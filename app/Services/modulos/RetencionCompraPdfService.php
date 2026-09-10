@@ -50,7 +50,24 @@ class RetencionCompraPdfService
         $this->dibujarEncabezado($pdf, $cabecera, $empresa);
         $this->dibujarProveedorSustento($pdf, $cabecera);
         $this->dibujarLineas($pdf, $lineas);
+
+        $paginaTotales = $pdf->getPage();
+        $yTotales      = $pdf->GetY();
         $this->dibujarTotales($pdf, $cabecera, $lineas);
+
+        // Información adicional a la izquierda de los totales, como en la factura y la
+        // liquidación. Si los totales saltaron de página, va debajo de ellos.
+        $infoAdicional = $this->infoAdicional($cabecera);
+        if (!empty($infoAdicional)) {
+            $yFinTotales = $pdf->GetY();
+            $alLado      = $pdf->getPage() === $paginaTotales;
+            $pdf->SetY($alLado ? $yTotales : $yFinTotales);
+            $this->dibujarInfoAdicional($pdf, $infoAdicional);
+            $yFinInfo = $pdf->GetY() + 3;
+            // Seguir debajo del más bajo de los dos bloques (salvo que la propia info
+            // haya pasado a otra página: ahí manda su final).
+            $pdf->SetY($alLado && $pdf->getPage() === $paginaTotales ? max($yFinInfo, $yFinTotales) : $yFinInfo);
+        }
 
         if (!empty($cabecera['observaciones'])) {
             $this->dibujarObservaciones($pdf, $cabecera['observaciones']);
@@ -393,9 +410,6 @@ class RetencionCompraPdfService
         $pdf->SetFillColor(240, 240, 240);
         $pdf->Cell($pageW, 5, 'DETALLE DE RETENCIONES', 1, 1, 'C', true);
 
-        // Cabeceras de tabla
-        $pdf->SetFont(self::FUENTE, 'B', 7);
-        $pdf->SetX($x);
         $anchos = [
             'impuesto'    => $pageW * 0.12,
             'codigo'      => $pageW * 0.10,
@@ -404,16 +418,26 @@ class RetencionCompraPdfService
             'porcentaje'  => $pageW * 0.14,
             'valor'       => $pageW * 0.18,
         ];
-        $pdf->SetFillColor(220, 220, 220);
-        $pdf->Cell($anchos['impuesto'],   5, 'IMPUESTO',     1, 0, 'C', true);
-        $pdf->Cell($anchos['codigo'],     5, 'CÓDIGO',       1, 0, 'C', true);
-        $pdf->Cell($anchos['concepto'],   5, 'CONCEPTO',     1, 0, 'C', true);
-        $pdf->Cell($anchos['base'],       5, 'BASE IMPON.',  1, 0, 'R', true);
-        $pdf->Cell($anchos['porcentaje'], 5, '%',            1, 0, 'C', true);
-        $pdf->Cell($anchos['valor'],      5, 'VALOR RET.',   1, 1, 'R', true);
 
-        $pdf->SetFont(self::FUENTE, '', 7);
-        $pdf->SetFillColor(255, 255, 255);
+        // Cabeceras de tabla. Se encapsulan porque hay que repetirlas al inicio de cada
+        // página cuando el detalle no cabe en una sola.
+        $dibujarCabeceraTabla = function () use ($pdf, $x, $anchos): void {
+            $pdf->SetFont(self::FUENTE, 'B', 7);
+            $pdf->SetX($x);
+            $pdf->SetFillColor(220, 220, 220);
+            $pdf->Cell($anchos['impuesto'],   5, 'IMPUESTO',     1, 0, 'C', true);
+            $pdf->Cell($anchos['codigo'],     5, 'CÓDIGO',       1, 0, 'C', true);
+            $pdf->Cell($anchos['concepto'],   5, 'CONCEPTO',     1, 0, 'C', true);
+            $pdf->Cell($anchos['base'],       5, 'BASE IMPON.',  1, 0, 'R', true);
+            $pdf->Cell($anchos['porcentaje'], 5, '%',            1, 0, 'C', true);
+            $pdf->Cell($anchos['valor'],      5, 'VALOR RET.',   1, 1, 'R', true);
+
+            $pdf->SetFont(self::FUENTE, '', 7);
+            $pdf->SetFillColor(255, 255, 255);
+        };
+
+        $dibujarCabeceraTabla();
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
 
         foreach ($lineas as $l) {
             $codImp = $l['codigo_impuesto'] ?? '1';
@@ -426,13 +450,26 @@ class RetencionCompraPdfService
 
             $concepto = $l['concepto'] ?? ($l['sri_concepto'] ?? '');
 
-            $pdf->SetX($x);
-            $yBefore = $pdf->GetY();
             $nLineas = max(
                 ceil(strlen($concepto) / 40),
                 1
             );
-            $h = max(4.5, $nLineas * 4.5);
+            // Si el concepto necesita más alto que la estimación por caracteres (pasa con
+            // mayúsculas: 40 ya ocupan dos renglones), manda su alto real; si no, el texto
+            // pisaría la fila siguiente y el control de salto de abajo fallaría.
+            $h = max(4.5, $nLineas * 4.5, $pdf->getStringHeight($anchos['concepto'], $concepto, false, true, null, 1));
+
+            // Salto de página CONTROLADO. Sin esto, la fila que no cabía se partía entre
+            // dos páginas y el SetY() del final —calculado con la Y de la página anterior—
+            // dejaba el cursor al fondo de la nueva, así que cada línea siguiente abría
+            // otra página casi vacía (41 líneas daban 3 páginas; 46, 8).
+            if ($pdf->GetY() + $h > $limiteY) {
+                $pdf->AddPage();
+                $dibujarCabeceraTabla();
+            }
+
+            $pdf->SetX($x);
+            $yBefore = $pdf->GetY();
 
             $pdf->MultiCell($anchos['impuesto'],   $h, $impuesto,                                       1, 'C', false, 0);
             $pdf->MultiCell($anchos['codigo'],     $h, $l['codigo_retencion'] ?? '',                    1, 'C', false, 0);
@@ -479,15 +516,67 @@ class RetencionCompraPdfService
         if ($totIsd > 0) $items[] = ['Total Retenido ISD:', $totIsd];
         $items[] = ['TOTAL RETENIDO:', $totalGeneral];
 
+        // El recuadro no se parte entre dos páginas: cada Cell salta por su cuenta, así
+        // que 'TOTAL RETENIDO' podía quedar solo en la siguiente. Si no cabe entero,
+        // empieza en la página siguiente.
+        $lh = 4.5;
+        if ($pdf->GetY() + count($items) * $lh > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+        }
+
         foreach ($items as $idx => [$label, $valor]) {
             $esTotal = $idx === count($items) - 1;
             $pdf->SetX($boxX);
             $pdf->SetFont(self::FUENTE, $esTotal ? 'B' : '', $esTotal ? 8 : 7);
-            $pdf->Cell($labelW, 4.5, $label, 'LTB', 0, 'R');
-            $pdf->Cell($valorW, 4.5, '$' . number_format($valor, 2), 'TBR', 1, 'R');
+            $pdf->Cell($labelW, $lh, $label, 'LTB', 0, 'R');
+            $pdf->Cell($valorW, $lh, '$' . number_format($valor, 2), 'TBR', 1, 'R');
         }
 
         $pdf->Ln(3);
+    }
+
+    // ── Información adicional ────────────────────────────────────
+
+    /**
+     * Filas de información adicional del RIDE: las mismas que XmlRetencionCompraService
+     * pone en el <infoAdicional> del XML, para que el impreso refleje lo enviado al SRI.
+     * Las observaciones, que el XML también lleva ahí, se imprimen en su propio bloque
+     * (dibujarObservaciones), igual que en la factura.
+     */
+    private function infoAdicional(array $cab): array
+    {
+        $filas = [];
+
+        // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027): el valor congelado
+        // en la cabecera al crear la retención. Las anteriores a ese cambio lo tienen en
+        // NULL y no lo llevan (su XML tampoco).
+        $ruc = trim((string) ($cab['ruc_proveedor_sistema'] ?? ''));
+        if ($ruc !== '') {
+            $filas[] = ['nombre' => \App\Helpers\SriProveedorHelper::CAMPO_NOMBRE, 'valor' => $ruc];
+        }
+
+        return $filas;
+    }
+
+    private function dibujarInfoAdicional(\TCPDF $pdf, array $filas): void
+    {
+        $x     = self::MARGEN_H;
+        $ancho = ($pdf->getPageWidth() - 2 * self::MARGEN_H) * 0.60; // los totales ocupan el 35 % derecho
+        $etiqW = 40;
+        $lh    = 4.5;
+
+        $pdf->SetX($x);
+        $pdf->SetFont(self::FUENTE, 'B', 8);
+        $pdf->SetFillColor(240, 240, 240);
+        $pdf->Cell($ancho, 5, 'INFORMACIÓN ADICIONAL', 1, 1, 'C', true);
+
+        foreach ($filas as $fila) {
+            $pdf->SetX($x);
+            $pdf->SetFont(self::FUENTE, 'B', 7);
+            $pdf->Cell($etiqW, $lh, $fila['nombre'], 1, 0, 'L');
+            $pdf->SetFont(self::FUENTE, '', 7);
+            $pdf->MultiCell($ancho - $etiqW, $lh, $fila['valor'], 1, 'L', false, 1);
+        }
     }
 
     // ── Observaciones ────────────────────────────────────────────
@@ -496,12 +585,27 @@ class RetencionCompraPdfService
     {
         $pageW = $pdf->getPageWidth() - 2 * self::MARGEN_H;
         $x     = self::MARGEN_H;
+        $lh    = 4.5;
+
+        // Etiqueta y texto van juntos: si el recuadro no cabe en lo que queda de página,
+        // empieza en la siguiente (la etiqueta podía quedar sola al pie, con el texto en
+        // otra página). Un texto más largo que una página sigue de corrido: basta con que
+        // quepa la etiqueta con su primer renglón.
+        $pdf->SetFont(self::FUENTE, '', 7.5);
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
+        $alto    = $lh + max($lh, $pdf->getStringHeight($pageW, $texto, false, true, null, 'LBR'));
+        if ($alto > $limiteY - $pdf->getMargins()['top']) {
+            $alto = 2 * $lh;
+        }
+        if ($pdf->GetY() + $alto > $limiteY) {
+            $pdf->AddPage();
+        }
 
         $pdf->SetX($x);
         $pdf->SetFont(self::FUENTE, 'B', 7.5);
-        $pdf->Cell($pageW, 4.5, 'OBSERVACIONES:', 'LTR', 1, 'L');
+        $pdf->Cell($pageW, $lh, 'OBSERVACIONES:', 'LTR', 1, 'L');
         $pdf->SetX($x);
         $pdf->SetFont(self::FUENTE, '', 7.5);
-        $pdf->MultiCell($pageW, 4.5, $texto, 'LBR', 'L');
+        $pdf->MultiCell($pageW, $lh, $texto, 'LBR', 'L');
     }
 }

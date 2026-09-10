@@ -393,27 +393,52 @@ class LiquidacionCompraPdfService
             'total'   => $pageW * 0.14,
         ];
 
-        $pdf->SetFont(self::FUENTE, 'B', 7);
-        $pdf->SetFillColor(220, 220, 220);
-        $pdf->SetX($x);
-        $pdf->Cell($anchos['codigo'], 5, 'CÓDIGO',        1, 0, 'C', true);
-        $pdf->Cell($anchos['desc'],   5, 'DESCRIPCIÓN',   1, 0, 'C', true);
-        $pdf->Cell($anchos['cant'],   5, 'CANT.',         1, 0, 'C', true);
-        $pdf->Cell($anchos['precio'], 5, 'P. UNIT.',      1, 0, 'R', true);
-        $pdf->Cell($anchos['descto'], 5, 'DESC.',         1, 0, 'R', true);
-        $pdf->Cell($anchos['total'],  5, 'SUBTOTAL',      1, 1, 'R', true);
+        // Encabezado de la tabla. Se encapsula porque hay que repetirlo al inicio de cada
+        // página cuando el detalle no cabe en una sola.
+        $dibujarCabeceraTabla = function () use ($pdf, $x, $anchos): void {
+            $pdf->SetFont(self::FUENTE, 'B', 7);
+            $pdf->SetFillColor(220, 220, 220);
+            $pdf->SetX($x);
+            $pdf->Cell($anchos['codigo'], 5, 'CÓDIGO',        1, 0, 'C', true);
+            $pdf->Cell($anchos['desc'],   5, 'DESCRIPCIÓN',   1, 0, 'C', true);
+            $pdf->Cell($anchos['cant'],   5, 'CANT.',         1, 0, 'C', true);
+            $pdf->Cell($anchos['precio'], 5, 'P. UNIT.',      1, 0, 'R', true);
+            $pdf->Cell($anchos['descto'], 5, 'DESC.',         1, 0, 'R', true);
+            $pdf->Cell($anchos['total'],  5, 'SUBTOTAL',      1, 1, 'R', true);
 
-        $pdf->SetFont(self::FUENTE, '', 7);
-        $pdf->SetFillColor(255, 255, 255);
+            $pdf->SetFont(self::FUENTE, '', 7);
+            $pdf->SetFillColor(255, 255, 255);
+        };
+
+        $dibujarCabeceraTabla();
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
 
         foreach ($detalles as $d) {
             $codigo = trim((string)($d['codigo_principal'] ?? ''));
             $desc   = (string)($d['descripcion'] ?? '');
 
+            $nLineas = max(ceil(mb_strlen($desc) / 55), 1);
+            // Si la descripción —o un código largo— necesita más alto que la estimación por
+            // caracteres (pasa con textos en mayúsculas), manda su alto real; si no, el texto
+            // pisaría la fila siguiente y el control de salto de abajo fallaría.
+            $h = max(
+                4.5,
+                $nLineas * 4.5,
+                $pdf->getStringHeight($anchos['desc'], $desc, false, true, null, 1),
+                $pdf->getStringHeight($anchos['codigo'], $codigo, false, true, null, 1)
+            );
+
+            // Salto de página CONTROLADO. Sin esto, la fila que no cabía se partía entre
+            // dos páginas y el SetY() del final —calculado con la Y de la página anterior—
+            // dejaba el cursor al fondo de la nueva, así que cada línea siguiente abría
+            // otra página casi vacía (41 líneas daban 5 páginas; 80, 44).
+            if ($pdf->GetY() + $h > $limiteY) {
+                $pdf->AddPage();
+                $dibujarCabeceraTabla();
+            }
+
             $pdf->SetX($x);
             $yBefore = $pdf->GetY();
-            $nLineas = max(ceil(mb_strlen($desc) / 55), 1);
-            $h = max(4.5, $nLineas * 4.5);
 
             $pdf->MultiCell($anchos['codigo'], $h, $codigo,                                            1, 'C', false, 0);
             $pdf->MultiCell($anchos['desc'],   $h, $desc,                                              1, 'L', false, 0);
@@ -476,16 +501,30 @@ class LiquidacionCompraPdfService
         $totalIva       = array_sum($ivaMap);
         $total          = (float)($cab['importe_total'] ?? ($subtotalSinImp + $totalIva));
 
-        $y = $pdf->GetY() + 1;
-        if ($y > 230) { $pdf->AddPage(); $y = 12; }
-
         // Layout de dos columnas (igual que factura).
-        $totW = 72;
-        $izqW = $cW - $totW - 2;
-        $totX = $mL + $izqW + 2;
-        $lh   = 5;
-        $lblW = 54;
-        $valW = $totW - $lblW;
+        $totW    = 72;
+        $izqW    = $cW - $totW - 2;
+        $totX    = $mL + $izqW + 2;
+        $lh      = 5;
+        $lblW    = 54;
+        $valW    = $totW - $lblW;
+        $etiqW   = 40;                     // Información Adicional: etiqueta | valor
+        $valIW   = $izqW - $etiqW;
+        $wNombre = $izqW - 28 - 22 - 22;   // Forma de pago: nombre | valor | días | plazo
+
+        // El pie no se parte entre dos páginas: si no cabe entero —la más alta de sus dos
+        // columnas— en lo que queda de página, empieza en la siguiente. Antes solo se miraba
+        // si arrancaba por debajo de 230 mm: un pie más alto que el hueco se salía de la
+        // página y, como sus celdas se colocan con SetXY y una Y fija, las que no cabían
+        // abrían páginas nuevas de a una.
+        $filasTot = count($subtotMap) + count($ivaMap) + ($noObjIva > 0 ? 1 : 0) + ($exentoIva > 0 ? 1 : 0)
+                  + 3; // SUBTOTAL SIN IMPUESTOS, TOTAL DESCUENTO y VALOR TOTAL
+        $altoPie  = max($filasTot * $lh, $this->altoColumnaIzquierda($pdf, $cab, $pagos, $infoAdicional, $izqW, $valIW, $wNombre, $lh));
+        $y = $pdf->GetY() + 1;
+        if ($y + $altoPie > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = 12;
+        }
 
         // ── Columna derecha: totales ──────────────────────────────────────────
         $yTot = $y;
@@ -534,8 +573,6 @@ class LiquidacionCompraPdfService
             $pdf->Cell($izqW, $lh, 'Información Adicional', 1, 1, 'C', true);
             $yIzq += $lh;
 
-            $etiqW = 40;
-            $valIW = $izqW - $etiqW;
             $pdf->SetFillColor(255, 255, 255);
             foreach ($infoAdicional as $info) {
                 if (empty($info['nombre']) && ($info['valor'] ?? '') === '') continue;
@@ -566,7 +603,6 @@ class LiquidacionCompraPdfService
         // Forma de pago
         if (!empty($pagos)) {
             $yIzq += 1;
-            $wNombre = $izqW - 28 - 22 - 22;
             $pdf->SetFont(self::FUENTE, 'B', 7);
             $pdf->SetFillColor(230, 230, 230);
             $pdf->SetXY($mL, $yIzq);
@@ -610,6 +646,35 @@ class LiquidacionCompraPdfService
         $pdf->SetXY($x, $y);
         $pdf->Cell($lblW, $h, $lbl, 1, 0, 'L');
         $pdf->Cell($valW, $h, number_format($val, 2), 1, 0, 'R');
+    }
+
+    /**
+     * Alto de la columna izquierda del pie (información adicional, observaciones y forma
+     * de pago), con las mismas medidas con que la dibuja dibujarPie().
+     */
+    private function altoColumnaIzquierda(\TCPDF $pdf, array $cab, array $pagos, array $infoAdicional, float $izqW, float $valIW, float $wNombre, float $lh): float
+    {
+        $pdf->SetFont(self::FUENTE, '', 7);
+        $alto = 0.0;
+
+        if (!empty($infoAdicional)) {
+            $alto += $lh;
+            foreach ($infoAdicional as $info) {
+                if (empty($info['nombre']) && ($info['valor'] ?? '') === '') continue;
+                $alto += max($lh, $pdf->getStringHeight($valIW, (string)($info['valor'] ?? ''), false, true, null, 1));
+            }
+        }
+        if (!empty($cab['observaciones'])) {
+            $alto += 1 + $lh + max(4.5, $pdf->getStringHeight($izqW, (string)$cab['observaciones'], false, true, null, 1));
+        }
+        if (!empty($pagos)) {
+            $alto += 1 + $lh;
+            foreach ($pagos as $p) {
+                $alto += max(1, $pdf->getNumLines(self::formaPagoLabel((string)($p['forma_pago'] ?? '')), $wNombre)) * $lh;
+            }
+        }
+
+        return $alto;
     }
 
     /** Etiqueta de tarifa sin decimales si es entera (15, 12, 5), con decimales si no. */

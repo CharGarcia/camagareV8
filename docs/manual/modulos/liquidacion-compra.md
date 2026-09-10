@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular
-version: 1.3
+version: 1.4
 orden: 40
 estado: activo
 ---
@@ -101,6 +101,14 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.4** — Corregido el **PDF** de las liquidaciones con muchas líneas. Cuando el detalle
+  no cabía en una página, cada línea siguiente abría una página nueva casi vacía (41
+  líneas daban 5 páginas; 80, 44), y a veces quedaba una página en blanco. Ahora el
+  detalle sigue en la página siguiente con el encabezado de la tabla repetido, y el pie
+  —totales, información adicional, observaciones y forma de pago— ya no se parte: si no
+  cabe entero pasa completo a la página siguiente, y si cabe ya no salta sin necesidad.
+  Además, una descripción o un código largos ya no se montan sobre la línea siguiente
+  (pasaba con textos en mayúsculas).
 - **1.3** — El módulo respeta ahora el **cierre contable**: no se puede emitir,
   modificar, anular ni eliminar una liquidación cuyo período esté cerrado. Antes no se
   comprobaba en ninguna de las cuatro operaciones.

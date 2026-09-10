@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias
-version: 1.9
+etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride
+version: 1.11
 orden: 30
 estado: activo
 ---
@@ -250,6 +250,26 @@ Si el proveedor no tiene correo, la columna se queda en **Pendiente**; puede
 enviarlo a mano desde el botón de correo del formulario indicando el
 destinatario.
 
+## RUC Proveedor en la información adicional
+
+Por la Resolución NAC-DGERCGC26-00000027, todo comprobante electrónico debe llevar
+en su información adicional el campo **"RUC Proveedor"**: el RUC de la empresa que
+provee el sistema de facturación electrónica. **No es el RUC del proveedor al que
+se le retiene** —ese va en los datos del sujeto retenido— ni el de su empresa.
+
+Igual que en la factura de venta, lo agrega el sistema solo:
+
+- En el formulario aparece bajo el documento sustento, en **Información
+  adicional**, como una fila fija con candado: no se puede editar ni quitar.
+- Va en el **XML** que se envía al SRI y en el **PDF** de la retención —también en
+  el que recibe el proveedor por correo—, en el recuadro *Información adicional*
+  junto a los totales.
+- El valor queda **guardado con la retención al crearla**: si después cambia la
+  configuración, las retenciones ya emitidas no se alteran. Las creadas antes de
+  que el sistema incorporara el campo no lo llevan, y en ellas no aparece.
+
+El valor lo configura el superadministrador en `/config/sri-proveedor`.
+
 ## Errores frecuentes
 
 - **"El tipo de documento de sustento no es válido"**: use uno de los códigos
@@ -295,6 +315,18 @@ destinatario.
 
 ## Historial de cambios
 
+- **1.11** — Corregido el **PDF** de las retenciones con muchas líneas. Cuando el detalle
+  no cabía en una página, cada línea siguiente abría una página nueva casi vacía (41
+  líneas daban 3 páginas; 46, 8). Ahora el detalle sigue en la página siguiente con el
+  encabezado de la tabla repetido, y ni el recuadro de totales ni las observaciones se
+  parten entre dos páginas: antes el *TOTAL RETENIDO* o el título *Observaciones* podían
+  quedar solos. Además, el concepto de una línea ya no puede montarse sobre la
+  siguiente (pasaba con algunos textos en mayúsculas).
+- **1.10** — El **PDF** y el **formulario** de la retención muestran ahora el campo
+  **"RUC Proveedor"** (Resolución NAC-DGERCGC26-00000027) en la información adicional,
+  igual que la factura de venta. El XML ya lo enviaba al SRI en las retenciones creadas
+  desde que se incorporó el campo, pero el comprobante impreso —el que recibe el
+  proveedor por correo— y la pantalla no lo mostraban.
 - **1.9** — El envío al SRI ahora comprueba que la **fecha de emisión sea la de hoy**,
   como ya hacían factura de venta, factura de reembolso y liquidación de compra. Antes
   la retención salía hacia el SRI con cualquier fecha y era el propio SRI quien la

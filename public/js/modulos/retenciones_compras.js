@@ -1074,6 +1074,22 @@
         el.classList.remove('d-none');
     }
 
+    /**
+     * Fila fija "RUC Proveedor" de la información adicional (Res. NAC-DGERCGC26-00000027),
+     * solo lectura. En una retención nueva muestra el valor de configuración, que el
+     * servidor congela al crearla (RetencionCompraService::crear); en una guardada, el que
+     * quedó en su cabecera. Vacío = esa retención no lo lleva (anterior al cambio o
+     * requisito apagado): se oculta, igual que no sale en su XML ni en su PDF.
+     */
+    function mostrarRucProveedor(valor) {
+        const bloque = document.getElementById('ret_info_adicional');
+        if (!bloque) return;
+        const ruc = String(valor || '').trim();
+        const el = document.getElementById('ret_ruc_proveedor_valor');
+        if (el) el.textContent = ruc;
+        bloque.classList.toggle('d-none', ruc === '');
+    }
+
     window.RET_actualizarPeriodoFiscal = (fecha) => {
         if (!fecha) return;
         const [y, m] = fecha.split('-');
@@ -1150,6 +1166,9 @@
         if (lblEmail) lblEmail.textContent = cab.proveedor_email || '—';
         const infoProv = document.getElementById('ret_proveedor_info');
         if (infoProv) infoProv.classList.remove('d-none');
+
+        // RUC Proveedor: el que quedó guardado con esta retención.
+        mostrarRucProveedor(cab.ruc_proveedor_sistema);
 
         // Badge de estado
         actualizarBadgeEstado(cab.estado || 'borrador');
@@ -1452,6 +1471,11 @@
         if (lblEmail) lblEmail.textContent = '';
 
 
+
+        // RUC Proveedor: vista previa del valor de configuración (retención nueva);
+        // cargarCabecera() lo cambia por el guardado al abrir una existente.
+        const bloqueRuc = document.getElementById('ret_info_adicional');
+        mostrarRucProveedor(bloqueRuc ? bloqueRuc.dataset.rucConfig : '');
 
         // Resetear estado badge
         actualizarBadgeEstado('borrador');

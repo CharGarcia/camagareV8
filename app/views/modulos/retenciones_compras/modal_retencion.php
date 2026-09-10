@@ -261,6 +261,33 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                                             <select name="id_sustento_tributario" id="ret_id_sustento_tributario"
                                                     class="form-select form-select-sm" style="height:28px;font-size:0.74rem;"></select>
                                         </div>
+                                        <!-- Información adicional: RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027 /
+                                             Ficha v2.34 Anexo 26). Fila fija, solo lectura: RetencionCompraService::crear la
+                                             congela en la cabecera y viaja en el XML y el PDF. retenciones_compras.js muestra
+                                             el valor de configuración en una retención nueva y el guardado en una existente
+                                             (oculta el bloque si esa retención no lo lleva). -->
+                                        <?php $rucProveedorSri = \App\Helpers\SriProveedorHelper::rucProveedor(); ?>
+                                        <div id="ret_info_adicional" class="mt-2<?= $rucProveedorSri === '' ? ' d-none' : '' ?>"
+                                             data-ruc-config="<?= htmlspecialchars($rucProveedorSri) ?>">
+                                            <div class="text-muted mb-1" style="font-size:0.72rem;">Información adicional</div>
+                                            <div class="border rounded-2 overflow-hidden bg-white">
+                                                <table class="table table-sm mb-0">
+                                                    <tbody>
+                                                        <tr class="table-light">
+                                                            <td class="ps-2 p-0 align-middle" style="width:40%;">
+                                                                <span class="small text-muted fst-italic"><i class="bi bi-lock-fill me-1" style="font-size:0.65rem;"></i><?= htmlspecialchars(\App\Helpers\SriProveedorHelper::CAMPO_NOMBRE) ?></span>
+                                                            </td>
+                                                            <td class="p-0 align-middle">
+                                                                <span class="small text-muted fst-italic" id="ret_ruc_proveedor_valor"><?= htmlspecialchars($rucProveedorSri) ?></span>
+                                                            </td>
+                                                            <td class="p-0 align-middle text-center" style="width:10%;">
+                                                                <i class="bi bi-shield-check text-success" style="font-size:0.75rem;" title="Campo obligatorio del SRI: lo agrega el sistema automáticamente en el XML y el PDF"></i>
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
                                         <script>window.RET_SUSTENTOS = <?= json_encode($sustentos ?? [], JSON_UNESCAPED_UNICODE) ?>;</script>
                                     </div>
 
