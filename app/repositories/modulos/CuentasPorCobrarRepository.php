@@ -6,10 +6,12 @@ namespace App\repositories\modulos;
 
 use App\Helpers\AbonosVentaSql;
 use App\repositories\BaseRepository;
+use App\Traits\AmbienteEmpresaTrait;
 use PDO;
 
 class CuentasPorCobrarRepository extends BaseRepository
 {
+    use AmbienteEmpresaTrait;
     /** Número de la factura `v` normalizado a 15 dígitos: clave de enlace con nc_aplic / nd_aplic. */
     private string $numV;
 
@@ -66,13 +68,18 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
-     * El documento pertenece al ambiente actual de SU PROPIA empresa. Correlacionada por fila
-     * (no por la empresa activa): en el consolidado cada establecimiento puede estar en un
-     * ambiente distinto y debe filtrarse contra el suyo.
+     * El documento pertenece al ambiente actual de SU PROPIA empresa: en el consolidado
+     * cada establecimiento puede estar en un ambiente distinto y debe filtrarse contra
+     * el suyo.
+     *
+     * Lo resuelve AmbienteEmpresaTrait con pares literales en vez de una subconsulta
+     * correlacionada por fila, que impedía a PostgreSQL estimar la selectividad del
+     * filtro y le hacía elegir bucles anidados. Ver el trait: en Cuentas por Pagar ese
+     * mismo patrón costaba 10.922 ms frente a 102 ms con el ambiente como literal.
      */
-    private function condAmbiente(string $alias): string
+    private function condAmbiente(string $alias, array $ids): string
     {
-        return "{$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+        return $this->condAmbienteDe($alias, $ids);
     }
 
     /**
@@ -147,7 +154,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         // perderlas del cálculo. porEmpresa=true: el CTE sale con id_empresa para enlazar
         // por (empresa, número) y que la NC de un establecimiento no descuente la factura
         // de otro con el mismo número.
-        $extra = "AND (n.tipo_ambiente IS NULL OR {$this->condAmbiente('n')})
+        $extra = "AND (n.tipo_ambiente IS NULL OR {$this->condAmbiente('n', $idsEmpresa)})
               {$filtroFecha}";
         return AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', $this->sqlAny($idsEmpresa), $extra, true);
     }
@@ -161,7 +168,7 @@ class CuentasPorCobrarRepository extends BaseRepository
     private function getCteND(array $idsEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND n.fecha_emision <= :nd_hasta" : '';
-        $extra = "AND (n.tipo_ambiente IS NULL OR {$this->condAmbiente('n')})
+        $extra = "AND (n.tipo_ambiente IS NULL OR {$this->condAmbiente('n', $idsEmpresa)})
               {$filtroFecha}";
         return AbonosVentaSql::cteNotasPorFactura('nota_debito_cabecera', 'total_nd', $this->sqlAny($idsEmpresa), $extra, true);
     }
@@ -225,7 +232,9 @@ class CuentasPorCobrarRepository extends BaseRepository
             LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
             LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
             WHERE {$where}
-            ORDER BY fecha_vencimiento ASC, v.fecha_emision DESC
+            -- v.id desempata: sin él, las filas con la misma fecha salen en orden
+            -- arbitrario y cambian de posición entre cargas (el orden depende del plan).
+            ORDER BY fecha_vencimiento ASC, v.fecha_emision DESC, v.id DESC
         ";
 
         $st = $this->db->prepare($sql);
@@ -519,7 +528,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $where = "v.id_empresa IN ({$this->phIn($idsEmpresa, 'emp', $params)})
               AND v.eliminado  = false
               AND v.estado NOT IN ('anulado','facturado')
-              AND {$this->condAmbiente('v')}";
+              AND {$this->condAmbiente('v', $idsEmpresa)}";
 
         $saldoExpr = "(v.importe_total - COALESCE(cb.total_cobrado, 0))";
 
@@ -605,7 +614,9 @@ class CuentasPorCobrarRepository extends BaseRepository
             LEFT JOIN vendedores ven ON ven.id = v.id_vendedor
             LEFT JOIN cobrado cb ON cb.id_venta = v.id
             WHERE {$where}
-            ORDER BY fecha_vencimiento ASC, v.fecha_emision DESC
+            -- v.id desempata: sin él, las filas con la misma fecha salen en orden
+            -- arbitrario y cambian de posición entre cargas (el orden depende del plan).
+            ORDER BY fecha_vencimiento ASC, v.fecha_emision DESC, v.id DESC
         ";
 
         $st = $this->db->prepare($sql);
@@ -799,7 +810,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $numSus  = AbonosVentaSql::normalizar('rd.num_doc_sustento');
         $numVc   = AbonosVentaSql::numFactura('vc');
         $numNc   = AbonosVentaSql::normalizar('n.num_doc_modificado');
-        $ambNota = $this->condAmbiente('n');
+        $ambNota = $this->condAmbiente('n', [$idEmpresa]);
 
         $sql = "
             WITH fact AS (
@@ -1339,7 +1350,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $where = "v.id_empresa IN ({$this->phIn($idsEmpresa, 'emp', $params)})
               AND v.eliminado  = false
               AND v.estado    IN ('autorizado','autorizada')
-              AND {$this->condAmbiente('v')}";
+              AND {$this->condAmbiente('v', $idsEmpresa)}";
 
         // Filtro de estado CxC
         $estado = $filtros['estado'] ?? 'PENDIENTES';

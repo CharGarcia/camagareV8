@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\repositories\modulos;
 
 use App\repositories\BaseRepository;
+use App\Traits\AmbienteEmpresaTrait;
 use PDO;
 
 class CuentasPorPagarRepository extends BaseRepository
 {
+    use AmbienteEmpresaTrait;
+
     public function __construct()
     {
         parent::__construct('compras_cabecera');
@@ -55,13 +58,20 @@ class CuentasPorPagarRepository extends BaseRepository
     }
 
     /**
-     * El documento pertenece al ambiente actual de SU PROPIA empresa. Correlacionada por fila
-     * (no por la empresa activa): en el consolidado cada establecimiento puede estar en un
-     * ambiente distinto y debe filtrarse contra el suyo.
+     * El documento pertenece al ambiente actual de SU PROPIA empresa: en el consolidado
+     * cada establecimiento puede estar en un ambiente distinto y debe filtrarse contra
+     * el suyo.
+     *
+     * Lo resuelve AmbienteEmpresaTrait con pares literales `(id_empresa, tipo_ambiente)`
+     * en vez de una subconsulta correlacionada por fila. La versión correlacionada le
+     * impedía a PostgreSQL estimar cuántas filas sobreviven (calculaba 30 donde había
+     * 6.193), y con esa estimación elegía un Nested Loop contra el CTE de pagos: 38,7
+     * millones de comparaciones y 10.922 ms para devolver 4 documentos, frente a 102 ms
+     * con el ambiente como literal. Ver el trait para el detalle.
      */
-    private function condAmbiente(string $alias): string
+    private function condAmbiente(string $alias, array $ids): string
     {
-        return "{$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+        return $this->condAmbienteDe($alias, $ids);
     }
 
     /**
@@ -316,7 +326,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE c.id_empresa       IN ({$in['c']})
                   AND c.eliminado        = false
                   AND {$esCargo} AND {$compraVigente}
-                  AND {$this->condAmbiente('c')}
+                  AND {$this->condAmbiente('c', $ids)}
 
                 UNION ALL
 
@@ -355,7 +365,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE l.id_empresa    IN ({$in['l']})
                   AND l.eliminado     = false
                   AND {$liqVigente}
-                  AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l')})
+                  AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l', $ids)})
 
                 UNION ALL
 
@@ -391,7 +401,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE fe.eliminado    = false
                   AND ic.eliminado    = false
                   AND ic.id_empresa   IN ({$in['i']})
-                  AND {$this->condAmbiente('ic')}
+                  AND {$this->condAmbiente('ic', $ids)}
             )
             SELECT
                 d.*,
@@ -399,7 +409,9 @@ class CuentasPorPagarRepository extends BaseRepository
             FROM docs d
             WHERE 1=1
                   {$whereExtra}
-            ORDER BY d.fecha_vencimiento ASC NULLS LAST, d.fecha_emision DESC
+            -- d.id desempata: sin él, las filas con la misma fecha salen en orden
+            -- arbitrario y cambian de posición entre cargas (el orden depende del plan).
+            ORDER BY d.fecha_vencimiento ASC NULLS LAST, d.fecha_emision DESC, d.id DESC
         ";
 
         $st = $this->db->prepare($sql);
@@ -450,7 +462,7 @@ class CuentasPorPagarRepository extends BaseRepository
                                    AND nn.documento_modificado=CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)
                 LEFT JOIN ret      ON ret.id_compra=c.id AND ret.id_liquidacion IS NULL
                 WHERE c.id_empresa IN ({$in['c']}) AND c.eliminado=false AND {$esCargo} AND {$compraVigente}
-                  AND {$this->condAmbiente('c')}
+                  AND {$this->condAmbiente('c', $ids)}
 
                 UNION ALL
 
@@ -467,7 +479,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN ret      ON ret.id_liquidacion=l.id AND ret.id_compra IS NULL
                 WHERE l.id_empresa IN ({$in['l']}) AND l.eliminado=false
                   AND {$liqVigente}
-                  AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l')})
+                  AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l', $ids)})
 
                 UNION ALL
 
@@ -481,7 +493,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 JOIN proveedores p ON p.id = fe.id_proveedor
                 LEFT JOIN pagado pg ON pg.tipo_documento='IMPORTACION' AND pg.id_doc=fe.id
                 WHERE ic.id_empresa IN ({$in['i']}) AND fe.eliminado=false AND ic.eliminado=false
-                  AND {$this->condAmbiente('ic')}
+                  AND {$this->condAmbiente('ic', $ids)}
             )
             SELECT
                 COUNT(*) AS total_docs,
@@ -637,7 +649,7 @@ class CuentasPorPagarRepository extends BaseRepository
                                    AND nn.documento_modificado=CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)
                 LEFT JOIN ret      ON ret.id_compra=c.id AND ret.id_liquidacion IS NULL
                 WHERE c.id_empresa IN ({$in['c']}) AND c.eliminado=false AND {$esCargo} AND {$compraVigente}
-                  AND {$this->condAmbiente('c')}
+                  AND {$this->condAmbiente('c', $ids)}
 
                 UNION ALL
 
@@ -654,7 +666,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN ret      ON ret.id_liquidacion=l.id AND ret.id_compra IS NULL
                 WHERE l.id_empresa IN ({$in['l']}) AND l.eliminado=false
                   AND {$liqVigente}
-                  AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l')})
+                  AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l', $ids)})
 
                 UNION ALL
 
@@ -668,7 +680,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 JOIN proveedores p ON p.id = fe.id_proveedor
                 LEFT JOIN pagado pg ON pg.tipo_documento='IMPORTACION' AND pg.id_doc=fe.id
                 WHERE ic.id_empresa IN ({$in['i']}) AND fe.eliminado=false AND ic.eliminado=false
-                  AND {$this->condAmbiente('ic')}
+                  AND {$this->condAmbiente('ic', $ids)}
             )
             SELECT
                 SUM(CASE WHEN d.saldo > 0 AND (CURRENT_DATE - d.fecha_vencimiento::date) <= 0              THEN d.saldo ELSE 0 END) AS tramo_vigente,

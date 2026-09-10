@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales
-version: 1.9
+version: 2.1
 orden: 40
 estado: activo
 ---
@@ -299,6 +299,11 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
+- **2.1** — El listado abre más rápido: la consulta que arma la cartera dejó de
+  recalcular por cada documento a qué ambiente pertenece su empresa, lo que en
+  bases con muchos documentos degradaba la pantalla entera. También se corrigió el
+  orden: las filas con la misma fecha de vencimiento ya no cambian de posición
+  entre una carga y otra.
 - **2.0** — El **Historial de Cobros** deja de listar solo los ingresos: ahora
   muestra también las **retenciones**, las **notas de crédito** (abonan) y las
   **notas de débito** (cargan), cada una con su tipo, número y monto, con el

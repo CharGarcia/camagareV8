@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente
-version: 1.6
+version: 1.7
 orden: 50
 estado: activo
 ---
@@ -136,6 +136,11 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.7** — El listado abre **mucho más rápido**. Con varios miles de compras, la
+  pantalla podía tardar más de diez segundos en mostrar aunque solo hubiera cuatro
+  documentos pendientes; ahora responde en décimas. También se corrigió el orden:
+  las filas con la misma fecha de vencimiento ya no cambian de posición entre una
+  carga y otra.
 - **1.6** — Al **registrar el pago** de una planilla de luz o agua, el saldo que
   se valida ya incluye los **valores de terceros** (bomberos, tasa de basura). El
   listado sí los mostraba, pero al guardar el pago se rechazaba el monto por
