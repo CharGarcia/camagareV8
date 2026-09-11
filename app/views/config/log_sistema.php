@@ -68,7 +68,7 @@ $verIntentos = $nivel >= 3;
         <div id="logHeaderAuditoria" class="log-tab-panel log-toolbar">
             <form id="logFormBuscar" class="input-group input-group-sm" style="width:280px;max-width:100%" onsubmit="event.preventDefault(); LOGSIS_cambiarPagina(1);">
                 <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                <input type="text" id="logInputBuscar" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar…  usuario:juan  accion:eliminar" autocomplete="off">
+                <input type="text" id="logInputBuscar" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar…  N° de documento  usuario:juan  accion:eliminar" autocomplete="off">
                 <button type="button" class="btn btn-outline-secondary" title="Ayuda de búsqueda" data-bs-toggle="collapse" data-bs-target="#logFiltrosAyuda"><i class="bi bi-question-lg"></i></button>
             </form>
 
@@ -155,12 +155,16 @@ $verIntentos = $nivel >= 3;
 
         <div id="logFiltrosAyuda" class="collapse">
             <div class="pt-2 small text-muted">
-                Usá la barra de filtros de arriba o escribí aquí. Claves disponibles:
+                Use la barra de filtros de arriba o escriba aquí. Si escribe un número
+                (p. ej. <code>001-001-000000123</code> o <code>000000123</code>) también se busca por el
+                <strong>número del documento</strong> afectado. Claves disponibles:
+                <code>documento:001-001-000000123</code> · <code>tercero:"DELIVERY HERO"</code> ·
                 <code>usuario:nombre</code> · <code>accion:crear</code> ·
                 <code>registro:123</code> · <code>ip:190.1</code> ·
                 <code>contenido:"DELIVERY HERO"</code> ·
                 <code>fecha:2026-07-01..2026-07-08</code> · <code>fecha:&gt;=2026-07-01</code>.
-                Usá <code>-clave:valor</code> para negar y comillas para valores con espacios.
+                Use <code>-clave:valor</code> para negar y comillas para valores con espacios.
+                <code>tercero:</code> es el cliente, proveedor o empleado del documento (nombre o identificación).
                 <div class="mt-1">
                     <strong>Contenido del mensaje:</strong> el campo <em>Contenido del mensaje</em> (y la clave
                     <code>contenido:</code>) busca dentro de los datos guardados del evento — concepto, proveedor
@@ -217,18 +221,19 @@ $verIntentos = $nivel >= 3;
                 <table class="table table-hover table-sm mb-0 align-middle">
                     <thead class="table-light shadow-sm sticky-top" style="z-index: 1;">
                         <tr>
-                            <th class="ps-3 log-sort" data-col="created_at" role="button" style="width: 14%;">Fecha <i class="bi bi-arrow-down-short"></i></th>
-                            <th class="log-sort" data-col="usuario" role="button" style="width: 16%;">Usuario</th>
-                            <th class="log-sort" data-col="empresa" role="button" style="width: 18%;">Empresa</th>
-                            <th class="log-sort" data-col="accion" role="button" style="width: 12%;">Acción</th>
-                            <th class="log-sort" data-col="tabla" role="button" style="width: 18%;">Módulo</th>
-                            <th class="text-center" style="width: 8%;">Registro</th>
-                            <th style="width: 14%;">IP</th>
+                            <th class="ps-3 log-sort" data-col="created_at" role="button" style="width: 13%;">Fecha <i class="bi bi-arrow-down-short"></i></th>
+                            <th class="log-sort" data-col="usuario" role="button" style="width: 14%;">Usuario</th>
+                            <th class="log-sort" data-col="empresa" role="button" style="width: 16%;">Empresa</th>
+                            <th class="log-sort" data-col="accion" role="button" style="width: 11%;">Acción</th>
+                            <th class="log-sort" data-col="tabla" role="button" style="width: 15%;">Módulo</th>
+                            <th style="width: 13%;">Documento</th>
+                            <th class="text-center" style="width: 7%;">Registro</th>
+                            <th style="width: 11%;">IP</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyLogSistema">
                         <tr>
-                            <td colspan="7" class="text-center py-5">
+                            <td colspan="8" class="text-center py-5">
                                 <span class="spinner-border spinner-border-sm text-primary me-2"></span> Cargando auditoría...
                             </td>
                         </tr>
@@ -266,7 +271,7 @@ $verIntentos = $nivel >= 3;
 
 <!-- Modal detalle -->
 <div class="modal fade" id="modalLogDetalle" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg">
             <div class="modal-header bg-light border-bottom px-4 py-3">
                 <h5 class="modal-title fw-bold mb-0"><i class="bi bi-clock-history me-2 text-dark"></i> Detalle del evento</h5>

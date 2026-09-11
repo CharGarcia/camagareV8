@@ -151,6 +151,26 @@ class DashboardService
                 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][$mes] ?? '';
     }
 
+    /**
+     * Filtro de ambiente equivalente a `COALESCE(col, '1') = $ta` (los documentos
+     * legados sin tipo_ambiente cuentan como pruebas), pero escrito sobre la
+     * columna desnuda para que el planificador pueda estimarlo.
+     *
+     * Con el COALESCE, PostgreSQL no tiene estadísticas de la expresión y supone
+     * que sobrevive el 0,5 % de las filas. Con esa estimación cruzaba las facturas
+     * contra los cobros agrupados con bucles anidados (facturas × grupos), y el
+     * saldo de CxC tardaba minutos en una empresa con muchas ventas. Mismo
+     * problema que resolvió AmbienteEmpresaTrait en Cuentas por Cobrar/Pagar.
+     * $ta sale de la configuración de la empresa; solo se interpola si es un dígito.
+     */
+    private function condAmbiente(string $col, string $ta): string
+    {
+        if ($ta === '1') {
+            return "({$col} = '1' OR {$col} IS NULL)";
+        }
+        return ctype_digit($ta) ? "{$col} = '{$ta}'" : 'FALSE';
+    }
+
     // ── Sumas de período ──────────────────────────────────────────────────────
 
     private function sumVentas(int $e, string $ta, string $d, string $h): float
@@ -159,10 +179,10 @@ class DashboardService
             "SELECT COALESCE(SUM(importe_total), 0)
              FROM ventas_cabecera
              WHERE id_empresa = ? AND eliminado = false AND estado != 'anulado'
-               AND COALESCE(tipo_ambiente, '1') = ?
+               AND {$this->condAmbiente('tipo_ambiente', $ta)}
                AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?"
         );
-        $st->execute([$e, $ta, $d, $h]);
+        $st->execute([$e, $d, $h]);
         return (float) $st->fetchColumn();
     }
 
@@ -172,10 +192,10 @@ class DashboardService
             "SELECT COALESCE(SUM(importe_total), 0)
              FROM compras_cabecera
              WHERE id_empresa = ? AND eliminado = false
-               AND COALESCE(tipo_ambiente::text, '1') = ?
+               AND {$this->condAmbiente('tipo_ambiente', $ta)}
                AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?"
         );
-        $st->execute([$e, $ta, $d, $h]);
+        $st->execute([$e, $d, $h]);
         return (float) $st->fetchColumn();
     }
 
@@ -218,97 +238,171 @@ class DashboardService
              FROM rol_cabecera
              WHERE id_empresa = ? AND eliminado = false
                AND estado NOT IN ('anulado', 'borrador')
-               AND COALESCE(tipo_ambiente, '1') = ?
+               AND {$this->condAmbiente('tipo_ambiente', $ta)}
                AND make_date(periodo_anio, periodo_mes, 1) BETWEEN ? AND ?"
         );
-        $st->execute([$e, $ta, $d, $h]);
+        $st->execute([$e, $d, $h]);
         return (float) $st->fetchColumn();
     }
 
     // ── CxC / CxP ────────────────────────────────────────────────────────────
+    //
+    // Los abonos (cobros, pagos, retenciones, NC) se agrupan SOLO de la empresa.
+    // Antes cada subconsulta agrupaba la tabla entera —la de todas las empresas
+    // del sistema— y eso se repetía cuatro veces por carga del tablero (total y
+    // vencidos, de CxC y de CxP). Mismo arreglo que ya tienen
+    // CuentasPorCobrarRepository y CuentasPorPagarRepository. $e es int validado
+    // → interpolación segura.
+
+    /**
+     * Cobros de FACTURAS, por documento. `id_referencia_documento` apunta a una tabla
+     * distinta según `tipo_documento` (RECIBO → recibos, SALDO_INICIAL → saldos
+     * iniciales, FACTURA_REEMBOLSO…): sin este filtro, un cobro de otro tipo cuyo id
+     * coincidiera con el de una factura se restaba de esa factura. Mismo criterio que
+     * CuentasPorCobrarRepository::getCteCobrado() y el estado de pago de Facturas.
+     */
+    private function sqlCobradoVentas(int $e): string
+    {
+        return "SELECT d.id_referencia_documento, SUM(d.monto_cobrado) AS tc
+                FROM ingresos_detalle d
+                INNER JOIN ingresos_cabecera ic ON ic.id = d.id_ingreso
+                WHERE ic.id_empresa = {$e} AND ic.eliminado = false AND ic.estado != 'anulado'
+                  AND d.tipo_documento = 'FACTURA'
+                GROUP BY d.id_referencia_documento";
+    }
+
+    private function sqlRetenidoVentas(int $e): string
+    {
+        return "SELECT r.id_venta, SUM(r.total_renta + r.total_iva + r.total_isd) AS tr
+                FROM retencion_venta_cabecera r
+                WHERE r.id_empresa = {$e} AND r.eliminado = false AND r.id_venta IS NOT NULL
+                GROUP BY r.id_venta";
+    }
+
+    private function sqlNcVentas(int $e): string
+    {
+        return "SELECT nc.num_doc_modificado, SUM(nc.importe_total) AS tnc
+                FROM notas_credito_cabecera nc
+                WHERE nc.id_empresa = {$e} AND nc.eliminado = false AND nc.estado != 'anulado'
+                GROUP BY nc.num_doc_modificado";
+    }
+
+    /**
+     * Pagos de COMPRAS, por documento. Mismo motivo que sqlCobradoVentas(): los pagos
+     * ROL, MANUAL, LIQUIDACION, IMPORTACION… apuntan a otras tablas. Mismo criterio
+     * que CuentasPorPagarRepository::getCtePagado().
+     */
+    private function sqlPagadoCompras(int $e): string
+    {
+        return "SELECT ed.id_referencia_documento, SUM(ed.monto_pagado) AS tp
+                FROM egresos_detalle ed
+                INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                WHERE ec.id_empresa = {$e} AND ed.eliminado = false AND ec.eliminado = false AND ec.estado != 'anulado'
+                  AND ed.tipo_documento = 'COMPRA'
+                GROUP BY ed.id_referencia_documento";
+    }
+
+    private function sqlRetenidoCompras(int $e): string
+    {
+        return "SELECT rc.id_compra, SUM(rc.total_retenido) AS tr
+                FROM retencion_compra_cabecera rc
+                WHERE rc.id_empresa = {$e} AND rc.eliminado = false
+                  AND UPPER(rc.estado) NOT IN ('ANULADO', 'BORRADOR', 'PENDIENTE')
+                  AND rc.id_compra IS NOT NULL
+                GROUP BY rc.id_compra";
+    }
+
+    /** NC (04) y ND (05) de compra, por proveedor y documento modificado. */
+    private function sqlNcNdCompras(int $e): string
+    {
+        return "SELECT nc.id_empresa, nc.id_proveedor, nc.documento_modificado,
+                       SUM(CASE WHEN nc.tipo_comprobante = '04' THEN nc.importe_total ELSE 0 END) AS tnc,
+                       SUM(CASE WHEN nc.tipo_comprobante = '05' THEN nc.importe_total ELSE 0 END) AS tnd
+                FROM compras_cabecera nc
+                WHERE nc.id_empresa = {$e} AND nc.tipo_comprobante IN ('04', '05') AND nc.eliminado = false
+                GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado";
+    }
+
+    /**
+     * CTEs (para anteponer con WITH) que dejan en `si_pend` los saldos iniciales
+     * CxC de la empresa con su pendiente real: saldo − cobrado − retenido − NC,
+     * igual que el módulo CxC. Las retenciones y NC enlazadas por número solo se
+     * descuentan si ese número NO es el de una factura real (esa ya la descuenta
+     * el cálculo de facturas).
+     *
+     * Antes esa regla era un NOT EXISTS dentro de dos LATERAL: por cada saldo
+     * inicial se recorrían TODAS las facturas de la empresa aplicando
+     * regexp_replace a cada una (saldos × facturas × 2). Aquí los números de
+     * facturas, retenciones y NC se normalizan una sola vez y se cruzan por hash.
+     *
+     * @param string $filtroS Condiciones extra sobre `s` (empiezan con AND).
+     */
+    private function ctesSaldosInicialesCxc(int $e, string $filtroS): string
+    {
+        return "si AS (
+                SELECT s.id_cliente, s.nombre_cliente, s.nro_documento, s.fecha_emision,
+                       s.fecha_vencimiento, s.saldo_inicial, s.monto_cobrado,
+                       regexp_replace(s.nro_documento, '[^0-9]', '', 'g') AS num
+                FROM saldos_iniciales_cxc s
+                WHERE s.id_empresa = {$e} AND s.eliminado = false {$filtroS}
+            ),
+            num_facturas AS (
+                SELECT DISTINCT regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g') AS num
+                FROM ventas_cabecera vc
+                WHERE vc.id_empresa = {$e} AND vc.eliminado = false
+            ),
+            ret AS (
+                SELECT r.id_cliente, regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g') AS num,
+                       SUM(rd.valor_retenido) AS retenido
+                FROM retencion_venta_detalle rd
+                INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
+                WHERE r.id_empresa = {$e} AND r.eliminado = false AND r.id_venta IS NULL
+                  AND rd.num_doc_sustento IS NOT NULL AND rd.num_doc_sustento <> ''
+                GROUP BY 1, 2
+            ),
+            nc AS (
+                SELECT regexp_replace(ncc.num_doc_modificado, '[^0-9]', '', 'g') AS num,
+                       SUM(ncc.importe_total) AS nc_total
+                FROM notas_credito_cabecera ncc
+                WHERE ncc.id_empresa = {$e} AND ncc.eliminado = false AND ncc.estado != 'anulado'
+                GROUP BY 1
+            ),
+            si_pend AS (
+                SELECT si.*, si.saldo_inicial - si.monto_cobrado
+                             - COALESCE(ret.retenido, 0) - COALESCE(nc.nc_total, 0) AS pend
+                FROM si
+                LEFT JOIN num_facturas nf ON nf.num = si.num
+                LEFT JOIN ret ON nf.num IS NULL AND ret.id_cliente = si.id_cliente AND ret.num = si.num
+                LEFT JOIN nc  ON nf.num IS NULL AND nc.num = si.num
+            )";
+    }
 
     private function getCxcTotal(int $e, string $ta, string $d, string $h): float
     {
         // Saldo neto = importe − cobrado − retenido − NC (igual que el módulo CxC).
-        // $e es int validado → interpolación segura en los subqueries.
         $st = $this->db->prepare(
             "SELECT COALESCE(SUM(v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)), 0)
              FROM ventas_cabecera v
-             LEFT JOIN (
-                 SELECT d.id_referencia_documento, SUM(d.monto_cobrado) AS tc
-                 FROM ingresos_detalle d
-                 INNER JOIN ingresos_cabecera ic ON ic.id = d.id_ingreso
-                 WHERE ic.eliminado = false AND ic.estado != 'anulado'
-                 GROUP BY d.id_referencia_documento
-             ) c ON c.id_referencia_documento = v.id
-             LEFT JOIN (
-                 SELECT r.id_venta, SUM(r.total_renta + r.total_iva + r.total_isd) AS tr
-                 FROM retencion_venta_cabecera r
-                 WHERE r.eliminado = false AND r.id_venta IS NOT NULL
-                 GROUP BY r.id_venta
-             ) rt ON rt.id_venta = v.id
-             LEFT JOIN (
-                 SELECT nc.num_doc_modificado, SUM(nc.importe_total) AS tnc
-                 FROM notas_credito_cabecera nc
-                 WHERE nc.eliminado = false AND nc.estado != 'anulado' AND nc.id_empresa = {$e}
-                 GROUP BY nc.num_doc_modificado
-             ) ncv ON ncv.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
+             LEFT JOIN ({$this->sqlCobradoVentas($e)}) c ON c.id_referencia_documento = v.id
+             LEFT JOIN ({$this->sqlRetenidoVentas($e)}) rt ON rt.id_venta = v.id
+             LEFT JOIN ({$this->sqlNcVentas($e)}) ncv
+                    ON ncv.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
              WHERE v.id_empresa = ? AND v.eliminado = false
                AND v.estado NOT IN ('anulado', 'pagado')
-               AND COALESCE(v.tipo_ambiente, '1') = ?
+               AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
                AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
                AND (v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)) > 0"
         );
-        $st->execute([$e, $ta, $d, $h]);
+        $st->execute([$e, $d, $h]);
         $total = (float) $st->fetchColumn();
 
         // Sumar los saldos iniciales CxC pendientes del período (pendiente
         // descuenta lo retenido, igual que el módulo).
         $si = $this->db->prepare(
-            "SELECT COALESCE(SUM(t.pend), 0) FROM (
-                SELECT (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS pend
-                FROM saldos_iniciales_cxc s
-                LEFT JOIN LATERAL (
-                    SELECT SUM(rd.valor_retenido) AS retenido
-                    FROM retencion_venta_detalle rd
-                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
-                    WHERE r.eliminado = false
-                      AND r.id_empresa = s.id_empresa
-                      AND r.id_venta IS NULL
-                      AND r.id_cliente = s.id_cliente
-                      AND rd.num_doc_sustento IS NOT NULL
-                      AND rd.num_doc_sustento <> ''
-                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
-                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM ventas_cabecera vc
-                          WHERE vc.id_empresa = s.id_empresa
-                            AND vc.eliminado = false
-                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
-                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      )
-                ) ret ON true
-                LEFT JOIN LATERAL (
-                    SELECT SUM(ncc.importe_total) AS nc_total
-                    FROM notas_credito_cabecera ncc
-                    WHERE ncc.eliminado  = false
-                      AND ncc.estado    != 'anulado'
-                      AND ncc.id_empresa = s.id_empresa
-                      AND regexp_replace(ncc.num_doc_modificado, '[^0-9]', '', 'g')
-                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM ventas_cabecera vc
-                          WHERE vc.id_empresa = s.id_empresa
-                            AND vc.eliminado = false
-                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
-                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      )
-                ) ncsi ON true
-                WHERE s.id_empresa = ? AND s.eliminado = false
-                  AND s.fecha_emision BETWEEN ? AND ?
-            ) t WHERE t.pend > 0"
+            "WITH {$this->ctesSaldosInicialesCxc($e, 'AND s.fecha_emision BETWEEN ? AND ?')}
+             SELECT COALESCE(SUM(pend), 0) FROM si_pend WHERE pend > 0"
         );
-        $si->execute([$e, $d, $h]);
+        $si->execute([$d, $h]);
         return $total + (float) $si->fetchColumn();
     }
 
@@ -317,43 +411,22 @@ class DashboardService
         // Saldo neto = importe − pagado − retenido − NC(04) + ND(05), solo sobre
         // facturas de compra (tipo_comprobante '01'). Antes se sumaban las propias
         // NC/ND (04/05) como documentos por pagar y no se restaban de la factura.
-        // $e es int validado → interpolación segura en los subqueries.
         $st = $this->db->prepare(
             "SELECT COALESCE(SUM(c.importe_total - COALESCE(p.tp, 0) - COALESCE(r.tr, 0)
                                  - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)), 0)
              FROM compras_cabecera c
-             LEFT JOIN (
-                 SELECT ed.id_referencia_documento, SUM(ed.monto_pagado) AS tp
-                 FROM egresos_detalle ed
-                 INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
-                 WHERE ed.eliminado = false AND ec.eliminado = false AND ec.estado != 'anulado'
-                 GROUP BY ed.id_referencia_documento
-             ) p ON p.id_referencia_documento = c.id
-             LEFT JOIN (
-                 SELECT rc.id_compra, SUM(rc.total_retenido) AS tr
-                 FROM retencion_compra_cabecera rc
-                 WHERE rc.eliminado = false
-                   AND UPPER(rc.estado) NOT IN ('ANULADO', 'BORRADOR', 'PENDIENTE')
-                   AND rc.id_compra IS NOT NULL
-                 GROUP BY rc.id_compra
-             ) r ON r.id_compra = c.id
-             LEFT JOIN (
-                 SELECT nc.id_empresa, nc.id_proveedor, nc.documento_modificado,
-                        SUM(CASE WHEN nc.tipo_comprobante = '04' THEN nc.importe_total ELSE 0 END) AS tnc,
-                        SUM(CASE WHEN nc.tipo_comprobante = '05' THEN nc.importe_total ELSE 0 END) AS tnd
-                 FROM compras_cabecera nc
-                 WHERE nc.tipo_comprobante IN ('04', '05') AND nc.eliminado = false AND nc.id_empresa = {$e}
-                 GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado
-             ) nn ON nn.id_empresa = c.id_empresa AND nn.id_proveedor = c.id_proveedor
+             LEFT JOIN ({$this->sqlPagadoCompras($e)}) p ON p.id_referencia_documento = c.id
+             LEFT JOIN ({$this->sqlRetenidoCompras($e)}) r ON r.id_compra = c.id
+             LEFT JOIN ({$this->sqlNcNdCompras($e)}) nn ON nn.id_empresa = c.id_empresa AND nn.id_proveedor = c.id_proveedor
                  AND nn.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov)
              WHERE c.id_empresa = ? AND c.eliminado = false
                AND c.tipo_comprobante = '01'
-               AND COALESCE(c.tipo_ambiente::text, '1') = ?
+               AND {$this->condAmbiente('c.tipo_ambiente', $ta)}
                AND CAST(c.fecha_emision AS DATE) BETWEEN ? AND ?
                AND (c.importe_total - COALESCE(p.tp, 0) - COALESCE(r.tr, 0)
                     - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)) > 0"
         );
-        $st->execute([$e, $ta, $d, $h]);
+        $st->execute([$e, $d, $h]);
         $total = (float) $st->fetchColumn();
 
         // Sumar los saldos iniciales CxP pendientes del período.
@@ -416,7 +489,7 @@ class DashboardService
         $todas = $formasPropias;
         foreach ($hermanas as $idHermana) {
             try {
-                $todas = array_merge($todas, $this->calcularSaldosCaja($idHermana)['formas']);
+                $todas = array_merge($todas, $this->calcularFormasCaja($idHermana));
             } catch (\Throwable $ex) {
                 // Establecimiento hermano roto (tablas de migración faltantes, etc.): se omite.
             }
@@ -450,6 +523,22 @@ class DashboardService
     }
 
     private function calcularSaldosCaja(int $e): array
+    {
+        return [
+            'formas'                => $this->calcularFormasCaja($e),
+            'anticipos_clientes'    => $this->getAnticipoGlobal($e, 'CLIENTE'),
+            'anticipos_proveedores' => $this->getAnticipoGlobal($e, 'PROVEEDOR'),
+            'tiene_datos'           => true,
+        ];
+    }
+
+    /**
+     * Saldo real actual de cada forma de pago de la empresa (sin anticipos). El
+     * consolidado por RUC lo pide por cada establecimiento hermano; antes se le
+     * calculaban también los anticipos (seis consultas más por hermano) para
+     * luego descartarlos.
+     */
+    private function calcularFormasCaja(int $e): array
     {
         // ── Bancos / Efectivo / Tarjeta / Otro: saldo real actual por forma ──
         //   saldo = saldo_inicial (saldos_iniciales_bancos)
@@ -526,12 +615,7 @@ class DashboardService
             ];
         }
 
-        return [
-            'formas'                => $formas,
-            'anticipos_clientes'    => $this->getAnticipoGlobal($e, 'CLIENTE'),
-            'anticipos_proveedores' => $this->getAnticipoGlobal($e, 'PROVEEDOR'),
-            'tiene_datos'           => true,
-        ];
+        return $formas;
     }
 
     /**
@@ -609,11 +693,11 @@ class DashboardService
              FROM ventas_cabecera v
              INNER JOIN clientes cl ON cl.id = v.id_cliente
              WHERE v.id_empresa = ? AND v.eliminado = false
-               AND COALESCE(v.tipo_ambiente, '1') = ?
+               AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
              ORDER BY v.fecha_emision DESC, v.id DESC
              LIMIT ?"
         );
-        $st->execute([$e, $ta, $lim]);
+        $st->execute([$e, $lim]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -626,11 +710,11 @@ class DashboardService
              FROM compras_cabecera c
              INNER JOIN proveedores p ON p.id = c.id_proveedor
              WHERE c.id_empresa = ? AND c.eliminado = false
-               AND COALESCE(c.tipo_ambiente::text, '1') = ?
+               AND {$this->condAmbiente('c.tipo_ambiente', $ta)}
              ORDER BY c.fecha_emision DESC, c.id DESC
              LIMIT ?"
         );
-        $st->execute([$e, $ta, $lim]);
+        $st->execute([$e, $lim]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -676,8 +760,11 @@ class DashboardService
         // Une las facturas de venta vencidas con los saldos iniciales CxC
         // vencidos (que tienen su propia fecha_vencimiento). En los saldos
         // iniciales el pendiente descuenta lo retenido, igual que el módulo.
+        // Desempate por saldo y comprobante: con varios documentos del mismo día,
+        // el LIMIT mostraba unos u otros según el plan de ejecución.
         $st = $this->db->prepare(
-            "SELECT cliente, comprobante, fecha, saldo, dias_vencido FROM (
+            "WITH {$this->ctesSaldosInicialesCxc($e, 'AND s.fecha_vencimiento IS NOT NULL AND s.fecha_vencimiento < CURRENT_DATE')}
+             SELECT cliente, comprobante, fecha, saldo, dias_vencido FROM (
                 SELECT cl.nombre AS cliente,
                        CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AS comprobante,
                        v.fecha_emision AS fecha,
@@ -685,86 +772,27 @@ class DashboardService
                        (CURRENT_DATE - CAST(v.fecha_emision AS DATE)) AS dias_vencido
                 FROM ventas_cabecera v
                 INNER JOIN clientes cl ON cl.id = v.id_cliente
-                LEFT JOIN (
-                    SELECT d.id_referencia_documento, SUM(d.monto_cobrado) AS tc
-                    FROM ingresos_detalle d
-                    INNER JOIN ingresos_cabecera ic ON ic.id = d.id_ingreso
-                    WHERE ic.eliminado = false AND ic.estado != 'anulado'
-                    GROUP BY d.id_referencia_documento
-                ) c ON c.id_referencia_documento = v.id
-                LEFT JOIN (
-                    SELECT r.id_venta, SUM(r.total_renta + r.total_iva + r.total_isd) AS tr
-                    FROM retencion_venta_cabecera r
-                    WHERE r.eliminado = false AND r.id_venta IS NOT NULL
-                    GROUP BY r.id_venta
-                ) rt ON rt.id_venta = v.id
-                LEFT JOIN (
-                    SELECT nc.num_doc_modificado, SUM(nc.importe_total) AS tnc
-                    FROM notas_credito_cabecera nc
-                    WHERE nc.eliminado = false AND nc.estado != 'anulado' AND nc.id_empresa = {$e}
-                    GROUP BY nc.num_doc_modificado
-                ) ncv ON ncv.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
+                LEFT JOIN ({$this->sqlCobradoVentas($e)}) c ON c.id_referencia_documento = v.id
+                LEFT JOIN ({$this->sqlRetenidoVentas($e)}) rt ON rt.id_venta = v.id
+                LEFT JOIN ({$this->sqlNcVentas($e)}) ncv
+                       ON ncv.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
                 WHERE v.id_empresa = :e AND v.eliminado = false
                   AND v.estado NOT IN ('anulado', 'pagado')
-                  AND COALESCE(v.tipo_ambiente, '1') = :ta
+                  AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
                   AND (v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)) > 0
                   AND (CURRENT_DATE - CAST(v.fecha_emision AS DATE)) > COALESCE(cl.plazo, 0)
 
                 UNION ALL
 
-                SELECT s.nombre_cliente AS cliente,
-                       s.nro_documento AS comprobante,
-                       s.fecha_emision AS fecha,
-                       (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS saldo,
-                       (CURRENT_DATE - s.fecha_vencimiento)::int AS dias_vencido
-                FROM saldos_iniciales_cxc s
-                LEFT JOIN LATERAL (
-                    SELECT SUM(rd.valor_retenido) AS retenido
-                    FROM retencion_venta_detalle rd
-                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
-                    WHERE r.eliminado = false
-                      AND r.id_empresa = s.id_empresa
-                      AND r.id_venta IS NULL
-                      AND r.id_cliente = s.id_cliente
-                      AND rd.num_doc_sustento IS NOT NULL
-                      AND rd.num_doc_sustento <> ''
-                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
-                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM ventas_cabecera vc
-                          WHERE vc.id_empresa = s.id_empresa
-                            AND vc.eliminado = false
-                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
-                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      )
-                ) ret ON true
-                LEFT JOIN LATERAL (
-                    SELECT SUM(ncc.importe_total) AS nc_total
-                    FROM notas_credito_cabecera ncc
-                    WHERE ncc.eliminado  = false
-                      AND ncc.estado    != 'anulado'
-                      AND ncc.id_empresa = s.id_empresa
-                      AND regexp_replace(ncc.num_doc_modificado, '[^0-9]', '', 'g')
-                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM ventas_cabecera vc
-                          WHERE vc.id_empresa = s.id_empresa
-                            AND vc.eliminado = false
-                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
-                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
-                      )
-                ) ncsi ON true
-                WHERE s.id_empresa = :e2 AND s.eliminado = false
-                  AND s.fecha_vencimiento IS NOT NULL
-                  AND s.fecha_vencimiento < CURRENT_DATE
-                  AND (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) > 0
+                SELECT nombre_cliente, nro_documento, fecha_emision, pend,
+                       (CURRENT_DATE - fecha_vencimiento)::int
+                FROM si_pend
+                WHERE pend > 0
             ) u
-            ORDER BY dias_vencido DESC
+            ORDER BY dias_vencido DESC, saldo DESC, comprobante
             LIMIT :lim"
         );
         $st->bindValue(':e',   $e,   PDO::PARAM_INT);
-        $st->bindValue(':ta',  $ta,  PDO::PARAM_STR);
-        $st->bindValue(':e2',  $e,   PDO::PARAM_INT);
         $st->bindValue(':lim', $lim, PDO::PARAM_INT);
         $st->execute();
         return $st->fetchAll(PDO::FETCH_ASSOC);
@@ -782,33 +810,13 @@ class DashboardService
                        (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) AS dias_vencido
                 FROM compras_cabecera c
                 INNER JOIN proveedores p ON p.id = c.id_proveedor
-                LEFT JOIN (
-                    SELECT ed.id_referencia_documento, SUM(ed.monto_pagado) AS tp
-                    FROM egresos_detalle ed
-                    INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
-                    WHERE ed.eliminado = false AND ec.eliminado = false AND ec.estado != 'anulado'
-                    GROUP BY ed.id_referencia_documento
-                ) pg ON pg.id_referencia_documento = c.id
-                LEFT JOIN (
-                    SELECT rc.id_compra, SUM(rc.total_retenido) AS tr
-                    FROM retencion_compra_cabecera rc
-                    WHERE rc.eliminado = false
-                      AND UPPER(rc.estado) NOT IN ('ANULADO', 'BORRADOR', 'PENDIENTE')
-                      AND rc.id_compra IS NOT NULL
-                    GROUP BY rc.id_compra
-                ) r ON r.id_compra = c.id
-                LEFT JOIN (
-                    SELECT nc.id_empresa, nc.id_proveedor, nc.documento_modificado,
-                           SUM(CASE WHEN nc.tipo_comprobante = '04' THEN nc.importe_total ELSE 0 END) AS tnc,
-                           SUM(CASE WHEN nc.tipo_comprobante = '05' THEN nc.importe_total ELSE 0 END) AS tnd
-                    FROM compras_cabecera nc
-                    WHERE nc.tipo_comprobante IN ('04', '05') AND nc.eliminado = false AND nc.id_empresa = {$e}
-                    GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado
-                ) nn ON nn.id_empresa = c.id_empresa AND nn.id_proveedor = c.id_proveedor
+                LEFT JOIN ({$this->sqlPagadoCompras($e)}) pg ON pg.id_referencia_documento = c.id
+                LEFT JOIN ({$this->sqlRetenidoCompras($e)}) r ON r.id_compra = c.id
+                LEFT JOIN ({$this->sqlNcNdCompras($e)}) nn ON nn.id_empresa = c.id_empresa AND nn.id_proveedor = c.id_proveedor
                     AND nn.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov)
                 WHERE c.id_empresa = :e AND c.eliminado = false
                   AND c.tipo_comprobante = '01'
-                  AND COALESCE(c.tipo_ambiente::text, '1') = :ta
+                  AND {$this->condAmbiente('c.tipo_ambiente', $ta)}
                   AND (c.importe_total - COALESCE(pg.tp, 0) - COALESCE(r.tr, 0) - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)) > 0
                   AND (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) > COALESCE(p.plazo, 0)
 
@@ -825,11 +833,10 @@ class DashboardService
                   AND s.fecha_vencimiento < CURRENT_DATE
                   AND s.saldo_pendiente > 0
             ) u
-            ORDER BY dias_vencido DESC
+            ORDER BY dias_vencido DESC, saldo DESC, comprobante
             LIMIT :lim"
         );
         $st->bindValue(':e',   $e,   PDO::PARAM_INT);
-        $st->bindValue(':ta',  $ta,  PDO::PARAM_STR);
         $st->bindValue(':e2',  $e,   PDO::PARAM_INT);
         $st->bindValue(':lim', $lim, PDO::PARAM_INT);
         $st->execute();
@@ -857,11 +864,11 @@ class DashboardService
             "SELECT TO_CHAR(make_date(periodo_anio, periodo_mes, 1),'YYYY-MM') k, SUM(total_ingresos) t
              FROM rol_cabecera
              WHERE id_empresa=? AND eliminado=false AND estado NOT IN ('anulado','borrador')
-               AND COALESCE(tipo_ambiente,'1')=?
+               AND {$this->condAmbiente('tipo_ambiente', $ta)}
                AND make_date(periodo_anio, periodo_mes, 1) >= ?
              GROUP BY k"
         );
-        $stN->execute([$e, $ta, $desde]);
+        $stN->execute([$e, $desde]);
         foreach ($stN->fetchAll(PDO::FETCH_ASSOC) as $r) {
             if (isset($data[$r['k']])) $data[$r['k']]['nomina'] = (float) $r['t'];
         }
@@ -870,13 +877,13 @@ class DashboardService
         foreach ([
             'ventas'  => "SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k, SUM(importe_total) t
                           FROM ventas_cabecera WHERE id_empresa=? AND eliminado=false AND estado!='anulado'
-                            AND COALESCE(tipo_ambiente,'1')=? AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
+                            AND {$this->condAmbiente('tipo_ambiente', $ta)} AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
             'compras' => "SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k, SUM(importe_total) t
                           FROM compras_cabecera WHERE id_empresa=? AND eliminado=false
-                            AND COALESCE(tipo_ambiente::text,'1')=? AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
+                            AND {$this->condAmbiente('tipo_ambiente', $ta)} AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
         ] as $campo => $sql) {
             $st = $this->db->prepare($sql);
-            $st->execute([$e, $ta, $desde]);
+            $st->execute([$e, $desde]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 if (isset($data[$r['k']])) $data[$r['k']][$campo] = (float) $r['t'];
             }
@@ -911,13 +918,13 @@ class DashboardService
              INNER JOIN ventas_cabecera v ON v.id = det.id_venta
              LEFT JOIN productos p ON p.id = det.id_producto
              WHERE v.id_empresa = ? AND v.eliminado = false AND v.estado != 'anulado'
-               AND COALESCE(v.tipo_ambiente, '1') = ?
+               AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
                AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
              GROUP BY COALESCE(p.nombre, det.descripcion)
              ORDER BY total DESC
              LIMIT ?"
         );
-        $st->execute([$e, $ta, $d, $h, $lim]);
+        $st->execute([$e, $d, $h, $lim]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -928,13 +935,13 @@ class DashboardService
              FROM ventas_cabecera v
              INNER JOIN clientes cl ON cl.id = v.id_cliente
              WHERE v.id_empresa = ? AND v.eliminado = false AND v.estado != 'anulado'
-               AND COALESCE(v.tipo_ambiente, '1') = ?
+               AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
                AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
              GROUP BY cl.nombre
              ORDER BY total DESC
              LIMIT ?"
         );
-        $st->execute([$e, $ta, $d, $h, $lim]);
+        $st->execute([$e, $d, $h, $lim]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -946,13 +953,13 @@ class DashboardService
              FROM compras_cabecera c
              INNER JOIN proveedores p ON p.id = c.id_proveedor
              WHERE c.id_empresa = ? AND c.eliminado = false
-               AND COALESCE(c.tipo_ambiente::text, '1') = ?
+               AND {$this->condAmbiente('c.tipo_ambiente', $ta)}
                AND CAST(c.fecha_emision AS DATE) BETWEEN ? AND ?
              GROUP BY p.razon_social
              ORDER BY total DESC
              LIMIT ?"
         );
-        $st->execute([$e, $ta, $d, $h, $lim]);
+        $st->execute([$e, $d, $h, $lim]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

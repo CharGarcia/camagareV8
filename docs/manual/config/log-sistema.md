@@ -1,6 +1,6 @@
 ---
 titulo: Auditoría del sistema
-etiquetas: [auditoría, bitácora, log, historial, quién hizo qué, rastreo, trazabilidad, cambios, log_sistema, intentos de login, buscar por contenido, buscar dentro del mensaje, concepto, proveedor, comprobante]
+etiquetas: [auditoría, bitácora, log, historial, quién hizo qué, rastreo, trazabilidad, cambios, log_sistema, intentos de login, buscar por contenido, buscar dentro del mensaje, concepto, proveedor, comprobante, número de documento, número de comprobante, buscar por número de documento, tercero, cliente, detalle del evento, información en detalle, datos del documento]
 visibilidad: superadmin
 ---
 
@@ -34,11 +34,60 @@ pantalla registra **acciones de negocio**.
    (solo nivel 3), **Acción** o **Módulo**.
 4. Para encontrar un evento por lo que dice adentro, escriba en **Contenido del
    mensaje** (ver más abajo).
-5. Haga clic en cualquier fila para abrir el **detalle del evento**: verá la tabla
-   de cambios campo por campo (antes / después) y, desplegando *Ver datos crudos*,
-   el contenido completo del evento.
+5. Haga clic en cualquier fila para abrir el **detalle del evento**: en el
+   encabezado verá el módulo y, si el evento es sobre un documento, su **número de
+   documento** (ver más abajo). Debajo, la tabla de cambios campo por campo
+   (antes / después) y, desplegando **Ver información en detalle**, todo lo que se
+   sabe del registro.
 6. Los botones de **PDF** y **Excel** exportan exactamente lo que está filtrado en
-   pantalla.
+   pantalla, incluida la columna **Documento**.
+
+### Número de documento en el listado y en el detalle
+
+Cuando el evento es sobre un documento —factura, egreso, ingreso, compra, nota de
+crédito o débito, retención, liquidación, guía de remisión, proforma, orden,
+asiento contable, etc.— el listado lo muestra en la columna **Documento** y el
+encabezado del detalle, justo después del **Módulo**, como **Número de documento**.
+Por ejemplo: `Módulo: Egresos` · `Número de documento: 001-001-000000123`.
+
+- El número se lee **del propio documento**, no de los datos guardados del evento:
+  aparece aunque el evento solo haya registrado un cambio de estado o de importe.
+- Si el documento se **eliminó** después, el número se muestra igual, con la marca
+  **Eliminado**.
+- En módulos que no son documentos (productos, clientes, catálogos…) este dato no
+  aparece.
+- Si el documento no tiene número asignado, se ve un guion (`-`).
+
+### Buscar por número de documento
+
+Escriba el número en el buscador general, completo o en parte: `001-001-000000123`,
+`000000123` o `123`. Cuando lo que escribe lleva dígitos, además de usuario, acción,
+módulo, empresa e IP, se busca en el **número del documento** afectado.
+
+Para ser más preciso use las claves:
+
+- `documento:001-001-000000123` (o su alias `numero:`) busca solo por el número del
+  documento.
+- `tercero:"DELIVERY HERO"` busca los eventos sobre documentos de ese **cliente,
+  proveedor o empleado**, por nombre o por identificación (`tercero:1790012345001`).
+
+### Ver información en detalle
+
+En el detalle del evento, el botón **Ver información en detalle** despliega:
+
+1. **Documento afectado — como está hoy**: tipo, número, fecha, estado, tercero
+   (cliente, proveedor o empleado, con su identificación), las líneas del documento,
+   los totales y las observaciones. En los asientos contables muestra además el
+   concepto, el origen y las líneas con cuenta, debe y haber. Son los datos
+   **actuales** del documento, no los del momento del evento.
+2. **Datos registrados en el evento**: todo lo que guardó el evento, no solo lo que
+   cambió, con nombres legibles, fechas en formato día-mes-año y las listas
+   (detalles, formas de pago…) como tablas. Van en orden alfabético y, al final,
+   los datos de control (ID interno, creado por, fechas de registro). Cuando el
+   evento guardó cómo estaba antes y cómo quedó, se ven lado a lado y **se resaltan
+   los campos que cambiaron**.
+3. **Ver JSON original**: el contenido técnico tal como se guardó, por si necesita
+   verificar un dato exacto.
 
 ### Buscar por contenido del mensaje
 
@@ -85,7 +134,7 @@ Cómo se comporta:
 
 | Campo | Qué significa |
 |-------|---------------|
-| Buscar | Texto libre sobre acción, módulo, usuario, empresa e IP. Admite claves `clave:valor` |
+| Buscar | Texto libre sobre acción, módulo, usuario, empresa e IP y, si lleva dígitos, sobre el número del documento. Admite claves `clave:valor` |
 | Contenido del mensaje | Busca dentro de los datos guardados del evento (concepto, proveedor, comprobante, importes, estado) |
 | Usuario | Solo los eventos generados por esa persona |
 | Empresa | Solo nivel 3. Acota a una empresa concreta |
@@ -100,6 +149,9 @@ Cómo se comporta:
 | `usuario:` | `usuario:maria` | Filtra por nombre de usuario |
 | `accion:` | `accion:eliminar` | Filtra por tipo de acción |
 | `registro:` | `registro:34766` | Filtra por el número del registro afectado |
+| `documento:` | `documento:001-001-000000123` | Filtra por el número del documento afectado |
+| `numero:` | `numero:000000123` | Alias de `documento:` |
+| `tercero:` | `tercero:"DELIVERY HERO"` | Cliente, proveedor o empleado del documento, por nombre o identificación |
 | `ip:` | `ip:190.1` | Filtra por dirección IP |
 | `contenido:` | `contenido:"DELIVERY HERO"` | Busca dentro de los datos del evento |
 | `datos:` | `datos:CO-000039` | Alias de `contenido:` |
@@ -128,6 +180,12 @@ espacios.
   puede leer un evento de otra empresa aunque conozca su número.
 - Los nombres internos de las tablas no se muestran: se traducen a nombres de
   módulo entendibles.
+- El **número de documento** (columna del listado y encabezado del detalle) se
+  consulta dentro de la empresa del propio evento, y se muestra aunque el documento
+  haya sido eliminado después (marcado como *Eliminado*): la auditoría debe poder
+  identificar qué documento se tocó.
+- El bloque **Documento afectado** muestra el documento con sus datos **de hoy**. Lo
+  que el evento registró en su momento está en *Datos registrados en el evento*.
 - Las exportaciones tienen tope de seguridad: **10.000 filas** en Excel y **2.000**
   en PDF. Si se supera, el archivo incluye un aviso y hay que acotar el filtro.
 
@@ -147,12 +205,27 @@ espacios.
   caracteres. Pulse **Enter** para forzar la búsqueda.
 - **No encuentro un evento que sé que existe**: verifique que no esté buscando
   fuera de su alcance de empresa (nivel 2) y que la palabra esté realmente en los
-  datos guardados —abra un evento parecido y mire *Ver datos crudos*.
+  datos guardados —abra un evento parecido y mire *Ver información en detalle*.
 - **"Registro no encontrado o fuera de su alcance"**: el evento pertenece a otra
   empresa.
+- **El detalle no muestra el número de documento**: solo aparece en eventos sobre
+  documentos (facturas, egresos, compras, etc.). En productos, clientes o
+  catálogos no aplica.
+- **Busco un número de documento y no aparece**: revise el rango **Desde/Hasta** y
+  tenga en cuenta que cada documento tiene su propio número: el asiento contable de
+  una compra tiene el suyo (p. ej. `CO-000039`). Para encontrar ese asiento por el
+  número de la compra, use **Contenido del mensaje**.
 
 ## Historial de cambios
 
+- **1.2** — Número del documento afectado en el listado (columna **Documento**,
+  también en PDF y Excel) y en el encabezado del detalle, justo después del módulo;
+  si el documento fue eliminado después, se marca como *Eliminado*. El buscador
+  encuentra eventos por número de documento y se agregan las claves
+  `documento:`/`numero:` y `tercero:`. *Ver datos crudos* pasa a ser **Ver
+  información en detalle**: documento afectado completo (cabecera, tercero, líneas y
+  totales), todos los datos del evento en forma legible y, al final, el JSON
+  original.
 - **1.1** — Se agrega la búsqueda por **contenido del mensaje** (campo en la barra
   de filtros y claves `contenido:` / `datos:` en el buscador), que revisa los datos
   guardados de cada evento. Se aplica también a las exportaciones a PDF y Excel.

@@ -14,6 +14,9 @@ class LogSistemaService
     /** Caché de resoluciones id → nombre dentro de la misma petición. */
     private array $cacheValores = [];
 
+    /** Datos de control del registro: el diff los omite y el detalle completo los deja al final. */
+    private const CAMPOS_CONTROL = ['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'eliminado', 'deleted_at', 'deleted_by', 'id_empresa', 'id_usuario'];
+
     public function __construct()
     {
         $this->db = Database::getConnection();
@@ -100,6 +103,202 @@ class LogSistemaService
     }
 
     /**
+     * Todos los datos guardados en el evento —no solo los que cambiaron—, legibles, para el
+     * detalle completo de la consulta de auditoría (config/log-sistema). A diferencia de
+     * formatearCambios() no omite nada (id, fechas de registro, quién lo hizo…) y muestra las
+     * listas anexas (detalles, pagos…) como tabla en vez de "3 registros".
+     *
+     * @return array<int, array{campo: string, antes: string|array|null, despues: string|array|null, cambio: bool}>
+     *         Cada lado es null si el evento no guardó ese campo de ese lado, un texto, o una
+     *         tabla ['columnas' => string[], 'filas' => string[][]] para listas y objetos.
+     */
+    public function formatearDatosCompletos(?array $antes, ?array $despues): array
+    {
+        $antes   = $antes ?? [];
+        $despues = $despues ?? [];
+
+        $claves = array_keys($despues);
+        foreach (array_keys($antes) as $clave) {
+            if (!array_key_exists($clave, $despues)) {
+                $claves[] = $clave;
+            }
+        }
+
+        $etiquetas = self::etiquetasUnicas(array_map('strval', $claves));
+        $filas = [];
+        $orden = [];
+        foreach ($claves as $clave) {
+            $key        = (string) $clave;
+            $hayAntes   = array_key_exists($clave, $antes);
+            $hayDespues = array_key_exists($clave, $despues);
+            $campo      = $etiquetas[$key];
+            $filas[] = [
+                'campo'   => $campo,
+                'antes'   => $hayAntes ? $this->presentarCompleto($key, $antes[$clave]) : null,
+                'despues' => $hayDespues ? $this->presentarCompleto($key, $despues[$clave]) : null,
+                'cambio'  => $hayAntes && $hayDespues && !AuditoriaCampos::iguales($antes[$clave], $despues[$clave]),
+            ];
+            $orden[] = [
+                in_array($key, self::CAMPOS_CONTROL, true) ? 1 : 0,
+                strtr(mb_strtolower($campo, 'UTF-8'), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n']),
+            ];
+        }
+
+        // Orden alfabético y los datos de control al final: el JSON guardado (JSONB) no
+        // conserva el orden de las columnas, así que el orden en que llega no dice nada.
+        $indices = array_keys($filas);
+        usort($indices, fn($a, $b) => $orden[$a] <=> $orden[$b]);
+
+        return array_map(fn($i) => $filas[$i], $indices);
+    }
+
+    /** Valor para el detalle completo: listas y objetos como tabla; lo demás, como en el diff. */
+    private function presentarCompleto(string $key, $valor)
+    {
+        // El mismo dato llega como arreglo o como texto JSON según de dónde venga el log.
+        if (is_string($valor) && preg_match('/^\s*[\[{]/', $valor)) {
+            $decodificado = json_decode($valor, true);
+            if (is_array($decodificado)) {
+                $valor = $decodificado;
+            }
+        }
+
+        // Los campos con traducción propia (opciones, casilleros SRI) conservan su texto.
+        if (is_array($valor) && $valor !== [] && $key !== 'casilleros_sri' && AuditoriaCampos::valorLegible($key, $valor) === null) {
+            $tabla = $this->tablaDeDatos($valor);
+            if ($tabla !== null) {
+                return $tabla;
+            }
+            if (array_keys($valor) === range(0, count($valor) - 1)) {
+                return implode(', ', array_map(
+                    fn($v) => is_array($v) ? (json_encode($v, JSON_UNESCAPED_UNICODE) ?: '') : $this->textoLegible((string) $v),
+                    $valor
+                ));
+            }
+        }
+
+        return $this->textoLegible($this->presentarValor($key, $valor));
+    }
+
+    /**
+     * Lista de registros (detalles, pagos…) → tabla con una columna por campo, sin las que
+     * vienen vacías en todas las filas; objeto → tabla Campo / Valor. Null si es una lista de
+     * valores simples.
+     *
+     * @return array{columnas: string[], filas: string[][]}|null
+     */
+    private function tablaDeDatos(array $valor): ?array
+    {
+        if (array_keys($valor) !== range(0, count($valor) - 1)) {
+            $etiquetas = self::etiquetasUnicas(array_map('strval', array_keys($valor)));
+            $filas = [];
+            foreach ($valor as $k => $v) {
+                $filas[] = [$etiquetas[(string) $k], $this->textoCelda((string) $k, $v)];
+            }
+            return ['columnas' => ['Campo', 'Valor'], 'filas' => $filas];
+        }
+
+        foreach ($valor as $registro) {
+            if (!is_array($registro)) {
+                return null;
+            }
+        }
+
+        // Columnas en el orden en que aparecen; fuera las vacías en todas las filas.
+        $conDato = [];
+        foreach ($valor as $registro) {
+            foreach ($registro as $k => $v) {
+                $k = (string) $k;
+                $conDato[$k] = ($conDato[$k] ?? false) || ($v !== null && $v !== '' && $v !== []);
+            }
+        }
+        $claves = array_map('strval', array_keys(array_filter($conDato)));
+        if ($claves === []) {
+            return null;
+        }
+
+        $filas = [];
+        foreach ($valor as $registro) {
+            $fila = [];
+            foreach ($claves as $k) {
+                $fila[] = array_key_exists($k, $registro) ? $this->textoCelda($k, $registro[$k]) : '';
+            }
+            $filas[] = $fila;
+        }
+
+        return [
+            'columnas' => array_values(self::etiquetasUnicas($claves)),
+            'filas'    => $filas,
+        ];
+    }
+
+    /**
+     * Etiqueta legible por clave, sin confusiones: `establecimiento` e `id_establecimiento`
+     * se ven juntas en el detalle completo y la segunda es el id del catálogo, así que se
+     * muestra como "Establecimiento (ID)". Igual con cualquier otro id cuya etiqueta choque.
+     *
+     * @param string[] $claves
+     * @return array<string, string> clave => etiqueta, en el mismo orden.
+     */
+    private static function etiquetasUnicas(array $claves): array
+    {
+        $etiquetas = [];
+        foreach ($claves as $clave) {
+            $etiquetas[$clave] = AuditoriaCampos::etiqueta($clave);
+        }
+
+        // Un id junto a su dato (id_punto_emision + punto_emision): la etiqueta del dato + " (ID)".
+        foreach (array_keys($etiquetas) as $clave) {
+            $base = preg_replace('/^id_|_id$/', '', (string) $clave);
+            if ($base !== (string) $clave && isset($etiquetas[$base])) {
+                $etiquetas[$clave] = $etiquetas[$base] . ' (ID)';
+            }
+        }
+
+        $repetidas = array_filter(array_count_values($etiquetas), fn($n) => $n > 1);
+        foreach ($etiquetas as $clave => $etiqueta) {
+            if (isset($repetidas[$etiqueta]) && preg_match('/^id_|_id$/', (string) $clave)) {
+                $etiquetas[$clave] = $etiqueta . ' (ID)';
+            }
+        }
+
+        return $etiquetas;
+    }
+
+    /** Valor de una celda de las tablas anexas: legible, en una línea, vacío si no hay dato. */
+    private function textoCelda(string $key, $valor): string
+    {
+        if ($valor === null || $valor === '') {
+            return '';
+        }
+        if (is_array($valor)) {
+            return AuditoriaCampos::valorLegible($key, $valor) ?? (json_encode($valor, JSON_UNESCAPED_UNICODE) ?: '');
+        }
+        return $this->textoLegible($this->presentarValor($key, $valor));
+    }
+
+    /**
+     * Texto de un valor de la BD en el formato del sistema: fechas ISO (2026-07-04,
+     * 2026-07-04 10:22:33.123456-05) como d-m-Y H:i:s, y decimales rellenos de ceros
+     * (150.000000) sin el relleno (150.00).
+     */
+    private function textoLegible(string $texto): string
+    {
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?[\d.]*(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/', $texto, $m)) {
+            $fecha = "{$m[3]}-{$m[2]}-{$m[1]}";
+            if (isset($m[4]) && $m[4] !== '') {
+                $fecha .= " {$m[4]}:{$m[5]}:" . (isset($m[6]) && $m[6] !== '' ? $m[6] : '00');
+            }
+            return $fecha;
+        }
+        if (preg_match('/^-?\d+\.\d{4,}$/', $texto)) {
+            [$entero, $decimales] = explode('.', $texto, 2);
+            return $entero . '.' . str_pad(rtrim($decimales, '0'), 2, '0');
+        }
+        return $texto;
+    }
+
+    /**
      * Compara dos arreglos de datos y retorna una lista de cambios legibles.
      *
      * La comparación es semántica (App\Helpers\AuditoriaCampos::iguales): un mismo
@@ -113,7 +312,7 @@ class LogSistemaService
         if (!$despues) return [['campo' => 'Registro', 'antes' => 'Existía', 'despues' => 'Eliminado']];
 
         $cambios = [];
-        $omitir = ['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'eliminado', 'deleted_at', 'deleted_by', 'id_empresa', 'id_usuario'];
+        $omitir = self::CAMPOS_CONTROL;
 
         foreach ($despues as $key => $valNuevo) {
             if (in_array($key, $omitir)) continue;
@@ -234,7 +433,14 @@ class LogSistemaService
             'tipo_empresa'      => ['table' => 'tipo_empresa', 'field' => 'nombre'],
             'provincia'         => ['table' => 'provincias', 'field' => 'nombre', 'key' => 'codigo'],
             'ciudad'            => ['table' => 'ciudades', 'field' => 'nombre', 'key' => 'codigo'],
-            'id_forma_cobro_predeterminada' => ['table' => 'formas_cobro', 'field' => 'nombre']
+            'id_forma_cobro_predeterminada' => ['table' => 'formas_cobro', 'field' => 'nombre'],
+            // Quién y en qué empresa: solo se ven en el detalle completo de la consulta de
+            // auditoría (formatearDatosCompletos); el diff de cambios omite estas claves.
+            'created_by'        => ['table' => 'usuarios', 'field' => 'nombre'],
+            'updated_by'        => ['table' => 'usuarios', 'field' => 'nombre'],
+            'deleted_by'        => ['table' => 'usuarios', 'field' => 'nombre'],
+            'id_usuario'        => ['table' => 'usuarios', 'field' => 'nombre'],
+            'id_empresa'        => ['table' => 'empresas', 'field' => 'COALESCE(nombre_comercial, nombre)'],
         ];
 
         if (isset($map[$key])) {

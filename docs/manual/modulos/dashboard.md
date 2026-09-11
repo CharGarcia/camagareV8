@@ -6,7 +6,7 @@ ruta_modulo: modulos/dashboard
 tipo: modulo
 visibilidad: todos
 etiquetas: tablero, dashboard, inicio, resumen, indicadores, avisos, pantalla principal, home, ordenar tarjetas, mover tarjetas, arrastrar, reubicar, personalizar tablero, filtros fijos, ancho de tarjetas, redimensionar, cambiar tamaño, columnas
-version: 1.1
+version: 1.2
 orden: 2
 estado: activo
 ---
@@ -97,6 +97,15 @@ Suele ser una de tres cosas:
 
 ## Historial de cambios
 
+- **1.2** — El tablero carga mucho más rápido en empresas con muchas facturas o con
+  saldos iniciales de cartera: el cálculo de *CxC Pendiente* y de las tablas de
+  vencidos ya no recorre los documentos de todas las empresas. Además, *CxC* solo
+  descuenta los cobros hechos a facturas y *CxP* solo los pagos hechos a compras:
+  antes, un cobro de un recibo de venta o de un saldo inicial (o un pago de un rol
+  o un egreso manual) podía restarse por error de una factura o compra que no tenía
+  nada que ver, cuando coincidía su número interno. En *CxC Vencidas* y *CxP
+  Vencidas*, los documentos con los mismos días de atraso se muestran ahora de mayor
+  a menor saldo.
 - **1.1** — Las tarjetas se pueden arrastrar a cualquier posición y cambiarles el
   ancho; el tablero se guarda por usuario y la barra de filtros quedó fija bajo el menú.
 - **1.0** — Versión inicial.

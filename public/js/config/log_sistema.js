@@ -36,7 +36,7 @@
     window.LOGSIS_cargarListado = async function (page = 1) {
         currentPage = page;
         const tbody = document.getElementById('tbodyLogSistema');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
 
         const params = construirParams({
             action: 'listar',
@@ -56,11 +56,11 @@
                 const pag = document.getElementById('logWrapperPagination');
                 if (pag) pag.innerHTML = res.pagination;
             } else {
-                if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger">${res.error || 'Error al cargar'}</td></tr>`;
+                if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">${res.error || 'Error al cargar'}</td></tr>`;
             }
         } catch (e) {
             console.error(e);
-            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Error de conexión con el servidor.</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-danger">Error de conexión con el servidor.</td></tr>';
         }
     };
 

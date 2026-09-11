@@ -3,8 +3,12 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Helpers\AuditoriaEtiquetas;
+use App\Helpers\DocumentoOrigenAsiento;
 use App\repositories\LogSistemaRepository;
 use App\repositories\LoginIntentoRepository;
+use App\repositories\modulos\AsientoContableRepository;
+use App\Services\modulos\DocumentoOrigenService;
 
 /**
  * Lógica de consulta (solo lectura) de la bitácora de auditoría.
@@ -90,7 +94,10 @@ class LogSistemaConsultaService
      * Detalle de un registro con el diff antes/después ya formateado.
      *
      * @param array{nivel:int,id_empresa:int} $scope
-     * @return array|null  El registro con claves extra: 'cambios', 'antes_json', 'despues_json'.
+     * @return array|null  El registro con claves extra: 'cambios' (solo lo que cambió), 'datos'
+     *                     (todo lo que guardó el evento, legible), 'antes_json', 'despues_json',
+     *                     'documento' (resumen: número, eliminado y tercero; null si el módulo no
+     *                     es de documentos) y 'documento_detalle' (el documento completo, o null).
      */
     public function getDetalle(int $id, array $scope): ?array
     {
@@ -103,9 +110,148 @@ class LogSistemaConsultaService
         $despues = !empty($row['datos_nuevos']) ? json_decode($row['datos_nuevos'], true) : null;
 
         $row['cambios']      = $this->logService->formatearCambios($antes, $despues);
+        $row['datos']        = $this->logService->formatearDatosCompletos($antes, $despues);
         $row['antes_json']   = $antes  !== null ? json_encode($antes, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : null;
         $row['despues_json'] = $despues !== null ? json_encode($despues, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : null;
 
+        // Documento afectado: el número va en el encabezado del detalle; el documento
+        // completo, en "Ver información en detalle".
+        $tabla      = (string) ($row['tabla_afectada'] ?? '');
+        $idRegistro = $row['id_registro'] !== null ? (int) $row['id_registro'] : null;
+        $idEmpresa  = $row['id_empresa'] !== null ? (int) $row['id_empresa'] : null;
+
+        $row['documento'] = $this->repo->getResumenDocumento($tabla, $idRegistro, $idEmpresa);
+        $row['documento_detalle'] = ($row['documento'] !== null && $idRegistro && $idEmpresa)
+            ? $this->getDocumentoDetalle($tabla, $idRegistro, $idEmpresa, $row['documento'])
+            : null;
+
         return $row;
+    }
+
+    /**
+     * Documento afectado tal como está hoy, para "Ver información en detalle". Facturas,
+     * compras, egresos… salen de DocumentoOrigenService (el mismo modal "Documento origen" de
+     * Mayores) y los asientos, con sus líneas contables; del resto de documentos solo se
+     * conoce el resumen (número y tercero).
+     *
+     * @param array{numero:?string,tercero:?string,tercero_identificacion:?string} $resumen
+     * @return array|null Misma forma que DocumentoOrigenService::getDetalle(), más 'campos'
+     *                    opcional (datos extra de la cabecera, label/valor).
+     */
+    private function getDocumentoDetalle(string $tabla, int $idRegistro, int $idEmpresa, array $resumen): ?array
+    {
+        try {
+            foreach (DocumentoOrigenAsiento::DOCUMENTOS as $modulo => $doc) {
+                if ($doc['tabla'] === $tabla) {
+                    return (new DocumentoOrigenService())->getDetalle((string) $modulo, $idRegistro, $idEmpresa);
+                }
+            }
+            if ($tabla === 'asientos_contables_cabecera') {
+                $asiento = $this->getAsientoDetalle($idRegistro, $idEmpresa);
+                if ($asiento !== null) {
+                    return $asiento;
+                }
+            }
+        } catch (\Throwable $e) {
+            // El documento ya no está o su tabla no existe en esta instalación: queda el resumen.
+        }
+
+        if ($resumen['numero'] === null && $resumen['tercero'] === null) {
+            return null;
+        }
+
+        return [
+            'etiqueta'               => AuditoriaEtiquetas::tabla($tabla),
+            'numero'                 => (string) ($resumen['numero'] ?? ''),
+            'fecha'                  => '',
+            'estado'                 => null,
+            'observaciones'          => null,
+            'tercero'                => $resumen['tercero'],
+            'tercero_identificacion' => $resumen['tercero_identificacion'],
+            'totales'                => [],
+            'columnas'               => [],
+            'lineas'                 => [],
+        ];
+    }
+
+    /** Asiento contable afectado con sus líneas, en la misma forma que DocumentoOrigenService. */
+    private function getAsientoDetalle(int $idAsiento, int $idEmpresa): ?array
+    {
+        $asiento = (new AsientoContableRepository())->getDetalleAsiento($idAsiento, $idEmpresa);
+        if (empty($asiento)) {
+            return null;
+        }
+
+        $detalles  = $asiento['detalles'] ?? [];
+        $conCentro = array_filter($detalles, fn($d) => trim((string) ($d['nombre_centro_costo'] ?? '')) !== '') !== [];
+        $conProy   = array_filter($detalles, fn($d) => trim((string) ($d['nombre_proyecto'] ?? '')) !== '') !== [];
+
+        $columnas = [['label' => 'Cuenta', 'numerica' => false], ['label' => 'Detalle', 'numerica' => false]];
+        if ($conCentro) {
+            $columnas[] = ['label' => 'Centro de costo', 'numerica' => false];
+        }
+        if ($conProy) {
+            $columnas[] = ['label' => 'Proyecto', 'numerica' => false];
+        }
+        $columnas[] = ['label' => 'Debe', 'numerica' => true];
+        $columnas[] = ['label' => 'Haber', 'numerica' => true];
+
+        $lineas = [];
+        foreach ($detalles as $d) {
+            $glosa = array_filter(
+                [trim((string) ($d['referencia_detalle'] ?? '')), trim((string) ($d['documento_referencia'] ?? ''))],
+                fn($v) => $v !== ''
+            );
+            $fila = [
+                trim(($d['codigo_cuenta'] ?? '') . ' - ' . ($d['nombre_cuenta'] ?? ''), ' -'),
+                implode(' · ', $glosa),
+            ];
+            if ($conCentro) {
+                $fila[] = (string) ($d['nombre_centro_costo'] ?? '');
+            }
+            if ($conProy) {
+                $fila[] = (string) ($d['nombre_proyecto'] ?? '');
+            }
+            $fila[] = self::dinero($d['debe'] ?? null);
+            $fila[] = self::dinero($d['haber'] ?? null);
+            $lineas[] = $fila;
+        }
+
+        $campos = [];
+        if (trim((string) ($asiento['concepto'] ?? '')) !== '') {
+            $campos[] = ['label' => 'Concepto', 'valor' => (string) $asiento['concepto']];
+        }
+        $origen = trim((string) ($asiento['modulo_origen'] ?? ''));
+        if ($origen !== '') {
+            $campos[] = [
+                'label' => 'Origen',
+                'valor' => DocumentoOrigenAsiento::paraModulo($origen)['etiqueta'] ?? ucfirst(str_replace('_', ' ', $origen)),
+            ];
+        }
+
+        $tipo  = trim((string) ($asiento['tipo_comprobante'] ?? ''));
+        $fecha = strtotime((string) ($asiento['fecha_asiento'] ?? ''));
+
+        return [
+            'etiqueta'               => 'Asiento contable' . ($tipo !== '' ? ' (' . $tipo . ')' : ''),
+            'numero'                 => (string) ($asiento['numero_comprobante'] ?? ''),
+            'fecha'                  => $fecha ? date('d-m-Y', $fecha) : '',
+            'estado'                 => ($asiento['estado'] ?? '') !== '' ? (string) $asiento['estado'] : null,
+            'observaciones'          => trim((string) ($asiento['observaciones'] ?? '')) !== '' ? (string) $asiento['observaciones'] : null,
+            'tercero'                => null,
+            'tercero_identificacion' => null,
+            'totales'                => [
+                ['label' => 'Total debe', 'valor' => self::dinero($asiento['total_debe'] ?? null)],
+                ['label' => 'Total haber', 'valor' => self::dinero($asiento['total_haber'] ?? null)],
+            ],
+            'columnas'               => $columnas,
+            'lineas'                 => $lineas,
+            'campos'                 => $campos,
+        ];
+    }
+
+    private static function dinero($valor): string
+    {
+        return is_numeric($valor) ? number_format((float) $valor, 2, '.', ',') : (string) ($valor ?? '');
     }
 }

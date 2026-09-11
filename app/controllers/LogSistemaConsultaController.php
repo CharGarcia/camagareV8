@@ -273,7 +273,7 @@ class LogSistemaConsultaController extends Controller
         }
         echo '<table><thead><tr>'
             . '<th>Fecha</th><th>Usuario</th><th>Empresa</th><th>Acción</th>'
-            . '<th>Módulo</th><th>Registro</th><th>IP</th>'
+            . '<th>Módulo</th><th>Documento</th><th>Registro</th><th>IP</th>'
             . '</tr></thead><tbody>';
         foreach ($rows as $r) {
             $fecha    = date('d-m-Y H:i:s', strtotime((string) $r['created_at']));
@@ -286,6 +286,7 @@ class LogSistemaConsultaController extends Controller
                 . '<td>' . htmlspecialchars((string) $empresa) . '</td>'
                 . '<td>' . htmlspecialchars(AuditoriaEtiquetas::accion((string) $r['accion'])) . '</td>'
                 . '<td>' . htmlspecialchars(AuditoriaEtiquetas::tabla((string) ($r['tabla_afectada'] ?? ''))) . '</td>'
+                . '<td>' . htmlspecialchars((string) ($r['numero_documento'] ?? '')) . '</td>'
                 . '<td>' . htmlspecialchars($registro) . '</td>'
                 . '<td>' . htmlspecialchars((string) ($r['ip_usuario'] ?? '-')) . '</td>'
                 . '</tr>';
@@ -338,7 +339,7 @@ class LogSistemaConsultaController extends Controller
     private function renderFilas(array $rows): string
     {
         if (empty($rows)) {
-            return '<tr><td colspan="7" class="text-center py-5 text-muted">No se encontraron registros de auditoría en el rango seleccionado.</td></tr>';
+            return '<tr><td colspan="8" class="text-center py-5 text-muted">No se encontraron registros de auditoría en el rango seleccionado.</td></tr>';
         }
 
         ob_start();
@@ -351,6 +352,8 @@ class LogSistemaConsultaController extends Controller
                 ? htmlspecialchars($r['empresa_nombre'])
                 : ($r['id_empresa'] === null ? '<span class="text-muted fst-italic">Global</span>' : '<span class="text-muted">#' . (int) $r['id_empresa'] . '</span>');
             $tabla    = htmlspecialchars(AuditoriaEtiquetas::tabla((string) ($r['tabla_afectada'] ?? '')));
+            $numDoc   = trim((string) ($r['numero_documento'] ?? ''));
+            $documento = $numDoc !== '' ? htmlspecialchars($numDoc) : '<span class="text-muted">-</span>';
             $registro = $r['id_registro'] !== null ? (int) $r['id_registro'] : '<span class="text-muted">-</span>';
             $ip       = htmlspecialchars((string) ($r['ip_usuario'] ?? '-'));
 
@@ -360,6 +363,7 @@ class LogSistemaConsultaController extends Controller
                 . '<td class="small">' . $empresa . '</td>'
                 . '<td>' . $this->badgeAccion((string) $r['accion']) . '</td>'
                 . '<td class="small">' . $tabla . '</td>'
+                . '<td class="small text-nowrap">' . $documento . '</td>'
                 . '<td class="text-center small">' . $registro . '</td>'
                 . '<td class="small text-muted text-nowrap">' . $ip . '</td>'
                 . '</tr>';
@@ -414,6 +418,8 @@ class LogSistemaConsultaController extends Controller
             ? htmlspecialchars($d['empresa_nombre'])
             : ($d['id_empresa'] === null ? 'Global (sin empresa)' : '#' . (int) $d['id_empresa']);
         $tabla    = htmlspecialchars(AuditoriaEtiquetas::tabla((string) ($d['tabla_afectada'] ?? '')));
+        // Solo los módulos de documentos (facturas, egresos, compras…) traen número.
+        $documento = $d['documento'] ?? null;
         $registro = $d['id_registro'] !== null ? (int) $d['id_registro'] : '-';
         $ip       = htmlspecialchars((string) ($d['ip_usuario'] ?? '-'));
         $ua       = htmlspecialchars((string) ($d['user_agent'] ?? '-'));
@@ -426,6 +432,19 @@ class LogSistemaConsultaController extends Controller
             <div class="col-md-6"><span class="text-muted">Empresa:</span> <strong><?= $empresa ?></strong></div>
             <div class="col-md-6"><span class="text-muted">Acción:</span> <?= $this->badgeAccion((string) $d['accion']) ?></div>
             <div class="col-md-6"><span class="text-muted">Módulo:</span> <strong><?= $tabla ?></strong></div>
+            <?php if ($documento !== null): ?>
+            <div class="col-md-6">
+                <span class="text-muted">Número de documento:</span>
+                <?php if ($documento['numero'] !== null): ?>
+                    <strong><?= htmlspecialchars($documento['numero']) ?></strong>
+                <?php else: ?>
+                    <span class="text-muted">-</span>
+                <?php endif; ?>
+                <?php if ($documento['eliminado']): ?>
+                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1">Eliminado</span>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
             <div class="col-md-6"><span class="text-muted">Registro:</span> <strong>#<?= $registro ?></strong></div>
             <div class="col-md-6"><span class="text-muted">IP:</span> <?= $ip ?></div>
             <div class="col-12"><span class="text-muted">Navegador:</span> <span class="text-break"><?= $ua ?></span></div>
@@ -453,23 +472,76 @@ class LogSistemaConsultaController extends Controller
             </div>
         <?php endif; ?>
 
-        <?php if ($d['antes_json'] !== null || $d['despues_json'] !== null): ?>
-        <div class="accordion accordion-flush border rounded" id="accLogJson">
+        <?php
+        $docDet     = $d['documento_detalle'] ?? null;
+        $datos      = $d['datos'] ?? [];
+        $conAntes   = $d['antes_json'] !== null;
+        $conDespues = $d['despues_json'] !== null;
+        ?>
+        <?php if ($docDet !== null || !empty($datos) || $conAntes || $conDespues): ?>
+        <div class="accordion accordion-flush border rounded" id="accLogInfo">
             <div class="accordion-item">
                 <h2 class="accordion-header">
-                    <button class="accordion-button collapsed py-2 small" type="button" data-bs-toggle="collapse" data-bs-target="#logJsonCrudo">
-                        <i class="bi bi-braces me-2"></i> Ver datos crudos (JSON)
+                    <button class="accordion-button collapsed py-2 small" type="button" data-bs-toggle="collapse" data-bs-target="#logInfoDetalle">
+                        <i class="bi bi-card-list me-2"></i> Ver información en detalle
                     </button>
                 </h2>
-                <div id="logJsonCrudo" class="accordion-collapse collapse" data-bs-parent="#accLogJson">
-                    <div class="accordion-body">
-                        <?php if ($d['antes_json'] !== null): ?>
-                            <div class="text-muted small mb-1">datos_anteriores</div>
-                            <pre class="bg-light border rounded p-2 small mb-3" style="max-height:220px;overflow:auto;"><?= htmlspecialchars($d['antes_json']) ?></pre>
+                <div id="logInfoDetalle" class="accordion-collapse collapse" data-bs-parent="#accLogInfo">
+                    <div class="accordion-body small">
+                        <?php if ($docDet !== null): ?>
+                            <?= $this->renderDocumentoDetalle($docDet, !empty($documento['eliminado'])) ?>
                         <?php endif; ?>
-                        <?php if ($d['despues_json'] !== null): ?>
-                            <div class="text-muted small mb-1">datos_nuevos</div>
-                            <pre class="bg-light border rounded p-2 small mb-0" style="max-height:220px;overflow:auto;"><?= htmlspecialchars($d['despues_json']) ?></pre>
+
+                        <?php if (!empty($datos)): ?>
+                            <h6 class="fw-bold small text-uppercase text-muted border-bottom pb-1 mb-2">
+                                Datos registrados en el evento
+                                <?php if ($conAntes && $conDespues): ?>
+                                    <span class="fw-normal text-lowercase">— resaltados los que cambiaron</span>
+                                <?php endif; ?>
+                            </h6>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm table-bordered align-middle mb-0 small">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width:22%;">Campo</th>
+                                            <?php if ($conAntes && $conDespues): ?>
+                                                <th>Antes</th><th>Después</th>
+                                            <?php else: ?>
+                                                <th>Valor</th>
+                                            <?php endif; ?>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($datos as $fila): ?>
+                                        <tr<?= !empty($fila['cambio']) ? ' class="table-warning"' : '' ?>>
+                                            <td class="fw-medium"><?= htmlspecialchars((string) $fila['campo']) ?></td>
+                                            <?php if ($conAntes && $conDespues): ?>
+                                                <td><?= $this->celdaDato($fila['antes']) ?></td>
+                                                <td><?= $this->celdaDato($fila['despues']) ?></td>
+                                            <?php else: ?>
+                                                <td><?= $this->celdaDato($conDespues ? $fila['despues'] : $fila['antes']) ?></td>
+                                            <?php endif; ?>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if ($conAntes || $conDespues): ?>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-muted text-decoration-none" data-bs-toggle="collapse" data-bs-target="#logJsonOriginal">
+                                <i class="bi bi-braces me-1"></i> Ver JSON original
+                            </button>
+                            <div id="logJsonOriginal" class="collapse mt-2">
+                                <?php if ($conAntes): ?>
+                                    <div class="text-muted mb-1">datos_anteriores</div>
+                                    <pre class="bg-light border rounded p-2 small mb-3" style="max-height:220px;overflow:auto;"><?= htmlspecialchars($d['antes_json']) ?></pre>
+                                <?php endif; ?>
+                                <?php if ($conDespues): ?>
+                                    <div class="text-muted mb-1">datos_nuevos</div>
+                                    <pre class="bg-light border rounded p-2 small mb-0" style="max-height:220px;overflow:auto;"><?= htmlspecialchars($d['despues_json']) ?></pre>
+                                <?php endif; ?>
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -478,5 +550,118 @@ class LogSistemaConsultaController extends Controller
         <?php endif; ?>
         <?php
         return (string) ob_get_clean();
+    }
+
+    /**
+     * Bloque "Documento afectado" del detalle completo: cabecera, líneas, totales y
+     * observaciones del documento tal como está hoy (el mismo contenido que el modal
+     * "Documento origen" de Mayores).
+     */
+    private function renderDocumentoDetalle(array $doc, bool $eliminado): string
+    {
+        $tercero = $doc['tercero'] !== null
+            ? $doc['tercero'] . (!empty($doc['tercero_identificacion']) ? ' (' . $doc['tercero_identificacion'] . ')' : '')
+            : '';
+        $numero = htmlspecialchars((string) $doc['numero'])
+            . ($eliminado ? ' <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1">Eliminado</span>' : '');
+
+        ob_start();
+        ?>
+        <h6 class="fw-bold small text-uppercase text-muted border-bottom pb-1 mb-2">
+            Documento afectado <span class="fw-normal text-lowercase">— como está hoy</span>
+        </h6>
+        <div class="row g-2 mb-2">
+            <?= $this->campoDetalle('Tipo', htmlspecialchars((string) $doc['etiqueta'])) ?>
+            <?= $this->campoDetalle('Número', (string) $doc['numero'] !== '' ? $numero : '') ?>
+            <?= $this->campoDetalle('Fecha', htmlspecialchars((string) $doc['fecha'])) ?>
+            <?= $this->campoDetalle('Estado', htmlspecialchars((string) ($doc['estado'] ?? ''))) ?>
+            <?= $this->campoDetalle('Tercero', htmlspecialchars($tercero), 'col-12 col-md-6') ?>
+            <?php foreach ($doc['campos'] ?? [] as $c): ?>
+                <?= $this->campoDetalle((string) $c['label'], htmlspecialchars((string) $c['valor']), 'col-12') ?>
+            <?php endforeach; ?>
+        </div>
+
+        <?php if (!empty($doc['columnas'])): ?>
+        <div class="table-responsive mb-2">
+            <table class="table table-sm table-bordered align-middle mb-0 small">
+                <thead class="table-light">
+                    <tr>
+                        <?php foreach ($doc['columnas'] as $c): ?>
+                            <th class="text-nowrap<?= $c['numerica'] ? ' text-end' : '' ?>"><?= htmlspecialchars((string) $c['label']) ?></th>
+                        <?php endforeach; ?>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($doc['lineas'])): ?>
+                        <tr><td colspan="<?= count($doc['columnas']) ?>" class="text-center text-muted">Este documento no tiene líneas registradas.</td></tr>
+                    <?php else: ?>
+                        <?php foreach ($doc['lineas'] as $fila): ?>
+                        <tr>
+                            <?php foreach ($fila as $i => $valor): ?>
+                                <td class="<?= !empty($doc['columnas'][$i]['numerica']) ? 'text-end text-nowrap' : '' ?>"><?= htmlspecialchars((string) $valor) ?></td>
+                            <?php endforeach; ?>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+
+        <?php if (!empty($doc['totales']) || $doc['observaciones'] !== null): ?>
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+            <div class="text-muted" style="max-width:60%;">
+                <?php if ($doc['observaciones'] !== null): ?>
+                    <span class="fw-semibold">Observaciones:</span> <?= htmlspecialchars((string) $doc['observaciones']) ?>
+                <?php endif; ?>
+            </div>
+            <div style="min-width:200px;">
+                <?php foreach ($doc['totales'] as $i => $t): ?>
+                    <div class="d-flex justify-content-between<?= $i === count($doc['totales']) - 1 ? ' fw-bold border-top pt-1' : '' ?>">
+                        <span class="text-muted me-4"><?= htmlspecialchars((string) $t['label']) ?></span>
+                        <span><?= htmlspecialchars((string) $t['valor']) ?></span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php else: ?>
+        <div class="mb-3"></div>
+        <?php endif; ?>
+        <?php
+        return (string) ob_get_clean();
+    }
+
+    /** Dato de la cabecera del documento (mismo estilo que el modal "Documento origen"); vacío si no hay valor. */
+    private function campoDetalle(string $label, string $valorHtml, string $ancho = 'col-6 col-md-3'): string
+    {
+        if ($valorHtml === '') {
+            return '';
+        }
+        return '<div class="' . $ancho . '"><div class="text-muted">' . htmlspecialchars($label) . '</div>'
+            . '<div class="fw-semibold text-break">' . $valorHtml . '</div></div>';
+    }
+
+    /** Celda de "Datos registrados en el evento": texto, o una tabla para listas y objetos. */
+    private function celdaDato($celda): string
+    {
+        if ($celda === null) {
+            return '<span class="text-muted fst-italic">No registrado</span>';
+        }
+        if (is_array($celda)) {
+            $html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0 small bg-white"><thead class="table-light"><tr>';
+            foreach ($celda['columnas'] as $columna) {
+                $html .= '<th class="text-nowrap">' . htmlspecialchars((string) $columna) . '</th>';
+            }
+            $html .= '</tr></thead><tbody>';
+            foreach ($celda['filas'] as $fila) {
+                $html .= '<tr>';
+                foreach ($fila as $valor) {
+                    $html .= '<td>' . htmlspecialchars((string) $valor) . '</td>';
+                }
+                $html .= '</tr>';
+            }
+            return $html . '</tbody></table></div>';
+        }
+        return '<span class="text-break">' . htmlspecialchars((string) $celda) . '</span>';
     }
 }

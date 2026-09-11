@@ -94,6 +94,16 @@ class AuditoriaCampos
         'costo_unitario'     => 'Costo unitario',
         'numero_lote'        => 'Lote',
         'nup'                => 'NUP',
+
+        // Control del registro (el diff de cambios los omite; se ven en el detalle
+        // completo de la consulta de auditoría)
+        'id'                 => 'ID interno',
+        'created_at'         => 'Creado el',
+        'created_by'         => 'Creado por',
+        'updated_at'         => 'Modificado el',
+        'updated_by'         => 'Modificado por',
+        'deleted_at'         => 'Eliminado el',
+        'deleted_by'         => 'Eliminado por',
     ];
 
     /** Códigos internos → texto con significado, por columna. */

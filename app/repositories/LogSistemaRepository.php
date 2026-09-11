@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\repositories;
 
+use App\Helpers\DocumentoOrigenAsiento;
 use App\Helpers\FiltrosBusqueda;
 use PDO;
 
@@ -22,7 +23,7 @@ class LogSistemaRepository extends BaseRepository
      * números de comprobante, importes, etc.
      *
      * Va con `::text` porque las columnas son JSONB; el resultado es el JSON
-     * serializado, que es exactamente lo que el usuario ve en "datos crudos".
+     * serializado, que es exactamente lo que el usuario ve en "Ver JSON original".
      * OJO: es una búsqueda sin índice (secuencial sobre el rango de fechas activo),
      * por eso es un filtro aparte y NO se agrega al texto libre por defecto.
      */
@@ -37,6 +38,32 @@ class LogSistemaRepository extends BaseRepository
         'empresa'    => 'e.nombre_comercial',
         'id'         => 'l.id',
     ];
+
+    /** Número de documento estándar: establecimiento-punto de emisión-secuencial. */
+    private const NUM_SRI = "concat_ws('-', t.establecimiento, t.punto_emision, t.secuencial)";
+
+    /**
+     * Documentos que NO están en DocumentoOrigenAsiento (de ahí salen el resto: facturas,
+     * compras, ingresos, egresos, notas, retenciones…). Expresiones SQL sobre el alias `t`:
+     * `numero` es el número del documento; `tipo` + `entidad`, de quién es (cliente,
+     * proveedor o empleado), o null si el documento no tiene tercero. Ver documentos().
+     */
+    private const DOCUMENTOS_EXTRA = [
+        'factura_reembolso_cabecera'  => ['numero' => self::NUM_SRI, 'tipo' => "'cliente'", 'entidad' => 't.id_cliente'],
+        'guias_remision_cabecera'     => ['numero' => self::NUM_SRI, 'tipo' => "'cliente'", 'entidad' => 't.id_cliente'],
+        'proformas_cabecera'          => ['numero' => self::NUM_SRI, 'tipo' => "'cliente'", 'entidad' => 't.id_cliente'],
+        'pedidos_cabecera'            => ['numero' => self::NUM_SRI, 'tipo' => "'cliente'", 'entidad' => 't.id_cliente'],
+        'ordenes_compra'              => ['numero' => 't.numero_orden', 'tipo' => "'proveedor'", 'entidad' => 't.id_proveedor'],
+        'carwash_ordenes'             => ['numero' => 't.numero_orden', 'tipo' => "'cliente'", 'entidad' => 't.id_cliente'],
+        'taller_ordenes'              => ['numero' => 't.numero_orden', 'tipo' => "'cliente'", 'entidad' => 't.id_cliente'],
+        'servicioexterno_ordenes'     => ['numero' => 't.numero_orden', 'tipo' => "'cliente'", 'entidad' => 't.id_cliente'],
+        'traspasos_cabecera'          => ['numero' => "COALESCE(NULLIF(t.numero_traspaso, ''), " . self::NUM_SRI . ")", 'tipo' => null, 'entidad' => null],
+        'inventario_cargas'           => ['numero' => 't.numero', 'tipo' => null, 'entidad' => null],
+        'asientos_contables_cabecera' => ['numero' => 't.numero_comprobante', 'tipo' => null, 'entidad' => null],
+    ];
+
+    /** Documentos válidos en esta base (ver documentos()); se calcula una vez por request. */
+    private static ?array $documentosCache = null;
 
     public function __construct()
     {
@@ -78,8 +105,10 @@ class LogSistemaRepository extends BaseRepository
         $perPage = max(1, min(200, $perPage));
         $offset  = max(0, ($page - 1) * $perPage);
 
+        $exprNumero = $this->exprNumeroDocumento();
         $sql = "SELECT l.id, l.id_usuario, l.id_empresa, l.accion, l.tabla_afectada,
                        l.id_registro, l.ip_usuario, l.user_agent, l.created_at,
+                       {$exprNumero} AS numero_documento,
                        u.nombre AS usuario_nombre,
                        e.nombre_comercial AS empresa_nombre,
                        e.nombre AS empresa_razon
@@ -127,8 +156,10 @@ class LogSistemaRepository extends BaseRepository
         $dirSql = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
         $limit  = max(1, min(50000, $limit));
 
+        $exprNumero = $this->exprNumeroDocumento();
         $sql = "SELECT l.id, l.id_usuario, l.id_empresa, l.accion, l.tabla_afectada,
                        l.id_registro, l.ip_usuario, l.created_at,
+                       {$exprNumero} AS numero_documento,
                        u.nombre AS usuario_nombre,
                        e.nombre_comercial AS empresa_nombre
                 FROM log_sistema l
@@ -174,6 +205,169 @@ class LogSistemaRepository extends BaseRepository
         $st->execute($params);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    /**
+     * Resumen del documento afectado por un evento: su número (p. ej. 001-001-000000123 de un
+     * egreso) y su tercero, leídos del propio documento — la bitácora no los guarda de forma
+     * uniforme (Egresos, por ejemplo, solo registra monto y tipo al crear).
+     *
+     * No filtra `eliminado` a propósito: la auditoría debe identificar el documento aunque
+     * se haya eliminado después (los eventos de eliminación son justo los que más lo
+     * necesitan). Sí lo acota a la empresa del propio evento.
+     *
+     * @return array{numero:?string,eliminado:bool,tercero:?string,tercero_identificacion:?string}|null
+     *         null si la tabla no es de documentos.
+     */
+    public function getResumenDocumento(string $tabla, ?int $idRegistro, ?int $idEmpresa): ?array
+    {
+        $def = $this->documentos()[$tabla] ?? null;
+        if ($def === null) {
+            return null;
+        }
+
+        $sinDatos = ['numero' => null, 'eliminado' => false, 'tercero' => null, 'tercero_identificacion' => null];
+        if (empty($idRegistro) || empty($idEmpresa)) {
+            return $sinDatos;
+        }
+
+        $colsTercero = $def['tipo'] !== null
+            ? "COALESCE(cli.nombre, prov.razon_social, emp.nombres_apellidos) AS tercero,
+               COALESCE(cli.identificacion, prov.identificacion, emp.identificacion) AS tercero_identificacion"
+            : "NULL AS tercero, NULL AS tercero_identificacion";
+
+        try {
+            // Tabla y expresiones salen de los mapas del servidor, nunca del cliente.
+            $st = $this->db->prepare(
+                "SELECT ({$def['numero']})::text AS numero, t.eliminado, {$colsTercero}
+                 FROM {$tabla} t " . self::joinsTercero($def) . "
+                 WHERE t.id = :id AND t.id_empresa = :id_empresa
+                 LIMIT 1"
+            );
+            $st->execute([':id' => $idRegistro, ':id_empresa' => $idEmpresa]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return $sinDatos;
+        }
+
+        if (!$row) {
+            return $sinDatos;
+        }
+
+        $numero = trim((string) ($row['numero'] ?? ''));
+        return [
+            'numero'                 => $numero !== '' ? $numero : null,
+            'eliminado'              => filter_var($row['eliminado'], FILTER_VALIDATE_BOOLEAN),
+            'tercero'                => ($row['tercero'] ?? '') !== '' ? (string) $row['tercero'] : null,
+            'tercero_identificacion' => ($row['tercero_identificacion'] ?? '') !== '' ? (string) $row['tercero_identificacion'] : null,
+        ];
+    }
+
+    /**
+     * Documentos cuyo número y tercero puede mostrar y buscar la bitácora:
+     * tabla => ['numero', 'tipo', 'entidad'] (ver DOCUMENTOS_EXTRA).
+     *
+     * Solo entran las tablas que existen en ESTA base con todas las columnas que usan sus
+     * expresiones: van dentro del SQL del listado, y una tabla o columna que falte en una
+     * instalación rompería la consulta entera. Si lo que falla es el tercero, queda el número.
+     */
+    private function documentos(): array
+    {
+        if (self::$documentosCache !== null) {
+            return self::$documentosCache;
+        }
+
+        $defs = [];
+        foreach (DocumentoOrigenAsiento::DOCUMENTOS as $doc) {
+            $defs[$doc['tabla']] = ['numero' => $doc['numero'], 'tipo' => $doc['tipo'], 'entidad' => $doc['entidad']];
+        }
+        $defs += self::DOCUMENTOS_EXTRA;
+
+        // Columnas reales de esas tablas: una sola consulta al catálogo.
+        $st = $this->db->prepare(
+            "SELECT c.relname AS tabla, a.attname AS columna
+             FROM pg_attribute a
+             JOIN pg_class c ON c.oid = a.attrelid
+             JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public' AND c.relname = ANY(CAST(:tablas AS text[]))
+               AND a.attnum > 0 AND NOT a.attisdropped"
+        );
+        $st->execute([':tablas' => '{' . implode(',', array_keys($defs)) . '}']);
+        $columnas = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $columnas[$r['tabla']][$r['columna']] = true;
+        }
+
+        $validos = [];
+        foreach ($defs as $tabla => $def) {
+            $cols = $columnas[$tabla] ?? [];
+            if (!isset($cols['id'], $cols['id_empresa'], $cols['eliminado']) || !self::columnasExisten($def['numero'], $cols)) {
+                continue;
+            }
+            if ($def['tipo'] === null || !self::columnasExisten($def['tipo'] . ' ' . $def['entidad'], $cols)) {
+                $def['tipo'] = $def['entidad'] = null;
+            }
+            $validos[$tabla] = $def;
+        }
+
+        return self::$documentosCache = $validos;
+    }
+
+    /** ¿Existen en la tabla todas las columnas `t.columna` que usa la expresión? */
+    private static function columnasExisten(string $expr, array $columnasTabla): bool
+    {
+        preg_match_all('/\bt\.([a-z_][a-z0-9_]*)/i', $expr, $m);
+        foreach ($m[1] as $columna) {
+            if (!isset($columnasTabla[$columna])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** JOINs al tercero del documento (alias cli/prov/emp), igual que DocumentoOrigenRepository. */
+    private static function joinsTercero(array $def): string
+    {
+        if ($def['tipo'] === null) {
+            return '';
+        }
+        [$tipo, $entidad] = [$def['tipo'], $def['entidad']];
+        return "LEFT JOIN clientes cli ON ({$tipo}) = 'cliente' AND ({$entidad}) = cli.id
+                LEFT JOIN proveedores prov ON ({$tipo}) = 'proveedor' AND ({$entidad}) = prov.id
+                LEFT JOIN empleados emp ON ({$tipo}) = 'empleado' AND ({$entidad}) = emp.id";
+    }
+
+    /**
+     * Número del documento afectado por cada fila de la bitácora (alias `l`), como expresión
+     * SQL para el listado y el buscador: un CASE por tabla con una lectura por clave primaria
+     * acotada a la empresa del evento. Solo se evalúa la rama de la tabla de cada fila.
+     * Vale '' si el módulo no es de documentos o el documento ya no está.
+     */
+    private function exprNumeroDocumento(): string
+    {
+        $ramas = [];
+        foreach ($this->documentos() as $tabla => $def) {
+            $ramas[] = "WHEN '{$tabla}' THEN (SELECT ({$def['numero']})::text FROM {$tabla} t"
+                . " WHERE t.id = l.id_registro AND t.id_empresa = l.id_empresa)";
+        }
+        return $ramas ? "COALESCE(CASE l.tabla_afectada " . implode(' ', $ramas) . " END, '')" : "''";
+    }
+
+    /** Igual que exprNumeroDocumento(), con el nombre e identificación del tercero del documento. */
+    private function exprTerceroDocumento(): string
+    {
+        $ramas = [];
+        foreach ($this->documentos() as $tabla => $def) {
+            if ($def['tipo'] === null) {
+                continue;
+            }
+            $ramas[] = "WHEN '{$tabla}' THEN (SELECT concat_ws(' ',
+                            COALESCE(cli.nombre, prov.razon_social, emp.nombres_apellidos),
+                            COALESCE(cli.identificacion, prov.identificacion, emp.identificacion))
+                        FROM {$tabla} t " . self::joinsTercero($def) . "
+                        WHERE t.id = l.id_registro AND t.id_empresa = l.id_empresa)";
+        }
+        return $ramas ? "COALESCE(CASE l.tabla_afectada " . implode(' ', $ramas) . " END, '')" : "''";
     }
 
     /**
@@ -263,20 +457,22 @@ class LogSistemaRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
 
-        // Texto libre → busca en acción, tabla, usuario, empresa e IP.
+        // Texto libre → busca en acción, tabla, usuario, empresa e IP y, si trae dígitos,
+        // también en el número del documento afectado (001-001-000000123, 000000123…).
+        // Solo con dígitos: resolver el número cuesta una lectura por fila de documento.
         if ($parsed['texto_libre'] !== '') {
-            $condicion = FiltrosBusqueda::condicionTexto(
-                ['l.accion', 'l.tabla_afectada', 'u.nombre', 'e.nombre_comercial', 'l.ip_usuario'],
-                $parsed['texto_libre'],
-                $params,
-                'tl'
-            );
+            $columnasTexto = ['l.accion', 'l.tabla_afectada', 'u.nombre', 'e.nombre_comercial', 'l.ip_usuario'];
+            if (preg_match('/\d/', $parsed['texto_libre'])) {
+                $columnasTexto[] = $this->exprNumeroDocumento();
+            }
+            $condicion = FiltrosBusqueda::condicionTexto($columnasTexto, $parsed['texto_libre'], $params, 'tl');
             if ($condicion !== '') {
                 $where .= " AND {$condicion}";
             }
         }
 
         // Filtros clave:valor
+        $exprNumero = $this->exprNumeroDocumento();
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
                 'usuario'   => 'u.nombre',
@@ -288,6 +484,12 @@ class LogSistemaRepository extends BaseRepository
                 //   contenido:"DELIVERY HERO"   ·   datos:CO-000039
                 'contenido' => self::EXPR_CONTENIDO,
                 'datos'     => self::EXPR_CONTENIDO,
+                // Documento afectado:  documento:001-001-000000123  ·  numero:000000123
+                'documento' => $exprNumero,
+                'numero'    => $exprNumero,
+                'número'    => $exprNumero,
+                // Cliente, proveedor o empleado del documento (nombre o identificación).
+                'tercero'   => $this->exprTerceroDocumento(),
             ],
             'numerico' => [
                 'registro' => 'l.id_registro',

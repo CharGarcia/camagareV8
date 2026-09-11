@@ -79,17 +79,18 @@ class LogSistemaPdfService
 
         // Tabla
         $html .= '<table class="g" cellpadding="0"><thead><tr>'
-            . '<th width="14%">Fecha</th>'
-            . '<th width="17%">Usuario</th>'
-            . '<th width="20%">Empresa</th>'
-            . '<th width="13%">Acción</th>'
-            . '<th width="18%">Módulo</th>'
-            . '<th width="8%" align="center">Registro</th>'
+            . '<th width="12%">Fecha</th>'
+            . '<th width="15%">Usuario</th>'
+            . '<th width="17%">Empresa</th>'
+            . '<th width="11%">Acción</th>'
+            . '<th width="15%">Módulo</th>'
+            . '<th width="13%">Documento</th>'
+            . '<th width="7%" align="center">Registro</th>'
             . '<th width="10%">IP</th>'
             . '</tr></thead><tbody>';
 
         if (empty($rows)) {
-            $html .= '<tr><td colspan="7" align="center">Sin registros para los filtros seleccionados.</td></tr>';
+            $html .= '<tr><td colspan="8" align="center">Sin registros para los filtros seleccionados.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $fecha    = date('d-m-Y H:i:s', strtotime((string) $r['created_at']));
@@ -105,6 +106,7 @@ class LogSistemaPdfService
                     . '<td>' . htmlspecialchars((string) $empresaN) . '</td>'
                     . '<td>' . htmlspecialchars(AuditoriaEtiquetas::accion((string) $r['accion'])) . '</td>'
                     . '<td>' . htmlspecialchars(AuditoriaEtiquetas::tabla((string) ($r['tabla_afectada'] ?? ''))) . '</td>'
+                    . '<td>' . htmlspecialchars((string) ($r['numero_documento'] ?? '')) . '</td>'
                     . '<td align="center">' . htmlspecialchars($registro) . '</td>'
                     . '<td>' . htmlspecialchars((string) ($r['ip_usuario'] ?? '-')) . '</td>'
                     . '</tr>';
