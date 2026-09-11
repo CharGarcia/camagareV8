@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, observacion, observaciones, detalle de novedad, motivo del descuento
-version: 1.2
+etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess
+version: 1.3
 orden: 30
 estado: activo
 ---
@@ -62,6 +62,31 @@ se agrega dentro de la misma celda del concepto, separada por un guion:
 `Horas extra 50% (6h) — cobertura del feriado`. Aplica tanto a la hoja principal
 como a las hojas *Novedades* y *Otros Detalles*.
 
+## Asiento contable del rol mensual
+
+Solo el rol **mensual** se contabiliza; las quincenas y semanas se netean dentro
+de él. Cada rubro va a la cuenta de su concepto en **Configuración Contable →
+Nómina**, o a la cuenta propia del empleado si tiene una en las *Reglas por
+Empleado*.
+
+Las cuotas de préstamo descontadas en el rol mensual salen en su propia línea
+cuando su concepto tiene cuenta:
+
+| Novedad | Concepto en Configuración Contable | Naturaleza |
+|---------|------------------------------------|------------|
+| Préstamo Quirografario | Préstamos Quirografarios por Pagar | Pasivo |
+| Préstamo hipotecario | Préstamos Hipotecarios por Pagar | Pasivo |
+| Préstamo Empresa | Préstamos Empresa por Cobrar | Activo |
+
+Esas tres cuentas son **opcionales**: si el concepto queda sin cuenta, la cuota se
+contabiliza en **Descuentos**, como antes. Siguen yendo a Descuentos, aunque el
+concepto tenga cuenta, las cuotas cargadas como rubro fijo de descuento en la
+ficha del empleado y las descontadas en una quincena o semana (llegan al mensual
+dentro de *Descuentos aplicados en quincenas/semanas del mes*).
+
+Cambiar la configuración no modifica los asientos ya generados: las cuentas
+nuevas se usan en los roles que se contabilicen desde ese momento.
+
 ## Errores frecuentes
 
 - **"La quincena debe ser 1 o 2"** / **"La semana debe estar entre 1 y 5"**:
@@ -70,9 +95,13 @@ como a las hojas *Novedades* y *Otros Detalles*.
 - **El líquido no coincide con lo esperado**: compare con las novedades del
   periodo; casi siempre es una novedad no registrada o imputada al periodo
   equivocado.
+- **La cuota de un préstamo sigue saliendo en Descuentos**: su concepto no tiene
+  cuenta en Configuración Contable → Nómina, o la cuota se descontó en una
+  quincena o semana en lugar del rol mensual.
 
 ## Historial de cambios
 
+- **1.3** — El asiento del rol mensual lleva las cuotas de préstamo quirografario, hipotecario y empresa a su propia cuenta cuando está configurada en Configuración Contable → Nómina.
 - **1.2** — El desglose de ingresos/egresos del empleado (modal, PDF individual y Excel) muestra la observación de la novedad que originó cada rubro.
 - **1.1** — Botón para exportar a Excel la ficha individual del empleado, junto al de PDF.
 - **1.0** — Versión inicial.

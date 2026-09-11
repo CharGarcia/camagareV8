@@ -1499,6 +1499,66 @@
         }
     }
 
+    // ─── Pestañas Transacciones y Estado de cuenta ───────────────────────────
+    // Componente compartido con la ficha de proveedores (public/js/components/ficha_consultas.js,
+    // lo carga el partial views/partials/ficha_consultas.php). Si la vista no lo incluyó
+    // —el usuario no puede ver ninguna de las dos pestañas— no hay nada que iniciar.
+    function initPestanasConsultaCli() {
+        if (!window.FichaConsultas) return;
+        const baseApp = urlBaseClientes.replace(/\/modulos\/clientes$/, '');
+        window.FichaConsultas.iniciar({
+            urlBase: urlBaseClientes,
+            idInput: 'cliente_id',
+            modalId: 'modalCliente',
+            eventoGuardado: 'clienteGuardado',
+            transacciones: {
+                panel: 'cli-pane-transacciones',
+                boton: 'cli-tab-transacciones-btn',
+                textos: {
+                    documentos: 'Veces vendido',
+                    ultimaFecha: 'Última venta',
+                    vacio: 'Todavía no hay facturas, recibos ni notas de crédito de este cliente.',
+                },
+            },
+            estadoCuenta: {
+                panel: 'cli-pane-estado-cuenta',
+                boton: 'cli-tab-estado-cuenta-btn',
+                textos: { sinPagos: 'No hay cobros en el período.' },
+                origenes: {
+                    FACTURA: 'Factura', RECIBO: 'Recibo', NOTA_DEBITO: 'Nota de débito',
+                    SALDO_INICIAL: 'Saldo inicial', COBRO: 'Cobro', RETENCION: 'Retención',
+                    NOTA_CREDITO: 'Nota de crédito',
+                },
+                // Cada cobro es un ingreso: se despliega con /modulos/ingresos/getIngresoAjax
+                pago: {
+                    origen: 'COBRO',
+                    titulo: 'Ingreso',
+                    tituloFila: 'Ver el ingreso',
+                    icono: 'bi-cash-stack',
+                    urlDetalle: id => `${baseApp}/modulos/ingresos/getIngresoAjax?id=${encodeURIComponent(id)}`,
+                    urlPdf: id => `${baseApp}/modulos/ingresos/pdf?id=${encodeURIComponent(id)}&_=${Date.now()}`,
+                    numero: e => e.numero_ingreso,
+                    sujeto: e => e.cliente_nombre || e.recibo_cliente_nombre || e.recibo_de,
+                    etiquetaSujeto: 'Recibido de',
+                    montoLinea: 'monto_cobrado',
+                    formaNombre: 'forma_cobro_nombre',
+                    tituloDocs: 'Documentos cobrados',
+                    tituloFormas: 'Formas de cobro',
+                    tiposDoc: {
+                        FACTURA: 'Factura', RECIBO: 'Recibo', SALDO_INICIAL: 'Saldo inicial',
+                        FACTURA_REEMBOLSO: 'Factura de reembolso',
+                    },
+                },
+            },
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initPestanasConsultaCli);
+    } else {
+        initPestanasConsultaCli();
+    }
+
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initEvents);
     else initEvents();
 

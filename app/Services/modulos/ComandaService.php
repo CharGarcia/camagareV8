@@ -556,6 +556,107 @@ class ComandaService
         }
     }
 
+    /**
+     * Botones −/+ de una línea de la comanda.
+     *
+     * - Línea todavía pendiente de enviar, o que no pasa por cocina/barra: la
+     *   cantidad cambia en la misma línea.
+     * - Línea ya enviada a preparación: el "+" crea una línea NUEVA con esa
+     *   unidad, pendiente de enviar. Subirle la cantidad a la original sería
+     *   invisible para la estación, que ya la imprimió y la muestra con la
+     *   cantidad anterior. El "−" ahí no se permite: lo ya preparado se anula.
+     *
+     * El descuento se conserva por unidad (un 10% sigue siendo 10%), y todo
+     * ocurre con la fila bloqueada: dos toques simultáneos no se pisan (§8).
+     *
+     * @return array{modo: string, id_linea: int, cantidad: float}
+     *         modo 'misma_linea' o 'nueva_linea'
+     */
+    public function cambiarCantidadLinea(int $idLinea, int $idComanda, int $idEmpresa, int $idUsuario, float $delta, array $empresaConfig = []): array
+    {
+        if ($delta == 0.0) {
+            throw new Exception('Cantidad no válida.');
+        }
+
+        $comanda = $this->repository->find($idComanda, $idEmpresa);
+        $this->rules->validarPuedeModificar($comanda);
+
+        $this->db->beginTransaction();
+        try {
+            $linea = $this->repository->bloquearLinea($idLinea, $idEmpresa);
+            if ($linea && (int) $linea['id_comanda'] !== $idComanda) {
+                $linea = null;
+            }
+            $this->rules->validarPuedeEditarLinea($linea);
+            $this->rules->validarPuedeCambiarCantidad($linea, (int) ($empresaConfig['id_producto_propina'] ?? 0));
+
+            $cantActual = (float) $linea['cantidad'];
+            $precio     = (float) $linea['precio_unitario'];
+            $descUnidad = $cantActual > 0 ? (float) $linea['descuento'] / $cantActual : 0.0;
+
+            if ($this->rules->lineaYaEnPreparacion($linea)) {
+                if ($delta < 0) {
+                    throw new Exception('Este ítem ya se envió a preparación: para quitarlo, anule la línea.');
+                }
+
+                $base      = round($precio * $delta, 2);
+                $descuento = min(round($descUnidad * $delta, 2), $base);
+                $estado    = $this->configRestauranteService->usaPreparacion($idEmpresa) ? 'pendiente' : 'entregado';
+
+                $idNueva = $this->repository->insertLinea([
+                    'id_empresa'            => $idEmpresa,
+                    'id_comanda'            => $idComanda,
+                    'id_producto'           => $linea['id_producto'] ?: null,
+                    'id_menu_item'          => $linea['id_menu_item'] ?: null,
+                    'descripcion'           => $linea['descripcion'],
+                    'cantidad'              => $delta,
+                    // El precio de la línea original, no el de lista: si el ítem
+                    // tenía precio editado, la unidad extra vale lo mismo.
+                    'precio_unitario'       => $precio,
+                    'descuento'             => $descuento,
+                    'subtotal'              => max(0.0, round($base - $descuento, 2)),
+                    'observacion_item'      => $linea['observacion_item'] ?? null,
+                    'id_estacion_impresion' => $linea['id_estacion_impresion'],
+                    'estado_linea'          => $estado,
+                    'lote'                  => $linea['lote'] ?? null,
+                    'caducidad'             => $linea['caducidad'] ?? null,
+                    'nup'                   => null,
+                    'created_by'            => $idUsuario,
+                ]);
+
+                $this->logService->registrar(
+                    $idUsuario, $idEmpresa, 'CANTIDAD_LINEA_COMANDA', 'comanda_detalle', $idNueva,
+                    null,
+                    ['id_linea_origen' => $idLinea, 'motivo' => 'ya_en_preparacion', 'cantidad' => $delta]
+                );
+
+                $this->db->commit();
+                return ['modo' => 'nueva_linea', 'id_linea' => $idNueva, 'cantidad' => $delta, 'estado_linea' => $estado];
+            }
+
+            $nueva = round($cantActual + $delta, 6);
+            if ($nueva <= 0) {
+                throw new Exception('La cantidad no puede quedar en cero: para quitar el ítem use la X.');
+            }
+            $base      = round($precio * $nueva, 2);
+            $descuento = min(round($descUnidad * $nueva, 2), $base);
+            $subtotal  = max(0.0, round($base - $descuento, 2));
+
+            $this->repository->actualizarCantidadLinea($idLinea, $idEmpresa, $nueva, $descuento, $subtotal);
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'CANTIDAD_LINEA_COMANDA', 'comanda_detalle', $idLinea,
+                ['cantidad' => $linea['cantidad'], 'descuento' => $linea['descuento'], 'subtotal' => $linea['subtotal']],
+                ['cantidad' => $nueva, 'descuento' => $descuento, 'subtotal' => $subtotal]
+            );
+
+            $this->db->commit();
+            return ['modo' => 'misma_linea', 'id_linea' => $idLinea, 'cantidad' => $nueva, 'estado_linea' => (string) $linea['estado_linea']];
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
+        }
+    }
+
     /** El mesero abrió la comanda: ya vio lo que pidió el cliente desde el QR, se apaga el aviso del tablero. */
     public function marcarPedidoQrVisto(int $idComanda, int $idEmpresa): void
     {

@@ -1842,6 +1842,7 @@ $totalPages = $totalPagesOriginal;
                 lista_precios: tr.querySelector('.input-lista-precios').value,
                 precio_total_sin_impuesto: subtotalNeto.toFixed(2),
                 casillero: tr.querySelector('.input-casillero').value,
+                codigo_auxiliar: tr.querySelector('.input-codigo-auxiliar')?.value || '',
                 lote: tr.querySelector('.input-lote')?.value.trim() || '',
                 caducidad: tr.querySelector('.input-caducidad')?.value.trim() || '',
                 nup: tr.querySelector('.input-nup')?.value.trim() || '',
@@ -2097,6 +2098,7 @@ $totalPages = $totalPagesOriginal;
                 iva: tr.querySelector('.input-iva')?.value || '',
                 lista_precios: tr.querySelector('.input-lista-precios')?.value || '',
                 casillero: tr.querySelector('.input-casillero')?.value || '',
+                codigo_auxiliar: tr.querySelector('.input-codigo-auxiliar')?.value || '',
                 lote: tr.querySelector('.input-lote')?.value || '',
                 nup: tr.querySelector('.input-nup')?.value || '',
                 ice_pct: tr.querySelector('.input-ice-pct')?.value || '',
@@ -2226,6 +2228,7 @@ $totalPages = $totalPagesOriginal;
                 set('.input-iva', fila.iva);
                 set('.input-lista-precios', fila.lista_precios);
                 set('.input-casillero', fila.casillero);
+                set('.input-codigo-auxiliar', fila.codigo_auxiliar);
                 const selLote = tr.querySelector('.input-lote');
                 const selCad = tr.querySelector('.input-caducidad');
                 if (selLote) {
@@ -3932,6 +3935,7 @@ $totalPages = $totalPagesOriginal;
                     title="${EMPRESA_CONFIG.facturacion_libre ? 'Modo libre: puedes escribir directamente o seleccionar del cat\u00e1logo' : ''}"></textarea>
                 <input type="hidden" class="input-id-producto">
                 <input type="hidden" class="input-casillero">
+                <input type="hidden" class="input-codigo-auxiliar">
                 <input type="hidden" class="input-id-variante">
                 <input type="hidden" class="input-es-libre" value="0">
                 <input type="hidden" class="input-ice-pct" value="0">
@@ -4034,6 +4038,7 @@ $totalPages = $totalPagesOriginal;
             row.dataset.inventariable = p.inventariable;
             row.querySelector('.input-precio-base-original').value = p.precio_base;
             row.querySelector('.input-casillero').value = p.id_casillero_venta || '';
+            row.querySelector('.input-codigo-auxiliar').value = p.codigo_auxiliar || '';
 
             // Ubicación física del producto (módulo Productos): ícono con tooltip, solo si existe.
             const spanUbic = row.querySelector('.span-ubicacion-info');
@@ -4625,6 +4630,7 @@ $totalPages = $totalPagesOriginal;
         row.dataset.tipoProduccion = '02'; // Los ítems libres se tratan como servicios ad-hoc
         row.dataset.inventariable = 'false';
         row.querySelector('.input-casillero').value = '';
+        row.querySelector('.input-codigo-auxiliar').value = '';
 
         // Precio en 0 para que el usuario lo ingrese
         row.querySelector('.input-precio').value = '0.00';
@@ -5469,6 +5475,7 @@ $totalPages = $totalPagesOriginal;
                 tr.querySelector('.input-descripcion').value = d.descripcion || '';
                 tr.querySelector('.input-codigo').value = d.codigo_principal || '';
                 tr.querySelector('.input-casillero').value = d.casillero || '';
+                tr.querySelector('.input-codigo-auxiliar').value = d.codigo_auxiliar || '';
                 tr.querySelector('.input-cantidad').value = parseFloat(d.cantidad || 1).toFixed(DEC_CANT);
                 tr.querySelector('.input-precio').value = parseFloat(d.precio_unitario || 0).toFixed(DEC_PRECIO);
                 tr.querySelector('.input-desc').value = parseFloat(d.descuento || 0).toFixed(2);

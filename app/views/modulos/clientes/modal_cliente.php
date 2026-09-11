@@ -38,6 +38,12 @@ if (($rutaModulo ?? '') !== 'modulos/clientes') {
 }
 
 $urlBaseCliShared = BASE_URL . '/modulos/clientes';
+
+// Pestañas de consulta (Transacciones / Estado de cuenta): se pintan solo si el
+// usuario puede ver alguno de los módulos de donde salen esos datos. Las rutas
+// viven en el controlador, que valida lo mismo en cada endpoint.
+$cliVerTransacciones = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ClientesController::RUTAS_TRANSACCIONES);
+$cliVerEstadoCuenta  = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ClientesController::RUTAS_ESTADO_CUENTA);
 ?>
 
 <?php
@@ -51,7 +57,7 @@ if (!defined('LEAFLET_LOADED')) {
 
 <!-- Modal Ficha de Cliente -->
 <div class="modal fade" id="modalCliente" tabindex="-1" aria-labelledby="modalClienteLabel" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <form method="POST" action="<?= $urlBaseCliShared ?>/store" id="formCliente" novalidate>
                 <div class="modal-header bg-light py-3">
@@ -78,6 +84,16 @@ if (!defined('LEAFLET_LOADED')) {
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link py-2 small" id="tab-comercial-btn" data-bs-toggle="tab" data-bs-target="#pane-comercial" href="#pane-comercial" role="tab"><i class="bi bi-bar-chart-fill me-1"></i>Comercial</a>
                             </li>
+                            <?php if ($cliVerTransacciones): ?>
+                                <li class="nav-item" role="presentation">
+                                    <a class="nav-link py-2 small" id="cli-tab-transacciones-btn" data-bs-toggle="tab" data-bs-target="#cli-pane-transacciones" href="#cli-pane-transacciones" role="tab" title="Productos y servicios vendidos a este cliente"><i class="bi bi-cart3 me-1"></i>Transacciones</a>
+                                </li>
+                            <?php endif; ?>
+                            <?php if ($cliVerEstadoCuenta): ?>
+                                <li class="nav-item" role="presentation">
+                                    <a class="nav-link py-2 small" id="cli-tab-estado-cuenta-btn" data-bs-toggle="tab" data-bs-target="#cli-pane-estado-cuenta" href="#cli-pane-estado-cuenta" role="tab" title="Estado de cuenta e historial de cobros"><i class="bi bi-journal-text me-1"></i>Estado de cuenta</a>
+                                </li>
+                            <?php endif; ?>
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link py-2 small" id="tab-cobros-btn" data-bs-toggle="tab" data-bs-target="#pane-cobros" href="#pane-cobros" role="tab"><i class="bi bi-cash-coin me-1"></i>Cobros</a>
                             </li>
@@ -92,8 +108,14 @@ if (!defined('LEAFLET_LOADED')) {
                             <?php
                             // Las claves son el id del PANEL, no el del botón: es lo que
                             // oculta el CSS (ver renderEstilosPestanasOcultas).
-                            $pestanasConfigCli = [
-                                'pane-comercial' => 'Comercial',
+                            $pestanasConfigCli = ['pane-comercial' => 'Comercial'];
+                            if ($cliVerTransacciones) {
+                                $pestanasConfigCli['cli-pane-transacciones'] = 'Transacciones';
+                            }
+                            if ($cliVerEstadoCuenta) {
+                                $pestanasConfigCli['cli-pane-estado-cuenta'] = 'Estado de cuenta';
+                            }
+                            $pestanasConfigCli += [
                                 'pane-cobros'    => 'Cobros',
                                 'pane-visitas'   => 'Visitas',
                                 'pane-ubicacion' => 'Ubicación',
@@ -219,6 +241,29 @@ if (!defined('LEAFLET_LOADED')) {
                                 </div>
                             </div>
                         </div>
+
+                        <?php if ($cliVerTransacciones || $cliVerEstadoCuenta): ?>
+                            <?php
+                            // Pestañas Transacciones y Estado de cuenta: HTML compartido con la ficha de proveedores
+                            $fichaConsultas = [
+                                'prefijo'       => 'cli',
+                                'transacciones' => $cliVerTransacciones ? 'cli-pane-transacciones' : null,
+                                'estado_cuenta' => $cliVerEstadoCuenta ? 'cli-pane-estado-cuenta' : null,
+                                'textos'        => [
+                                    'sin_guardar_trx' => 'Guarde el cliente para ver los productos y servicios que se le han vendido.',
+                                    'sin_guardar_ec'  => 'Guarde el cliente para ver su estado de cuenta.',
+                                    'nota_trx'        => 'Facturas, recibos y notas de crédito de venta; las notas de crédito restan.',
+                                    'cargos'          => 'VENTAS Y CARGOS',
+                                    'pagos'           => 'COBROS (INGRESOS)',
+                                    'otros'           => 'RETENCIONES Y NC',
+                                    'saldo'           => 'SALDO POR COBRAR',
+                                    'filtro_pagos'    => 'Historial de cobros',
+                                    'ayuda_pago'      => 'Haga clic en un cobro para ver su ingreso.',
+                                ],
+                            ];
+                            include MVC_APP . '/views/partials/ficha_consultas.php';
+                            ?>
+                        <?php endif; ?>
 
                         <!-- Pestaña 4: COBROS -->
                         <div class="tab-pane fade" id="pane-cobros" role="tabpanel">

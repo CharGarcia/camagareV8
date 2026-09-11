@@ -370,4 +370,35 @@ class ProveedorService
     {
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
+
+    // ─── PESTAÑAS DE CONSULTA DEL MODAL (solo lectura) ───────────────────────
+
+    /**
+     * Pestaña "Transacciones": productos y servicios comprados al proveedor.
+     * $fuentes llega resuelto por el controlador según los permisos del usuario
+     * sobre Compras y Liquidaciones de Compra (ver ProveedorRepository::getTransacciones()).
+     */
+    public function getTransacciones(int $idProveedor, int $idEmpresa, string $buscar, string $vista, int $page, int $perPage, string $ordenCol, string $ordenDir, array $fuentes): array
+    {
+        $this->exigirProveedor($idProveedor, $idEmpresa);
+        return $this->repository->getTransacciones($idProveedor, $idEmpresa, $buscar, $vista, $page, $perPage, $ordenCol, $ordenDir, $fuentes);
+    }
+
+    /**
+     * Pestaña "Estado de cuenta": el kardex del Reporte de Cartera resumido para la
+     * ficha, con una sola fila por egreso (ver EstadoCuentaTerceroService).
+     */
+    public function getEstadoCuenta(int $idProveedor, int $idEmpresa, ?string $fechaDesde, ?string $fechaHasta): array
+    {
+        $this->exigirProveedor($idProveedor, $idEmpresa);
+        return (new EstadoCuentaTerceroService())->proveedor($idEmpresa, $idProveedor, $fechaDesde, $fechaHasta);
+    }
+
+    /** Las consultas de la ficha solo aplican a un proveedor vigente de la empresa activa. */
+    private function exigirProveedor(int $idProveedor, int $idEmpresa): void
+    {
+        if ($idProveedor <= 0 || !$this->repository->findById($idProveedor, $idEmpresa)) {
+            throw new Exception('El proveedor no existe o ha sido eliminado.');
+        }
+    }
 }

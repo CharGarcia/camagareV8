@@ -325,7 +325,9 @@ class ConfiguracionContableController extends BaseModuloController
             } elseif ($tipoAsiento === 'retenciones_compra') {
                 $reglas = $this->repository->getReglasRetencionesCompra($idEmpresa);
             } else {
-                $reglas = $this->repository->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento);
+                $reglas = $this->repository->anotarConceptosOpcionales(
+                    $this->repository->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento)
+                );
 
                 // Aumentar reglas específicas para las tarifas de IVA por concepto
                 if ($tipoAsiento === 'ventas_factura') {

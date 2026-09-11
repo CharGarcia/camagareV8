@@ -386,6 +386,36 @@ class ComandasController extends BaseModuloController
     }
 
     /**
+     * Botones −/+ de una línea. El "+" es agregar (permiso de crear, igual que
+     * agregar un ítem); el "−" es quitar (permiso de actualizar, igual que
+     * anular). Qué hace cada uno según el estado de la línea lo decide el Service.
+     */
+    public function cambiarCantidadLineaAjax(): void
+    {
+        $delta = (float) ($_POST['delta'] ?? 0);
+        if ($delta > 0) {
+            $this->requireCrear();
+        } else {
+            $this->requireActualizar();
+        }
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $idLinea   = (int) ($_POST['id_linea'] ?? 0);
+            $idComanda = (int) ($_POST['id_comanda'] ?? 0);
+            if ($idLinea <= 0 || $idComanda <= 0) throw new Exception('Línea no válida.');
+            $res = $this->service->cambiarCantidadLinea(
+                $idLinea, $idComanda, $idEmpresa, $idUsuario, $delta, $this->getEmpresaConfig($idEmpresa)
+            );
+            $this->json(['ok' => true] + $res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
      * Precio por línea. Solo para los productos marcados con "Permitir cambiar
      * el precio en la comanda" en su ficha — el Service lo revalida contra la
      * base, así que la marca de la pantalla no alcanza para saltárselo.

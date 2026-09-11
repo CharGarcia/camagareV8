@@ -303,4 +303,35 @@ class ClienteService
     {
         return $this->repository->getEstadisticas($idCliente, $idEmpresa);
     }
+
+    // ─── PESTAÑAS DE CONSULTA DE LA FICHA (solo lectura) ─────────────────────
+
+    /**
+     * Pestaña "Transacciones": productos y servicios vendidos al cliente. $fuentes llega
+     * resuelto por el controlador según los permisos del usuario sobre Facturas, Recibos
+     * y Notas de Crédito de venta (ver ClienteRepository::getTransacciones()).
+     */
+    public function getTransacciones(int $idCliente, int $idEmpresa, string $buscar, string $vista, int $page, int $perPage, string $ordenCol, string $ordenDir, array $fuentes): array
+    {
+        $this->exigirCliente($idCliente, $idEmpresa);
+        return $this->repository->getTransacciones($idCliente, $idEmpresa, $buscar, $vista, $page, $perPage, $ordenCol, $ordenDir, $fuentes);
+    }
+
+    /**
+     * Pestaña "Estado de cuenta": el kardex del Reporte de Cartera resumido para la
+     * ficha, con una sola fila por ingreso (ver EstadoCuentaTerceroService).
+     */
+    public function getEstadoCuenta(int $idCliente, int $idEmpresa, ?string $fechaDesde, ?string $fechaHasta): array
+    {
+        $this->exigirCliente($idCliente, $idEmpresa);
+        return (new EstadoCuentaTerceroService())->cliente($idEmpresa, $idCliente, $fechaDesde, $fechaHasta);
+    }
+
+    /** Las consultas de la ficha solo aplican a un cliente vigente de la empresa activa. */
+    private function exigirCliente(int $idCliente, int $idEmpresa): void
+    {
+        if ($idCliente <= 0 || !$this->repository->findById($idCliente, $idEmpresa)) {
+            throw new Exception('El cliente no existe o ha sido eliminado.');
+        }
+    }
 }

@@ -6,7 +6,7 @@ ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
 etiquetas: comandas, comanda, pedido, mesa, sri, autorizacion sri, factura autorizada, numero de autorizacion, clave de acceso, enviar al sri, firma electronica, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante, datos para la factura, precuenta, cuenta previa, llenar a mano, direccion, telefono, cambiar precio, editar precio, precio editable, envio a domicilio, delivery, servicio a domicilio, precio variable
-version: 1.28
+version: 1.29
 orden: 20
 estado: activo
 ---
@@ -255,6 +255,36 @@ embotellada o de un servicio.
 
 Si un plato no llega a la pantalla de cocina, casi siempre es esto: revise su
 campo *Preparar en* en el módulo **Menú**.
+
+## Cambiar la cantidad de un ítem ya agregado
+
+Cada línea de la comanda tiene los botones **−** y **+** a los lados de su
+cantidad. No hace falta volver a buscar el producto en el catálogo para pedir
+otro igual.
+
+Lo que hace el **+** depende de si ese ítem ya salió a cocina o barra:
+
+- **Todavía no se envió a preparación** (o es algo que no pasa por cocina, como
+  una bebida embotellada): la cantidad sube **en la misma línea**.
+- **Ya se envió a preparación**: el + agrega **una línea nueva** con esa unidad,
+  pendiente de enviar, y avisa. Es a propósito: la cocina ya imprimió y ve en su
+  pantalla la cantidad anterior; si solo se le subiera el número a la línea
+  original, nunca se enteraría de que tiene que preparar uno más. Esa línea
+  nueva se manda con **Enviar a preparación**, como cualquier pedido.
+
+El **−** baja la cantidad en la misma línea, hasta 1. Para quitar el ítem del
+todo está la **X** de siempre. En un ítem que ya está en preparación no hay −:
+lo que la cocina ya tiene se corrige anulando la línea.
+
+- Si la línea tenía **descuento**, se mantiene proporcional: un 10% sigue siendo
+  un 10% con la cantidad nueva.
+- No tienen botones los ítems con **número de serie (NUP)** —cada unidad lleva
+  su propio número y se agrega desde el catálogo—, la **propina**, las líneas
+  anuladas ni las que ya están en una cuenta.
+- El **+** requiere permiso de *crear* (es agregar); el **−**, permiso de
+  *actualizar* (es quitar).
+- Cada cambio queda **auditado**. Si dos personas tocan el mismo ítem a la vez,
+  los dos cambios se suman: ninguno pisa al otro.
 
 ## Cambiar el precio de una línea (envío a domicilio y similares)
 
@@ -578,6 +608,11 @@ tocarlas cada vez.
   es probable que el cobro ya se haya emitido.
 
 ## Historial de cambios
+
+- **1.29** — Botones **− / +** en cada línea para cambiar la cantidad de un ítem
+  ya agregado, sin volver a buscarlo en el catálogo. Si el ítem ya se envió a
+  cocina o barra, el + lo agrega como una línea nueva para que la estación se
+  entere. Ver *Cambiar la cantidad de un ítem ya agregado*.
 
 - **1.28** — Se puede **cambiar el precio de una línea** en los productos
   marcados para ello en su ficha (*Productos → Permitir cambiar el precio de

@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta
-version: 1.9
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales
+version: 1.10
 orden: 5
 estado: activo
 ---
@@ -238,6 +238,23 @@ Entre los tipos configurables está el **cierre del ejercicio**, que necesita do
 cuentas: la de *resumen de resultados* y la de *resultado del ejercicio*. Son las
 que permiten cerrar el año llevando la utilidad al patrimonio.
 
+## Nómina: cuentas de los préstamos
+
+En el tipo **Nómina** hay tres conceptos para las cuotas de préstamo que se
+descuentan en el rol mensual:
+
+- **Préstamos Quirografarios por Pagar** (pasivo): cuota del préstamo
+  quirografario del IESS, que la empresa retiene y paga al IESS.
+- **Préstamos Hipotecarios por Pagar** (pasivo): cuota del préstamo hipotecario.
+- **Préstamos Empresa por Cobrar** (activo): cuota de un préstamo que la empresa
+  le dio al empleado; reduce lo que el empleado le debe. Use la misma cuenta de
+  activo con la que se registró el desembolso del préstamo.
+
+Los tres son **opcionales**: si se dejan vacíos, la cuota se contabiliza en
+**Descuentos**, igual que antes, y la pantalla no los marca como faltantes. Se
+configuran en General y también en las **Reglas por Empleado**, donde la cuenta
+del empleado manda sobre la General.
+
 ## Cuándo tocar esta pantalla
 
 - Al poner en marcha la empresa.
@@ -267,6 +284,9 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.10** — Nómina incorpora tres conceptos opcionales para las cuotas de préstamo
+  (quirografario, hipotecario y empresa), configurables en General y por
+  empleado. Si quedan sin cuenta, la cuota sigue yendo a Descuentos.
 - **1.9** — Las cuentas del bloque Ingresos y Egresos también se administran desde
   el módulo Opciones de ingreso y egreso, en la ficha de cada concepto libre: es
   la misma configuración, sincronizada en las dos pantallas. Los conceptos atados

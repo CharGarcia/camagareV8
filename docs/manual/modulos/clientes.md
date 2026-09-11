@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
-etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor
-version: 1.3
+etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso
+version: 1.4
 orden: 10
 estado: activo
 ---
@@ -160,6 +160,73 @@ configurada y usted tiene permiso para crear ingresos.
 > Los **saldos iniciales** de cartera no entran en el cobro automático: se cobran
 > desde el módulo Ingresos, para revisarlos uno a uno.
 
+## Transacciones: productos y servicios vendidos
+
+La pestaña *Transacciones* lista lo que se le ha vendido al cliente a partir de sus
+**facturas de venta**, **recibos de venta** y **notas de crédito**. Es de solo
+lectura.
+
+Tiene dos vistas:
+
+| Vista | Qué muestra |
+|-------|-------------|
+| Detalle | Una fila por línea de documento: fecha, tipo y número del documento, código, descripción, cantidad, precio unitario, descuento y subtotal |
+| Por producto | Una fila por producto o servicio (mismo código y descripción): veces vendido, cantidad total, último precio, fecha de la última venta y total |
+
+Las **notas de crédito** se ven en rojo y **restan** en cantidades y totales,
+porque son devoluciones o descuentos posteriores. No aparecen los documentos en
+borrador, anulados ni los que el SRI no aceptó; tampoco los recibos ya
+convertidos en factura, para no contar dos veces la misma venta. Los montos son
+**sin impuestos**.
+
+Haga clic en el título de una columna para ordenar por ella; otro clic invierte
+el orden. Se muestran 50 filas por página.
+
+### Buscar en las transacciones
+
+El buscador de la pestaña encuentra por **palabras sueltas**, en cualquier orden
+y sin distinguir tildes ni mayúsculas, en el código, la descripción y el número y
+tipo de documento.
+
+También acepta filtros por campo con la sintaxis `clave:valor`:
+
+| Filtro | Ejemplo | Qué hace |
+|--------|---------|----------|
+| `producto:` (o `descripcion:`, `servicio:`) | `producto:arroz` | Busca solo en la descripción |
+| `codigo:` | `codigo:7861` | Busca solo en el código |
+| `documento:` | `documento:000123` | Número del documento |
+| `tipo:` | `tipo:credito` o `-tipo:credito` | Tipo de documento; el `-` lo excluye |
+| `fecha:` | `fecha:2026-08` o `fecha:2026-01..2026-03` | Año, mes, día o rango |
+| `precio:` | `precio:>10` | Precio unitario |
+| `cantidad:` | `cantidad:1..5` | Cantidad |
+| `total:` (o `subtotal:`) | `total:>=100` | Subtotal de la línea |
+
+## Estado de cuenta e historial de cobros
+
+La pestaña *Estado de cuenta* muestra en orden cronológico todo lo que suma a la
+deuda del cliente (**cargos**: facturas, recibos, notas de débito y saldos
+iniciales) y todo lo que la baja (**abonos**: cobros, retenciones y notas de
+crédito), con el **saldo corriendo** fila por fila. Es el mismo cálculo del
+*Reporte de Cartera*, que sigue las reglas de **Cuentas por Cobrar**.
+
+Arriba se resumen los totales del período: ventas y cargos, cobros, retenciones y
+notas de crédito, y el saldo por cobrar.
+
+- **Desde / Hasta**: limitan el período. Con *Desde*, la primera fila es el
+  **saldo anterior** a esa fecha, así el saldo final sigue siendo el real.
+- **Historial de cobros**: deja a la vista solo los cobros (ingresos). El saldo de
+  cada fila sigue siendo el que quedó después de ese cobro.
+
+### Ver un ingreso con un clic
+
+Cada cobro es un **ingreso**. Haga **clic en la fila del cobro** y se despliega
+debajo su detalle: número, fecha, concepto, documentos que cobró, formas de cobro
+(banco, cheque, referencia) y quién lo registró. El botón rojo de PDF descarga el
+comprobante de ingreso. Otro clic en la fila lo pliega.
+
+Un ingreso que cobra varias facturas del cliente aparece como **una sola fila**
+con el total cobrado; el reparto por factura se ve al desplegarlo.
+
 ## Carga masiva desde Excel
 
 En *Configuración → Importador desde Excel* la entidad **Clientes** permite
@@ -182,6 +249,17 @@ Lo que puede hacer cada persona depende de los permisos asignados al submódulo:
 Si no ve clientes que sabe que existen, lo más probable es que le falte el
 permiso de acceso total.
 
+Las pestañas de consulta de la ficha dependen de los permisos de los módulos de
+donde salen sus datos:
+
+- **Transacciones**: aparece si puede ver **Facturas de Venta**, **Recibos de
+  Venta** o **Notas de Crédito**, y solo trae los documentos de los módulos que
+  puede ver. Sin *acceso total* en uno de ellos, de ese módulo ve únicamente los
+  documentos que usted registró.
+- **Estado de cuenta**: aparece si puede ver **Cuentas por Cobrar** o el
+  **Reporte de Cartera**. Para desplegar un cobro hace falta, además, permiso
+  para ver **Ingresos**.
+
 ## Eliminar un cliente
 
 La eliminación es **lógica**: el cliente deja de aparecer en los listados pero no
@@ -200,9 +278,27 @@ usuario y la fecha.
   botón *Limpiar* si este cliente no lleva ruta.
 - **«Con frecuencia quincenal debe indicar al menos una semana del mes»**: falta
   marcar en qué semanas aplica. Solo la frecuencia semanal se guarda sin semanas.
+- **No veo las pestañas Transacciones o Estado de cuenta**: le falta permiso para
+  ver Facturas, Recibos o Notas de Crédito (Transacciones), o Cuentas por Cobrar
+  o el Reporte de Cartera (Estado de cuenta). También pudo ocultarlas con el
+  botón de configurar pestañas de la ficha.
+- **La pestaña pide «Guarde el cliente»**: la ficha es nueva. Al guardarla, la
+  pestaña se carga sola.
+- **Faltan ventas en Transacciones**: sin *acceso total* en Facturas de Venta
+  solo ve las que usted registró; además no se muestran las anuladas, en
+  borrador o no aceptadas por el SRI, ni las del otro ambiente
+  (pruebas/producción).
+- **Un cobro no se despliega al hacer clic**: necesita permiso para ver Ingresos.
 
 ## Historial de cambios
 
+- **1.4** — Pestaña **Transacciones**: productos y servicios vendidos al cliente
+  (facturas, recibos y notas de crédito), en detalle o agrupados por producto,
+  con buscador, filtros `clave:valor`, orden por columna y último precio.
+  Pestaña **Estado de cuenta**: movimientos con saldo corriendo (mismo cálculo
+  que el Reporte de Cartera y Cuentas por Cobrar), rango de fechas, vista de
+  historial de cobros y detalle del ingreso con un clic. La ficha es más ancha
+  para dar espacio a estas tablas.
 - **1.3** — Carga masiva desde Excel: la plantilla de clientes admite la columna
   VENDEDOR para asignar el vendedor por identificación o nombre.
 - **1.2** — Pestaña *Visitas*: días de visita del vendedor, frecuencia (semanal,

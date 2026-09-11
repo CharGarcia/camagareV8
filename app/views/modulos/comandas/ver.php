@@ -71,6 +71,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
         .cm-linea .entregar { font-size: .68rem; padding: 2px 8px; }
         .cm-linea .btn-desc,
         .cm-linea .btn-precio { width: 26px; height: 22px; line-height: 1; padding: 0; font-size: .68rem; flex-shrink: 0; }
+        .cm-qty { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+        .cm-qty button { width: 24px; height: 24px; line-height: 1; padding: 0; font-size: .8rem; }
+        .cm-qty span { min-width: 22px; text-align: center; font-size: .8rem; font-weight: 600; }
         .cm-totales { flex: 0 0 auto; padding: 12px 16px; border-top: 1px dashed #dee2e6; font-size: .85rem; }
         .cm-totales .row div { display: flex; justify-content: space-between; padding: 2px 0; }
         .cm-totales .row.total div { font-size: 1.15rem; font-weight: 700; border-top: 1px solid #dee2e6; margin-top: 6px; padding-top: 8px; }
@@ -837,15 +840,38 @@ window.addEventListener('pageshow', function (e) {
                 // tiene nada que entregar; si arrastra un estado viejo, tampoco
                 // se le ofrece el botón.
                 const puedeEntregar = PUEDE_ACTUALIZAR && d.estado_linea === 'listo' && !!d.id_estacion_impresion;
+                // Botones −/+ de cantidad. Sin ellos: la propina (se edita como
+                // monto en el pie) y los ítems con NUP (cada unidad lleva su
+                // propio número de serie). Si la línea ya se envió a cocina/barra,
+                // el "+" sale como una línea nueva y no hay "−": la estación ya la
+                // tiene con la cantidad anterior (ComandaService::cambiarCantidadLinea).
+                const tieneNup = !!(d.nup && String(d.nup).trim());
+                const enPreparacion = !!d.id_estacion_impresion && d.estado_linea !== 'pendiente';
+                const muestraQty = d.estado_linea !== 'anulado' && !d.id_grupo_cobro && !esPropina && !tieneNup
+                    && (PUEDE_CREAR || PUEDE_ACTUALIZAR);
+                const puedeMenos = muestraQty && PUEDE_ACTUALIZAR && !enPreparacion && parseFloat(d.cantidad) > 1;
+                const qtyHtml = muestraQty
+                    ? '<div class="cm-qty">' +
+                        '<button type="button" class="btn btn-outline-secondary qty-btn" data-id="' + d.id + '" data-delta="-1"'
+                            + (puedeMenos ? '' : ' disabled')
+                            + ' title="' + (enPreparacion ? 'Ya está en preparación: para quitarlo, anule la línea' : 'Uno menos') + '">−</button>' +
+                        '<span>' + cantidad(d.cantidad) + '</span>' +
+                        (PUEDE_CREAR
+                            ? '<button type="button" class="btn btn-outline-secondary qty-btn" data-id="' + d.id + '" data-delta="1"'
+                                + ' title="' + (enPreparacion ? 'Uno más (sale como pedido nuevo a cocina)' : 'Uno más') + '">+</button>'
+                            : '') +
+                      '</div>'
+                    : '';
                 return `
                 <div class="cm-linea ${d.estado_linea === 'anulado' ? 'anulado' : ''}">
                     <div class="desc">
-                        <div class="n">${esPropina ? '' : cantidad(d.cantidad) + ' x '}${escapeHtml(d.descripcion)}${descTag}</div>
+                        <div class="n">${(esPropina || muestraQty) ? '' : cantidad(d.cantidad) + ' x '}${escapeHtml(d.descripcion)}${descTag}</div>
                         ${d.observacion_item ? '<div class="p">' + escapeHtml(d.observacion_item) + '</div>' : ''}
                         ${d.estado_linea !== 'anulado' && label ? '<div class="estado"><span class="badge bg-' + color + '-subtle text-' + color + '-emphasis">' + label + '</span></div>' : ''}
                         ${puedeEntregar ? '<button type="button" class="btn btn-sm btn-success entregar mt-1" data-id="' + d.id + '"><i class="bi bi-check2-circle me-1"></i>Entregar</button>' : ''}
                         ${d.estado_linea === 'anulado' && PUEDE_ACTUALIZAR ? '<button type="button" class="btn btn-sm btn-outline-secondary restaurar mt-1" data-id="' + d.id + '"><i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar</button>' : ''}
                     </div>
+                    ${qtyHtml}
                     ${puedeEditar && precioEditable(d) ? '<button type="button" class="btn btn-outline-primary btn-precio" data-id="' + d.id + '" title="Cambiar el precio"><i class="bi bi-tag"></i></button>' : ''}
                     ${puedeEditar ? '<button type="button" class="btn btn-outline-secondary btn-desc" data-id="' + d.id + '" title="Aplicar descuento"><i class="bi bi-percent"></i></button>' : ''}
                     <div class="total" title="IVA incluido">${totalHtml}</div>
@@ -1158,7 +1184,38 @@ window.addEventListener('pageshow', function (e) {
         } catch (e) { swalError('Error de conexión.'); }
     }
 
+    /**
+     * Botones −/+ de una línea. Los toques se encolan y se mandan de a uno: tres
+     * toques rápidos al "+" son tres unidades, y cada uno parte de la cantidad
+     * que dejó el anterior (el servidor además bloquea la fila).
+     */
+    let colaCantidad = Promise.resolve();
+    function cambiarCantidadLinea(idLinea, delta) {
+        colaCantidad = colaCantidad.then(async () => {
+            try {
+                const fd = new FormData();
+                fd.append('id_linea', idLinea);
+                fd.append('id_comanda', ID_COMANDA);
+                fd.append('delta', delta);
+                const r = await fetch(AJAX + '/cambiarCantidadLineaAjax', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (!d.ok) { swalError(d.error || 'No se pudo cambiar la cantidad.'); return; }
+                if (d.modo === 'nueva_linea') {
+                    // Pendiente: hay que mandarla con "Enviar a preparación". Si el
+                    // local no trabaja con preparación, nace entregada y no hay nada que enviar.
+                    swalToast('info', d.estado_linea === 'pendiente'
+                        ? 'Ya estaba en preparación: se agregó como pedido nuevo. Envíelo a cocina.'
+                        : 'Ya estaba en preparación: se agregó como una línea aparte.');
+                }
+                await refrescarComanda();
+            } catch (e) { swalError('Error de conexión.'); }
+        });
+        return colaCantidad;
+    }
+
     $lineas.addEventListener('click', async (ev) => {
+        const qty = ev.target.closest('.qty-btn');
+        if (qty) { if (!qty.disabled) cambiarCantidadLinea(parseInt(qty.dataset.id, 10), parseFloat(qty.dataset.delta)); return; }
         const rm = ev.target.closest('.rm');
         const entregar = ev.target.closest('.entregar');
         const restaurar = ev.target.closest('.restaurar');

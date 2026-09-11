@@ -45,8 +45,20 @@ class RolAsientoService
     ];
 
     /**
+     * Cuotas de préstamo (novedad 7/8/9) con concepto propio en tipo 'nomina'. Los tres son
+     * OPCIONALES: sin cuenta vuelven a Descuentos (ver devolverPrestamosSinCuenta() y
+     * AsientoProgramadoRepository::CONCEPTOS_CON_RESPALDO, que evita marcarlos como faltantes).
+     * Código de novedad => [código del concepto, etiqueta de la línea del asiento].
+     */
+    private const PRESTAMOS = [
+        '7' => ['PRESTAMOQUIROGRAFARIONOMINA', 'Préstamos Quirografarios por Pagar'],
+        '8' => ['PRESTAMOHIPOTECARIONOMINA',   'Préstamos Hipotecarios por Pagar'],
+        '9' => ['PRESTAMOEMPRESANOMINA',       'Préstamos Empresa por Cobrar'],
+    ];
+
+    /**
      * Agrupa los rubros individuales de una línea del rol (rol_detalle_rubro, ya
-     * traídos por RolPagoRepository::getDetalleCompleto()/getLinea()) en los 6
+     * traídos por RolPagoRepository::getDetalleCompleto()/getLinea()) en los
      * grupos de tipo_asiento='nomina' que reemplazan a los antiguos totales
      * agregados "Gasto Sueldos y Salarios" (todo ingreso) y "Anticipos y
      * Descuentos" (todo egreso salvo IESS personal):
@@ -59,9 +71,13 @@ class RolAsientoService
      *   - anticipos:             novedad codigo 3 (Anticipo) + "Neteo semanas/quincenas del mes"
      *                            (lo ya pagado en quincena/semana, ver AsientoBuilderService::
      *                            sumaRolNoMensualPorEgreso — misma cuenta ANTICIPOSDESCUENTOSNOMINA).
-     *   - descuentos:            todo lo demás: descuento directo, préstamos (quirografario,
-     *                            hipotecario, empresa), días no laborados, retención IR, rubro_fijo
-     *                            egreso, y "Descuentos aplicados en quincenas/semanas del mes".
+     *   - prestamos:             cuotas de préstamo descontadas en ESTE rol, por código de novedad
+     *                            (7 quirografario, 8 hipotecario, 9 empresa): cada una va a su propio
+     *                            concepto (ver PRESTAMOS), o a Descuentos si no tiene cuenta.
+     *   - descuentos:            todo lo demás: descuento directo, días no laborados, retención IR,
+     *                            rubro_fijo egreso, y "Descuentos aplicados en quincenas/semanas del
+     *                            mes" — este último incluye también las cuotas de préstamo cobradas en
+     *                            esas corridas, que llegan sumadas y sin código de novedad.
      *
      * El aporte IESS personal (origen='iess') se excluye por completo: ya tiene su
      * propia cuenta (IESSPORPAGARNOMINA), igual que antes.
@@ -72,6 +88,7 @@ class RolAsientoService
             'sueldo_base' => 0.0, 'horas_extra' => 0.0,
             'ingresos_gravados' => 0.0, 'ingresos_no_gravados' => 0.0,
             'anticipos' => 0.0, 'descuentos' => 0.0,
+            'prestamos' => array_fill_keys(array_keys(self::PRESTAMOS), 0.0),
         ];
         foreach ($rubros as $r) {
             $tipo    = (string) ($r['tipo'] ?? '');
@@ -97,9 +114,34 @@ class RolAsientoService
                 }
                 if (($origen === 'novedad' && $codigo === '3') || ($origen === 'neteo' && str_starts_with($concepto, 'Neteo'))) {
                     $grp['anticipos'] += $valor;
+                } elseif ($origen === 'novedad' && array_key_exists($codigo, self::PRESTAMOS)) {
+                    $grp['prestamos'][$codigo] += $valor;
                 } else {
                     $grp['descuentos'] += $valor;
                 }
+            }
+        }
+        return $grp;
+    }
+
+    /**
+     * Préstamos sin cuenta para este empleado —ni propia (Reglas por Empleado) ni General, o el
+     * concepto todavía no existe porque falta el SQL—: su cuota vuelve a Descuentos, donde se
+     * contabilizaba antes de que existieran estos conceptos. Así una empresa que no los configuró
+     * obtiene exactamente el mismo asiento que antes (una sola línea de Descuentos).
+     *
+     * @param array $ctas  código => regla General (getReglasGeneralesPorConcepto)
+     * @param array $ovIds id_asiento_tipo => id_cuenta propia del empleado
+     */
+    private function devolverPrestamosSinCuenta(array $grp, array $ctas, array $ovIds): array
+    {
+        foreach (self::PRESTAMOS as $cod => [$codigo]) {
+            $regla = $ctas[$codigo] ?? null;
+            $tieneCuenta = $regla !== null
+                && (((int) ($ovIds[(int) $regla['id_asiento_tipo']] ?? 0)) > 0 || ((int) ($regla['id_cuenta'] ?? 0)) > 0);
+            if (!$tieneCuenta && $grp['prestamos'][$cod] > 0) {
+                $grp['descuentos'] += $grp['prestamos'][$cod];
+                $grp['prestamos'][$cod] = 0.0;
             }
         }
         return $grp;
@@ -212,7 +254,7 @@ class RolAsientoService
             $nombresPorEmpleado[$idEmp] = $nombre;
             $empOv  = $overridesPorEmpleado[$idEmp];
             $provis = $prov->calcularProvisiones($lin, $salario);
-            $grp    = $this->clasificarRubros($lin['rubros'] ?? []);
+            $grp    = $this->devolverPrestamosSinCuenta($this->clasificarRubros($lin['rubros'] ?? []), $ctas, $empOv);
 
             $push('GASTOSUELDOSNOMINA', 'debe', $grp['sueldo_base'], 'Gasto Sueldos y Salarios', $empOv, $idEmp, $nombre);
             $push('GASTOHORASEXTRASNOMINA', 'debe', $grp['horas_extra'], 'Gasto Horas Extras', $empOv, $idEmp, $nombre);
@@ -232,6 +274,9 @@ class RolAsientoService
                 }
             }
             $push('ANTICIPOSDESCUENTOSNOMINA', 'haber', $grp['anticipos'], 'Anticipos', $empOv, $idEmp, $nombre);
+            foreach (self::PRESTAMOS as $cod => [$codigo, $concepto]) {
+                $push($codigo, 'haber', $grp['prestamos'][$cod], $concepto, $empOv, $idEmp, $nombre);
+            }
             $push('DESCUENTOSNOMINA', 'haber', $grp['descuentos'], 'Descuentos', $empOv, $idEmp, $nombre);
             // Base DEVENGADO: el rol se contabiliza al calcularse, no al pagarse — el
             // líquido a pagar todavía no salió de Bancos, así que se reconoce como
@@ -434,7 +479,11 @@ class RolAsientoService
         };
 
         $prov = (new RolProvisionService())->calcularProvisiones($lin, $salario);
-        $grp  = $this->clasificarRubros($lin['rubros'] ?? []);
+        $grp  = $this->devolverPrestamosSinCuenta(
+            $this->clasificarRubros($lin['rubros'] ?? []),
+            $ctas,
+            array_map(fn (array $o): int => $o['id_cuenta'], $empOv)
+        );
         $debe = [];
         $haber = [];
 
@@ -448,6 +497,9 @@ class RolAsientoService
         $haber[] = $mk('IESSPORPAGARNOMINA', 'IESS por Pagar', (float) $lin['aporte_iess'] + (float) $lin['aporte_patronal']);
         foreach ($prov as $p) if (!empty($p['incluir']) && $p['valor'] > 0) $haber[] = $mk(self::PROV_MAP[$p['concepto']][1] ?? '', $p['concepto'] . ' por Pagar', (float) $p['valor']);
         $haber[] = $mk('ANTICIPOSDESCUENTOSNOMINA', 'Anticipos', $grp['anticipos']);
+        foreach (self::PRESTAMOS as $cod => [$codigo, $concepto]) {
+            $haber[] = $mk($codigo, $concepto, $grp['prestamos'][$cod]);
+        }
         $haber[] = $mk('DESCUENTOSNOMINA', 'Descuentos', $grp['descuentos']);
         $haber[] = $mk('SUELDOSPORPAGARNOMINA', 'Sueldos por Pagar', (float) $lin['neto']);
 

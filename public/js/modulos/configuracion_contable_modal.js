@@ -233,7 +233,10 @@
 
                             const cuentaVal = item.id_cuenta ? `${item.cuenta_codigo} - ${item.cuenta_nombre}` : '';
                             const idCuentaVal = item.id_cuenta || '';
-                            const borderClass = idCuentaVal ? '' : 'is-invalid border-danger';
+                            // Concepto opcional (p. ej. préstamos de nómina): vacío no es un error, su valor
+                            // se contabiliza en el concepto de respaldo — no se pinta en rojo.
+                            const borderClass = (idCuentaVal || item.respaldo_concepto) ? '' : 'is-invalid border-danger';
+                            const placeholderCuenta = item.respaldo_concepto ? `Opcional: vacía usa ${item.respaldo_concepto}` : 'Buscar cuenta...';
 
                             // Cada concepto se ubica en su columna natural (Debe o Haber).
                             const esDebe = (item.debe_haber || 'debe').toLowerCase() === 'debe';
@@ -253,7 +256,7 @@
                                     </button>
                                 </div>
                                 <div class="autocomplete-celda position-relative">
-                                    <input type="text" class="form-control form-control-sm ${borderClass}" id="${inputId}" placeholder="Buscar cuenta..." value="${cuentaVal}" autocomplete="off">
+                                    <input type="text" class="form-control form-control-sm ${borderClass}" id="${inputId}" placeholder="${placeholderCuenta}" value="${cuentaVal}" autocomplete="off">
                                     <input type="hidden" id="${hiddenId}" value="${idCuentaVal}">
                                     <div class="list-group sugerencias-flotantes" id="${sugId}" style="display: none;"></div>
                                 </div>
@@ -1134,8 +1137,9 @@
             const inputId   = `dimc_${tipo}_${idx}_${key}`;
             const valor     = propia ? `${propia.cuenta_codigo} - ${propia.cuenta_nombre}` : '';
             const general   = c.cuenta_codigo ? `${c.cuenta_codigo}` : '';
-            const marcador  = general ? `General: ${general}` : 'sin cuenta';
-            const claseSin  = (!propia && !c.id_cuenta) ? ' border-danger' : '';
+            // Concepto opcional sin cuenta en General: su valor va al concepto de respaldo, no falta.
+            const marcador  = general ? `General: ${general}` : (c.respaldo_concepto ? `usa ${c.respaldo_concepto}` : 'sin cuenta');
+            const claseSin  = (!propia && !c.id_cuenta && !c.respaldo_concepto) ? ' border-danger' : '';
             return `
             <div class="d-flex align-items-center gap-1 border-bottom py-1">
                 <span class="small text-truncate" style="flex:0 0 42%;" title="${ASIENTOPROG_esc(c.concepto)}">${ASIENTOPROG_esc(c.concepto)}</span>
@@ -1173,7 +1177,7 @@
                 ? g.filas.find(f => parseInt(f.id_asiento_tipo) === parseInt(c.id_asiento_tipo))
                 : g.filas.find(f => esIvaFila(f) && String(f.codigo_tarifa_iva) === String(c.id_referencia));
 
-            const faltantes = conceptos.filter(c => !c.id_cuenta && !propiaDe(c));   // ni aquí ni en General
+            const faltantes = conceptos.filter(c => !c.id_cuenta && !propiaDe(c) && !c.respaldo_concepto);   // ni aquí ni en General (un opcional nunca falta: va a su respaldo)
             const heredados = conceptos.filter(c => c.id_cuenta && !propiaDe(c)).length;
 
             const esDebe = (x) => ((x.debe_haber || 'debe') + '').toLowerCase() === 'debe';
@@ -1376,7 +1380,7 @@
 
         const esConceptoValido = (c) => parseInt(c.id_asiento_tipo) > 0 || ASIENTOPROG_esConceptoIva(c);
         const aplicables = conceptos.filter(c => esConceptoValido(c) && c.id_cuenta);
-        const sinCuenta  = conceptos.filter(c => esConceptoValido(c) && !c.id_cuenta).length;
+        const sinCuenta  = conceptos.filter(c => esConceptoValido(c) && !c.id_cuenta && !c.respaldo_concepto).length;   // los opcionales no cuentan: van a su respaldo
 
         let copiadas = 0;
         for (const item of aplicables) {

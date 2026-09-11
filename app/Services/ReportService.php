@@ -70,8 +70,9 @@ class ReportService
      * Agrega una hoja adicional simple (encabezados + filas, sin título
      * principal) a un Spreadsheet ya existente. Útil para reportes que
      * necesitan una segunda hoja de detalle junto al resumen principal.
+     * $formatosColumnas: igual que en construirSpreadsheet() (índice 1-based => formato).
      */
-    public function agregarHoja(Spreadsheet $spreadsheet, array $headers, array $data, string $sheetTitle): void
+    public function agregarHoja(Spreadsheet $spreadsheet, array $headers, array $data, string $sheetTitle, array $formatosColumnas = []): void
     {
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle(substr($sheetTitle, 0, 31));
@@ -113,6 +114,15 @@ class ReportService
                 $col++;
             }
             $rowNum++;
+        }
+
+        // Formato numérico por columna sobre las filas de datos (mismo contrato que construirSpreadsheet)
+        if ($formatosColumnas && $rowNum > 2) {
+            foreach ($formatosColumnas as $idxCol => $formato) {
+                $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex((int)$idxCol);
+                $sheet->getStyle("{$colLetter}2:{$colLetter}" . ($rowNum - 1))
+                      ->getNumberFormat()->setFormatCode($formato);
+            }
         }
 
         for ($i = 1; $i <= count($headers); $i++) {

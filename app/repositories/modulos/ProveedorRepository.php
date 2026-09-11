@@ -8,6 +8,8 @@ use PDO;
 
 class ProveedorRepository extends BaseRepository
 {
+    use \App\Traits\LineasDocumentoTrait;
+
     public const COLUMNAS_ORDEN = [
         'razon_social', 'identificacion', 'nombre_tipo_id', 'email', 'telefono',
         'nombre_comercial', 'direccion', 'plazo', 'relacionado', 'status',
@@ -434,6 +436,106 @@ class ProveedorRepository extends BaseRepository
         }
 
         return $stats;
+    }
+
+    /**
+     * Pestaña "Transacciones" del modal: los productos o servicios de las
+     * compras y liquidaciones de compra del proveedor, con el buscador y las
+     * vistas (detalle / por producto) de LineasDocumentoTrait.
+     *
+     * Mismo alcance de documentos que el Resumen Comercial: ambiente activo, sin
+     * eliminados ni compras anuladas/rechazadas, y liquidaciones solo en sus
+     * estados vigentes. Las notas de crédito se listan (son devoluciones) y
+     * RESTAN en las cantidades y totales.
+     *
+     * @param array<string,?int> $fuentes Orígenes a incluir: 'COMPRA' y/o
+     *        'LIQUIDACION' => id de usuario para "registros propios" (null = todos).
+     *        Un origen ausente no se consulta (el usuario no tiene ese permiso).
+     * @return array{rows: array, total: int, total_neto: float}
+     */
+    public function getTransacciones(
+        int $idProveedor,
+        int $idEmpresa,
+        string $buscar,
+        string $vista,
+        int $page,
+        int $perPage,
+        string $ordenCol,
+        string $ordenDir,
+        array $fuentes
+    ): array {
+        $amb    = $this->ambienteLineasDocumento($idEmpresa); // null = no se conoce: sin filtro, como getEstadisticas()
+        $params = [];
+        $ramas  = [];
+
+        if (array_key_exists('COMPRA', $fuentes)) {
+            $nombreTipo    = \App\Helpers\TiposComprobanteCompra::sqlNombre('c.tipo_comprobante');
+            $compraVigente = \App\Helpers\TiposComprobanteCompra::sqlCompraVigente('c.estado');
+            $listaSql      = static fn(array $cods): string => "'" . implode("','", $cods) . "'";
+            $tiposNc       = $listaSql(\App\Helpers\TiposComprobanteCompra::NOTAS_CREDITO);
+            $tiposSinLineas = $listaSql(\App\Helpers\TiposComprobanteCompra::SIN_CARTERA); // guía de remisión / retención
+
+            $sql = "SELECT 'COMPRA'::text AS origen, c.id AS id_documento, d.id AS id_linea,
+                           c.fecha_emision::date AS fecha,
+                           CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AS numero_documento,
+                           ({$nombreTipo})::text AS tipo_documento,
+                           COALESCE(TRIM(d.codigo_principal), '') AS codigo,
+                           COALESCE(TRIM(d.descripcion), '') AS descripcion,
+                           d.cantidad, d.precio_unitario, d.descuento,
+                           d.precio_total_sin_impuesto AS subtotal,
+                           CASE WHEN COALESCE(TRIM(c.tipo_comprobante), '') IN ({$tiposNc}) THEN -1 ELSE 1 END AS signo
+                    FROM compras_detalle d
+                    INNER JOIN compras_cabecera c ON c.id = d.id_compra
+                    WHERE c.id_empresa = :emp_c AND c.id_proveedor = :prov_c
+                      AND c.eliminado = false AND {$compraVigente}
+                      AND COALESCE(NULLIF(TRIM(c.tipo_comprobante), ''), '01') NOT IN ({$tiposSinLineas})";
+            $params[':emp_c']  = $idEmpresa;
+            $params[':prov_c'] = $idProveedor;
+            if ($amb !== null) {
+                $sql .= " AND CAST(c.tipo_ambiente AS VARCHAR) = :amb_c";
+                $params[':amb_c'] = $amb;
+            }
+            if ($fuentes['COMPRA'] !== null) {
+                $sql .= " AND c.created_by = :usr_c";
+                $params[':usr_c'] = (int) $fuentes['COMPRA'];
+            }
+            $ramas[] = $sql;
+        }
+
+        if (array_key_exists('LIQUIDACION', $fuentes)) {
+            $liqVigente = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado');
+
+            // Con alias propios: si el usuario no ve Compras, esta es la primera rama
+            // del UNION y es la que da nombre a las columnas.
+            $sql = "SELECT 'LIQUIDACION'::text AS origen, l.id AS id_documento, d.id AS id_linea,
+                           l.fecha_emision::date AS fecha,
+                           CONCAT(l.establecimiento, '-', l.punto_emision, '-', l.secuencial) AS numero_documento,
+                           'Liquidación de Compra'::text AS tipo_documento,
+                           COALESCE(TRIM(d.codigo_principal), '') AS codigo,
+                           COALESCE(TRIM(d.descripcion), '') AS descripcion,
+                           d.cantidad, d.precio_unitario, d.descuento,
+                           d.precio_total_sin_impuesto AS subtotal,
+                           1 AS signo
+                    FROM liquidaciones_detalle d
+                    INNER JOIN liquidaciones_cabecera l ON l.id = d.id_cabecera
+                    WHERE l.id_empresa = :emp_l AND l.id_proveedor = :prov_l
+                      AND l.eliminado = false AND {$liqVigente}";
+            $params[':emp_l']  = $idEmpresa;
+            $params[':prov_l'] = $idProveedor;
+            if ($amb !== null) {
+                // NULL = registro antiguo/migrado, igual que CxP
+                $sql .= " AND (l.tipo_ambiente IS NULL OR CAST(l.tipo_ambiente AS VARCHAR) = :amb_l)";
+                $params[':amb_l'] = $amb;
+            }
+            if ($fuentes['LIQUIDACION'] !== null) {
+                // Mismo criterio que el listado de Liquidaciones: "registros propios" por id_usuario
+                $sql .= " AND l.id_usuario = :usr_l";
+                $params[':usr_l'] = (int) $fuentes['LIQUIDACION'];
+            }
+            $ramas[] = $sql;
+        }
+
+        return $this->consultarLineasDocumento($ramas, $params, $buscar, $vista, $page, $perPage, $ordenCol, $ordenDir);
     }
 
     public function create(array $data): int

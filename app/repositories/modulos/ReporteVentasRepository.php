@@ -86,7 +86,7 @@ class ReporteVentasRepository extends BaseRepository
                 'fk_det'      => 'id_recibo',          // detalle.id_recibo = cabecera.id
                 'fk_imp'      => 'id_recibo_detalle',  // impuestos.id_recibo_detalle = detalle.id
                 'fk_adic'     => 'id_recibo',
-                'estado_ok'   => "{alias}.estado NOT IN ('borrador', 'anulado', 'facturado')",
+                'estado_ok'   => $this->condEstado("{alias}.estado NOT IN ('borrador', 'anulado', 'facturado')", $filtros),
                 'retenciones' => false,
                 'clave'       => false,
                 'vendedor'    => true,
@@ -102,7 +102,7 @@ class ReporteVentasRepository extends BaseRepository
                 'fk_det'      => 'id_nota_credito',
                 'fk_imp'      => 'id_nota_credito_detalle',
                 'fk_adic'     => 'id_nota_credito',
-                'estado_ok'   => "{alias}.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')",
+                'estado_ok'   => $this->condEstado("{alias}.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')", $filtros),
                 'retenciones' => false,
                 'clave'       => true,
                 'vendedor'    => false,   // notas_credito_cabecera no tiene id_vendedor
@@ -117,11 +117,30 @@ class ReporteVentasRepository extends BaseRepository
             'fk_det'      => 'id_venta',
             'fk_imp'      => 'id_venta_detalle',
             'fk_adic'     => 'id_venta',
-            'estado_ok'   => "{alias}.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')",
+            'estado_ok'   => $this->condEstado("{alias}.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')", $filtros),
             'retenciones' => true,
             'clave'       => true,
             'vendedor'    => true,
         ];
+    }
+
+    /**
+     * Condición de estado según el selector "Borradores" del reporte:
+     *  - EXCLUIR (por defecto, y también cuando no llega, como en la API móvil o en
+     *    Índices Financieros): solo `$validos`, los documentos que cuentan como venta.
+     *  - INCLUIR: `$validos` + los borradores.
+     *  - SOLO:    únicamente los borradores.
+     * El borrador se reconoce igual que en getResumenEstados() (LOWER(estado)), así el
+     * modo SOLO coincide con el contador "Borr." de la pantalla.
+     */
+    private function condEstado(string $validos, array $filtros): string
+    {
+        $esBorrador = "LOWER({alias}.estado) = 'borrador'";
+        return match (strtoupper((string) ($filtros['borradores'] ?? ''))) {
+            'INCLUIR' => "({$validos} OR {$esBorrador})",
+            'SOLO'    => $esBorrador,
+            default   => $validos,
+        };
     }
 
     /** ¿El reporte es el neto "Facturas − Notas de crédito"? */

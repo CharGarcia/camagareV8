@@ -21,6 +21,19 @@ class ProveedoresController extends BaseModuloController
     private ProveedorService $service;
     private const RUTA_MODULO = 'modulos/proveedores';
 
+    /**
+     * Módulos cuyo permiso de lectura habilita las pestañas de consulta del
+     * modal. Única fuente: modal_proveedor.php la usa también para decidir si
+     * pinta cada pestaña.
+     *  - Transacciones: cada origen se incluye solo con permiso en su módulo.
+     *  - Estado de cuenta: basta poder ver Cuentas por Pagar o el Reporte de Cartera.
+     */
+    public const RUTAS_TRANSACCIONES = [
+        'COMPRA'      => 'modulos/compras',
+        'LIQUIDACION' => 'modulos/liquidacion-compra',
+    ];
+    public const RUTAS_ESTADO_CUENTA = ['modulos/cuentas_por_pagar', 'modulos/reporte_cartera'];
+
     public function __construct()
     {
         parent::__construct();
@@ -421,6 +434,106 @@ class ProveedoresController extends BaseModuloController
                     'stats' => $stats
                 ]
             ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Pestaña "Transacciones" del modal: productos y servicios comprados al
+     * proveedor (compras y liquidaciones), con buscador y paginación. Cada
+     * origen se incluye solo si el usuario puede ver ese módulo, y sin "acceso
+     * total" en él solo ve los documentos que creó (registros propios).
+     */
+    public function transaccionesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $fuentes = [];
+        foreach (self::RUTAS_TRANSACCIONES as $origen => $ruta) {
+            $p = $this->permisosModuloPorRuta($ruta);
+            if (!empty($p['ver'])) {
+                $fuentes[$origen] = empty($p['todo']) ? $idUsuario : null;
+            }
+        }
+        if (empty($fuentes)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'No tiene permiso para ver compras ni liquidaciones de compra.']);
+            exit;
+        }
+
+        try {
+            $vista   = ($_GET['vista'] ?? '') === 'producto' ? 'producto' : 'detalle';
+            $page    = max(1, (int) ($_GET['page'] ?? 1));
+            $perPage = 50;
+
+            $res = $this->service->getTransacciones(
+                (int) ($_GET['id'] ?? 0),
+                $idEmpresa,
+                mb_substr(trim((string) ($_GET['b'] ?? '')), 0, 200),
+                $vista,
+                $page,
+                $perPage,
+                trim((string) ($_GET['sort'] ?? '')),
+                trim((string) ($_GET['dir'] ?? '')),
+                $fuentes
+            );
+
+            echo json_encode([
+                'ok'          => true,
+                'vista'       => $vista,
+                'rows'        => $res['rows'],
+                'total'       => $res['total'],
+                'total_neto'  => $res['total_neto'],
+                'page'        => $page,
+                'per_page'    => $perPage,
+                'total_pages' => max(1, (int) ceil($res['total'] / $perPage)),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Pestaña "Estado de cuenta" del modal: kardex del proveedor (mismo criterio
+     * que Cuentas por Pagar y el Reporte de Cartera) con su historial de pagos.
+     * Informa además si el usuario puede abrir los egresos desde la pestaña.
+     */
+    public function estadoCuentaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        if (!\App\Helpers\Permisos::puedeVerAlguna(self::RUTAS_ESTADO_CUENTA)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'No tiene permiso para ver el estado de cuenta (Cuentas por Pagar o Reporte de Cartera).']);
+            exit;
+        }
+
+        $desde = trim((string) ($_GET['desde'] ?? ''));
+        $hasta = trim((string) ($_GET['hasta'] ?? ''));
+
+        try {
+            $res = $this->service->getEstadoCuenta(
+                (int) ($_GET['id'] ?? 0),
+                (int) $_SESSION['id_empresa'],
+                $desde !== '' ? $desde : null,
+                $hasta !== '' ? $hasta : null
+            );
+
+            // puede_ver_pago: si la pestaña deja desplegar los egresos (lo valida también Egresos)
+            echo json_encode([
+                'ok'             => true,
+                'puede_ver_pago' => \App\Helpers\Permisos::puedeVer('modulos/egresos'),
+            ] + $res);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

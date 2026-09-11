@@ -1407,6 +1407,65 @@
         }
     };
 
+    // ─── Pestañas Transacciones y Estado de cuenta ──────────────────────────
+    // Componente compartido con la ficha de clientes (public/js/components/ficha_consultas.js,
+    // lo carga el partial views/partials/ficha_consultas.php). Si la vista no lo incluyó
+    // —el usuario no puede ver ninguna de las dos pestañas— no hay nada que iniciar.
+    function initPestanasConsultaProv() {
+        if (!window.FichaConsultas) return;
+        window.FichaConsultas.iniciar({
+            urlBase: urlBaseProv,
+            idInput: 'prov_id',
+            modalId: 'modalProveedor',
+            eventoGuardado: 'proveedorGuardado',
+            transacciones: {
+                panel: 'prov-tab-transacciones',
+                boton: 'prov-tab-transacciones-btn',
+                textos: {
+                    documentos: 'Veces comprado',
+                    ultimaFecha: 'Última compra',
+                    vacio: 'Todavía no hay compras ni liquidaciones de este proveedor.',
+                },
+            },
+            estadoCuenta: {
+                panel: 'prov-tab-estado-cuenta',
+                boton: 'prov-tab-estado-cuenta-btn',
+                textos: { sinPagos: 'No hay pagos en el período.' },
+                origenes: {
+                    COMPRA: 'Compra', LIQUIDACION: 'Liquidación', IMPORTACION: 'Importación',
+                    NOTA_DEBITO: 'Nota de débito', SALDO_INICIAL: 'Saldo inicial',
+                    PAGO: 'Pago', RETENCION: 'Retención', NOTA_CREDITO: 'Nota de crédito',
+                },
+                // Cada pago es un egreso: se despliega con /modulos/egresos/getEgresoAjax
+                pago: {
+                    origen: 'PAGO',
+                    titulo: 'Egreso',
+                    tituloFila: 'Ver el egreso',
+                    icono: 'bi-cash-coin',
+                    urlDetalle: id => `${BASE_URL}/modulos/egresos/getEgresoAjax?id=${encodeURIComponent(id)}`,
+                    urlPdf: id => `${BASE_URL}/modulos/egresos/pdf?id=${encodeURIComponent(id)}&_=${Date.now()}`,
+                    numero: e => e.numero_egreso,
+                    sujeto: e => e.sujeto_nombre,
+                    etiquetaSujeto: 'Pagado a',
+                    montoLinea: 'monto_pagado',
+                    formaNombre: 'forma_pago_nombre',
+                    tituloDocs: 'Documentos pagados',
+                    tituloFormas: 'Formas de pago',
+                    tiposDoc: {
+                        COMPRA: 'Compra', LIQUIDACION: 'Liquidación', IMPORTACION: 'Importación',
+                        SALDO_INICIAL: 'Saldo inicial', ROL: 'Rol de pago',
+                    },
+                },
+            },
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initPestanasConsultaProv);
+    } else {
+        initPestanasConsultaProv();
+    }
+
     // Aliases movidos al inicio del script para mayor seguridad
 
     if (document.readyState === 'loading') {

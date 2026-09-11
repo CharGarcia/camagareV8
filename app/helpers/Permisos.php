@@ -174,4 +174,21 @@ class Permisos
     public static function puedeCrear(string $ruta): bool       { return !empty(self::porRuta($ruta)['crear']); }
     public static function puedeActualizar(string $ruta): bool  { return !empty(self::porRuta($ruta)['actualizar']); }
     public static function puedeEliminar(string $ruta): bool    { return !empty(self::porRuta($ruta)['eliminar']); }
+
+    /**
+     * ¿Puede ver al menos uno de estos módulos? Para pantallas que juntan datos de
+     * varios (p. ej. las pestañas Transacciones y Estado de cuenta de las fichas de
+     * proveedor y cliente).
+     *
+     * @param string[] $rutas
+     */
+    public static function puedeVerAlguna(array $rutas): bool
+    {
+        foreach ($rutas as $ruta) {
+            if (self::puedeVer((string) $ruta)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

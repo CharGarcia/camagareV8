@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
-etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz
-version: 1.4
+etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso
+version: 1.5
 orden: 10
 estado: activo
 ---
@@ -121,6 +121,76 @@ proveedor en la empresa y ambiente activos:
 | Total compras | Facturas y liquidaciones − notas de crédito + notas de débito |
 | Por pagar | Saldo pendiente, con el mismo criterio de Cuentas por Pagar, más los saldos iniciales |
 
+## Transacciones: productos y servicios comprados
+
+La pestaña *Transacciones* lista lo que se le ha comprado al proveedor a partir
+de sus **compras** (facturas, notas de venta, notas de débito y demás
+comprobantes) y sus **liquidaciones de compra**. Es de solo lectura.
+
+Tiene dos vistas:
+
+| Vista | Qué muestra |
+|-------|-------------|
+| Detalle | Una fila por línea de documento: fecha, tipo y número del documento, código, descripción, cantidad, precio unitario, descuento y subtotal |
+| Por producto | Una fila por producto o servicio (mismo código y descripción): veces comprado, cantidad total, último precio pagado, fecha de la última compra y total |
+
+Las **notas de crédito** del proveedor se ven en rojo y **restan** en cantidades
+y totales, porque son devoluciones o descuentos posteriores. Los documentos
+anulados o rechazados no aparecen. Los montos son **sin impuestos**.
+
+Haga clic en el título de una columna para ordenar por ella; otro clic invierte
+el orden. Se muestran 50 filas por página.
+
+### Buscar en las transacciones
+
+El buscador de la pestaña encuentra por **palabras sueltas**, en cualquier orden
+y sin distinguir tildes ni mayúsculas, en el código, la descripción y el número
+y tipo de documento: `aceite oliva` encuentra *CARBONELL ACEITE SOL OLIVA PET*.
+
+También acepta filtros por campo con la sintaxis `clave:valor`:
+
+| Filtro | Ejemplo | Qué hace |
+|--------|---------|----------|
+| `producto:` (o `descripcion:`, `servicio:`) | `producto:arroz` | Busca solo en la descripción |
+| `codigo:` | `codigo:7861` | Busca solo en el código |
+| `documento:` | `documento:582276` | Número del documento |
+| `tipo:` | `tipo:credito` o `-tipo:credito` | Tipo de documento; el `-` lo excluye |
+| `fecha:` | `fecha:2026-08` o `fecha:2026-01..2026-03` | Año, mes, día o rango |
+| `precio:` | `precio:>10` | Precio unitario |
+| `cantidad:` | `cantidad:1..5` | Cantidad |
+| `total:` (o `subtotal:`) | `total:>=100` | Subtotal de la línea |
+
+## Estado de cuenta e historial de pagos
+
+La pestaña *Estado de cuenta* muestra en orden cronológico todo lo que suma a la
+deuda con el proveedor (**cargos**: compras, liquidaciones, facturas del
+exterior, notas de débito y saldos iniciales) y todo lo que la baja (**abonos**:
+pagos, retenciones y notas de crédito), con el **saldo corriendo** fila por fila.
+Es el mismo cálculo del *Reporte de Cartera*, que sigue las reglas de **Cuentas
+por Pagar**.
+
+El *Por pagar* de la pestaña Comercial se calcula documento por documento y no
+incluye facturas del exterior: si el proveedor tiene importaciones o documentos
+pagados de más, puede no coincidir con el saldo de esta pestaña.
+
+Arriba se resumen los totales del período: compras y cargos, pagos, retenciones
+y notas de crédito, y el saldo por pagar.
+
+- **Desde / Hasta**: limitan el período. Con *Desde*, la primera fila es el
+  **saldo anterior** a esa fecha, así el saldo final sigue siendo el real.
+- **Historial de pagos**: deja a la vista solo los pagos (egresos). El saldo de
+  cada fila sigue siendo el que quedó después de ese pago.
+
+### Ver un egreso con un clic
+
+Cada pago es un **egreso**. Haga **clic en la fila del pago** y se despliega
+debajo su detalle: número, fecha, concepto, documentos que pagó, formas de pago
+(banco, cheque, referencia) y quién lo registró. El botón rojo de PDF descarga
+el comprobante de egreso. Otro clic en la fila lo pliega.
+
+Un egreso que paga varias facturas del proveedor aparece como **una sola fila**
+con el total pagado; el reparto por factura se ve al desplegarlo.
+
 ## Retenciones y sustento
 
 | Campo | Para qué sirve |
@@ -186,6 +256,17 @@ Copiar proveedores a otra empresa exige permiso de **crear** en el módulo, tant
 en la empresa de origen como en la de destino. En el copiado masivo, un usuario
 sin *acceso total* copia únicamente los proveedores que él creó.
 
+Las pestañas de consulta dependen de los permisos de los módulos de donde salen
+sus datos:
+
+- **Transacciones**: aparece si puede ver **Compras** o **Liquidaciones de
+  Compra**, y solo trae los documentos de los módulos que puede ver. Sin
+  *acceso total* en uno de ellos, de ese módulo ve únicamente los documentos
+  que usted registró.
+- **Estado de cuenta**: aparece si puede ver **Cuentas por Pagar** o el
+  **Reporte de Cartera**. Para desplegar un egreso hace falta, además, permiso
+  para ver **Egresos**.
+
 ## Eliminar
 
 Es una eliminación **lógica**: el proveedor sale del listado y las compras que ya
@@ -211,9 +292,26 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 - **Una factura del SRI no se registraba por "value too long"**: la dirección o la
   razón social del emisor venía más larga que el campo. Ya no bloquea la carga;
   ver *Descargas del SRI → Errores frecuentes*.
+- **No veo las pestañas Transacciones o Estado de cuenta**: le falta permiso para
+  ver Compras o Liquidaciones de Compra (Transacciones), o Cuentas por Pagar o el
+  Reporte de Cartera (Estado de cuenta). También pudo ocultarlas con el botón de
+  configurar pestañas de la ficha.
+- **La pestaña pide "Guarde el proveedor"**: la ficha es nueva. Al guardarla, la
+  pestaña se carga sola.
+- **Faltan compras en Transacciones**: sin *acceso total* en Compras solo ve las
+  que usted registró; además no se muestran las anuladas o rechazadas ni las del
+  otro ambiente (pruebas/producción).
+- **Un pago no se despliega al hacer clic**: necesita permiso para ver Egresos.
 
 ## Historial de cambios
 
+- **1.5** — Pestaña **Transacciones**: productos y servicios comprados al
+  proveedor (compras y liquidaciones), en detalle o agrupados por producto, con
+  buscador, filtros `clave:valor`, orden por columna y último precio pagado.
+  Pestaña **Estado de cuenta**: movimientos con saldo corriendo (mismo cálculo
+  que el Reporte de Cartera y Cuentas por Pagar), rango de fechas, vista de
+  historial de pagos y detalle del egreso con un clic. La ficha es más ancha
+  para dar espacio a estas tablas.
 - **1.4** — Razón social, nombre comercial y dirección aceptan hasta 300
   caracteres (antes 200, 200 y 150). Un texto más largo se recorta en vez de
   impedir que el proveedor se cree, que era lo que hacía fallar el registro

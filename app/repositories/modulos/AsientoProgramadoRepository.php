@@ -300,6 +300,36 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * Conceptos OPCIONALES: si la empresa no les asigna cuenta (ni en General ni en la regla de la
+     * entidad), su valor se contabiliza en el concepto de respaldo, que es donde iba antes de que
+     * existieran — así agregarlos nunca deja sin asiento a una empresa que no los configuró. Por eso
+     * no se reportan como faltantes (si al respaldo le falta cuenta, ya se reporta el respaldo). El
+     * respaldo lo aplica quien arma el asiento: RolAsientoService::devolverPrestamosSinCuenta().
+     * código opcional => código de respaldo (mismo tipo_asiento).
+     */
+    public const CONCEPTOS_CON_RESPALDO = [
+        'PRESTAMOQUIROGRAFARIONOMINA' => 'DESCUENTOSNOMINA',
+        'PRESTAMOHIPOTECARIONOMINA'   => 'DESCUENTOSNOMINA',
+        'PRESTAMOEMPRESANOMINA'       => 'DESCUENTOSNOMINA',
+    ];
+
+    /**
+     * Anota en cada regla de getReglasGeneralesPorConcepto() el nombre de su concepto de respaldo
+     * ('respaldo_concepto'; null si el concepto no es opcional), para que Configuración Contable no
+     * marque como faltante un concepto opcional que se dejó sin cuenta.
+     */
+    public function anotarConceptosOpcionales(array $reglas): array
+    {
+        $nombres = array_column($reglas, 'concepto', 'codigo');
+        foreach ($reglas as &$r) {
+            $respaldo = self::CONCEPTOS_CON_RESPALDO[$r['codigo'] ?? ''] ?? null;
+            $r['respaldo_concepto'] = $respaldo !== null ? ($nombres[$respaldo] ?? $respaldo) : null;
+        }
+        unset($r);
+        return $reglas;
+    }
+
+    /**
      * comportamiento (empresa_opciones_ingreso_egreso) => [tipo_asiento, codigo] de la cuenta
      * "oficial" que ese módulo YA usa para su propia Cuenta por Pagar/Cobrar en Configuración
      * Contable. Solo cubre comportamientos con una ÚNICA cuenta oficial resoluble (compra,
@@ -1032,6 +1062,8 @@ class AsientoProgramadoRepository extends BaseRepository
             // El Ajuste por redondeo no se reporta: su ausencia solo importa en descuadres de
             // centavos y ya tiene su propio aviso en AsientoBuilderService::aplicarAjusteRedondeo().
             if (str_contains($codigo, 'REDONDEO')) continue;
+            // Los conceptos opcionales tampoco: sin cuenta, su valor va al concepto de respaldo.
+            if (array_key_exists($codigo, self::CONCEPTOS_CON_RESPALDO)) continue;
 
             $idTipo = (int) $g['id_asiento_tipo'];
             $conceptoLower = strtolower($g['concepto'] ?? '');

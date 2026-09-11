@@ -1,12 +1,12 @@
 ---
 titulo: Reporte de ventas
-resumen: Ventas del periodo con filtros por cliente, vendedor, producto y estado, agrupables y exportables.
+resumen: Ventas del periodo con filtros por cliente, vendedor, producto y borradores, agrupables y exportables.
 categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc
-version: 1.2
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri
+version: 1.3
 orden: 10
 estado: activo
 ---
@@ -22,21 +22,54 @@ qué, en el periodo que se indique.
 | Cliente | Ventas de un cliente concreto |
 | Vendedor | Ventas de un vendedor concreto. Las notas de crédito no llevan vendedor propio: se les atribuye el vendedor de la factura que modifican, así que sí entran en el filtro (también en *Facturas − NC*) |
 | Producto | Ventas de un producto concreto |
-| Estado | Borrador, autorizada o anulada |
+| Borradores | *Sin borradores* (por defecto), *Con borradores* o *Solo borradores*. Ver la sección *Documentos en borrador* |
 
 Los filtros se combinan: *las ventas del producto X al cliente Y en marzo*.
 
 ## El estado importa
 
-Es el filtro que más confunde y el que más cambia las cifras:
+Es lo que más cambia las cifras:
 
 - **Autorizada**: la venta real, aprobada por el SRI. Es lo que hay que mirar
-  para saber cuánto se vendió.
-- **Borrador**: emitida pero aún no enviada. Todavía puede cambiar.
-- **Anulada**: dejada sin efecto. No es venta.
+  para saber cuánto se vendió. En los recibos de venta, el equivalente es el
+  recibo **emitido**.
+- **Borrador**: guardada pero aún no enviada al SRI (o, en recibos, aún no
+  emitida). Todavía puede cambiar.
+- **Anulada**: dejada sin efecto. No es venta y nunca entra en el reporte; la
+  tarjeta de documentos solo muestra cuántas hay (*Anul.*).
 
-Si el reporte no coincide con lo esperado, revise primero qué estados está
-incluyendo.
+Por defecto el reporte suma únicamente lo que es venta: facturas y notas de
+crédito autorizadas, y recibos emitidos. Un recibo que ya se facturó no se cuenta
+dos veces: aparece como la factura.
+
+Si el reporte no coincide con lo esperado, revise primero el selector
+**Borradores**.
+
+## Documentos en borrador
+
+El selector **Borradores** (segunda fila de filtros, bajo *Tipo de documento*)
+decide si los documentos en borrador entran al reporte:
+
+- **Sin borradores** (por defecto): solo los documentos válidos, como siempre.
+- **Con borradores**: agrega los borradores a la tabla, las tarjetas, el gráfico,
+  el PDF y el Excel. Sirve para ver cuánto se vendería si se emiten los
+  pendientes.
+- **Solo borradores**: lista únicamente los borradores, para revisar qué falta
+  enviar al SRI.
+
+Cuando se incluyen borradores:
+
+- En el detallado cada documento muestra su estado (*BORRADOR* en gris).
+- La tarjeta de documentos cambia a *Doc. Aut. + Borr.* o *Doc. Borradores*, y
+  el **Gran Total** indica *(con borradores)* o *(solo borradores)*.
+- El PDF y el Excel llevan en el encabezado la línea *Estados*, y el Excel del
+  detallado agrega la columna **Estado**.
+- Con *Facturas − NC* la opción se aplica a ambos documentos: también se restan
+  las notas de crédito en borrador.
+
+La estrella junto al selector lo guarda como favorito, para que el reporte abra
+siempre con esa opción. Solo aparecen los borradores del ambiente actual de la
+empresa (producción o pruebas), igual que en el listado de Facturas de Venta.
 
 ## Consolidar varios establecimientos (solo desde la matriz)
 
@@ -82,14 +115,21 @@ se va a seguir analizando por fuera.
 
 ## Errores frecuentes
 
-- **Las cifras no coinciden con la contabilidad**: revise el estado incluido; los
-  borradores no son ventas y las anuladas no cuentan.
-- **Falta una venta**: compruebe su fecha de emisión y que no esté anulada.
+- **Las cifras no coinciden con la contabilidad**: revise el selector
+  **Borradores**; con borradores las cifras incluyen documentos que todavía no
+  son ventas. Las anuladas nunca cuentan.
+- **Falta una venta**: compruebe su fecha de emisión y que no esté anulada. Si
+  está en borrador, elija *Con borradores*.
 - **No veo las ventas de otros vendedores**: sin el permiso de *acceso total*
   cada usuario ve solo lo que registró.
 
 ## Historial de cambios
 
+- **1.3** — Nuevo selector **Borradores** (segunda fila de filtros): *Sin
+  borradores* (por defecto, como antes), *Con borradores* o *Solo borradores*.
+  Se aplica a la tabla, las tarjetas, el gráfico, el PDF y el Excel; el Excel
+  del detallado agrega la columna Estado cuando hay borradores. La tabla de
+  filtros ya no menciona un filtro "Estado", que no existía en pantalla.
 - **1.2** — Nuevo filtro **Establecimientos** (solo desde la matriz del grupo
   RUC) para consolidar las ventas de todas las sucursales del mismo RUC: badge
   del establecimiento en el detallado, columna "Estab." en PDF y Excel, y línea

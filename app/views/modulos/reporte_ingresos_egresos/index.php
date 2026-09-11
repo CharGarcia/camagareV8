@@ -1,4 +1,4 @@
-<?php /** @var string $rutaModulo @var array $formas @var array $conceptos @var array $anios */ ?>
+<?php /** @var string $rutaModulo @var array $formas @var array $conceptos @var array $vendedores @var array $anios */ ?>
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
 <style>
@@ -73,6 +73,16 @@
                         <input type="text" id="rie-tercero-txt" class="form-control form-control-sm shadow-none border" placeholder="Nombre / RUC…" autocomplete="off">
                         <input type="hidden" id="rie-tercero-id">
                         <div id="rie-tercero-drop" class="list-group shadow position-absolute w-100 d-none" style="z-index:1050;max-height:220px;overflow:auto;margin-top:2px;"></div>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor</label>
+                        <select id="rie-vendedor" class="form-select form-select-sm shadow-none border" style="width:170px;"
+                                title="Cobros de las facturas y recibos de venta de este vendedor. Los egresos no tienen vendedor.">
+                            <option value="0">Todos</option>
+                            <?php foreach ($vendedores as $vd): ?>
+                                <option value="<?= (int)$vd['id'] ?>"><?= htmlspecialchars($vd['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                 </div>
 
@@ -228,6 +238,7 @@
             fecha_hasta: $('rie-fecha-hasta').value,
             tercero_tipo: $('rie-tercero-tipo').value,
             tercero_id: $('rie-tercero-id').value || 0,
+            id_vendedor: $('rie-vendedor').value,
             id_forma: $('rie-forma').value,
             operacion_bancaria: $('rie-opbanc').value,
             id_concepto: $('rie-concepto').value,
@@ -312,6 +323,7 @@
         $('rie-fecha-hasta').value = '<?= date('Y-m-d') ?>';
         $('rie-tipo-flujo').value = 'AMBOS'; $('rie-ver-por').value = 'DETALLE'; $('rie-tercero-tipo').value = '';
         $('rie-forma').value = '0'; $('rie-opbanc').value = ''; $('rie-concepto').value = '0'; $('rie-tipo-doc').value = ''; $('rie-estado').value = 'TODOS';
+        $('rie-vendedor').value = '0';
         generar();
     });
 

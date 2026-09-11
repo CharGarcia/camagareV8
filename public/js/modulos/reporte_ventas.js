@@ -260,7 +260,17 @@ window.RV_generarReporte = function () {
                 document.getElementById('stat-total').textContent = parseFloat(res.stats.gran_total).toFixed(2);
             }
             if (res.estados) {
-                document.getElementById('stat-documentos').textContent = res.estados.autorizados;
+                // El conteo principal y la nota del Gran Total siguen al selector "Borradores"
+                // con el que se generó el reporte (res.borradores), igual que filas y totales.
+                const aut = parseInt(res.estados.autorizados, 10) || 0;
+                const bor = parseInt(res.estados.borradores, 10) || 0;
+                const [etiqueta, docs, notaTotal] =
+                    res.borradores === 'SOLO'    ? ['Doc. Borradores',   bor,       ' (solo borradores)'] :
+                    res.borradores === 'INCLUIR' ? ['Doc. Aut. + Borr.', aut + bor, ' (con borradores)']  :
+                                                   ['Doc. Autorizados',  aut,       ''];
+                document.getElementById('stat-documentos').textContent       = docs;
+                document.getElementById('stat-documentos-label').textContent = etiqueta;
+                document.getElementById('stat-total-nota').textContent       = notaTotal;
                 document.getElementById('stat-borradores').textContent = res.estados.borradores;
                 document.getElementById('stat-anulados').textContent   = res.estados.anulados;
             }

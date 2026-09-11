@@ -117,6 +117,19 @@
                 </div>
 
                 <div class="d-flex flex-wrap align-items-start gap-2">
+                    <div>
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase d-flex align-items-center" style="font-size:.65rem;">
+                            <i class="bi bi-pencil-square me-1"></i>Borradores
+                            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_borradores', 'borradores') ?>
+                        </label>
+                        <select name="borradores" id="rv_borradores" class="form-select form-select-sm shadow-none border" style="width:150px;" onchange="window.RV_generarReporte()"
+                                title="Por defecto el reporte solo muestra documentos autorizados (recibos: emitidos). Los borradores aún no son ventas.">
+                            <option value="EXCLUIR" selected>Sin borradores</option>
+                            <option value="INCLUIR">Con borradores</option>
+                            <option value="SOLO">Solo borradores</option>
+                        </select>
+                    </div>
+
                     <div style="flex:1 1 150px;min-width:0;">
                         <label class="form-label small fw-bold mb-1 text-muted text-uppercase d-flex align-items-center" style="font-size:.65rem;">
                             <i class="bi bi-person-badge me-1"></i>Vendedor
@@ -181,7 +194,7 @@
                     <div>
                         <div class="cmg-control-card__stat-value" id="stat-documentos">0</div>
                         <div class="cmg-control-card__stat-label">
-                            Doc. Autorizados
+                            <span id="stat-documentos-label">Doc. Autorizados</span>
                             <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary ms-1" style="font-size:.55rem;">Borr: <span id="stat-borradores">0</span></span>
                             <span class="badge bg-danger bg-opacity-10 text-danger border border-danger" style="font-size:.55rem;">Anul: <span id="stat-anulados">0</span></span>
                         </div>
@@ -205,7 +218,7 @@
                     <i class="bi bi-cash-stack bg-success bg-opacity-10 text-success"></i>
                     <div>
                         <div class="cmg-control-card__stat-value text-success">$<span id="stat-total">0.00</span></div>
-                        <div class="cmg-control-card__stat-label">Gran Total</div>
+                        <div class="cmg-control-card__stat-label">Gran Total<span id="stat-total-nota"></span></div>
                     </div>
                 </div>
             </div>

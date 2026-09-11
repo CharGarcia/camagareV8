@@ -142,6 +142,38 @@ class ComandaRules
         }
     }
 
+    /**
+     * ¿A esta línea se le puede cambiar la cantidad con los botones −/+?
+     *
+     * No a un ítem con NUP/serie: cada unidad lleva su propio número, así que
+     * "una más" es otra captura de serie (se agrega desde el catálogo). Tampoco a
+     * la propina, que se edita como monto desde el pie de la comanda.
+     *
+     * @param array $linea            Línea leída de la base
+     * @param int   $idProductoPropina Producto de propina del establecimiento (0 si no hay)
+     */
+    public function validarPuedeCambiarCantidad(array $linea, int $idProductoPropina): void
+    {
+        if (trim((string) ($linea['nup'] ?? '')) !== '') {
+            throw new Exception('Este ítem lleva número de serie (NUP): cada unidad se agrega por separado desde el catálogo.');
+        }
+        if ($idProductoPropina > 0 && (int) ($linea['id_producto'] ?? 0) === $idProductoPropina) {
+            throw new Exception('La propina se cambia desde su campo, al pie de la comanda.');
+        }
+    }
+
+    /**
+     * Una línea ya enviada a cocina/barra no cambia su cantidad en el sitio: la
+     * estación ya la imprimió y la muestra con la cantidad anterior, así que un
+     * cambio silencioso nunca le llegaría. Las que no pasan por estación (nacen
+     * entregadas) o que todavía están pendientes de enviar, sí.
+     */
+    public function lineaYaEnPreparacion(array $linea): bool
+    {
+        return !empty($linea['id_estacion_impresion'])
+            && ($linea['estado_linea'] ?? '') !== 'pendiente';
+    }
+
     /** Solo se puede restaurar un ítem que esté eliminado ("anulado"). */
     public function validarPuedeRestaurarLinea(?array $linea): void
     {

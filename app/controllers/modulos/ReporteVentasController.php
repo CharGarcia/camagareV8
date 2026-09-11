@@ -79,7 +79,24 @@ class ReporteVentasController extends BaseModuloController
             // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
             // solo se honra desde la matriz — ver resolverAlcance()).
             'alcance'        => strtoupper(trim((string) ($_REQUEST['alcance'] ?? ''))),
+            // Selector "Borradores": EXCLUIR (por defecto, solo documentos válidos) | INCLUIR
+            // (válidos + borradores) | SOLO (solo borradores). Lo aplica el repositorio (condEstado).
+            'borradores'     => match (strtoupper(trim((string) ($_REQUEST['borradores'] ?? '')))) {
+                'INCLUIR' => 'INCLUIR',
+                'SOLO'    => 'SOLO',
+                default   => 'EXCLUIR',
+            },
         ];
+    }
+
+    /** Texto del selector "Borradores" para el encabezado del PDF/Excel ('' si es el por defecto). */
+    private function describirBorradores(string $modo): string
+    {
+        return match ($modo) {
+            'INCLUIR' => 'Incluye documentos en borrador',
+            'SOLO'    => 'Solo documentos en borrador',
+            default   => '',
+        };
     }
 
     /**
@@ -187,6 +204,7 @@ class ReporteVentasController extends BaseModuloController
                 'estados'     => $resumenEstados,
                 'agrupacion'  => $filtros['agrupar_por'],
                 'consolidado' => $consolidado,
+                'borradores'  => $filtros['borradores'],
             ]);
             
             if ($jsonOutput === false) {
@@ -482,8 +500,10 @@ class ReporteVentasController extends BaseModuloController
                     ];
                 }
             } else {
-                // Consolidado: columna "Estab." al inicio con el establecimiento dueño del documento
-                $headers = array_merge($consolidado ? ['Estab.'] : [], ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula', 'Vendedor', 'Cajero', 'Usuario', 'Clave Acceso', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Retenciones']);
+                // Consolidado: columna "Estab." al inicio con el establecimiento dueño del documento.
+                // Con borradores: columna "Estado" para distinguirlos de los documentos válidos.
+                $conEstado = $filtros['borradores'] !== 'EXCLUIR';
+                $headers = array_merge($consolidado ? ['Estab.'] : [], ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula'], $conEstado ? ['Estado'] : [], ['Vendedor', 'Cajero', 'Usuario', 'Clave Acceso', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Retenciones']);
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = array_merge($consolidado ? [(string) ($r['establecimiento'] ?? '')] : [], [
@@ -491,6 +511,7 @@ class ReporteVentasController extends BaseModuloController
                         $r['numero_factura'],
                         $r['cliente_nombre'],
                         $r['cliente_ruc'],
+                    ], $conEstado ? [strtoupper((string) ($r['estado'] ?? ''))] : [], [
                         $r['vendedor_nombre'] ?? '',
                         $r['cajero_nombre']   ?? '',
                         $r['usuario_nombre']  ?? '',
@@ -504,8 +525,10 @@ class ReporteVentasController extends BaseModuloController
                 }
             }
 
+            $borradoresTxt = $this->describirBorradores($filtros['borradores']);
             $reportService = new \App\Services\ReportService();
-            $reportService->exportToExcel('Ventas', $headers, $exportData, 'Reporte_Ventas', $nombreEmpresa);
+            $reportService->exportToExcel('Ventas', $headers, $exportData, 'Reporte_Ventas', $nombreEmpresa,
+                $borradoresTxt !== '' ? ['Estados' => $borradoresTxt] : []);
             exit;
         } catch (\Throwable $e) {
             echo "Error al generar Excel: " . $e->getMessage();
@@ -542,6 +565,7 @@ class ReporteVentasController extends BaseModuloController
             $empresa   = (new \App\models\Empresa())->getPorId($idEmpresaActiva) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE VENTAS';
             $alcanceTxt    = $this->describirAlcance($idsEmpresa, $consolidado);
+            $borradoresTxt = $this->describirBorradores($filtros['borradores']);
 
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) require_once $autoload;
@@ -562,6 +586,7 @@ class ReporteVentasController extends BaseModuloController
                 <h3>Reporte de Ventas</h3>
                 <p>Fecha de reporte: <?= date('d-m-Y H:i:s') ?></p>
                 <?php if ($alcanceTxt !== ''): ?><p><strong>Alcance:</strong> <?= htmlspecialchars($alcanceTxt) ?></p><?php endif; ?>
+                <?php if ($borradoresTxt !== ''): ?><p><strong>Estados:</strong> <?= htmlspecialchars($borradoresTxt) ?></p><?php endif; ?>
             </div>
             <table>
                 <thead>

@@ -8,6 +8,8 @@ use PDO;
 
 class ClienteRepository extends BaseRepository
 {
+    use \App\Traits\LineasDocumentoTrait;
+
     public const COLUMNAS_ORDEN = [
         'identificacion', 'nombre_tipo_id', 'nombre', 'email', 'telefono', 'direccion',
         'plazo', 'nombre_provincia', 'nombre_ciudad', 'nombre_vendedor',
@@ -652,6 +654,112 @@ class ClienteRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return (int) $st->fetchColumn();
+    }
+
+    /**
+     * Estados de facturas y notas de crédito de venta que NO cuentan en la pestaña
+     * Transacciones: sin emitir, anuladas o que el SRI no aceptó (se comparan en
+     * minúsculas y sin espacios). Los recibos no pasan por el SRI y excluyen además
+     * los ya convertidos en factura, para no contar dos veces la misma venta.
+     */
+    private const ESTADOS_VENTA_SIN_EFECTO  = ['borrador', 'anulado', 'anulada', 'devuelta', 'devuelto', 'no_autorizado', 'no autorizado', 'rechazado', 'rechazada', 'error'];
+    private const ESTADOS_RECIBO_SIN_EFECTO = ['borrador', 'anulado', 'anulada', 'facturado'];
+
+    /**
+     * Pestaña "Transacciones" de la ficha: productos y servicios vendidos al cliente en
+     * facturas, recibos y notas de crédito de venta (estas restan), con el buscador y
+     * las vistas de LineasDocumentoTrait. Cada origen se limita al ambiente activo de
+     * la empresa, como en su propio módulo.
+     *
+     * @param array<string,?int> $fuentes Orígenes a incluir: 'FACTURA', 'RECIBO' y/o
+     *        'NOTA_CREDITO' => id de usuario para "registros propios" (null = todos).
+     *        Un origen ausente no se consulta (el usuario no tiene ese permiso).
+     * @return array{rows: array, total: int, total_neto: float}
+     */
+    public function getTransacciones(
+        int $idCliente,
+        int $idEmpresa,
+        string $buscar,
+        string $vista,
+        int $page,
+        int $perPage,
+        string $ordenCol,
+        string $ordenDir,
+        array $fuentes
+    ): array {
+        $amb    = $this->ambienteLineasDocumento($idEmpresa);
+        $params = [];
+        $ramas  = [];
+
+        $documentos = [
+            // origen => [etiqueta, signo, cabecera, detalle, FK del detalle, estados excluidos, sufijo de parámetros]
+            'FACTURA'      => ['Factura de Venta', 1, 'ventas_cabecera', 'ventas_detalle', 'id_venta', self::ESTADOS_VENTA_SIN_EFECTO, 'f'],
+            'RECIBO'       => ['Recibo de Venta', 1, 'recibos_venta_cabecera', 'recibos_venta_detalle', 'id_recibo', self::ESTADOS_RECIBO_SIN_EFECTO, 'r'],
+            'NOTA_CREDITO' => ['Nota de Crédito', -1, 'notas_credito_cabecera', 'notas_credito_detalle', 'id_nota_credito', self::ESTADOS_VENTA_SIN_EFECTO, 'n'],
+        ];
+        foreach ($documentos as $origen => [$etiqueta, $signo, $cabecera, $detalle, $fk, $excluidos, $sufijo]) {
+            if (!array_key_exists($origen, $fuentes)) {
+                continue;
+            }
+            $ramas[] = $this->ramaLineasVenta(
+                $origen, $etiqueta, $signo, $cabecera, $detalle, $fk, $excluidos,
+                $idCliente, $idEmpresa, $amb, $fuentes[$origen], $sufijo, $params
+            );
+        }
+
+        return $this->consultarLineasDocumento($ramas, $params, $buscar, $vista, $page, $perPage, $ordenCol, $ordenDir);
+    }
+
+    /**
+     * Rama del UNION de getTransacciones() para un tipo de documento de venta. Las tres
+     * cabeceras comparten forma (establecimiento/punto/secuencial, estado, tipo_ambiente)
+     * y usan id_usuario para "registros propios", igual que el listado de su módulo.
+     * Tablas, etiqueta y estados vienen de código, nunca del usuario.
+     */
+    private function ramaLineasVenta(
+        string $origen,
+        string $etiqueta,
+        int $signo,
+        string $cabecera,
+        string $detalle,
+        string $fk,
+        array $estadosExcluidos,
+        int $idCliente,
+        int $idEmpresa,
+        ?string $amb,
+        ?int $idUsuarioFiltro,
+        string $sufijo,
+        array &$params
+    ): string {
+        $excluidos = "'" . implode("','", $estadosExcluidos) . "'";
+
+        $sql = "SELECT '{$origen}'::text AS origen, c.id AS id_documento, d.id AS id_linea,
+                       c.fecha_emision::date AS fecha,
+                       CONCAT(c.establecimiento, '-', c.punto_emision, '-', c.secuencial) AS numero_documento,
+                       '{$etiqueta}'::text AS tipo_documento,
+                       COALESCE(TRIM(d.codigo_principal), '') AS codigo,
+                       COALESCE(TRIM(d.descripcion), '') AS descripcion,
+                       d.cantidad, d.precio_unitario, d.descuento,
+                       d.precio_total_sin_impuesto AS subtotal,
+                       {$signo} AS signo
+                FROM {$detalle} d
+                INNER JOIN {$cabecera} c ON c.id = d.{$fk}
+                WHERE c.id_empresa = :emp_{$sufijo} AND c.id_cliente = :cli_{$sufijo}
+                  AND c.eliminado = false
+                  AND LOWER(TRIM(COALESCE(c.estado, ''))) NOT IN ({$excluidos})";
+        $params[":emp_{$sufijo}"] = $idEmpresa;
+        $params[":cli_{$sufijo}"] = $idCliente;
+
+        if ($amb !== null) {
+            $sql .= " AND CAST(c.tipo_ambiente AS VARCHAR) = :amb_{$sufijo}";
+            $params[":amb_{$sufijo}"] = $amb;
+        }
+        if ($idUsuarioFiltro !== null) {
+            $sql .= " AND c.id_usuario = :usr_{$sufijo}";
+            $params[":usr_{$sufijo}"] = $idUsuarioFiltro;
+        }
+
+        return $sql;
     }
 
     /**

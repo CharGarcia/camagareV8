@@ -517,6 +517,33 @@ class ComandaRepository extends BaseRepository
         ]);
     }
 
+    /**
+     * La línea con candado de fila (FOR UPDATE), para cambiarle la cantidad: dos
+     * meseros tocando "+" a la vez sobre el mismo ítem leerían la misma cantidad
+     * de partida y el segundo pisaría al primero (CLAUDE.md §8). Debe llamarse
+     * dentro de la transacción del Service; el candado se suelta al COMMIT.
+     */
+    public function bloquearLinea(int $idLinea, int $idEmpresa): ?array
+    {
+        $sql = "SELECT * FROM comanda_detalle
+                WHERE id = :id AND id_empresa = :e AND eliminado = false
+                FOR UPDATE";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idLinea, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Cantidad de una línea, con su descuento y subtotal ya recalculados por el Service. */
+    public function actualizarCantidadLinea(int $idLinea, int $idEmpresa, float $cantidad, float $descuento, float $subtotal): void
+    {
+        $sql = "UPDATE comanda_detalle SET cantidad = :c, descuento = :d, subtotal = :s
+                WHERE id = :id AND id_empresa = :e AND eliminado = false";
+        $this->db->prepare($sql)->execute([
+            ':c' => $cantidad, ':d' => $descuento, ':s' => $subtotal, ':id' => $idLinea, ':e' => $idEmpresa,
+        ]);
+    }
+
     /** Anula todas las líneas activas de la comanda (usado al anular la comanda completa: saca todo del KDS). */
     /** Cuenta las líneas de la comanda (agregadas o ya anuladas) — usado para exigir motivo al anular la comanda completa. */
     public function contarLineas(int $idComanda, int $idEmpresa): int
