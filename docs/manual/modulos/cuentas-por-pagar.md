@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion
-version: 1.8
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago
+version: 1.9
 orden: 50
 estado: activo
 ---
@@ -112,6 +112,21 @@ agua: valores de terceros* en el manual de Compras.
 También queda disponible el **historial de pagos** de cada documento, útil cuando
 una factura se pagó en varias partes.
 
+### Serie del pago: solo puntos de emisión activos
+
+La lista **Serie** del modal muestra únicamente los puntos de emisión en estado
+**activo**; los inactivos no aparecen. Es el mismo criterio de Egresos y
+Cuentas por Cobrar, porque el pago emite un egreso nuevo con el secuencial de
+esa serie. En el consolidado, la lista es la de la sucursal dueña del documento.
+
+- Para usar una serie que no aparece, actívela en **Empresa**, pestaña
+  **Puntos de Emisión**.
+- Si la empresa no tiene ningún punto activo, la lista muestra *Sin series
+  activas* y el pago no se puede registrar.
+- Si una serie se inactiva con el modal ya abierto, al guardar el sistema
+  rechaza el pago con el aviso *La serie (punto de emisión) no es válida o
+  está inactiva*: cierre el modal y vuelva a abrirlo.
+
 ## Errores frecuentes
 
 - **Un documento aparece vencido antes de tiempo**: revise el *plazo* del
@@ -120,6 +135,9 @@ una factura se pagó en varias partes.
   de crédito aplicadas a esa factura.
 - **Pagué y sigue pendiente**: verifique que el egreso quedó aplicado a ese
   documento y no registrado como concepto general.
+- **Una serie no aparece en el modal de pago**: está **inactiva**. Solo se
+  ofrecen los puntos de emisión activos; actívela en Empresa, pestaña Puntos de
+  Emisión (ver *Serie del pago: solo puntos de emisión activos*).
 
 ## Qué comprobantes de compra aparecen
 
@@ -136,6 +154,11 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.9** — La lista **Serie** del modal de pago ya no ofrece puntos de emisión
+  **inactivos**: solo los activos, igual que Egresos y Cuentas por Cobrar. El
+  servidor también rechaza un pago con una serie inactiva, y si la empresa no
+  tiene ninguna activa la lista lo indica (*Sin series activas*). Nueva sección
+  *Serie del pago: solo puntos de emisión activos*.
 - **1.8** — Se corrigió el filtro por **proveedor**: al elegir uno, la pantalla
   mostraba «Error de conexión» en vez de sus documentos. Las tarjetas de resumen y
   la antigüedad de saldos también vuelven a filtrarse por el proveedor elegido.

@@ -136,24 +136,35 @@ class ConciliacionCobrosRepository extends BaseRepository
         return (int) $st->fetchColumn();
     }
 
+    /**
+     * Puntos de emisión activos (select de la carga). Las series inactivas no se ofrecen:
+     * los ingresos que genera la carga se numeran en esa serie.
+     */
     public function getPuntosEmision(int $idEmpresa): array
     {
         $sql = "SELECT pe.id, pe.codigo_punto, pe.id_establecimiento, es.codigo AS cod_establecimiento
                 FROM empresa_punto_emision pe
                 INNER JOIN empresa_establecimiento es ON es.id = pe.id_establecimiento
                 WHERE pe.id_empresa = :id_empresa AND pe.eliminado = FALSE AND es.eliminado = FALSE
+                  AND LOWER(COALESCE(pe.estado, '')) = 'activo'
                 ORDER BY es.codigo ASC, pe.codigo_punto ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
+    /**
+     * Punto de emisión con el que se numeran los ingresos de una carga: solo si está activo.
+     * Se valida al subir el extracto y otra vez al generar los ingresos, por si la serie se
+     * inactivó entre medio.
+     */
     public function getPuntoEmision(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT pe.id, pe.codigo_punto, pe.id_establecimiento, es.codigo AS cod_establecimiento
                 FROM empresa_punto_emision pe
                 INNER JOIN empresa_establecimiento es ON es.id = pe.id_establecimiento
-                WHERE pe.id = :id AND pe.id_empresa = :id_empresa AND pe.eliminado = FALSE AND es.eliminado = FALSE";
+                WHERE pe.id = :id AND pe.id_empresa = :id_empresa AND pe.eliminado = FALSE AND es.eliminado = FALSE
+                  AND LOWER(COALESCE(pe.estado, '')) = 'activo'";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);

@@ -460,8 +460,12 @@ async function CXP_abrirModalPago(idDoc, tipoFuente, idEmpresa = 0) {
         // Serie / punto de emisión
         const selPunto = document.getElementById('pago-punto-emision');
         const pts = cat.puntos;
-        selPunto.innerHTML = '<option value="">— Seleccione —</option>'
-            + pts.map(p => `<option value="${p.id_punto}">${p.cod_establecimiento}-${p.codigo_punto}</option>`).join('');
+        // El servidor ya manda solo las series activas; si no queda ninguna se dice por qué,
+        // en vez de dejar un "— Seleccione —" vacío.
+        selPunto.innerHTML = pts.length
+            ? '<option value="">— Seleccione —</option>'
+              + pts.map(p => `<option value="${p.id_punto}">${p.cod_establecimiento}-${p.codigo_punto}</option>`).join('')
+            : '<option value="">Sin series activas</option>';
         if (pts.length === 1) {
             selPunto.selectedIndex = 1;
             CXP_cargarSecuencial(pts[0].id_punto);

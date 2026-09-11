@@ -47,7 +47,7 @@ class CuentasPorPagarService
 
         $punto = $this->repo->getPuntoEmisionPorId($idPunto, $idEmpresa);
         if (!$punto) {
-            throw new \InvalidArgumentException('Punto de emisión no válido.');
+            throw new \InvalidArgumentException('La serie (punto de emisión) no es válida o está inactiva.');
         }
 
         $doc = $this->repo->getDocumentoParaPago($idDoc, $tipoFuente, $idEmpresa);

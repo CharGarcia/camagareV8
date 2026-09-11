@@ -79,7 +79,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                 <div class="col-md-3">
                     <label class="form-label small fw-bold text-muted mb-1">Punto de Emisión (para los Ingresos)</label>
                     <select id="cc-punto" class="form-select form-select-sm shadow-none" required>
-                        <option value="">— Seleccione —</option>
+                        <option value=""><?= empty($puntosEmision) ? 'Sin series activas' : '— Seleccione —' ?></option>
                         <?php foreach ($puntosEmision as $p): ?>
                             <option value="<?= (int) $p['id'] ?>"><?= htmlspecialchars($p['cod_establecimiento'] . '-' . $p['codigo_punto']) ?></option>
                         <?php endforeach; ?>

@@ -984,18 +984,21 @@ class CuentasPorCobrarRepository extends BaseRepository
 
     /**
      * Puntos de emisión activos de la empresa (para el select Serie del cobro).
+     * Las series inactivas no se ofrecen: el cobro siempre emite un ingreso nuevo.
      */
     public function getPuntosEmision(int $idEmpresa): array
     {
-        return (new \App\repositories\SecuencialRepository())->getPuntosEmisionSerie($idEmpresa);
+        return (new \App\repositories\SecuencialRepository())->getPuntosEmisionSerie($idEmpresa, true);
     }
 
     /**
      * Datos de un punto de emisión específico (para construir el número de ingreso).
+     * Solo si está activo: así el servidor rechaza una serie inactiva aunque llegue en la
+     * petición (modal abierto antes de inhabilitarla o petición armada a mano).
      */
     public function getPuntoEmisionPorId(int $idPunto, int $idEmpresa): ?array
     {
-        return (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa);
+        return (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa, true);
     }
 
     /**

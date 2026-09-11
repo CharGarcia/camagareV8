@@ -444,7 +444,8 @@ class SecuencialRepository
 
     /**
      * Serie de un punto de emisión concreto, validando que pertenezca a la empresa indicada.
-     * Devuelve null si el punto no existe, está eliminado o es de otra empresa.
+     * Devuelve null si el punto no existe, está eliminado o es de otra empresa (y, con
+     * $soloActivos, también si está inhabilitado).
      *
      * Úsese al guardar un documento para derivar `establecimiento`/`punto_emision` del punto
      * REAL en vez de confiar en lo que mande el navegador: así la serie de texto nunca queda
@@ -457,10 +458,16 @@ class SecuencialRepository
      * `punto`/`codigo_punto`) existen porque los módulos que consumen este dato fueron escritos
      * con nombres distintos; así todos comparten la consulta sin tocar sus vistas.
      *
+     * @param bool $soloActivos Exige además que el punto esté habilitado (estado = 'activo'), con el
+     *                          mismo criterio que getPuntosEmisionSerie(). Por defecto no se exige,
+     *                          para poder reabrir y guardar documentos cuya serie se inhabilitó después;
+     *                          pasar true solo donde se emite un documento NUEVO.
      * @return array{id:int,id_punto:int,id_establecimiento:int,establecimiento:string,cod_establecimiento:string,punto:string,codigo_punto:string,nombre:string}|null
      */
-    public function getPuntoEmisionSerie(int $idPuntoEmision, int $idEmpresa): ?array
+    public function getPuntoEmisionSerie(int $idPuntoEmision, int $idEmpresa, bool $soloActivos = false): ?array
     {
+        $filtroEstado = $soloActivos ? " AND LOWER(COALESCE(p.estado, '')) = 'activo'" : '';
+
         $sql = "SELECT p.id,
                        p.id_establecimiento,
                        LPAD(REGEXP_REPLACE(e.codigo,        '[^0-9]', '', 'g'), 3, '0') AS establecimiento,
@@ -472,6 +479,7 @@ class SecuencialRepository
                    AND e.id_empresa = :id_empresa
                    AND p.eliminado = false
                    AND e.eliminado = false
+                   {$filtroEstado}
                  LIMIT 1";
 
         $stmt = $this->db->prepare($sql);

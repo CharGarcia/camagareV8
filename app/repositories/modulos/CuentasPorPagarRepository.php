@@ -952,6 +952,10 @@ class CuentasPorPagarRepository extends BaseRepository
     // CATÁLOGOS
     // ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * Puntos de emisión activos de la empresa (para el select Serie del pago).
+     * Las series inactivas no se ofrecen: el pago siempre emite un egreso nuevo.
+     */
     public function getPuntosEmision(int $idEmpresa): array
     {
         try {
@@ -959,6 +963,7 @@ class CuentasPorPagarRepository extends BaseRepository
                     FROM empresa_punto_emision p
                     JOIN empresa_establecimiento e ON e.id=p.id_establecimiento
                     WHERE p.id_empresa=:id_empresa AND p.eliminado=false AND e.eliminado=false
+                      AND LOWER(COALESCE(p.estado,''))='activo'
                     ORDER BY e.codigo, p.codigo_punto";
             $st = $this->db->prepare($sql);
             $st->execute([':id_empresa' => $idEmpresa]);
@@ -968,13 +973,19 @@ class CuentasPorPagarRepository extends BaseRepository
         }
     }
 
+    /**
+     * Punto de emisión para numerar un egreso nuevo: solo si está activo, así el servidor
+     * rechaza una serie inactiva aunque llegue en la petición (modal abierto antes de
+     * inhabilitarla o petición armada a mano).
+     */
     public function getPuntoEmisionPorId(int $idPunto, int $idEmpresa): ?array
     {
         try {
             $sql = "SELECT p.id, e.codigo AS establecimiento, p.codigo_punto AS punto, p.id_establecimiento
                     FROM empresa_punto_emision p
                     JOIN empresa_establecimiento e ON e.id=p.id_establecimiento
-                    WHERE p.id=:id AND p.id_empresa=:id_empresa AND p.eliminado=false";
+                    WHERE p.id=:id AND p.id_empresa=:id_empresa AND p.eliminado=false
+                      AND LOWER(COALESCE(p.estado,''))='activo'";
             $st = $this->db->prepare($sql);
             $st->execute([':id' => $idPunto, ':id_empresa' => $idEmpresa]);
             return $st->fetch(PDO::FETCH_ASSOC) ?: null;

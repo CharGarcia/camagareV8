@@ -523,7 +523,7 @@ class CuentasPorCobrarController extends BaseModuloController
         // Validar punto de emisión
         $punto = $this->repo->getPuntoEmisionPorId($idPunto, $idEmpresa);
         if (!$punto) {
-            $this->jsonError('Punto de emisión no válido.');
+            $this->jsonError('La serie (punto de emisión) no es válida o está inactiva.');
             return;
         }
 
@@ -736,7 +736,7 @@ class CuentasPorCobrarController extends BaseModuloController
         // Validar punto de emisión
         $punto = $this->repo->getPuntoEmisionPorId($idPunto, $idEmpresa);
         if (!$punto) {
-            $this->jsonError('Punto de emisión no válido.');
+            $this->jsonError('La serie (punto de emisión) no es válida o está inactiva.');
             return;
         }
 
@@ -872,7 +872,7 @@ class CuentasPorCobrarController extends BaseModuloController
         // El punto debe pertenecer a la empresa del cobro (la activa o, en consolidado, la
         // hermana dueña del documento); así no se consulta el secuencial de cualquier serie.
         if (!$this->repo->getPuntoEmisionPorId($idPunto, $this->empresaLectura())) {
-            $this->jsonError('Punto de emisión no válido.');
+            $this->jsonError('La serie (punto de emisión) no es válida o está inactiva.');
             return;
         }
         // Fecha del documento: solo pesa si este tipo numera por fecha de emisión
@@ -1926,7 +1926,7 @@ HTML;
 
         $punto = $this->repo->getPuntoEmisionPorId($idPunto, $idEmpresa);
         if (!$punto) {
-            $this->jsonError('Punto de emisión no válido.');
+            $this->jsonError('La serie (punto de emisión) no es válida o está inactiva.');
             return;
         }
 

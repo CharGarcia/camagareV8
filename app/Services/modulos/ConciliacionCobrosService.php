@@ -138,7 +138,7 @@ class ConciliacionCobrosService
 
         $punto = $this->repository->getPuntoEmision((int) $data['id_punto_emision'], $idEmpresa);
         if (!$punto) {
-            throw new \Exception('El punto de emisión seleccionado no es válido.');
+            throw new \Exception('La serie (punto de emisión) seleccionada no es válida o está inactiva.');
         }
 
         $tipoArchivo = strtoupper((string) $perfil['tipo_archivo']);
@@ -367,7 +367,7 @@ class ConciliacionCobrosService
 
         $punto = $this->repository->getPuntoEmision((int) $carga['id_punto_emision'], $idEmpresa);
         if (!$punto) {
-            throw new \Exception('El punto de emisión de esta carga ya no es válido.');
+            throw new \Exception('La serie (punto de emisión) de esta carga ya no es válida o está inactiva. Actívela en Empresa → Puntos de Emisión para generar los ingresos.');
         }
         $cuenta = $this->repository->getCuentaBancariaPorId((int) $carga['id_forma_pago'], $idEmpresa);
         $nombreCuenta = $cuenta['nombre'] ?? '';

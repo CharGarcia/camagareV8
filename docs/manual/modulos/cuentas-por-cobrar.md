@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales
-version: 2.1
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro
+version: 2.2
 orden: 40
 estado: activo
 ---
@@ -205,6 +205,21 @@ para facturas como para recibos de venta y saldos iniciales. Lo que se registra
 aquí es exactamente lo mismo que un ingreso: reduce el saldo del documento y
 genera su asiento.
 
+### Serie del cobro: solo puntos de emisión activos
+
+La lista **Serie** del modal muestra únicamente los puntos de emisión en estado
+**activo**; los inactivos no aparecen. Es el mismo criterio de Ingresos y
+Facturas de Venta, porque el cobro emite un ingreso nuevo con el secuencial de
+esa serie. En el consolidado, la lista es la de la sucursal dueña del documento.
+
+- Para usar una serie que no aparece, actívela en **Empresa**, pestaña
+  **Puntos de Emisión**.
+- Si la empresa no tiene ningún punto activo, la lista muestra *Sin series
+  activas* y el cobro no se puede registrar.
+- Si una serie se inactiva con el modal ya abierto, al guardar el sistema
+  rechaza el cobro con el aviso *La serie (punto de emisión) no es válida o
+  está inactiva*: cierre el modal y vuelva a abrirlo.
+
 El recordatorio por **correo** funciona para facturas y recibos; el envío por
 **WhatsApp** está disponible solo para facturas.
 
@@ -296,9 +311,17 @@ Y dos casos que el reporte **no** descuenta a propósito:
   **mismo establecimiento** que la factura.
 - **No veo las facturas de otro vendedor**: sin el permiso de *acceso total*,
   cada usuario ve solo los documentos que él creó.
+- **Una serie no aparece en el modal de cobro**: está **inactiva**. Solo se
+  ofrecen los puntos de emisión activos; actívela en Empresa, pestaña Puntos de
+  Emisión (ver *Serie del cobro: solo puntos de emisión activos*).
 
 ## Historial de cambios
 
+- **2.2** — La lista **Serie** del modal de cobro ya no ofrece puntos de emisión
+  **inactivos**: solo los activos, igual que Ingresos y Facturas de Venta. El
+  servidor también rechaza un cobro con una serie inactiva, y si la empresa no
+  tiene ninguna activa la lista lo indica (*Sin series activas*). Nueva sección
+  *Serie del cobro: solo puntos de emisión activos*.
 - **2.1** — El listado abre más rápido: la consulta que arma la cartera dejó de
   recalcular por cada documento a qué ambiente pertenece su empresa, lo que en
   bases con muchos documentos degradaba la pantalla entera. También se corrigió el

@@ -516,8 +516,12 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA', idEmpresa = 0) {
     // ── Serie (puntos de emisión) ──────────────────────────────────────────
     const selPunto = document.getElementById('cobro-punto-emision');
     const pts = cat.puntos;
-    selPunto.innerHTML = '<option value="">— Seleccione —</option>'
-        + pts.map(p => `<option value="${p.id_punto}">${p.cod_establecimiento}-${p.codigo_punto}</option>`).join('');
+    // El servidor ya manda solo las series activas; si no queda ninguna se dice por qué,
+    // en vez de dejar un "— Seleccione —" vacío.
+    selPunto.innerHTML = pts.length
+        ? '<option value="">— Seleccione —</option>'
+          + pts.map(p => `<option value="${p.id_punto}">${p.cod_establecimiento}-${p.codigo_punto}</option>`).join('')
+        : '<option value="">Sin series activas</option>';
     if (pts.length === 1) {
         selPunto.selectedIndex = 1;
         CXC_cargarSecuencial(pts[0].id_punto);
