@@ -52,6 +52,18 @@ class EstadoCuentaTerceroService
         );
     }
 
+    /** ¿El cliente tiene algún movimiento? La ficha no pinta la pestaña si no hay nada. */
+    public function tieneCliente(int $idEmpresa, int $idCliente): bool
+    {
+        return $this->cartera->tieneMovimientosCliente($idEmpresa, $idCliente);
+    }
+
+    /** ¿El proveedor tiene algún movimiento? La ficha no pinta la pestaña si no hay nada. */
+    public function tieneProveedor(int $idEmpresa, int $idProveedor): bool
+    {
+        return $this->cartera->tieneMovimientosProveedor($idEmpresa, $idProveedor);
+    }
+
     /**
      * @param string $origenCaja Origen que se funde por documento de caja: 'PAGO' (egreso) o 'COBRO' (ingreso).
      * @return array{movimientos: array, saldo_anterior: float, total_cargos: float,

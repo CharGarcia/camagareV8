@@ -1537,6 +1537,15 @@ function CMG_agregarFilaDetalle(det) {
         opcIva += `<option value="${_codH}" data-codigo="${_codH}" data-tarifa="${ivaPct}" selected>${ivaPct}%</option>`;
     }
 
+    // ICE (impuesto a los consumos especiales): a diferencia de Ventas, en Compras el ICE
+    // no se calcula desde un catálogo propio — es el valor que YA declaró el proveedor en su
+    // comprobante (manual o importado del SRI), así que se toma tal cual del detalle y se
+    // conserva como un valor fijo de la línea, no algo que se recalcule por cantidad/tarifa.
+    const impIce = (det.impuestos || []).find(i => String(i.codigo_impuesto) === '3');
+    const iceVal = impIce ? parseFloat(impIce.valor || 0) : 0;
+    const iceCod = impIce ? (impIce.codigo_porcentaje ?? '') : '';
+    const icePct = impIce ? parseFloat(impIce.tarifa || 0) : 0;
+
     // Subtotal DECLARADO en el XML del SRI para esta línea (precioTotalSinImpuesto), ya guardado
     // en compras_detalle.precio_total_sin_impuesto. Mientras la línea no se edite, se usa TAL CUAL
     // (no se recalcula cantidad*precio en el navegador, que puede redondear distinto que el emisor
@@ -1559,6 +1568,9 @@ function CMG_agregarFilaDetalle(det) {
             <input type="hidden" class="input-codigo" value="${det.codigo_principal || ''}">
             <input type="hidden" class="input-id-medida" value="${det.product_id_medida || det.id_medida || ''}">
             <input type="hidden" class="input-id-tipo-medida" value="${det.product_id_tipo_medida || det.id_tipo_medida || ''}">
+            <input type="hidden" class="input-ice-val" value="${iceVal}">
+            <input type="hidden" class="input-ice-cod" value="${_esc(String(iceCod))}">
+            <input type="hidden" class="input-ice-pct" value="${icePct}">
         </td>
         <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${det.cantidad != null ? _fmtExacto(det.cantidad) : '1'}" min="0.0001" step="any" oninput="this.closest('tr').dataset.subtotalOriginal='';CMG_recalcularFila(this)"></td>
         <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${det.precio_unitario != null ? _fmtExacto(det.precio_unitario) : '0'}" min="0" step="any" oninput="this.closest('tr').dataset.subtotalOriginal='';CMG_recalcularFila(this)"></td>
@@ -1604,7 +1616,7 @@ function CMG_recalcularTotales() {
     // subtotal individual de cada línea (ver comentario de _r2 más arriba en el archivo).
     const r2 = _r2;
 
-    let totalDesc = 0, subTotalBruto = 0;
+    let totalDesc = 0, subTotalBruto = 0, totalIce = 0;
     const grupos = {}; // Para agrupar por tarifa IVA
     const rows = document.querySelectorAll('#tbodyDetalle tr');
 
@@ -1612,6 +1624,11 @@ function CMG_recalcularTotales() {
         const cant  = parseFloat(tr.querySelector('.input-cantidad')?.value || 0);
         const prec  = parseFloat(tr.querySelector('.input-precio')?.value || 0);
         const desc  = r2(parseFloat(tr.querySelector('.input-desc')?.value || 0));
+        // ICE de la línea: valor fijo tomado del comprobante (ver CMG_agregarFilaDetalle),
+        // no se recalcula por cantidad/precio. Aumenta la base sobre la que se calcula el
+        // IVA (regla del SRI: IVA se calcula sobre subtotal + ICE).
+        const iceFila = r2(parseFloat(tr.querySelector('.input-ice-val')?.value || 0));
+        totalIce = r2(totalIce + iceFila);
         const sel   = tr.querySelector('.input-iva');
         const tarifa = sel ? parseFloat(sel.selectedOptions[0]?.dataset.tarifa || 0) : 0;
         const codPct = sel ? sel.value : '0';
@@ -1646,7 +1663,8 @@ function CMG_recalcularTotales() {
             grupos[codPct] = { tarifa: tarifa, label: label, base: 0, iva: 0 };
         }
         grupos[codPct].base = r2(grupos[codPct].base + netoFila);
-        grupos[codPct].iva = r2(grupos[codPct].iva + r2(netoFila * (tarifa / 100)));
+        // Base del IVA = neto de la línea + su ICE (si tiene), como exige el SRI.
+        grupos[codPct].iva = r2(grupos[codPct].iva + r2((netoFila + iceFila) * (tarifa / 100)));
     });
 
     // Renderizar Subtotales por IVA
@@ -1685,20 +1703,31 @@ function CMG_recalcularTotales() {
     const inputPropina = document.getElementById('mcInputPropina');
     const propina      = r2(inputPropina ? parseFloat(inputPropina.value || 0) : 0);
 
-    // Total General = Subtotal (bruto) - Descuento + IVA + Propina, tal cual se ve en pantalla.
+    // Total General = Subtotal (bruto) - Descuento + IVA + ICE + Propina, tal cual se ve en pantalla.
     const subtotalNeto = r2(subTotalBruto - totalDesc);
-    const totalFinal    = r2(subtotalNeto + totalIva + propina);
+    const totalFinal    = r2(subtotalNeto + totalIva + totalIce + propina);
 
     const modalEl = document.getElementById('modalCompra');
     if (modalEl) {
         modalEl.dataset.subtotalNeto = subtotalNeto.toFixed(2);
         modalEl.dataset.totalIva     = totalIva.toFixed(2);
+        modalEl.dataset.totalIce     = totalIce.toFixed(2);
     }
 
     document.getElementById('mcLabelSubtotal').textContent = subTotalBruto.toFixed(2);
     document.getElementById('mcContenedorSubtotalesIva').innerHTML = htmlSubtotales;
     document.getElementById('mcLabelDescuento').textContent = totalDesc.toFixed(2);
     document.getElementById('mcContenedorIvasIva').innerHTML = htmlIvas;
+
+    const iceRow = document.getElementById('mcLabelIceRow');
+    if (iceRow) {
+        if (totalIce > 0.001) {
+            document.getElementById('mcLabelIce').textContent = totalIce.toFixed(2);
+            iceRow.classList.remove('d-none');
+        } else {
+            iceRow.classList.add('d-none');
+        }
+    }
     document.getElementById('mcLabelTotal').textContent = totalFinal.toFixed(2);
 
     // Valores de terceros: se suman al TOTAL solo para mostrar el "TOTAL A PAGAR".
@@ -1769,8 +1798,22 @@ window.CMG_guardar = async function() {
             const bruto = _r2(cant * precio);
             neto = _r2(bruto - Math.min(_r2(descVal), bruto));
         }
-        const ivaVal = _r2(neto * tarifa / 100);
-        
+        // ICE de la línea: valor fijo del comprobante (no se recalcula aquí, ver
+        // CMG_agregarFilaDetalle/CMG_recalcularTotales). Aumenta la base del IVA.
+        const iceVal = _r2(parseFloat(tr.querySelector('.input-ice-val')?.value || 0));
+        const ivaVal = _r2((neto + iceVal) * tarifa / 100);
+
+        const impuestos = [{ codigo_impuesto:'2', codigo_porcentaje: codPct, tarifa, base_imponible: _r2(neto + iceVal), valor: ivaVal }];
+        if (iceVal > 0) {
+            impuestos.push({
+                codigo_impuesto: '3',
+                codigo_porcentaje: tr.querySelector('.input-ice-cod')?.value || '',
+                tarifa: parseFloat(tr.querySelector('.input-ice-pct')?.value || 0),
+                base_imponible: neto,
+                valor: iceVal
+            });
+        }
+
         detalles.push({
             id: tr.querySelector('.input-id-detalle')?.value || null,
             id_producto: tr.querySelector('.input-id-producto')?.value || null,
@@ -1780,7 +1823,7 @@ window.CMG_guardar = async function() {
             precio_unitario: precio,
             descuento: descVal,
             precio_total_sin_impuesto: neto,
-            impuestos: [{ codigo_impuesto:'2', codigo_porcentaje: codPct, tarifa, base_imponible: neto, valor: ivaVal }]
+            impuestos
         });
     });
 

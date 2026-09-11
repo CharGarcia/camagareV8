@@ -156,6 +156,25 @@ trait LineasDocumentoTrait
     }
 
     /**
+     * ¿Alguna rama devuelve al menos una línea? Misma unión que consultarLineasDocumento(),
+     * sin buscador, orden ni paginación: la ficha lo usa para decidir si pinta la pestaña
+     * "Transacciones" (no se muestra vacía). EXISTS corta en la primera fila que encuentra.
+     *
+     * @param string[] $ramas  Las mismas ramas que recibiría consultarLineasDocumento().
+     * @param array    $params Parámetros de esas ramas.
+     */
+    protected function existenLineasDocumento(array $ramas, array $params): bool
+    {
+        if (empty($ramas)) {
+            return false;
+        }
+        $st = $this->db->prepare("SELECT EXISTS (SELECT 1 FROM ( "
+            . implode("\n UNION ALL \n", $ramas) . " ) t) AS hay");
+        $st->execute($params);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
      * Columnas ordenables de cada vista (clave recibida del navegador => expresión SQL
      * fija). Deben coincidir con las columnas "o: true" de public/js/components/ficha_consultas.js.
      */

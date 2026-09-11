@@ -465,6 +465,91 @@ class FormaPagoRepository extends BaseRepository
     }
 
     /**
+     * Movimientos de anticipos de un tercero, con las MISMAS fuentes y filtros de
+     * getSaldoAnticipo() pero detallados y sin acotar a una forma: saldo inicial (+),
+     * anticipos recibidos/entregados (+) y aplicaciones a un cobro/pago (−). Así el total
+     * de la pestaña "Anticipos" de la ficha cuadra con el saldo que muestra la forma.
+     * $esProveedor define la dirección: egresos/proveedor o ingresos/cliente.
+     */
+    public function getMovimientosAnticipoTercero(int $idEmpresa, int $idTercero, bool $esProveedor): array
+    {
+        $st = $this->db->prepare($this->sqlMovimientosAnticipo($esProveedor) . " ORDER BY fecha, id_documento");
+        $st->execute([':e' => $idEmpresa, ':t' => $idTercero]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** ¿El tercero tiene algún movimiento de anticipos? (la ficha no pinta la pestaña vacía). */
+    public function tieneAnticiposTercero(int $idEmpresa, int $idTercero, bool $esProveedor): bool
+    {
+        $st = $this->db->prepare("SELECT EXISTS (SELECT 1 FROM ( "
+            . $this->sqlMovimientosAnticipo($esProveedor) . " ) m) AS hay");
+        $st->execute([':e' => $idEmpresa, ':t' => $idTercero]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
+     * UNION de las tres fuentes del anticipo. Tablas, signos y etiquetas son fijos; del
+     * exterior solo entran la empresa y el tercero, como parámetros.
+     */
+    private function sqlMovimientosAnticipo(bool $esProveedor): string
+    {
+        if ($esProveedor) {
+            return "
+                SELECT a.fecha_saldo::date AS fecha, 'SALDO_INICIAL'::text AS origen,
+                       'Saldo inicial'::text AS movimiento, COALESCE(fp.nombre, '')::text AS forma,
+                       ''::text AS numero_documento, COALESCE(a.observaciones, '')::text AS detalle,
+                       a.saldo_inicial AS monto, 1 AS signo, 0 AS id_documento
+                FROM saldos_iniciales_anticipos a
+                LEFT JOIN empresa_formas_pago fp ON fp.id = a.id_forma_pago
+                WHERE a.id_empresa = :e AND a.eliminado = FALSE AND a.id_proveedor = :t
+                UNION ALL
+                SELECT ec.fecha_emision::date, 'ENTREGADO'::text, 'Anticipo entregado'::text,
+                       COALESCE(o.nombre, '')::text, ec.numero_egreso::text,
+                       COALESCE(ec.observaciones, '')::text, ec.monto_total, 1, ec.id
+                FROM egresos_cabecera ec
+                INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ec.id_egreso_concepto
+                WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                  AND o.comportamiento = 'ANTICIPO_PROVEEDOR' AND ec.id_proveedor = :t
+                UNION ALL
+                SELECT ec.fecha_emision::date, 'APLICADO'::text, 'Aplicado a un pago'::text,
+                       fp.nombre::text, ec.numero_egreso::text,
+                       COALESCE(ec.observaciones, '')::text, ep.monto, -1, ec.id
+                FROM egresos_pagos ep
+                INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                INNER JOIN empresa_formas_pago fp ON fp.id = ep.id_forma_pago AND fp.tipo = 'ANTICIPO'
+                WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                  AND ep.eliminado = FALSE AND ec.id_proveedor = :t";
+        }
+
+        return "
+            SELECT a.fecha_saldo::date AS fecha, 'SALDO_INICIAL'::text AS origen,
+                   'Saldo inicial'::text AS movimiento, COALESCE(fp.nombre, '')::text AS forma,
+                   ''::text AS numero_documento, COALESCE(a.observaciones, '')::text AS detalle,
+                   a.saldo_inicial AS monto, 1 AS signo, 0 AS id_documento
+            FROM saldos_iniciales_anticipos a
+            LEFT JOIN empresa_formas_pago fp ON fp.id = a.id_forma_pago
+            WHERE a.id_empresa = :e AND a.eliminado = FALSE AND a.id_cliente = :t
+            UNION ALL
+            SELECT ic.fecha_emision::date, 'RECIBIDO'::text, 'Anticipo recibido'::text,
+                   COALESCE(o.nombre, '')::text, ic.numero_ingreso::text,
+                   COALESCE(ic.observaciones, '')::text, ic.monto_total, 1, ic.id
+            FROM ingresos_cabecera ic
+            INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ic.id_ingreso_concepto
+            WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+              AND o.comportamiento = 'ANTICIPO_CLIENTE'
+              AND COALESCE(ic.id_cliente, ic.id_recibo_cliente) = :t
+            UNION ALL
+            SELECT ic.fecha_emision::date, 'APLICADO'::text, 'Aplicado a un cobro'::text,
+                   fp.nombre::text, ic.numero_ingreso::text,
+                   COALESCE(ic.observaciones, '')::text, ip.monto, -1, ic.id
+            FROM ingresos_pagos ip
+            INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+            INNER JOIN empresa_formas_pago fp ON fp.id = ip.id_forma_cobro AND fp.tipo = 'ANTICIPO'
+            WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+              AND ic.id_cliente = :t";
+    }
+
+    /**
      * Otra forma de pago (de la misma empresa) que ya usa esta cuenta contable, si la hay.
      * Se usa para evitar que una forma NO bancaria (efectivo, tarjeta...) comparta la cuenta
      * de una forma BANCO/CHEQUE: Control Bancario filtra el mayor por id_cuenta_contable, así

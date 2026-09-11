@@ -1,19 +1,22 @@
 <?php
 /**
  * Pestañas de consulta de las fichas de proveedor y cliente: «Transacciones» (productos y
- * servicios de sus documentos) y «Estado de cuenta» (kardex con su historial de pagos o
- * cobros). Un solo HTML para ambos modales; lo alimenta FichaConsultas.iniciar() de
- * public/js/components/ficha_consultas.js, que ubica cada control por su atributo data-fc
- * dentro del panel (no por id).
+ * servicios de sus documentos), «Estado de cuenta» (kardex con su historial de pagos o
+ * cobros) y «Anticipos» (saldo a favor y sus movimientos). Un solo HTML para ambos modales;
+ * lo alimenta FichaConsultas.iniciar() de public/js/components/ficha_consultas.js, que ubica
+ * cada control por su atributo data-fc dentro del panel (no por id).
  *
  * El modal decide los permisos: pasa null en el panel que el usuario no puede ver y omite
- * también su <li> y su entrada en el dropdown de pestañas configurables.
+ * también su <li> y su entrada en el dropdown de pestañas configurables. Además, cada
+ * pestaña se muestra solo si ese cliente/proveedor tiene datos (lo resuelve el componente
+ * con consultasDisponiblesAjax).
  *
  * Variables:
  *   $fichaConsultas = [
  *       'prefijo'       => 'prov',                    // para los ids de <label for>
  *       'transacciones' => 'prov-tab-transacciones',  // id del panel, o null para no pintarlo
  *       'estado_cuenta' => 'prov-tab-estado-cuenta',  // id del panel, o null
+ *       'anticipos'     => 'prov-tab-anticipos',      // id del panel, o null
  *       'textos'        => [...],                     // ver valores por defecto abajo
  *   ];
  *
@@ -25,9 +28,11 @@ $fcConf   = $fichaConsultas ?? [];
 $fcPref   = preg_replace('/[^a-z0-9_-]/i', '', (string) ($fcConf['prefijo'] ?? 'fc'));
 $fcPanTrx = $fcConf['transacciones'] ?? null;
 $fcPanEc  = $fcConf['estado_cuenta'] ?? null;
+$fcPanAnt = $fcConf['anticipos'] ?? null;
 $fcTxt    = ($fcConf['textos'] ?? []) + [
     'sin_guardar_trx' => 'Guarde la ficha para ver sus transacciones.',
     'sin_guardar_ec'  => 'Guarde la ficha para ver su estado de cuenta.',
+    'sin_guardar_ant' => 'Guarde la ficha para ver sus anticipos.',
     'nota_trx'        => 'Las notas de crédito restan.',
     'cargos'          => 'CARGOS',
     'pagos'           => 'PAGOS',
@@ -35,6 +40,10 @@ $fcTxt    = ($fcConf['textos'] ?? []) + [
     'saldo'           => 'SALDO',
     'filtro_pagos'    => 'Historial de pagos',
     'ayuda_pago'      => 'Haga clic en un pago para ver su detalle.',
+    'ant_generado'    => 'RECIBIDO',
+    'ant_aplicado'    => 'APLICADO',
+    'ant_saldo'       => 'SALDO A FAVOR',
+    'ant_nota'        => 'El saldo a favor es lo recibido menos lo ya aplicado a cobros.',
 ];
 $fcEsc = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
 
@@ -156,6 +165,10 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                     <input type="date" class="form-control form-control-sm" id="<?= $fcPref ?>_fc_hasta" data-fc="hasta" style="width: 140px;">
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-fc="limpiar" title="Quitar el rango de fechas"><i class="bi bi-eraser"></i></button>
+                <!-- Descarga lo mismo que se está viendo: mismo período y mismos movimientos -->
+                <button type="button" class="btn btn-sm btn-outline-success" data-fc="excel" title="Descargar el estado de cuenta en Excel">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
+                </button>
                 <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Movimientos">
                     <button type="button" class="btn btn-outline-secondary active" data-fc-filtro="todos"><i class="bi bi-list-columns-reverse me-1"></i>Todos los movimientos</button>
                     <button type="button" class="btn btn-outline-secondary" data-fc-filtro="pagos"><i class="bi bi-cash-coin me-1"></i><?= $fcEsc($fcTxt['filtro_pagos']) ?></button>
@@ -223,6 +236,57 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
         </div>
     </div>
 <?php endif; ?>
+
+<?php if ($fcPanAnt): ?>
+    <!-- Pestaña Anticipos (solo lectura): saldo a favor del tercero y sus movimientos -->
+    <div class="tab-pane fade" id="<?= $fcEsc($fcPanAnt) ?>" role="tabpanel">
+        <div class="text-center text-muted small py-5" data-fc="sin-guardar">
+            <i class="bi bi-wallet2 fs-3 d-block mb-2"></i>
+            <?= $fcEsc($fcTxt['sin_guardar_ant']) ?>
+        </div>
+        <div class="d-none" data-fc="con-datos">
+            <div class="ficha-consulta-scroll ficha-consulta-scroll-ec border rounded">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-2">Fecha</th>
+                            <th>Movimiento</th>
+                            <th>Forma</th>
+                            <th>Documento</th>
+                            <th>Detalle</th>
+                            <th class="text-end">Monto</th>
+                            <th class="text-end pe-2">Saldo</th>
+                        </tr>
+                    </thead>
+                    <tbody data-fc="tbody"></tbody>
+                </table>
+            </div>
+            <div class="small text-muted mt-1">
+                <i class="bi bi-info-circle me-1"></i><?= $fcEsc($fcTxt['ant_nota']) ?>
+            </div>
+            <div class="row g-2 mt-1">
+                <div class="col-6 col-md">
+                    <div class="card bg-light border-0 text-center p-2">
+                        <span class="small text-muted d-block" style="font-size: 0.7rem;"><?= $fcEsc($fcTxt['ant_generado']) ?></span>
+                        <h6 class="mb-0 fw-bold text-primary" data-fc="generado">$0.00</h6>
+                    </div>
+                </div>
+                <div class="col-6 col-md">
+                    <div class="card bg-light border-0 text-center p-2">
+                        <span class="small text-muted d-block" style="font-size: 0.7rem;"><?= $fcEsc($fcTxt['ant_aplicado']) ?></span>
+                        <h6 class="mb-0 fw-bold text-success" data-fc="aplicado">$0.00</h6>
+                    </div>
+                </div>
+                <div class="col-6 col-md">
+                    <div class="card bg-light border-0 text-center p-2">
+                        <span class="small text-muted d-block" style="font-size: 0.7rem;"><?= $fcEsc($fcTxt['ant_saldo']) ?></span>
+                        <h6 class="mb-0 fw-bold text-danger" data-fc="saldo">$0.00</h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
 <?php
 // Este archivo se incluye dentro de la vista de cada página: no dejar variables sueltas.
-unset($fcConf, $fcPref, $fcPanTrx, $fcPanEc, $fcTxt, $fcEsc);
+unset($fcConf, $fcPref, $fcPanTrx, $fcPanEc, $fcPanAnt, $fcTxt, $fcEsc);

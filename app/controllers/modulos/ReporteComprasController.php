@@ -141,8 +141,8 @@ class ReporteComprasController extends BaseModuloController
 
             ob_start();
             if (empty($rows)) {
-                $colSpan = ($filtros['agrupar_por'] === 'NINGUNO') ? 12 :
-                           (($filtros['agrupar_por'] === 'PRODUCTO') ? 7 : 6);
+                $colSpan = ($filtros['agrupar_por'] === 'NINGUNO') ? 13 :
+                           (($filtros['agrupar_por'] === 'PRODUCTO') ? 8 : 7);
                 echo '<tr><td colspan="' . $colSpan . '" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>No se encontraron resultados.</td></tr>';
             } else {
                 foreach ($rows as $r) {
@@ -201,6 +201,7 @@ class ReporteComprasController extends BaseModuloController
         $base0   = number_format((float)($r['base_0']    ?? 0), 2);
         $baseIva = number_format((float)($r['base_iva']  ?? 0), 2);
         $iva     = number_format((float)($r['valor_iva'] ?? 0), 2);
+        $ice     = number_format((float)($r['valor_ice'] ?? 0), 2);
         $total   = number_format((float)($r['total']     ?? 0), 2);
 
         if ($agruparPor === 'PROVEEDOR') {
@@ -209,6 +210,7 @@ class ReporteComprasController extends BaseModuloController
             $html .= "<td class='text-end'>$base0</td>";
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
+            $html .= "<td class='text-end'>$ice</td>";
             $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
         } elseif ($agruparPor === 'PRODUCTO') {
             $tarifa = (float)($r['tarifa_iva'] ?? 0);
@@ -218,6 +220,7 @@ class ReporteComprasController extends BaseModuloController
             $html .= "<td class='text-end'>$base0</td>";
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
+            $html .= "<td class='text-end'>$ice</td>";
             $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
         } elseif ($agruparPor === 'FECHA') {
             $html .= "<td><span class='fw-bold'>" . date('d/m/Y', strtotime($r['fecha'] ?? '')) . "</span></td>";
@@ -225,6 +228,7 @@ class ReporteComprasController extends BaseModuloController
             $html .= "<td class='text-end'>$base0</td>";
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
+            $html .= "<td class='text-end'>$ice</td>";
             $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
         } elseif ($agruparPor === 'MES') {
             $html .= "<td><span class='fw-bold'>" . self::formatearMes($r['mes'] ?? '') . "</span></td>";
@@ -232,6 +236,7 @@ class ReporteComprasController extends BaseModuloController
             $html .= "<td class='text-end'>$base0</td>";
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
+            $html .= "<td class='text-end'>$ice</td>";
             $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
         } else {
             // DETALLADO / NINGUNO
@@ -249,6 +254,7 @@ class ReporteComprasController extends BaseModuloController
             $html .= "<td class='text-end'>$base0</td>";
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
+            $html .= "<td class='text-end'>$ice</td>";
             $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
             $html .= "<td class='text-end text-warning'>$retenciones</td>";
         }
@@ -366,7 +372,7 @@ class ReporteComprasController extends BaseModuloController
             }
 
             if ($filtros['agrupar_por'] === 'PROVEEDOR') {
-                $headers = ['RUC/Cédula', 'Proveedor', 'Nro Comprobantes', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                $headers = ['RUC/Cédula', 'Proveedor', 'Nro Comprobantes', 'Base 0%', 'Base IVA', 'IVA', 'ICE', 'Total'];
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = [
@@ -376,11 +382,12 @@ class ReporteComprasController extends BaseModuloController
                         (float)$r['base_0'],
                         (float)$r['base_iva'],
                         (float)$r['valor_iva'],
+                        (float)($r['valor_ice'] ?? 0),
                         (float)$r['total'],
                     ];
                 }
             } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
-                $headers = ['Código', 'Producto', 'Cant. Comprada', 'Tipo IVA', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                $headers = ['Código', 'Producto', 'Cant. Comprada', 'Tipo IVA', 'Base 0%', 'Base IVA', 'IVA', 'ICE', 'Total'];
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = [
@@ -391,11 +398,12 @@ class ReporteComprasController extends BaseModuloController
                         (float)$r['base_0'],
                         (float)$r['base_iva'],
                         (float)$r['valor_iva'],
+                        (float)($r['valor_ice'] ?? 0),
                         (float)$r['total'],
                     ];
                 }
             } elseif ($filtros['agrupar_por'] === 'FECHA') {
-                $headers = ['Fecha', 'Nro Comprobantes', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                $headers = ['Fecha', 'Nro Comprobantes', 'Base 0%', 'Base IVA', 'IVA', 'ICE', 'Total'];
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = [
@@ -404,11 +412,12 @@ class ReporteComprasController extends BaseModuloController
                         (float)$r['base_0'],
                         (float)$r['base_iva'],
                         (float)$r['valor_iva'],
+                        (float)($r['valor_ice'] ?? 0),
                         (float)$r['total'],
                     ];
                 }
             } elseif ($filtros['agrupar_por'] === 'MES') {
-                $headers = ['Mes', 'Nro Comprobantes', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                $headers = ['Mes', 'Nro Comprobantes', 'Base 0%', 'Base IVA', 'IVA', 'ICE', 'Total'];
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = [
@@ -417,6 +426,7 @@ class ReporteComprasController extends BaseModuloController
                         (float)$r['base_0'],
                         (float)$r['base_iva'],
                         (float)$r['valor_iva'],
+                        (float)($r['valor_ice'] ?? 0),
                         (float)$r['total'],
                     ];
                 }
@@ -424,7 +434,7 @@ class ReporteComprasController extends BaseModuloController
                 // Consolidado: columna "Estab." al inicio con el establecimiento dueño del documento
                 $headers = array_merge($consolidado ? ['Estab.'] : [], ['F. Emisión', 'F. Registro', 'Nro Documento', 'Proveedor', 'RUC/Cédula',
                             'Tipo', 'Usuario', 'Nro Autorización',
-                            'Base 0%', 'Base IVA', 'IVA', 'Total', 'Retenciones']);
+                            'Base 0%', 'Base IVA', 'IVA', 'ICE', 'Total', 'Retenciones']);
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = array_merge($consolidado ? [(string) ($r['establecimiento'] ?? '')] : [], [
@@ -439,6 +449,7 @@ class ReporteComprasController extends BaseModuloController
                         (float)($r['base_0']      ?? 0),
                         (float)($r['base_iva']    ?? 0),
                         (float)($r['valor_iva']   ?? 0),
+                        (float)($r['valor_ice']   ?? 0),
                         (float)($r['total']       ?? 0),
                         (float)($r['retenciones'] ?? 0),
                     ]);
@@ -503,15 +514,15 @@ class ReporteComprasController extends BaseModuloController
             <table>
                 <thead>
                     <?php if ($filtros['agrupar_por'] === 'PROVEEDOR'): ?>
-                        <tr><th>Proveedor</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
+                        <tr><th>Proveedor</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>ICE</th><th>Total</th></tr>
                     <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
-                        <tr><th>Producto</th><th>Cant.</th><th>T. IVA</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
+                        <tr><th>Producto</th><th>Cant.</th><th>T. IVA</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>ICE</th><th>Total</th></tr>
                     <?php elseif ($filtros['agrupar_por'] === 'FECHA'): ?>
-                        <tr><th>Fecha</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
+                        <tr><th>Fecha</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>ICE</th><th>Total</th></tr>
                     <?php elseif ($filtros['agrupar_por'] === 'MES'): ?>
-                        <tr><th>Mes</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
+                        <tr><th>Mes</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>ICE</th><th>Total</th></tr>
                     <?php else: ?>
-                        <tr><?php if ($consolidado): ?><th>Estab.</th><?php endif; ?><th>F. Emisión</th><th>Nro Documento</th><th>Proveedor</th><th>Tipo</th><th>Usuario</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th><th>Retenciones</th></tr>
+                        <tr><?php if ($consolidado): ?><th>Estab.</th><?php endif; ?><th>F. Emisión</th><th>Nro Documento</th><th>Proveedor</th><th>Tipo</th><th>Usuario</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>ICE</th><th>Total</th><th>Retenciones</th></tr>
                     <?php endif; ?>
                 </thead>
                 <tbody>
@@ -523,6 +534,7 @@ class ReporteComprasController extends BaseModuloController
                                 <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
                                 <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
                             <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
                                 <td><?= htmlspecialchars($r['producto_nombre']) ?></td>
@@ -531,6 +543,7 @@ class ReporteComprasController extends BaseModuloController
                                 <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
                                 <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
                             <?php elseif ($filtros['agrupar_por'] === 'FECHA'): ?>
                                 <td class="text-center"><?= date('d/m/Y', strtotime($r['fecha'])) ?></td>
@@ -538,6 +551,7 @@ class ReporteComprasController extends BaseModuloController
                                 <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
                                 <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
                             <?php elseif ($filtros['agrupar_por'] === 'MES'): ?>
                                 <td class="text-center"><?= self::formatearMes($r['mes'] ?? '') ?></td>
@@ -545,6 +559,7 @@ class ReporteComprasController extends BaseModuloController
                                 <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
                                 <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
                             <?php else: ?>
                                 <?php if ($consolidado): ?><td class="text-center"><?= htmlspecialchars((string) ($r['establecimiento'] ?? '')) ?></td><?php endif; ?>
@@ -556,6 +571,7 @@ class ReporteComprasController extends BaseModuloController
                                 <td class="text-end"><?= number_format((float)($r['base_0'] ?? 0), 2) ?></td>
                                 <td class="text-end"><?= number_format((float)($r['base_iva'] ?? 0), 2) ?></td>
                                 <td class="text-end"><?= number_format((float)($r['valor_iva'] ?? 0), 2) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
                                 <td class="text-end"><strong><?= number_format((float)($r['total'] ?? 0), 2) ?></strong></td>
                                 <td class="text-end"><?= number_format((float)($r['retenciones'] ?? 0), 2) ?></td>
                             <?php endif; ?>
@@ -574,6 +590,7 @@ class ReporteComprasController extends BaseModuloController
                         <th class="text-end"><?= number_format((float)$totales['total_base_0'],   2) ?></th>
                         <th class="text-end"><?= number_format((float)$totales['total_base_iva'], 2) ?></th>
                         <th class="text-end"><?= number_format((float)$totales['total_iva'],      2) ?></th>
+                        <th class="text-end"><?= number_format((float)($totales['total_ice'] ?? 0), 2) ?></th>
                         <th class="text-end" style="color:#dc3545;font-weight:bold;">$<?= number_format((float)$totales['gran_total'], 2) ?></th>
                         <?php if ($filtros['agrupar_por'] === 'NINGUNO'): ?>
                         <th class="text-end">-</th>

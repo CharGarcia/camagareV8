@@ -190,6 +190,13 @@
                     </div>
                 </div>
                 <div class="cmg-control-card__stat">
+                    <i class="bi bi-fire bg-secondary bg-opacity-10 text-secondary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value">$<span id="stat-ice">0.00</span></div>
+                        <div class="cmg-control-card__stat-label">ICE</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat">
                     <i class="bi bi-cash-stack bg-danger bg-opacity-10 text-danger"></i>
                     <div>
                         <div class="cmg-control-card__stat-value text-danger">$<span id="stat-total">0.00</span></div>

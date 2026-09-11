@@ -39,11 +39,13 @@ if (($rutaModulo ?? '') !== 'modulos/clientes') {
 
 $urlBaseCliShared = BASE_URL . '/modulos/clientes';
 
-// Pestañas de consulta (Transacciones / Estado de cuenta): se pintan solo si el
-// usuario puede ver alguno de los módulos de donde salen esos datos. Las rutas
-// viven en el controlador, que valida lo mismo en cada endpoint.
+// Pestañas de consulta (Transacciones / Estado de cuenta / Anticipos): se pintan solo
+// si el usuario puede ver el módulo de donde salen esos datos. Las rutas viven en el
+// controlador, que valida lo mismo en cada endpoint. Además, al abrir la ficha el
+// componente oculta las que ESE cliente no tenga (consultasDisponiblesAjax).
 $cliVerTransacciones = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ClientesController::RUTAS_TRANSACCIONES);
 $cliVerEstadoCuenta  = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ClientesController::RUTAS_ESTADO_CUENTA);
+$cliVerAnticipos     = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ClientesController::RUTAS_ANTICIPOS);
 ?>
 
 <?php
@@ -57,7 +59,10 @@ if (!defined('LEAFLET_LOADED')) {
 
 <!-- Modal Ficha de Cliente -->
 <div class="modal fade" id="modalCliente" tabindex="-1" aria-labelledby="modalClienteLabel" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <?php // Sin modal-dialog-scrollable a propósito: así el cuerpo no lleva barra vertical
+          // propia. Si el contenido no cabe en la pantalla, scrollea el modal completo, igual
+          // que en Facturas de Venta, Compras o Empleados. ?>
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <form method="POST" action="<?= $urlBaseCliShared ?>/store" id="formCliente" novalidate>
                 <div class="modal-header bg-light py-3">
@@ -94,6 +99,11 @@ if (!defined('LEAFLET_LOADED')) {
                                     <a class="nav-link py-2 small" id="cli-tab-estado-cuenta-btn" data-bs-toggle="tab" data-bs-target="#cli-pane-estado-cuenta" href="#cli-pane-estado-cuenta" role="tab" title="Estado de cuenta e historial de cobros"><i class="bi bi-journal-text me-1"></i>Estado de cuenta</a>
                                 </li>
                             <?php endif; ?>
+                            <?php if ($cliVerAnticipos): ?>
+                                <li class="nav-item" role="presentation">
+                                    <a class="nav-link py-2 small" id="cli-tab-anticipos-btn" data-bs-toggle="tab" data-bs-target="#cli-pane-anticipos" href="#cli-pane-anticipos" role="tab" title="Anticipos recibidos y saldo a favor"><i class="bi bi-wallet2 me-1"></i>Anticipos</a>
+                                </li>
+                            <?php endif; ?>
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link py-2 small" id="tab-cobros-btn" data-bs-toggle="tab" data-bs-target="#pane-cobros" href="#pane-cobros" role="tab"><i class="bi bi-cash-coin me-1"></i>Cobros</a>
                             </li>
@@ -114,6 +124,9 @@ if (!defined('LEAFLET_LOADED')) {
                             }
                             if ($cliVerEstadoCuenta) {
                                 $pestanasConfigCli['cli-pane-estado-cuenta'] = 'Estado de cuenta';
+                            }
+                            if ($cliVerAnticipos) {
+                                $pestanasConfigCli['cli-pane-anticipos'] = 'Anticipos';
                             }
                             $pestanasConfigCli += [
                                 'pane-cobros'    => 'Cobros',
@@ -242,16 +255,22 @@ if (!defined('LEAFLET_LOADED')) {
                             </div>
                         </div>
 
-                        <?php if ($cliVerTransacciones || $cliVerEstadoCuenta): ?>
+                        <?php if ($cliVerTransacciones || $cliVerEstadoCuenta || $cliVerAnticipos): ?>
                             <?php
-                            // Pestañas Transacciones y Estado de cuenta: HTML compartido con la ficha de proveedores
+                            // Pestañas Transacciones, Estado de cuenta y Anticipos: HTML compartido con la ficha de proveedores
                             $fichaConsultas = [
                                 'prefijo'       => 'cli',
                                 'transacciones' => $cliVerTransacciones ? 'cli-pane-transacciones' : null,
                                 'estado_cuenta' => $cliVerEstadoCuenta ? 'cli-pane-estado-cuenta' : null,
+                                'anticipos'     => $cliVerAnticipos ? 'cli-pane-anticipos' : null,
                                 'textos'        => [
                                     'sin_guardar_trx' => 'Guarde el cliente para ver los productos y servicios que se le han vendido.',
                                     'sin_guardar_ec'  => 'Guarde el cliente para ver su estado de cuenta.',
+                                    'sin_guardar_ant' => 'Guarde el cliente para ver sus anticipos.',
+                                    'ant_generado'    => 'RECIBIDO',
+                                    'ant_aplicado'    => 'APLICADO A COBROS',
+                                    'ant_saldo'       => 'SALDO A FAVOR',
+                                    'ant_nota'        => 'Saldo a favor = anticipos recibidos menos lo ya aplicado a cobros.',
                                     'nota_trx'        => 'Facturas, recibos y notas de crédito de venta; las notas de crédito restan.',
                                     'cargos'          => 'VENTAS Y CARGOS',
                                     'pagos'           => 'COBROS (INGRESOS)',

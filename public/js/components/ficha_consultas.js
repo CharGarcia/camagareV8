@@ -11,13 +11,17 @@
  * viven dentro del <form> de la ficha.
  *
  * config = {
- *   urlBase:        '/…/modulos/proveedores',  // expone transaccionesAjax y estadoCuentaAjax
+ *   urlBase:        '/…/modulos/proveedores',  // expone transaccionesAjax, estadoCuentaAjax,
+ *                                              // anticiposAjax, estadoCuentaExcel y consultasDisponiblesAjax
  *   idInput:        'prov_id',                 // input con el id de la ficha
  *   modalId:        'modalProveedor',
  *   eventoGuardado: 'proveedorGuardado',       // CustomEvent que emite la ficha al guardar
  *   transacciones:  { panel, boton, textos: { documentos, ultimaFecha, vacio } },
  *   estadoCuenta:   { panel, boton, textos: { sinPagos }, origenes: { ORIGEN: 'Etiqueta' }, pago: {…} },
+ *   anticipos:      { panel, boton, textos: { vacio } },
  * }
+ * Cada pestaña se pinta solo si ese registro tiene datos: al abrir la ficha se consulta
+ * `consultasDisponiblesAjax` y se ocultan las que no aplican (ver crearDisponibilidad).
  * estadoCuenta.pago describe el movimiento de caja que se despliega con un clic (egreso
  * del proveedor / ingreso del cliente): origen, titulo, tituloFila, icono,
  * urlDetalle(id), urlPdf(id), numero(e), sujeto(e), etiquetaSujeto, montoLinea,
@@ -522,6 +526,19 @@
             cargar();
         });
 
+        // Excel: lo arma el servidor con los mismos movimientos y el mismo período que se
+        // están viendo, para que el archivo coincida con la pantalla.
+        el('excel')?.addEventListener('click', () => {
+            const id = idFicha(cfg);
+            if (!id) return;
+            const p = new URLSearchParams({
+                id,
+                desde: el('desde')?.value || '',
+                hasta: el('hasta')?.value || '',
+            });
+            window.open(`${cfg.urlBase}/estadoCuentaExcel?${p.toString()}`, '_blank');
+        });
+
         panel.querySelectorAll('[data-fc-filtro]').forEach(btn => btn.addEventListener('click', () => {
             st.filtro = btn.dataset.fcFiltro;
             st.page   = 1;
@@ -549,6 +566,178 @@
         };
     }
 
+    // ── Anticipos ───────────────────────────────────────────────────────────
+
+    /**
+     * Pestaña "Anticipos": el saldo a favor del tercero y los movimientos que lo forman
+     * (el saldo inicial y los anticipos recibidos/entregados suman; lo aplicado a un cobro
+     * o pago resta). Solo lectura y sin filtros: lo que importa es el saldo. La pestaña
+     * solo se pinta si hay movimientos (ver crearDisponibilidad).
+     */
+    function crearAnticipos(cfg) {
+        const conf   = cfg.anticipos;
+        const panel  = document.getElementById(conf.panel);
+        if (!panel) return null;
+        const textos = conf.textos || {};
+        const st     = { idCargado: null, peticion: 0 };
+        const el     = clave => panel.querySelector(`[data-fc="${clave}"]`);
+
+        function filaHtml(m) {
+            const resta = Number(m.signo) < 0;
+            return `<tr>
+                <td class="ps-2">${fmtFecha(m.fecha)}</td>
+                <td>${esc(m.movimiento)}</td>
+                <td>${esc(m.forma)}</td>
+                <td>${esc(m.numero_documento)}</td>
+                <td class="fc-col-desc" title="${esc(m.detalle)}">${esc(m.detalle)}</td>
+                <td class="text-end ${resta ? 'text-success' : 'text-primary'}">${resta ? '−' : ''}${fmtMoneda(m.monto)}</td>
+                <td class="text-end pe-2 fw-medium">${fmtMoneda(m.saldo)}</td>
+            </tr>`;
+        }
+
+        async function cargar() {
+            const id = idFicha(cfg);
+            mostrarSinGuardar(panel, !id);
+            if (!id) return;
+            st.idCargado = id;
+
+            const tbody = el('tbody');
+            const mio   = ++st.peticion;
+            if (tbody) tbody.innerHTML = filaMensaje(7, CARGANDO);
+
+            const json = await pedirJson(`${cfg.urlBase}/anticiposAjax?id=${encodeURIComponent(id)}`);
+            if (mio !== st.peticion || !tbody) return;
+            if (!json.ok) {
+                tbody.innerHTML = filaMensaje(7, esc(json.error || 'No se pudo cargar.'), 'text-danger');
+                return;
+            }
+
+            const movs = json.movimientos || [];
+            tbody.innerHTML = movs.length
+                ? movs.map(filaHtml).join('')
+                : filaMensaje(7, '<i class="bi bi-inbox fs-4 d-block mb-1"></i>'
+                    + esc(textos.vacio || 'No hay anticipos registrados.'));
+
+            const pintar = (clave, valor) => { const x = el(clave); if (x) x.textContent = fmtMoneda(valor); };
+            pintar('generado', json.total_generado);
+            pintar('aplicado', json.total_aplicado);
+            pintar('saldo', json.saldo);
+        }
+
+        function reset() {
+            st.idCargado = null;
+            st.peticion++;
+            const tbody = el('tbody');
+            if (tbody) tbody.innerHTML = '';
+            ['generado', 'aplicado', 'saldo'].forEach(clave => {
+                const x = el(clave);
+                if (x) x.textContent = '$0.00';
+            });
+        }
+
+        function asegurar() {
+            const id = idFicha(cfg);
+            if (id && st.idCargado === id) return;
+            if (st.idCargado !== null) reset();
+            cargar();
+        }
+
+        document.getElementById(conf.boton)?.addEventListener('shown.bs.tab', asegurar);
+
+        return {
+            reset,
+            refrescarSiVisible() { if (panel.classList.contains('active')) asegurar(); },
+        };
+    }
+
+    // ── Qué pestañas tiene sentido mostrar ──────────────────────────────────
+
+    /**
+     * Las dos pestañas se muestran solo si ESE cliente o proveedor tiene datos; el estado
+     * de cuenta, además, solo si el usuario puede ver el Reporte de Cartera. Ambas cosas
+     * las decide el servidor en `consultasDisponiblesAjax`, que se pregunta una vez por
+     * registro (consulta barata: EXISTS sobre las mismas fuentes de cada pestaña).
+     *
+     * El id de la ficha se vigila mientras el modal está abierto porque cada ficha lo fija
+     * en un momento distinto: la de clientes carga los datos y después abre el modal, y la
+     * de proveedores abre el modal primero y lo completa luego. Vigilándolo se cubren por
+     * igual el alta, la edición y el duplicado, sin que cada ficha tenga que avisar.
+     */
+    function crearDisponibilidad(cfg) {
+        const partes = [
+            { conf: cfg.transacciones, clave: 'transacciones' },
+            { conf: cfg.estadoCuenta,  clave: 'estado_cuenta' },
+            { conf: cfg.anticipos,     clave: 'anticipos' },
+        ].filter(p => p.conf && p.conf.boton);
+        if (!partes.length) return null;
+
+        let idConsultado = null;
+        let vigilante    = null;
+        let peticion     = 0;
+
+        /** Oculta o muestra la pestaña. Solo toca su clase: si el usuario la escondió desde
+         *  el menú de pestañas configurables, ese CSS sigue mandando. */
+        function mostrar(conf, visible) {
+            const boton = document.getElementById(conf.boton);
+            (boton?.closest('.nav-item') || boton)?.classList.toggle('d-none', !visible);
+        }
+
+        /** Si la pestaña que se oculta era la activa, pasar a la primera visible. */
+        function reubicarSiActiva(conf) {
+            const boton = document.getElementById(conf.boton);
+            if (!boton || !boton.classList.contains('active')) return;
+            const lista = boton.closest('.nav-tabs');
+            const otro  = lista && Array.from(lista.querySelectorAll('.nav-link'))
+                .find(b => b !== boton && b.offsetParent !== null);
+            if (otro && typeof bootstrap !== 'undefined' && bootstrap.Tab) {
+                bootstrap.Tab.getOrCreateInstance(otro).show();
+            }
+        }
+
+        function ocultarTodas() {
+            partes.forEach(p => { mostrar(p.conf, false); reubicarSiActiva(p.conf); });
+        }
+
+        async function revisar(id) {
+            const mio = ++peticion;
+            if (!id) { ocultarTodas(); return; }
+
+            const json = await pedirJson(`${cfg.urlBase}/consultasDisponiblesAjax?id=${encodeURIComponent(id)}`);
+            if (mio !== peticion) return; // llegó tarde: mientras tanto se abrió otra ficha
+
+            partes.forEach(p => {
+                // Si la consulta falla se dejan visibles: cada pestaña ya avisa si está vacía.
+                const visible = json.ok ? !!json[p.clave] : true;
+                mostrar(p.conf, visible);
+                if (!visible) reubicarSiActiva(p.conf);
+            });
+        }
+
+        function comprobar(forzar) {
+            const id = idFicha(cfg);
+            if (!forzar && id === idConsultado) return;
+            idConsultado = id;
+            revisar(id);
+        }
+
+        return {
+            empezar() {
+                idConsultado = null;
+                ocultarTodas();
+                comprobar(true);
+                clearInterval(vigilante);
+                vigilante = setInterval(() => comprobar(false), 250);
+            },
+            parar() {
+                clearInterval(vigilante);
+                vigilante    = null;
+                idConsultado = null;
+                peticion++;  // descarta cualquier respuesta en vuelo
+            },
+            comprobar,
+        };
+    }
+
     // ── Arranque ────────────────────────────────────────────────────────────
 
     function iniciar(cfg) {
@@ -558,20 +747,31 @@
         }
         const trx = cfg.transacciones ? crearTransacciones(cfg) : null;
         const ec  = cfg.estadoCuenta ? crearEstadoCuenta(cfg) : null;
-        if (!trx && !ec) return;
+        const ant = cfg.anticipos ? crearAnticipos(cfg) : null;
+        if (!trx && !ec && !ant) return;
 
-        // Cerrar la ficha limpia ambas pestañas: la próxima que se abra no muestra datos de otro registro
-        document.getElementById(cfg.modalId)?.addEventListener('hidden.bs.modal', () => {
+        const disp    = crearDisponibilidad(cfg);
+        const modalEl = document.getElementById(cfg.modalId);
+
+        // Abrir la ficha: las pestañas arrancan ocultas y se muestran según lo que haya.
+        modalEl?.addEventListener('shown.bs.modal', () => disp?.empezar());
+
+        // Cerrar la ficha limpia las pestañas: la próxima que se abra no muestra datos de otro registro
+        modalEl?.addEventListener('hidden.bs.modal', () => {
+            disp?.parar();
             trx?.reset();
             ec?.reset();
+            ant?.reset();
         });
 
         // Al guardar una ficha nueva estando en una de estas pestañas, cargarla ya con su id.
         // La ficha fija el id justo después de emitir el evento, de ahí el setTimeout.
         if (cfg.eventoGuardado) {
             document.addEventListener(cfg.eventoGuardado, () => setTimeout(() => {
+                disp?.comprobar(true);
                 trx?.refrescarSiVisible();
                 ec?.refrescarSiVisible();
+                ant?.refrescarSiVisible();
             }, 0));
         }
     }

@@ -1326,28 +1326,36 @@ class ComprasService
     {
         $subtotal = 0;
         $descuento = 0;
-        $total = 0;
+        $totalImpuestos = 0;
+        $totalIce = 0;
 
         foreach ($data['detalles'] ?? [] as $det) {
             $cant = (float)($det['cantidad'] ?? 0);
             $prec = (float)($det['precio_unitario'] ?? 0);
             $desc = (float)($det['descuento'] ?? 0);
-            
+
             $sub = $cant * $prec;
             $subtotal += $sub;
             $descuento += $desc;
 
-            // Sumar impuestos del detalle
+            // Sumar impuestos del detalle, separando ICE (código 3) del resto (IVA,
+            // ISD, etc.) para poder guardarlo aparte en compras_cabecera.total_ice —
+            // importe_total sigue siendo la suma de TODOS los impuestos, como antes.
             if (!empty($det['impuestos'])) {
                 foreach ($det['impuestos'] as $imp) {
-                    $total += (float)($imp['valor'] ?? 0);
+                    $valor = (float)($imp['valor'] ?? 0);
+                    $totalImpuestos += $valor;
+                    if ((string)($imp['codigo_impuesto'] ?? '') === '3') {
+                        $totalIce += $valor;
+                    }
                 }
             }
         }
 
         $data['total_sin_impuestos'] = $subtotal - $descuento;
         $data['total_descuento']     = $descuento;
-        $data['importe_total']       = $data['total_sin_impuestos'] + ($total) + (float)($data['propina'] ?? 0);
+        $data['total_ice']           = $totalIce;
+        $data['importe_total']       = $data['total_sin_impuestos'] + $totalImpuestos + (float)($data['propina'] ?? 0);
 
         return $data;
     }

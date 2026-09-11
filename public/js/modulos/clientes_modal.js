@@ -1567,6 +1567,11 @@
                     },
                 },
             },
+            anticipos: {
+                panel: 'cli-pane-anticipos',
+                boton: 'cli-tab-anticipos-btn',
+                textos: { vacio: 'Este cliente no tiene anticipos registrados.' },
+            },
         });
     }
 

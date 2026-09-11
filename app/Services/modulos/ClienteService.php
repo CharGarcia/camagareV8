@@ -327,6 +327,43 @@ class ClienteService
         return (new EstadoCuentaTerceroService())->cliente($idEmpresa, $idCliente, $fechaDesde, $fechaHasta);
     }
 
+    /**
+     * ¿Hay datos para cada pestaña de consulta de la ficha? Consultas de existencia
+     * (EXISTS sobre las mismas fuentes de cada pestaña), para no pintar pestañas vacías.
+     * No exige que el cliente exista: si no existe, sencillamente no hay datos.
+     */
+    public function tieneTransacciones(int $idCliente, int $idEmpresa, array $fuentes): bool
+    {
+        return $idCliente > 0 && $fuentes !== []
+            && $this->repository->tieneTransacciones($idCliente, $idEmpresa, $fuentes);
+    }
+
+    public function tieneEstadoCuenta(int $idCliente, int $idEmpresa): bool
+    {
+        return $idCliente > 0 && (new EstadoCuentaTerceroService())->tieneCliente($idEmpresa, $idCliente);
+    }
+
+    /**
+     * Pestaña "Anticipos": movimientos y saldo a favor del cliente, con la misma fórmula
+     * con la que se calcula el saldo de una forma de cobro tipo ANTICIPO.
+     */
+    public function getAnticipos(int $idCliente, int $idEmpresa): array
+    {
+        $this->exigirCliente($idCliente, $idEmpresa);
+        return (new AnticiposTerceroService())->cliente($idEmpresa, $idCliente);
+    }
+
+    public function tieneAnticipos(int $idCliente, int $idEmpresa): bool
+    {
+        return $idCliente > 0 && (new AnticiposTerceroService())->tieneCliente($idEmpresa, $idCliente);
+    }
+
+    /** Datos del cliente para encabezar una descarga (nombre e identificación). */
+    public function getFicha(int $idCliente, int $idEmpresa): ?array
+    {
+        return $this->repository->findById($idCliente, $idEmpresa) ?: null;
+    }
+
     /** Las consultas de la ficha solo aplican a un cliente vigente de la empresa activa. */
     private function exigirCliente(int $idCliente, int $idEmpresa): void
     {

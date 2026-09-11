@@ -401,6 +401,22 @@ class ReporteCarteraRepository extends BaseRepository
     }
 
     /**
+     * ¿El cliente tiene algún movimiento en cartera? Misma unión que getMovimientosCliente()
+     * (sin rango de fechas) envuelta en EXISTS, que corta en la primera fila: la ficha lo usa
+     * para no pintar la pestaña "Estado de cuenta" cuando no hay nada que mostrar.
+     */
+    public function tieneMovimientosCliente(int $idEmpresa, int $idCliente): bool
+    {
+        $params = [];
+        $ctes   = $this->ctesCliente($idEmpresa, $params);
+        $union  = $this->unionCliente($idEmpresa, $idCliente, null, null, $params);
+
+        $st = $this->db->prepare("WITH {$ctes} SELECT EXISTS (SELECT 1 FROM ( {$union} ) mov) AS hay");
+        $st->execute($params);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
      * Clientes de la empresa cuyo saldo acumulado (a la fecha de corte, o a
      * hoy si no se indica) es mayor a cero. Se agrupa en una sola consulta
      * (en vez de calcular el saldo cliente por cliente) para poder ofrecer
@@ -631,6 +647,21 @@ class ReporteCarteraRepository extends BaseRepository
     {
         $hasta = date('Y-m-d', strtotime($fechaDesde . ' -1 day'));
         return $this->sumarSaldo($this->getMovimientosProveedor($idEmpresa, $idProveedor, null, $hasta, $documento));
+    }
+
+    /**
+     * ¿El proveedor tiene algún movimiento en cartera? Misma unión que
+     * getMovimientosProveedor() (sin rango de fechas) envuelta en EXISTS, que corta en la
+     * primera fila: la ficha lo usa para no pintar la pestaña "Estado de cuenta" vacía.
+     */
+    public function tieneMovimientosProveedor(int $idEmpresa, int $idProveedor): bool
+    {
+        $params = [];
+        $union  = $this->unionProveedor($idEmpresa, $idProveedor, null, null, $params);
+
+        $st = $this->db->prepare("SELECT EXISTS (SELECT 1 FROM ( {$union} ) mov) AS hay");
+        $st->execute($params);
+        return (bool) $st->fetchColumn();
     }
 
     /**

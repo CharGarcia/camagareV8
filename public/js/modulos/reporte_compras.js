@@ -205,7 +205,7 @@ window.RC_generarReporte = function () {
     RC_dibujarCabecera(agruparPor);
 
     const tbody       = document.getElementById('rc_tbody');
-    const colSpanAct  = agruparPor === 'NINGUNO' ? 12 : (agruparPor === 'PRODUCTO' ? 7 : 6);
+    const colSpanAct  = agruparPor === 'NINGUNO' ? 13 : (agruparPor === 'PRODUCTO' ? 8 : 7);
     tbody.innerHTML   = `<tr><td colspan="${colSpanAct}" class="text-center py-4">
         <div class="spinner-border text-danger" role="status"></div>
         <br><span class="text-muted small mt-2 d-inline-block">Generando reporte...</span>
@@ -229,6 +229,7 @@ window.RC_generarReporte = function () {
                 document.getElementById('stat-base-0').textContent   = parseFloat(res.stats.total_base_0).toFixed(2);
                 document.getElementById('stat-base-iva').textContent = parseFloat(res.stats.total_base_iva).toFixed(2);
                 document.getElementById('stat-iva').textContent      = parseFloat(res.stats.total_iva).toFixed(2);
+                document.getElementById('stat-ice').textContent      = parseFloat(res.stats.total_ice || 0).toFixed(2);
                 document.getElementById('stat-total').textContent    = parseFloat(res.stats.gran_total).toFixed(2);
                 document.getElementById('stat-documentos').textContent = res.stats.total_documentos;
             }
@@ -265,6 +266,7 @@ function RC_dibujarCabecera(agruparPor) {
             <th class="text-end">Base 0% / Exento</th>
             <th class="text-end">Base IVA</th>
             <th class="text-end">Total IVA</th>
+            <th class="text-end">Total ICE</th>
             <th class="text-end pe-4">Gran Total</th>
         `;
     } else if (agruparPor === 'PRODUCTO') {
@@ -275,6 +277,7 @@ function RC_dibujarCabecera(agruparPor) {
             <th class="text-end">Base 0% / Exento</th>
             <th class="text-end">Base IVA</th>
             <th class="text-end">Total IVA</th>
+            <th class="text-end">Total ICE</th>
             <th class="text-end pe-4">Gran Total</th>
         `;
     } else if (agruparPor === 'FECHA') {
@@ -284,6 +287,7 @@ function RC_dibujarCabecera(agruparPor) {
             <th class="text-end">Base 0% / Exento</th>
             <th class="text-end">Base IVA</th>
             <th class="text-end">Total IVA</th>
+            <th class="text-end">Total ICE</th>
             <th class="text-end pe-4">Gran Total</th>
         `;
     } else if (agruparPor === 'MES') {
@@ -293,10 +297,11 @@ function RC_dibujarCabecera(agruparPor) {
             <th class="text-end">Base 0% / Exento</th>
             <th class="text-end">Base IVA</th>
             <th class="text-end">Total IVA</th>
+            <th class="text-end">Total ICE</th>
             <th class="text-end pe-4">Gran Total</th>
         `;
     } else {
-        // NINGUNO / DETALLADO — 12 columnas
+        // NINGUNO / DETALLADO — 13 columnas
         th += `
             <th class="ps-3">F. Emisión</th>
             <th>F. Registro</th>
@@ -308,6 +313,7 @@ function RC_dibujarCabecera(agruparPor) {
             <th class="text-end">Base 0% / Exento</th>
             <th class="text-end">Base IVA</th>
             <th class="text-end">Total IVA</th>
+            <th class="text-end">Total ICE</th>
             <th class="text-end pe-3">Gran Total</th>
             <th class="text-end pe-3">Retenciones</th>
         `;

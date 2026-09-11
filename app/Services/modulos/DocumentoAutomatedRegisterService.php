@@ -716,6 +716,64 @@ class DocumentoAutomatedRegisterService
                         }
                     }
                 }
+            } elseif ($codDoc === '05' && isset($info->motivos->motivo)) {
+                // Nota de Débito de compra: a diferencia de una factura, el XML no trae
+                // <detalles><detalle> — trae <infoNotaDebito><motivos><motivo> (una línea
+                // por razón + valor, sin desglose de impuestos propio) y los impuestos van
+                // a nivel de CABECERA en <infoNotaDebito><impuestos><impuesto>. Sin este
+                // caso, insertarCompra() nunca escribía compras_detalle ni
+                // compras_detalle_impuestos para ninguna ND — el total de la cabecera salía
+                // bien (viene directo del XML), pero el desglose de IVA/ICE quedaba vacío en
+                // el modal y en el Reporte de Compras. Mismo criterio que
+                // insertarNotaDebito() del lado de ventas (nota_debito_motivos), adaptado a
+                // que aquí no existe una tabla de motivos propia: se crea una línea de
+                // compras_detalle por motivo y los impuestos de cabecera (no vienen
+                // desglosados por motivo en el XML) se adjuntan a la primera línea, para que
+                // el reporte sí pueda sumar el IVA/ICE de este documento.
+                $primerDetalle = null;
+                foreach ($info->motivos->motivo as $m) {
+                    $valorMotivo = (float)$m->valor;
+                    $idDetalle = $this->compraRepo->insertDetalle([
+                        'id_compra' => $idCompra,
+                        'descripcion' => (string)$m->razon,
+                        'cantidad' => 1,
+                        'precio_unitario' => $valorMotivo,
+                        'descuento' => 0,
+                        'precio_total_sin_impuesto' => $valorMotivo
+                    ]);
+                    if ($primerDetalle === null) {
+                        $primerDetalle = $idDetalle;
+                    }
+                }
+                if ($primerDetalle !== null && isset($info->impuestos->impuesto)) {
+                    foreach ($info->impuestos->impuesto as $imp) {
+                        $this->compraRepo->insertImpuesto([
+                            'id_compra_detalle' => $primerDetalle,
+                            'codigo_impuesto' => (string)$imp->codigo,
+                            'codigo_porcentaje' => (string)$imp->codigoPorcentaje,
+                            'tarifa' => (float)$imp->tarifa,
+                            'base_imponible' => (float)$imp->baseImponible,
+                            'valor' => (float)$imp->valor
+                        ]);
+                    }
+                }
+            }
+
+            // 3.5 Total ICE del documento: se recalcula sumando lo que realmente quedó
+            // insertado en compras_detalle_impuestos (código 3), en vez de reparsear el
+            // XML de nuevo — así queda consistente sin importar el tipo de documento
+            // (factura, liquidación, NC o ND) ni cómo se haya armado el detalle arriba.
+            $stTotalIce = $db->prepare(
+                "SELECT COALESCE(SUM(cdi.valor), 0)
+                 FROM compras_detalle_impuestos cdi
+                 JOIN compras_detalle cd ON cd.id = cdi.id_compra_detalle
+                 WHERE cd.id_compra = ? AND cdi.codigo_impuesto = '3'"
+            );
+            $stTotalIce->execute([$idCompra]);
+            $totalIceDoc = (float) $stTotalIce->fetchColumn();
+            if ($totalIceDoc > 0) {
+                $db->prepare("UPDATE compras_cabecera SET total_ice = ? WHERE id = ?")
+                   ->execute([$totalIceDoc, $idCompra]);
             }
 
             // 4. Pagos

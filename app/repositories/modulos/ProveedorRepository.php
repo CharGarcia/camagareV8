@@ -464,8 +464,33 @@ class ProveedorRepository extends BaseRepository
         string $ordenDir,
         array $fuentes
     ): array {
-        $amb    = $this->ambienteLineasDocumento($idEmpresa); // null = no se conoce: sin filtro, como getEstadisticas()
         $params = [];
+        $ramas  = $this->ramasTransacciones($idProveedor, $idEmpresa, $fuentes, $params);
+
+        return $this->consultarLineasDocumento($ramas, $params, $buscar, $vista, $page, $perPage, $ordenCol, $ordenDir);
+    }
+
+    /**
+     * ¿El proveedor tiene alguna transacción que este usuario pueda ver? Misma unión que
+     * getTransacciones(), sin traer filas: la ficha lo usa para no pintar la pestaña vacía.
+     */
+    public function tieneTransacciones(int $idProveedor, int $idEmpresa, array $fuentes): bool
+    {
+        $params = [];
+        return $this->existenLineasDocumento(
+            $this->ramasTransacciones($idProveedor, $idEmpresa, $fuentes, $params),
+            $params
+        );
+    }
+
+    /**
+     * Ramas del UNION de la pestaña "Transacciones": una por tipo de documento permitido
+     * (compras y liquidaciones), con su filtro de ambiente y el de registros propios.
+     * Única fuente para el listado y para la comprobación de si hay datos.
+     */
+    private function ramasTransacciones(int $idProveedor, int $idEmpresa, array $fuentes, array &$params): array
+    {
+        $amb    = $this->ambienteLineasDocumento($idEmpresa); // null = no se conoce: sin filtro, como getEstadisticas()
         $ramas  = [];
 
         if (array_key_exists('COMPRA', $fuentes)) {
@@ -549,7 +574,7 @@ class ProveedorRepository extends BaseRepository
             $ramas[] = $sql;
         }
 
-        return $this->consultarLineasDocumento($ramas, $params, $buscar, $vista, $page, $perPage, $ordenCol, $ordenDir);
+        return $ramas;
     }
 
     public function create(array $data): int

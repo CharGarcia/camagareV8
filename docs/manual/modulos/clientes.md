@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso
-version: 1.6
+version: 1.8
 orden: 10
 estado: activo
 ---
@@ -187,6 +187,9 @@ Haga clic en el título de una columna para ordenar por ella; otro clic invierte
 el orden. La tabla muestra **20 filas por página**; para avanzar, use las flechas
 de la derecha (al lado se ve cuántas filas está viendo del total).
 
+La pestaña **solo aparece** si el cliente tiene documentos: a un cliente al que
+todavía no se le ha vendido nada no se le muestra esta pestaña.
+
 ### Buscar en las transacciones
 
 El buscador de la pestaña encuentra por **palabras sueltas**, en cualquier orden
@@ -214,6 +217,12 @@ iniciales) y todo lo que la baja (**abonos**: cobros, retenciones y notas de
 crédito), con el **saldo corriendo** fila por fila. Es el mismo cálculo del
 *Reporte de Cartera*, que sigue las reglas de **Cuentas por Cobrar**.
 
+La pestaña **solo aparece** si se cumplen dos cosas: que el usuario tenga acceso
+al **Reporte de Cartera** (de donde sale el cálculo) y que el cliente tenga
+movimientos. El botón **Excel** descarga exactamente lo que está viendo —los
+movimientos del período elegido, con el saldo de cada fila y el resumen— en una
+hoja de cálculo.
+
 Al pie, debajo de los movimientos, se resumen los totales del período: ventas y
 cargos, cobros, retenciones y notas de crédito, y el saldo por cobrar.
 
@@ -235,6 +244,24 @@ comprobante de ingreso. Otro clic en la fila lo pliega.
 
 Un ingreso que cobra varias facturas del cliente aparece como **una sola fila**
 con el total cobrado; el reparto por factura se ve al desplegarlo.
+
+## Anticipos
+
+La pestaña *Anticipos* muestra el dinero que el cliente entregó por adelantado y
+cuánto le queda **a favor**. Cada fila es un movimiento, con el saldo corriendo:
+
+| Movimiento | Qué es | Efecto |
+|------------|--------|--------|
+| Saldo inicial | El anticipo con el que arrancó el sistema (módulo *Saldos iniciales*) | Suma |
+| Anticipo recibido | Un ingreso registrado con un concepto de tipo *anticipo de cliente* | Suma |
+| Aplicado a un cobro | Un cobro pagado con la forma de cobro tipo *anticipo* | Resta |
+
+Al pie se ven los tres totales: lo recibido, lo ya aplicado y el **saldo a favor**.
+Ese saldo es el mismo que aparece al elegir la forma de cobro *anticipo* mientras
+se registra un cobro: sale de la misma fórmula, así que no puede discrepar.
+
+La pestaña **solo aparece** si el cliente tiene anticipos y el usuario puede ver
+**Ingresos**, que es donde se registran.
 
 ## Carga masiva desde Excel
 
@@ -301,6 +328,15 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **1.8** — Las pestañas de consulta **solo aparecen cuando hay algo que mostrar**:
+  *Transacciones* si el cliente tiene documentos, *Estado de cuenta* si tiene
+  movimientos y además el usuario puede ver el **Reporte de Cartera** (antes
+  bastaba con Cuentas por Cobrar), y la nueva pestaña **Anticipos** si tiene
+  anticipos. El estado de cuenta se puede **descargar en Excel** con el período
+  que esté viendo.
+- **1.7** — La ficha del cliente ya no tiene barra de desplazamiento propia dentro
+  del modal: cuando el contenido no cabe en la pantalla se desplaza el modal
+  completo, igual que en Facturas de Venta o Compras.
 - **1.6** — *Transacciones* muestra el **IVA de cada línea** (con su tarifa en el
   tooltip) y el total de IVA al pie. Al abrir la ficha de un cliente, la cabecera
   del modal muestra su **nombre**.

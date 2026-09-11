@@ -388,6 +388,13 @@
                   <!-- Contenedor dinámico de IVAs por tarifa -->
                   <div id="mcContenedorIvasIva" class="mb-1"></div>
 
+                  <!-- ICE (impuesto a los consumos especiales): solo se muestra si el
+                       documento trae líneas con ICE (ver CMG_recalcularTotales). -->
+                  <div id="mcLabelIceRow" class="d-flex justify-content-between align-items-center mb-1 d-none">
+                    <span class="text-muted">(+) ICE</span>
+                    <span class="fw-bold text-dark" id="mcLabelIce">0.00</span>
+                  </div>
+
                   <!-- Propina -->
                   <div class="d-flex justify-content-between align-items-center mb-1">
                     <span class="text-muted">(+) Propina</span>

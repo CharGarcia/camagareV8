@@ -232,7 +232,7 @@ class ComprasRepository extends BaseRepository
                        c.total_impuesto_reembolso, c.id_orden_compra, c.estado,
                        c.token_aprobacion, c.aprobado_by, c.aprobado_at,
                        c.motivo_rechazo, c.total_terceros,
-                       (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0)) AS monto_iva,
+                       (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0) - COALESCE(c.total_ice, 0)) AS monto_iva,
                        p.razon_social      AS proveedor_nombre,
                        p.identificacion    AS proveedor_ruc,
                        st.nombre           AS sustento_nombre,
@@ -380,7 +380,7 @@ class ComprasRepository extends BaseRepository
         }
 
         $sql = "SELECT c.*,
-                       (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0)) AS monto_iva,
+                       (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0) - COALESCE(c.total_ice, 0)) AS monto_iva,
                        p.razon_social          AS proveedor_nombre,
                        p.identificacion        AS proveedor_ruc,
                        p.direccion             AS proveedor_direccion,
@@ -672,7 +672,7 @@ class ComprasRepository extends BaseRepository
                     id_sustento_tributario, tipo_comprobante, tipo_id_proveedor,
                     parte_relacionada, establecimiento_prov, punto_emision_prov,
                     secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro,
-                    total_sin_impuestos, total_descuento, importe_total, propina,
+                    total_sin_impuestos, total_descuento, importe_total, total_ice, propina,
                     autorizacion_desde, autorizacion_hasta, fecha_caducidad,
                     tipo_registro, deducible, documento_modificado, motivo,
                     observaciones, estado, created_by, updated_by, id_usuario,
@@ -682,7 +682,7 @@ class ComprasRepository extends BaseRepository
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
                     (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
                 ) RETURNING id";
 
@@ -703,6 +703,7 @@ class ComprasRepository extends BaseRepository
             (float) ($data['total_sin_impuestos'] ?? 0),
             (float) ($data['total_descuento'] ?? 0),
             (float) ($data['importe_total'] ?? 0),
+            (float) ($data['total_ice'] ?? 0),
             (float) ($data['propina'] ?? 0),
             $data['autorizacion_desde'] ?? null,
             $data['autorizacion_hasta'] ?? null,
@@ -748,6 +749,7 @@ class ComprasRepository extends BaseRepository
                     total_sin_impuestos     = ?,
                     total_descuento         = ?,
                     importe_total           = ?,
+                    total_ice               = ?,
                     propina                 = ?,
                     autorizacion_desde      = ?,
                     autorizacion_hasta      = ?,
@@ -781,6 +783,7 @@ class ComprasRepository extends BaseRepository
             (float) ($data['total_sin_impuestos'] ?? 0),
             (float) ($data['total_descuento'] ?? 0),
             (float) ($data['importe_total'] ?? 0),
+            (float) ($data['total_ice'] ?? 0),
             (float) ($data['propina'] ?? 0),
             $data['autorizacion_desde'] ?? null,
             $data['autorizacion_hasta'] ?? null,

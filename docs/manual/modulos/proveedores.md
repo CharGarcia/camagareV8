@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso
-version: 1.8
+version: 2.0
 orden: 10
 estado: activo
 ---
@@ -147,6 +147,9 @@ Haga clic en el título de una columna para ordenar por ella; otro clic invierte
 el orden. La tabla muestra **20 filas por página**; para avanzar, use las flechas
 de la derecha (al lado se ve cuántas filas está viendo del total).
 
+La pestaña **solo aparece** si el proveedor tiene documentos: a un proveedor al
+que todavía no se le ha comprado nada no se le muestra esta pestaña.
+
 ### Buscar en las transacciones
 
 El buscador de la pestaña encuentra por **palabras sueltas**, en cualquier orden
@@ -175,6 +178,12 @@ pagos, retenciones y notas de crédito), con el **saldo corriendo** fila por fil
 Es el mismo cálculo del *Reporte de Cartera*, que sigue las reglas de **Cuentas
 por Pagar**.
 
+La pestaña **solo aparece** si se cumplen dos cosas: que el usuario tenga acceso
+al **Reporte de Cartera** (de donde sale el cálculo) y que el proveedor tenga
+movimientos. El botón **Excel** descarga exactamente lo que está viendo —los
+movimientos del período elegido, con el saldo de cada fila y el resumen— en una
+hoja de cálculo.
+
 El *Por pagar* de la pestaña Comercial se calcula documento por documento y no
 incluye facturas del exterior: si el proveedor tiene importaciones o documentos
 pagados de más, puede no coincidir con el saldo de esta pestaña.
@@ -200,6 +209,24 @@ el comprobante de egreso. Otro clic en la fila lo pliega.
 
 Un egreso que paga varias facturas del proveedor aparece como **una sola fila**
 con el total pagado; el reparto por factura se ve al desplegarlo.
+
+## Anticipos
+
+La pestaña *Anticipos* muestra el dinero entregado por adelantado al proveedor y
+cuánto queda **a favor**. Cada fila es un movimiento, con el saldo corriendo:
+
+| Movimiento | Qué es | Efecto |
+|------------|--------|--------|
+| Saldo inicial | El anticipo con el que arrancó el sistema (módulo *Saldos iniciales*) | Suma |
+| Anticipo entregado | Un egreso registrado con un concepto de tipo *anticipo a proveedor* | Suma |
+| Aplicado a un pago | Un pago hecho con la forma de pago tipo *anticipo* | Resta |
+
+Al pie se ven los tres totales: lo entregado, lo ya aplicado y el **saldo a favor**.
+Ese saldo es el mismo que aparece al elegir la forma de pago *anticipo* mientras se
+registra un pago: sale de la misma fórmula, así que no puede discrepar.
+
+La pestaña **solo aparece** si el proveedor tiene anticipos y el usuario puede ver
+**Egresos**, que es donde se registran.
 
 ## Retenciones y sustento
 
@@ -316,6 +343,15 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.0** — Las pestañas de consulta **solo aparecen cuando hay algo que mostrar**:
+  *Transacciones* si el proveedor tiene documentos, *Estado de cuenta* si tiene
+  movimientos y además el usuario puede ver el **Reporte de Cartera** (antes
+  bastaba con Cuentas por Pagar), y la nueva pestaña **Anticipos** si tiene
+  anticipos. El estado de cuenta se puede **descargar en Excel** con el período
+  que esté viendo.
+- **1.9** — La ficha del proveedor ya no tiene barra de desplazamiento propia
+  dentro del modal: cuando el contenido no cabe en la pantalla se desplaza el
+  modal completo, igual que en Facturas de Venta o Compras.
 - **1.8** — *Transacciones* muestra el **IVA de cada línea** (con su tarifa en el
   tooltip) y el total de IVA al pie. Al abrir la ficha de un proveedor, la
   cabecera del modal muestra su **nombre**.

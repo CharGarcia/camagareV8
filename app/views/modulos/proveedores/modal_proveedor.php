@@ -24,11 +24,13 @@ if (($rutaModulo ?? '') !== 'modulos/proveedores') {
 
 $urlBaseProvShared = BASE_URL . '/modulos/proveedores';
 
-// Pestañas de consulta (Transacciones / Estado de cuenta): se pintan solo si el
-// usuario puede ver alguno de los módulos de donde salen esos datos. Las rutas
-// viven en el controlador, que valida lo mismo en cada endpoint.
+// Pestañas de consulta (Transacciones / Estado de cuenta / Anticipos): se pintan solo
+// si el usuario puede ver el módulo de donde salen esos datos. Las rutas viven en el
+// controlador, que valida lo mismo en cada endpoint. Además, al abrir la ficha el
+// componente oculta las que ESE proveedor no tenga (consultasDisponiblesAjax).
 $provVerTransacciones = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ProveedoresController::RUTAS_TRANSACCIONES);
 $provVerEstadoCuenta  = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ProveedoresController::RUTAS_ESTADO_CUENTA);
+$provVerAnticipos     = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ProveedoresController::RUTAS_ANTICIPOS);
 
 // Cargar Leaflet solo una vez (evitar duplicado si ya lo cargó modal_cliente)
 if (!defined('LEAFLET_LOADED')) {
@@ -39,7 +41,10 @@ if (!defined('LEAFLET_LOADED')) {
 ?>
 <!-- Modal Proveedor -->
 <div class="modal fade" id="modalProveedor" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <?php // Sin modal-dialog-scrollable a propósito: así el cuerpo no lleva barra vertical
+          // propia. Si el contenido no cabe en la pantalla, scrollea el modal completo, igual
+          // que en Facturas de Venta, Compras o Empleados. ?>
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <form method="POST" action="<?= $urlBaseProvShared ?>/store" id="prov_formProveedor" novalidate>
                 <div class="modal-header bg-light py-3">
@@ -81,6 +86,11 @@ if (!defined('LEAFLET_LOADED')) {
                                     <a class="nav-link" id="prov-tab-estado-cuenta-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-estado-cuenta" href="#prov-tab-estado-cuenta" role="tab" title="Estado de cuenta e historial de pagos"><i class="bi bi-journal-text me-1"></i> Estado de cuenta</a>
                                 </li>
                             <?php endif; ?>
+                            <?php if ($provVerAnticipos): ?>
+                                <li class="nav-item" role="presentation">
+                                    <a class="nav-link" id="prov-tab-anticipos-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-anticipos" href="#prov-tab-anticipos" role="tab" title="Anticipos entregados y saldo a favor"><i class="bi bi-wallet2 me-1"></i> Anticipos</a>
+                                </li>
+                            <?php endif; ?>
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link" id="prov-tab-banco-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-banco" href="#prov-tab-banco" role="tab" title="Banco"><i class="bi bi-bank me-1"></i> Banco</a>
                             </li>
@@ -105,6 +115,9 @@ if (!defined('LEAFLET_LOADED')) {
                             }
                             if ($provVerEstadoCuenta) {
                                 $pestanasConfigProv['prov-tab-estado-cuenta'] = 'Estado de cuenta';
+                            }
+                            if ($provVerAnticipos) {
+                                $pestanasConfigProv['prov-tab-anticipos'] = 'Anticipos';
                             }
                             $pestanasConfigProv += [
                                 'prov-tab-banco'      => 'Banco',
@@ -227,16 +240,22 @@ if (!defined('LEAFLET_LOADED')) {
                             </div>
                         </div>
 
-                        <?php if ($provVerTransacciones || $provVerEstadoCuenta): ?>
+                        <?php if ($provVerTransacciones || $provVerEstadoCuenta || $provVerAnticipos): ?>
                             <?php
-                            // Pestañas Transacciones y Estado de cuenta: HTML compartido con la ficha de clientes
+                            // Pestañas Transacciones, Estado de cuenta y Anticipos: HTML compartido con la ficha de clientes
                             $fichaConsultas = [
                                 'prefijo'       => 'prov',
                                 'transacciones' => $provVerTransacciones ? 'prov-tab-transacciones' : null,
                                 'estado_cuenta' => $provVerEstadoCuenta ? 'prov-tab-estado-cuenta' : null,
+                                'anticipos'     => $provVerAnticipos ? 'prov-tab-anticipos' : null,
                                 'textos'        => [
                                     'sin_guardar_trx' => 'Guarde el proveedor para ver los productos y servicios que se le han comprado.',
                                     'sin_guardar_ec'  => 'Guarde el proveedor para ver su estado de cuenta.',
+                                    'sin_guardar_ant' => 'Guarde el proveedor para ver sus anticipos.',
+                                    'ant_generado'    => 'ENTREGADO',
+                                    'ant_aplicado'    => 'APLICADO A PAGOS',
+                                    'ant_saldo'       => 'SALDO A FAVOR',
+                                    'ant_nota'        => 'Saldo a favor = anticipos entregados menos lo ya aplicado a pagos.',
                                     'nota_trx'        => 'Compras y liquidaciones de compra; las notas de crédito restan.',
                                     'cargos'          => 'COMPRAS Y CARGOS',
                                     'pagos'           => 'PAGOS (EGRESOS)',

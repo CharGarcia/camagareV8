@@ -26,13 +26,17 @@ class ProveedoresController extends BaseModuloController
      * modal. Única fuente: modal_proveedor.php la usa también para decidir si
      * pinta cada pestaña.
      *  - Transacciones: cada origen se incluye solo con permiso en su módulo.
-     *  - Estado de cuenta: basta poder ver Cuentas por Pagar o el Reporte de Cartera.
+     *  - Estado de cuenta: es el kardex del Reporte de Cartera, así que exige ese permiso.
+     * Además de tener permiso, la ficha solo pinta cada pestaña si el proveedor TIENE datos
+     * (ver consultasDisponiblesAjax).
      */
     public const RUTAS_TRANSACCIONES = [
         'COMPRA'      => 'modulos/compras',
         'LIQUIDACION' => 'modulos/liquidacion-compra',
     ];
-    public const RUTAS_ESTADO_CUENTA = ['modulos/cuentas_por_pagar', 'modulos/reporte_cartera'];
+    public const RUTAS_ESTADO_CUENTA = ['modulos/reporte_cartera'];
+    /** Anticipos: el anticipo a un proveedor se registra como un egreso, así que ese es su permiso. */
+    public const RUTAS_ANTICIPOS = ['modulos/egresos'];
 
     public function __construct()
     {
@@ -515,7 +519,7 @@ class ProveedoresController extends BaseModuloController
 
         if (!\App\Helpers\Permisos::puedeVerAlguna(self::RUTAS_ESTADO_CUENTA)) {
             http_response_code(403);
-            echo json_encode(['ok' => false, 'error' => 'No tiene permiso para ver el estado de cuenta (Cuentas por Pagar o Reporte de Cartera).']);
+            echo json_encode(['ok' => false, 'error' => 'No tiene permiso para ver el estado de cuenta (Reporte de Cartera).']);
             exit;
         }
 
@@ -538,6 +542,156 @@ class ProveedoresController extends BaseModuloController
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Qué pestañas de consulta tiene sentido mostrar en la ficha de ESTE proveedor: la
+     * ficha las pinta solo si el usuario tiene permiso y además el proveedor tiene datos,
+     * para no ofrecer pestañas vacías. Son consultas de existencia (EXISTS sobre las mismas
+     * fuentes que alimentan cada pestaña), así que salen baratas al abrir la ficha.
+     */
+    public function consultasDisponiblesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            echo json_encode([
+                'ok'            => true,
+                'transacciones' => $this->service->tieneTransacciones($id, $idEmpresa, $this->fuentesTransacciones()),
+                'estado_cuenta' => \App\Helpers\Permisos::puedeVerAlguna(self::RUTAS_ESTADO_CUENTA)
+                                   && $this->service->tieneEstadoCuenta($id, $idEmpresa),
+                'anticipos'     => \App\Helpers\Permisos::puedeVerAlguna(self::RUTAS_ANTICIPOS)
+                                   && $this->service->tieneAnticipos($id, $idEmpresa),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Orígenes de la pestaña Transacciones que este usuario puede ver, cada uno con su
+     * filtro de "registros propios" (null = ve todos los del módulo).
+     */
+    private function fuentesTransacciones(): array
+    {
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $fuentes   = [];
+        foreach (self::RUTAS_TRANSACCIONES as $origen => $ruta) {
+            $p = $this->permisosModuloPorRuta($ruta);
+            if (!empty($p['ver'])) {
+                $fuentes[$origen] = empty($p['todo']) ? $idUsuario : null;
+            }
+        }
+        return $fuentes;
+    }
+
+    /**
+     * Pestaña "Anticipos" de la ficha: saldo a favor del proveedor y los movimientos que lo
+     * forman, con la misma fórmula del saldo de una forma de pago tipo ANTICIPO.
+     */
+    public function anticiposAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        if (!\App\Helpers\Permisos::puedeVerAlguna(self::RUTAS_ANTICIPOS)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'No tiene permiso para ver los anticipos (Egresos).']);
+            exit;
+        }
+
+        try {
+            $res = $this->service->getAnticipos((int) ($_GET['id'] ?? 0), (int) $_SESSION['id_empresa']);
+            echo json_encode(['ok' => true] + $res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Descarga en Excel el estado de cuenta de la ficha: los mismos movimientos y el mismo
+     * período que muestra la pestaña (misma fuente), con el proveedor, el período y el
+     * resumen en el encabezado. Exige el mismo permiso que la pestaña.
+     */
+    public function estadoCuentaExcel(): void
+    {
+        $this->requireLeer();
+        if (!\App\Helpers\Permisos::puedeVerAlguna(self::RUTAS_ESTADO_CUENTA)) {
+            http_response_code(403);
+            echo 'No tiene permiso para ver el estado de cuenta (Reporte de Cartera).';
+            exit;
+        }
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $id        = (int) ($_GET['id'] ?? 0);
+        $desde     = trim((string) ($_GET['desde'] ?? ''));
+        $hasta     = trim((string) ($_GET['hasta'] ?? ''));
+
+        try {
+            $ec        = $this->service->getEstadoCuenta($id, $idEmpresa, $desde !== '' ? $desde : null, $hasta !== '' ? $hasta : null);
+            $proveedor = $this->service->getFicha($id, $idEmpresa) ?? [];
+            $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa)['nombre'] ?? '';
+
+            $origenes = [
+                'COMPRA'       => 'Compra',        'LIQUIDACION'   => 'Liquidación',
+                'IMPORTACION'  => 'Importación',   'NOTA_DEBITO'   => 'Nota de débito',
+                'SALDO_INICIAL'=> 'Saldo inicial', 'PAGO'          => 'Pago',
+                'RETENCION'    => 'Retención',     'NOTA_CREDITO'  => 'Nota de crédito',
+            ];
+            $filas = [];
+            foreach ($ec['movimientos'] as $m) {
+                $esCargo = ($m['tipo_movimiento'] ?? '') === 'CARGO';
+                $filas[] = [
+                    !empty($m['fecha']) ? date('d-m-Y', strtotime((string) $m['fecha'])) : '',
+                    $origenes[$m['origen'] ?? ''] ?? (string) ($m['origen'] ?? ''),
+                    (string) ($m['numero_documento'] ?? ''),
+                    (string) ($m['detalle'] ?? ''),
+                    $esCargo ? (float) $m['monto'] : null,
+                    $esCargo ? null : (float) $m['monto'],
+                    (float) $m['saldo'],
+                ];
+            }
+
+            $fecha  = fn(string $f) => $f !== '' ? date('d-m-Y', strtotime($f)) : '';
+            $dinero = fn($v) => '$' . number_format((float) $v, 2);
+            $info   = [
+                'Proveedor' => trim(($proveedor['razon_social'] ?? '') . '  ' . ($proveedor['identificacion'] ?? '')),
+                'Periodo'   => match (true) {
+                    $desde !== '' && $hasta !== '' => 'Del ' . $fecha($desde) . ' al ' . $fecha($hasta),
+                    $desde !== ''                  => 'Desde el ' . $fecha($desde),
+                    $hasta !== ''                  => 'Hasta el ' . $fecha($hasta),
+                    default                        => 'Todos los movimientos',
+                },
+                'Resumen'   => sprintf(
+                    'Saldo anterior %s  |  Cargos %s  |  Pagos %s  |  Retenciones y NC %s  |  Saldo %s',
+                    $dinero($ec['saldo_anterior']), $dinero($ec['total_cargos']), $dinero($ec['total_pagos']),
+                    $dinero($ec['total_otros_abonos']), $dinero($ec['saldo_final'])
+                ),
+                'Generado'  => date('d-m-Y H:i:s'),
+            ];
+
+            (new \App\Services\ReportService())->exportToExcel(
+                'Estado_de_cuenta',
+                ['Fecha', 'Movimiento', 'Documento', 'Detalle', 'Cargo', 'Abono', 'Saldo'],
+                $filas,
+                'Estado de cuenta',
+                $empresa,
+                $info,
+                [5 => '#,##0.00', 6 => '#,##0.00', 7 => '#,##0.00']
+            );
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo 'Error al generar el Excel: ' . $e->getMessage();
         }
         exit;
     }

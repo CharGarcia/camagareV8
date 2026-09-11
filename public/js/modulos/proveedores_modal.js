@@ -1473,6 +1473,11 @@
                     },
                 },
             },
+            anticipos: {
+                panel: 'prov-tab-anticipos',
+                boton: 'prov-tab-anticipos-btn',
+                textos: { vacio: 'Este proveedor no tiene anticipos registrados.' },
+            },
         });
     }
 

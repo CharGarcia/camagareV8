@@ -102,12 +102,18 @@ class ReporteComprasRepository extends BaseRepository
      */
     private function getCteBasesImpuestos(): string
     {
+        // Antes esto sumaba TODOS los impuestos de la línea sin distinguir código: en un
+        // documento con ICE (código 3) además de IVA (código 2), valor_iva terminaba
+        // mostrando IVA+ICE mezclados, y su base caía en base_0/base_iva según la tarifa
+        // del ICE (a menudo 0% por ser específico, no ad-valorem). Se filtra explícitamente
+        // por codigo_impuesto = '2' para IVA y se agrega valor_ice (código 3) aparte.
         return "
             SELECT
                 d.id_compra,
-                SUM(CASE WHEN i.tarifa = 0 THEN i.base_imponible ELSE 0 END) as base_0,
-                SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
-                SUM(i.valor) as valor_iva
+                SUM(CASE WHEN i.codigo_impuesto = '2' AND i.tarifa = 0 THEN i.base_imponible ELSE 0 END) as base_0,
+                SUM(CASE WHEN i.codigo_impuesto = '2' AND i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
+                SUM(CASE WHEN i.codigo_impuesto = '2' THEN i.valor ELSE 0 END) as valor_iva,
+                SUM(CASE WHEN i.codigo_impuesto = '3' THEN i.valor ELSE 0 END) as valor_ice
             FROM compras_detalle d
             JOIN compras_cabecera cbc ON cbc.id = d.id_compra AND cbc.id_empresa IN ({$this->inEmp})
             LEFT JOIN compras_detalle_impuestos i ON i.id_compra_detalle = d.id
@@ -212,6 +218,7 @@ class ReporteComprasRepository extends BaseRepository
                 (COALESCE(b.base_0, 0)    * {$sgn}) as base_0,
                 (COALESCE(b.base_iva, 0)  * {$sgn}) as base_iva,
                 (COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
+                (COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
                 (c.importe_total          * {$sgn}) as total,
                 COALESCE((
                     SELECT SUM(r.total_retenido)
@@ -250,6 +257,7 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.base_0, 0)   * {$sgn}) as base_0,
                 SUM(COALESCE(b.base_iva, 0) * {$sgn}) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
+                SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
                 SUM(c.importe_total * {$sgn}) as total
             FROM compras_cabecera c
             JOIN proveedores p ON p.id = c.id_proveedor
@@ -272,23 +280,36 @@ class ReporteComprasRepository extends BaseRepository
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c', 'd');
         $sgn = $this->signoNc($filtros);
 
+        // A diferencia de las demás vistas (que usan getCteBasesImpuestos()), esta agrupa
+        // por tarifa de IVA a nivel de línea, así que el JOIN a impuestos debe acotarse a
+        // codigo_impuesto = '2' (IVA): si se unieran TODOS los impuestos de la línea sin
+        // filtrar, una línea con ICE además de IVA aparecería dos veces (una fila por
+        // impuesto) y tanto cantidad_comprada como total quedarían duplicados. El ICE de
+        // la línea se suma aparte con una subconsulta correlacionada (no duplica filas).
         $sql = "
             SELECT
                 d.id_producto,
                 COALESCE(prod.codigo, '') as producto_codigo,
                 COALESCE(prod.nombre, d.descripcion) as producto_nombre,
-                COALESCE(i.tarifa, 0) as tarifa_iva,
+                COALESCE(iva.tarifa, 0) as tarifa_iva,
                 SUM(d.cantidad * {$sgn}) as cantidad_comprada,
-                SUM((CASE WHEN i.tarifa = 0 THEN i.base_imponible ELSE 0 END) * {$sgn}) as base_0,
-                SUM((CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) * {$sgn}) as base_iva,
-                SUM(COALESCE(i.valor, 0) * {$sgn}) as valor_iva,
-                SUM((d.precio_total_sin_impuesto + COALESCE(i.valor, 0)) * {$sgn}) as total
+                SUM((CASE WHEN iva.tarifa = 0 THEN iva.base_imponible ELSE 0 END) * {$sgn}) as base_0,
+                SUM((CASE WHEN iva.tarifa > 0 THEN iva.base_imponible ELSE 0 END) * {$sgn}) as base_iva,
+                SUM(COALESCE(iva.valor, 0) * {$sgn}) as valor_iva,
+                SUM(COALESCE((
+                    SELECT SUM(i3.valor) FROM compras_detalle_impuestos i3
+                    WHERE i3.id_compra_detalle = d.id AND i3.codigo_impuesto = '3'
+                ), 0) * {$sgn}) as valor_ice,
+                SUM((d.precio_total_sin_impuesto + COALESCE(iva.valor, 0) + COALESCE((
+                    SELECT SUM(i3.valor) FROM compras_detalle_impuestos i3
+                    WHERE i3.id_compra_detalle = d.id AND i3.codigo_impuesto = '3'
+                ), 0)) * {$sgn}) as total
             FROM compras_detalle d
             JOIN compras_cabecera c ON c.id = d.id_compra
             LEFT JOIN productos prod ON prod.id = d.id_producto
-            LEFT JOIN compras_detalle_impuestos i ON i.id_compra_detalle = d.id
+            LEFT JOIN compras_detalle_impuestos iva ON iva.id_compra_detalle = d.id AND iva.codigo_impuesto = '2'
             WHERE {$where}
-            GROUP BY d.id_producto, prod.codigo, COALESCE(prod.nombre, d.descripcion), COALESCE(i.tarifa, 0)
+            GROUP BY d.id_producto, prod.codigo, COALESCE(prod.nombre, d.descripcion), COALESCE(iva.tarifa, 0)
             ORDER BY cantidad_comprada DESC
         ";
 
@@ -313,6 +334,7 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.base_0, 0)   * {$sgn}) as base_0,
                 SUM(COALESCE(b.base_iva, 0) * {$sgn}) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
+                SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
                 SUM(c.importe_total * {$sgn}) as total
             FROM compras_cabecera c
             LEFT JOIN bases b ON b.id_compra = c.id
@@ -342,6 +364,7 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.base_0, 0)   * {$sgn}) as base_0,
                 SUM(COALESCE(b.base_iva, 0) * {$sgn}) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
+                SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
                 SUM(c.importe_total * {$sgn}) as total
             FROM compras_cabecera c
             LEFT JOIN bases b ON b.id_compra = c.id
@@ -425,6 +448,7 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.base_0, 0)    * {$sgn}) as total_base_0,
                 SUM(COALESCE(b.base_iva, 0)  * {$sgn}) as total_base_iva,
                 SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as total_iva,
+                SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as total_ice,
                 SUM(c.importe_total          * {$sgn}) as gran_total,
                 COUNT(c.id)                    as total_documentos
             FROM compras_cabecera c
@@ -440,6 +464,7 @@ class ReporteComprasRepository extends BaseRepository
             'total_base_0'     => (float)($row['total_base_0']  ?? 0),
             'total_base_iva'   => (float)($row['total_base_iva'] ?? 0),
             'total_iva'        => (float)($row['total_iva']      ?? 0),
+            'total_ice'        => (float)($row['total_ice']      ?? 0),
             'gran_total'       => (float)($row['gran_total']     ?? 0),
             'total_documentos' => (int)($row['total_documentos'] ?? 0),
         ];

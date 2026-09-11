@@ -394,6 +394,43 @@ class ProveedorService
         return (new EstadoCuentaTerceroService())->proveedor($idEmpresa, $idProveedor, $fechaDesde, $fechaHasta);
     }
 
+    /**
+     * ¿Hay datos para cada pestaña de consulta de la ficha? Consultas de existencia
+     * (EXISTS sobre las mismas fuentes de cada pestaña), para no pintar pestañas vacías.
+     * No exige que el proveedor exista: si no existe, sencillamente no hay datos.
+     */
+    public function tieneTransacciones(int $idProveedor, int $idEmpresa, array $fuentes): bool
+    {
+        return $idProveedor > 0 && $fuentes !== []
+            && $this->repository->tieneTransacciones($idProveedor, $idEmpresa, $fuentes);
+    }
+
+    public function tieneEstadoCuenta(int $idProveedor, int $idEmpresa): bool
+    {
+        return $idProveedor > 0 && (new EstadoCuentaTerceroService())->tieneProveedor($idEmpresa, $idProveedor);
+    }
+
+    /**
+     * Pestaña "Anticipos": movimientos y saldo a favor del proveedor, con la misma fórmula
+     * con la que se calcula el saldo de una forma de pago tipo ANTICIPO.
+     */
+    public function getAnticipos(int $idProveedor, int $idEmpresa): array
+    {
+        $this->exigirProveedor($idProveedor, $idEmpresa);
+        return (new AnticiposTerceroService())->proveedor($idEmpresa, $idProveedor);
+    }
+
+    public function tieneAnticipos(int $idProveedor, int $idEmpresa): bool
+    {
+        return $idProveedor > 0 && (new AnticiposTerceroService())->tieneProveedor($idEmpresa, $idProveedor);
+    }
+
+    /** Datos del proveedor para encabezar una descarga (razón social e identificación). */
+    public function getFicha(int $idProveedor, int $idEmpresa): ?array
+    {
+        return $this->repository->findById($idProveedor, $idEmpresa) ?: null;
+    }
+
     /** Las consultas de la ficha solo aplican a un proveedor vigente de la empresa activa. */
     private function exigirProveedor(int $idProveedor, int $idEmpresa): void
     {
