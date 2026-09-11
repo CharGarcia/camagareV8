@@ -14,17 +14,31 @@
 --      está autorizada. En el portal hay que buscarla por la FECHA ORIGINAL
 --      (la que está en los 8 primeros dígitos de la clave vieja, ddmmaaaa).
 --
---   B) Ambiente distinto. La clave/envío llevan tipo_ambiente 2 (pruebas) y
---      se está revisando el portal de producción (o al revés).
+--   B) Ambiente distinto. tipo_ambiente del SRI: 1 = PRUEBAS, 2 = PRODUCCIÓN.
+--      Si la clave/envío llevan 1 y se revisa el portal (que solo muestra
+--      producción), el comprobante no aparece aunque el SRI de pruebas lo tenga.
+--
+--   C) El número ya lo usó OTRO registro que el cálculo del secuencial no ve:
+--      una retención del mismo número con otro id_punto_emision, con
+--      tipo_ambiente distinto (migrada, o emitida cuando la empresa estaba en
+--      pruebas) o eliminada. El cálculo del siguiente secuencial solo mira los
+--      documentos vivos del mismo punto y del ambiente actual de la empresa.
+--      También puede venir del sistema anterior (migración): el SRI tiene el
+--      comprobante, pero aquí no existe ninguna fila con ese número.
 --
 -- SOLO LECTURA: no modifica ni crea nada. NO hay que poner parámetros: las
--- consultas buscan solas el error 45 en el log de envíos.
+-- consultas 1-3 buscan solas el error 45 en el log de envíos; la 4 y la 5
+-- necesitan la empresa y el número (ver sus CTE `parametros`).
 -- USO: resalte UNA consulta y presione F5.
 --        1) Envíos devueltos con error 45 en los últimos 60 días (cualquier
 --           tipo de comprobante), con el documento al que pertenecen.
 --        2) Historial COMPLETO de envíos de esas retenciones: todas las claves
 --           que han tenido. Si hay más de una clave distinta → causa A.
 --        3) Otras retenciones (vivas o eliminadas) con el mismo número.
+--        4) TODO lo que hay en el sistema con un número dado, sin filtrar por
+--           punto, ambiente ni eliminado, y el envío al SRI de cada fila.
+--        5) Cómo está numerada la serie: último número por punto/ambiente/
+--           eliminado y el secuencial inicial configurado.
 -- ============================================================================
 
 -- 1) Envíos con error 45 en los últimos 60 días
@@ -103,3 +117,54 @@ JOIN retencion_compra_cabecera x
  AND x.punto_emision   = r.punto_emision
  AND x.secuencial      = r.secuencial
 ORDER BY r.id, x.id;
+
+
+-- 4) Todo lo que existe en el sistema con ese número, sin ningún filtro
+--    (punto, ambiente, eliminado), y qué dice el log del SRI de cada fila.
+--    Si aparece una fila con tipo_ambiente distinto de 2, con otro
+--    id_punto_emision o eliminada, esa es la que ocupó el número en el SRI y
+--    el cálculo del secuencial no la veía (causa C). Si no aparece NADA más
+--    que la retención afectada, el número lo emitió otro sistema (el anterior).
+WITH parametros AS (
+    SELECT 106 AS id_empresa, '002' AS establecimiento, '101' AS punto_emision, 1450 AS secuencial
+)
+SELECT r.id, r.id_punto_emision, r.tipo_ambiente, r.eliminado, r.estado,
+       r.establecimiento || '-' || r.punto_emision || '-' || r.secuencial AS numero,
+       r.fecha_emision, r.clave_acceso, r.numero_autorizacion, r.fecha_autorizacion,
+       r.created_at, r.deleted_at,
+       (SELECT string_agg(l.accion || '@' || l.tipo_ambiente, ' > ' ORDER BY l.id)
+          FROM sri_envio_log l
+         WHERE l.tipo_comprobante = 'retencion_compra' AND l.id_comprobante = r.id) AS envios_sri
+FROM retencion_compra_cabecera r
+JOIN parametros p ON p.id_empresa = r.id_empresa
+WHERE r.establecimiento = p.establecimiento
+  AND r.punto_emision   = p.punto_emision
+  AND TRIM(r.secuencial) ~ '^[0-9]+$'
+  AND CAST(TRIM(r.secuencial) AS BIGINT) BETWEEN p.secuencial - 5 AND p.secuencial + 5
+ORDER BY CAST(TRIM(r.secuencial) AS BIGINT), r.id;
+
+
+-- 5) Cómo está numerada la serie 002-101 de retenciones de esa empresa:
+--    último número y cantidad por punto / ambiente / eliminado, y el
+--    secuencial inicial configurado. Si el máximo de alguna combinación que
+--    NO es (ambiente 2, eliminado false) supera al número afectado, el SRI ya
+--    tiene números por encima y hay que subir el secuencial inicial.
+WITH parametros AS (
+    SELECT 106 AS id_empresa, '002' AS establecimiento, '101' AS punto_emision
+)
+SELECT r.id_punto_emision, r.tipo_ambiente, r.eliminado,
+       COUNT(*)                                        AS cantidad,
+       MAX(CAST(TRIM(r.secuencial) AS BIGINT))         AS ultimo_numero,
+       MAX(r.fecha_emision)                            AS ultima_fecha,
+       SUM(CASE WHEN r.numero_autorizacion IS NOT NULL AND r.numero_autorizacion <> '' THEN 1 ELSE 0 END) AS con_autorizacion,
+       (SELECT string_agg(es.tipo_documento || ': inicial ' || COALESCE(es.secuencial_inicial, 1), ' | ')
+          FROM empresa_secuencial es
+         WHERE es.id_punto_emision = r.id_punto_emision AND es.eliminado = false
+           AND es.tipo_documento ILIKE '%retenc%')       AS config_serie
+FROM retencion_compra_cabecera r
+JOIN parametros p ON p.id_empresa = r.id_empresa
+WHERE r.establecimiento = p.establecimiento
+  AND r.punto_emision   = p.punto_emision
+  AND TRIM(r.secuencial) ~ '^[0-9]+$'
+GROUP BY r.id_punto_emision, r.tipo_ambiente, r.eliminado
+ORDER BY ultimo_numero DESC;

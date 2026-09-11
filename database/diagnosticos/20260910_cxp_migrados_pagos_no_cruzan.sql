@@ -10,7 +10,7 @@
 --
 -- SOLO LECTURA: no modifica ni crea nada.
 -- USO: por defecto revisa TODAS las empresas (id_empresa = 0). Para una sola,
---      cambie el 0 de `parametros`. Son 8 consultas: resalte UNA y presione F5
+--      cambie el 0 de `parametros`. Son 10 consultas: resalte UNA y presione F5
 --      (si ejecuta todo el archivo, pgAdmin muestra solo la última).
 --        1) DOCUMENTOS pendientes: resumen por empresa / tipo / motivo  ← compartir
 --        2) DOCUMENTOS pendientes: detalle uno por uno
@@ -20,6 +20,8 @@
 --        6) COBERTURA por empresa: pagos migrados, fechas, líneas          ← compartir
 --        7) COBERTURA por empresa y año: compras sin pago vs egresos        ← compartir
 --        8) LIQUIDACIONES sin pago: compra gemela / registro como compra   ← compartir
+--        9) EJEMPLOS de liquidaciones sin registro para buscar en el sistema anterior
+--       10) RASTREO de un documento (compra o liquidación) y sus pagos   ← para revisar un caso
 --
 -- MOTIVOS (consultas 1 y 2) y cómo se corrige cada uno:
 --   PAGO SIN ENLAZAR            líneas de pago de egresos migrados calzan con el documento
@@ -1196,3 +1198,245 @@ LEFT JOIN gemela g   ON g.id_liq = l.id
 GROUP BY l.id_empresa
 HAVING COUNT(*) FILTER (WHERE pg.id IS NULL) > 0
 ORDER BY l.id_empresa;
+
+
+-- ── 9) EJEMPLOS para buscar en el sistema anterior: liquidaciones "sin registro"
+--       (no registradas como compra) y sin pago, las 10 de mayor valor por empresa.
+--   id_en_sistema_anterior = encabezado_liquidacion.id_encabezado_liq del sistema viejo.
+--   lineas_que_la_mencionan: líneas de egresos migrados (de cualquier tipo, incluidas
+--   las de "Otros conceptos") cuyo texto trae el número de la liquidación: si hay, el
+--   pago sí se migró, pero quedó como concepto sin enlazar al documento.
+WITH parametros AS (
+    SELECT 0::int AS id_empresa          -- << 0 = todas; o el id de la empresa (p. ej. 94)
+),
+liq AS (
+    SELECT l.id, l.id_empresa, l.id_proveedor, l.fecha_emision, l.importe_total, l.id_sustento_tributario,
+           l.establecimiento, l.punto_emision, l.secuencial, l.clave_acceso,
+           COALESCE(l.establecimiento, '') || COALESCE(l.punto_emision, '') || COALESCE(l.secuencial, '') AS num15,
+           m.id_origen
+    FROM migracion_mysql_map m
+    JOIN liquidaciones_cabecera l ON l.id = m.id_destino AND l.id_empresa = m.id_empresa
+    CROSS JOIN parametros p
+    WHERE m.entidad = 'liquidaciones' AND l.eliminado = false
+      AND (p.id_empresa = 0 OR l.id_empresa = p.id_empresa)
+      AND UPPER(TRIM(COALESCE(l.estado, ''))) IN ('AUTORIZADO','AUTORIZADA','APROBADO','APROBADA','CONTABILIZADO','CONTABILIZADA')
+),
+pagadas AS (
+    SELECT DISTINCT d.id_referencia_documento AS id
+    FROM egresos_detalle d
+    JOIN egresos_cabecera e ON e.id = d.id_egreso
+    WHERE d.tipo_documento = 'LIQUIDACION' AND d.id_referencia_documento IS NOT NULL
+      AND d.eliminado = false AND e.eliminado = false AND e.estado <> 'anulado'
+),
+gemela AS (
+    SELECT DISTINCT l.id
+    FROM liq l
+    JOIN compras_cabecera c
+      ON c.id_empresa = l.id_empresa AND c.id_proveedor = l.id_proveedor AND c.eliminado = false
+     AND COALESCE(c.establecimiento_prov, '') || COALESCE(c.punto_emision_prov, '') || COALESCE(c.secuencial_prov, '') = l.num15
+),
+sin_reg AS (
+    SELECT l.*, ROW_NUMBER() OVER (PARTITION BY l.id_empresa ORDER BY l.importe_total DESC, l.fecha_emision) AS rn
+    FROM liq l
+    LEFT JOIN pagadas pg ON pg.id = l.id
+    LEFT JOIN gemela g   ON g.id = l.id
+    WHERE l.id_sustento_tributario IS NULL AND pg.id IS NULL AND g.id IS NULL
+),
+muestra AS (SELECT * FROM sin_reg WHERE rn <= 10),
+texto AS (     -- líneas de egresos de la empresa cuyo texto menciona el número de la liquidación
+    SELECT s.id, COUNT(*) AS lineas, MIN(e.numero_egreso) AS egreso_ejemplo, SUM(d.monto_pagado) AS monto
+    FROM muestra s
+    JOIN egresos_cabecera e ON e.id_empresa = s.id_empresa AND e.eliminado = false
+    JOIN egresos_detalle d  ON d.id_egreso = e.id AND d.eliminado = false
+    WHERE regexp_replace(COALESCE(d.descripcion, ''), '[^0-9]', '', 'g') LIKE '%' || s.num15 || '%'
+      -- descarta coincidencias: líneas que ya pagan OTRO documento (p. ej. una factura de otro
+      -- proveedor con el mismo número) y egresos hechos a otro proveedor
+      AND NOT (d.tipo_documento IN ('COMPRA','LIQUIDACION') AND d.id_referencia_documento IS NOT NULL)
+      AND (e.id_proveedor IS NULL OR e.id_proveedor = s.id_proveedor)
+    GROUP BY s.id
+)
+SELECT s.id_empresa,
+       s.establecimiento || '-' || s.punto_emision || '-' || s.secuencial AS liquidacion,
+       to_char(s.fecha_emision, 'DD-MM-YYYY')                              AS fecha,
+       pr.razon_social                                                     AS proveedor,
+       pr.identificacion                                                   AS identificacion_proveedor,
+       s.importe_total                                                     AS total,
+       s.clave_acceso,
+       s.id_origen                                                         AS id_en_sistema_anterior,
+       COALESCE(t.lineas, 0)                                               AS lineas_que_la_mencionan,
+       t.egreso_ejemplo,
+       t.monto                                                             AS monto_mencionado,
+       s.id                                                                AS id_liquidacion
+FROM muestra s
+LEFT JOIN proveedores pr ON pr.id = s.id_proveedor
+LEFT JOIN texto t        ON t.id = s.id
+ORDER BY s.id_empresa, s.importe_total DESC, s.fecha_emision;
+
+
+-- ── 10) RASTREO de UN documento (compra o liquidación): todo lo que el sistema
+--        nuevo tiene de él: el documento, los pagos que lo enlazan, las líneas de
+--        egreso que mencionan su número, retenciones y NC/ND, el saldo como lo
+--        calcula Cuentas por Pagar y, si se indica, cómo quedó migrado el egreso
+--        que lo pagó en el sistema anterior. Cambie los 3 parámetros y ejecute
+--        SOLO esta consulta.
+WITH parametros AS (
+    SELECT 0::int AS id_empresa,          -- << id de la empresa (p. ej. 94)
+           ''::text AS numero,            -- << número del documento como se ve: 001-002-000000542
+           ''::text AS egreso_viejo       -- << opcional: número del egreso que lo pagó en el sistema anterior (p. ej. 12722)
+),
+p AS (
+    SELECT pa.id_empresa,
+           CASE WHEN pa.numero ~ '^[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,9}$'
+                THEN lpad(split_part(pa.numero, '-', 1), 3, '0') || lpad(split_part(pa.numero, '-', 2), 3, '0')
+                  || lpad(split_part(pa.numero, '-', 3), 9, '0')
+                ELSE regexp_replace(pa.numero, '[^0-9]', '', 'g') END      AS num15,
+           NULLIF(regexp_replace(pa.egreso_viejo, '[^0-9]', '', 'g'), '')  AS egr_num,
+           (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = pa.id_empresa) AS amb_empresa
+    FROM parametros pa
+),
+docs AS (
+    SELECT 'COMPRA'::text AS tipo, c.id, c.id_proveedor, c.fecha_emision,
+           CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AS numero,
+           'tipo ' || COALESCE(NULLIF(TRIM(c.tipo_comprobante), ''), '01') AS subtipo,
+           c.estado, c.eliminado, c.tipo_ambiente, c.importe_total + COALESCE(c.total_terceros, 0) AS total,
+           (SELECT m.id_origen || CASE WHEN m.vinculado THEN ' (vinculado a uno que ya existía)' ELSE '' END
+              FROM migracion_mysql_map m
+             WHERE m.id_empresa = c.id_empresa AND m.entidad = 'compras' AND m.id_destino = c.id LIMIT 1) AS id_viejo
+    FROM compras_cabecera c
+    JOIN p ON c.id_empresa = p.id_empresa
+    WHERE length(p.num15) = 15
+      AND COALESCE(c.establecimiento_prov, '') || COALESCE(c.punto_emision_prov, '') || COALESCE(c.secuencial_prov, '') = p.num15
+    UNION ALL
+    SELECT 'LIQUIDACION', l.id, l.id_proveedor, l.fecha_emision,
+           CONCAT(l.establecimiento, '-', l.punto_emision, '-', l.secuencial),
+           CASE WHEN l.id_sustento_tributario IS NULL THEN 'sin sustento: no era compra en el sistema anterior'
+                ELSE 'con sustento: era compra en el sistema anterior' END,
+           l.estado, l.eliminado, l.tipo_ambiente, l.importe_total,
+           (SELECT m.id_origen || CASE WHEN m.vinculado THEN ' (vinculado a uno que ya existía)' ELSE '' END
+              FROM migracion_mysql_map m
+             WHERE m.id_empresa = l.id_empresa AND m.entidad = 'liquidaciones' AND m.id_destino = l.id LIMIT 1)
+    FROM liquidaciones_cabecera l
+    JOIN p ON l.id_empresa = p.id_empresa
+    WHERE length(p.num15) = 15
+      AND COALESCE(l.establecimiento, '') || COALESCE(l.punto_emision, '') || COALESCE(l.secuencial, '') = p.num15
+),
+lin AS (       -- líneas de egresos que apuntan al documento, lo mencionan o son del egreso indicado
+    SELECT d.id AS id_detalle, d.tipo_documento, d.id_referencia_documento, d.descripcion, d.monto_pagado,
+           d.eliminado AS det_elim, e.id AS id_egreso, e.numero_egreso, e.fecha_emision, e.estado,
+           e.eliminado AS egr_elim, COALESCE(pr.razon_social, e.beneficiario_nombre) AS tercero,
+           EXISTS (SELECT 1 FROM docs x WHERE x.tipo = d.tipo_documento AND x.id = d.id_referencia_documento) AS al_doc,
+           (p.egr_num IS NOT NULL AND e.secuencial = lpad(p.egr_num, 9, '0'))                            AS del_egreso_indicado,
+           (SELECT m.id_origen FROM migracion_mysql_map m
+             WHERE m.id_empresa = e.id_empresa AND m.entidad = 'egresos' AND m.id_destino = e.id LIMIT 1) AS id_viejo
+    FROM egresos_detalle d
+    JOIN egresos_cabecera e ON e.id = d.id_egreso
+    JOIN p ON e.id_empresa = p.id_empresa
+    LEFT JOIN proveedores pr ON pr.id = e.id_proveedor
+    WHERE EXISTS (SELECT 1 FROM docs x WHERE x.tipo = d.tipo_documento AND x.id = d.id_referencia_documento)
+       OR (p.egr_num IS NOT NULL AND e.secuencial = lpad(p.egr_num, 9, '0'))
+       OR (length(p.num15) = 15 AND (
+              regexp_replace(COALESCE(d.descripcion, ''), '[^0-9]', '', 'g') LIKE '%' || p.num15 || '%'
+           OR (CASE WHEN d.numero_documento ~ '^[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,9}$'
+                    THEN lpad(split_part(d.numero_documento, '-', 1), 3, '0') || lpad(split_part(d.numero_documento, '-', 2), 3, '0')
+                      || lpad(split_part(d.numero_documento, '-', 3), 9, '0')
+                    ELSE regexp_replace(COALESCE(d.numero_documento, ''), '[^0-9]', '', 'g') END) = p.num15))
+),
+ret AS (
+    SELECT r.id, CONCAT(r.establecimiento, '-', r.punto_emision, '-', r.secuencial) AS numero, r.fecha_emision,
+           r.estado, r.eliminado, r.total_retenido, r.id_compra, r.id_liquidacion, r.num_doc_sustento, r.tipo_doc_sustento
+    FROM retencion_compra_cabecera r
+    JOIN p ON r.id_empresa = p.id_empresa
+    WHERE EXISTS (SELECT 1 FROM docs x WHERE (x.tipo = 'COMPRA' AND x.id = r.id_compra) OR (x.tipo = 'LIQUIDACION' AND x.id = r.id_liquidacion))
+       OR (length(p.num15) = 15 AND regexp_replace(COALESCE(r.num_doc_sustento, ''), '[^0-9]', '', 'g') = p.num15)
+),
+nc AS (
+    SELECT c.id, CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AS numero,
+           c.fecha_emision, c.tipo_comprobante, c.estado, c.eliminado, c.importe_total, c.documento_modificado
+    FROM compras_cabecera c
+    JOIN p ON c.id_empresa = p.id_empresa
+    WHERE c.tipo_comprobante IN ('04','05') AND length(p.num15) = 15
+      AND regexp_replace(COALESCE(c.documento_modificado, ''), '[^0-9]', '', 'g') = p.num15
+)
+SELECT * FROM (
+    -- 1. El documento
+    SELECT 1 AS orden, 'DOCUMENTO'::text AS seccion, d.numero, d.fecha_emision AS fecha,
+           d.tipo || ' · ' || d.subtipo AS tipo,
+           d.estado || CASE WHEN d.eliminado THEN ' (ELIMINADO)' ELSE '' END AS estado,
+           d.total AS monto,
+           pr.razon_social || ' · ' || COALESCE(pr.identificacion, '') AS tercero,
+           NULL::text AS texto,
+           CASE WHEN d.id_viejo IS NULL THEN 'nativo (no migrado)' ELSE 'migrado, id viejo ' || d.id_viejo END
+             || CASE WHEN d.tipo_ambiente IS DISTINCT FROM p.amb_empresa
+                     THEN ' · OTRO AMBIENTE (' || COALESCE(d.tipo_ambiente, 'nulo') || '): no sale en CxP' ELSE '' END AS observacion,
+           d.id
+    FROM docs d
+    CROSS JOIN p
+    LEFT JOIN proveedores pr ON pr.id = d.id_proveedor
+    UNION ALL
+    SELECT 1, 'DOCUMENTO', NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+           CASE WHEN length(p.num15) <> 15 THEN 'Escriba el número completo, p. ej. 001-002-000000542'
+                ELSE 'NO EXISTE ningún documento con ese número en la empresa' END, NULL
+    FROM p
+    WHERE NOT EXISTS (SELECT 1 FROM docs)
+    UNION ALL
+    -- 2. Líneas de egreso: pagos enlazados, líneas que lo mencionan y las del egreso indicado
+    SELECT CASE WHEN l.al_doc THEN 2 WHEN l.del_egreso_indicado THEN 4 ELSE 3 END,
+           CASE WHEN l.al_doc THEN 'PAGO ENLAZADO' WHEN l.del_egreso_indicado THEN 'EGRESO INDICADO' ELSE 'LÍNEA QUE LO MENCIONA' END,
+           l.numero_egreso, l.fecha_emision, l.tipo_documento,
+           l.estado || CASE WHEN l.egr_elim OR l.det_elim THEN ' (ELIMINADO)' ELSE '' END,
+           l.monto_pagado, l.tercero, l.descripcion,
+           CASE
+             WHEN l.al_doc AND (l.estado = 'anulado' OR l.egr_elim OR l.det_elim) THEN 'enlazada, pero NO cuenta: egreso anulado o eliminado'
+             WHEN l.al_doc THEN 'enlazada: cuenta como pago'
+             WHEN l.tipo_documento IN ('COMPRA','LIQUIDACION') AND l.id_referencia_documento IS NULL THEN 'línea de documento SIN enlace'
+             WHEN l.tipo_documento IN ('COMPRA','LIQUIDACION')
+                  THEN 'enlazada a OTRO documento (' || l.tipo_documento || ' id ' || l.id_referencia_documento || ')'
+             ELSE 'línea de "Otros conceptos" (sin documento)'
+           END || CASE WHEN l.id_viejo IS NOT NULL THEN ' · egreso migrado, id viejo ' || l.id_viejo ELSE ' · egreso nativo' END,
+           l.id_egreso
+    FROM lin l
+    UNION ALL
+    SELECT 4, 'EGRESO INDICADO', NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+           'NO EXISTE en el sistema nuevo un egreso con ese número: no se migró', NULL
+    FROM p
+    WHERE p.egr_num IS NOT NULL AND NOT EXISTS (SELECT 1 FROM lin WHERE del_egreso_indicado)
+    UNION ALL
+    -- 3. Retenciones
+    SELECT 5, 'RETENCIÓN', r.numero, r.fecha_emision, 'sustento ' || COALESCE(r.tipo_doc_sustento, '?'),
+           r.estado || CASE WHEN r.eliminado THEN ' (ELIMINADA)' ELSE '' END,
+           r.total_retenido, NULL, 'sustento ' || COALESCE(r.num_doc_sustento, ''),
+           CASE WHEN r.eliminado OR UPPER(COALESCE(r.estado, '')) IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+                     THEN 'NO resta: estado ' || COALESCE(r.estado, 'nulo')
+                WHEN r.id_compra IS NOT NULL OR r.id_liquidacion IS NOT NULL THEN 'resta: enlazada al documento'
+                ELSE 'solo por número de sustento: resta en compras, NO en liquidaciones' END,
+           r.id
+    FROM ret r
+    UNION ALL
+    -- 4. Notas de crédito / débito que lo modifican
+    SELECT 6, CASE WHEN n.tipo_comprobante = '04' THEN 'NOTA DE CRÉDITO' ELSE 'NOTA DE DÉBITO' END,
+           n.numero, n.fecha_emision, 'modifica ' || COALESCE(n.documento_modificado, ''),
+           n.estado || CASE WHEN n.eliminado THEN ' (ELIMINADA)' ELSE '' END,
+           n.importe_total, NULL, NULL, NULL, n.id
+    FROM nc n
+    UNION ALL
+    -- 5. Saldo como lo calcula Cuentas por Pagar (aproximado)
+    SELECT 7, 'SALDO (como en CxP)', d.numero, NULL, d.tipo, NULL,
+           d.total
+           - COALESCE((SELECT SUM(l.monto_pagado) FROM lin l
+                        WHERE l.al_doc AND l.tipo_documento = d.tipo AND l.id_referencia_documento = d.id
+                          AND l.estado <> 'anulado' AND NOT l.egr_elim AND NOT l.det_elim), 0)
+           - COALESCE((SELECT SUM(r.total_retenido) FROM ret r
+                        WHERE NOT r.eliminado AND UPPER(COALESCE(r.estado, '')) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
+                          AND ((d.tipo = 'COMPRA' AND (r.id_compra = d.id OR (r.id_compra IS NULL AND r.id_liquidacion IS NULL)))
+                            OR (d.tipo = 'LIQUIDACION' AND r.id_liquidacion = d.id))), 0)
+           - CASE WHEN d.tipo = 'COMPRA'
+                  THEN COALESCE((SELECT SUM(n.importe_total) FROM nc n WHERE n.tipo_comprobante = '04' AND NOT n.eliminado), 0) ELSE 0 END
+           + CASE WHEN d.tipo = 'COMPRA'
+                  THEN COALESCE((SELECT SUM(n.importe_total) FROM nc n WHERE n.tipo_comprobante = '05' AND NOT n.eliminado), 0) ELSE 0 END,
+           NULL, NULL,
+           'total − pagos que cuentan − retenciones que restan − NC + ND',
+           d.id
+    FROM docs d
+    WHERE NOT d.eliminado
+) t
+ORDER BY orden, fecha NULLS FIRST, numero;

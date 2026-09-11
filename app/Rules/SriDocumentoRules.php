@@ -39,7 +39,8 @@ class SriDocumentoRules
 
         $clave    = (string) ($registro['clave_acceso'] ?? '');
         $accion   = strtolower((string) ($registro['accion'] ?? ''));
-        $ambiente = ((string) ($registro['tipo_ambiente'] ?? '1')) === '2' ? 'pruebas' : 'producción';
+        // SRI: '1' = pruebas, '2' = producción.
+        $ambiente = ((string) ($registro['tipo_ambiente'] ?? '1')) === '2' ? 'producción' : 'pruebas';
         $numero   = ClaveAccesoService::numeroDesdeClave($clave);
         $situacion = str_starts_with($accion, 'autoriz')
             ? 'ya la autorizó'

@@ -1305,7 +1305,8 @@ class SriEnvioService
             }
 
             $numero   = \App\Services\ClaveAccesoService::numeroDesdeClave($claveAcceso);
-            $ambiente = \App\Services\ClaveAccesoService::ambienteDesdeClave($claveAcceso) === '2' ? 'pruebas' : 'producción';
+            // SRI: '1' = pruebas, '2' = producción.
+            $ambiente = \App\Services\ClaveAccesoService::ambienteDesdeClave($claveAcceso) === '2' ? 'producción' : 'pruebas';
             $mensaje  = "El SRI ({$ambiente}) ya tiene registrado el número {$numero} de este tipo de comprobante "
                 . "con otra clave de acceso, por eso no acepta {$nombreDoc}.";
             $errores[$i]['info'] = trim(((string) ($error['info'] ?? '')) . ' '

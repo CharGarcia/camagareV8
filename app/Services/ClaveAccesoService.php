@@ -123,7 +123,7 @@ class ClaveAccesoService
         return substr($claveAcceso, 24, 3) . '-' . substr($claveAcceso, 27, 3) . '-' . substr($claveAcceso, 30, 9);
     }
 
-    /** Ambiente codificado en la clave (posición 24): '1' producción, '2' pruebas. */
+    /** Ambiente codificado en la clave (posición 24): '1' pruebas, '2' producción. */
     public static function ambienteDesdeClave(string $claveAcceso): string
     {
         return strlen($claveAcceso) === 49 ? substr($claveAcceso, 23, 1) : '1';

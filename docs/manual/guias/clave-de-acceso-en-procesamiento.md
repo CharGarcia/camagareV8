@@ -67,7 +67,18 @@ emisión y secuencial) pero con **otra clave de acceso**. No es un problema del
 XML ni de la firma: el número ya está ocupado y no se puede volver a usar en
 ese ambiente.
 
-Las dos causas conocidas:
+**"Registrado" no es "autorizado".** El SRI ata el número a la clave de acceso
+del **primer envío que recibe**, y lo conserva aunque ese comprobante haya
+terminado **no autorizado**. Desde entonces solo acepta ese número con la clave
+original; con otra clave responde 45. Por eso puede pasar que en el portal el
+número no aparezca como autorizado y aun así el SRI lo rechace.
+
+Las causas conocidas:
+
+- **Se eliminó una retención (o factura) no autorizada y se creó de nuevo.** El
+  SRI la había recibido con su clave; la nueva lleva el mismo número y otra
+  clave (aunque sea el mismo día, cambia el código numérico aleatorio). Lo
+  correcto era corregir la misma retención y reenviarla, no eliminarla.
 
 - **Se eliminó un documento que ya se había enviado.** Un borrador enviado al
   SRI y luego eliminado en el sistema liberaba su número, y el siguiente
