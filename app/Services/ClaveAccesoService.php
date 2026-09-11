@@ -110,6 +110,25 @@ class ClaveAccesoService
         return substr($claveAcceso, 39, 8); // posiciones 40-47 (offset 39, longitud 8)
     }
 
+    /**
+     * Número del comprobante "est-pto-secuencial" tal como está codificado en la clave
+     * (posiciones 25-30 la serie y 31-39 el secuencial, indexadas desde 1). Cadena vacía
+     * si la clave no tiene 49 dígitos.
+     */
+    public static function numeroDesdeClave(string $claveAcceso): string
+    {
+        if (strlen($claveAcceso) !== 49) {
+            return '';
+        }
+        return substr($claveAcceso, 24, 3) . '-' . substr($claveAcceso, 27, 3) . '-' . substr($claveAcceso, 30, 9);
+    }
+
+    /** Ambiente codificado en la clave (posición 24): '1' producción, '2' pruebas. */
+    public static function ambienteDesdeClave(string $claveAcceso): string
+    {
+        return strlen($claveAcceso) === 49 ? substr($claveAcceso, 23, 1) : '1';
+    }
+
     // ── Helpers privados ──────────────────────────────────────────────────────
 
     private static function formatearFecha(string $fecha): string

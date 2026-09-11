@@ -348,6 +348,9 @@ class FacturaReembolsoService
             if (($fr['estado'] ?? '') !== 'borrador') {
                 throw new Exception('Solo se pueden eliminar facturas de reembolso en estado borrador.');
             }
+            // Un borrador que el SRI ya recibió/autorizó no se borra: su secuencial ya
+            // está ocupado allá con esa clave (ver SriDocumentoRules).
+            \App\Rules\SriDocumentoRules::validarEliminable('factura_reembolso', $id, 'la factura de reembolso');
 
             $this->validarPeriodoContable(
                 $fr['fecha_emision'] ?? null,

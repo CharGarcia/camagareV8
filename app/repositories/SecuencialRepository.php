@@ -49,6 +49,29 @@ class SecuencialRepository
     ];
 
     /**
+     * Tablas de comprobantes electrónicos → tipo_comprobante con el que quedan en
+     * sri_envio_log. Solo estas pueden tener secuenciales "quemados" en el SRI.
+     */
+    private const TABLA_A_TIPO_SRI_LOG = [
+        'ventas_cabecera'            => 'factura_venta',
+        'notas_credito_cabecera'     => 'nota_credito',
+        'nota_debito_cabecera'       => 'nota_debito',
+        'factura_reembolso_cabecera' => 'factura_reembolso',
+        'retencion_compra_cabecera'  => 'retencion_compra',
+        'guias_remision_cabecera'    => 'guia_remision',
+        'liquidaciones_cabecera'     => 'liquidacion_compra',
+    ];
+
+    /**
+     * Acciones de sri_envio_log que prueban que el SRI retuvo la clave (y con ella el
+     * secuencial) en ese ambiente. 'devuelta' y 'enviando' no cuentan: la primera es un
+     * rechazo en recepción (el SRI no guarda nada) y la segunda se escribe antes de saber
+     * el resultado. 'no_autorizado' sí cuenta: es conservador, pero un hueco de más no
+     * cuesta nada frente a un "ERROR 45 SECUENCIAL REGISTRADO".
+     */
+    private const ACCIONES_SRI_RETIENE_SECUENCIAL = "'recibida','en_procesamiento','autorizado','autorizada','no_autorizado','no_autorizada'";
+
+    /**
      * Tipos de documento que, ante el SRI, comparten el MISMO codDoc (Tabla 3) y
      * por tanto NO PUEDEN compartir el mismo punto de emisión: la numeración
      * estab-ptoEmi-secuencial debe ser única por (establecimiento, punto, codDoc),
@@ -716,6 +739,53 @@ class SecuencialRepository
         $colSec   = $map['col_sec'];
         $colPunto = $map['col_punto'];
 
+        $tipoAmbiente = $this->getTipoAmbiente($idPuntoEmision);
+        $params = [
+            ':id_punto'      => $idPuntoEmision,
+            ':tipo_ambiente' => $tipoAmbiente,
+            ':piso'          => $inicial,
+            ':techo'         => $techo,
+            ':ini_libre'     => $inicial,
+            ':ini_valor'     => $inicial,
+            ':ini_desde'     => $inicial,
+        ];
+
+        // Secuenciales "quemados" en el SRI: los de documentos (eliminados o no) cuya clave
+        // de acceso el SRI ya recibió/autorizó en este ambiente. Un documento eliminado deja
+        // de contar en `usados`, y su número volvía a salir como hueco libre; pero el SRI ya
+        // lo tiene registrado con la clave vieja y rechaza el nuevo con "ERROR 45 SECUENCIAL
+        // REGISTRADO" (o 43 "CLAVE ACCESO REGISTRADA"). Se cruza por (tipo, id) contra
+        // sri_envio_log y no por clave_acceso: al editar la fecha de un borrador la clave
+        // cambia, pero el id y el secuencial se conservan. Filtra por el ambiente del log,
+        // no del documento: es en ese ambiente donde el número quedó ocupado.
+        $unionQuemados = '';
+        $tipoSriLog    = self::TABLA_A_TIPO_SRI_LOG[$tabla] ?? null;
+        if ($tipoSriLog !== null && $this->tableExists('sri_envio_log')) {
+            $acciones      = self::ACCIONES_SRI_RETIENE_SECUENCIAL;
+            $unionQuemados = "
+                    UNION
+                    SELECT DISTINCT CAST(TRIM(d.{$colSec}) AS BIGINT) AS sec
+                      FROM {$tabla} d
+                     WHERE d.{$colPunto} = :id_punto_q
+                       AND d.{$colSec} IS NOT NULL
+                       AND TRIM(d.{$colSec}) ~ '^[0-9]+$'
+                       AND CAST(TRIM(d.{$colSec}) AS BIGINT) BETWEEN :piso_q AND :techo_q
+                       AND EXISTS (
+                           SELECT 1 FROM sri_envio_log l
+                            WHERE l.tipo_comprobante = :tipo_sri_log
+                              AND l.id_comprobante   = d.id
+                              AND l.tipo_ambiente    = :tipo_ambiente_q
+                              AND l.accion IN ({$acciones})
+                       )";
+            $params += [
+                ':id_punto_q'      => $idPuntoEmision,
+                ':piso_q'          => $inicial,
+                ':techo_q'         => $techo,
+                ':tipo_sri_log'    => $tipoSriLog,
+                ':tipo_ambiente_q' => $tipoAmbiente,
+            ];
+        }
+
         // Placeholders distintos para el mismo valor: PDO/pgsql no permite repetir uno nombrado.
         $sql = "WITH usados AS (
                     SELECT DISTINCT CAST(TRIM({$colSec}) AS BIGINT) AS sec
@@ -726,6 +796,7 @@ class SecuencialRepository
                        AND {$colSec} IS NOT NULL
                        AND TRIM({$colSec}) ~ '^[0-9]+$'
                        AND CAST(TRIM({$colSec}) AS BIGINT) BETWEEN :piso AND :techo
+                    {$unionQuemados}
                 )
                 SELECT
                     (SELECT COALESCE(MAX(sec), 0) FROM usados) AS max_usado,
@@ -740,15 +811,7 @@ class SecuencialRepository
                     END AS siguiente";
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([
-            ':id_punto'      => $idPuntoEmision,
-            ':tipo_ambiente' => $this->getTipoAmbiente($idPuntoEmision),
-            ':piso'          => $inicial,
-            ':techo'         => $techo,
-            ':ini_libre'     => $inicial,
-            ':ini_valor'     => $inicial,
-            ':ini_desde'     => $inicial,
-        ]);
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         $maxUsado  = (int) ($row['max_usado'] ?? 0);

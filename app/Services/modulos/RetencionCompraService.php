@@ -331,6 +331,11 @@ class RetencionCompraService
         if (($cabecera['estado'] ?? '') === 'autorizada') {
             throw new \Exception('No se puede eliminar una retención autorizada por el SRI.');
         }
+        // Un borrador que el SRI ya recibió/autorizó no se borra: su secuencial ya está
+        // ocupado allá con esa clave (ver SriDocumentoRules).
+        if (($cabecera['estado'] ?? '') === 'borrador') {
+            \App\Rules\SriDocumentoRules::validarEliminable('retencion_compra', $id, 'la retención');
+        }
 
         // Igual que al anular: eliminar revierte el asiento y libera el documento de
         // sustento, y eso no puede hacerse dentro de un período ya cerrado.

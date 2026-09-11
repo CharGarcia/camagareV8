@@ -64,6 +64,46 @@ class SriEnvioLog
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
 
+    /**
+     * ¿El SRI tiene este comprobante recibido, en cola o autorizado? Si es así,
+     * devuelve la fila del log que lo prueba (clave_acceso, tipo_ambiente,
+     * accion); si no, null.
+     *
+     * Se usa para impedir eliminar un documento que el SRI ya tiene: su
+     * secuencial quedó registrado en ese ambiente con esa clave, y borrar la
+     * copia local solo esconde el problema (el número no puede volver a
+     * usarse; ver SecuencialRepository::getSiguienteDisponible()).
+     *
+     * Se recorre el historial del más reciente al más antiguo: la primera
+     * acción concluyente decide. 'no_autorizado' y 'devuelta' significan que el
+     * SRI NO retuvo esa clave (se puede eliminar); 'recibida',
+     * 'en_procesamiento' y 'autorizado/a' significan que sí. 'enviando',
+     * 'error' y 'aviso_email' no dicen nada por sí solas y se saltan.
+     */
+    public function getRegistroRetenidoPorSri(string $tipo, int $idComprobante): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT accion, clave_acceso, tipo_ambiente, created_at
+             FROM sri_envio_log
+             WHERE tipo_comprobante = ? AND id_comprobante = ?
+             ORDER BY id DESC"
+        );
+        $st->execute([$tipo, $idComprobante]);
+
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+            $accion = strtolower((string) ($row['accion'] ?? ''));
+            // 'no_autorizado' (factura, NC, ND…) y 'no_autorizada' (retención): el
+            // estado interno de cada flujo va en el género del documento.
+            if (str_starts_with($accion, 'no_autorizad') || $accion === 'devuelta') {
+                return null;
+            }
+            if ($accion === 'recibida' || $accion === 'en_procesamiento' || str_starts_with($accion, 'autoriz')) {
+                return $row;
+            }
+        }
+        return null;
+    }
+
     /** Devuelve un registro por ID validando la empresa. */
     public function getPorId(int $id, int $idEmpresa): ?array
     {

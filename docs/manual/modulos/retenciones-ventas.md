@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro
-version: 1.4
+version: 1.5
 orden: 40
 estado: activo
 ---
@@ -103,6 +103,9 @@ cerrado.
 
 ## Historial de cambios
 
+- **1.5** — El modal de la retención se abre **siempre en la pestaña *General***, tanto al
+  registrar una nueva como al cargar una existente. Antes, si el usuario había dejado
+  activa *Asiento contable* al cerrar, la siguiente retención se abría en esa pestaña.
 - **1.4** — El control del **cierre contable** ya no depende del asiento: se
   comprueba al registrar y al modificar la retención, no solo al eliminarla, y el
   aviso dice qué operación se rechazó en vez de hablar del asiento. Las retenciones

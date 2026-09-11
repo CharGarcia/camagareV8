@@ -1322,6 +1322,12 @@ class FacturaVentaService
         if ($estadoActual !== 'borrador' && !$esSuperAdmin) {
             throw new \Exception('Solo se pueden eliminar facturas en estado borrador.');
         }
+        // Un borrador que el SRI ya recibió/autorizó no se borra: su secuencial ya está
+        // ocupado allá con esa clave (ver SriDocumentoRules). El superadministrador
+        // conserva el borrado forzado descrito más abajo.
+        if ($estadoActual === 'borrador' && !$esSuperAdmin) {
+            \App\Rules\SriDocumentoRules::validarEliminable('factura_venta', $id, 'la factura');
+        }
 
         // Vale también para el superadministrador: eliminar revierte asiento,
         // inventario y cobros, y un período cerrado no admite ese movimiento.

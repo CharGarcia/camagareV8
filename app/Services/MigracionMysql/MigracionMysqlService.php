@@ -3312,7 +3312,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'egresos', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'egresos', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0, 'pagos_liquidacion' => 0, 'pagos_liquidacion_sin_doc' => 0];
         $done      = $this->idsMigrados($pg, $idEmpresa, 'egresos');
         $mapCompra = $this->mapaDe($pg, $idEmpresa, 'compras');
         $insMap    = $this->stmtMap($pg,'egresos');
@@ -3351,9 +3351,33 @@ class MigracionMysqlService
             $formaByDoc[(string) $r['cd']][] = $r;
         }
         $compProvByCod = []; // codigo_documento de la compra → id_proveedor (para el proveedor del egreso desde su compra)
-        foreach ($mysql->query("SELECT codigo_documento, id_proveedor FROM encabezado_compra WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')) as $r) {
+        // Las LIQUIDACIONES de compra también viven en encabezado_compra (id_comprobante = 3) y el egreso
+        // viejo las paga igual que a una factura (codigo_documento_cv = su codigo_documento). Pero
+        // migrarCompras las EXCLUYE (van a liquidaciones_cabecera desde encabezado_liquidacion), así que
+        // no están en el mapa de compras: el pago quedaba como COMPRA sin documento y la liquidación
+        // seguía "pendiente de pago". Se guarda su número (15 dígitos) para enlazar el pago a ella.
+        $liqNumPorCod = [];
+        foreach ($mysql->query("SELECT codigo_documento, id_proveedor, id_comprobante, numero_documento FROM encabezado_compra WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')) as $r) {
             $compProvByCod[(string) $r['codigo_documento']] = (int) $r['id_proveedor'];
+            if ((int) $r['id_comprobante'] === 3) {
+                $liqNumPorCod[(string) $r['codigo_documento']] = \App\Helpers\AbonosVentaSql::normalizarValor((string) $r['numero_documento']);
+            }
         }
+        // Liquidaciones del sistema nuevo (migradas o nativas) por número de 15 dígitos. Ante números
+        // repetidos (p. ej. el mismo en pruebas y en producción) se prefiere el ambiente de la empresa y
+        // luego el proveedor del egreso; si aun así queda más de una, no se enlaza (mejor sin enlace
+        // que con uno equivocado). Misma regla que cruzarEgresosConLiquidaciones().
+        $liqPorNum = [];
+        $stLiq = $pg->prepare("SELECT id, id_proveedor, tipo_ambiente, COALESCE(establecimiento, '') || COALESCE(punto_emision, '') || COALESCE(secuencial, '') AS num FROM liquidaciones_cabecera WHERE id_empresa = ? AND eliminado = false");
+        $stLiq->execute([$idEmpresa]);
+        foreach ($stLiq->fetchAll(PDO::FETCH_ASSOC) as $l) { $liqPorNum[(string) $l['num']][] = $l; }
+        $ambEmp = $this->ambienteEmpresa($pg, $idEmpresa);
+        $liqDe = function (string $num, ?int $idProv) use ($liqPorNum, $ambEmp): ?int {
+            $c = $liqPorNum[$num] ?? [];
+            if (count($c) > 1) { $c = array_values(array_filter($c, fn($l) => (string) $l['tipo_ambiente'] === $ambEmp)); }
+            if (count($c) > 1) { $c = array_values(array_filter($c, fn($l) => $idProv && (int) $l['id_proveedor'] === $idProv)); }
+            return count($c) === 1 ? (int) $c[0]['id'] : null;
+        };
         // Concepto/tipo del egreso viejo: ingresos_egresos.codigo_contable → opciones_ingresos_egresos.id
         // (descripción como "Sueldos", "Anticípo sueldos", "décimo tercero", "fondos de reserva"...).
         // Sirve para reconocer los egresos de NÓMINA y marcarlos como tipo ROL + sujeto EMPLEADO.
@@ -3489,7 +3513,14 @@ class MigracionMysqlService
                     // el mismo id → "otros nombres"). El "Pagado a" correcto es el texto libre
                     // nombre_ing_egr (beneficiario_nombre), que ya se muestra cuando id_proveedor es NULL.
                 } else {
-                    $tipoEgreso = 'COMPRA';
+                    // Igual que el egreso nativo (su tipo = comportamiento del concepto): LIQUIDACION si todo
+                    // lo que paga son liquidaciones de compra; COMPRA en cualquier otro caso.
+                    $soloLiq = true;
+                    foreach ($dets as $d) {
+                        $cdv = (string) $d['codigo_documento_cv'];
+                        if ($cdv !== '' && $cdv !== '0' && isset($compProvByCod[$cdv]) && !isset($liqNumPorCod[$cdv])) { $soloLiq = false; break; }
+                    }
+                    $tipoEgreso = $soloLiq ? 'LIQUIDACION' : 'COMPRA';
                     $idConcepto = null;
                     // Fallback SOLO para egresos de compra cuyo proveedor no se resolvió desde la compra
                     // referenciada: usar id_cli_pro del egreso viejo (aquí sí apunta al proveedor).
@@ -3517,9 +3548,18 @@ class MigracionMysqlService
                     $res['migrados']++;
                 }
 
+                $liqOk = 0; $liqSin = 0; // pagos de liquidación enlazados / sin enlazar (se suman tras el commit)
                 foreach ($dets as $d) {
                     $cdv = (string) $d['codigo_documento_cv'];
-                    if ($cdv !== '' && $cdv !== '0' && isset($compProvByCod[$cdv])) { // línea de documento: compra REAL
+                    if ($cdv !== '' && $cdv !== '0' && isset($liqNumPorCod[$cdv])) { // línea de documento: LIQUIDACIÓN de compra
+                        // Sin la liquidación aún migrada queda LIQUIDACION sin documento; al migrar
+                        // Liquidaciones de compra, cruzarEgresosConLiquidaciones() completa el enlace.
+                        $num    = $liqNumPorCod[$cdv];
+                        $tdoc   = 'LIQUIDACION';
+                        $idRef  = strlen($num) === 15 ? $liqDe($num, $idProv) : null;
+                        $numDoc = self::formatoNumDoc($num);
+                        if ($idRef) { $liqOk++; } else { $liqSin++; }
+                    } elseif ($cdv !== '' && $cdv !== '0' && isset($compProvByCod[$cdv])) { // línea de documento: compra REAL
                         $tdoc   = 'COMPRA';
                         $idRef  = $compraPorCod[$cdv] ?? null;
                         $numDoc = (preg_match('/(\d{1,3}-\d{1,3}-\d+)/', (string) $d['detalle_ing_egr'], $mnum) ? $mnum[1] : null);
@@ -3550,6 +3590,8 @@ class MigracionMysqlService
                 }
                 $pg->commit();
                 $done[(string) $old] = true;
+                $res['pagos_liquidacion']         += $liqOk;
+                $res['pagos_liquidacion_sin_doc'] += $liqSin;
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) { $pg->rollBack(); }
                 $res['errores']++;
@@ -3808,6 +3850,9 @@ class MigracionMysqlService
         // Cruce retención de compra → liquidación: ahora que las liquidaciones existen, se completa el
         // id_liquidacion de las retenciones (03) ya migradas que sustentan contra ellas.
         $res['retenciones_cruzadas'] = $this->cruzarRetencionesConLiquidaciones($pg, $idEmpresa);
+        // Cruce pago (egreso) → liquidación: si Pagos (egresos) se migró ANTES, sus líneas LIQUIDACION
+        // quedaron sin documento; ahora que las liquidaciones existen, se completa el enlace.
+        $res['pagos_enlazados'] = $this->cruzarEgresosConLiquidaciones($pg, $idEmpresa);
         return $res;
     }
 
@@ -4759,6 +4804,50 @@ class MigracionMysqlService
                     AND l.id_proveedor = rc.id_proveedor
                     AND (COALESCE(l.establecimiento,'') || COALESCE(l.punto_emision,'') || COALESCE(l.secuencial,''))
                         = regexp_replace(rc.num_doc_sustento, '[^0-9]', '', 'g')"
+            );
+            $st->execute([':e' => $idEmpresa]);
+            return $st->rowCount();
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Cruza los pagos (egresos) migrados con su LIQUIDACIÓN de compra: llena id_referencia_documento de las
+     * líneas tipo 'LIQUIDACION' que migrarEgresos dejó sin documento porque la liquidación aún no estaba
+     * migrada. Empareja por número (establecimiento||punto_emision||secuencial, 15 dígitos) dentro de la
+     * empresa; ante números repetidos prefiere el ambiente del egreso y luego su proveedor (misma regla que
+     * $liqDe en migrarEgresos) y, si sigue ambiguo, no enlaza. Solo toca egresos del mapa de migración.
+     * Idempotente (solo líneas sin documento). Se llama al final de migrarLiquidaciones.
+     */
+    private function cruzarEgresosConLiquidaciones(PDO $pg, int $idEmpresa): int
+    {
+        try {
+            $st = $pg->prepare(
+                "UPDATE egresos_detalle d
+                    SET id_referencia_documento = x.id_liq
+                   FROM (
+                        SELECT d2.id AS id_det,
+                               CASE
+                                 WHEN COUNT(l.id) = 1 THEN MIN(l.id)
+                                 WHEN COUNT(l.id) FILTER (WHERE l.tipo_ambiente = e.tipo_ambiente) = 1
+                                      THEN MIN(l.id) FILTER (WHERE l.tipo_ambiente = e.tipo_ambiente)
+                                 WHEN COUNT(l.id) FILTER (WHERE l.tipo_ambiente = e.tipo_ambiente AND l.id_proveedor = e.id_proveedor) = 1
+                                      THEN MIN(l.id) FILTER (WHERE l.tipo_ambiente = e.tipo_ambiente AND l.id_proveedor = e.id_proveedor)
+                               END AS id_liq
+                          FROM egresos_detalle d2
+                          JOIN egresos_cabecera e    ON e.id = d2.id_egreso
+                          JOIN migracion_mysql_map m ON m.id_empresa = e.id_empresa AND m.entidad = 'egresos' AND m.id_destino = e.id
+                          JOIN liquidaciones_cabecera l
+                            ON l.id_empresa = e.id_empresa AND l.eliminado = false
+                           AND (COALESCE(l.establecimiento,'') || COALESCE(l.punto_emision,'') || COALESCE(l.secuencial,''))
+                               = regexp_replace(d2.numero_documento, '[^0-9]', '', 'g')
+                         WHERE e.id_empresa = :e AND e.eliminado = false
+                           AND d2.tipo_documento = 'LIQUIDACION' AND d2.id_referencia_documento IS NULL
+                           AND d2.eliminado = false AND d2.numero_documento IS NOT NULL AND d2.numero_documento <> ''
+                         GROUP BY d2.id, e.tipo_ambiente, e.id_proveedor
+                   ) x
+                  WHERE d.id = x.id_det AND x.id_liq IS NOT NULL"
             );
             $st->execute([':e' => $idEmpresa]);
             return $st->rowCount();

@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos
-version: 2.3
+version: 2.4
 orden: 20
 estado: activo
 ---
@@ -159,6 +159,14 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.4** — Errores **43 y 45 del SRI**. El número de una factura eliminada que el SRI ya
+  recibió o autorizó ya no se reutiliza, no se puede eliminar un borrador en esa
+  situación (salvo el borrado forzado del superadministrador) y el error 45
+  *"Secuencial registrado"* se explica con el número y el ambiente afectados. El 43
+  *"Clave de acceso registrada"* deja de marcar la factura como devuelta: se consulta la
+  autorización, igual que con el 70. Aplica también a notas de crédito y débito,
+  facturas de reembolso, retenciones, guías y liquidaciones. Ver la guía *"Clave de
+  acceso en procesamiento"*.
 - **2.3** — El módulo respeta ahora el **cierre contable**: no se puede emitir,
   modificar, anular ni eliminar una factura cuyo período esté cerrado. Antes no se
   comprobaba en ninguna de las cuatro operaciones.

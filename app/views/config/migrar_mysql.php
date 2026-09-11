@@ -606,6 +606,16 @@ $base = BASE_URL;
                 if (d.revividos > 0) {
                     html += `<br><span class="text-success small">♻ ${fmt(d.revividos)} estaban eliminado(s) y se restauraron (volvieron a mostrarse).</span>`;
                 }
+                // Pagos (egresos) de liquidaciones de compra: se enlazan a la liquidación por su número.
+                if (d.pagos_liquidacion > 0) {
+                    html += `<br><span class="text-success small">🔗 ${fmt(d.pagos_liquidacion)} pago(s) enlazado(s) a su liquidación de compra.</span>`;
+                }
+                if (d.pagos_liquidacion_sin_doc > 0) {
+                    html += `<br><span class="text-warning small">ℹ ${fmt(d.pagos_liquidacion_sin_doc)} pago(s) de liquidación sin enlazar: no se encontró la liquidación por su número (¿aún no se migran las Liquidaciones de compra?). Se enlazan solos al migrarlas.</span>`;
+                }
+                if (d.pagos_enlazados > 0) {
+                    html += `<br><span class="text-success small">🔗 ${fmt(d.pagos_enlazados)} pago(s) ya migrado(s) se enlazaron a su liquidación.</span>`;
+                }
                 if (d.serie_omitida > 0) {
                     // El sistema anterior numera estos documentos POR ESTABLECIMIENTO: el mismo número
                     // puede existir dos veces y solo uno puede ocupar la serie de destino.

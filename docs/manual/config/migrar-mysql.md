@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie
-version: 1.2
+etiquetas: migracion, migrar, sistema anterior, mysql, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador
+version: 1.5
 orden: 2
 estado: activo
 ---
@@ -78,7 +78,8 @@ dos maneras distintas, según lo que traiga el sistema anterior:
     no solo por número. Si una corrida anterior había dejado la segunda como
     "vinculada" a la del otro cliente (sin insertarla), al volver a migrar
     Retenciones en venta se deshace ese vínculo y se inserta el documento
-    faltante; no hace falta usar *Eliminar migrados*.- **Documentos sin serie en el sistema anterior** — ingresos, egresos, pedidos
+    faltante; no hace falta usar *Eliminar migrados*.
+- **Documentos sin serie en el sistema anterior** — ingresos, egresos, pedidos
   y cambios de producto. El sistema anterior solo les guarda un número
   correlativo. La migración les asigna la **serie activa de la empresa**: el
   establecimiento activo y el **punto de emisión activo de menor número**,
@@ -101,6 +102,44 @@ al repetido**, avisando al final del proceso con el mensaje *"N quedaron sin
 serie: ese número ya está usado en el punto de emisión de destino"*. Esos
 documentos hay que revisarlos a mano: nada se borra ni se renumera solo.
 
+## Pagos de liquidaciones de compra
+
+En el sistema anterior una **liquidación de compra** se registraba también
+como compra, y el egreso que la pagaba apuntaba a esa compra. Aquí las
+liquidaciones tienen su propio módulo, así que al migrar **Pagos (egresos)**
+esos pagos se reconocen y se **enlazan a la liquidación**, buscándola por su
+número (por ejemplo `001-002-000000045`) dentro de la misma empresa:
+
+- En el egreso, la línea aparece como **Liquidación** (no como Compra) y su
+  número abre la liquidación. Si todo lo que paga el egreso son liquidaciones,
+  el egreso queda con tipo *Liquidación*, igual que uno registrado aquí.
+- La liquidación deja de salir en **Cuentas por Pagar** y en *Liquidaciones de
+  Compra - Pendientes de Pago* (Egresos) cuando lo pagado cubre su saldo, y el
+  pago se ve en su pestaña **Pagos**.
+- Si los egresos se migran **antes** que las liquidaciones, el pago queda
+  marcado como liquidación pero sin enlazar; al migrar después **Liquidaciones
+  de compra** se enlaza solo. El resultado de cada corrida informa cuántos
+  pagos se enlazaron y cuántos quedaron sin enlazar.
+- Si el mismo número existe dos veces (por ejemplo en pruebas y en
+  producción), se usa la liquidación del ambiente de la empresa y, si aún hay
+  dos, la del mismo proveedor; si sigue siendo ambiguo, el pago no se enlaza.
+
+### Pagos de compras: cuándo se pierde el enlace
+
+Los pagos de **facturas de compra** se enlazan a la compra por el registro
+interno de la migración (qué documento del sistema anterior corresponde a cuál
+de aquí). Ese enlace se pierde en dos situaciones:
+
+- **Los pagos se migraron antes que las compras** (o la compra cayó en
+  *omitidos/errores* y se trajo después): la línea del pago queda sin
+  documento. Volver a migrar **Pagos (egresos)** lo completa.
+- **Las compras se borraron con *Eliminar migrados* y se volvieron a migrar**:
+  reciben números internos nuevos y los pagos siguen apuntando a los viejos.
+  También se completa volviendo a migrar Pagos (egresos).
+
+En ambos casos Cuentas por Pagar muestra la compra pendiente aunque el pago
+exista (ver *Errores frecuentes*).
+
 ## Errores frecuentes
 
 - **Un ingreso, egreso o pedido migrado no aparece con serie**: su número
@@ -111,6 +150,36 @@ documentos hay que revisarlos a mano: nada se borra ni se renumera solo.
   propia no pueden completarse. Primero se crea el establecimiento y el punto
   de emisión en **Configuración → Empresas del sistema**, y luego se vuelve a
   correr la migración de esa entidad (completa la serie de lo ya migrado).
+- **Una liquidación de compra migrada sale pendiente de pago aunque en el
+  sistema anterior estaba pagada**: los egresos migrados antes de la versión
+  1.4 de este artículo guardaban ese pago como una compra sin documento. Hay
+  dos formas de corregirlo:
+  - Volver a migrar **Pagos (egresos)** de la empresa: reconstruye el detalle
+    de los egresos ya migrados con el enlace correcto. Ojo: también reconstruye
+    sus formas de pago y el estado de sus cheques desde el sistema anterior; si
+    ya se trabajó sobre esos egresos aquí (por ejemplo, cheques marcados como
+    cobrados o conciliación bancaria), use la otra vía.
+  - Sin volver a migrar: el script
+    `database/20260910_enlazar_pagos_liquidaciones_migradas.sql` (solo toca las
+    líneas del pago y deja rastro en el log del sistema). Antes conviene revisar
+    qué va a enlazar con
+    `database/diagnosticos/20260910_liquidaciones_migradas_pago_sin_enlace.sql`.
+- **Una compra o liquidación migrada sale pendiente en Cuentas por Pagar
+  aunque tiene su pago**: el diagnóstico
+  `database/diagnosticos/20260910_cxp_migrados_pagos_no_cruzan.sql` (solo
+  lectura) dice el motivo de cada documento pendiente. Los más comunes:
+  - *Pago sin enlazar* (la línea del pago no tiene documento o apunta a uno
+    borrado): lo corrige `database/20260910_reenlazar_pagos_migrados.sql` sin
+    tocar formas de pago ni cheques; o volver a migrar Pagos (egresos).
+  - *Retención en borrador*: la retención de compra que debía restar quedó en
+    borrador (migradas antes del arreglo de estado). Volver a migrar
+    **Retenciones en compra**.
+  - *NC restada en el pago*: el egreso descontó la nota de crédito como línea
+    negativa y la NC no existe como documento propio. Volver a migrar
+    **Compras** (la inserta) y luego **Pagos (egresos)**.
+  - *Sin pago en el sistema*: ningún pago apunta al documento. O está
+    realmente pendiente, o ese egreso nunca se migró (revisar
+    omitidos/errores al migrar Pagos).
 - **Se fusionó un establecimiento por error**: no hay forma de deshacerlo
   desde acá — sus datos no se guardaron en ningún lado. Si de verdad hacía
   falta como cliente separado, se crea una empresa nueva a mano desde
@@ -123,6 +192,15 @@ documentos hay que revisarlos a mano: nada se borra ni se renumera solo.
 
 ## Historial de cambios
 
+- **1.5** — Se documenta cuándo se pierde el enlace pago↔compra (pagos
+  migrados antes que las compras; compras borradas y vueltas a migrar) y el
+  diagnóstico por motivo de las compras/liquidaciones migradas que siguen
+  pendientes en Cuentas por Pagar, con el script que re-enlaza los pagos.
+- **1.4** — Pagos (egresos) de **liquidaciones de compra**: la migración los
+  enlaza a la liquidación por su número (antes quedaban como compra sin
+  documento y la liquidación seguía pendiente de pago). Al migrar Liquidaciones
+  de compra se enlazan los pagos que habían quedado sin enlazar. Se documentan
+  las dos formas de corregir lo ya migrado.
 - **1.3** — Retenciones en venta: la deduplicación pasa a ser por **cliente +
   número** (antes solo por número). Una retención con el mismo
   `estab-pto-secuencial` que otra de un cliente distinto se migraba como

@@ -156,6 +156,11 @@ class GuiaRemisionService
         if (!in_array($actual['estado'] ?? '', ['borrador', 'anulado'], true)) {
             throw new \RuntimeException('Solo se pueden eliminar guías en estado borrador o anulado.');
         }
+        // Un borrador que el SRI ya recibió/autorizó no se borra: su secuencial ya está
+        // ocupado allá con esa clave (ver SriDocumentoRules).
+        if (($actual['estado'] ?? '') === 'borrador') {
+            \App\Rules\SriDocumentoRules::validarEliminable('guia_remision', $id, 'la guía de remisión');
+        }
 
         $db = Database::getConnection();
         $db->beginTransaction();

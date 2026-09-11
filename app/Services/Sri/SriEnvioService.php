@@ -192,20 +192,16 @@ class SriEnvioService
         $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
 
         if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
-            $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
+            $devuelta    = $this->respuestaDevuelta($recepcion, $claveAcceso, 'el comprobante');
+            $erroresJson = json_encode($devuelta['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoSri($idVenta, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
                 'accion'       => 'devuelta',
                 'estado_sri'   => 'DEVUELTA',
-                'mensaje'      => 'El SRI devolvió el comprobante con errores.',
+                'mensaje'      => $devuelta['mensaje'],
                 'detalle_json' => $erroresJson,
             ]);
-            return [
-                'ok'      => false,
-                'estado'  => 'devuelta',
-                'mensaje' => 'El SRI devolvió el comprobante con errores.',
-                'errores' => $recepcion['errores'],
-            ];
+            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => $devuelta['mensaje'], 'errores' => $devuelta['errores']];
         }
 
         $this->actualizarEstadoSri($idVenta, 'recibida', null, null, null, $idUsuario);
@@ -443,20 +439,16 @@ class SriEnvioService
         $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
 
         if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
-            $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
+            $devuelta    = $this->respuestaDevuelta($recepcion, $claveAcceso, 'la factura de reembolso');
+            $erroresJson = json_encode($devuelta['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('factura_reembolso_cabecera', $idFR, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
                 'accion'       => 'devuelta',
                 'estado_sri'   => 'DEVUELTA',
-                'mensaje'      => 'El SRI devolvió el comprobante con errores.',
+                'mensaje'      => $devuelta['mensaje'],
                 'detalle_json' => $erroresJson,
             ]);
-            return [
-                'ok'      => false,
-                'estado'  => 'devuelta',
-                'mensaje' => 'El SRI devolvió el comprobante con errores.',
-                'errores' => $recepcion['errores'],
-            ];
+            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => $devuelta['mensaje'], 'errores' => $devuelta['errores']];
         }
 
         $this->actualizarEstadoDocumento('factura_reembolso_cabecera', $idFR, 'recibida', null, null, null, $idUsuario);
@@ -700,12 +692,13 @@ class SriEnvioService
         $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
 
         if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
-            $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
+            $devuelta    = $this->respuestaDevuelta($recepcion, $claveAcceso, 'la nota de crédito');
+            $erroresJson = json_encode($devuelta['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('notas_credito_cabecera', $idNC, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
-                'accion' => 'devuelta', 'estado_sri' => 'DEVUELTA', 'mensaje' => 'El SRI devolvió el comprobante con errores.', 'detalle_json' => $erroresJson
+                'accion' => 'devuelta', 'estado_sri' => 'DEVUELTA', 'mensaje' => $devuelta['mensaje'], 'detalle_json' => $erroresJson
             ]);
-            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => 'El SRI devolvió el comprobante con errores.', 'errores' => $recepcion['errores']];
+            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => $devuelta['mensaje'], 'errores' => $devuelta['errores']];
         }
 
         $this->actualizarEstadoDocumento('notas_credito_cabecera', $idNC, 'recibida', null, null, null, $idUsuario);
@@ -903,12 +896,13 @@ class SriEnvioService
         $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
 
         if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
-            $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
+            $devuelta    = $this->respuestaDevuelta($recepcion, $claveAcceso, 'la nota de débito');
+            $erroresJson = json_encode($devuelta['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('nota_debito_cabecera', $idND, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
-                'accion' => 'devuelta', 'estado_sri' => 'DEVUELTA', 'mensaje' => 'El SRI devolvió el comprobante con errores.', 'detalle_json' => $erroresJson
+                'accion' => 'devuelta', 'estado_sri' => 'DEVUELTA', 'mensaje' => $devuelta['mensaje'], 'detalle_json' => $erroresJson
             ]);
-            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => 'El SRI devolvió el comprobante con errores.', 'errores' => $recepcion['errores']];
+            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => $devuelta['mensaje'], 'errores' => $devuelta['errores']];
         }
 
         $this->actualizarEstadoDocumento('nota_debito_cabecera', $idND, 'recibida', null, null, null, $idUsuario);
@@ -1105,13 +1099,14 @@ class SriEnvioService
         $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
 
         if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
-            $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
+            $devuelta    = $this->respuestaDevuelta($recepcion, $claveAcceso, 'la retención');
+            $erroresJson = json_encode($devuelta['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('retencion_compra_cabecera', $idRetencion, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
                 'accion' => 'devuelta', 'estado_sri' => 'DEVUELTA',
-                'mensaje' => 'El SRI devolvió la retención con errores.', 'detalle_json' => $erroresJson,
+                'mensaje' => $devuelta['mensaje'], 'detalle_json' => $erroresJson,
             ]);
-            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => 'El SRI devolvió la retención con errores.', 'errores' => $recepcion['errores']];
+            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => $devuelta['mensaje'], 'errores' => $devuelta['errores']];
         }
 
         $this->actualizarEstadoDocumento('retencion_compra_cabecera', $idRetencion, 'recibida', null, null, null, $idUsuario);
@@ -1265,15 +1260,63 @@ class SriEnvioService
     private function recepcionEnProcesamiento(array $recepcion): bool
     {
         foreach ($recepcion['errores'] ?? [] as $error) {
-            if (trim((string) ($error['id'] ?? '')) === '70') {
+            $id      = trim((string) ($error['id'] ?? ''));
+            $mensaje = strtoupper((string) ($error['mensaje'] ?? ''));
+            if ($id === '70' || str_contains($mensaje, 'EN PROCESAMIENTO')) {
                 return true;
             }
-            if (stripos((string) ($error['mensaje'] ?? ''), 'EN PROCESAMIENTO') !== false) {
+            // 43 "CLAVE ACCESO REGISTRADA": el SRI ya recibió ESTA MISMA clave en un
+            // envío anterior (típico del ambiente de pruebas, que a veces responde
+            // "sin autorizaciones" en la verificación previa aunque tenga el
+            // comprobante en cola). No hay nada que corregir: como con el 70, lo que
+            // toca es consultar la autorización y dejar el documento en el reintento.
+            if ($id === '43' || str_contains($mensaje, 'CLAVE ACCESO REGISTRADA')) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Arma el mensaje y los errores que verá el usuario cuando el SRI devuelve el
+     * comprobante en recepción. En general se muestran tal cual llegan; el 45
+     * "ERROR SECUENCIAL REGISTRADO" se explica, porque el texto del SRI no dice lo
+     * que pasa: en ese ambiente ya existe un comprobante del mismo tipo con el mismo
+     * número (est-pto-secuencial) pero OTRA clave de acceso. Las causas conocidas
+     * son un documento eliminado que ya se había enviado y cuyo número se volvió a
+     * usar (hoy SecuencialRepository ya no reutiliza esos números) y un borrador al
+     * que se le cambió la fecha de emisión después de un envío (la clave cambia, el
+     * número no). El usuario suele buscar en el portal por la clave actual, o en
+     * producción cuando el envío fue a pruebas, y concluye que "no existe".
+     *
+     * @return array{mensaje:string, errores:array}
+     */
+    private function respuestaDevuelta(array $recepcion, string $claveAcceso, string $nombreDoc): array
+    {
+        $errores = $recepcion['errores'] ?? [];
+        $mensaje = "El SRI devolvió {$nombreDoc} con errores.";
+
+        foreach ($errores as $i => $error) {
+            $id  = trim((string) ($error['id'] ?? ''));
+            $txt = strtoupper((string) ($error['mensaje'] ?? ''));
+            if ($id !== '45' && !str_contains($txt, 'SECUENCIAL REGISTRADO')) {
+                continue;
+            }
+
+            $numero   = \App\Services\ClaveAccesoService::numeroDesdeClave($claveAcceso);
+            $ambiente = \App\Services\ClaveAccesoService::ambienteDesdeClave($claveAcceso) === '2' ? 'pruebas' : 'producción';
+            $mensaje  = "El SRI ({$ambiente}) ya tiene registrado el número {$numero} de este tipo de comprobante "
+                . "con otra clave de acceso, por eso no acepta {$nombreDoc}.";
+            $errores[$i]['info'] = trim(((string) ($error['info'] ?? '')) . ' '
+                . "Suele pasar cuando se eliminó un documento que ya se había enviado al SRI y su número se volvió a usar, "
+                . "o cuando se cambió la fecha de emisión de un borrador después de enviarlo (la clave cambia, el número no). "
+                . "El número {$numero} ya no puede usarse en el ambiente de {$ambiente}: asigne el siguiente secuencial libre "
+                . "y vuelva a enviar. Para ubicar el comprobante en el SRI búsquelo por número y por la fecha del envío original, "
+                . "no por la clave actual; los comprobantes de pruebas no aparecen en el portal.");
+        }
+
+        return ['mensaje' => $mensaje, 'errores' => $errores];
     }
 
     private function consultarConReintentos(string $claveAcceso, string $tipoAmbiente): array
@@ -1497,7 +1540,9 @@ class SriEnvioService
 
         foreach ($acciones as $accion) {
             $accion = strtolower((string) $accion);
-            if (str_starts_with($accion, 'autoriz') || $accion === 'no_autorizado') {
+            // 'no_autorizado' en factura/NC/ND…, 'no_autorizada' en retención: el estado
+            // interno se registra en el género del documento.
+            if (str_starts_with($accion, 'autoriz') || str_starts_with($accion, 'no_autorizad')) {
                 return false; // Ya hay una resolución definitiva registrada.
             }
             if ($accion === 'recibida') {
@@ -2056,13 +2101,14 @@ class SriEnvioService
         $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
 
         if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
-            $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
+            $devuelta    = $this->respuestaDevuelta($recepcion, $claveAcceso, 'la guía');
+            $erroresJson = json_encode($devuelta['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('guias_remision_cabecera', $idGuia, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
                 'accion' => 'devuelta', 'estado_sri' => 'DEVUELTA',
-                'mensaje' => 'El SRI devolvió la guía con errores.', 'detalle_json' => $erroresJson,
+                'mensaje' => $devuelta['mensaje'], 'detalle_json' => $erroresJson,
             ]);
-            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => 'El SRI devolvió la guía con errores.', 'errores' => $recepcion['errores']];
+            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => $devuelta['mensaje'], 'errores' => $devuelta['errores']];
         }
 
         $this->actualizarEstadoDocumento('guias_remision_cabecera', $idGuia, 'recibida', null, null, null, $idUsuario);
@@ -2261,15 +2307,16 @@ class SriEnvioService
         $enProcesamiento = $this->recepcionEnProcesamiento($recepcion);
 
         if ($recepcion['estado'] !== 'RECIBIDA' && !$enProcesamiento) {
-            $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
+            $devuelta    = $this->respuestaDevuelta($recepcion, $claveAcceso, 'la liquidación');
+            $erroresJson = json_encode($devuelta['errores'], JSON_UNESCAPED_UNICODE);
             $this->actualizarEstadoDocumento('liquidaciones_cabecera', $idLiq, 'devuelta', null, null, $erroresJson, $idUsuario);
             $this->log($logBase + [
                 'accion'       => 'devuelta',
                 'estado_sri'   => 'DEVUELTA',
-                'mensaje'      => 'El SRI devolvió la liquidación con errores.',
+                'mensaje'      => $devuelta['mensaje'],
                 'detalle_json' => $erroresJson,
             ]);
-            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => 'El SRI devolvió la liquidación con errores.', 'errores' => $recepcion['errores']];
+            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => $devuelta['mensaje'], 'errores' => $devuelta['errores']];
         }
 
         $this->actualizarEstadoDocumento('liquidaciones_cabecera', $idLiq, 'recibida', null, null, null, $idUsuario);

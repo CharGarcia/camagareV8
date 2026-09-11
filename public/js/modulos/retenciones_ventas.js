@@ -755,6 +755,13 @@
         window._RETV_soloLectura = false;
         const form = document.getElementById('formRetencionVenta');
         if (form) form.reset();
+
+        // Siempre abrir en la pestaña "General": Bootstrap conserva la última
+        // pestaña activa (Asiento contable) entre aperturas del modal.
+        const tabGeneral = document.getElementById('retv-tab-general-btn');
+        if (tabGeneral && typeof bootstrap !== 'undefined') {
+            bootstrap.Tab.getOrCreateInstance(tabGeneral).show();
+        }
         document.getElementById('retv_id').value = '';
         retvIdActual = 0;
         lineasData   = [];

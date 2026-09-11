@@ -1439,6 +1439,13 @@
     function resetForm() {
         const form = document.getElementById('formRetencion');
         if (form) form.reset();
+
+        // Siempre abrir en la pestaña "Retención": Bootstrap conserva la última
+        // pestaña activa (Asiento contable / SRI) entre aperturas del modal.
+        const tabPrincipal = document.getElementById('tab-ret-principal-btn');
+        if (tabPrincipal && typeof bootstrap !== 'undefined') {
+            bootstrap.Tab.getOrCreateInstance(tabPrincipal).show();
+        }
         document.getElementById('ret_id').value = '';
         retIdActual = 0;
         lineasData  = [];

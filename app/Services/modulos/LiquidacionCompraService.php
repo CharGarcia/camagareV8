@@ -352,6 +352,9 @@ class LiquidacionCompraService
         if ($estadoActual !== '' && $estadoActual !== 'borrador') {
             throw new \Exception('Solo se pueden eliminar liquidaciones en estado borrador.');
         }
+        // Un borrador que el SRI ya recibió/autorizó no se borra: su secuencial ya está
+        // ocupado allá con esa clave (ver SriDocumentoRules).
+        \App\Rules\SriDocumentoRules::validarEliminable('liquidacion_compra', $id, 'la liquidación');
 
         $this->validarPeriodoContable(
             $cabecera['fecha_emision'] ?? null,

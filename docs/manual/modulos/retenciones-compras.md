@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride
-version: 1.11
+version: 1.13
 orden: 30
 estado: activo
 ---
@@ -315,6 +315,19 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.13** — Corregido el **"ERROR 45 SECUENCIAL REGISTRADO"** al enviar al SRI. Pasaba
+  cuando se eliminaba una retención en borrador que el SRI ya había recibido: su número
+  quedaba libre en el sistema y la siguiente retención lo volvía a tomar, pero el SRI ya
+  lo tenía con otra clave. Ahora el número de un documento eliminado que el SRI recibió
+  no se reutiliza, **no se puede eliminar** una retención en borrador que el SRI ya
+  recibió o autorizó (hay que anularla o esperar su resolución), y el error se explica
+  con el número y el ambiente afectados. Detalle en la guía *"Clave de acceso en
+  procesamiento"*, sección *Error 45*.
+- **1.12** — El modal de retención se abre **siempre en la pestaña *Retención***, tanto al
+  crear una nueva como al cargar una existente (desde el listado, desde la pestaña
+  *Retenciones* de una compra o desde una liquidación). Antes, si el usuario había dejado
+  activa *Asiento contable* o *SRI* al cerrar, la siguiente retención se abría en esa
+  pestaña y no en el detalle.
 - **1.11** — Corregido el **PDF** de las retenciones con muchas líneas. Cuando el detalle
   no cabía en una página, cada línea siguiente abría una página nueva casi vacía (41
   líneas daban 3 páginas; 46, 8). Ahora el detalle sigue en la página siguiente con el

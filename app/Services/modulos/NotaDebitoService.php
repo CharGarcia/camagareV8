@@ -355,6 +355,11 @@ class NotaDebitoService
             if ($estadoActual !== 'borrador' && !$esSuperAdmin) {
                 throw new Exception("Solo se pueden eliminar Notas de Débito en estado borrador.");
             }
+            // Un borrador que el SRI ya recibió/autorizó no se borra: su secuencial ya
+            // está ocupado allá con esa clave (ver SriDocumentoRules).
+            if ($estadoActual === 'borrador' && !$esSuperAdmin) {
+                \App\Rules\SriDocumentoRules::validarEliminable('nota_debito', $id, 'la nota de débito');
+            }
 
             // Vale también para el superadministrador: eliminar revierte el asiento y
             // un período cerrado no admite ese movimiento.
