@@ -1144,7 +1144,7 @@ ORDER BY da.id_empresa, da.anio, da.tipo;
 -- ── 8) LIQUIDACIONES migradas sin pago: ¿dónde quedó su pago? ──────────────────
 --   En el sistema anterior una liquidación solo se podía pagar con un egreso si
 --   además estaba registrada como compra. Tres casos:
---   · con_compra_gemela: existe una COMPRA del mismo proveedor con el mismo número
+--   · con_compra_gemela: existe una COMPRA del mismo proveedor con el mismo número y valor
 --     (se registró como factura, no como liquidación): el pago está en esa compra
 --     (gemela_pagada) y la liquidación queda duplicada como deuda.
 --   · registrada_como_compra (tiene sustento tributario, que la migración solo
@@ -1180,6 +1180,7 @@ gemela AS (    -- compra del mismo proveedor y empresa con el número de la liqu
       ON c.id_empresa = l.id_empresa AND c.id_proveedor = l.id_proveedor AND c.eliminado = false
      AND COALESCE(NULLIF(TRIM(c.tipo_comprobante), ''), '01') NOT IN ('04','23','47','51','05','06','07')
      AND COALESCE(c.establecimiento_prov, '') || COALESCE(c.punto_emision_prov, '') || COALESCE(c.secuencial_prov, '') = l.num15
+     AND abs(c.importe_total - l.importe_total) < 0.01   -- mismo valor: el mismo documento registrado dos veces
     LEFT JOIN pagados pc ON pc.tipo_documento = 'COMPRA' AND pc.id = c.id
     GROUP BY l.id
 )
@@ -1234,6 +1235,7 @@ gemela AS (
     JOIN compras_cabecera c
       ON c.id_empresa = l.id_empresa AND c.id_proveedor = l.id_proveedor AND c.eliminado = false
      AND COALESCE(c.establecimiento_prov, '') || COALESCE(c.punto_emision_prov, '') || COALESCE(c.secuencial_prov, '') = l.num15
+     AND abs(c.importe_total - l.importe_total) < 0.01   -- mismo valor: el mismo documento registrado dos veces
 ),
 sin_reg AS (
     SELECT l.*, ROW_NUMBER() OVER (PARTITION BY l.id_empresa ORDER BY l.importe_total DESC, l.fecha_emision) AS rn

@@ -17,7 +17,8 @@
 --   1. Toma las líneas tipo 'COMPRA' sin documento cuyo número (el de la línea,
 --      o el que aparece en su texto) calza con UNA liquidación de la misma
 --      empresa, del mismo proveedor del egreso o con "liquidación" en el texto,
---      y que NO calzan también con una factura de compra de ese proveedor.
+--      y que NO calzan también con una factura de compra de ese proveedor emitida
+--      hasta la fecha del pago (una factura posterior no puede ser lo que se pagó).
 --      Es exactamente el estado "SE ENLAZA" del diagnóstico
 --      database/diagnosticos/20260910_liquidaciones_migradas_pago_sin_enlace.sql
 --   2. Esas líneas pasan a tipo_documento = 'LIQUIDACION', con el id y el número
@@ -74,7 +75,7 @@ BEGIN
     -- 1) Líneas a enlazar (misma lógica que el estado "SE ENLAZA" del diagnóstico)
     INSERT INTO tmp_enlace_liq (id_detalle, id_egreso, id_empresa, numero_ant, tipo_egreso_ant, id_liq, numero_liq)
     WITH lineas AS (
-        SELECT d.id AS id_detalle, d.id_egreso, e.id_empresa, e.tipo_egreso,
+        SELECT d.id AS id_detalle, d.id_egreso, e.id_empresa, e.tipo_egreso, e.fecha_emision AS fecha_egreso,
                e.id_proveedor AS prov_egreso, e.tipo_ambiente AS amb_egreso,
                d.descripcion, d.numero_documento,
                COALESCE(
@@ -124,6 +125,7 @@ BEGIN
          AND c.eliminado = false
          AND c.id_proveedor = li.prov_egreso
          AND COALESCE(c.tipo_comprobante, '01') NOT IN ('04', '05')
+         AND c.fecha_emision <= li.fecha_egreso        -- una factura posterior al pago no puede ser lo que se pagó
          AND COALESCE(c.establecimiento_prov, '') || COALESCE(c.punto_emision_prov, '') || COALESCE(c.secuencial_prov, '') = li.num15
         WHERE length(li.num15) = 15
     )

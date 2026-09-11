@@ -1069,11 +1069,13 @@ class CuentasPorPagarRepository extends BaseRepository
                 : explode(',', (string)$filtros['id_proveedor']);
             $provs = array_filter(array_map('intval', $rawProv));
             if (!empty($provs)) {
-                $in = [];
+                // Variable propia: $in ya lleva los placeholders de empresa por rama del UNION
+                // (c/l/i); reutilizarla aquí los borraba y el listado caía con "IN ()".
+                $inProv = [];
                 foreach (array_values($provs) as $i => $id) {
-                    $k = ":prov{$i}"; $in[] = $k; $params[$k] = $id;
+                    $k = ":prov{$i}"; $inProv[] = $k; $params[$k] = $id;
                 }
-                $whereExtra .= " AND d.id_proveedor IN (" . implode(',', $in) . ")";
+                $whereExtra .= " AND d.id_proveedor IN (" . implode(',', $inProv) . ")";
             }
         }
         if (!empty($filtros['tipo_fuente'])) {

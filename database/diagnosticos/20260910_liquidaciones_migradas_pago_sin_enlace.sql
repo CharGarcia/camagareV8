@@ -24,7 +24,8 @@
 --   SE ENLAZA       calza con UNA liquidación de la misma empresa por número, del
 --                   mismo proveedor o con "liquidación" en el texto. Es lo que
 --                   corrige database/20260910_enlazar_pagos_liquidaciones_migradas.sql
---   ES UNA COMPRA   el número calza con una factura de compra del mismo proveedor:
+--   ES UNA COMPRA   el número calza con una factura de compra del mismo proveedor,
+--                   emitida hasta la fecha del pago:
 --                   no es liquidación; la compra se migró DESPUÉS que los egresos.
 --                   Se arregla volviendo a migrar Pagos (egresos).
 --   AMBIGUA         calza con más de un documento: revisar a mano.
@@ -98,6 +99,7 @@ compra AS (
      AND c.eliminado = false
      AND c.id_proveedor = li.prov_egreso
      AND COALESCE(c.tipo_comprobante, '01') NOT IN ('04', '05')
+     AND c.fecha_emision <= li.fecha_egreso   -- una factura posterior al pago no es lo que se pagó
      AND COALESCE(c.establecimiento_prov, '') || COALESCE(c.punto_emision_prov, '') || COALESCE(c.secuencial_prov, '') = li.num15
     WHERE length(li.num15) = 15
     GROUP BY li.id_detalle
@@ -188,6 +190,7 @@ compra AS (
      AND c.eliminado = false
      AND c.id_proveedor = li.prov_egreso
      AND COALESCE(c.tipo_comprobante, '01') NOT IN ('04', '05')
+     AND c.fecha_emision <= li.fecha_egreso   -- una factura posterior al pago no es lo que se pagó
      AND COALESCE(c.establecimiento_prov, '') || COALESCE(c.punto_emision_prov, '') || COALESCE(c.secuencial_prov, '') = li.num15
     WHERE length(li.num15) = 15
     GROUP BY li.id_detalle
@@ -284,6 +287,7 @@ compra AS (
      AND c.eliminado = false
      AND c.id_proveedor = li.prov_egreso
      AND COALESCE(c.tipo_comprobante, '01') NOT IN ('04', '05')
+     AND c.fecha_emision <= li.fecha_egreso   -- una factura posterior al pago no es lo que se pagó
      AND COALESCE(c.establecimiento_prov, '') || COALESCE(c.punto_emision_prov, '') || COALESCE(c.secuencial_prov, '') = li.num15
     WHERE length(li.num15) = 15
     GROUP BY li.id_detalle

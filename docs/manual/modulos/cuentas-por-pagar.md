@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente
-version: 1.7
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion
+version: 1.8
 orden: 50
 estado: activo
 ---
@@ -136,6 +136,9 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.8** — Se corrigió el filtro por **proveedor**: al elegir uno, la pantalla
+  mostraba «Error de conexión» en vez de sus documentos. Las tarjetas de resumen y
+  la antigüedad de saldos también vuelven a filtrarse por el proveedor elegido.
 - **1.7** — El listado abre **mucho más rápido**. Con varios miles de compras, la
   pantalla podía tardar más de diez segundos en mostrar aunque solo hubiera cuatro
   documentos pendientes; ahora responde en décimas. También se corrigió el orden:
