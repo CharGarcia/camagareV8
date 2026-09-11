@@ -10,6 +10,9 @@ use Exception;
 
 class TareaService
 {
+    /** Mismo texto para una tarea inexistente, eliminada o ajena: así no se revela que existe. */
+    private const MSG_NO_ENCONTRADA = 'Tarea no encontrada.';
+
     private TareaRepository  $repository;
     private TareaRules       $rules;
     private LogSistemaService $logService;
@@ -22,6 +25,20 @@ class TareaService
         $this->repository = $repository;
         $this->rules      = $rules;
         $this->logService = $logService;
+    }
+
+    // ─── Acceso ───────────────────────────────────────────────
+
+    /**
+     * Corta si el usuario no puede ver la tarea (regla de TareaRepository::puedeVerTarea:
+     * nivel 3 todas; el resto, las que creó o en las que es responsable). Va antes de
+     * leer, modificar, eliminar o tocar los adjuntos de una tarea que llega por id.
+     */
+    public function verificarAcceso(int $idTarea, int $idUsuario, int $nivel): void
+    {
+        if ($idTarea <= 0 || !$this->repository->puedeVerTarea($idTarea, $idUsuario, $nivel)) {
+            throw new Exception(self::MSG_NO_ENCONTRADA);
+        }
     }
 
     // ─── Listados ─────────────────────────────────────────────
@@ -58,10 +75,12 @@ class TareaService
     /**
      * "Combo" de un cliente: una fila por cada obligación que tiene vigente
      * (su tarea activa más reciente por obligación), con sus responsables.
+     * Solo con las tareas que el usuario puede ver, igual que el contador
+     * "N vigentes" del listado de clientes.
      */
-    public function getComboCliente(int $idCliente): array
+    public function getComboCliente(int $idCliente, int $idUsuario, int $nivel): array
     {
-        $rows = $this->repository->getComboVigentePorCliente($idCliente);
+        $rows = $this->repository->getComboVigentePorCliente($idCliente, $idUsuario, $nivel);
         foreach ($rows as &$row) {
             $row['responsables'] = $this->repository->getResponsables((int) $row['id']);
         }
@@ -189,16 +208,17 @@ class TareaService
 
     // ─── Actualizar ──────────────────────────────────────────
 
-    public function actualizar(int $id, array $data): void
+    public function actualizar(int $id, array $data, int $nivel): void
     {
+        $idUsuario = (int) $data['updated_by'];
+        $this->verificarAcceso($id, $idUsuario, $nivel);
         $this->rules->validar($data);
 
         $antes = $this->repository->findByIdGlobal($id);
         if (!$antes) {
-            throw new Exception('La tarea no existe o fue eliminada.');
+            throw new Exception(self::MSG_NO_ENCONTRADA);
         }
 
-        $idUsuario    = (int) $data['updated_by'];
         $responsables = $data['responsables'] ?? [];
         $estadoNuevo  = trim($data['estado'] ?? '');
         $estadoAntes  = $antes['estado'];
@@ -239,11 +259,13 @@ class TareaService
 
     // ─── Eliminar ─────────────────────────────────────────────
 
-    public function eliminar(int $id, int $idUsuario): void
+    public function eliminar(int $id, int $idUsuario, int $nivel): void
     {
+        $this->verificarAcceso($id, $idUsuario, $nivel);
+
         $antes = $this->repository->findByIdGlobal($id);
         if (!$antes) {
-            throw new Exception('La tarea no existe o ya fue eliminada.');
+            throw new Exception(self::MSG_NO_ENCONTRADA);
         }
 
         $this->repository->beginTransaction();
@@ -443,13 +465,22 @@ class TareaService
         return $this->repository->getAdjuntos($idTarea);
     }
 
-    public function addAdjunto(array $data): int
+    public function addAdjunto(array $data, int $nivel): int
     {
+        $this->verificarAcceso((int) $data['id_tarea'], (int) $data['created_by'], $nivel);
         return $this->repository->addAdjunto($data);
     }
 
-    public function deleteAdjunto(int $idAdjunto, int $idUsuario): ?string
+    /**
+     * El adjunto se valida a través de su tarea. Inexistente o de una tarea ajena
+     * responden igual, para no revelar que existe.
+     */
+    public function deleteAdjunto(int $idAdjunto, int $idUsuario, int $nivel): ?string
     {
+        $idTarea = $this->repository->getIdTareaDeAdjunto($idAdjunto);
+        if ($idTarea === null || !$this->repository->puedeVerTarea($idTarea, $idUsuario, $nivel)) {
+            throw new Exception('Adjunto no encontrado.');
+        }
         return $this->repository->deleteAdjunto($idAdjunto, $idUsuario);
     }
 
@@ -510,7 +541,25 @@ class TareaService
         return $this->repository->updateResponsableTarea($id, $data);
     }
 
-    public function getTareaCompleta(int $id): ?array
+    /**
+     * Detalle completo de una tarea para mostrarlo al usuario: solo si puede verla
+     * (si no, "Tarea no encontrada.", igual que si no existiera).
+     */
+    public function getTareaCompletaVisible(int $id, int $idUsuario, int $nivel): array
+    {
+        $this->verificarAcceso($id, $idUsuario, $nivel);
+        $tarea = $this->getTareaCompleta($id);
+        if (!$tarea) {
+            throw new Exception(self::MSG_NO_ENCONTRADA);
+        }
+        return $tarea;
+    }
+
+    /**
+     * Detalle completo SIN validar acceso: solo para uso interno (la notificación de
+     * la tarea recién guardada). Hacia el usuario, usar getTareaCompletaVisible().
+     */
+    private function getTareaCompleta(int $id): ?array
     {
         $tarea = $this->repository->findByIdCompleto($id);
         if ($tarea) {

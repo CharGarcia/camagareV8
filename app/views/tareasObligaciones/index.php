@@ -994,6 +994,8 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
         modalComboBS = null,
         modalDuplicarBS = null;
     var tabActual = '<?= $tabActiva ?>';
+    // Tarea que pidió abrir la campana del navbar al llegar desde otra pantalla (0 = ninguna).
+    var abrirTareaInicial = <?= (int) ($abrirTarea ?? 0) ?>;
     var TAB_LINK_ID = { tareas: 'tab-tareas-link', obligaciones: 'tab-oblig-link', clientes: 'tab-clientes-link' };
 
     // ── Bootstrap modal refs ─────────────────────────────────────────
@@ -1031,6 +1033,9 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
             } else {
                 buscarOblig(1);
             }
+
+            // Llegó desde la campana del navbar: abrir directamente esa tarea.
+            if (abrirTareaInicial > 0) abrirTareaPorId(abrirTareaInicial);
         } catch (e) {
             console.error('Error init modals:', e);
         }
@@ -1805,8 +1810,30 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
     };
 
     window.abrirModalTareaEditar = function(tr) {
+        abrirModalTareaConDatos(JSON.parse(tr.getAttribute('data-row')));
+    };
+
+    // Abre una tarea por su id, sin la fila de la tabla a mano: la usa la campana de
+    // tareas del navbar (estando aquí, o al llegar desde otra pantalla).
+    window.abrirTareaPorId = function(id) {
+        fetch(BASE + '/config/tareas-obligaciones?action=tareas-get-detalle&id=' + encodeURIComponent(id))
+            .then(function(res) {
+                return res.json();
+            })
+            .then(function(d) {
+                if (d.ok && d.data) {
+                    abrirModalTareaConDatos(d.data);
+                    return;
+                }
+                Swal.fire({ icon: 'error', title: 'No se pudo abrir la tarea', text: d.error || 'La tarea ya no está disponible.' });
+            })
+            .catch(function() {
+                Swal.fire({ icon: 'error', title: 'No se pudo abrir la tarea', text: 'Intente de nuevo.' });
+            });
+    };
+
+    function abrirModalTareaConDatos(r) {
         resetModalTarea();
-        var r = JSON.parse(tr.getAttribute('data-row'));
         document.getElementById('tarea-modal-titulo').textContent = 'Editar Tarea';
         document.getElementById('tarea-id').value = r.id;
         document.getElementById('tarea-id-origen').value = r.id_tarea_origen || '';
@@ -1867,7 +1894,7 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
             });
 
         modalTareaBS.show();
-    };
+    }
 
     window.onEstadoCambio = function() {
         var estado = document.getElementById('tarea-estado').value;

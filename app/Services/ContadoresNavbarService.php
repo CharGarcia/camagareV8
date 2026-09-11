@@ -81,6 +81,9 @@ class ContadoresNavbarService
     /** Ventana en días para "suscripciones por vencer" (cobros próximos de los clientes). */
     private const DIAS_SUSCRIPCIONES_POR_VENCER = 7;
 
+    /** Tope de tareas por grupo (vencidas / por vencer) en la lista de la campana; el resto se ve en el módulo. */
+    private const LIMITE_LISTA_TAREAS = 15;
+
     /**
      * Umbral de aviso ESCALADO según la periodicidad de la suscripción.
      * Evita que una suscripción mensual mantenga el badge encendido todo el mes
@@ -220,6 +223,47 @@ class ContadoresNavbarService
         $det['total'] = $det['vencidas'] + $det['por_vencer'];
         Cache::set(self::claveTareas($idUsuario), $det, self::TTL_CONTADORES);
         return $det;
+    }
+
+    /**
+     * Lista de la campana de tareas (se pide al abrirla, no en cada sondeo): las
+     * vencidas y las por vencer del usuario, cada grupo con su total real — la lista
+     * se corta en LIMITE_LISTA_TAREAS por grupo.
+     *
+     * De paso deja en caché el desglose recién contado, para que el badge del
+     * siguiente sondeo muestre el mismo número que la lista.
+     *
+     * @return array{vencidas:array{total:int,items:array<int,array<string,mixed>>},por_vencer:array{total:int,items:array<int,array<string,mixed>>}}
+     */
+    public function getTareasAlertas(int $idUsuario): array
+    {
+        $out = [
+            'vencidas'   => ['total' => 0, 'items' => []],
+            'por_vencer' => ['total' => 0, 'items' => []],
+        ];
+
+        $filas = (new TareaRepository())->getAlertaTareasLista($idUsuario, self::LIMITE_LISTA_TAREAS);
+        foreach ($filas as $f) {
+            $grupo = ($f['grupo'] ?? '') === 'vencida' ? 'vencidas' : 'por_vencer';
+            $out[$grupo]['total']   = (int) $f['total_grupo'];
+            $out[$grupo]['items'][] = [
+                'id'         => (int) $f['id'],
+                'obligacion' => (string) ($f['obligacion'] ?? ''),
+                'cliente'    => (string) ($f['cliente_nombre'] ?? ''),
+                'fecha'      => (string) ($f['fecha_tarea'] ?? ''),
+                'dias'       => (int) $f['dias'],
+            ];
+        }
+
+        $vencidas  = $out['vencidas']['total'];
+        $porVencer = $out['por_vencer']['total'];
+        Cache::set(self::claveTareas($idUsuario), [
+            'vencidas'   => $vencidas,
+            'por_vencer' => $porVencer,
+            'total'      => $vencidas + $porVencer,
+        ], self::TTL_CONTADORES);
+
+        return $out;
     }
 
     /**

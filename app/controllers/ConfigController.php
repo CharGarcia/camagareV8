@@ -1488,6 +1488,7 @@ class ConfigController extends Controller
             'tareas-update'            => 'tareasUpdate',
             'tareas-delete'            => 'tareasDelete',
             'tareas-get-detalle'       => 'tareasGetDetalle',
+            'tareas-entrar'            => 'tareasEntrarAjax',
             // Adjuntos
             'tareas-upload-adjunto'    => 'tareasUploadAdjunto',
             'tareas-delete-adjunto'    => 'tareasDeleteAdjunto',

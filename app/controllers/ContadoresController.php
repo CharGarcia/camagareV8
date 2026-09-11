@@ -59,6 +59,30 @@ class ContadoresController extends Controller
     }
 
     /**
+     * GET /contadores/tareasAlertasAjax → lista de la campana de tareas (vencidas y
+     * por vencer). Se pide solo al abrir el desplegable, no en el sondeo del navbar.
+     * Tareas es global por usuario: basta la sesión.
+     */
+    public function tareasAlertasAjax(): void
+    {
+        $this->requireAuth();
+
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        // Solo LEE la sesión: se libera el lock igual que en navbarAjax.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        try {
+            $this->json(['ok' => true] + $this->service->getTareasAlertas($idUsuario));
+        } catch (\Throwable $e) {
+            error_log('ContadoresController::tareasAlertasAjax ' . $e->getMessage());
+            $this->json(['ok' => false, 'error' => 'No se pudo cargar la lista de tareas.']);
+        }
+    }
+
+    /**
      * POST /contadores/marcarSubmoduloVistoAjax — el navbar la dispara cuando detecta
      * que la ruta actual coincide con un submódulo "nuevo" (ver navbar.php). Marca
      * la visita para que deje de aparecer en el aviso. Nunca debe romper la página.

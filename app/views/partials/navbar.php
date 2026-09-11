@@ -239,6 +239,51 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
        por permisos, desaparece entero: si no, seguiría aportando el gap del
        contenedor y su línea divisoria donde no hay nada. */
     .cmg-nav-grupo:not(:has(> *:not(.d-none))) { display: none; }
+
+    /* Campana de tareas: lista de vencidas y por vencer. La misma lista se pinta en
+       el desplegable (escritorio) y en su modal (móvil), por eso sus estilos no
+       dependen de las variables de .dropdown-menu. */
+    .cmg-tareas-grupo {
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        padding: 0.5rem 0.9rem 0.3rem;
+        background: #f8f9fa;
+        border-bottom: 1px solid #eef0f2;
+    }
+    .cmg-tarea-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.45rem 0.9rem;
+        font-size: 0.8rem;
+        color: var(--bs-body-color);
+        text-decoration: none;
+        border-bottom: 1px solid #f1f3f5;
+    }
+    .cmg-tarea-item:hover,
+    .cmg-tarea-item:focus { background: #f1f5ff; color: var(--bs-body-color); }
+    .cmg-tarea-item__texto { display: flex; flex-direction: column; min-width: 0; }
+    .cmg-tarea-item__titulo,
+    .cmg-tarea-item__cliente { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cmg-tarea-item__titulo { font-weight: 600; }
+    .cmg-tarea-item__cliente { font-size: 0.75rem; color: var(--bs-secondary-color); }
+    .cmg-tarea-item__cuando {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        flex-shrink: 0;
+        font-size: 0.72rem;
+        white-space: nowrap;
+    }
+    .cmg-tareas-resto {
+        padding: 0.4rem 0.9rem;
+        font-size: 0.72rem;
+        color: var(--bs-secondary-color);
+        border-bottom: 1px solid #f1f3f5;
+    }
 </style>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary cmg-navbar-compact position-relative">
     <div class="container-fluid gap-2 align-items-center py-1 d-flex flex-wrap flex-lg-nowrap">
@@ -382,11 +427,19 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscgest-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
 
-                <!-- Tareas y obligaciones pendientes / vencidas -->
-                <a id="tareas-alertas-link" href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative d-none cmg-icon-update tareas-alertas-link" title="Tareas pendientes/vencidas" data-navbar-link="true">
-                    <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger tareas-alertas-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-                </a>
+                <!-- Tareas y obligaciones vencidas / por vencer: la campana despliega la lista
+                     (se pide al abrirla, ver CMG_cargarTareasAlertas) y cada tarea abre su ficha. -->
+                <div class="dropdown d-none tareas-alertas-link cmg-tareas-alertas-wrap">
+                    <a class="text-white text-decoration-none position-relative tareas-alertas-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Tareas vencidas y por vencer" data-navbar-link="true">
+                        <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger tareas-alertas-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end shadow-sm p-0 overflow-hidden" style="width: 360px; max-width: 92vw; z-index: 5065;">
+                        <h6 class="dropdown-header text-danger border-bottom py-2"><i class="bi bi-bell me-1"></i>Tareas vencidas y por vencer</h6>
+                        <div class="cmg-tareas-lista" style="max-height: 60vh; overflow-y: auto;"></div>
+                        <a class="dropdown-item text-center small text-primary py-2" href="<?= $base ?>/config/tareas-obligaciones">Ver todas las tareas</a>
+                    </div>
+                </div>
             </div>
 
             <!-- Grupo 2 · PENDIENTES: documentos a medias que esperan al usuario. -->
@@ -570,7 +623,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscgest-badge">0</span>
                     <small>Suscrip.</small>
                 </a>
-                <a class="cmg-icon-update tareas-alertas-link d-none" href="<?= $base ?>/config/tareas-obligaciones">
+                <a class="cmg-icon-update tareas-alertas-link tareas-alertas-toggle d-none" href="#" data-bs-toggle="modal" data-bs-target="#modalTareasAlertas">
                     <i class="bi bi-bell-fill"></i>
                     <span class="position-absolute badge rounded-pill bg-danger tareas-alertas-badge">0</span>
                     <small>Tareas</small>
@@ -736,11 +789,30 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
     </div>
 </div>
 
+<!-- Modal: tareas vencidas y por vencer. Lo abre la campana del menú móvil; en
+     escritorio la misma lista va en el desplegable de la campana. -->
+<div class="modal fade" id="modalTareasAlertas" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-bell-fill text-danger me-1"></i> Tareas vencidas y por vencer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-0 cmg-tareas-lista"></div>
+            <div class="modal-footer py-2">
+                <a href="<?= $base ?>/config/tareas-obligaciones" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-list-check"></i> Ver todas las tareas
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-    // Safari/iOS FIX: Mover el offcanvas y el modal al final del body para escapar
+    // Safari/iOS FIX: Mover el offcanvas y los modales al final del body para escapar
     // de cualquier restricción de position: sticky del header padre.
     document.addEventListener("DOMContentLoaded", function() {
-        ['offcanvasMobileMenu', 'modalSubmodulosNuevos'].forEach(function(id) {
+        ['offcanvasMobileMenu', 'modalSubmodulosNuevos', 'modalTareasAlertas'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el && el.parentNode !== document.body) {
                 document.body.appendChild(el);
@@ -948,13 +1020,15 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     firmaWraps.forEach(function(w) { w.classList.add('d-none'); });
                 }
 
-                // Campana de tareas: tooltip con el desglose (vencidas vs por vencer)
+                // Campana de tareas: tooltip con el desglose (vencidas vs por vencer). Va en el
+                // enlace que despliega la lista, no en su contenedor, para que no aparezca al
+                // pasar el mouse por la lista abierta.
                 const td = c.tareas_detalle || null;
                 if (td) {
                     const v = parseInt(td.vencidas || 0, 10);
                     const p = parseInt(td.por_vencer || 0, 10);
-                    const titTareas = v + ' vencida' + (v === 1 ? '' : 's') + ' · ' + p + ' por vencer';
-                    document.querySelectorAll('.tareas-alertas-link').forEach(function(l) { l.setAttribute('title', titTareas); });
+                    const titTareas = v + ' vencida' + (v === 1 ? '' : 's') + ' · ' + p + ' por vencer — clic para verlas';
+                    document.querySelectorAll('.tareas-alertas-toggle').forEach(function(l) { l.setAttribute('title', titTareas); });
                 }
 
                 // Submódulos nuevos asignados (sin visitar): badge + lista del modal.
@@ -1049,6 +1123,101 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 .catch(function() {})
                 .finally(function() { btnMarcarTodosSubmod.disabled = false; });
             });
+        }
+
+        // ===== Campana de tareas: lista de vencidas y por vencer =====
+        // La lista NO viaja en el sondeo de 5 s: se pide cada vez que se abre el
+        // desplegable (escritorio) o su modal (móvil), y se pinta igual en ambos.
+        function CMG_etiquetaDiasTarea(grupo, dias) {
+            if (grupo === 'vencidas') {
+                return dias < 0 ? 'Hace ' + (-dias) + (dias === -1 ? ' día' : ' días') : 'Vencida';
+            }
+            if (dias === 0) return 'Vence hoy';
+            if (dias === 1) return 'Vence mañana';
+            return 'En ' + dias + ' días';
+        }
+
+        function CMG_htmlGrupoTareas(grupo, titulo, icono, color, datos) {
+            const total = parseInt((datos && datos.total) || 0, 10);
+            if (total <= 0) return '';
+            const items = Array.isArray(datos.items) ? datos.items : [];
+            let html = '<div class="cmg-tareas-grupo text-' + color + '"><i class="bi ' + icono + ' me-1"></i>' + titulo + ' (' + total + ')</div>';
+            items.forEach(function(t) {
+                const dias  = parseInt(t.dias, 10);
+                const fecha = String(t.fecha || '').slice(0, 10).split('-').reverse().join('-'); // d-m-Y
+                html += '<a href="#" class="cmg-tarea-item" data-id="' + parseInt(t.id, 10) + '">'
+                    + '<span class="cmg-tarea-item__texto">'
+                    +   '<span class="cmg-tarea-item__titulo">' + escapeHtmlNav(t.obligacion || 'Tarea') + '</span>'
+                    +   '<span class="cmg-tarea-item__cliente">' + escapeHtmlNav(t.cliente) + '</span>'
+                    + '</span>'
+                    + '<span class="cmg-tarea-item__cuando">'
+                    +   '<span class="fw-semibold text-' + color + '">' + CMG_etiquetaDiasTarea(grupo, dias) + '</span>'
+                    +   '<span class="text-muted">' + escapeHtmlNav(fecha) + '</span>'
+                    + '</span>'
+                    + '</a>';
+            });
+            const resto = total - items.length;
+            if (resto > 0) {
+                html += '<div class="cmg-tareas-resto">y ' + resto + ' más en Tareas y Obligaciones</div>';
+            }
+            return html;
+        }
+
+        let CMG_tareasListaEnVuelo = false;
+        function CMG_cargarTareasAlertas() {
+            const listas = document.querySelectorAll('.cmg-tareas-lista');
+            if (!listas.length || CMG_tareasListaEnVuelo) return;
+            CMG_tareasListaEnVuelo = true;
+            const pintar = function(html) { listas.forEach(function(l) { l.innerHTML = html; }); };
+            pintar('<div class="text-center text-muted small py-4"><span class="spinner-border spinner-border-sm me-2"></span>Cargando…</div>');
+            fetch('<?= $base ?>/contadores/tareasAlertasAjax', { headers: { 'Accept': 'application/json' } })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (!d || !d.ok) throw new Error('sin datos');
+                    const html = CMG_htmlGrupoTareas('vencidas', 'Vencidas', 'bi-exclamation-circle-fill', 'danger', d.vencidas)
+                               + CMG_htmlGrupoTareas('por_vencer', 'Por vencer', 'bi-hourglass-split', 'warning-emphasis', d.por_vencer);
+                    pintar(html || '<div class="text-center text-muted small py-4">No tienes tareas vencidas ni por vencer.</div>');
+                })
+                .catch(function() {
+                    pintar('<div class="text-center text-danger small py-4">No se pudo cargar la lista de tareas.</div>');
+                })
+                .finally(function() { CMG_tareasListaEnVuelo = false; });
+        }
+
+        // Se recarga en cada apertura, así nunca muestra una tarea ya atendida.
+        document.addEventListener('show.bs.dropdown', function(e) {
+            if (e.target && e.target.closest && e.target.closest('.cmg-tareas-alertas-wrap')) CMG_cargarTareasAlertas();
+        });
+        const modalTareasAlertas = document.getElementById('modalTareasAlertas');
+        if (modalTareasAlertas) modalTareasAlertas.addEventListener('show.bs.modal', CMG_cargarTareasAlertas);
+
+        // Clic en una tarea de la lista: abrir su ficha en Tareas y Obligaciones.
+        document.addEventListener('click', function(e) {
+            const item = e.target && e.target.closest ? e.target.closest('.cmg-tarea-item[data-id]') : null;
+            if (!item) return;
+            e.preventDefault();
+            CMG_abrirTarea(parseInt(item.getAttribute('data-id'), 10), !item.closest('.modal'));
+        });
+
+        function CMG_abrirTarea(id, desdeDesplegable) {
+            if (!(id > 0)) return;
+            // Ya en Tareas y Obligaciones: se abre ahí mismo, sin recargar. Desde el modal
+            // del menú móvil se navega igual, para no apilar ese modal, el offcanvas y la ficha.
+            if (desdeDesplegable && typeof window.abrirTareaPorId === 'function') {
+                window.abrirTareaPorId(id);
+                return;
+            }
+            // Desde otra pantalla: el id viaja en sesión y se navega a la URL limpia
+            // (ver TareasObligacionesController::tareasEntrarAjax). Si falla, igual se
+            // llega al módulo, solo que sin abrir la ficha.
+            const fd = new FormData();
+            fd.append('id', id);
+            fetch('<?= $base ?>/config/tareas-obligaciones?action=tareas-entrar', {
+                method: 'POST', body: fd, credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .catch(function() {})
+            .finally(function() { window.location.href = '<?= $base ?>/config/tareas-obligaciones'; });
         }
 
         // Compatibilidad: las funciones antiguas ahora refrescan TODO vía el endpoint unificado.

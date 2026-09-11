@@ -176,6 +176,48 @@ class TareaRepository extends BaseRepository
     }
 
     /**
+     * true si el usuario puede ver la tarea, y por tanto abrirla, modificarla,
+     * eliminarla o tocar sus adjuntos. Misma regla de visibilidad que getListado():
+     * nivel 3 (superadmin) ve todas; el resto solo las que creó o en las que figura
+     * como responsable (por usuario o por su correo). Una tarea inexistente o
+     * eliminada da false en cualquier nivel.
+     */
+    public function puedeVerTarea(int $idTarea, int $idUsuario, int $nivel): bool
+    {
+        if ($nivel >= 3) {
+            $st = $this->db->prepare("SELECT 1 FROM {$this->table} WHERE id = :id AND eliminado = false");
+            $st->execute([':id' => $idTarea]);
+            return (bool) $st->fetchColumn();
+        }
+
+        $selMail = $this->db->prepare("SELECT mail FROM usuarios WHERE id = :id_u");
+        $selMail->execute([':id_u' => $idUsuario]);
+        $uMail = strtolower(trim((string) $selMail->fetchColumn()));
+
+        $sql = "SELECT 1
+                FROM {$this->table} t
+                WHERE t.id = :id_tarea
+                  AND t.eliminado = false
+                  AND (
+                    t.created_by = :id_usuario
+                    OR t.id IN (
+                      SELECT id_tarea FROM tareas_responsables
+                      WHERE id_usuario = :id_usuario_rep
+                         OR (:u_mail <> '' AND LOWER(correo_cache) = :u_mail_aux)
+                    )
+                  )";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_tarea'       => $idTarea,
+            ':id_usuario'     => $idUsuario,
+            ':id_usuario_rep' => $idUsuario,
+            ':u_mail'         => $uMail,
+            ':u_mail_aux'     => $uMail,
+        ]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
      * Crea una nueva tarea.
      */
     public function create(array $data): int
@@ -372,6 +414,18 @@ class TareaRepository extends BaseRepository
         $st->execute([':id' => $idAdjunto, ':uid' => $idUsuario]);
 
         return $row['ruta_archivo'];
+    }
+
+    /**
+     * Tarea dueña de un adjunto activo (null si el adjunto no existe o ya se eliminó).
+     * Sirve para validar el acceso al adjunto a través de su tarea.
+     */
+    public function getIdTareaDeAdjunto(int $idAdjunto): ?int
+    {
+        $st = $this->db->prepare("SELECT id_tarea FROM tareas_adjuntos WHERE id = :id AND eliminado = false");
+        $st->execute([':id' => $idAdjunto]);
+        $idTarea = $st->fetchColumn();
+        return $idTarea === false ? null : (int) $idTarea;
     }
 
     /**
@@ -714,6 +768,73 @@ class TareaRepository extends BaseRepository
     }
 
     /**
+     * Lista de la campana del navbar: las tareas VENCIDAS y POR VENCER del usuario,
+     * con el mismo criterio y la misma visibilidad que getAlertaTareasDetalle (así el
+     * total de cada grupo cuadra con el badge).
+     *
+     * Trae hasta $limite tareas por grupo, de la más cercana a hoy hacia afuera: las
+     * vencidas de la más reciente a la más antigua y las por vencer de la más próxima
+     * a la más lejana. Cada fila lleva el total real de su grupo (total_grupo), para
+     * poder avisar cuántas quedaron fuera de la lista.
+     *
+     *   grupo = 'vencida'    → estado 'vencida' o 'por_realizar' con fecha ya pasada
+     *   grupo = 'por_vencer' → 'por_realizar' con fecha entre hoy y hoy+2
+     *   dias  = fecha_tarea - hoy (negativo si ya venció)
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function getAlertaTareasLista(int $idUsuario, int $limite): array
+    {
+        $selMail = $this->db->prepare("SELECT mail FROM usuarios WHERE id = :id_u");
+        $selMail->execute([':id_u' => $idUsuario]);
+        $uMail = strtolower(trim((string) $selMail->fetchColumn()));
+
+        $sql = "WITH alertas AS (
+                    SELECT t.id, t.cliente_nombre, t.fecha_tarea, t.id_obligacion,
+                           CASE WHEN t.estado = 'vencida' OR t.fecha_tarea < CURRENT_DATE
+                                THEN 'vencida' ELSE 'por_vencer' END AS grupo
+                    FROM tareas t
+                    WHERE t.eliminado = false
+                      AND (
+                        t.estado = 'vencida'
+                        OR (t.estado = 'por_realizar' AND t.fecha_tarea <= CURRENT_DATE + 2)
+                      )
+                      AND (
+                        t.created_by = :id_usuario
+                        OR t.id IN (
+                          SELECT id_tarea FROM tareas_responsables
+                          WHERE id_usuario = :id_usuario_rep
+                             OR (:u_mail <> '' AND LOWER(correo_cache) = :u_mail_aux)
+                        )
+                      )
+                ), numeradas AS (
+                    SELECT a.*,
+                           COUNT(*) OVER (PARTITION BY a.grupo) AS total_grupo,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY a.grupo
+                               ORDER BY ABS(a.fecha_tarea - CURRENT_DATE), a.id
+                           ) AS rn
+                    FROM alertas a
+                )
+                SELECT n.id, n.cliente_nombre, n.fecha_tarea, n.grupo, n.total_grupo,
+                       (n.fecha_tarea - CURRENT_DATE) AS dias,
+                       co.nombre AS obligacion
+                FROM numeradas n
+                LEFT JOIN cat_obligaciones co ON co.id = n.id_obligacion
+                WHERE n.rn <= CAST(:limite AS INTEGER)
+                ORDER BY n.grupo, n.rn";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_usuario'     => $idUsuario,
+            ':id_usuario_rep' => $idUsuario,
+            ':u_mail'         => $uMail,
+            ':u_mail_aux'     => $uMail,
+            ':limite'         => $limite,
+        ]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Tareas VENCIDAS o POR VENCER (fecha dentro de $dias) con su responsable resuelto
      * (correo + nombre). Devuelve una fila por (tarea, responsable). Es GLOBAL: la tabla
      * `tareas` no depende de empresa. Para el recordatorio diario por correo.
@@ -838,19 +959,42 @@ class TareaRepository extends BaseRepository
 
     /**
      * Combo vigente de un cliente: una fila por cada obligación con tarea activa
-     * (no archivada), tomando la más reciente por obligación.
+     * (no archivada), tomando la más reciente por obligación. Nivel 3 ve todas; el
+     * resto solo las tareas que creó o donde es responsable — mismo criterio que
+     * getClientesListado(), así el combo cuadra con su contador "N vigentes".
      */
-    public function getComboVigentePorCliente(int $idCliente): array
+    public function getComboVigentePorCliente(int $idCliente, int $idUsuario, int $nivel): array
     {
+        $visSql = '';
+        $params = [':id_cliente' => $idCliente];
+        if ($nivel < 3) {
+            $selMail = $this->db->prepare("SELECT mail FROM usuarios WHERE id = :id_u");
+            $selMail->execute([':id_u' => $idUsuario]);
+            $uMail = strtolower(trim((string) $selMail->fetchColumn()));
+
+            $visSql = " AND (
+                t.created_by = :id_usuario
+                OR t.id IN (
+                    SELECT id_tarea FROM tareas_responsables
+                    WHERE id_usuario = :id_usuario_aux
+                       OR (:u_mail <> '' AND LOWER(correo_cache) = :u_mail_aux)
+                )
+            )";
+            $params[':id_usuario']     = $idUsuario;
+            $params[':id_usuario_aux'] = $idUsuario;
+            $params[':u_mail']         = $uMail;
+            $params[':u_mail_aux']     = $uMail;
+        }
+
         $sql = "SELECT DISTINCT ON (t.id_obligacion)
                        t.id, t.id_obligacion, co.nombre AS obligacion_nombre,
                        t.periodicidad, t.fecha_tarea, t.estado
                 FROM tareas t
                 JOIN cat_obligaciones co ON co.id = t.id_obligacion
-                WHERE t.id_cliente = :id_cliente AND t.eliminado = false AND t.archivada = false
+                WHERE t.id_cliente = :id_cliente AND t.eliminado = false AND t.archivada = false{$visSql}
                 ORDER BY t.id_obligacion, t.fecha_tarea DESC";
         $st = $this->db->prepare($sql);
-        $st->execute([':id_cliente' => $idCliente]);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

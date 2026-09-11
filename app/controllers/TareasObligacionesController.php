@@ -42,6 +42,9 @@ class TareasObligacionesController extends Controller
         'application/xml',
     ];
 
+    /** Tarea que la campana del navbar pidió abrir (de un solo uso, ver tareasEntrarAjax()). */
+    private const SESION_ABRIR_TAREA = 'tareas_abrir_tarea';
+
     public function __construct()
     {
         $logService              = new LogSistemaService();
@@ -88,6 +91,11 @@ class TareasObligacionesController extends Controller
             $idEmpresaFavorita = null;
         }
 
+        // Tarea elegida en la campana del navbar: el id viaja en sesión para que la
+        // URL quede limpia. Es de un solo uso, así al recargar no se reabre.
+        $abrirTarea = (int) ($_SESSION[self::SESION_ABRIR_TAREA] ?? 0);
+        unset($_SESSION[self::SESION_ABRIR_TAREA]);
+
         $this->viewWithLayout('layouts.main', 'tareasObligaciones.index', [
             'titulo'              => 'Tareas y Obligaciones',
             'tab'                 => $tab,
@@ -97,6 +105,7 @@ class TareasObligacionesController extends Controller
             'responsablesFiltro'  => $responsablesFiltro,
             'empresas'            => $empresas,  // Agregar explícitamente para navbar
             'idEmpresaFavorita'   => $idEmpresaFavorita,  // Agregar favorito
+            'abrirTarea'          => $abrirTarea,
         ]);
     }
 
@@ -376,6 +385,7 @@ class TareasObligacionesController extends Controller
 
         $id           = (int) ($_POST['id'] ?? 0);
         $idUsuario    = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel        = (int) ($_SESSION['nivel'] ?? 1);
         $responsables = $_POST['responsables'] ?? [];
         if (is_string($responsables)) {
             $responsables = json_decode($responsables, true) ?? [];
@@ -387,7 +397,7 @@ class TareasObligacionesController extends Controller
 
         try {
             if ($id <= 0) throw new \Exception('ID no válido.');
-            $this->tareaService->actualizar($id, $data);
+            $this->tareaService->actualizar($id, $data, $nivel);
             echo json_encode(['ok' => true, 'msg' => 'Tarea actualizada correctamente.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -402,10 +412,11 @@ class TareasObligacionesController extends Controller
 
         $id        = (int) ($_POST['id'] ?? 0);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
 
         try {
             if ($id <= 0) throw new \Exception('ID no válido.');
-            $this->tareaService->eliminar($id, $idUsuario);
+            $this->tareaService->eliminar($id, $idUsuario, $nivel);
             echo json_encode(['ok' => true, 'msg' => 'Tarea eliminada correctamente.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -418,11 +429,12 @@ class TareasObligacionesController extends Controller
         $this->requireAuth();
         header('Content-Type: application/json');
 
-        $id = (int) ($_GET['id'] ?? 0);
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
         try {
             if ($id <= 0) throw new \Exception('ID no válido.');
-            $tarea = $this->tareaService->getTareaCompleta($id);
-            if (!$tarea) throw new \Exception('Tarea no encontrada.');
+            $tarea = $this->tareaService->getTareaCompletaVisible($id, $idUsuario, $nivel);
 
             // Formatear fechas
             $fmt = fn($d) => !empty($d) ? date('d-m-Y H:i:s', strtotime($d)) : '-';
@@ -436,6 +448,26 @@ class TareasObligacionesController extends Controller
         exit;
     }
 
+    /**
+     * Abrir una tarea desde la campana del navbar.
+     *
+     * El id se deja en sesión y la navegación va a la URL limpia
+     * (`config/tareas-obligaciones`, sin parámetros): index() lo recoge y la vista
+     * abre el modal de esa tarea. Mismo patrón que el tablero del taller.
+     */
+    public function tareasEntrarAjax(): void
+    {
+        $this->requireAuth();
+
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $this->json(['ok' => false, 'error' => 'Tarea no válida.']);
+        }
+
+        $_SESSION[self::SESION_ABRIR_TAREA] = $id;
+        $this->json(['ok' => true]);
+    }
+
     // ════════════════════════════════════════════════════════
     //  AJAX — ADJUNTOS
     // ════════════════════════════════════════════════════════
@@ -447,9 +479,12 @@ class TareasObligacionesController extends Controller
 
         $idTarea   = (int) ($_POST['id_tarea'] ?? 0);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
 
         try {
             if ($idTarea <= 0) throw new \Exception('ID de tarea no válido.');
+            // Antes de tocar el disco: a una tarea ajena no se le guarda (ni queda huérfano) ningún archivo.
+            $this->tareaService->verificarAcceso($idTarea, $idUsuario, $nivel);
             if (empty($_FILES['adjunto'])) throw new \Exception('No se recibió ningún archivo.');
 
             $file = $_FILES['adjunto'];
@@ -488,7 +523,7 @@ class TareasObligacionesController extends Controller
                 'tipo_mime'      => $mime,
                 'tamanio'        => $file['size'],
                 'created_by'     => $idUsuario,
-            ]);
+            ], $nivel);
 
             echo json_encode(['ok' => true, 'msg' => 'Archivo adjunto guardado.', 'id' => $idAdjunto, 'nombre' => $file['name']]);
         } catch (\Throwable $e) {
@@ -504,10 +539,11 @@ class TareasObligacionesController extends Controller
 
         $idAdjunto = (int) ($_POST['id_adjunto'] ?? 0);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
 
         try {
             if ($idAdjunto <= 0) throw new \Exception('ID no válido.');
-            $ruta = $this->tareaService->deleteAdjunto($idAdjunto, $idUsuario);
+            $ruta = $this->tareaService->deleteAdjunto($idAdjunto, $idUsuario, $nivel);
 
             // Eliminar archivo físico si existe
             if ($ruta) {
@@ -747,9 +783,11 @@ class TareasObligacionesController extends Controller
         header('Content-Type: application/json');
 
         $idCliente = (int) ($_GET['id_cliente'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
         try {
             if ($idCliente <= 0) throw new \Exception('Cliente no válido.');
-            $combo = $this->tareaService->getComboCliente($idCliente);
+            $combo = $this->tareaService->getComboCliente($idCliente, $idUsuario, $nivel);
             echo json_encode(['ok' => true, 'data' => $combo]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
