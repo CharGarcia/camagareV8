@@ -1357,10 +1357,15 @@ $totalPages = $totalPagesOriginal;
                 });
             }
 
+            // Código del ítem libre: si el usuario no escribió uno, se manda la bandera
+            // "__LIBRE__" para que el backend genere uno automático — el input se deja
+            // vacío en pantalla (ver seleccionarItemLibre()), el sentinel se agrega solo
+            // aquí, al armar lo que se envía al servidor.
+            const codTecleadoFila = tr.querySelector('.input-codigo').value.trim();
             detalles.push({
                 id_producto: idProd || '',
                 es_libre: esLibre ? '1' : '0',
-                codigo_principal: tr.querySelector('.input-codigo').value,
+                codigo_principal: (esLibre && codTecleadoFila === '') ? '__LIBRE__' : codTecleadoFila,
                 descripcion: desc,
                 info_adicional: tr.querySelector('.input-adicional').value,
                 id_producto_variante: tr.querySelector('.input-id-variante').value || '',
@@ -3836,11 +3841,14 @@ $totalPages = $totalPagesOriginal;
         // Si el usuario ya escribió un código propio en la columna "Código" (que no
         // coincidió con ningún producto existente, o si coincidiera ya se habría
         // autoseleccionado), se respeta y se usa como código del nuevo producto al
-        // guardar. Solo se manda la bandera "__LIBRE__" cuando el campo quedó vacío,
-        // para que el backend genere uno automático (S001, S002...).
+        // guardar. El campo se deja VACÍO cuando no hay código tecleado — la bandera
+        // "__LIBRE__" que el backend necesita para generar uno automático (S001,
+        // S002...) se agrega recién al armar el payload de guardado (ver más abajo,
+        // "codigo_principal"), nunca se escribe en el input visible: mostrarle al
+        // usuario el texto "__LIBRE__" en la columna Código es confuso.
         const inputCod = row.querySelector('.input-codigo');
         const codTecleado = (inputCod.value || '').trim();
-        inputCod.value = (codTecleado !== '' && codTecleado.toUpperCase() !== '__LIBRE__') ? codTecleado : '__LIBRE__';
+        inputCod.value = (codTecleado !== '' && codTecleado.toUpperCase() !== '__LIBRE__') ? codTecleado : '';
         row.querySelector('.input-es-libre').value = '1';
         row.dataset.tipoProduccion = '02'; // Los ítems libres se tratan como servicios ad-hoc
         row.dataset.inventariable = 'false';
