@@ -1285,14 +1285,22 @@ WITH parametros AS (
            ''::text AS egreso_viejo       -- << opcional: número del egreso que lo pagó en el sistema anterior (p. ej. 12722)
 ),
 p AS (
-    SELECT pa.id_empresa,
-           CASE WHEN pa.numero ~ '^[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,9}$'
-                THEN lpad(split_part(pa.numero, '-', 1), 3, '0') || lpad(split_part(pa.numero, '-', 2), 3, '0')
-                  || lpad(split_part(pa.numero, '-', 3), 9, '0')
-                ELSE regexp_replace(pa.numero, '[^0-9]', '', 'g') END      AS num15,
-           NULLIF(regexp_replace(pa.egreso_viejo, '[^0-9]', '', 'g'), '')  AS egr_num,
+    SELECT pa.id_empresa, pa.numero AS numero_escrito,
+           -- acepta espacios y ceros de más: "001 - 002 - 0000000542" = 001-002-000000542
+           CASE WHEN n.limpio ~ '^[0-9]+-[0-9]+-[0-9]+$'
+                     AND length(ltrim(split_part(n.limpio, '-', 1), '0')) <= 3
+                     AND length(ltrim(split_part(n.limpio, '-', 2), '0')) <= 3
+                     AND length(ltrim(split_part(n.limpio, '-', 3), '0')) <= 9
+                THEN lpad(ltrim(split_part(n.limpio, '-', 1), '0'), 3, '0')
+                  || lpad(ltrim(split_part(n.limpio, '-', 2), '0'), 3, '0')
+                  || lpad(ltrim(split_part(n.limpio, '-', 3), '0'), 9, '0')
+                ELSE regexp_replace(n.limpio, '[^0-9]', '', 'g') END AS num15,
+           -- egreso: número del sistema anterior (12722) o número completo (001-001-000012722)
+           NULLIF(ltrim(regexp_replace(CASE WHEN pa.egreso_viejo LIKE '%-%-%' THEN split_part(pa.egreso_viejo, '-', 3)
+                                            ELSE pa.egreso_viejo END, '[^0-9]', '', 'g'), '0'), '') AS egr_num,
            (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = pa.id_empresa) AS amb_empresa
     FROM parametros pa
+    CROSS JOIN LATERAL (SELECT regexp_replace(COALESCE(pa.numero, ''), '[^0-9-]', '', 'g') AS limpio) n
 ),
 docs AS (
     SELECT 'COMPRA'::text AS tipo, c.id, c.id_proveedor, c.fecha_emision,
@@ -1325,7 +1333,7 @@ lin AS (       -- líneas de egresos que apuntan al documento, lo mencionan o so
            d.eliminado AS det_elim, e.id AS id_egreso, e.numero_egreso, e.fecha_emision, e.estado,
            e.eliminado AS egr_elim, COALESCE(pr.razon_social, e.beneficiario_nombre) AS tercero,
            EXISTS (SELECT 1 FROM docs x WHERE x.tipo = d.tipo_documento AND x.id = d.id_referencia_documento) AS al_doc,
-           (p.egr_num IS NOT NULL AND e.secuencial = lpad(p.egr_num, 9, '0'))                            AS del_egreso_indicado,
+           (p.egr_num IS NOT NULL AND ltrim(e.secuencial, '0') = p.egr_num)                            AS del_egreso_indicado,
            (SELECT m.id_origen FROM migracion_mysql_map m
              WHERE m.id_empresa = e.id_empresa AND m.entidad = 'egresos' AND m.id_destino = e.id LIMIT 1) AS id_viejo
     FROM egresos_detalle d
@@ -1333,7 +1341,7 @@ lin AS (       -- líneas de egresos que apuntan al documento, lo mencionan o so
     JOIN p ON e.id_empresa = p.id_empresa
     LEFT JOIN proveedores pr ON pr.id = e.id_proveedor
     WHERE EXISTS (SELECT 1 FROM docs x WHERE x.tipo = d.tipo_documento AND x.id = d.id_referencia_documento)
-       OR (p.egr_num IS NOT NULL AND e.secuencial = lpad(p.egr_num, 9, '0'))
+       OR (p.egr_num IS NOT NULL AND ltrim(e.secuencial, '0') = p.egr_num)
        OR (length(p.num15) = 15 AND (
               regexp_replace(COALESCE(d.descripcion, ''), '[^0-9]', '', 'g') LIKE '%' || p.num15 || '%'
            OR (CASE WHEN d.numero_documento ~ '^[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,9}$'
@@ -1374,8 +1382,11 @@ SELECT * FROM (
     LEFT JOIN proveedores pr ON pr.id = d.id_proveedor
     UNION ALL
     SELECT 1, 'DOCUMENTO', NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-           CASE WHEN length(p.num15) <> 15 THEN 'Escriba el número completo, p. ej. 001-002-000000542'
-                ELSE 'NO EXISTE ningún documento con ese número en la empresa' END, NULL
+           CASE WHEN COALESCE(p.id_empresa, 0) = 0 THEN 'Falta el id de la empresa en el parámetro id_empresa'
+                WHEN length(p.num15) <> 15
+                     THEN 'Número recibido: "' || COALESCE(p.numero_escrito, '') || '". Escríbalo completo en el parámetro numero, p. ej. 001-002-000000542'
+                ELSE 'NO EXISTE en la empresa ' || p.id_empresa || ' ninguna compra ni liquidación con el número '
+                     || substr(p.num15, 1, 3) || '-' || substr(p.num15, 4, 3) || '-' || substr(p.num15, 7) END, NULL
     FROM p
     WHERE NOT EXISTS (SELECT 1 FROM docs)
     UNION ALL

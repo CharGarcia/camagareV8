@@ -1307,14 +1307,10 @@ class SriEnvioService
             $numero   = \App\Services\ClaveAccesoService::numeroDesdeClave($claveAcceso);
             // SRI: '1' = pruebas, '2' = producción.
             $ambiente = \App\Services\ClaveAccesoService::ambienteDesdeClave($claveAcceso) === '2' ? 'producción' : 'pruebas';
+            // Solo el resumen: el detalle de causas y qué hacer está en el manual
+            // (guía "Clave de acceso en procesamiento", sección Error 45).
             $mensaje  = "El SRI ({$ambiente}) ya tiene registrado el número {$numero} de este tipo de comprobante "
                 . "con otra clave de acceso, por eso no acepta {$nombreDoc}.";
-            $errores[$i]['info'] = trim(((string) ($error['info'] ?? '')) . ' '
-                . "Suele pasar cuando se eliminó un documento que ya se había enviado al SRI y su número se volvió a usar, "
-                . "o cuando se cambió la fecha de emisión de un borrador después de enviarlo (la clave cambia, el número no). "
-                . "El número {$numero} ya no puede usarse en el ambiente de {$ambiente}: asigne el siguiente secuencial libre "
-                . "y vuelva a enviar. Para ubicar el comprobante en el SRI búsquelo por número y por la fecha del envío original, "
-                . "no por la clave actual; los comprobantes de pruebas no aparecen en el portal.");
         }
 
         return ['mensaje' => $mensaje, 'errores' => $errores];
