@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso
-version: 1.4
+version: 1.5
 orden: 10
 estado: activo
 ---
@@ -180,7 +180,8 @@ convertidos en factura, para no contar dos veces la misma venta. Los montos son
 **sin impuestos**.
 
 Haga clic en el título de una columna para ordenar por ella; otro clic invierte
-el orden. Se muestran 50 filas por página.
+el orden. La tabla muestra **20 filas por página**; para avanzar, use las flechas
+de la derecha (al lado se ve cuántas filas está viendo del total).
 
 ### Buscar en las transacciones
 
@@ -216,6 +217,10 @@ notas de crédito, y el saldo por cobrar.
   **saldo anterior** a esa fecha, así el saldo final sigue siendo el real.
 - **Historial de cobros**: deja a la vista solo los cobros (ingresos). El saldo de
   cada fila sigue siendo el que quedó después de ese cobro.
+
+Los movimientos se muestran de **20 en 20**, con las flechas de avance abajo a la
+derecha. Los totales de arriba y el saldo anterior corresponden a **todo el
+período filtrado**, no solo a la página que está viendo.
 
 ### Ver un ingreso con un clic
 
@@ -292,6 +297,11 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **1.5** — Las pestañas *Transacciones* y *Estado de cuenta* muestran **20 filas
+  por página**, con los botones de avance y el contador de filas a la derecha.
+  Además, el estado de cuenta abre mucho más rápido: el cruce de las notas de
+  crédito/débito y de las retenciones con su factura ya no recalcula el número de
+  cada factura por cada documento (ver *Reporte de Cartera*).
 - **1.4** — Pestaña **Transacciones**: productos y servicios vendidos al cliente
   (facturas, recibos y notas de crédito), en detalle o agrupados por producto,
   con buscador, filtros `clave:valor`, orden por columna y último precio.

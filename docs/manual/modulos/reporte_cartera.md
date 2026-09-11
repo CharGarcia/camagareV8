@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
 etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado
-version: 1.5
+version: 1.6
 orden: 0
 estado: activo
 ---
@@ -150,6 +150,12 @@ que los tres deben coincidir.
 
 ## Historial de cambios
 
+- **1.6** — El estado de cuenta de **clientes** es mucho más rápido. Las notas de
+  crédito/débito y las retenciones que no apuntan a una factura se enlazan por el
+  número del documento, y ese número se recalculaba para todas las facturas una vez
+  por cada nota o retención: el tiempo crecía como facturas × documentos. Ahora se
+  calcula una sola vez por consulta; con 20.000 facturas y 2.000 retenciones esa
+  parte pasó de unos 83 segundos a menos de un segundo. Los resultados no cambian.
 - **1.5** — La cartera de proveedores incluye todos los comprobantes de compra que generan deuda (notas de venta, documentos financieros, planillas, etc.), no solo la factura, y las liquidaciones de compra ya contabilizadas. Las compras anuladas o rechazadas quedan fuera. Antes esos documentos tenían asiento de cuenta por pagar pero no aparecían en el reporte.
 - **1.4** — Nuevo filtro **Documento**: buscador de los documentos del
   cliente/proveedor seleccionado; al elegir uno, el estado de cuenta se

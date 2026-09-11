@@ -110,6 +110,13 @@
 
     const CARGANDO = '<span class="spinner-border spinner-border-sm me-2"></span>Cargando…';
 
+    /**
+     * Filas por página del estado de cuenta. Se pagina en el navegador porque el saldo
+     * corriendo necesita todos los movimientos del período; Transacciones, en cambio,
+     * pagina en el servidor (el tamaño lo fija el controlador).
+     */
+    const POR_PAGINA_EC = 20;
+
     // ── Transacciones ───────────────────────────────────────────────────────
 
     function crearTransacciones(cfg) {
@@ -293,7 +300,7 @@
         const origenes = conf.origenes || {};
         const textos   = Object.assign({ sinPagos: 'No hay pagos en el período.' }, conf.textos || {});
         const el       = clave => panel.querySelector(`[data-fc="${clave}"]`);
-        const st       = { idCargado: null, filtro: 'todos', data: null, peticion: 0, detalles: new Map() };
+        const st       = { idCargado: null, filtro: 'todos', data: null, page: 1, peticion: 0, detalles: new Map() };
 
         function pintarResumen(d) {
             const set = (clave, v) => { const x = el(clave); if (x) x.textContent = fmtMoneda(v); };
@@ -325,6 +332,17 @@
             </tr>`;
         }
 
+        function pintarPaginacion(total, totalPaginas) {
+            const desde = total > 0 ? ((st.page - 1) * POR_PAGINA_EC) + 1 : 0;
+            const hasta = total > 0 ? Math.min(st.page * POR_PAGINA_EC, total) : 0;
+            const info  = el('info');
+            if (info) info.textContent = `${desde}-${hasta}/${total}`;
+            const prev = el('prev');
+            const next = el('next');
+            if (prev) prev.disabled = st.page <= 1;
+            if (next) next.disabled = st.page >= totalPaginas;
+        }
+
         function pintarMovimientos() {
             const tbody = el('tbody');
             const d = st.data;
@@ -334,19 +352,25 @@
             const movs  = (d.movimientos || []).filter(m => !soloPagos || m.origen === pago.origen);
             const desde = el('desde')?.value || '';
 
+            const totalPaginas = Math.max(1, Math.ceil(movs.length / POR_PAGINA_EC));
+            st.page = Math.min(Math.max(1, st.page), totalPaginas);
+            const pagina = movs.slice((st.page - 1) * POR_PAGINA_EC, st.page * POR_PAGINA_EC);
+
             let html = '';
-            if (desde && !soloPagos) {
+            // El saldo anterior encabeza el estado de cuenta: solo en la primera página
+            if (desde && !soloPagos && st.page === 1) {
                 html += `<tr class="table-light">
                     <td class="ps-2">${fmtFecha(desde)}</td>
                     <td colspan="5" class="fst-italic text-muted">Saldo anterior</td>
                     <td class="text-end pe-2 fw-medium">${fmtMoneda(d.saldo_anterior)}</td>
                 </tr>`;
             }
-            html += movs.length
-                ? movs.map(m => fila(m, !!d.puede_ver_pago)).join('')
+            html += pagina.length
+                ? pagina.map(m => fila(m, !!d.puede_ver_pago)).join('')
                 : filaMensaje(7, '<i class="bi bi-inbox fs-4 d-block mb-1"></i>'
                     + esc(soloPagos ? textos.sinPagos : 'No hay movimientos en el período.'));
             tbody.innerHTML = html;
+            pintarPaginacion(movs.length, totalPaginas);
         }
 
         async function cargar() {
@@ -354,6 +378,7 @@
             mostrarSinGuardar(panel, !id);
             if (!id) return;
             st.idCargado = id;
+            st.page = 1;
 
             const tbody = el('tbody');
             tbody.innerHTML = filaMensaje(7, CARGANDO);
@@ -375,7 +400,7 @@
         }
 
         function reset() {
-            Object.assign(st, { idCargado: null, filtro: 'todos', data: null });
+            Object.assign(st, { idCargado: null, filtro: 'todos', data: null, page: 1 });
             st.peticion++;
             st.detalles.clear();
             ['desde', 'hasta'].forEach(clave => { const x = el(clave); if (x) x.value = ''; });
@@ -383,6 +408,7 @@
             const tbody = el('tbody');
             if (tbody) tbody.innerHTML = '';
             pintarResumen(null);
+            pintarPaginacion(0, 1);
         }
 
         function asegurar() {
@@ -491,9 +517,18 @@
 
         panel.querySelectorAll('[data-fc-filtro]').forEach(btn => btn.addEventListener('click', () => {
             st.filtro = btn.dataset.fcFiltro;
+            st.page   = 1;
             panel.querySelectorAll('[data-fc-filtro]').forEach(b => b.classList.toggle('active', b === btn));
             pintarMovimientos();
         }));
+
+        el('prev')?.addEventListener('click', () => {
+            if (st.page > 1) { st.page--; pintarMovimientos(); }
+        });
+        el('next')?.addEventListener('click', () => {
+            st.page++;
+            pintarMovimientos();
+        });
 
         el('tbody')?.addEventListener('click', (e) => {
             if (e.target.closest('a, button')) return; // p. ej. el PDF dentro del detalle

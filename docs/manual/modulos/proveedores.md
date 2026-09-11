@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso
-version: 1.5
+version: 1.7
 orden: 10
 estado: activo
 ---
@@ -41,7 +41,7 @@ documento de fondo ya lo tiene seleccionado; cierre la ficha cuando termine.
 | Nombre comercial | No | Cómo se lo conoce habitualmente |
 | Dirección, ciudad, provincia | No | Ubicación del proveedor |
 | Teléfono, correo | No | Contacto |
-| Parte relacionada | No | Marque si lo es. Afecta a la declaración del anexo |
+| Parte relacionada | No | Está en la pestaña *SRI*. Marque si lo es: se reporta en el anexo |
 | Estado | Sí | Activo o inactivo |
 
 Razón social, nombre comercial y dirección admiten hasta **300 caracteres**, el
@@ -139,7 +139,8 @@ y totales, porque son devoluciones o descuentos posteriores. Los documentos
 anulados o rechazados no aparecen. Los montos son **sin impuestos**.
 
 Haga clic en el título de una columna para ordenar por ella; otro clic invierte
-el orden. Se muestran 50 filas por página.
+el orden. La tabla muestra **20 filas por página**; para avanzar, use las flechas
+de la derecha (al lado se ve cuántas filas está viendo del total).
 
 ### Buscar en las transacciones
 
@@ -181,6 +182,10 @@ y notas de crédito, y el saldo por pagar.
 - **Historial de pagos**: deja a la vista solo los pagos (egresos). El saldo de
   cada fila sigue siendo el que quedó después de ese pago.
 
+Los movimientos se muestran de **20 en 20**, con las flechas de avance abajo a la
+derecha. Los totales de arriba y el saldo anterior corresponden a **todo el
+período filtrado**, no solo a la página que está viendo.
+
 ### Ver un egreso con un clic
 
 Cada pago es un **egreso**. Haga **clic en la fila del pago** y se despliega
@@ -198,6 +203,7 @@ con el total pagado; el reparto por factura se ve al desplegarlo.
 | Retención de IVA | Porcentaje que se le suele retener de IVA |
 | Retención de renta | Porcentaje habitual de retención en la fuente |
 | Sustento tributario | El código de sustento con el que se registran sus compras |
+| Parte relacionada | Marca al proveedor como parte relacionada; se reporta en el anexo transaccional (ATS) |
 | Concepto de egreso predeterminado | Concepto que se propone al pagarle |
 
 Estos valores son **propuestas**, no imposiciones: al registrar la compra o la
@@ -305,6 +311,11 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **1.7** — Las pestañas *Transacciones* y *Estado de cuenta* muestran **20 filas
+  por página**, con los botones de avance y el contador de filas a la derecha.
+- **1.6** — La casilla **Parte relacionada** pasó de la pestaña *Comercial* a la
+  pestaña *SRI*, junto al sustento tributario: es un dato tributario del anexo,
+  no comercial. No cambia cómo se guarda ni el filtro `relacionado:` del listado.
 - **1.5** — Pestaña **Transacciones**: productos y servicios comprados al
   proveedor (compras y liquidaciones), en detalle o agrupados por producto, con
   buscador, filtros `clave:valor`, orden por columna y último precio pagado.

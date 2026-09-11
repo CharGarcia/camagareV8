@@ -195,13 +195,6 @@ if (!defined('LEAFLET_LOADED')) {
                                     <label class="form-label small fw-bold">Días de Crédito / Plazo</label>
                                     <input type="number" step="1" min="0" class="form-control form-control-sm" name="plazo" id="prov_plazo" value="0">
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Parte Relacionada</label>
-                                    <select class="form-select form-select-sm" name="relacionado" id="prov_relacionado">
-                                        <option value="0">No Relacionada</option>
-                                        <option value="1">Sí (Parte Relacionada SRI)</option>
-                                    </select>
-                                </div>
 
                                 <!-- Resumen Comercial (Lectura) -->
                                 <div class="col-12 mt-4">
@@ -413,12 +406,20 @@ if (!defined('LEAFLET_LOADED')) {
                                         <i class="bi bi-info-circle text-primary me-1"></i> Configure los parámetros de reporte del SRI para este proveedor.
                                     </div>
                                 </div>
-                                <div class="col-md-12">
+                                <div class="col-md-8">
                                     <label class="form-label small fw-bold text-muted">Sustento Tributario Predeterminado</label>
                                     <select name="id_sustento_tributario" id="prov_id_sustento_tributario" class="form-select form-select-sm shadow-none border-secondary-subtle">
                                         <option value="">-- Seleccione Sustento --</option>
                                     </select>
                                     <div class="form-text extra-small">Este sustento se asignará por defecto al registrar compras de este proveedor.</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-muted">Parte Relacionada</label>
+                                    <select class="form-select form-select-sm shadow-none border-secondary-subtle" name="relacionado" id="prov_relacionado">
+                                        <option value="0">No Relacionada</option>
+                                        <option value="1">Sí (Parte Relacionada SRI)</option>
+                                    </select>
+                                    <div class="form-text extra-small">Se reporta en el anexo transaccional (ATS).</div>
                                 </div>
                             </div>
                         </div>

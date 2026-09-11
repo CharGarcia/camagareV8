@@ -198,8 +198,17 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                     <tbody data-fc="tbody"></tbody>
                 </table>
             </div>
-            <div class="small text-muted mt-1 d-none" data-fc="ayuda-pago">
-                <i class="bi bi-hand-index me-1"></i><?= $fcEsc($fcTxt['ayuda_pago']) ?>
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
+                <div class="small text-muted d-none" data-fc="ayuda-pago">
+                    <i class="bi bi-hand-index me-1"></i><?= $fcEsc($fcTxt['ayuda_pago']) ?>
+                </div>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <span class="small text-muted fw-medium" data-fc="info">0-0/0</span>
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-secondary" data-fc="prev" title="Anterior" disabled><i class="bi bi-chevron-left"></i></button>
+                        <button type="button" class="btn btn-outline-secondary" data-fc="next" title="Siguiente" disabled><i class="bi bi-chevron-right"></i></button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

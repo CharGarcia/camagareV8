@@ -138,6 +138,59 @@ class ReporteCarteraRepository extends BaseRepository
         return ' AND (' . implode(' OR ', $conds) . ')';
     }
 
+    /**
+     * CTE de apoyo del kardex de clientes (se anteponen a la consulta que usa
+     * unionCliente()).
+     *
+     * ventas_numeradas: las ventas del ambiente actual con su número ya armado y su
+     * versión de solo dígitos.
+     * retenciones_cliente: el cliente de cada retención que no apunta a una venta
+     * (id_venta IS NULL), resuelto por el número del documento sustento.
+     *
+     * POR QUÉ EXISTEN: las notas de crédito/débito y esas retenciones se enlazan con su
+     * factura por el NÚMERO escrito en el documento, y eso se hacía con un LATERAL que
+     * recalculaba el número (CONCAT / regexp_replace, que no pueden usar índice) para
+     * TODAS las ventas, una vez por cada nota o retención. El costo crecía como
+     * ventas × documentos: medido con datos sintéticos, 20.000 ventas y 2.000
+     * retenciones tardaban 83 s solo en esa rama (y 23 s la de notas). Calculando el
+     * número una sola vez aquí, el mismo cruce baja a ~0,1 s.
+     *
+     * Una sola fila por número (DISTINCT ON): cada LATERAL tomaba una venta con LIMIT 1,
+     * así que un número repetido no debe multiplicar la fila de la nota.
+     */
+    private function ctesCliente(int $idEmpresa, array &$params): string
+    {
+        $amb = $this->ambienteEmpresa($idEmpresa);
+        $params[':emp_vnum']   = $idEmpresa;
+        $params[':emp_retcli'] = $idEmpresa;
+
+        // COALESCE + || reproduce lo que hacía CONCAT(), que ignora los NULL
+        $numero = "COALESCE(vc.establecimiento, '') || '-' || COALESCE(vc.punto_emision, '') || '-' || COALESCE(vc.secuencial, '')";
+
+        return "ventas_numeradas AS MATERIALIZED (
+                    SELECT DISTINCT ON (numero) numero, numero_norm, id_cliente, id
+                    FROM (
+                        SELECT {$numero} AS numero,
+                               regexp_replace({$numero}, '[^0-9]', '', 'g') AS numero_norm,
+                               vc.id_cliente, vc.id
+                        FROM ventas_cabecera vc
+                        WHERE vc.id_empresa = :emp_vnum AND vc.eliminado = false
+                          AND vc.tipo_ambiente = '{$amb}'
+                    ) vn
+                    ORDER BY numero, id
+                ),
+                retenciones_cliente AS MATERIALIZED (
+                    SELECT DISTINCT ON (rd.id_retencion) rd.id_retencion, vnr.id_cliente
+                    FROM retencion_venta_cabecera rc
+                    JOIN retencion_venta_detalle rd ON rd.id_retencion = rc.id
+                    JOIN ventas_numeradas vnr
+                      ON vnr.numero_norm = regexp_replace(COALESCE(rd.num_doc_sustento, ''), '[^0-9]', '', 'g')
+                    WHERE rc.id_empresa = :emp_retcli AND rc.eliminado = false
+                      AND rc.id_venta IS NULL AND COALESCE(rd.num_doc_sustento, '') <> ''
+                    ORDER BY rd.id_retencion, rd.id
+                )";
+    }
+
     private function sumarSaldo(array $movs): float
     {
         $saldo = 0.0;
@@ -222,8 +275,8 @@ class ReporteCarteraRepository extends BaseRepository
             ':emp5' => $idEmpresa, ':emp6' => $idEmpresa, ':emp7' => $idEmpresa,
         ];
 
-        $numVenta = "CONCAT(vc.establecimiento,'-',vc.punto_emision,'-',vc.secuencial)";
-
+        // Las NC/ND y las retenciones sin id_venta se enlazan con su factura por el
+        // NÚMERO del documento; ese cruce se resuelve en los CTE de ctesCliente().
         return "
                 -- FACTURAS DE VENTA (CARGO) — solo el ambiente actual, como CxC
                 SELECT v.fecha_emision::date AS fecha, 'CARGO'::text AS tipo_movimiento, 1 AS signo, 'FACTURA'::text AS origen,
@@ -254,13 +307,7 @@ class ReporteCarteraRepository extends BaseRepository
                        CONCAT('Nota de Débito (ref. ', nd.num_doc_modificado, ')'),
                        nd.importe_total, nd.id, {$eNd}
                 FROM nota_debito_cabecera nd
-                LEFT JOIN LATERAL (
-                    SELECT vc.id_cliente FROM ventas_cabecera vc
-                    WHERE vc.id_empresa = nd.id_empresa AND vc.eliminado = false
-                      AND vc.tipo_ambiente = '{$amb}'
-                      AND {$numVenta} = nd.num_doc_modificado
-                    LIMIT 1
-                ) vm ON true
+                LEFT JOIN ventas_numeradas vm ON vm.numero = nd.num_doc_modificado
                 WHERE nd.id_empresa = :emp3 AND nd.eliminado = false
                   AND nd.estado != 'anulado'
                   AND (nd.tipo_ambiente IS NULL OR nd.tipo_ambiente = '{$amb}') {$wNd} {$fNd} {$dNd}
@@ -301,18 +348,7 @@ class ReporteCarteraRepository extends BaseRepository
                        'Retención', {$montoR}, r.id, {$eR}
                 FROM retencion_venta_cabecera r
                 LEFT JOIN ventas_cabecera v ON v.id = r.id_venta
-                LEFT JOIN LATERAL (
-                    SELECT vc.id_cliente
-                    FROM retencion_venta_detalle rd
-                    JOIN ventas_cabecera vc
-                      ON vc.id_empresa = r.id_empresa AND vc.eliminado = false
-                     AND vc.tipo_ambiente = '{$amb}'
-                     AND regexp_replace(COALESCE(rd.num_doc_sustento,''), '[^0-9]', '', 'g')
-                         = regexp_replace({$numVenta}, '[^0-9]', '', 'g')
-                    WHERE rd.id_retencion = r.id AND r.id_venta IS NULL
-                      AND COALESCE(rd.num_doc_sustento,'') <> ''
-                    LIMIT 1
-                ) vs ON true
+                LEFT JOIN retenciones_cliente vs ON vs.id_retencion = r.id
                 WHERE r.id_empresa = :emp6 AND r.eliminado = false
                   AND (r.tipo_ambiente IS NULL OR r.tipo_ambiente = '{$amb}')
                   AND (v.id IS NULL OR v.tipo_ambiente = '{$amb}') {$wR} {$fR} {$dR}
@@ -325,13 +361,7 @@ class ReporteCarteraRepository extends BaseRepository
                        CONCAT('Nota de Crédito (ref. ', nc.num_doc_modificado, ')'),
                        nc.importe_total, nc.id, {$eNc}
                 FROM notas_credito_cabecera nc
-                LEFT JOIN LATERAL (
-                    SELECT vc.id_cliente FROM ventas_cabecera vc
-                    WHERE vc.id_empresa = nc.id_empresa AND vc.eliminado = false
-                      AND vc.tipo_ambiente = '{$amb}'
-                      AND {$numVenta} = nc.num_doc_modificado
-                    LIMIT 1
-                ) vm ON true
+                LEFT JOIN ventas_numeradas vm ON vm.numero = nc.num_doc_modificado
                 WHERE nc.id_empresa = :emp7 AND nc.eliminado = false
                   AND nc.estado != 'anulado'
                   AND (nc.tipo_ambiente IS NULL OR nc.tipo_ambiente = '{$amb}') {$wNc} {$fNc} {$dNc}
@@ -346,9 +376,11 @@ class ReporteCarteraRepository extends BaseRepository
     public function getMovimientosCliente(int $idEmpresa, int $idCliente, ?string $fechaDesde, ?string $fechaHasta, ?string $documento = null): array
     {
         $params = [];
+        $ctes   = $this->ctesCliente($idEmpresa, $params);
         $union  = $this->unionCliente($idEmpresa, $idCliente, $fechaDesde, $fechaHasta, $params, $documento);
 
-        $sql = "SELECT fecha, tipo_movimiento, signo, origen, numero_documento, detalle, monto, id_orden
+        $sql = "WITH {$ctes}
+                SELECT fecha, tipo_movimiento, signo, origen, numero_documento, detalle, monto, id_orden
                 FROM ( {$union} ) mov
                 ORDER BY fecha ASC, signo DESC, id_orden ASC";
 
@@ -378,10 +410,12 @@ class ReporteCarteraRepository extends BaseRepository
     public function getClientesConSaldoPendiente(int $idEmpresa, ?string $fechaHasta): array
     {
         $params = [];
+        $ctes   = $this->ctesCliente($idEmpresa, $params);
         $union  = $this->unionCliente($idEmpresa, null, null, $fechaHasta, $params);
         $params[':emp_cli'] = $idEmpresa;
 
         $sql = "
+            WITH {$ctes}
             SELECT cli.id, cli.nombre, cli.identificacion
             FROM (
                 SELECT id_entidad, SUM(signo * monto) AS saldo

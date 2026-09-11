@@ -471,7 +471,7 @@ class ProveedoresController extends BaseModuloController
         try {
             $vista   = ($_GET['vista'] ?? '') === 'producto' ? 'producto' : 'detalle';
             $page    = max(1, (int) ($_GET['page'] ?? 1));
-            $perPage = 50;
+            $perPage = 20;
 
             $res = $this->service->getTransacciones(
                 (int) ($_GET['id'] ?? 0),
