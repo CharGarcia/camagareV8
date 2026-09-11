@@ -40,7 +40,8 @@
                 { k: 'cantidad',    t: 'Cantidad',    o: true, cls: 'text-end' },
                 { k: 'precio',      t: 'P. unitario', o: true, cls: 'text-end' },
                 { k: 'descuento',   t: 'Descuento',   cls: 'text-end' },
-                { k: 'subtotal',    t: 'Subtotal',    o: true, cls: 'text-end pe-2' },
+                { k: 'subtotal',    t: 'Subtotal',    o: true, cls: 'text-end' },
+                { k: 'iva',         t: 'IVA',         o: true, cls: 'text-end pe-2' },
             ],
             producto: [
                 { k: 'codigo',        t: 'Código',              o: true, cls: 'ps-2' },
@@ -178,7 +179,8 @@
                 <td class="text-end${rojo}">${signo}${fmtCantidad(r.cantidad)}</td>
                 <td class="text-end">$${fmtPrecio(r.precio_unitario)}</td>
                 <td class="text-end">${parseFloat(r.descuento) ? '$' + fmtDinero(r.descuento) : '—'}</td>
-                <td class="text-end pe-2 fw-medium${rojo}">${signo}$${fmtDinero(r.subtotal)}</td>
+                <td class="text-end fw-medium${rojo}">${signo}$${fmtDinero(r.subtotal)}</td>
+                <td class="text-end pe-2${rojo}"${parseFloat(r.tarifa_iva) ? ` title="Tarifa ${fmtCantidad(r.tarifa_iva)}%"` : ''}>${parseFloat(r.iva) ? `${signo}$${fmtDinero(r.iva)}` : '—'}</td>
             </tr>`;
         }
 
@@ -199,11 +201,13 @@
             const json = await pedirJson(`${cfg.urlBase}/transaccionesAjax?${q}`);
             if (nro !== st.peticion) return; // ya hay una consulta más reciente (o se cambió de ficha)
 
-            const total = el('total');
+            const total    = el('total');
+            const totalIva = el('total-iva');
             if (!json.ok) {
                 tbody.innerHTML = filaMensaje(ncols, esc(json.error || 'No se pudieron cargar las transacciones.'), 'text-danger');
                 pintarPaginacion(0, 1, 1, 1);
                 if (total) total.textContent = '$0.00';
+                if (totalIva) totalIva.textContent = '$0.00';
                 return;
             }
 
@@ -214,6 +218,7 @@
                     + esc(buscar ? 'Ninguna transacción coincide con la búsqueda.' : textos.vacio));
             pintarPaginacion(json.total, json.page, json.total_pages, json.per_page);
             if (total) total.textContent = fmtMoneda(json.total_neto);
+            if (totalIva) totalIva.textContent = fmtMoneda(json.total_iva);
         }
 
         function reset() {
@@ -227,6 +232,8 @@
             if (tbody) tbody.innerHTML = '';
             const total = el('total');
             if (total) total.textContent = '$0.00';
+            const totalIva = el('total-iva');
+            if (totalIva) totalIva.textContent = '$0.00';
             pintarPaginacion(0, 1, 1, 1);
         }
 

@@ -149,12 +149,13 @@ $to         = $to         ?? 0;
                             { key: 'fecha_registro', label: 'Fecha registro',    icon: 'bi-calendar-plus',   type: 'date_range' },
                             { key: 'monto',          label: 'Monto total',       icon: 'bi-currency-dollar', type: 'number_range' },
                             { key: 'subtotal',       label: 'Subtotal',          icon: 'bi-receipt',         type: 'number_range' },
-                            // Mismo catálogo que usa el selector "Tipo de Comprobante" del modal de
-                            // registro (comprobantes_autorizados) — así el buscador nunca queda
-                            // desactualizado respecto a los tipos que el sistema realmente soporta.
+                            // Solo los tipos que esta empresa realmente tiene registrados en
+                            // Compras (getTiposComprobanteUsados) — no el catálogo completo ni
+                            // la lista acotada del selector de creación, para no ofrecer filtros
+                            // que nunca van a traer resultados.
                             { key: 'tipo',           label: 'Tipo comprobante',  icon: 'bi-file-earmark',    type: 'select', options: <?= json_encode(array_map(
                                 fn($tc) => ['v' => $tc['codigo_comprobante'], 'l' => $tc['codigo_comprobante'] . ' - ' . $tc['comprobante']],
-                                $tiposComprobante ?? []
+                                $tiposComprobanteUsados ?? []
                             ), JSON_UNESCAPED_UNICODE) ?> },
                             { key: 'estado',         label: 'Estado',            icon: 'bi-flag',            type: 'select', options: [
                                 { v: 'registrado',           l: 'Registrado' },

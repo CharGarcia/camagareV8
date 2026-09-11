@@ -57,7 +57,7 @@ if (!defined('LEAFLET_LOADED')) {
 
 <!-- Modal Ficha de Cliente -->
 <div class="modal fade" id="modalCliente" tabindex="-1" aria-labelledby="modalClienteLabel" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content shadow-lg border-0">
             <form method="POST" action="<?= $urlBaseCliShared ?>/store" id="formCliente" novalidate>
                 <div class="modal-header bg-light py-3">

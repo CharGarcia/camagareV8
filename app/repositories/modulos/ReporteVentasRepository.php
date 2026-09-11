@@ -149,6 +149,139 @@ class ReporteVentasRepository extends BaseRepository
         return ($filtros['tipo_documento'] ?? '') === 'FACTURA_MENOS_NC';
     }
 
+    // ── Orden de las filas ────────────────────────────────────────────────────
+    //
+    // La pantalla ordena haciendo clic en las cabeceras y manda la columna elegida en los
+    // filtros (`orden_col`/`orden_dir`), que viajan dentro del formulario: por eso el Excel
+    // y el PDF —que repiten la consulta con esos mismos filtros— salen en el mismo orden.
+
+    /**
+     * Columnas por las que se puede ordenar cada agrupación: clave (la misma que manda la
+     * pantalla en `data-sort`) => expresión SQL, con `{dir}` donde va la dirección.
+     *
+     * La clave es además el nombre del campo en la fila devuelta, para poder aplicar el
+     * mismo orden en PHP al neto "Facturas − NC", que se combina fuera de SQL (combinarNeto).
+     *
+     * `_def` es el orden histórico de cada modo: se usa cuando no llega ninguna columna
+     * (API móvil, Índices Financieros) y cuando la que llega no aplica a esa agrupación
+     * (p. ej. una preferencia guardada desde otro modo). NUNCA se interpola lo que manda el
+     * cliente: solo salen de aquí las expresiones que se concatenan al SQL.
+     */
+    private const ORDEN_COLUMNAS = [
+        'NINGUNO' => [
+            '_def'            => ['fecha_emision', 'DESC'],
+            'fecha_emision'   => 'v.fecha_emision {dir}, v.secuencial {dir}',
+            'numero_factura'  => 'numero_factura {dir}',
+            'cliente_nombre'  => 'cliente_nombre {dir}',
+            'estado'          => 'estado {dir}',
+            'vendedor_nombre' => 'vendedor_nombre {dir}',
+            'cajero_nombre'   => 'cajero_nombre {dir}',
+            'usuario_nombre'  => 'usuario_nombre {dir}',
+            'base_0'          => 'base_0 {dir}',
+            'base_iva'        => 'base_iva {dir}',
+            'valor_iva'       => 'valor_iva {dir}',
+            'total'           => 'total {dir}',
+            'retenciones'     => 'retenciones {dir}',
+        ],
+        'CLIENTE' => [
+            '_def'              => ['total', 'DESC'],
+            'cliente_nombre'    => 'cliente_nombre {dir}',
+            'cantidad_facturas' => 'cantidad_facturas {dir}',
+            'base_0'            => 'base_0 {dir}',
+            'base_iva'          => 'base_iva {dir}',
+            'valor_iva'         => 'valor_iva {dir}',
+            'total'             => 'total {dir}',
+        ],
+        'PRODUCTO' => [
+            '_def'             => ['cantidad_vendida', 'DESC'],
+            'producto_nombre'  => 'producto_nombre {dir}',
+            'cantidad_vendida' => 'cantidad_vendida {dir}',
+            'tarifa_iva'       => 'tarifa_iva {dir}',
+            'base_0'           => 'base_0 {dir}',
+            'base_iva'         => 'base_iva {dir}',
+            'valor_iva'        => 'valor_iva {dir}',
+            'total'            => 'total {dir}',
+        ],
+        'VARIANTE' => [
+            '_def'             => ['cantidad_vendida', 'DESC'],
+            'producto_nombre'  => 'producto_nombre {dir}',
+            'variante_nombre'  => 'variante_nombre {dir}, variante_valor {dir}',
+            'cantidad_vendida' => 'cantidad_vendida {dir}',
+            'tarifa_iva'       => 'tarifa_iva {dir}',
+            'base_0'           => 'base_0 {dir}',
+            'base_iva'         => 'base_iva {dir}',
+            'valor_iva'        => 'valor_iva {dir}',
+            'total'            => 'total {dir}',
+        ],
+        'FECHA' => [
+            '_def'              => ['fecha', 'DESC'],
+            'fecha'             => 'fecha {dir}',
+            'cantidad_facturas' => 'cantidad_facturas {dir}',
+            'base_0'            => 'base_0 {dir}',
+            'base_iva'          => 'base_iva {dir}',
+            'valor_iva'         => 'valor_iva {dir}',
+            'total'             => 'total {dir}',
+        ],
+        'MES' => [
+            '_def'              => ['mes', 'DESC'],
+            'mes'               => 'mes {dir}',
+            'cantidad_facturas' => 'cantidad_facturas {dir}',
+            'base_0'            => 'base_0 {dir}',
+            'base_iva'          => 'base_iva {dir}',
+            'valor_iva'         => 'valor_iva {dir}',
+            'total'             => 'total {dir}',
+        ],
+    ];
+
+    /** Agrupación que corresponde a cada método (para ordenar el neto Facturas − NC). */
+    private const MODO_POR_METODO = [
+        'getReporteDetallado'        => 'NINGUNO',
+        'getReporteAgrupadoCliente'  => 'CLIENTE',
+        'getReporteAgrupadoProducto' => 'PRODUCTO',
+        'getReporteAgrupadoVariante' => 'VARIANTE',
+        'getReporteAgrupadoFecha'    => 'FECHA',
+        'getReporteAgrupadoMes'      => 'MES',
+    ];
+
+    /** Columna y dirección efectivas: valida contra la lista blanca del modo. */
+    private function resolverOrden(array $filtros, string $modo): array
+    {
+        $cols = self::ORDEN_COLUMNAS[$modo] ?? self::ORDEN_COLUMNAS['NINGUNO'];
+        $col  = (string) ($filtros['orden_col'] ?? '');
+        if ($col === '' || $col === '_def' || !isset($cols[$col])) {
+            return $cols['_def'];
+        }
+        $dir = strtoupper((string) ($filtros['orden_dir'] ?? '')) === 'ASC' ? 'ASC' : 'DESC';
+        return [$col, $dir];
+    }
+
+    /** Contenido del ORDER BY para un modo, ya validado. */
+    private function ordenSql(array $filtros, string $modo): string
+    {
+        [$col, $dir] = $this->resolverOrden($filtros, $modo);
+        $cols = self::ORDEN_COLUMNAS[$modo] ?? self::ORDEN_COLUMNAS['NINGUNO'];
+        return str_replace('{dir}', $dir . ' NULLS LAST', $cols[$col]);
+    }
+
+    /**
+     * Aplica el mismo orden en PHP a las filas que no salen ordenadas de SQL: el neto
+     * "Facturas − NC" se arma combinando dos consultas, así que su ORDER BY no manda.
+     */
+    private function ordenarFilas(array $rows, array $filtros, string $modo): array
+    {
+        [$col, $dir] = $this->resolverOrden($filtros, $modo);
+        $signo = $dir === 'ASC' ? 1 : -1;
+        usort($rows, static function (array $a, array $b) use ($col, $signo): int {
+            $x = $a[$col] ?? null;
+            $y = $b[$col] ?? null;
+            $cmp = (is_numeric($x) && is_numeric($y))
+                ? ((float) $x <=> (float) $y)
+                : strcasecmp((string) $x, (string) $y);
+            return $signo * $cmp;
+        });
+        return $rows;
+    }
+
     /**
      * Combina un método de reporte para FACTURA y NOTA_CREDITO restando la NC.
      * - $claves: columnas que identifican cada grupo (para agrupados). Si es null,
@@ -162,6 +295,8 @@ class ReporteVentasRepository extends BaseRepository
         $fNc  = array_merge($filtros, ['tipo_documento' => 'NOTA_CREDITO']);
         $fac  = $this->$metodo($idEmpresa, $fFac);
         $nc   = $this->$metodo($idEmpresa, $fNc);
+        // El orden de cada consulta se pierde al mezclarlas: se reaplica sobre el resultado.
+        $modo = self::MODO_POR_METODO[$metodo] ?? 'NINGUNO';
 
         // Modo detallado: mezclar filas, negando montos de las NC.
         if ($claves === null) {
@@ -172,9 +307,7 @@ class ReporteVentasRepository extends BaseRepository
                 $r['_doc_tipo'] = 'NOTA_CREDITO';
             }
             unset($r);
-            $all = array_merge($fac, $nc);
-            usort($all, fn($a, $b) => strcmp((string)($b['fecha_emision'] ?? ''), (string)($a['fecha_emision'] ?? '')));
-            return $all;
+            return $this->ordenarFilas(array_merge($fac, $nc), $filtros, $modo);
         }
 
         // Modo agrupado: indexar por clave y restar las NC.
@@ -200,9 +333,7 @@ class ReporteVentasRepository extends BaseRepository
             foreach ($sumar  as $c) { $idx[$k][$c] = (float)($idx[$k][$c] ?? 0) + (float)($r[$c] ?? 0); }
         }
 
-        $out = array_values($idx);
-        usort($out, fn($a, $b) => ((float)($b['total'] ?? 0)) <=> ((float)($a['total'] ?? 0)));
-        return $out;
+        return $this->ordenarFilas(array_values($idx), $filtros, $modo);
     }
 
     /**
@@ -423,6 +554,7 @@ class ReporteVentasRepository extends BaseRepository
             $vendedorJoin = "LEFT JOIN ventas_cabecera fvnc ON " . $this->condicionFacturaDeNc('v', 'fvnc') . "
             LEFT JOIN vendedores vend ON vend.id = fvnc.id_vendedor";
         }
+        $orden = $this->ordenSql($filtros, 'NINGUNO');
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos($f) . "){$retenCte}
@@ -452,7 +584,7 @@ class ReporteVentasRepository extends BaseRepository
             LEFT JOIN usuarios    ucaj ON ucaj.id = v.id_usuario
             LEFT JOIN usuarios    uusr ON uusr.id = v.created_by
             WHERE {$where}
-            ORDER BY v.fecha_emision DESC, v.secuencial DESC
+            ORDER BY {$orden}
         ";
 
         $st = $this->db->prepare($sql);
@@ -472,6 +604,7 @@ class ReporteVentasRepository extends BaseRepository
 
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        $orden = $this->ordenSql($filtros, 'CLIENTE');
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
@@ -489,7 +622,7 @@ class ReporteVentasRepository extends BaseRepository
             LEFT JOIN bases b ON b.id_doc = v.id
             WHERE {$where}
             GROUP BY c.id, c.identificacion, c.nombre
-            ORDER BY total DESC
+            ORDER BY {$orden}
         ";
 
         $st = $this->db->prepare($sql);
@@ -509,6 +642,7 @@ class ReporteVentasRepository extends BaseRepository
 
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', 'd');
+        $orden = $this->ordenSql($filtros, 'PRODUCTO');
 
         $sql = "
             SELECT
@@ -527,7 +661,7 @@ class ReporteVentasRepository extends BaseRepository
             LEFT JOIN {$f['imp']} i ON i.{$f['fk_imp']} = d.id
             WHERE {$where}
             GROUP BY d.id_producto, p.codigo, COALESCE(p.nombre, d.descripcion), COALESCE(i.tarifa, 0)
-            ORDER BY cantidad_vendida DESC
+            ORDER BY {$orden}
         ";
 
         $st = $this->db->prepare($sql);
@@ -556,6 +690,7 @@ class ReporteVentasRepository extends BaseRepository
 
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', 'd');
+        $orden = $this->ordenSql($filtros, 'VARIANTE');
 
         $sql = "
             SELECT
@@ -576,7 +711,7 @@ class ReporteVentasRepository extends BaseRepository
             LEFT JOIN {$f['imp']} i ON i.{$f['fk_imp']} = d.id
             WHERE {$where}
             GROUP BY d.id_producto_variante, COALESCE(p.nombre, d.descripcion), pv.nombre, pv.valor, COALESCE(i.tarifa, 0)
-            ORDER BY cantidad_vendida DESC
+            ORDER BY {$orden}
         ";
 
         $st = $this->db->prepare($sql);
@@ -596,6 +731,7 @@ class ReporteVentasRepository extends BaseRepository
 
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        $orden = $this->ordenSql($filtros, 'FECHA');
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
@@ -610,7 +746,7 @@ class ReporteVentasRepository extends BaseRepository
             LEFT JOIN bases b ON b.id_doc = v.id
             WHERE {$where}
             GROUP BY v.fecha_emision
-            ORDER BY v.fecha_emision DESC
+            ORDER BY {$orden}
         ";
 
         $st = $this->db->prepare($sql);
@@ -630,6 +766,7 @@ class ReporteVentasRepository extends BaseRepository
 
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        $orden = $this->ordenSql($filtros, 'MES');
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
@@ -644,7 +781,7 @@ class ReporteVentasRepository extends BaseRepository
             LEFT JOIN bases b ON b.id_doc = v.id
             WHERE {$where}
             GROUP BY TO_CHAR(v.fecha_emision, 'YYYY-MM')
-            ORDER BY mes DESC
+            ORDER BY {$orden}
         ";
 
         $st = $this->db->prepare($sql);

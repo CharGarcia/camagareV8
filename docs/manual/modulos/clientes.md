@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso
-version: 1.5
+version: 1.6
 orden: 10
 estado: activo
 ---
@@ -170,14 +170,18 @@ Tiene dos vistas:
 
 | Vista | Qué muestra |
 |-------|-------------|
-| Detalle | Una fila por línea de documento: fecha, tipo y número del documento, código, descripción, cantidad, precio unitario, descuento y subtotal |
+| Detalle | Una fila por línea de documento: fecha, tipo y número del documento, código, descripción, cantidad, precio unitario, descuento, subtotal e IVA |
 | Por producto | Una fila por producto o servicio (mismo código y descripción): veces vendido, cantidad total, último precio, fecha de la última venta y total |
 
 Las **notas de crédito** se ven en rojo y **restan** en cantidades y totales,
 porque son devoluciones o descuentos posteriores. No aparecen los documentos en
 borrador, anulados ni los que el SRI no aceptó; tampoco los recibos ya
-convertidos en factura, para no contar dos veces la misma venta. Los montos son
-**sin impuestos**.
+convertidos en factura, para no contar dos veces la misma venta.
+
+El **subtotal** de cada línea va **sin impuestos** y a su lado se muestra el
+**IVA** de esa misma línea; al pasar el cursor por encima se ve la tarifa
+aplicada (por ejemplo 15 %). Al pie de la tabla se totalizan los dos: el neto sin
+impuestos y el IVA del conjunto que esté viendo filtrado.
 
 Haga clic en el título de una columna para ordenar por ella; otro clic invierte
 el orden. La tabla muestra **20 filas por página**; para avanzar, use las flechas
@@ -210,17 +214,17 @@ iniciales) y todo lo que la baja (**abonos**: cobros, retenciones y notas de
 crédito), con el **saldo corriendo** fila por fila. Es el mismo cálculo del
 *Reporte de Cartera*, que sigue las reglas de **Cuentas por Cobrar**.
 
-Arriba se resumen los totales del período: ventas y cargos, cobros, retenciones y
-notas de crédito, y el saldo por cobrar.
+Al pie, debajo de los movimientos, se resumen los totales del período: ventas y
+cargos, cobros, retenciones y notas de crédito, y el saldo por cobrar.
 
 - **Desde / Hasta**: limitan el período. Con *Desde*, la primera fila es el
   **saldo anterior** a esa fecha, así el saldo final sigue siendo el real.
 - **Historial de cobros**: deja a la vista solo los cobros (ingresos). El saldo de
   cada fila sigue siendo el que quedó después de ese cobro.
 
-Los movimientos se muestran de **20 en 20**, con las flechas de avance abajo a la
-derecha. Los totales de arriba y el saldo anterior corresponden a **todo el
-período filtrado**, no solo a la página que está viendo.
+Los movimientos se muestran de **20 en 20**, con las flechas de avance arriba a la
+derecha, junto a los filtros. Los totales del pie y el saldo anterior corresponden
+a **todo el período filtrado**, no solo a la página que está viendo.
 
 ### Ver un ingreso con un clic
 
@@ -297,8 +301,13 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **1.6** — *Transacciones* muestra el **IVA de cada línea** (con su tarifa en el
+  tooltip) y el total de IVA al pie. Al abrir la ficha de un cliente, la cabecera
+  del modal muestra su **nombre**.
 - **1.5** — Las pestañas *Transacciones* y *Estado de cuenta* muestran **20 filas
-  por página**, con los botones de avance y el contador de filas a la derecha.
+  por página**, con los botones de avance y el contador de filas arriba a la
+  derecha. En el estado de cuenta, el resumen del período pasó al pie, debajo de
+  los movimientos.
   Además, el estado de cuenta abre mucho más rápido: el cruce de las notas de
   crédito/débito y de las retenciones con su factura ya no recalcula el número de
   cada factura por cada documento (ver *Reporte de Cartera*).

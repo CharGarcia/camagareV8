@@ -20,7 +20,11 @@ use PDO;
  * debe exponer estas columnas, con estos alias:
  *
  *   origen, id_documento, id_linea, fecha, numero_documento, tipo_documento,
- *   codigo, descripcion, cantidad, precio_unitario, descuento, subtotal, signo
+ *   codigo, descripcion, cantidad, precio_unitario, descuento, subtotal,
+ *   iva, tarifa_iva, signo
+ *
+ * iva es el IVA de la línea (suma de sus impuestos con codigo_impuesto = '2') y
+ * tarifa_iva su porcentaje, para mostrarlo junto al subtotal (que va sin impuestos).
  *
  * signo = -1 en las notas de crédito: se listan (son devoluciones) y restan en las
  * cantidades y los totales. Todas las ramas llevan alias porque la primera del UNION es
@@ -60,7 +64,7 @@ trait LineasDocumentoTrait
         string $ordenDir
     ): array {
         if (empty($ramas)) {
-            return ['rows' => [], 'total' => 0, 'total_neto' => 0.0];
+            return ['rows' => [], 'total' => 0, 'total_neto' => 0.0, 'total_iva' => 0.0];
         }
         $vista = $vista === 'producto' ? 'producto' : 'detalle';
 
@@ -102,7 +106,10 @@ trait LineasDocumentoTrait
         $limite = " LIMIT " . (int) $perPage . " OFFSET " . (int) max(0, ($page - 1) * $perPage);
 
         if ($vista === 'detalle') {
-            $stT = $this->db->prepare("SELECT COUNT(*) AS total, COALESCE(SUM(t.signo * t.subtotal), 0) AS neto {$base}");
+            $stT = $this->db->prepare("SELECT COUNT(*) AS total,
+                                              COALESCE(SUM(t.signo * t.subtotal), 0) AS neto,
+                                              COALESCE(SUM(t.signo * t.iva), 0) AS iva
+                                       {$base}");
             $stT->execute($params);
             $tot = $stT->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'neto' => 0];
 
@@ -118,13 +125,16 @@ trait LineasDocumentoTrait
                              COUNT(DISTINCT t.origen || ':' || t.id_documento) FILTER (WHERE t.signo = 1) AS documentos,
                              SUM(t.signo * t.cantidad) AS cantidad,
                              SUM(t.signo * t.subtotal) AS total,
+                             SUM(t.signo * t.iva) AS iva,
                              MAX(t.fecha) FILTER (WHERE t.signo = 1) AS ultima_fecha,
                              (ARRAY_AGG(t.precio_unitario ORDER BY t.fecha DESC, t.id_documento DESC, t.id_linea DESC)
                                  FILTER (WHERE t.signo = 1))[1] AS ultimo_precio
                       {$base}
                       GROUP BY UPPER(t.codigo), UPPER(t.descripcion)";
 
-            $stT = $this->db->prepare("SELECT COUNT(*) AS total, COALESCE(SUM(g.total), 0) AS neto FROM ( {$grupo} ) g");
+            $stT = $this->db->prepare("SELECT COUNT(*) AS total, COALESCE(SUM(g.total), 0) AS neto,
+                                              COALESCE(SUM(g.iva), 0) AS iva
+                                       FROM ( {$grupo} ) g");
             $stT->execute($params);
             $tot = $stT->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'neto' => 0];
 
@@ -141,6 +151,7 @@ trait LineasDocumentoTrait
             'rows'       => $st->fetchAll(PDO::FETCH_ASSOC),
             'total'      => (int) $tot['total'],
             'total_neto' => (float) $tot['neto'],
+            'total_iva'  => (float) $tot['iva'],
         ];
     }
 
@@ -169,6 +180,7 @@ trait LineasDocumentoTrait
             'cantidad'    => 't.cantidad',
             'precio'      => 't.precio_unitario',
             'subtotal'    => 't.subtotal',
+            'iva'         => 't.iva',
         ];
     }
 }

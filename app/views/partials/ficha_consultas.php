@@ -42,9 +42,19 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
     define('FICHA_CONSULTAS_ASSETS', true);
 ?>
 <style>
+    /*
+     * Altura FIJA (no "hasta"): la tabla es lo único que hace scroll, así el modal no
+     * cambia de alto cuando una búsqueda devuelve menos filas —al estar centrado, ese
+     * cambio lo hacía saltar— ni aparece un segundo scroll en pantallas bajas.
+     * Se calcula desde el alto de la ventana descontando la cabecera y el pie del modal.
+     */
     .ficha-consulta-scroll {
-        max-height: 380px;
+        height: clamp(180px, calc(100vh - 330px), 560px);
         overflow: auto;
+    }
+    /* El estado de cuenta lleva además el resumen al pie: un poco más baja. */
+    .ficha-consulta-scroll.ficha-consulta-scroll-ec {
+        height: clamp(160px, calc(100vh - 420px), 480px);
     }
     .ficha-consulta-scroll > table {
         font-size: 0.76rem;
@@ -121,7 +131,8 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
             </div>
             <div class="d-flex flex-wrap justify-content-between gap-2 mt-1 small text-muted">
                 <span><i class="bi bi-info-circle me-1"></i><?= $fcEsc($fcTxt['nota_trx']) ?></span>
-                <span>Total neto (sin impuestos): <b class="text-dark" data-fc="total">$0.00</b></span>
+                <span>Total neto (sin impuestos): <b class="text-dark" data-fc="total">$0.00</b>
+                    &middot; IVA: <b class="text-dark" data-fc="total-iva">$0.00</b></span>
             </div>
         </div>
     </div>
@@ -149,8 +160,35 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                     <button type="button" class="btn btn-outline-secondary active" data-fc-filtro="todos"><i class="bi bi-list-columns-reverse me-1"></i>Todos los movimientos</button>
                     <button type="button" class="btn btn-outline-secondary" data-fc-filtro="pagos"><i class="bi bi-cash-coin me-1"></i><?= $fcEsc($fcTxt['filtro_pagos']) ?></button>
                 </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-muted fw-medium" data-fc="info">0-0/0</span>
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-secondary" data-fc="prev" title="Anterior" disabled><i class="bi bi-chevron-left"></i></button>
+                        <button type="button" class="btn btn-outline-secondary" data-fc="next" title="Siguiente" disabled><i class="bi bi-chevron-right"></i></button>
+                    </div>
+                </div>
             </div>
-            <div class="row g-2 mb-2">
+            <div class="ficha-consulta-scroll ficha-consulta-scroll-ec border rounded">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-2">Fecha</th>
+                            <th>Movimiento</th>
+                            <th>Documento</th>
+                            <th>Detalle</th>
+                            <th class="text-end">Cargo</th>
+                            <th class="text-end">Abono</th>
+                            <th class="text-end pe-2">Saldo</th>
+                        </tr>
+                    </thead>
+                    <tbody data-fc="tbody"></tbody>
+                </table>
+            </div>
+            <div class="small text-muted mt-1 d-none" data-fc="ayuda-pago">
+                <i class="bi bi-hand-index me-1"></i><?= $fcEsc($fcTxt['ayuda_pago']) ?>
+            </div>
+            <!-- Resumen del período (no de la página): va al pie, después de los movimientos -->
+            <div class="row g-2 mt-1">
                 <div class="col-6 col-md d-none" data-fc="card-anterior">
                     <div class="card bg-light border-0 text-center p-2">
                         <span class="small text-muted d-block" style="font-size: 0.7rem;">SALDO ANTERIOR</span>
@@ -179,34 +217,6 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                     <div class="card bg-light border-0 text-center p-2">
                         <span class="small text-muted d-block" style="font-size: 0.7rem;"><?= $fcEsc($fcTxt['saldo']) ?></span>
                         <h6 class="mb-0 fw-bold text-danger" data-fc="saldo">$0.00</h6>
-                    </div>
-                </div>
-            </div>
-            <div class="ficha-consulta-scroll border rounded">
-                <table class="table table-sm mb-0">
-                    <thead>
-                        <tr>
-                            <th class="ps-2">Fecha</th>
-                            <th>Movimiento</th>
-                            <th>Documento</th>
-                            <th>Detalle</th>
-                            <th class="text-end">Cargo</th>
-                            <th class="text-end">Abono</th>
-                            <th class="text-end pe-2">Saldo</th>
-                        </tr>
-                    </thead>
-                    <tbody data-fc="tbody"></tbody>
-                </table>
-            </div>
-            <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
-                <div class="small text-muted d-none" data-fc="ayuda-pago">
-                    <i class="bi bi-hand-index me-1"></i><?= $fcEsc($fcTxt['ayuda_pago']) ?>
-                </div>
-                <div class="ms-auto d-flex align-items-center gap-2">
-                    <span class="small text-muted fw-medium" data-fc="info">0-0/0</span>
-                    <div class="btn-group btn-group-sm">
-                        <button type="button" class="btn btn-outline-secondary" data-fc="prev" title="Anterior" disabled><i class="bi bi-chevron-left"></i></button>
-                        <button type="button" class="btn btn-outline-secondary" data-fc="next" title="Siguiente" disabled><i class="bi bi-chevron-right"></i></button>
                     </div>
                 </div>
             </div>

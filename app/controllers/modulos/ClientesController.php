@@ -705,6 +705,7 @@ class ClientesController extends BaseModuloController
                 'rows'        => $res['rows'],
                 'total'       => $res['total'],
                 'total_neto'  => $res['total_neto'],
+                'total_iva'   => $res['total_iva'],
                 'page'        => $page,
                 'per_page'    => $perPage,
                 'total_pages' => max(1, (int) ceil($res['total'] / $perPage)),

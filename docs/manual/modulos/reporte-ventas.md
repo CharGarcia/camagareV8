@@ -1,12 +1,12 @@
 ---
 titulo: Reporte de ventas
-resumen: Ventas del periodo con filtros por cliente, vendedor, producto y borradores, agrupables y exportables.
+resumen: Ventas del periodo con filtros por cliente, vendedor, producto y borradores, agrupables, ordenables y exportables.
 categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri
-version: 1.3
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas
+version: 1.4
 orden: 10
 estado: activo
 ---
@@ -108,10 +108,26 @@ Los resultados se pueden agrupar (por cliente, por producto, por periodo) para
 pasar del detalle al resumen sin cambiar de pantalla. Es lo que permite ver de un
 vistazo qué cliente compra más o qué producto rota mejor.
 
+## Ordenar los resultados
+
+Los títulos de las columnas ordenan el reporte: un clic ordena de menor a mayor y
+otro clic invierte el orden. La flecha del título indica por cuál se está
+ordenando. Funciona en el detallado y en todas las agrupaciones: por ejemplo,
+*Por cliente* ordenado por **Gran Total** deja arriba al cliente que más compró.
+
+- **El PDF y el Excel salen con ese mismo orden**, el que esté marcado en la
+  pantalla al momento de descargarlos.
+- Cada agrupación ordena por sus propias columnas. Si cambia de agrupación y la
+  columna elegida no existe en la nueva, se vuelve al orden habitual de esa
+  vista: el detallado por fecha, *Por cliente* por total, *Por producto* y *Por
+  variante* por cantidad vendida, y *Por fecha* / *Por mes* por el periodo.
+- El orden elegido **se recuerda** para la próxima vez que abra el reporte.
+
 ## Exportar
 
-El reporte se exporta a **PDF** y **Excel**. El Excel es el que conviene cuando
-se va a seguir analizando por fuera.
+El reporte se exporta a **PDF** y **Excel**, con las mismas filas, los mismos
+filtros y el mismo orden que se ve en pantalla. El Excel es el que conviene
+cuando se va a seguir analizando por fuera.
 
 ## Errores frecuentes
 
@@ -122,9 +138,16 @@ se va a seguir analizando por fuera.
   está en borrador, elija *Con borradores*.
 - **No veo las ventas de otros vendedores**: sin el permiso de *acceso total*
   cada usuario ve solo lo que registró.
+- **El Excel salió en otro orden**: se exporta con el orden que estaba marcado en
+  la pantalla; si cambió la agrupación después de ordenar, revise la flecha de la
+  cabecera antes de descargar.
 
 ## Historial de cambios
 
+- **1.4** — Las columnas de la tabla ahora **ordenan el reporte**: un clic ordena
+  de menor a mayor y otro invierte, en el detallado y en todas las agrupaciones.
+  El **PDF y el Excel respetan ese orden**, y la columna elegida se guarda como
+  preferencia del usuario para la próxima vez.
 - **1.3** — Nuevo selector **Borradores** (segunda fila de filtros): *Sin
   borradores* (por defecto, como antes), *Con borradores* o *Solo borradores*.
   Se aplica a la tabla, las tarjetas, el gráfico, el PDF y el Excel; el Excel

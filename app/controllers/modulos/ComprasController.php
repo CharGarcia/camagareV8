@@ -166,6 +166,11 @@ class ComprasController extends BaseModuloController
         // puntos de emisión propios de esta empresa, no del proveedor).
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
 
+        // Tipos de comprobante REALMENTE registrados en Compras, para el filtro
+        // "Tipo comprobante" del buscador (no el catálogo completo ni la lista
+        // acotada del selector de creación — ver getTiposComprobanteModal()).
+        $tiposComprobanteUsados = $this->repository->getTiposComprobanteUsados($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/compras/index', [
             'titulo'             => 'Compras',
             'perm'               => $perm,
@@ -193,6 +198,7 @@ class ComprasController extends BaseModuloController
             'sustentos'          => $this->repository->getSustentosTributarios(),
             'puntos'             => $puntos,
             'seriesFiltro'       => $seriesFiltro,
+            'tiposComprobanteUsados' => $tiposComprobanteUsados,
             'establecimientos'   => $establecimientos,
             'sucursal_principal' => !empty($establecimientos) ? $establecimientos[0] : null,
             'tiposComprobante'   => $this->getTiposComprobanteModal(),

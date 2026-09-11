@@ -483,9 +483,16 @@ class ProveedorRepository extends BaseRepository
                            COALESCE(TRIM(d.descripcion), '') AS descripcion,
                            d.cantidad, d.precio_unitario, d.descuento,
                            d.precio_total_sin_impuesto AS subtotal,
+                           COALESCE(imp.iva, 0) AS iva,
+                           COALESCE(imp.tarifa, 0) AS tarifa_iva,
                            CASE WHEN COALESCE(TRIM(c.tipo_comprobante), '') IN ({$tiposNc}) THEN -1 ELSE 1 END AS signo
                     FROM compras_detalle d
                     INNER JOIN compras_cabecera c ON c.id = d.id_compra
+                    LEFT JOIN LATERAL (
+                        SELECT SUM(i.valor) AS iva, MAX(i.tarifa) AS tarifa
+                        FROM compras_detalle_impuestos i
+                        WHERE i.id_compra_detalle = d.id AND i.codigo_impuesto = '2'
+                    ) imp ON true
                     WHERE c.id_empresa = :emp_c AND c.id_proveedor = :prov_c
                       AND c.eliminado = false AND {$compraVigente}
                       AND COALESCE(NULLIF(TRIM(c.tipo_comprobante), ''), '01') NOT IN ({$tiposSinLineas})";
@@ -515,9 +522,16 @@ class ProveedorRepository extends BaseRepository
                            COALESCE(TRIM(d.descripcion), '') AS descripcion,
                            d.cantidad, d.precio_unitario, d.descuento,
                            d.precio_total_sin_impuesto AS subtotal,
+                           COALESCE(imp.iva, 0) AS iva,
+                           COALESCE(imp.tarifa, 0) AS tarifa_iva,
                            1 AS signo
                     FROM liquidaciones_detalle d
                     INNER JOIN liquidaciones_cabecera l ON l.id = d.id_cabecera
+                    LEFT JOIN LATERAL (
+                        SELECT SUM(i.valor) AS iva, MAX(i.tarifa) AS tarifa
+                        FROM liquidaciones_detalle_impuestos i
+                        WHERE i.id_detalle = d.id AND i.codigo_impuesto = '2'
+                    ) imp ON true
                     WHERE l.id_empresa = :emp_l AND l.id_proveedor = :prov_l
                       AND l.eliminado = false AND {$liqVigente}";
             $params[':emp_l']  = $idEmpresa;

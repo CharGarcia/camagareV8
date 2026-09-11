@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso
-version: 1.7
+version: 1.8
 orden: 10
 estado: activo
 ---
@@ -131,12 +131,17 @@ Tiene dos vistas:
 
 | Vista | Qué muestra |
 |-------|-------------|
-| Detalle | Una fila por línea de documento: fecha, tipo y número del documento, código, descripción, cantidad, precio unitario, descuento y subtotal |
+| Detalle | Una fila por línea de documento: fecha, tipo y número del documento, código, descripción, cantidad, precio unitario, descuento, subtotal e IVA |
 | Por producto | Una fila por producto o servicio (mismo código y descripción): veces comprado, cantidad total, último precio pagado, fecha de la última compra y total |
 
 Las **notas de crédito** del proveedor se ven en rojo y **restan** en cantidades
 y totales, porque son devoluciones o descuentos posteriores. Los documentos
-anulados o rechazados no aparecen. Los montos son **sin impuestos**.
+anulados o rechazados no aparecen.
+
+El **subtotal** de cada línea va **sin impuestos** y a su lado se muestra el
+**IVA** de esa misma línea; al pasar el cursor por encima se ve la tarifa
+aplicada (por ejemplo 15 %). Al pie de la tabla se totalizan los dos: el neto sin
+impuestos y el IVA del conjunto que esté viendo filtrado.
 
 Haga clic en el título de una columna para ordenar por ella; otro clic invierte
 el orden. La tabla muestra **20 filas por página**; para avanzar, use las flechas
@@ -174,17 +179,17 @@ El *Por pagar* de la pestaña Comercial se calcula documento por documento y no
 incluye facturas del exterior: si el proveedor tiene importaciones o documentos
 pagados de más, puede no coincidir con el saldo de esta pestaña.
 
-Arriba se resumen los totales del período: compras y cargos, pagos, retenciones
-y notas de crédito, y el saldo por pagar.
+Al pie, debajo de los movimientos, se resumen los totales del período: compras y
+cargos, pagos, retenciones y notas de crédito, y el saldo por pagar.
 
 - **Desde / Hasta**: limitan el período. Con *Desde*, la primera fila es el
   **saldo anterior** a esa fecha, así el saldo final sigue siendo el real.
 - **Historial de pagos**: deja a la vista solo los pagos (egresos). El saldo de
   cada fila sigue siendo el que quedó después de ese pago.
 
-Los movimientos se muestran de **20 en 20**, con las flechas de avance abajo a la
-derecha. Los totales de arriba y el saldo anterior corresponden a **todo el
-período filtrado**, no solo a la página que está viendo.
+Los movimientos se muestran de **20 en 20**, con las flechas de avance arriba a la
+derecha, junto a los filtros. Los totales del pie y el saldo anterior corresponden
+a **todo el período filtrado**, no solo a la página que está viendo.
 
 ### Ver un egreso con un clic
 
@@ -311,8 +316,13 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **1.8** — *Transacciones* muestra el **IVA de cada línea** (con su tarifa en el
+  tooltip) y el total de IVA al pie. Al abrir la ficha de un proveedor, la
+  cabecera del modal muestra su **nombre**.
 - **1.7** — Las pestañas *Transacciones* y *Estado de cuenta* muestran **20 filas
-  por página**, con los botones de avance y el contador de filas a la derecha.
+  por página**, con los botones de avance y el contador de filas arriba a la
+  derecha. En el estado de cuenta, el resumen del período pasó al pie, debajo de
+  los movimientos.
 - **1.6** — La casilla **Parte relacionada** pasó de la pestaña *Comercial* a la
   pestaña *SRI*, junto al sustento tributario: es un dato tributario del anexo,
   no comercial. No cambia cómo se guarda ni el filtro `relacionado:` del listado.

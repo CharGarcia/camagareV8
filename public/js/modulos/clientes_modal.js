@@ -895,6 +895,23 @@
         cliSincronizarVisitas();
     }
 
+    /**
+     * Cabecera del modal: "Ficha de Cliente — NOMBRE" para que se vea de quién es la
+     * ficha abierta; sin nombre (alta) queda "Nuevo Cliente".
+     */
+    function tituloModalCli(nombre) {
+        const el = document.getElementById('tituloModalCliente');
+        if (!el) return;
+        const limpio = (nombre || '').trim();
+        if (!limpio) {
+            el.textContent = 'Nuevo Cliente';
+            el.removeAttribute('title');
+            return;
+        }
+        el.innerHTML = 'Ficha de Cliente <span class="fw-normal text-muted">— ' + escapeHtml(limpio) + '</span>';
+        el.setAttribute('title', limpio);
+    }
+
     // ─── Reset formulario ────────────────────────────────────────────────────
     function resetFormulario() {
         const form = document.getElementById('formCliente');
@@ -962,8 +979,7 @@
             btnDlt.innerHTML = '<i class="bi bi-trash3 me-1"></i> Eliminar';
         }
 
-        const titleEl = document.getElementById('tituloModalCliente');
-        if (titleEl) titleEl.textContent = 'Nuevo Cliente';
+        tituloModalCli('');
         
         limpiarBadgeSri();
     }
@@ -1068,12 +1084,13 @@
 
         const idCli = elId?.value || '';
 
+        // El nombre pudo cambiar al guardar
+        tituloModalCli(json.data?.nombre || document.getElementById('cliente_nombre')?.value || '');
+
         if (eraNuevo) {
             // A partir de aquí el formulario edita la ficha recién creada
             const form = document.getElementById('formCliente');
             if (form) form.action = urlBaseClientes + '/update';
-            const t = document.getElementById('tituloModalCliente');
-            if (t) t.textContent = 'Ficha de Cliente';
             document.getElementById('btnEliminarCliente')?.classList.remove('d-none');
         }
 
@@ -1119,7 +1136,7 @@
             _pendingMapCoords = { lat, lng };
         }
 
-        setT('tituloModalCliente', 'Ficha de Cliente');
+        tituloModalCli(data.nombre);
         const btnDlt = document.getElementById('btnEliminarCliente');
         if (btnDlt) btnDlt.classList.remove('d-none');
 

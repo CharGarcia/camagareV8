@@ -277,6 +277,26 @@ class ComprasRepository extends BaseRepository
     }
 
     /**
+     * Tipos de comprobante que la empresa REALMENTE tiene registrados en Compras
+     * (no el catálogo completo ni la lista acotada del modal de creación), para
+     * poblar el filtro "Tipo comprobante" del buscador — mismo criterio que
+     * getSeriesDistintas() para el filtro "Serie".
+     */
+    public function getTiposComprobanteUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT c.tipo_comprobante AS codigo_comprobante,
+                       COALESCE(ca.comprobante, c.tipo_comprobante) AS comprobante
+                FROM compras_cabecera c
+                LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
+                WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                  AND c.tipo_comprobante IS NOT NULL AND c.tipo_comprobante != ''
+                ORDER BY c.tipo_comprobante";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll();
+    }
+
+    /**
      * Compras del rango de fechas para exportación masiva (Descargas Masivas).
      * Sin paginar; el llamador (DescargaMasivaService) valida el límite de cantidad.
      * No filtra por estado: una compra pendiente de aprobación ya está registrada

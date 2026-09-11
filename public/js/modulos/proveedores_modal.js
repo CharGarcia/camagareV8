@@ -297,6 +297,23 @@
 
 
 
+    /**
+     * Cabecera del modal: "Editar Proveedor — NOMBRE" para que se vea de quién es la
+     * ficha abierta; sin nombre (alta) queda "Nuevo Proveedor".
+     */
+    function tituloModalProv(nombre) {
+        const el = document.getElementById('prov_tituloModal');
+        if (!el) return;
+        const limpio = (nombre || '').trim();
+        if (!limpio) {
+            el.textContent = 'Nuevo Proveedor';
+            el.removeAttribute('title');
+            return;
+        }
+        el.innerHTML = 'Editar Proveedor <span class="fw-normal text-muted">— ' + escapeHtmlProv(limpio) + '</span>';
+        el.setAttribute('title', limpio);
+    }
+
     async function abrirModalCrearInternal() {
         const form = document.getElementById('prov_formProveedor');
         if (!form) return;
@@ -317,8 +334,7 @@
         if (brenta) brenta.value = '';
         const biva = document.getElementById('busqueda_retencion_iva');
         if (biva) biva.value = '';
-        const elTitle = document.getElementById('prov_tituloModal');
-        if (elTitle) elTitle.textContent = 'Nuevo Proveedor';
+        tituloModalProv('');
 
         const btnDlt = document.getElementById('prov_btnEliminar');
         const btnSave = document.getElementById('prov_btnGuardar');
@@ -474,8 +490,7 @@
             _provPendingCoords = { lat, lng };
         }
 
-        const elTitle = document.getElementById('prov_tituloModal');
-        if (elTitle) elTitle.textContent = 'Editar Proveedor';
+        tituloModalProv(data.razon_social || data.nombre_comercial || '');
 
         inicializarReplicarUIProv();
 
@@ -580,10 +595,11 @@
 
         const idProv = elId?.value || '';
 
+        // La razón social pudo cambiar al guardar (el backend la guarda en mayúsculas)
+        tituloModalProv(json.data?.razon_social || document.getElementById('prov_razon')?.value || '');
+
         if (eraNuevo) {
             // A partir de aquí el formulario edita la ficha recién creada
-            const elTitle = document.getElementById('prov_tituloModal');
-            if (elTitle) elTitle.textContent = 'Editar Proveedor';
             document.getElementById('prov_btnEliminar')?.classList.remove('d-none');
         }
 

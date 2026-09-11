@@ -185,6 +185,12 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- Orden de la tabla: lo fijan las cabeceras (clic) y viaja dentro del formulario,
+                     así el Excel y el PDF —que serializan este mismo formulario— salen con el mismo
+                     orden que se ve en pantalla. Vacío = el orden por defecto de cada agrupación. -->
+                <input type="hidden" name="orden_col" id="rv_orden_col" value="<?= htmlspecialchars($ordenCol ?? '') ?>">
+                <input type="hidden" name="orden_dir" id="rv_orden_dir" value="<?= htmlspecialchars($ordenDir ?? 'DESC') ?>">
             </form>
         </div>
         <div class="card-footer bg-white border-top py-2 px-3">

@@ -417,77 +417,154 @@ function RV_dibujarGrafico(rawData, agrupacion) {
     });
 }
 
-function RV_dibujarCabecera(agruparPor) {
-    let theadHtml = '<tr class="text-secondary" style="font-family: \'Outfit\', sans-serif;">';
-    
-    if (agruparPor === 'CLIENTE') {
-        theadHtml += `
-            <th class="ps-4">Cliente</th>
-            <th class="text-center">Nro Facturas</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end pe-4">Gran Total</th>
-        `;
-    } else if (agruparPor === 'PRODUCTO') {
-        theadHtml += `
-            <th class="ps-4">Producto</th>
-            <th class="text-center">Cantidad Vendida</th>
-            <th class="text-center">Tipo IVA</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end pe-4">Gran Total</th>
-        `;
-    } else if (agruparPor === 'VARIANTE') {
-        theadHtml += `
-            <th class="ps-4">Producto</th>
-            <th>Variante</th>
-            <th class="text-center">Cantidad Vendida</th>
-            <th class="text-center">Tipo IVA</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end pe-4">Gran Total</th>
-        `;
-    } else if (agruparPor === 'FECHA') {
-        theadHtml += `
-            <th class="ps-4">Fecha</th>
-            <th class="text-center">Nro Facturas</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end pe-4">Gran Total</th>
-        `;
-    } else if (agruparPor === 'MES') {
-        theadHtml += `
-            <th class="ps-4">Mes</th>
-            <th class="text-center">Nro Facturas</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end pe-4">Gran Total</th>
-        `;
-    } else {
-        // NINGUNO / DETALLADO
-        theadHtml += `
-            <th class="ps-4">Fecha</th>
-            <th>Nro Documento</th>
-            <th>Cliente</th>
-            <th class="text-center">Estado</th>
-            <th>Vendedor</th>
-            <th>Cajero</th>
-            <th>Usuario</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end pe-4">Gran Total</th>
-            <th class="text-end pe-4">Retenciones</th>
-        `;
+/* ════════════════════════════════════════════════════
+   CABECERAS Y ORDEN DE LA TABLA
+   Columnas de cada agrupación: [clave de orden, etiqueta, clases]. La clave tiene que
+   existir en ReporteVentasRepository::ORDEN_COLUMNAS del mismo modo; si no, el servidor
+   la ignora y usa su orden por defecto. `def` es ese orden por defecto, y solo sirve para
+   pintar la flecha en la columna correcta mientras el usuario no elija otra.
+════════════════════════════════════════════════════ */
+const RV_COLUMNAS = {
+    CLIENTE: {
+        def: ['total', 'DESC'],
+        cols: [
+            ['cliente_nombre',    'Cliente',          'ps-4'],
+            ['cantidad_facturas', 'Nro Facturas',     'text-center'],
+            ['base_0',            'Base 0% / Exento', 'text-end'],
+            ['base_iva',          'Base IVA',         'text-end'],
+            ['valor_iva',         'Total IVA',        'text-end'],
+            ['total',             'Gran Total',       'text-end pe-4'],
+        ]
+    },
+    PRODUCTO: {
+        def: ['cantidad_vendida', 'DESC'],
+        cols: [
+            ['producto_nombre',   'Producto',         'ps-4'],
+            ['cantidad_vendida',  'Cantidad Vendida', 'text-center'],
+            ['tarifa_iva',        'Tipo IVA',         'text-center'],
+            ['base_0',            'Base 0% / Exento', 'text-end'],
+            ['base_iva',          'Base IVA',         'text-end'],
+            ['valor_iva',         'Total IVA',        'text-end'],
+            ['total',             'Gran Total',       'text-end pe-4'],
+        ]
+    },
+    VARIANTE: {
+        def: ['cantidad_vendida', 'DESC'],
+        cols: [
+            ['producto_nombre',   'Producto',         'ps-4'],
+            ['variante_nombre',   'Variante',         ''],
+            ['cantidad_vendida',  'Cantidad Vendida', 'text-center'],
+            ['tarifa_iva',        'Tipo IVA',         'text-center'],
+            ['base_0',            'Base 0% / Exento', 'text-end'],
+            ['base_iva',          'Base IVA',         'text-end'],
+            ['valor_iva',         'Total IVA',        'text-end'],
+            ['total',             'Gran Total',       'text-end pe-4'],
+        ]
+    },
+    FECHA: {
+        def: ['fecha', 'DESC'],
+        cols: [
+            ['fecha',             'Fecha',            'ps-4'],
+            ['cantidad_facturas', 'Nro Facturas',     'text-center'],
+            ['base_0',            'Base 0% / Exento', 'text-end'],
+            ['base_iva',          'Base IVA',         'text-end'],
+            ['valor_iva',         'Total IVA',        'text-end'],
+            ['total',             'Gran Total',       'text-end pe-4'],
+        ]
+    },
+    MES: {
+        def: ['mes', 'DESC'],
+        cols: [
+            ['mes',               'Mes',              'ps-4'],
+            ['cantidad_facturas', 'Nro Facturas',     'text-center'],
+            ['base_0',            'Base 0% / Exento', 'text-end'],
+            ['base_iva',          'Base IVA',         'text-end'],
+            ['valor_iva',         'Total IVA',        'text-end'],
+            ['total',             'Gran Total',       'text-end pe-4'],
+        ]
+    },
+    NINGUNO: {
+        def: ['fecha_emision', 'DESC'],
+        cols: [
+            ['fecha_emision',     'Fecha',            'ps-4'],
+            ['numero_factura',    'Nro Documento',    ''],
+            ['cliente_nombre',    'Cliente',          ''],
+            ['estado',            'Estado',           'text-center'],
+            ['vendedor_nombre',   'Vendedor',         ''],
+            ['cajero_nombre',     'Cajero',           ''],
+            ['usuario_nombre',    'Usuario',          ''],
+            ['base_0',            'Base 0% / Exento', 'text-end'],
+            ['base_iva',          'Base IVA',         'text-end'],
+            ['valor_iva',         'Total IVA',        'text-end'],
+            ['total',             'Gran Total',       'text-end pe-4'],
+            ['retenciones',       'Retenciones',      'text-end pe-4'],
+        ]
     }
-    
-    theadHtml += '</tr>';
-    document.getElementById('rv_thead').innerHTML = theadHtml;
+};
+
+// Orden actual, tal como viajará al servidor (columna vacía = orden por defecto).
+function RV_ordenActual() {
+    return [
+        document.getElementById('rv_orden_col').value,
+        (document.getElementById('rv_orden_dir').value || 'DESC').toUpperCase()
+    ];
+}
+
+function RV_fijarOrden(col, dir) {
+    document.getElementById('rv_orden_col').value = col;
+    document.getElementById('rv_orden_dir').value = dir;
+}
+
+/**
+ * Engancha las cabeceras recién dibujadas y marca con la flecha la columna que ordena.
+ * No se usa CMG_initSort a propósito: ese motor persiste con guardarOrdenacionVista, que
+ * recarga la página entera, y aquí los filtros viven solo en el formulario (se perderían).
+ * La preferencia se guarda igual, con CMG_guardarVista({reload:false}), y el reporte se
+ * regenera por AJAX; al ir el orden en el formulario, el Excel y el PDF lo respetan.
+ */
+function RV_engancharOrden(modo) {
+    let [col, dir] = RV_ordenActual();
+    if (!col) { [col, dir] = RV_COLUMNAS[modo].def; }
+
+    document.querySelectorAll('#rv_thead .sortable-header[data-sort]').forEach(th => {
+        if (th.dataset.sort === col) {
+            const icono = th.querySelector('i');
+            if (icono) {
+                icono.className = (dir === 'ASC')
+                    ? 'bi bi-sort-alpha-down text-primary ms-1'
+                    : 'bi bi-sort-alpha-up text-primary ms-1';
+            }
+        }
+        th.addEventListener('click', function () {
+            const [colActual, dirActual] = RV_ordenActual();
+            const nuevaDir = (th.dataset.sort === colActual && dirActual === 'ASC') ? 'DESC' : 'ASC';
+            RV_fijarOrden(th.dataset.sort, nuevaDir);
+            if (typeof window.CMG_guardarVista === 'function') {
+                window.CMG_guardarVista(RUTA_MODULO, { '__ordenCol__': th.dataset.sort, '__ordenDir__': nuevaDir }, { reload: false });
+            }
+            window.RV_generarReporte();
+        });
+    });
+}
+
+function RV_dibujarCabecera(agruparPor) {
+    const modo = RV_COLUMNAS[agruparPor] ? agruparPor : 'NINGUNO';
+    const cols = RV_COLUMNAS[modo].cols;
+
+    // Un orden guardado de otra agrupación (p. ej. "Cliente" al pasar a "Por mes") no
+    // aplica aquí: se vuelve al orden por defecto del modo.
+    const [colActual] = RV_ordenActual();
+    if (colActual && !cols.some(c => c[0] === colActual)) RV_fijarOrden('', 'DESC');
+
+    document.getElementById('rv_thead').innerHTML =
+        '<tr class="text-secondary" style="font-family: \'Outfit\', sans-serif;">'
+        + cols.map(([clave, etiqueta, clases]) =>
+            `<th class="${clases} sortable-header" role="button" data-sort="${clave}" title="Ordenar por ${etiqueta}">`
+            + `${etiqueta} <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>`
+          ).join('')
+        + '</tr>';
+
+    RV_engancharOrden(modo);
 }
 
 window.RV_exportarExcel = function() {

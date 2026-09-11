@@ -692,17 +692,17 @@ class ClienteRepository extends BaseRepository
         $ramas  = [];
 
         $documentos = [
-            // origen => [etiqueta, signo, cabecera, detalle, FK del detalle, estados excluidos, sufijo de parámetros]
-            'FACTURA'      => ['Factura de Venta', 1, 'ventas_cabecera', 'ventas_detalle', 'id_venta', self::ESTADOS_VENTA_SIN_EFECTO, 'f'],
-            'RECIBO'       => ['Recibo de Venta', 1, 'recibos_venta_cabecera', 'recibos_venta_detalle', 'id_recibo', self::ESTADOS_RECIBO_SIN_EFECTO, 'r'],
-            'NOTA_CREDITO' => ['Nota de Crédito', -1, 'notas_credito_cabecera', 'notas_credito_detalle', 'id_nota_credito', self::ESTADOS_VENTA_SIN_EFECTO, 'n'],
+            // origen => [etiqueta, signo, cabecera, detalle, FK del detalle, tabla de impuestos, FK de impuestos, estados excluidos, sufijo]
+            'FACTURA'      => ['Factura de Venta', 1, 'ventas_cabecera', 'ventas_detalle', 'id_venta', 'ventas_detalle_impuestos', 'id_venta_detalle', self::ESTADOS_VENTA_SIN_EFECTO, 'f'],
+            'RECIBO'       => ['Recibo de Venta', 1, 'recibos_venta_cabecera', 'recibos_venta_detalle', 'id_recibo', 'recibos_venta_detalle_impuestos', 'id_recibo_detalle', self::ESTADOS_RECIBO_SIN_EFECTO, 'r'],
+            'NOTA_CREDITO' => ['Nota de Crédito', -1, 'notas_credito_cabecera', 'notas_credito_detalle', 'id_nota_credito', 'notas_credito_detalle_impuestos', 'id_nota_credito_detalle', self::ESTADOS_VENTA_SIN_EFECTO, 'n'],
         ];
-        foreach ($documentos as $origen => [$etiqueta, $signo, $cabecera, $detalle, $fk, $excluidos, $sufijo]) {
+        foreach ($documentos as $origen => [$etiqueta, $signo, $cabecera, $detalle, $fk, $impuestos, $fkImpuestos, $excluidos, $sufijo]) {
             if (!array_key_exists($origen, $fuentes)) {
                 continue;
             }
             $ramas[] = $this->ramaLineasVenta(
-                $origen, $etiqueta, $signo, $cabecera, $detalle, $fk, $excluidos,
+                $origen, $etiqueta, $signo, $cabecera, $detalle, $fk, $impuestos, $fkImpuestos, $excluidos,
                 $idCliente, $idEmpresa, $amb, $fuentes[$origen], $sufijo, $params
             );
         }
@@ -713,8 +713,10 @@ class ClienteRepository extends BaseRepository
     /**
      * Rama del UNION de getTransacciones() para un tipo de documento de venta. Las tres
      * cabeceras comparten forma (establecimiento/punto/secuencial, estado, tipo_ambiente)
-     * y usan id_usuario para "registros propios", igual que el listado de su módulo.
-     * Tablas, etiqueta y estados vienen de código, nunca del usuario.
+     * y usan id_usuario para "registros propios", igual que el listado de su módulo; sus
+     * detalles comparten columnas y tienen su tabla de impuestos por línea, de donde sale
+     * el IVA (codigo_impuesto = '2'). Tablas, etiqueta y estados vienen de código, nunca
+     * del usuario.
      */
     private function ramaLineasVenta(
         string $origen,
@@ -723,6 +725,8 @@ class ClienteRepository extends BaseRepository
         string $cabecera,
         string $detalle,
         string $fk,
+        string $impuestos,
+        string $fkImpuestos,
         array $estadosExcluidos,
         int $idCliente,
         int $idEmpresa,
@@ -741,9 +745,16 @@ class ClienteRepository extends BaseRepository
                        COALESCE(TRIM(d.descripcion), '') AS descripcion,
                        d.cantidad, d.precio_unitario, d.descuento,
                        d.precio_total_sin_impuesto AS subtotal,
+                       COALESCE(imp.iva, 0) AS iva,
+                       COALESCE(imp.tarifa, 0) AS tarifa_iva,
                        {$signo} AS signo
                 FROM {$detalle} d
                 INNER JOIN {$cabecera} c ON c.id = d.{$fk}
+                LEFT JOIN LATERAL (
+                    SELECT SUM(i.valor) AS iva, MAX(i.tarifa) AS tarifa
+                    FROM {$impuestos} i
+                    WHERE i.{$fkImpuestos} = d.id AND i.codigo_impuesto = '2'
+                ) imp ON true
                 WHERE c.id_empresa = :emp_{$sufijo} AND c.id_cliente = :cli_{$sufijo}
                   AND c.eliminado = false
                   AND LOWER(TRIM(COALESCE(c.estado, ''))) NOT IN ({$excluidos})";

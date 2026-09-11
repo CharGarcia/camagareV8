@@ -51,6 +51,11 @@ class ReporteVentasController extends BaseModuloController
             'titulo'      => 'Reporte de Ventas',
             'perm'        => $this->getPermisos(),
             'vistaConfig' => $prefsVista,
+            // Orden guardado por el usuario al hacer clic en las cabeceras (lo escribe el JS
+            // con CMG_guardarVista). Si la columna no aplica a la agrupación elegida, la vista
+            // la descarta y el repositorio usa el orden por defecto de ese modo.
+            'ordenCol'    => (string) ($prefsVista['__ordenCol__'] ?? ''),
+            'ordenDir'    => strtoupper((string) ($prefsVista['__ordenDir__'] ?? 'DESC')) === 'ASC' ? 'ASC' : 'DESC',
             'rutaModulo'  => $this->getRutaModulo(),
             'tarifasIva'  => $tarifasIva,
             'anios'       => $anios,
@@ -76,6 +81,12 @@ class ReporteVentasController extends BaseModuloController
             'variante_texto' => trim($_REQUEST['variante_texto'] ?? ''),
             'estado'         => $_REQUEST['estado'] ?? 'TODOS',
             'buscar_info'    => trim($_REQUEST['buscar_info'] ?? ''),
+            // Orden de la tabla: columna (una de la lista blanca del repositorio, propia de
+            // cada agrupación) y dirección. Viajan dentro del formulario de filtros, así que
+            // el Excel y el PDF —que serializan ese mismo formulario— salen con el mismo orden
+            // que la pantalla. Vacío = el orden por defecto de cada agrupación.
+            'orden_col'      => trim((string) ($_REQUEST['orden_col'] ?? '')),
+            'orden_dir'      => strtoupper(trim((string) ($_REQUEST['orden_dir'] ?? ''))) === 'ASC' ? 'ASC' : 'DESC',
             // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
             // solo se honra desde la matriz — ver resolverAlcance()).
             'alcance'        => strtoupper(trim((string) ($_REQUEST['alcance'] ?? ''))),
