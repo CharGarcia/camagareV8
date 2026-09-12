@@ -107,17 +107,34 @@ class ReporteComprasRepository extends BaseRepository
         // mostrando IVA+ICE mezclados, y su base caía en base_0/base_iva según la tarifa
         // del ICE (a menudo 0% por ser específico, no ad-valorem). Se filtra explícitamente
         // por codigo_impuesto = '2' para IVA y se agrega valor_ice (código 3) aparte.
+        //
+        // Caso Nota de Débito (tipo_comprobante='05'): el motivo (<motivos><motivo>) no
+        // trae su propio desglose de impuesto — el/los impuesto(s) de <infoNotaDebito>
+        // se adjuntan a la primera línea (ver insertarCompra()). Cuando el motivo no está
+        // sujeto a IVA (p. ej. "Interés por mora", codigoPorcentaje='6' No objeto), el SRI
+        // declara ese impuesto con base_imponible=0 Y valor=0 — el monto real solo vive en
+        // compras_cabecera.total_sin_impuestos. Sin este fallback, esas ND mostraban Base 0%,
+        // Base IVA, IVA e ICE en cero y solo el Total (columna aparte, de importe_total)
+        // tenía valor. El fallback solo aplica cuando TODO el desglose de IVA del documento
+        // suma cero (no hay ninguna línea con base o valor real) — si la ND sí trae una
+        // parte gravada, esa parte ya cae en base_iva/valor_iva normalmente y no se toca.
         return "
             SELECT
                 d.id_compra,
-                SUM(CASE WHEN i.codigo_impuesto = '2' AND i.tarifa = 0 THEN i.base_imponible ELSE 0 END) as base_0,
+                CASE
+                    WHEN cbc.tipo_comprobante = '05'
+                         AND COALESCE(SUM(CASE WHEN i.codigo_impuesto = '2' THEN i.base_imponible ELSE 0 END), 0) = 0
+                         AND COALESCE(SUM(CASE WHEN i.codigo_impuesto = '2' THEN i.valor ELSE 0 END), 0) = 0
+                    THEN COALESCE(cbc.total_sin_impuestos, 0)
+                    ELSE SUM(CASE WHEN i.codigo_impuesto = '2' AND i.tarifa = 0 THEN i.base_imponible ELSE 0 END)
+                END as base_0,
                 SUM(CASE WHEN i.codigo_impuesto = '2' AND i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
                 SUM(CASE WHEN i.codigo_impuesto = '2' THEN i.valor ELSE 0 END) as valor_iva,
                 SUM(CASE WHEN i.codigo_impuesto = '3' THEN i.valor ELSE 0 END) as valor_ice
             FROM compras_detalle d
             JOIN compras_cabecera cbc ON cbc.id = d.id_compra AND cbc.id_empresa IN ({$this->inEmp})
             LEFT JOIN compras_detalle_impuestos i ON i.id_compra_detalle = d.id
-            GROUP BY d.id_compra
+            GROUP BY d.id_compra, cbc.tipo_comprobante, cbc.total_sin_impuestos
         ";
     }
 

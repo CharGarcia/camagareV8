@@ -806,7 +806,9 @@ class ComprasService
             'proveedor_email'          => '',
             'proveedor_nombre_tipo_id' => 'R.U.C.',
             'total_sin_impuestos'      => (float) ($info->totalSinImpuestos ?? 0),
-            'importe_total'            => (float) ($info->importeTotal ?? $info->valorModificacion ?? 0),
+            // factura: importeTotal · nota de crédito: valorModificacion · nota de
+            // débito: valorTotal. Sin este último, una ND siempre salía en 0 aquí.
+            'importe_total'            => (float) ($info->importeTotal ?? $info->valorModificacion ?? $info->valorTotal ?? 0),
             'propina'                  => (float) ($info->propina ?? 0),
         ];
 
@@ -849,6 +851,39 @@ class ComprasService
                 'precio_total_sin_impuesto' => (float) ($d->precioTotalSinImpuesto ?? 0),
                 'impuestos'                 => $impuestos,
             ];
+        }
+        // Nota de Débito: no trae <detalles><detalle> — trae <motivos><motivo> (una
+        // línea por razón + valor) como HERMANO de <infoNotaDebito> a nivel de raíz, y
+        // los impuestos van a nivel de CABECERA en <infoNotaDebito><impuestos><impuesto>.
+        // Mismo criterio que insertarCompra(): una línea por motivo, con los impuestos
+        // de cabecera adjuntos a la primera (para que el PDF calcule subtotal/IVA/ICE).
+        if ($codDoc === '05' && isset($xml->motivos->motivo)) {
+            $impuestosCabecera = [];
+            if (isset($info->impuestos->impuesto)) {
+                foreach ($info->impuestos->impuesto as $imp) {
+                    $impuestosCabecera[] = [
+                        'codigo_impuesto'   => (string) $imp->codigo,
+                        'codigo_porcentaje' => (string) $imp->codigoPorcentaje,
+                        'tarifa'            => (float) $imp->tarifa,
+                        'base_imponible'    => (float) $imp->baseImponible,
+                        'valor'             => (float) $imp->valor,
+                    ];
+                }
+            }
+            $primero = true;
+            foreach ($xml->motivos->motivo as $m) {
+                $valorMotivo = (float) $m->valor;
+                $detalles[] = [
+                    'codigo_principal'          => '',
+                    'descripcion'               => (string) ($m->razon ?? ''),
+                    'cantidad'                  => 1,
+                    'precio_unitario'           => $valorMotivo,
+                    'descuento'                 => 0,
+                    'precio_total_sin_impuesto' => $valorMotivo,
+                    'impuestos'                 => $primero ? $impuestosCabecera : [],
+                ];
+                $primero = false;
+            }
         }
 
         // ── Pagos ─────────────────────────────────────────────────────────────
