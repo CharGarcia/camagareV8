@@ -5,7 +5,8 @@
  * compras_detalle_impuestos vacíos) porque insertarCompra() reutilizaba la
  * lógica de facturas (<detalles><detalle>) para todos los tipos de documento,
  * y una Nota de Débito del SRI no trae esa estructura — trae
- * <infoNotaDebito><motivos><motivo> (líneas) e
+ * <motivos><motivo> (líneas), como HERMANO de <infoNotaDebito> a nivel de raíz
+ * (NO anidado dentro de infoNotaDebito), e
  * <infoNotaDebito><impuestos><impuesto> (impuestos a nivel de cabecera).
  * El total de la cabecera (importe_total/total_sin_impuestos) siempre estuvo
  * bien, porque se toma directo del XML; lo que faltaba era el desglose.
@@ -109,8 +110,8 @@ foreach ($pendientes as $row) {
 
         $primerDetalle = null;
         $lineas = 0;
-        if (isset($info->motivos->motivo)) {
-            foreach ($info->motivos->motivo as $m) {
+        if (isset($xml->motivos->motivo)) {
+            foreach ($xml->motivos->motivo as $m) {
                 $valorMotivo = (float) $m->valor;
                 $stDet = $db->prepare(
                     "INSERT INTO compras_detalle

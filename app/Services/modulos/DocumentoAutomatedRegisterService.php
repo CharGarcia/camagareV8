@@ -716,12 +716,13 @@ class DocumentoAutomatedRegisterService
                         }
                     }
                 }
-            } elseif ($codDoc === '05' && isset($info->motivos->motivo)) {
+            } elseif ($codDoc === '05' && isset($xml->motivos->motivo)) {
                 // Nota de Débito de compra: a diferencia de una factura, el XML no trae
-                // <detalles><detalle> — trae <infoNotaDebito><motivos><motivo> (una línea
-                // por razón + valor, sin desglose de impuestos propio) y los impuestos van
-                // a nivel de CABECERA en <infoNotaDebito><impuestos><impuesto>. Sin este
-                // caso, insertarCompra() nunca escribía compras_detalle ni
+                // <detalles><detalle> — trae <motivos><motivo> (una línea por razón + valor,
+                // sin desglose de impuestos propio) como HERMANO de <infoNotaDebito> a nivel
+                // de raíz (NO anidado dentro de infoNotaDebito), y los impuestos van a nivel
+                // de CABECERA en <infoNotaDebito><impuestos><impuesto>. Sin este caso,
+                // insertarCompra() nunca escribía compras_detalle ni
                 // compras_detalle_impuestos para ninguna ND — el total de la cabecera salía
                 // bien (viene directo del XML), pero el desglose de IVA/ICE quedaba vacío en
                 // el modal y en el Reporte de Compras. Mismo criterio que
@@ -731,7 +732,7 @@ class DocumentoAutomatedRegisterService
                 // desglosados por motivo en el XML) se adjuntan a la primera línea, para que
                 // el reporte sí pueda sumar el IVA/ICE de este documento.
                 $primerDetalle = null;
-                foreach ($info->motivos->motivo as $m) {
+                foreach ($xml->motivos->motivo as $m) {
                     $valorMotivo = (float)$m->valor;
                     $idDetalle = $this->compraRepo->insertDetalle([
                         'id_compra' => $idCompra,
@@ -1305,8 +1306,8 @@ class DocumentoAutomatedRegisterService
                 'tipo_ambiente' => $ambiente
             ]);
 
-            if (isset($info->motivos->motivo)) {
-                foreach ($info->motivos->motivo as $m) {
+            if (isset($xml->motivos->motivo)) {
+                foreach ($xml->motivos->motivo as $m) {
                     $this->ndRepo->insertMotivo(['id_nota_debito' => $idND, 'razon' => (string)$m->razon, 'valor' => (float)$m->valor]);
                 }
             }
