@@ -266,6 +266,21 @@ class MigrarMysqlController extends Controller
         exit;
     }
 
+    /** POST: verificación de la migración (cobertura viejo vs nuevo + integridad). Solo lectura. */
+    public function verificarMigracionAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa, $ruc] = $this->resolverEmpresa();
+            if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
+            $data = $this->service->verificarMigracion($idEmpresa, $ruc);
+            echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     /** POST: cuántos registros ELIMINARÍA por entidad (para la confirmación previa). No borra nada. */
     public function eliminarPreviewAjax(): void
     {

@@ -223,6 +223,7 @@ $base = BASE_URL;
                             <input type="date" class="form-control form-control-sm" id="fHasta">
                         </div>
                         <div class="col text-end">
+                            <button class="btn btn-outline-info btn-sm me-1" id="btnVerificarMig" title="Compara viejo vs migrado y revisa relaciones (solo lectura)"><i class="bi bi-clipboard-check me-1"></i> Verificar migración</button>
                             <button class="btn btn-outline-danger btn-sm me-1" id="btnEliminar"><i class="bi bi-trash3 me-1"></i> Eliminar migrados</button>
                             <button class="btn btn-success btn-sm" id="btnMigrar"><i class="bi bi-database-down me-1"></i> Migrar seleccionados</button>
                         </div>
@@ -398,6 +399,44 @@ $base = BASE_URL;
         $('zonaMigrar').classList.remove('d-none');
         $('zonaMigrarResultado').innerHTML = '';
     }
+
+    // Verificar migración: cobertura (viejo vs migrado) + integridad. Solo lectura.
+    $('btnVerificarMig').addEventListener('click', async () => {
+        const idEmpresa = $('selEmpresa').value;
+        if (!idEmpresa) { alert('Seleccione una empresa.'); return; }
+        Swal.fire({ title: 'Verificando migración…', html: '<div class="spinner-border text-info" role="status" style="width:2.2rem;height:2.2rem;"></div><div class="text-muted small mt-2">Comparando viejo vs migrado y revisando relaciones…</div>', showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
+        try {
+            const b = new URLSearchParams(); b.append('id_empresa', idEmpresa);
+            const r = await fetch(base + '/config/migrarMysql?action=verificar-migracion', { method: 'POST', body: b }).then(x => x.json());
+            if (!r.ok) { await Swal.fire({ icon: 'error', title: 'Error', text: r.mensaje || 'Falló la verificación' }); return; }
+            const d = r.data || {};
+            let cob = '<table class="table table-sm table-bordered mb-0"><thead><tr><th class="text-start">Dato</th><th class="text-end">Viejo</th><th class="text-end">Migrado</th><th class="text-end">Faltan</th></tr></thead><tbody>';
+            (d.cobertura || []).forEach(c => {
+                const falt = c.faltan > 0 ? `<b class="text-danger">${c.faltan}</b>` : '<span class="text-success">0</span>';
+                cob += `<tr><td class="text-start">${esc(c.label)}</td><td class="text-end">${fmt(c.viejo)}</td><td class="text-end">${fmt(c.migrado)}</td><td class="text-end">${falt}</td></tr>`;
+            });
+            cob += '</tbody></table>';
+            let hall;
+            if ((d.hallazgos || []).length) {
+                hall = '<table class="table table-sm table-bordered mb-0"><thead><tr><th class="text-start">Problema</th><th class="text-end">Cant.</th><th class="text-start">Ejemplos</th></tr></thead><tbody>';
+                d.hallazgos.forEach(h => { hall += `<tr><td class="text-start">${esc(h.descripcion)}</td><td class="text-end text-danger fw-bold">${fmt(h.cantidad)}</td><td class="text-start small text-muted">${esc(h.muestra || '')}</td></tr>`; });
+                hall += '</tbody></table>';
+            } else {
+                hall = '<div class="alert alert-success small mb-0"><i class="bi bi-check-circle me-1"></i>Sin problemas de integridad detectados.</div>';
+            }
+            await Swal.fire({
+                title: 'Verificación de migración',
+                html: `<div class="text-start">
+                         <h6 class="mt-1">Cobertura (viejo vs migrado)</h6>
+                         <div style="max-height:38vh;overflow:auto;">${cob}</div>
+                         <div class="text-muted" style="font-size:.72rem;">«Faltan» es aproximado: el conteo viejo incluye todo el RUC (todos los establecimientos) y puede contar anulados u otros tipos que la migración excluye a propósito.</div>
+                         <h6 class="mt-3">Integridad / relaciones</h6>
+                         <div style="max-height:32vh;overflow:auto;">${hall}</div>
+                       </div>`,
+                width: 740, confirmButtonText: 'Cerrar', confirmButtonColor: '#0dcaf0'
+            });
+        } catch (e) { await Swal.fire({ icon: 'error', title: 'Error', text: e.message }); }
+    });
 
     // Migrar los datos seleccionados (uno por uno) con modal de progreso + tiempo restante
     $('btnMigrar').addEventListener('click', async () => {

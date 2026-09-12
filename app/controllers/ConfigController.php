@@ -803,6 +803,7 @@ class ConfigController extends Controller
             'eliminar'           => 'eliminarAjax',
             'verificar-existentes' => 'verificarExistentesAjax',
             'verificar-ruc-migrado' => 'verificarRucMigradoAjax',
+            'verificar-migracion' => 'verificarMigracionAjax',
             'usuarios-por-migrar' => 'usuariosPorMigrarAjax',
             'migrar-usuarios'    => 'migrarUsuariosAjax',
             'empresas-por-migrar' => 'empresasPorMigrarAjax',

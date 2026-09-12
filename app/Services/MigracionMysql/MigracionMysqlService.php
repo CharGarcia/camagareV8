@@ -116,6 +116,100 @@ class MigracionMysqlService
     }
 
     /**
+     * Verificación de la migración de una empresa (SOLO LECTURA). Devuelve:
+     *  - 'cobertura': por entidad, cuántas hay en el viejo (base) vs. cuántas quedaron migradas (mapa) → faltan.
+     *  - 'hallazgos': problemas de integridad/relaciones en lo ya migrado (cabeceras sin detalle, retención sin
+     *    documento, asientos descuadrados/sin líneas, registros migrados que luego se eliminaron, etc.).
+     * No modifica nada. Cada chequeo va en try/catch: si una tabla/columna no existe, se omite ese chequeo.
+     */
+    public function verificarMigracion(int $idEmpresa, string $ruc): array
+    {
+        $pg = Database::getConnection();
+
+        // A) Cobertura: viejo (conteo por RUC base) vs migrado (conteo del mapa).
+        // Guarda: sin un RUC base de 10 dígitos, analizar() haría `LIKE '%'` y contaría TODA la base
+        // vieja (todas las empresas). Si el RUC no es válido, se omite el conteo viejo (queda en 0).
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $viejo = (strlen($base) === 10) ? $this->analizar($ruc) : [];
+        $mapCounts = [];
+        $stm = $pg->prepare("SELECT entidad, COUNT(*) AS n FROM migracion_mysql_map WHERE id_empresa = ? GROUP BY entidad");
+        $stm->execute([$idEmpresa]);
+        foreach ($stm->fetchAll(PDO::FETCH_ASSOC) as $r) { $mapCounts[(string) $r['entidad']] = (int) $r['n']; }
+
+        $cobertura = [];
+        foreach (self::ENTIDADES as $key => $def) {
+            $vi = (int) ($viejo[$key]['total'] ?? 0);
+            $mi = (int) ($mapCounts[$key] ?? 0);
+            if ($vi === 0 && $mi === 0) { continue; } // entidad sin datos en ambos lados: no aplica
+            $cobertura[] = ['label' => $def['label'], 'viejo' => $vi, 'migrado' => $mi, 'faltan' => max(0, $vi - $mi)];
+        }
+
+        // B) Hallazgos de integridad. Cada chequeo recibe el SQL de las filas "ofensoras" (con una columna
+        // `clave` para la muestra) y reporta cuántas hay + hasta 5 ejemplos.
+        $hallazgos = [];
+        $chk = function (string $tipo, string $desc, string $ofensores, array $params) use ($pg, &$hallazgos): void {
+            try {
+                $sc = $pg->prepare("SELECT COUNT(*) FROM ($ofensores) x");
+                $sc->execute($params);
+                $n = (int) $sc->fetchColumn();
+                if ($n <= 0) { return; }
+                $sm = $pg->prepare("SELECT clave FROM ($ofensores) x WHERE clave IS NOT NULL AND clave <> '' LIMIT 5");
+                $sm->execute($params);
+                $muestra = implode(', ', array_map('strval', $sm->fetchAll(PDO::FETCH_COLUMN)));
+                $hallazgos[] = ['tipo' => $tipo, 'descripcion' => $desc, 'cantidad' => $n, 'muestra' => $muestra];
+            } catch (Throwable $e) { /* tabla/columna ausente en esta instalación → se omite el chequeo */ }
+        };
+        $qEnt = fn(string $e): string => $pg->quote($e);
+
+        // Cabeceras migradas sin ninguna línea de detalle (genérico, por REVERT_DOC: el 1er "hijo" es el detalle).
+        foreach (self::REVERT_DOC as $ent => $def) {
+            $hijos = $def['hijos'] ?? [];
+            if (empty($hijos)) { continue; }
+            [$detTabla, $fk] = $hijos[0];
+            $lbl = self::ENTIDADES[$ent]['label'] ?? $ent;
+            $chk('sin_detalle', "$lbl: cabeceras migradas SIN detalle",
+                "SELECT m.clave_natural AS clave
+                   FROM {$def['cab']} c
+                   JOIN migracion_mysql_map m ON m.id_destino = c.id AND m.entidad = {$qEnt($ent)} AND m.id_empresa = c.id_empresa AND m.vinculado = false
+                  WHERE c.id_empresa = :e AND c.eliminado = false
+                    AND NOT EXISTS (SELECT 1 FROM $detTabla d WHERE d.$fk = c.id)",
+                [':e' => $idEmpresa]);
+        }
+
+        // Retención de compra migrada sin documento sustentado (ni factura ni liquidación).
+        $chk('ret_sin_doc', "Retención de compra sin factura ni liquidación vinculada",
+            "SELECT (rc.establecimiento || '-' || rc.punto_emision || '-' || rc.secuencial) AS clave
+               FROM retencion_compra_cabecera rc
+               JOIN migracion_mysql_map m ON m.id_destino = rc.id AND m.entidad = 'retenciones_compra' AND m.id_empresa = rc.id_empresa AND m.vinculado = false
+              WHERE rc.id_empresa = :e AND rc.eliminado = false AND rc.id_compra IS NULL AND rc.id_liquidacion IS NULL",
+            [':e' => $idEmpresa]);
+
+        // Asientos migrados descuadrados o sin detalle.
+        $chk('asiento_descuadrado', "Asientos contables descuadrados (debe ≠ haber)",
+            "SELECT numero_comprobante AS clave FROM asientos_contables_cabecera
+              WHERE id_empresa = :e AND eliminado = false AND modulo_origen = 'migracion' AND ABS(total_debe - total_haber) > 0.01",
+            [':e' => $idEmpresa]);
+        $chk('asiento_sin_detalle', "Asientos contables migrados sin líneas de detalle",
+            "SELECT numero_comprobante AS clave FROM asientos_contables_cabecera ac
+              WHERE ac.id_empresa = :e AND ac.eliminado = false AND ac.modulo_origen = 'migracion'
+                AND NOT EXISTS (SELECT 1 FROM asientos_contables_detalle d WHERE d.id_asiento = ac.id)",
+            [':e' => $idEmpresa]);
+
+        // Registros migrados por esta migración (vinculado=false) que luego fueron ELIMINADOS (genérico por DESTINO_TABLA).
+        foreach (self::DESTINO_TABLA as $ent => $tabla) {
+            $lbl = self::ENTIDADES[$ent]['label'] ?? $ent;
+            $chk('destino_eliminado', "$lbl: registros migrados que fueron eliminados",
+                "SELECT m.clave_natural AS clave
+                   FROM migracion_mysql_map m
+                   JOIN $tabla t ON t.id = m.id_destino AND t.id_empresa = m.id_empresa
+                  WHERE m.id_empresa = :e AND m.entidad = {$qEnt($ent)} AND m.vinculado = false AND t.eliminado = true",
+                [':e' => $idEmpresa]);
+        }
+
+        return ['cobertura' => $cobertura, 'hallazgos' => $hallazgos];
+    }
+
+    /**
      * Filtro por establecimiento (opcional). Cuando están fijados:
      *  - estabOrigen (3 díg.): solo se traen los documentos del viejo cuyo ruc_empresa termina en ese
      *    establecimiento (ver clausulaEstabOrigen).
@@ -2153,7 +2247,7 @@ class MigracionMysqlService
         $prodPorCod  = $this->productosPorCodigo($pg, $idEmpresa);
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $insMap      = $this->stmtMap($pg,'cambios_producto');
-        $oldProd     = $mysql->prepare("SELECT codigo_producto, nombre_producto FROM productos_servicios WHERE id_producto = :id LIMIT 1");
+        $oldProd     = $mysql->prepare("SELECT codigo_producto, nombre_producto FROM productos_servicios WHERE id = :id LIMIT 1");
 
         // cambio_productos_facturados no tiene número ni serie en el viejo: el secuencial se deriva del
         // id_cambio y la serie se completa con la activa de la empresa (serieDefecto).
