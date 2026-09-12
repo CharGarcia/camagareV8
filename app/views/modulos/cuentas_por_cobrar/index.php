@@ -589,4 +589,6 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
     const RUTA_MODULO_CXC = "<?php echo $rutaModulo; ?>";
     const CXC_TIENE_WA    = <?php echo $tieneWA ? 'true' : 'false'; ?>;
 </script>
+<!-- Cédula y RUC del mismo tercero (cédula + '001') se tratan como uno solo -->
+<script src="<?php echo BASE_URL; ?>/js/components/identificacion_tercero.js?v=<?php echo time(); ?>"></script>
 <script src="<?php echo BASE_URL; ?>/js/modulos/cuentas_por_cobrar.js?v=<?php echo time(); ?>"></script>

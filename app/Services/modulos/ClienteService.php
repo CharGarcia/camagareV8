@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\ClienteRepository;
+use App\repositories\modulos\ReporteCarteraRepository;
 use App\Rules\modulos\ClienteRules;
 use App\Services\LogSistemaService;
 use Exception;
@@ -301,7 +302,7 @@ class ClienteService
      */
     public function getEstadisticas(int $idCliente, int $idEmpresa): array
     {
-        return $this->repository->getEstadisticas($idCliente, $idEmpresa);
+        return $this->repository->getEstadisticas($this->fichasDelCliente($idCliente, $idEmpresa), $idEmpresa);
     }
 
     // ─── PESTAÑAS DE CONSULTA DE LA FICHA (solo lectura) ─────────────────────
@@ -314,7 +315,7 @@ class ClienteService
     public function getTransacciones(int $idCliente, int $idEmpresa, string $buscar, string $vista, int $page, int $perPage, string $ordenCol, string $ordenDir, array $fuentes): array
     {
         $this->exigirCliente($idCliente, $idEmpresa);
-        return $this->repository->getTransacciones($idCliente, $idEmpresa, $buscar, $vista, $page, $perPage, $ordenCol, $ordenDir, $fuentes);
+        return $this->repository->getTransacciones($this->fichasDelCliente($idCliente, $idEmpresa), $idEmpresa, $buscar, $vista, $page, $perPage, $ordenCol, $ordenDir, $fuentes);
     }
 
     /**
@@ -335,7 +336,7 @@ class ClienteService
     public function tieneTransacciones(int $idCliente, int $idEmpresa, array $fuentes): bool
     {
         return $idCliente > 0 && $fuentes !== []
-            && $this->repository->tieneTransacciones($idCliente, $idEmpresa, $fuentes);
+            && $this->repository->tieneTransacciones($this->fichasDelCliente($idCliente, $idEmpresa), $idEmpresa, $fuentes);
     }
 
     public function tieneEstadoCuenta(int $idCliente, int $idEmpresa): bool
@@ -362,6 +363,19 @@ class ClienteService
     public function getFicha(int $idCliente, int $idEmpresa): ?array
     {
         return $this->repository->findById($idCliente, $idEmpresa) ?: null;
+    }
+
+    /**
+     * Todas las fichas de `clientes` que son el MISMO cliente: el contribuyente
+     * registrado dos veces, una con la cédula y otra con el RUC (esa cédula + '001').
+     * Las consultas de la ficha (resumen y transacciones) las suman, igual que hacen el
+     * Estado de cuenta y Cuentas por Cobrar.
+     *
+     * @return int[]
+     */
+    private function fichasDelCliente(int $idCliente, int $idEmpresa): array
+    {
+        return (new ReporteCarteraRepository())->expandirEntidades($idEmpresa, 'CLIENTE', [$idCliente]);
     }
 
     /** Las consultas de la ficha solo aplican a un cliente vigente de la empresa activa. */

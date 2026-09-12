@@ -279,7 +279,10 @@ function CXP_renderAgrupado(filas) {
     // Agrupar por proveedor (RUC como clave; si falta, por nombre)
     const mapa = new Map();
     for (const r of filas) {
-        const key = (r.proveedor_ruc && String(r.proveedor_ruc).trim()) || r.proveedor_nombre || 'Sin proveedor';
+        // Clave por identificación BASE, no por el texto del RUC: el proveedor registrado
+        // dos veces —con la cédula y con el RUC, que es esa cédula + '001'— cae en un solo
+        // grupo con su saldo sumado. Sin identificación se agrupa por nombre.
+        const key = IdentificacionTercero.claveGrupo(r.proveedor_ruc, r.proveedor_nombre || 'Sin proveedor');
         let g = mapa.get(key);
         if (!g) {
             g = { key, nombre: r.proveedor_nombre || 'Sin proveedor', ruc: r.proveedor_ruc || '', items: [], total: 0, pagado: 0, ncret: 0, saldo: 0 };

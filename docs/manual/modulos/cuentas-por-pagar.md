@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago
-version: 1.9
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos
+version: 1.10
 orden: 50
 estado: activo
 ---
@@ -71,6 +71,34 @@ Reglas:
   pruebas), no por el de la matriz.
 - En el PDF y el Excel, el encabezado indica *Alcance: Consolidado por RUC* con
   la lista de establecimientos, y se agrega la columna **Estab.**
+
+## Un mismo proveedor registrado con cédula y con RUC
+
+Es habitual que el mismo proveedor esté cargado **dos veces**: una ficha con la
+**cédula** (10 dígitos) y otra con el **RUC** (13 dígitos), que en las personas
+naturales es esa misma cédula seguida de **001**. Por ejemplo
+`1717136574` y `1717136574001`. Son dos filas distintas en `proveedores`, cada una con
+sus propios documentos, aunque para efectos prácticos sean la misma persona.
+
+Cuentas por pagar los trata como **uno solo**:
+
+- El **buscador de proveedor** muestra **una sola entrada**, no dos. Se puede escribir
+  la cédula o el RUC: en ambos casos aparece la misma opción (se muestra la ficha
+  con el RUC, que es la identificación completa).
+- Al elegirla, el listado trae los documentos de **las dos fichas**, y los totales
+  de arriba suman las dos.
+- La vista **Agrupado por proveedor** los junta en **una sola tarjeta**, con su
+  saldo total, en vez de dos tarjetas con la deuda partida.
+
+Esto es solo de consulta: **no se fusionan ni se modifican las fichas**, y cada
+documento sigue perteneciendo a la ficha con la que se emitió. Si quiere dejar
+una sola ficha de verdad, hay que hacerlo en el módulo de Proveedores.
+
+**Qué NO se agrupa**: solo se cruzan la cédula de 10 dígitos y su RUC terminado
+en 001. Un RUC de sucursal (…002, …003), el consumidor final
+(`9999999999999`), un pasaporte o cualquier otra identificación se comportan
+como siempre: cada ficha por su lado. Las fichas **sin identificación** tampoco
+se agrupan entre sí.
 
 ## Fecha Hasta como fecha de corte
 
@@ -154,6 +182,11 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.10** — Un mismo proveedor cargado **dos veces** —una ficha con la cédula y otra con el
+  RUC, que es esa cédula + `001`— deja de aparecer partido en dos: el buscador
+  muestra una sola entrada, el listado trae los documentos de las dos fichas y la
+  vista agrupada las junta en una tarjeta. Nueva sección *Un mismo proveedor
+  registrado con cédula y con RUC*.
 - **1.9** — La lista **Serie** del modal de pago ya no ofrece puntos de emisión
   **inactivos**: solo los activos, igual que Egresos y Cuentas por Cobrar. El
   servidor también rechaza un pago con una serie inactiva, y si la empresa no

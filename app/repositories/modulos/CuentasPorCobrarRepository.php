@@ -7,11 +7,13 @@ namespace App\repositories\modulos;
 use App\Helpers\AbonosVentaSql;
 use App\repositories\BaseRepository;
 use App\Traits\AmbienteEmpresaTrait;
+use App\Traits\ExpansionTerceroTrait;
 use PDO;
 
 class CuentasPorCobrarRepository extends BaseRepository
 {
     use AmbienteEmpresaTrait;
+    use ExpansionTerceroTrait;
     /** Número de la factura `v` normalizado a 15 dígitos: clave de enlace con nc_aplic / nd_aplic. */
     private string $numV;
 
@@ -1593,16 +1595,25 @@ class CuentasPorCobrarRepository extends BaseRepository
     // ─────────────────────────────────────────────────────────────────────
     // CLIENTES (buscador del filtro)
     //
-    // `clientes` es por empresa: el mismo cliente existe como filas distintas
-    // en cada establecimiento del RUC. En el consolidado se busca en todos y se
-    // cruza por identificación.
+    // Un mismo cliente puede estar repartido en varias filas de `clientes`:
+    //   · por establecimiento — la tabla es por empresa, así que en el consolidado
+    //     el mismo cliente existe una vez en cada empresa del grupo RUC;
+    //   · por identificación  — el mismo contribuyente registrado dos veces, una
+    //     con la cédula y otra con el RUC (esa cédula + '001').
+    // En ambos casos se cruza por la clave base de la identificación
+    // (IdentificacionTercero): el buscador muestra UNA entrada y el filtro se expande
+    // a todas las filas hermanas, para que su cartera no salga partida en dos.
     // ─────────────────────────────────────────────────────────────────────
 
     /**
-     * Buscador del filtro Cliente. Con varios establecimientos, devuelve UNA fila por
-     * identificación (prefiere la de la empresa activa) para no repetir al cliente en el
-     * dropdown; el filtro luego se expande a las hermanas con
-     * expandirClientesPorIdentificacion().
+     * Buscador del filtro Cliente. Devuelve UNA fila por cliente real: las que comparten
+     * la clave base de identificación (la cédula y su RUC, más las hermanas de otros
+     * establecimientos en el consolidado) colapsan en una sola entrada del dropdown; el
+     * filtro se expande después con expandirClientesPorIdentificacion().
+     *
+     * Gana la fila de la empresa activa y, entre la cédula y el RUC del mismo cliente, la
+     * de identificación más larga (el RUC). El LIMIT del SQL se pide holgado porque varias
+     * filas colapsan en una sola entrada.
      */
     public function buscarClientes(int|array $idsEmpresa, int $idEmpresaActual, string $q, int $limite = 15): array
     {
@@ -1618,20 +1629,13 @@ class CuentasPorCobrarRepository extends BaseRepository
                 WHERE id_empresa IN ({$inEmp})
                   AND eliminado  = false
                   AND (LOWER(nombre) LIKE :q OR identificacion LIKE :q2)
-                ORDER BY (id_empresa = :actual) DESC, nombre
-                LIMIT " . max(15, $limite * count($ids));
+                ORDER BY (id_empresa = :actual) DESC, nombre, LENGTH(COALESCE(identificacion, '')) DESC
+                LIMIT " . max(30, $limite * 2 * count($ids));
         $st = $this->db->prepare($sql);
         $st->execute($params);
 
         $out = [];
-        $vistos = [];
-        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
-            $clave = trim((string)($c['identificacion'] ?? ''));
-            $clave = $clave !== '' ? 'i:' . $clave : 'id:' . (int)$c['id'];
-            if (isset($vistos[$clave])) {
-                continue;
-            }
-            $vistos[$clave] = true;
+        foreach ($this->unaFilaPorTercero($st->fetchAll(PDO::FETCH_ASSOC)) as $c) {
             $out[] = ['id' => (int)$c['id'], 'nombre' => $c['nombre'], 'identificacion' => $c['identificacion']];
             if (count($out) >= $limite) {
                 break;
@@ -1641,33 +1645,14 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
-     * Consolidado: expande los ids de cliente elegidos a TODOS los ids del grupo de
-     * establecimientos que comparten la misma identificación (los clientes sin
-     * identificación solo se cruzan consigo mismos). Devuelve la unión con los ids
-     * originales, para que el filtro `id_cliente IN (...)` alcance los documentos y
-     * saldos iniciales de las hermanas.
+     * Expande los ids de cliente elegidos a TODAS las filas que son el MISMO cliente (el
+     * contribuyente registrado con la cédula y con el RUC, y en consolidado sus hermanas de
+     * otros establecimientos), para que `id_cliente IN (...)` alcance los documentos y
+     * saldos iniciales de todas ellas. La regla vive en ExpansionTerceroTrait.
      */
     public function expandirClientesPorIdentificacion(array $idsCliente, int|array $idsEmpresa): array
     {
-        $idsCliente = array_values(array_unique(array_filter(array_map('intval', $idsCliente))));
-        if (!$idsCliente) {
-            return [];
-        }
-        $params = [];
-        $inCli  = $this->phIn($idsCliente, 'xc', $params);
-        $inEmp  = $this->phIn($this->idsEmpresa($idsEmpresa), 'xe', $params);
-        $sql = "SELECT DISTINCT c2.id
-                FROM clientes c1
-                JOIN clientes c2
-                  ON c2.identificacion = c1.identificacion
-                 AND c2.eliminado = false
-                 AND c2.id_empresa IN ({$inEmp})
-                WHERE c1.id IN ({$inCli})
-                  AND COALESCE(TRIM(c1.identificacion), '') <> ''";
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        $extra = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
-        return array_values(array_unique(array_merge($idsCliente, $extra)));
+        return $this->expandirTerceroPorIdentificacion('clientes', $idsCliente, $this->idsEmpresa($idsEmpresa));
     }
 
     /**

@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro
-version: 2.2
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos
+version: 2.3
 orden: 40
 estado: activo
 ---
@@ -174,6 +174,36 @@ Reglas:
 - En el PDF y el Excel, el encabezado indica *Alcance: Consolidado por RUC* con
   la lista de establecimientos, y se agrega la columna **Estab.**
 
+## Un mismo cliente registrado con cédula y con RUC
+
+Es habitual que el mismo cliente esté cargado **dos veces**: una ficha con la
+**cédula** (10 dígitos) y otra con el **RUC** (13 dígitos), que en las personas
+naturales es esa misma cédula seguida de **001**. Por ejemplo
+`1717136574` y `1717136574001`. Son dos filas distintas en `clientes`, cada una con
+sus propios documentos, aunque para efectos prácticos sean la misma persona.
+
+Cuentas por cobrar los trata como **uno solo**:
+
+- El **buscador de cliente** muestra **una sola entrada**, no dos. Se puede escribir
+  la cédula o el RUC: en ambos casos aparece la misma opción (se muestra la ficha
+  con el RUC, que es la identificación completa).
+- Al elegirla, el listado trae los documentos de **las dos fichas**, y los totales
+  de arriba suman las dos.
+- La vista **Agrupado por cliente** los junta en **una sola tarjeta**, con su
+  saldo total, en vez de dos tarjetas con la deuda partida.
+- En el **envío masivo de recordatorios** se manda **un solo correo** con todos sus
+  documentos, no dos correos con la mitad cada uno.
+
+Esto es solo de consulta: **no se fusionan ni se modifican las fichas**, y cada
+documento sigue perteneciendo a la ficha con la que se emitió. Si quiere dejar
+una sola ficha de verdad, hay que hacerlo en el módulo de Clientes.
+
+**Qué NO se agrupa**: solo se cruzan la cédula de 10 dígitos y su RUC terminado
+en 001. Un RUC de sucursal (…002, …003), el consumidor final
+(`9999999999999`), un pasaporte o cualquier otra identificación se comportan
+como siempre: cada ficha por su lado. Las fichas **sin identificación** tampoco
+se agrupan entre sí.
+
 ## Fecha Hasta como fecha de corte
 
 El filtro **Fecha Hasta** no solo limita qué documentos se muestran (los
@@ -317,6 +347,11 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
+- **2.3** — Un mismo cliente cargado **dos veces** —una ficha con la cédula y otra con el
+  RUC, que es esa cédula + `001`— deja de aparecer partido en dos: el buscador
+  muestra una sola entrada, el listado trae los documentos de las dos fichas, la
+  vista agrupada las junta en una tarjeta y el envío masivo manda un solo correo.
+  Nueva sección *Un mismo cliente registrado con cédula y con RUC*.
 - **2.2** — La lista **Serie** del modal de cobro ya no ofrece puntos de emisión
   **inactivos**: solo los activos, igual que Ingresos y Facturas de Venta. El
   servidor también rechaza un cobro con una serie inactiva, y si la empresa no

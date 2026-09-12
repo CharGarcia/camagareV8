@@ -6,11 +6,13 @@ namespace App\repositories\modulos;
 
 use App\repositories\BaseRepository;
 use App\Traits\AmbienteEmpresaTrait;
+use App\Traits\ExpansionTerceroTrait;
 use PDO;
 
 class CuentasPorPagarRepository extends BaseRepository
 {
     use AmbienteEmpresaTrait;
+    use ExpansionTerceroTrait;
 
     public function __construct()
     {
@@ -1169,16 +1171,25 @@ class CuentasPorPagarRepository extends BaseRepository
     // ─────────────────────────────────────────────────────────────────────
     // PROVEEDORES (buscador del filtro)
     //
-    // `proveedores` es por empresa: el mismo proveedor existe como filas
-    // distintas en cada establecimiento del RUC. En el consolidado se busca en
-    // todos y se cruza por identificación.
+    // Un mismo proveedor puede estar repartido en varias filas de `proveedores`:
+    //   · por establecimiento — la tabla es por empresa, así que en el consolidado
+    //     el mismo proveedor existe una vez en cada empresa del grupo RUC;
+    //   · por identificación  — el mismo contribuyente registrado dos veces, una
+    //     con la cédula y otra con el RUC (esa cédula + '001').
+    // En ambos casos se cruza por la clave base de la identificación
+    // (IdentificacionTercero): el buscador muestra UNA entrada y el filtro se expande
+    // a todas las filas hermanas, para que su cartera no salga partida en dos.
     // ─────────────────────────────────────────────────────────────────────
 
     /**
-     * Buscador del filtro Proveedor. Con varios establecimientos devuelve UNA fila por
-     * identificación (prefiere la de la empresa activa) para no repetir al proveedor en
-     * el dropdown; el filtro luego se expande a las hermanas con
-     * expandirProveedoresPorIdentificacion().
+     * Buscador del filtro Proveedor. Devuelve UNA fila por proveedor real: las que
+     * comparten la clave base de identificación (la cédula y su RUC, más las hermanas de
+     * otros establecimientos en el consolidado) colapsan en una sola entrada del dropdown;
+     * el filtro se expande después con expandirProveedoresPorIdentificacion().
+     *
+     * Gana la fila de la empresa activa y, entre la cédula y el RUC del mismo proveedor, la
+     * de identificación más larga (el RUC). El LIMIT del SQL se pide holgado porque varias
+     * filas colapsan en una sola entrada.
      */
     public function buscarProveedores(int|array $idsEmpresa, int $idEmpresaActual, string $q, int $limite = 15): array
     {
@@ -1194,20 +1205,13 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE id_empresa IN ({$inEmp})
                   AND eliminado  = false
                   AND (LOWER(razon_social) LIKE :q OR identificacion LIKE :q2)
-                ORDER BY (id_empresa = :actual) DESC, razon_social
-                LIMIT " . max(15, $limite * count($ids));
+                ORDER BY (id_empresa = :actual) DESC, razon_social, LENGTH(COALESCE(identificacion, '')) DESC
+                LIMIT " . max(30, $limite * 2 * count($ids));
         $st = $this->db->prepare($sql);
         $st->execute($params);
 
         $out = [];
-        $vistos = [];
-        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $p) {
-            $clave = trim((string)($p['identificacion'] ?? ''));
-            $clave = $clave !== '' ? 'i:' . $clave : 'id:' . (int)$p['id'];
-            if (isset($vistos[$clave])) {
-                continue;
-            }
-            $vistos[$clave] = true;
+        foreach ($this->unaFilaPorTercero($st->fetchAll(\PDO::FETCH_ASSOC)) as $p) {
             $out[] = ['id' => (int)$p['id'], 'nombre' => $p['nombre'], 'identificacion' => $p['identificacion']];
             if (count($out) >= $limite) {
                 break;
@@ -1217,33 +1221,14 @@ class CuentasPorPagarRepository extends BaseRepository
     }
 
     /**
-     * Consolidado: expande los ids de proveedor elegidos a TODOS los ids del grupo de
-     * establecimientos que comparten la misma identificación (los proveedores sin
-     * identificación solo se cruzan consigo mismos). Devuelve la unión con los ids
-     * originales, para que el filtro `id_proveedor IN (...)` alcance los documentos y
-     * saldos iniciales de las hermanas.
+     * Expande los ids de proveedor elegidos a TODAS las filas que son el MISMO proveedor (el
+     * contribuyente registrado con la cédula y con el RUC, y en consolidado sus hermanas de
+     * otros establecimientos), para que `id_proveedor IN (...)` alcance los documentos y
+     * saldos iniciales de todas ellas. La regla vive en ExpansionTerceroTrait.
      */
     public function expandirProveedoresPorIdentificacion(array $idsProveedor, int|array $idsEmpresa): array
     {
-        $idsProveedor = array_values(array_unique(array_filter(array_map('intval', $idsProveedor))));
-        if (!$idsProveedor) {
-            return [];
-        }
-        $params = [];
-        $inProv = $this->phIn($idsProveedor, 'xp', $params);
-        $inEmp  = $this->phIn($this->idsEmpresa($idsEmpresa), 'xe', $params);
-        $sql = "SELECT DISTINCT p2.id
-                FROM proveedores p1
-                JOIN proveedores p2
-                  ON p2.identificacion = p1.identificacion
-                 AND p2.eliminado = false
-                 AND p2.id_empresa IN ({$inEmp})
-                WHERE p1.id IN ({$inProv})
-                  AND COALESCE(TRIM(p1.identificacion), '') <> ''";
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        $extra = array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
-        return array_values(array_unique(array_merge($idsProveedor, $extra)));
+        return $this->expandirTerceroPorIdentificacion('proveedores', $idsProveedor, $this->idsEmpresa($idsEmpresa));
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\Helpers\IdentificacionTercero;
 use App\repositories\modulos\ReporteCarteraRepository;
 use App\repositories\modulos\ClienteRepository;
 use App\repositories\modulos\ProveedorRepository;
@@ -72,7 +73,10 @@ class ReporteCarteraController extends BaseModuloController
     private function resolverIds(int $idEmpresa, array $filtros): array
     {
         if (!$filtros['todos']) {
-            return $filtros['ids'];
+            // Si el usuario eligió a mano las dos fichas del mismo tercero (cédula y RUC),
+            // se deja una sola: construirLedger() ya abarca las dos y de lo contrario
+            // saldría el mismo estado de cuenta repetido.
+            return $this->unaEntidadPorTercero($idEmpresa, $filtros['tipo'], $filtros['ids']);
         }
 
         $fechaHasta = $filtros['fecha_hasta'] !== '' ? $filtros['fecha_hasta'] : null;
@@ -81,6 +85,64 @@ class ReporteCarteraController extends BaseModuloController
             : $this->repository->getClientesConSaldoPendiente($idEmpresa, $fechaHasta);
 
         return array_map(fn($r) => (int) $r['id'], $rows);
+    }
+
+    /**
+     * Deja una sola ficha por tercero real dentro de una selección manual, quedándose con
+     * la primera de cada grupo. Evita que el mismo estado de cuenta se pinte dos veces
+     * cuando el usuario elige la ficha de la cédula y la del RUC.
+     *
+     * @param  int[] $ids
+     * @return int[]
+     */
+    private function unaEntidadPorTercero(int $idEmpresa, string $tipo, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (count($ids) < 2) {
+            return $ids;
+        }
+        $out = [];
+        $vistos = [];
+        foreach ($ids as $id) {
+            $ent = $tipo === 'PROVEEDOR'
+                ? $this->repository->getProveedorPorId($idEmpresa, $id)
+                : $this->repository->getClientePorId($idEmpresa, $id);
+            $clave = IdentificacionTercero::claveGrupo($ent['identificacion'] ?? null, 'id:' . $id);
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $out[] = $id;
+        }
+        return $out;
+    }
+
+    /**
+     * Una fila por tercero real en el resultado de un buscador, recortada a $limite.
+     * Entre la cédula y el RUC gana la primera que llegue en el orden del listado.
+     *
+     * @param  array<int, array<string, mixed>> $filas
+     * @return array<int, array<string, mixed>>
+     */
+    private function unaFichaPorTercero(array $filas, int $limite): array
+    {
+        $out = [];
+        $vistos = [];
+        foreach ($filas as $fila) {
+            $clave = IdentificacionTercero::claveGrupo(
+                isset($fila['identificacion']) ? (string) $fila['identificacion'] : null,
+                'id:' . (int) ($fila['id'] ?? 0)
+            );
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $out[] = $fila;
+            if (count($out) >= $limite) {
+                break;
+            }
+        }
+        return $out;
     }
 
     private function etiquetaEntidad(string $tipo): string
@@ -103,19 +165,27 @@ class ReporteCarteraController extends BaseModuloController
         return $ledgers;
     }
 
+    /**
+     * Estado de cuenta de UN tercero. El movimiento se busca sobre todas sus fichas —el
+     * mismo contribuyente puede estar registrado dos veces, una con la cédula y otra con
+     * el RUC (esa cédula + '001')—, así que el kardex sale completo en una sola sección
+     * en vez de partido en dos con saldos que no cuadran. La cabecera es la de la ficha
+     * elegida, que es la que el buscador mostró.
+     */
     private function construirLedger(int $idEmpresa, string $tipo, int $idEntidad, string $fechaDesde, string $fechaHasta, string $documento = ''): ?array
     {
-        $doc = $documento !== '' ? $documento : null;
+        $doc  = $documento !== '' ? $documento : null;
+        $idsEntidad = $this->repository->expandirEntidades($idEmpresa, $tipo, [$idEntidad]);
         if ($tipo === 'PROVEEDOR') {
             $entidad = $this->repository->getProveedorPorId($idEmpresa, $idEntidad);
             if (!$entidad) return null;
-            $movimientos   = $this->repository->getMovimientosProveedor($idEmpresa, $idEntidad, $fechaDesde !== '' ? $fechaDesde : null, $fechaHasta !== '' ? $fechaHasta : null, $doc);
-            $saldoAnterior = $fechaDesde !== '' ? $this->repository->getSaldoAnteriorProveedor($idEmpresa, $idEntidad, $fechaDesde, $doc) : 0.0;
+            $movimientos   = $this->repository->getMovimientosProveedor($idEmpresa, $idsEntidad, $fechaDesde !== '' ? $fechaDesde : null, $fechaHasta !== '' ? $fechaHasta : null, $doc);
+            $saldoAnterior = $fechaDesde !== '' ? $this->repository->getSaldoAnteriorProveedor($idEmpresa, $idsEntidad, $fechaDesde, $doc) : 0.0;
         } else {
             $entidad = $this->repository->getClientePorId($idEmpresa, $idEntidad);
             if (!$entidad) return null;
-            $movimientos   = $this->repository->getMovimientosCliente($idEmpresa, $idEntidad, $fechaDesde !== '' ? $fechaDesde : null, $fechaHasta !== '' ? $fechaHasta : null, $doc);
-            $saldoAnterior = $fechaDesde !== '' ? $this->repository->getSaldoAnteriorCliente($idEmpresa, $idEntidad, $fechaDesde, $doc) : 0.0;
+            $movimientos   = $this->repository->getMovimientosCliente($idEmpresa, $idsEntidad, $fechaDesde !== '' ? $fechaDesde : null, $fechaHasta !== '' ? $fechaHasta : null, $doc);
+            $saldoAnterior = $fechaDesde !== '' ? $this->repository->getSaldoAnteriorCliente($idEmpresa, $idsEntidad, $fechaDesde, $doc) : 0.0;
         }
 
         $saldo = $saldoAnterior;
@@ -193,7 +263,12 @@ class ReporteCarteraController extends BaseModuloController
                 exit;
             }
 
-            $rows = $this->repository->getDocumentosEntidad($idEmpresa, $filtros['tipo'], $filtros['todos'] ? [] : $filtros['ids'], $q, 20);
+            // Sobre todas las fichas del tercero: el documento buscado puede estar
+            // registrado bajo la cédula aunque el usuario haya elegido el RUC.
+            $idsDoc = $filtros['todos']
+                ? []
+                : $this->repository->expandirEntidades($idEmpresa, $filtros['tipo'], $filtros['ids']);
+            $rows = $this->repository->getDocumentosEntidad($idEmpresa, $filtros['tipo'], $idsDoc, $q, 20);
             $data = array_map(fn($r) => [
                 'numero'  => (string) $r['numero'],
                 'origen'  => ucfirst(strtolower(str_replace('_', ' ', (string) $r['origen']))),
@@ -354,14 +429,16 @@ class ReporteCarteraController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar = trim($_GET['q'] ?? '');
 
+        // Se pide holgado y se colapsa después: las dos fichas del mismo contribuyente
+        // (cédula y RUC) deben ocupar una sola entrada del dropdown.
         $repo = new ClienteRepository();
-        $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC');
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 30, 'nombre', 'ASC');
 
         $data = array_map(fn($row) => [
             'id'             => $row['id'],
             'nombre'         => $row['nombre'] ?? '',
             'identificacion' => $row['identificacion'] ?? '',
-        ], $result['rows'] ?? []);
+        ], $this->unaFichaPorTercero($result['rows'] ?? [], 15));
 
         echo json_encode(['ok' => true, 'data' => $data]);
         exit;
@@ -375,14 +452,16 @@ class ReporteCarteraController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar = trim($_GET['q'] ?? '');
 
+        // Se pide holgado y se colapsa después: las dos fichas del mismo contribuyente
+        // (cédula y RUC) deben ocupar una sola entrada del dropdown.
         $repo = new ProveedorRepository();
-        $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'razon_social', 'ASC');
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 30, 'razon_social', 'ASC');
 
         $data = array_map(fn($row) => [
             'id'             => $row['id'],
             'nombre'         => $row['razon_social'] ?? '',
             'identificacion' => $row['identificacion'] ?? '',
-        ], $result['rows'] ?? []);
+        ], $this->unaFichaPorTercero($result['rows'] ?? [], 15));
 
         echo json_encode(['ok' => true, 'data' => $data]);
         exit;

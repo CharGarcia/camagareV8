@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\Helpers\IdentificacionTercero;
 use App\repositories\modulos\CuentasPorPagarRepository;
 use App\Services\LogSistemaService;
 use PDO;
@@ -131,8 +132,11 @@ class CuentasPorPagarController extends BaseModuloController
      * solo se honra si la empresa activa es la matriz del grupo RUC y hay hermanas accesibles
      * para el usuario (EmpresaRepository::getIdsConsolidadoDesdeMatriz); en cualquier otro
      * caso se ignora en silencio y el listado queda como siempre (solo la empresa activa).
-     * En consolidado, el filtro de proveedor se expande a las filas hermanas del mismo
-     * proveedor (misma identificación), porque `proveedores` es una tabla por establecimiento.
+     * El filtro de proveedor SIEMPRE se expande a las demás filas del mismo proveedor
+     * (expandirProveedoresPorIdentificacion): dentro de una empresa, al contribuyente
+     * registrado dos veces —con la cédula y con el RUC, que es esa cédula + '001'— y,
+     * en consolidado, además a sus hermanas de los otros establecimientos, porque
+     * `proveedores` es una tabla por empresa. Sin eso su cartera saldría partida en dos.
      */
     private function resolverAlcance(int $idEmpresa, array &$filtros): array
     {
@@ -147,7 +151,7 @@ class CuentasPorPagarController extends BaseModuloController
             }
         }
         $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
-        if ($consolidado && !empty($filtros['id_proveedor'])) {
+        if (!empty($filtros['id_proveedor'])) {
             $raw = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
             $filtros['id_proveedor'] = $this->repo->expandirProveedoresPorIdentificacion($raw, $idsEmpresa);
         }
@@ -708,12 +712,12 @@ class CuentasPorPagarController extends BaseModuloController
             $ids = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
             $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
             if ($ids) {
-                // En consolidado el filtro viene expandido a las filas hermanas del mismo
-                // proveedor: se muestra una sola vez por identificación.
+                // El filtro viene expandido a las demás filas del mismo proveedor (cédula/RUC y,
+                // en consolidado, otros establecimientos): se nombra una sola vez por proveedor.
                 $nombres = [];
                 $vistos  = [];
                 foreach ($this->repo->getProveedoresPorIds($ids, $idsEmpresa) as $id => $p) {
-                    $clave = $p['identificacion'] !== '' ? 'i:' . $p['identificacion'] : 'id:' . $id;
+                    $clave = IdentificacionTercero::claveGrupo($p['identificacion'], 'id:' . $id);
                     if (isset($vistos[$clave])) {
                         continue;
                     }

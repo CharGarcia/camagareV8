@@ -16,6 +16,10 @@ use App\Rules\RangoFechasRules;
  * egreso o ingreso. El kardex trae una fila por cada documento que paga un egreso o
  * cobra un ingreso; aquí se funden y el reparto por documento se ve al desplegar el
  * pago o cobro desde la pestaña.
+ *
+ * Si el mismo contribuyente está registrado dos veces —una ficha con la cédula y otra
+ * con el RUC, que es esa cédula + '001'— el kardex abarca las dos, igual que en el
+ * Reporte de Cartera: el estado de cuenta es del tercero, no de la fila.
  */
 class EstadoCuentaTerceroService
 {
@@ -32,10 +36,11 @@ class EstadoCuentaTerceroService
     public function proveedor(int $idEmpresa, int $idProveedor, ?string $fechaDesde, ?string $fechaHasta): array
     {
         $this->rules->validar($fechaDesde, $fechaHasta);
+        $ids = $this->cartera->expandirEntidades($idEmpresa, 'PROVEEDOR', [$idProveedor]);
 
         return $this->resumir(
-            $this->cartera->getMovimientosProveedor($idEmpresa, $idProveedor, $fechaDesde, $fechaHasta),
-            $fechaDesde !== null ? $this->cartera->getSaldoAnteriorProveedor($idEmpresa, $idProveedor, $fechaDesde) : 0.0,
+            $this->cartera->getMovimientosProveedor($idEmpresa, $ids, $fechaDesde, $fechaHasta),
+            $fechaDesde !== null ? $this->cartera->getSaldoAnteriorProveedor($idEmpresa, $ids, $fechaDesde) : 0.0,
             'PAGO'
         );
     }
@@ -44,10 +49,11 @@ class EstadoCuentaTerceroService
     public function cliente(int $idEmpresa, int $idCliente, ?string $fechaDesde, ?string $fechaHasta): array
     {
         $this->rules->validar($fechaDesde, $fechaHasta);
+        $ids = $this->cartera->expandirEntidades($idEmpresa, 'CLIENTE', [$idCliente]);
 
         return $this->resumir(
-            $this->cartera->getMovimientosCliente($idEmpresa, $idCliente, $fechaDesde, $fechaHasta),
-            $fechaDesde !== null ? $this->cartera->getSaldoAnteriorCliente($idEmpresa, $idCliente, $fechaDesde) : 0.0,
+            $this->cartera->getMovimientosCliente($idEmpresa, $ids, $fechaDesde, $fechaHasta),
+            $fechaDesde !== null ? $this->cartera->getSaldoAnteriorCliente($idEmpresa, $ids, $fechaDesde) : 0.0,
             'COBRO'
         );
     }
@@ -55,13 +61,13 @@ class EstadoCuentaTerceroService
     /** ¿El cliente tiene algún movimiento? La ficha no pinta la pestaña si no hay nada. */
     public function tieneCliente(int $idEmpresa, int $idCliente): bool
     {
-        return $this->cartera->tieneMovimientosCliente($idEmpresa, $idCliente);
+        return $this->cartera->tieneMovimientosCliente($idEmpresa, $this->cartera->expandirEntidades($idEmpresa, 'CLIENTE', [$idCliente]));
     }
 
     /** ¿El proveedor tiene algún movimiento? La ficha no pinta la pestaña si no hay nada. */
     public function tieneProveedor(int $idEmpresa, int $idProveedor): bool
     {
-        return $this->cartera->tieneMovimientosProveedor($idEmpresa, $idProveedor);
+        return $this->cartera->tieneMovimientosProveedor($idEmpresa, $this->cartera->expandirEntidades($idEmpresa, 'PROVEEDOR', [$idProveedor]));
     }
 
     /**

@@ -9,6 +9,7 @@ use PDO;
 class ClienteRepository extends BaseRepository
 {
     use \App\Traits\LineasDocumentoTrait;
+    use \App\Traits\ExpansionTerceroTrait;
 
     public const COLUMNAS_ORDEN = [
         'identificacion', 'nombre_tipo_id', 'nombre', 'email', 'telefono', 'direccion',
@@ -677,7 +678,7 @@ class ClienteRepository extends BaseRepository
      * @return array{rows: array, total: int, total_neto: float}
      */
     public function getTransacciones(
-        int $idCliente,
+        int|array $idCliente,
         int $idEmpresa,
         string $buscar,
         string $vista,
@@ -697,7 +698,7 @@ class ClienteRepository extends BaseRepository
      * ¿El cliente tiene alguna transacción que este usuario pueda ver? Misma unión que
      * getTransacciones(), sin traer filas: la ficha lo usa para no pintar la pestaña vacía.
      */
-    public function tieneTransacciones(int $idCliente, int $idEmpresa, array $fuentes): bool
+    public function tieneTransacciones(int|array $idCliente, int $idEmpresa, array $fuentes): bool
     {
         $params = [];
         return $this->existenLineasDocumento(
@@ -711,7 +712,7 @@ class ClienteRepository extends BaseRepository
      * con su filtro de ambiente y el de registros propios. Única fuente para el listado y
      * para la comprobación de si hay datos.
      */
-    private function ramasTransacciones(int $idCliente, int $idEmpresa, array $fuentes, array &$params): array
+    private function ramasTransacciones(int|array $idCliente, int $idEmpresa, array $fuentes, array &$params): array
     {
         $amb   = $this->ambienteLineasDocumento($idEmpresa);
         $ramas = [];
@@ -753,7 +754,7 @@ class ClienteRepository extends BaseRepository
         string $impuestos,
         string $fkImpuestos,
         array $estadosExcluidos,
-        int $idCliente,
+        int|array $idCliente,
         int $idEmpresa,
         ?string $amb,
         ?int $idUsuarioFiltro,
@@ -761,6 +762,8 @@ class ClienteRepository extends BaseRepository
         array &$params
     ): string {
         $excluidos = "'" . implode("','", $estadosExcluidos) . "'";
+        // Todas las fichas del mismo cliente (cédula y RUC), igual que el resumen comercial.
+        $inCli     = $this->sqlInTercero((array) $idCliente);
 
         $sql = "SELECT '{$origen}'::text AS origen, c.id AS id_documento, d.id AS id_linea,
                        c.fecha_emision::date AS fecha,
@@ -780,11 +783,10 @@ class ClienteRepository extends BaseRepository
                     FROM {$impuestos} i
                     WHERE i.{$fkImpuestos} = d.id AND i.codigo_impuesto = '2'
                 ) imp ON true
-                WHERE c.id_empresa = :emp_{$sufijo} AND c.id_cliente = :cli_{$sufijo}
+                WHERE c.id_empresa = :emp_{$sufijo} AND c.id_cliente IN {$inCli}
                   AND c.eliminado = false
                   AND LOWER(TRIM(COALESCE(c.estado, ''))) NOT IN ({$excluidos})";
         $params[":emp_{$sufijo}"] = $idEmpresa;
-        $params[":cli_{$sufijo}"] = $idCliente;
 
         if ($amb !== null) {
             $sql .= " AND CAST(c.tipo_ambiente AS VARCHAR) = :amb_{$sufijo}";
@@ -801,8 +803,11 @@ class ClienteRepository extends BaseRepository
     /**
      * Obtiene estadísticas de ventas y documentos para un cliente.
      */
-    public function getEstadisticas(int $idCliente, int $idEmpresa): array
+    public function getEstadisticas(int|array $idCliente, int $idEmpresa): array
     {
+        // El mismo contribuyente puede tener dos fichas (cédula y RUC = esa cédula + '001'):
+        // el resumen suma las dos, para que cuadre con el Estado de cuenta y con CxC.
+        $inCli = $this->sqlInTercero((array) $idCliente);
         $stats = [
             'facturas_emitidas' => 0,
             'total_ventas'      => 0.00,
@@ -817,12 +822,12 @@ class ClienteRepository extends BaseRepository
                         COALESCE(SUM(total_sin_impuestos) FILTER (WHERE estado NOT IN ('borrador', 'anulado')), 0) as subtotal,
                         COUNT(*) FILTER (WHERE estado = 'anulado') as anuladas
                       FROM ventas_cabecera 
-                      WHERE id_cliente = :id_cliente 
+                      WHERE id_cliente IN {$inCli}
                         AND id_empresa = :id_empresa 
                         AND eliminado = false";
         
         $stVentas = $this->db->prepare($sqlVentas);
-        $stVentas->execute([':id_cliente' => $idCliente, ':id_empresa' => $idEmpresa]);
+        $stVentas->execute([':id_empresa' => $idEmpresa]);
         $resVentas = $stVentas->fetch(PDO::FETCH_ASSOC);
 
         if ($resVentas) {
@@ -837,14 +842,14 @@ class ClienteRepository extends BaseRepository
                     COALESCE(SUM(importe_total), 0) as total_nc,
                     COALESCE(SUM(total_sin_impuestos), 0) as subtotal_nc
                   FROM notas_credito_cabecera 
-                  WHERE id_cliente = :id_cliente 
+                  WHERE id_cliente IN {$inCli}
                     AND id_empresa = :id_empresa 
                     AND estado NOT IN ('borrador', 'anulado')
                     AND eliminado = false";
         
         try {
             $stNC = $this->db->prepare($sqlNC);
-            $stNC->execute([':id_cliente' => $idCliente, ':id_empresa' => $idEmpresa]);
+            $stNC->execute([':id_empresa' => $idEmpresa]);
             $resNC = $stNC->fetch(PDO::FETCH_ASSOC);
             $stats['total_nc'] = (float) ($resNC['total_nc'] ?? 0);
             $stats['total_nc_subtotal'] = (float) ($resNC['subtotal_nc'] ?? 0);

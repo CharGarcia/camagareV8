@@ -420,7 +420,8 @@ class ProveedoresController extends BaseModuloController
 
             if (!$prov) throw new \Exception('Proveedor no encontrado');
 
-            $stats = $repo->getEstadisticas($id, $idEmpresa);
+            // Por el service: es quien suma las fichas del mismo proveedor (cédula y RUC).
+            $stats = $this->service->getEstadisticas($id, $idEmpresa);
 
             $fmt = fn($d) => !empty($d) ? date('d-m-Y H:i:s', strtotime($d)) : '—';
 

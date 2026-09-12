@@ -6,6 +6,7 @@ namespace App\repositories\modulos;
 
 use App\Helpers\AbonosVentaSql;
 use App\repositories\BaseRepository;
+use App\Traits\ExpansionTerceroTrait;
 use PDO;
 
 /**
@@ -33,6 +34,8 @@ use PDO;
  */
 class ReporteCarteraRepository extends BaseRepository
 {
+    use ExpansionTerceroTrait;
+
     public function __construct()
     {
         parent::__construct('ventas_cabecera');
@@ -98,13 +101,33 @@ class ReporteCarteraRepository extends BaseRepository
      * ese tercero; sin él (modo "Todos"), no filtra y la expresión se expone
      * como columna id_entidad para agrupar.
      */
-    private function entidadWhere(string $expr, string $suffix, ?int $idEntidad, array &$params): string
+    /**
+     * Filtro por entidad de una rama del UNION. Acepta un id o VARIOS: el mismo tercero
+     * puede tener dos fichas —una con la cédula y otra con el RUC, que es esa cédula +
+     * '001'—, y su estado de cuenta debe salir en uno solo, no partido en dos.
+     * `null` = todas las entidades (el agregado de "Todos").
+     */
+    private function entidadWhere(string $expr, string $suffix, int|array|null $idEntidad, array &$params): string
     {
         if ($idEntidad === null) {
             return " AND {$expr} IS NOT NULL";
         }
-        $params[":ent_{$suffix}"] = $idEntidad;
-        return " AND {$expr} = :ent_{$suffix}";
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $idEntidad))));
+        if (!$ids) {
+            return " AND FALSE";
+        }
+        if (count($ids) === 1) {
+            $params[":ent_{$suffix}"] = $ids[0];
+            return " AND {$expr} = :ent_{$suffix}";
+        }
+        // Un placeholder por id y por rama: PDO-pgsql no admite repetir un nombre.
+        $ph = [];
+        foreach ($ids as $i => $id) {
+            $k = ":ent_{$suffix}_{$i}";
+            $ph[] = $k;
+            $params[$k] = $id;
+        }
+        return " AND {$expr} IN (" . implode(',', $ph) . ")";
     }
 
     /**
@@ -209,7 +232,7 @@ class ReporteCarteraRepository extends BaseRepository
      * expone: fecha, tipo_movimiento, signo, origen, numero_documento,
      * detalle, monto, id_orden, id_entidad (cliente al que se atribuye).
      */
-    private function unionCliente(int $idEmpresa, ?int $idCliente, ?string $fechaDesde, ?string $fechaHasta, array &$params, ?string $documento = null): string
+    private function unionCliente(int $idEmpresa, int|array|null $idCliente, ?string $fechaDesde, ?string $fechaHasta, array &$params, ?string $documento = null): string
     {
         $amb = $this->ambienteEmpresa($idEmpresa);
 
@@ -373,7 +396,7 @@ class ReporteCarteraRepository extends BaseRepository
      * inicial) y ABONO (cobro/retención/NC). $fechaDesde/$fechaHasta son
      * opcionales (null = sin límite).
      */
-    public function getMovimientosCliente(int $idEmpresa, int $idCliente, ?string $fechaDesde, ?string $fechaHasta, ?string $documento = null): array
+    public function getMovimientosCliente(int $idEmpresa, int|array $idCliente, ?string $fechaDesde, ?string $fechaHasta, ?string $documento = null): array
     {
         $params = [];
         $ctes   = $this->ctesCliente($idEmpresa, $params);
@@ -394,7 +417,7 @@ class ReporteCarteraRepository extends BaseRepository
      * saldo corriente del rango filtrado). Reutiliza getMovimientosCliente
      * con fecha_hasta = fechaDesde - 1 día.
      */
-    public function getSaldoAnteriorCliente(int $idEmpresa, int $idCliente, string $fechaDesde, ?string $documento = null): float
+    public function getSaldoAnteriorCliente(int $idEmpresa, int|array $idCliente, string $fechaDesde, ?string $documento = null): float
     {
         $hasta = date('Y-m-d', strtotime($fechaDesde . ' -1 day'));
         return $this->sumarSaldo($this->getMovimientosCliente($idEmpresa, $idCliente, null, $hasta, $documento));
@@ -405,7 +428,7 @@ class ReporteCarteraRepository extends BaseRepository
      * (sin rango de fechas) envuelta en EXISTS, que corta en la primera fila: la ficha lo usa
      * para no pintar la pestaña "Estado de cuenta" cuando no hay nada que mostrar.
      */
-    public function tieneMovimientosCliente(int $idEmpresa, int $idCliente): bool
+    public function tieneMovimientosCliente(int $idEmpresa, int|array $idCliente): bool
     {
         $params = [];
         $ctes   = $this->ctesCliente($idEmpresa, $params);
@@ -441,12 +464,14 @@ class ReporteCarteraRepository extends BaseRepository
             ) agg
             JOIN clientes cli ON cli.id = agg.id_entidad
             WHERE cli.id_empresa = :emp_cli AND cli.eliminado = false
-            ORDER BY cli.nombre ASC
+            ORDER BY cli.nombre ASC, LENGTH(COALESCE(cli.identificacion, '')) DESC
         ";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        // Una fila por cliente real: si el mismo contribuyente tiene dos fichas (cédula y
+        // RUC) se devuelve solo la del RUC, y el estado de cuenta la expande a las dos.
+        return $this->unaFilaPorTercero($st->fetchAll(PDO::FETCH_ASSOC));
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -459,7 +484,7 @@ class ReporteCarteraRepository extends BaseRepository
      * 04/05), no en tablas propias. Los cargos son TODOS los tipos que generan
      * deuda (ver TiposComprobanteCompra), no solo la factura '01'.
      */
-    private function unionProveedor(int $idEmpresa, ?int $idProveedor, ?string $fechaDesde, ?string $fechaHasta, array &$params, ?string $documento = null): string
+    private function unionProveedor(int $idEmpresa, int|array|null $idProveedor, ?string $fechaDesde, ?string $fechaHasta, array &$params, ?string $documento = null): string
     {
         $amb = $this->ambienteEmpresa($idEmpresa);
 
@@ -629,7 +654,7 @@ class ReporteCarteraRepository extends BaseRepository
      * importación/ND recibida/saldo inicial) y ABONO (pago/retención/NC
      * recibida).
      */
-    public function getMovimientosProveedor(int $idEmpresa, int $idProveedor, ?string $fechaDesde, ?string $fechaHasta, ?string $documento = null): array
+    public function getMovimientosProveedor(int $idEmpresa, int|array $idProveedor, ?string $fechaDesde, ?string $fechaHasta, ?string $documento = null): array
     {
         $params = [];
         $union  = $this->unionProveedor($idEmpresa, $idProveedor, $fechaDesde, $fechaHasta, $params, $documento);
@@ -643,7 +668,7 @@ class ReporteCarteraRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function getSaldoAnteriorProveedor(int $idEmpresa, int $idProveedor, string $fechaDesde, ?string $documento = null): float
+    public function getSaldoAnteriorProveedor(int $idEmpresa, int|array $idProveedor, string $fechaDesde, ?string $documento = null): float
     {
         $hasta = date('Y-m-d', strtotime($fechaDesde . ' -1 day'));
         return $this->sumarSaldo($this->getMovimientosProveedor($idEmpresa, $idProveedor, null, $hasta, $documento));
@@ -654,7 +679,7 @@ class ReporteCarteraRepository extends BaseRepository
      * getMovimientosProveedor() (sin rango de fechas) envuelta en EXISTS, que corta en la
      * primera fila: la ficha lo usa para no pintar la pestaña "Estado de cuenta" vacía.
      */
-    public function tieneMovimientosProveedor(int $idEmpresa, int $idProveedor): bool
+    public function tieneMovimientosProveedor(int $idEmpresa, int|array $idProveedor): bool
     {
         $params = [];
         $union  = $this->unionProveedor($idEmpresa, $idProveedor, null, null, $params);
@@ -686,12 +711,14 @@ class ReporteCarteraRepository extends BaseRepository
             ) agg
             JOIN proveedores prov ON prov.id = agg.id_entidad
             WHERE prov.id_empresa = :emp_prov AND prov.eliminado = false
-            ORDER BY prov.razon_social ASC
+            ORDER BY prov.razon_social ASC, LENGTH(COALESCE(prov.identificacion, '')) DESC
         ";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        // Una fila por proveedor real: si el mismo contribuyente tiene dos fichas (cédula y
+        // RUC) se devuelve solo la del RUC, y el estado de cuenta la expande a las dos.
+        return $this->unaFilaPorTercero($st->fetchAll(PDO::FETCH_ASSOC));
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -705,6 +732,20 @@ class ReporteCarteraRepository extends BaseRepository
      * por documento. $ids vacío = sin filtro de entidad (modo "Todos").
      * Devuelve: origen, numero, fecha, total, id_entidad, nombre_entidad.
      */
+    /**
+     * Todas las fichas que son el MISMO tercero que las recibidas: el contribuyente
+     * registrado dos veces, una con la cédula y otra con el RUC (esa cédula + '001').
+     * El estado de cuenta se arma sobre el conjunto para que no salga partido en dos.
+     *
+     * @param  int[] $ids
+     * @return int[]
+     */
+    public function expandirEntidades(int $idEmpresa, string $tipo, array $ids): array
+    {
+        $tabla = strtoupper($tipo) === 'PROVEEDOR' ? 'proveedores' : 'clientes';
+        return $this->expandirTerceroPorIdentificacion($tabla, $ids, [$idEmpresa]);
+    }
+
     public function getDocumentosEntidad(int $idEmpresa, string $tipo, array $ids, string $q, int $limite = 20): array
     {
         $amb    = $this->ambienteEmpresa($idEmpresa);

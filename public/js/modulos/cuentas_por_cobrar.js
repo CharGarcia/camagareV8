@@ -264,10 +264,12 @@ function CXC_renderAgrupado(filas) {
     const tbody = document.getElementById('cxc-tbody');
     const label = document.getElementById('cxc-count-label');
 
-    // Agrupar por cliente (RUC como clave; si falta, por nombre)
+    // Agrupar por cliente. La clave es la identificación BASE, no el texto del RUC: así
+    // el cliente registrado dos veces —con la cédula y con el RUC, que es esa cédula + '001'—
+    // cae en un solo grupo con su saldo sumado. Sin identificación se agrupa por nombre.
     const mapa = new Map();
     for (const r of filas) {
-        const key = (r.cliente_ruc && String(r.cliente_ruc).trim()) || r.cliente_nombre || 'Sin cliente';
+        const key = IdentificacionTercero.claveGrupo(r.cliente_ruc, r.cliente_nombre || 'Sin cliente');
         let g = mapa.get(key);
         if (!g) {
             g = { key, nombre: r.cliente_nombre || 'Sin cliente', ruc: r.cliente_ruc || '', items: [], total: 0, cobrado: 0, saldo: 0 };
@@ -838,12 +840,14 @@ function CXC_envioMasivoEmail() {
         return;
     }
 
-    // Agrupar por cliente: se envía UN correo por cliente con el resumen
-    // de todos sus documentos seleccionados (facturas y recibos).
+    // Agrupar por cliente: se envía UN correo por cliente con el resumen de todos sus
+    // documentos seleccionados (facturas y recibos). La clave es la identificación base y
+    // no el id, para que el cliente registrado dos veces —cédula y RUC— reciba un solo
+    // correo con TODOS sus documentos y no dos correos parciales.
     const mapa = new Map();
     for (const r of filas) {
         const idCli = parseInt(r.id_cliente) || 0;
-        const k = idCli || ('r:' + (r.cliente_ruc || r.cliente_nombre || '?'));
+        const k = IdentificacionTercero.claveGrupo(r.cliente_ruc, String(r.cliente_nombre || idCli || '?'));
         let g = mapa.get(k);
         if (!g) {
             g = { idCliente: idCli, nombre: r.cliente_nombre || 'Sin nombre', ruc: r.cliente_ruc || '',

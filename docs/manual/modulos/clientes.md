@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
-etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso
-version: 1.8
+etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
+version: 1.9
 orden: 10
 estado: activo
 ---
@@ -263,6 +263,25 @@ se registra un cobro: sale de la misma fórmula, así que no puede discrepar.
 La pestaña **solo aparece** si el cliente tiene anticipos y el usuario puede ver
 **Ingresos**, que es donde se registran.
 
+## Si el mismo cliente está cargado con cédula y con RUC
+
+Un mismo contribuyente puede tener **dos fichas**: una con la **cédula** (10
+dígitos) y otra con el **RUC** (13 dígitos), que en las personas naturales es esa
+cédula seguida de **001** —por ejemplo `1717136574` y `1717136574001`—. Al abrir
+cualquiera de las dos, las consultas de la ficha muestran **el total del
+cliente**, no solo lo de esa fila:
+
+- **Resumen comercial**: los documentos y el total vendido suman las dos fichas.
+- **Transacciones**: lista los productos y servicios de los documentos de ambas.
+- **Estado de cuenta**: un solo kardex, con el saldo real (el mismo que muestran
+  Cuentas por cobrar y el Reporte de Cartera).
+
+Los **datos de la ficha** (nombre, dirección, correo…) siguen siendo los de la
+fila que abrió, y **no se fusiona nada**: son dos registros y se pueden editar o
+eliminar por separado. La pestaña **Anticipos** tampoco se suma, se queda en la
+ficha: es el saldo que se consume al registrar un cobro, y ahí cada ficha
+tiene el suyo.
+
 ## Carga masiva desde Excel
 
 En *Configuración → Importador desde Excel* la entidad **Clientes** permite
@@ -328,6 +347,11 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **1.9** — Si el mismo contribuyente está cargado **dos veces** —una ficha con la cédula y
+  otra con el RUC, que es esa cédula + `001`—, el **Resumen comercial**, las
+  **Transacciones** y el **Estado de cuenta** de la ficha muestran el total del
+  cliente, sumando las dos fichas, en vez de la mitad en cada una. Nueva sección
+  *Si el mismo cliente está cargado con cédula y con RUC*.
 - **1.8** — Las pestañas de consulta **solo aparecen cuando hay algo que mostrar**:
   *Transacciones* si el cliente tiene documentos, *Estado de cuenta* si tiene
   movimientos y además el usuario puede ver el **Reporte de Cartera** (antes

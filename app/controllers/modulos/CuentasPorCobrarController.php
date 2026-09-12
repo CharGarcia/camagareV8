@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\Helpers\IdentificacionTercero;
 use App\repositories\modulos\CuentasPorCobrarRepository;
 use App\repositories\modulos\EmpresaRepository;
 use App\services\WhatsappService;
@@ -339,8 +340,11 @@ class CuentasPorCobrarController extends BaseModuloController
      * solo se honra si la empresa activa es la matriz del grupo RUC y hay hermanas accesibles
      * para el usuario (EmpresaRepository::getIdsConsolidadoDesdeMatriz); en cualquier otro
      * caso se ignora en silencio y el listado queda como siempre (solo la empresa activa).
-     * En consolidado, el filtro de cliente se expande a las filas hermanas del mismo cliente
-     * (misma identificación), porque `clientes` es una tabla por establecimiento.
+     * El filtro de cliente SIEMPRE se expande a las demás filas del mismo cliente
+     * (expandirClientesPorIdentificacion): dentro de una empresa, al contribuyente
+     * registrado dos veces —con la cédula y con el RUC, que es esa cédula + '001'— y,
+     * en consolidado, además a sus hermanas de los otros establecimientos, porque
+     * `clientes` es una tabla por empresa. Sin eso su cartera saldría partida en dos.
      */
     private function resolverAlcance(int $idEmpresa, array &$filtros): array
     {
@@ -354,7 +358,7 @@ class CuentasPorCobrarController extends BaseModuloController
             }
         }
         $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
-        if ($consolidado && !empty($filtros['id_cliente'])) {
+        if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
             $filtros['id_cliente'] = $this->repo->expandirClientesPorIdentificacion($raw, $idsEmpresa);
         }
@@ -1017,14 +1021,19 @@ $plantillasFiltradas = [];
         // Correos revisados/editados en el modal: {id_cliente: "correo1, correo2"}.
         // Si la clave existe se usa tal cual (vacío = omitir al cliente); si no,
         // se usa el correo de la ficha del cliente. Solo afecta a este envío.
+        // La clave es UNO de los ids del cliente: el modal agrupa por identificación base,
+        // así que un cliente con dos fichas (cédula y RUC) manda solo el id que mostró.
         $correosEdit = json_decode($_POST['correos'] ?? '{}', true);
         if (!is_array($correosEdit)) $correosEdit = [];
 
         // El envío SMTP secuencial puede tardar varios segundos por cliente
         @set_time_limit(300);
 
-        // 1) Cargar cada documento desde BD (valida empresa/estado y trae el saldo real)
-        $porCliente    = [];  // id_cliente => [nombre, email, docs[]]
+        // 1) Cargar cada documento desde BD (valida empresa/estado y trae el saldo real).
+        // Se agrupa por identificación BASE y no por id de ficha: el mismo contribuyente
+        // registrado dos veces —con la cédula y con el RUC, que es esa cédula + '001'—
+        // recibe UN correo con todos sus documentos, no dos correos parciales.
+        $porCliente    = [];  // clave de cliente real => [nombre, email, ids[], docs[]]
         $sinSaldo      = 0;
         $noEncontrados = 0;
         $vistos        = [];  // dedup ORIGEN:id
@@ -1052,14 +1061,23 @@ $plantillasFiltradas = [];
             $diasVencido = (int)((strtotime(date('Y-m-d')) - strtotime(date('Y-m-d', strtotime($fVenc)))) / 86400);
 
             $idCliente = (int)($doc['id_cliente'] ?? 0);
-            if (!isset($porCliente[$idCliente])) {
-                $porCliente[$idCliente] = [
+            $claveCli  = IdentificacionTercero::claveGrupo($doc['cliente_ruc'] ?? null, 'id:' . $idCliente);
+            if (!isset($porCliente[$claveCli])) {
+                $porCliente[$claveCli] = [
                     'nombre' => $doc['cliente_nombre'] ?? '',
                     'email'  => trim((string)($doc['cliente_email'] ?? '')),
+                    'ids'    => [],
                     'docs'   => [],
                 ];
             }
-            $porCliente[$idCliente]['docs'][] = [
+            // Todas las fichas que aportaron documentos: cualquiera de ellas puede ser la
+            // que el modal usó como clave del correo editado, y si una no tiene correo en
+            // su ficha sirve el de la otra.
+            $porCliente[$claveCli]['ids'][$idCliente] = true;
+            if ($porCliente[$claveCli]['email'] === '') {
+                $porCliente[$claveCli]['email'] = trim((string)($doc['cliente_email'] ?? ''));
+            }
+            $porCliente[$claveCli]['docs'][] = [
                 'tipo'          => $origen === 'RECIBO' ? 'Recibo' : 'Factura',
                 'numero'        => $doc['numero_factura'] ?? '',
                 'fecha_emision' => $doc['fecha_emision'] ?? '',
@@ -1081,11 +1099,16 @@ $plantillasFiltradas = [];
         $sinEmail = 0;
         $conError = 0;
 
-        foreach ($porCliente as $idCliente => $cli) {
-            // Correo editado en el modal (si vino) o el de la ficha del cliente
-            $emailStr = array_key_exists($idCliente, $correosEdit)
-                ? trim((string)$correosEdit[$idCliente])
-                : trim((string)$cli['email']);
+        foreach ($porCliente as $cli) {
+            // Correo editado en el modal (si vino) o el de la ficha del cliente. Se busca por
+            // cualquiera de las fichas del grupo, porque el modal manda el id de una sola.
+            $emailStr = trim((string)$cli['email']);
+            foreach (array_keys($cli['ids']) as $idFicha) {
+                if (array_key_exists($idFicha, $correosEdit)) {
+                    $emailStr = trim((string)$correosEdit[$idFicha]);
+                    break;
+                }
+            }
 
             // Direcciones válidas (mismo criterio de split que enviarAvisoSimple)
             $direcciones = [];
@@ -1115,10 +1138,13 @@ $plantillasFiltradas = [];
                     $idEmpresa,
                     'EMAIL_CXC_MASIVO',
                     'clientes',
-                    $idCliente,
+                    // El grupo puede abarcar dos fichas del mismo cliente (cédula y RUC): se
+                    // audita sobre la primera y se dejan todas en el detalle.
+                    (int) (array_key_first($cli['ids']) ?? 0),
                     null,
                     [
                         'email'           => implode(', ', $direcciones),
+                        'id_clientes'     => array_keys($cli['ids']),
                         'documentos'      => array_map(fn ($x) => $x['tipo'] . ' ' . $x['numero'], $cli['docs']),
                         'total_pendiente' => round(array_sum(array_column($cli['docs'], 'saldo')), 2),
                     ]
@@ -1713,12 +1739,12 @@ $plantillasFiltradas = [];
             $ids = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
             $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
             if ($ids) {
-                // En consolidado el filtro viene expandido a las filas hermanas del mismo
-                // cliente: se muestra una sola vez por identificación.
+                // El filtro viene expandido a las demás filas del mismo cliente (cédula/RUC y,
+                // en consolidado, otros establecimientos): se nombra una sola vez por cliente.
                 $nombres = [];
                 $vistos  = [];
                 foreach ($this->repo->getClientesPorIds($ids, $idsEmpresa) as $id => $c) {
-                    $clave = $c['identificacion'] !== '' ? 'i:' . $c['identificacion'] : 'id:' . $id;
+                    $clave = IdentificacionTercero::claveGrupo($c['identificacion'], 'id:' . $id);
                     if (isset($vistos[$clave])) {
                         continue;
                     }

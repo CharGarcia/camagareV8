@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
-etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado
-version: 1.6
+etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
+version: 1.7
 orden: 0
 estado: activo
 ---
@@ -121,6 +121,29 @@ de la empresa activa.
   saldo mayor a cero a la fecha de corte — un cliente sin movimientos, o que
   ya pagó todo, no aparece.
 
+## Un mismo cliente o proveedor con cédula y con RUC
+
+Cuando el mismo contribuyente está cargado **dos veces** —una ficha con la
+**cédula** (10 dígitos) y otra con el **RUC** (13 dígitos), que en las personas
+naturales es esa cédula seguida de **001**, por ejemplo `1717136574` y
+`1717136574001`— el reporte lo trata como **una sola persona**:
+
+- El buscador muestra **una entrada**, se escriba la cédula o el RUC.
+- El estado de cuenta sale **completo en una sola sección**: incluye los
+  documentos y los abonos de las dos fichas, y el saldo final es el real. Antes
+  salían dos secciones, cada una con la mitad de los movimientos.
+- Con **Todos** marcado, el contribuyente aparece **una vez**, no dos.
+- El buscador de **Documento** también mira las dos fichas, así que encuentra la
+  factura aunque se haya emitido con la otra identificación.
+- El PDF, el Excel y el correo del estado de cuenta salen con ese mismo detalle
+  unificado.
+
+Si elige a mano las dos fichas del mismo contribuyente, se genera **un solo**
+estado de cuenta, no el mismo repetido.
+
+Solo se cruzan la cédula y su RUC terminado en 001. Un RUC de sucursal (…002),
+el consumidor final (`9999999999999`) o un pasaporte se comportan como siempre.
+
 ## Integraciones con otros módulos
 
 Lee de Facturación, Recibos de Venta, Notas de Crédito/Débito, Compras,
@@ -150,6 +173,12 @@ que los tres deben coincidir.
 
 ## Historial de cambios
 
+- **1.7** — Un mismo cliente o proveedor cargado **dos veces** —con la cédula y con el RUC,
+  que es esa cédula + `001`— deja de salir en dos estados de cuenta con la mitad
+  de los movimientos cada uno: ahora es **una sola sección** con todo su
+  movimiento y el saldo real, tanto en pantalla como en el PDF, el Excel y el
+  correo. Con *Todos* marcado aparece una vez. Nueva sección *Un mismo cliente o
+  proveedor con cédula y con RUC*.
 - **1.6** — El estado de cuenta de **clientes** es mucho más rápido. Las notas de
   crédito/débito y las retenciones que no apuntan a una factura se enlazan por el
   número del documento, y ese número se recalculaba para todas las facturas una vez

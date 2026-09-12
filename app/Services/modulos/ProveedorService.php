@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\ProveedorRepository;
+use App\repositories\modulos\ReporteCarteraRepository;
 use App\Rules\modulos\ProveedorRules;
 use App\Services\LogSistemaService;
 use Exception;
@@ -381,7 +382,7 @@ class ProveedorService
     public function getTransacciones(int $idProveedor, int $idEmpresa, string $buscar, string $vista, int $page, int $perPage, string $ordenCol, string $ordenDir, array $fuentes): array
     {
         $this->exigirProveedor($idProveedor, $idEmpresa);
-        return $this->repository->getTransacciones($idProveedor, $idEmpresa, $buscar, $vista, $page, $perPage, $ordenCol, $ordenDir, $fuentes);
+        return $this->repository->getTransacciones($this->fichasDelProveedor($idProveedor, $idEmpresa), $idEmpresa, $buscar, $vista, $page, $perPage, $ordenCol, $ordenDir, $fuentes);
     }
 
     /**
@@ -402,7 +403,7 @@ class ProveedorService
     public function tieneTransacciones(int $idProveedor, int $idEmpresa, array $fuentes): bool
     {
         return $idProveedor > 0 && $fuentes !== []
-            && $this->repository->tieneTransacciones($idProveedor, $idEmpresa, $fuentes);
+            && $this->repository->tieneTransacciones($this->fichasDelProveedor($idProveedor, $idEmpresa), $idEmpresa, $fuentes);
     }
 
     public function tieneEstadoCuenta(int $idProveedor, int $idEmpresa): bool
@@ -429,6 +430,29 @@ class ProveedorService
     public function getFicha(int $idProveedor, int $idEmpresa): ?array
     {
         return $this->repository->findById($idProveedor, $idEmpresa) ?: null;
+    }
+
+    /**
+     * Resumen comercial de la ficha (documentos recibidos, total comprado, por pagar),
+     * sumando las fichas del mismo proveedor para que cuadre con su estado de cuenta.
+     */
+    public function getEstadisticas(int $idProveedor, int $idEmpresa): array
+    {
+        $this->exigirProveedor($idProveedor, $idEmpresa);
+        return $this->repository->getEstadisticas($this->fichasDelProveedor($idProveedor, $idEmpresa), $idEmpresa);
+    }
+
+    /**
+     * Todas las fichas de `proveedores` que son el MISMO proveedor: el contribuyente
+     * registrado dos veces, una con la cédula y otra con el RUC (esa cédula + '001').
+     * Las consultas de la ficha (resumen y transacciones) las suman, igual que hacen el
+     * Estado de cuenta y Cuentas por Pagar.
+     *
+     * @return int[]
+     */
+    private function fichasDelProveedor(int $idProveedor, int $idEmpresa): array
+    {
+        return (new ReporteCarteraRepository())->expandirEntidades($idEmpresa, 'PROVEEDOR', [$idProveedor]);
     }
 
     /** Las consultas de la ficha solo aplican a un proveedor vigente de la empresa activa. */

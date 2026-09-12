@@ -9,6 +9,7 @@ use PDO;
 class ProveedorRepository extends BaseRepository
 {
     use \App\Traits\LineasDocumentoTrait;
+    use \App\Traits\ExpansionTerceroTrait;
 
     public const COLUMNAS_ORDEN = [
         'razon_social', 'identificacion', 'nombre_tipo_id', 'email', 'telefono',
@@ -279,7 +280,7 @@ class ProveedorRepository extends BaseRepository
      * Se limita al ambiente activo de la empresa, igual que el resto de módulos
      * transaccionales. Si algo falla devuelve ceros sin romper el modal.
      */
-    public function getEstadisticas(int $id, int $idEmpresa): array
+    public function getEstadisticas(int|array $id, int $idEmpresa): array
     {
         $stats = [
             'documentos_recibidos' => 0,
@@ -287,7 +288,10 @@ class ProveedorRepository extends BaseRepository
             'por_pagar'            => 0.00,
         ];
 
-        $params = [':id' => $id, ':id_empresa' => $idEmpresa];
+        // El mismo contribuyente puede tener dos fichas (cédula y RUC = esa cédula + '001'):
+        // el resumen suma las dos, para que cuadre con el Estado de cuenta y con CxP.
+        $inProv = $this->sqlInTercero((array) $id);
+        $params = [':id_empresa' => $idEmpresa];
 
         try {
             // Ambiente activo de la empresa ('1' pruebas | '2' producción)
@@ -330,7 +334,7 @@ class ProveedorRepository extends BaseRepository
                     WHERE nc.tipo_comprobante IN ('04','05')
                       AND nc.eliminado    = false
                       AND nc.id_empresa   = :id_empresa
-                      AND nc.id_proveedor = :id
+                      AND nc.id_proveedor IN {$inProv}
                     GROUP BY nc.documento_modificado
                 ),
                 ret AS (
@@ -359,7 +363,7 @@ class ProveedorRepository extends BaseRepository
                               CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)
                     LEFT JOIN ret    rt ON rt.id_compra = c.id AND rt.id_liquidacion IS NULL
                     WHERE c.id_empresa       = :id_empresa
-                      AND c.id_proveedor     = :id
+                      AND c.id_proveedor IN {$inProv}
                       AND c.eliminado        = false
                       AND {$esCargo} AND {$compraVigente}
                       {$filtroAmbC}
@@ -375,7 +379,7 @@ class ProveedorRepository extends BaseRepository
                     LEFT JOIN pagado pg ON pg.tipo_documento = 'LIQUIDACION' AND pg.id_doc = l.id
                     LEFT JOIN ret    rt ON rt.id_liquidacion = l.id
                     WHERE l.id_empresa   = :id_empresa
-                      AND l.id_proveedor = :id
+                      AND l.id_proveedor IN {$inProv}
                       AND l.eliminado    = false
                       AND {$liqVigente}
                       {$filtroAmbL}
@@ -395,7 +399,7 @@ class ProveedorRepository extends BaseRepository
                             COALESCE(SUM(CASE WHEN c.tipo_comprobante = '05' THEN c.importe_total ELSE 0 END), 0) AS total_nd
                         FROM compras_cabecera c
                         WHERE c.id_empresa   = :id_empresa
-                          AND c.id_proveedor = :id
+                          AND c.id_proveedor IN {$inProv}
                           AND c.eliminado    = false
                           AND c.tipo_comprobante IN ('04','05')
                           {$filtroAmbC}";
@@ -411,10 +415,10 @@ class ProveedorRepository extends BaseRepository
             // Cantidad de documentos recibidos (compras de cualquier tipo + liquidaciones)
             $sqlDocs = "SELECT
                             (SELECT COUNT(*) FROM compras_cabecera c
-                              WHERE c.id_empresa = :id_empresa AND c.id_proveedor = :id
+                              WHERE c.id_empresa = :id_empresa AND c.id_proveedor IN {$inProv}
                                 AND c.eliminado = false {$filtroAmbC})
                           + (SELECT COUNT(*) FROM liquidaciones_cabecera l
-                              WHERE l.id_empresa = :id_empresa AND l.id_proveedor = :id
+                              WHERE l.id_empresa = :id_empresa AND l.id_proveedor IN {$inProv}
                                 AND l.eliminado = false {$filtroAmbL}) AS docs";
             $stD = $this->db->prepare($sqlDocs);
             $stD->execute($params);
@@ -427,9 +431,9 @@ class ProveedorRepository extends BaseRepository
         try {
             $sqlSi = "SELECT COALESCE(SUM(CASE WHEN saldo_pendiente > 0 THEN saldo_pendiente ELSE 0 END), 0)
                       FROM saldos_iniciales_cxp
-                      WHERE id_empresa = :id_empresa AND id_proveedor = :id AND eliminado = false";
+                      WHERE id_empresa = :id_empresa AND id_proveedor IN {$inProv} AND eliminado = false";
             $stSi = $this->db->prepare($sqlSi);
-            $stSi->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+            $stSi->execute([':id_empresa' => $idEmpresa]);
             $stats['por_pagar'] += (float) $stSi->fetchColumn();
         } catch (\Throwable $e) {
             // Módulo de saldos iniciales no instalado
@@ -454,7 +458,7 @@ class ProveedorRepository extends BaseRepository
      * @return array{rows: array, total: int, total_neto: float}
      */
     public function getTransacciones(
-        int $idProveedor,
+        int|array $idProveedor,
         int $idEmpresa,
         string $buscar,
         string $vista,
@@ -474,7 +478,7 @@ class ProveedorRepository extends BaseRepository
      * ¿El proveedor tiene alguna transacción que este usuario pueda ver? Misma unión que
      * getTransacciones(), sin traer filas: la ficha lo usa para no pintar la pestaña vacía.
      */
-    public function tieneTransacciones(int $idProveedor, int $idEmpresa, array $fuentes): bool
+    public function tieneTransacciones(int|array $idProveedor, int $idEmpresa, array $fuentes): bool
     {
         $params = [];
         return $this->existenLineasDocumento(
@@ -488,9 +492,11 @@ class ProveedorRepository extends BaseRepository
      * (compras y liquidaciones), con su filtro de ambiente y el de registros propios.
      * Única fuente para el listado y para la comprobación de si hay datos.
      */
-    private function ramasTransacciones(int $idProveedor, int $idEmpresa, array $fuentes, array &$params): array
+    private function ramasTransacciones(int|array $idProveedor, int $idEmpresa, array $fuentes, array &$params): array
     {
         $amb    = $this->ambienteLineasDocumento($idEmpresa); // null = no se conoce: sin filtro, como getEstadisticas()
+        // Todas las fichas del mismo proveedor (cédula y RUC), igual que el resumen.
+        $inProv = $this->sqlInTercero((array) $idProveedor);
         $ramas  = [];
 
         if (array_key_exists('COMPRA', $fuentes)) {
@@ -518,11 +524,10 @@ class ProveedorRepository extends BaseRepository
                         FROM compras_detalle_impuestos i
                         WHERE i.id_compra_detalle = d.id AND i.codigo_impuesto = '2'
                     ) imp ON true
-                    WHERE c.id_empresa = :emp_c AND c.id_proveedor = :prov_c
+                    WHERE c.id_empresa = :emp_c AND c.id_proveedor IN {$inProv}
                       AND c.eliminado = false AND {$compraVigente}
                       AND COALESCE(NULLIF(TRIM(c.tipo_comprobante), ''), '01') NOT IN ({$tiposSinLineas})";
             $params[':emp_c']  = $idEmpresa;
-            $params[':prov_c'] = $idProveedor;
             if ($amb !== null) {
                 $sql .= " AND CAST(c.tipo_ambiente AS VARCHAR) = :amb_c";
                 $params[':amb_c'] = $amb;
@@ -557,10 +562,9 @@ class ProveedorRepository extends BaseRepository
                         FROM liquidaciones_detalle_impuestos i
                         WHERE i.id_detalle = d.id AND i.codigo_impuesto = '2'
                     ) imp ON true
-                    WHERE l.id_empresa = :emp_l AND l.id_proveedor = :prov_l
+                    WHERE l.id_empresa = :emp_l AND l.id_proveedor IN {$inProv}
                       AND l.eliminado = false AND {$liqVigente}";
             $params[':emp_l']  = $idEmpresa;
-            $params[':prov_l'] = $idProveedor;
             if ($amb !== null) {
                 // NULL = registro antiguo/migrado, igual que CxP
                 $sql .= " AND (l.tipo_ambiente IS NULL OR CAST(l.tipo_ambiente AS VARCHAR) = :amb_l)";

@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
-etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso
-version: 2.0
+etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
+version: 2.1
 orden: 10
 estado: activo
 ---
@@ -228,6 +228,25 @@ registra un pago: sale de la misma fórmula, así que no puede discrepar.
 La pestaña **solo aparece** si el proveedor tiene anticipos y el usuario puede ver
 **Egresos**, que es donde se registran.
 
+## Si el mismo proveedor está cargado con cédula y con RUC
+
+Un mismo contribuyente puede tener **dos fichas**: una con la **cédula** (10
+dígitos) y otra con el **RUC** (13 dígitos), que en las personas naturales es esa
+cédula seguida de **001** —por ejemplo `1717136574` y `1717136574001`—. Al abrir
+cualquiera de las dos, las consultas de la ficha muestran **el total del
+proveedor**, no solo lo de esa fila:
+
+- **Resumen comercial**: los documentos y el total comprado suman las dos fichas.
+- **Transacciones**: lista los productos y servicios de los documentos de ambas.
+- **Estado de cuenta**: un solo kardex, con el saldo real (el mismo que muestran
+  Cuentas por pagar y el Reporte de Cartera).
+
+Los **datos de la ficha** (nombre, dirección, correo…) siguen siendo los de la
+fila que abrió, y **no se fusiona nada**: son dos registros y se pueden editar o
+eliminar por separado. La pestaña **Anticipos** tampoco se suma, se queda en la
+ficha: es el saldo que se consume al registrar un pago, y ahí cada ficha
+tiene el suyo.
+
 ## Retenciones y sustento
 
 | Campo | Para qué sirve |
@@ -343,6 +362,11 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.1** — Si el mismo contribuyente está cargado **dos veces** —una ficha con la cédula y
+  otra con el RUC, que es esa cédula + `001`—, el **Resumen comercial**, las
+  **Transacciones** y el **Estado de cuenta** de la ficha muestran el total del
+  proveedor, sumando las dos fichas, en vez de la mitad en cada una. Nueva sección
+  *Si el mismo proveedor está cargado con cédula y con RUC*.
 - **2.0** — Las pestañas de consulta **solo aparecen cuando hay algo que mostrar**:
   *Transacciones* si el proveedor tiene documentos, *Estado de cuenta* si tiene
   movimientos y además el usuario puede ver el **Reporte de Cartera** (antes

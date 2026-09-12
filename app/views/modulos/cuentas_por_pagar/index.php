@@ -482,4 +482,6 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 <script>
     const RUTA_MODULO_CXP = "<?php echo $rutaModulo; ?>";
 </script>
+<!-- Cédula y RUC del mismo tercero (cédula + '001') se tratan como uno solo -->
+<script src="<?php echo BASE_URL; ?>/js/components/identificacion_tercero.js?v=<?php echo time(); ?>"></script>
 <script src="<?php echo BASE_URL; ?>/js/modulos/cuentas_por_pagar.js?v=<?php echo time(); ?>"></script>
