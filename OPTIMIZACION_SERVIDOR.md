@@ -5,8 +5,15 @@ Dos cambios independientes, ambos reversibles en menos de un minuto.
 
 | Parte | Qué hace | Riesgo | Reversión |
 |-------|----------|--------|-----------|
-| **A · OPcache** | PHP deja de recompilar 4.583 archivos en cada petición | Bajo | comentar 2 líneas + `systemctl restart apache2` |
-| **B · Cache-Control** | El navegador deja de *preguntar* por cada CSS/JS | Bajo-medio | quitar el bloque + `systemctl reload apache2` |
+| **A · OPcache** | PHP deja de recompilar 4.583 archivos en cada petición | Bajo | `rm` del .ini + `systemctl restart apache2` |
+| **B · Cache-Control** | El navegador deja de *preguntar* por cada CSS/JS | Bajo-medio | `a2disconf cmg-cache` + `systemctl reload apache2` |
+
+**Infraestructura confirmada el 13-09-2026** (no asumir, se verificó): el ERP es
+**`https://erp.camagare.com.ec`** (`www.camagare.com.ec` es el sitio de marketing en Astro, otro
+servidor con nginx). Lo sirve **Apache/2.4.58 con mod_php** (`php_module (shared)`), **PHP 8.3.6**,
+vhosts `sistema.conf` / `sistema-le-ssl.conf`. `headers_module` **no** está cargado → la Parte B
+necesita `a2enmod headers`. nginx está `failed` pero `enabled`, con un vhost propio para
+`erp.camagare.com.ec` — ver la advertencia del final.
 
 > **Hacer una parte por vez**, medir, y solo entonces la siguiente. Si algo va mal hay que saber qué fue.
 
@@ -93,7 +100,7 @@ cd /var/www/sistema && git pull origin main
 Esta es la comprobación que autoriza el paso 5. Ejecuta el mismo comando **dos veces seguidas**:
 
 ```bash
-curl -s https://www.camagare.com.ec/ | grep -oE "(app\.css|csrf\.js)\?v=[0-9]+" | sort -u
+curl -s https://erp.camagare.com.ec/ | grep -oE "(app\.css|csrf\.js)\?v=[0-9]+" | sort -u
 ```
 
 - Si las dos veces sale **el mismo número** → `asset_ver()` está funcionando. Puedes seguir.
@@ -105,7 +112,7 @@ curl -s https://www.camagare.com.ec/ | grep -oE "(app\.css|csrf\.js)\?v=[0-9]+" 
 Apunta estos cinco números antes de tocar nada más:
 
 ```bash
-for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{time_total}s\n" https://www.camagare.com.ec/; done
+for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{time_total}s\n" https://erp.camagare.com.ec/; done
 ```
 
 ## Paso 5 — Parte A (OPcache)
@@ -153,7 +160,7 @@ también sirve: es el día de menos actividad.
 Sin una medición previa no se puede saber si el cambio sirvió. Desde tu PC o desde el droplet:
 
 ```bash
-for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{time_total}s\n" https://www.camagare.com.ec/; done
+for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{time_total}s\n" https://erp.camagare.com.ec/; done
 ```
 
 Apunta los 5 números. Es el login: una página PHP real que no necesita sesión, así que mide
@@ -162,16 +169,40 @@ exactamente lo que arregla OPcache (el arranque y la compilación de PHP).
 Y las cabeceras actuales de un asset:
 
 ```bash
-curl -sI https://www.camagare.com.ec/css/app.css | grep -iE "cache-control|expires|etag|last-modified"
+curl -sI https://erp.camagare.com.ec/css/app.css | grep -iE "cache-control|expires|etag|last-modified"
 ```
 
 Hoy no debería salir `Cache-Control` (por eso existe la Parte B).
 
 ---
 
-# PARTE A · OPcache
+# PARTE A · OPcache — ⚠️ YA ESTABA ACTIVO (verificado 13-09-2026)
 
-## Por qué
+**Conclusión tras aplicarlo: esta parte NO aporta la mejora que se esperaba, porque OPcache ya
+funcionaba en producción desde el 27-05-2026.** Existe
+`/etc/php/8.3/apache2/conf.d/10-opcache.ini → mods-available/opcache.ini` (instalado con la
+extensión), y los valores por defecto de PHP ya son `opcache.enable=1` y `memory_consumption=128`.
+
+Medido en caliente sobre Apache con `opcache_get_status()`: **72 archivos en caché, 19,1 MB usados de
+128, 91,4% de hits**. El servidor no estaba recompilando PHP en cada petición.
+
+El `99-cmg-opcache.ini` que se creó se deja puesto porque **fija explícitamente
+`validate_timestamps=1` y `revalidate_freq=2`**, que es lo que hace que un `git pull` entre en vigor
+sin recargar Apache. Hoy son los defaults, pero dejarlo escrito evita que una actualización de PHP o
+de la distro cambie ese comportamiento sin que nadie se entere. Los otros dos valores propios
+(`interned_strings_buffer=16`, `max_wasted_percentage=10`) son ajustes marginales.
+
+**Por qué me equivoqué, para no repetirlo:** el diagnóstico decía "OPcache no aparece configurado en
+ningún runbook", y de ahí inferí que faltaba. No aparecer en la documentación no es lo mismo que no
+estar instalado. La verificación correcta habría sido `ls /etc/php/8.3/apache2/conf.d/` **antes** de
+proponer el cambio.
+
+**Implicación para el plan:** el margen de mejora del servidor no está aquí. Está en el polling de
+5 segundos (`PLAN_ESCALA_5000.md`, A1), que sigue siendo el mayor consumidor de capacidad.
+
+---
+
+## Por qué (contexto original, ya resuelto)
 
 El sistema tiene **4.583 archivos PHP** (1.484 propios + 3.099 de `vendor/`) y **50 MB de código
 fuente**. Sin OPcache, PHP lee, parsea y compila a bytecode los archivos que necesita **en cada
@@ -200,7 +231,6 @@ Pega esto completo en el servidor (crea el archivo de una vez, sin editor):
 
 ```bash
 cat > /etc/php/8.3/apache2/conf.d/99-cmg-opcache.ini <<'EOF'
-[opcache]
 [opcache]
 ; OPcache guarda el bytecode compilado en memoria compartida (una sola copia para
 ; todos los procesos de Apache, no una por worker).
@@ -281,7 +311,7 @@ apache2ctl configtest && systemctl restart apache2
 Vuelve a medir lo mismo de antes:
 
 ```bash
-for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{time_total}s\n" https://www.camagare.com.ec/; done
+for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{time_total}s\n" https://erp.camagare.com.ec/; done
 ```
 
 La primera petición tras el reinicio será igual o más lenta (la caché está vacía y se está
@@ -297,7 +327,7 @@ hubo que limpiar en la Fase 1 de seguridad. Crea el archivo, míralo y bórralo 
 
 ```bash
 printf '<?php $s=opcache_get_status(); $m=$s["memory_usage"]; printf("usada: %%.1f MB | libre: %%.1f MB | desperdiciada: %%.1f%%%% | archivos: %%d/%%d | hits: %%.2f%%%%\\n", $m["used_memory"]/1048576, $m["free_memory"]/1048576, $m["current_wasted_percentage"], $s["opcache_statistics"]["num_cached_scripts"], $s["opcache_statistics"]["max_cached_keys"], $s["opcache_statistics"]["opcache_hit_rate"]);' > /var/www/sistema/public/_opc.php
-curl -s https://www.camagare.com.ec/_opc.php
+curl -s https://erp.camagare.com.ec/_opc.php
 rm -f /var/www/sistema/public/_opc.php
 ```
 
@@ -320,7 +350,20 @@ solo evita recompilar.
 
 ---
 
-# PARTE B · Cache-Control de los assets
+# PARTE B · Cache-Control de los assets — ✅ APLICADO 13-09-2026
+
+Verificado en producción justo después de aplicarlo:
+
+```
+curl -sI ".../css/app.css?v=123"  → Cache-Control: public, max-age=31536000, immutable
+curl -sI ".../css/app.css"        → (ninguna cabecera Cache-Control)
+```
+
+Es decir: los assets versionados se cachean indefinidamente y los que no llevan `?v=` quedan fuera de
+la regla, que es justo la salvaguarda contra congelar un archivo. `a2enmod headers` pidió un
+`restart`, pero el `reload` (graceful) bastó para cargar el módulo.
+
+
 
 ## Por qué, y qué cambió antes para que esto sea seguro
 
@@ -417,17 +460,17 @@ funcionando con la configuración anterior, así que no hay prisa ni daño.
 ## Verificar
 
 ```bash
-curl -sI "https://www.camagare.com.ec/css/app.css?v=123" | grep -i cache-control
+curl -sI "https://erp.camagare.com.ec/css/app.css?v=123" | grep -i cache-control
 ```
 → debe decir `public, max-age=31536000, immutable`
 
 ```bash
-curl -sI "https://www.camagare.com.ec/css/app.css" | grep -i cache-control
+curl -sI "https://erp.camagare.com.ec/css/app.css" | grep -i cache-control
 ```
 → **no** debe decir `immutable` (sin `?v=` no entra en la regla larga)
 
 ```bash
-curl -sI "https://www.camagare.com.ec/image/logofinal.png" | grep -i cache-control
+curl -sI "https://erp.camagare.com.ec/image/logofinal.png" | grep -i cache-control
 ```
 → `public, max-age=86400`
 
@@ -458,3 +501,43 @@ No hay forma de quedarse con una versión vieja de forma permanente.
 Ninguno de los dos toca el polling de 5 segundos, que sigue siendo el mayor consumidor de
 capacidad del sistema (ver `PLAN_ESCALA_5000.md`, A1). Estos dos cambios hacen que cada una de esas
 peticiones cueste menos; el siguiente paso es que dejen de existir.
+
+---
+
+# ⚠️ RIESGO APARTE · nginx puede tumbar el ERP en el próximo reinicio
+
+Detectado el 13-09-2026, **no tiene relación con las Partes A y B** pero es más urgente que ambas.
+
+Estado comprobado en el droplet:
+
+- `systemctl is-active nginx` → **failed** (no está corriendo)
+- `systemctl is-enabled nginx` → **enabled** (systemd lo arrancará en cada reinicio)
+- Existe `/etc/nginx/sites-enabled/erp.camagare.com.ec`
+
+Apache está sirviendo el ERP en los puertos 80 y 443. nginx está configurado para el mismo dominio y
+tiene orden de arrancar solo. **En el próximo reinicio del droplet los dos competirán por el 443**, y
+quién gane depende del orden en que systemd los levante:
+
+- Si Apache gana, nginx vuelve a quedar `failed` y no pasa nada (es la situación de hoy).
+- Si nginx gana, **Apache no arranca y el ERP queda caído** para las 100 empresas, hasta que alguien
+  entre al servidor a arreglarlo.
+
+Es una lotería en cada reinicio, y hay un reinicio pendiente por actualización de kernel.
+
+**Arreglo — un comando, reversible, sin efecto inmediato sobre nada:**
+
+```bash
+systemctl disable nginx
+```
+
+No desinstala nginx, no borra su configuración y no toca Apache: solo le quita la orden de arrancar
+automáticamente. Si algún día se quiere poner nginx delante de Apache a propósito, se revierte con
+`systemctl enable nginx` y se configura bien entonces.
+
+Comprobar que quedó:
+
+```bash
+systemctl is-enabled nginx
+```
+
+Debe decir `disabled`.

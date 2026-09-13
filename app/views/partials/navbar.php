@@ -880,8 +880,22 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             CMG_contadoresEnVuelo = true;
             try {
                 const resp = await fetch('<?= $base ?>/contadores/navbarAjax', { headers: { 'Accept': 'application/json' } });
+                // 401 = la sesión ya no existe en el servidor. Antes esto se ignoraba
+                // y el usuario seguía en pantalla hasta que intentara algo; ahora se
+                // trata igual que una sesión desplazada (la función vive en
+                // partials/scripts.php).
+                if (resp.status === 401) {
+                    if (typeof window.CMG_sesionCerrada === 'function') window.CMG_sesionCerrada();
+                    return;
+                }
                 if (!resp.ok) return;
                 const data = await resp.json();
+                // Sesión desplazada por otro dispositivo: este endpoint absorbió el
+                // sondeo que hacía scripts.php contra /auth/verificar-sesion.
+                if (data && data.sesion_activa === false) {
+                    if (typeof window.CMG_sesionCerrada === 'function') window.CMG_sesionCerrada();
+                    return;
+                }
                 if (!data || !data.ok || !data.contadores) return;
                 const c = data.contadores;
                 Object.keys(CMG_CONTADORES_MAP).forEach(function(key) {
@@ -1234,10 +1248,20 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
 
         // Carga inicial
         window.CMG_refreshContadores();
-        // Un solo ciclo de sondeo, SOLO con la pestaña visible (ahorra peticiones en pestañas de fondo)
+        // Un solo ciclo de sondeo, SOLO con la pestaña visible (ahorra peticiones en
+        // pestañas de fondo).
+        //
+        // 30 s, no 5. Estaba en 5 s y eso eran 12 peticiones por minuto y por pestaña
+        // abierta, cuando la caché del servidor dura 30 s: 5 de cada 6 devolvían el
+        // mismo valor ya cacheado, gastando un arranque de PHP y una conexión a la BD
+        // para nada. Y no hace falta más frecuencia porque los cambios PROPIOS ya se
+        // reflejan al instante: el hook global de fetch (más abajo) refresca los
+        // contadores después de cada guardado/anulación/eliminación en cualquier
+        // módulo. Este sondeo solo cubre lo que hacen OTROS usuarios de la empresa,
+        // y para eso 30 s sobra.
         setInterval(function() {
             if (document.visibilityState === 'visible') window.CMG_refreshContadores();
-        }, 5000);
+        }, 30000);
         // Refresco inmediato al volver a la pestaña / ventana
         document.addEventListener('visibilitychange', function() {
             if (document.visibilityState === 'visible') window.CMG_refreshContadores();

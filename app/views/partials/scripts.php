@@ -1,61 +1,62 @@
 <?php require MVC_APP . '/views/partials/agente_extension.php'; ?>
 <script>
 /* ---------------------------------------------------------------
- * Control de sesión activa: polling cada 30 s.
- * Si el servidor indica que la sesión fue desplazada (otro dispositivo
- * inició sesión), muestra una alerta y redirige al login.
+ * Control de sesión activa: aviso de "sesión desplazada".
+ *
+ * Ya NO sondea por su cuenta. Antes pedía /auth/verificar-sesion cada 5 s, en
+ * paralelo al sondeo de contadores del navbar: eran 24 peticiones por minuto y
+ * por pestaña abierta, sin que el usuario hiciera nada, y la de sesión consultaba
+ * la BD en cada una (sin caché). Ahora el dato `sesion_activa` viaja DENTRO de la
+ * respuesta de /contadores/navbarAjax, que el navbar ya pedía de todos modos, y
+ * ese sondeo pasó de 5 s a 30 s → 2 peticiones por minuto en total.
+ *
+ * Aquí solo queda la función del aviso, que el navbar invoca cuando el servidor
+ * responde sesion_activa:false (o 401). Enterarse a los 30 s en vez de a los 5 no
+ * cambia nada para el usuario: en cuanto intenta cualquier acción, el servidor ya
+ * le devuelve 401 y lo manda al login por su cuenta.
  * --------------------------------------------------------------- */
 (function() {
-    var URL_VERIFICAR = BASE_URL + '/auth/verificar-sesion';
-    var URL_LOGOUT    = BASE_URL + '/auth/logout';
-    var INTERVALO_MS  = 5000; // 5 segundos
-    var _timer = null;
+    var URL_LOGOUT = BASE_URL + '/auth/logout';
     var _alertaActiva = false;
 
-    function verificarSesion() {
-        fetch(URL_VERIFICAR, {
-            method: 'GET',
-            credentials: 'same-origin',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (!data.activa && !_alertaActiva) {
-                _alertaActiva = true;
-                clearInterval(_timer);
-                if (window.Swal) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Sesión cerrada',
-                        text: 'Su sesión fue cerrada porque se inició sesión desde otro dispositivo.',
-                        confirmButtonText: 'Aceptar',
-                        confirmButtonColor: '#0d6efd',
-                        allowOutsideClick: false,
-                        allowEscapeKey: false,
-                    }).then(function() {
-                        window.location.href = URL_LOGOUT;
-                    });
-                } else {
-                    alert('Su sesión fue cerrada porque se inició sesión desde otro dispositivo.');
-                    window.location.href = URL_LOGOUT;
-                }
-            }
-        })
-        .catch(function() {
-            // Error de red: no cerrar sesión, intentar de nuevo en el próximo ciclo
-        });
-    }
+    window.CMG_sesionCerrada = function() {
+        if (_alertaActiva) return;      // no apilar avisos
+        _alertaActiva = true;
+        var msg = 'Su sesión fue cerrada porque se inició sesión desde otro dispositivo.';
+        if (window.Swal) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Sesión cerrada',
+                text: msg,
+                confirmButtonText: 'Aceptar',
+                confirmButtonColor: '#0d6efd',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+            }).then(function() { window.location.href = URL_LOGOUT; });
+        } else {
+            alert(msg);
+            window.location.href = URL_LOGOUT;
+        }
+    };
 
-    // Iniciar polling solo si hay sesión activa (el elemento body con id_usuario en data es
-    // suficiente señal; usamos el hecho de que este script está en el layout autenticado)
+    /* Respaldo para pantallas que cargan este partial SIN el navbar (hoy solo el
+     * layout `guest`, que ninguna vista viva usa). Sin navbar no hay quien pida
+     * los contadores, así que nadie avisaría de una sesión desplazada: si al
+     * cargar no existe CMG_refreshContadores, este bloque hace su propio sondeo,
+     * a 60 s — suficiente para una pantalla sin datos del negocio. */
     document.addEventListener('DOMContentLoaded', function() {
-        _timer = setInterval(verificarSesion, INTERVALO_MS);
-        // Verificar también cuando la pestaña vuelve a estar visible
-        document.addEventListener('visibilitychange', function() {
-            if (document.visibilityState === 'visible') {
-                verificarSesion();
-            }
-        });
+        if (typeof window.CMG_refreshContadores === 'function') return; // el navbar se encarga
+        setInterval(function() {
+            if (document.visibilityState !== 'visible') return;
+            fetch(BASE_URL + '/auth/verificar-sesion', {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) { if (data && !data.activa) window.CMG_sesionCerrada(); })
+            .catch(function() { /* error de red: se reintenta en el próximo ciclo */ });
+        }, 60000);
     });
 })();
 </script>

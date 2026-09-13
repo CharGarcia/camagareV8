@@ -89,7 +89,25 @@ no es un riesgo: es una certeza diaria.
 Ordenado por relación impacto/esfuerzo. **A1 a A4 son de días, no de meses, y multiplican la
 capacidad varias veces cada uno.**
 
-### A1. Matar el polling de 5 segundos ⭐ máxima prioridad
+### A1. Matar el polling de 5 segundos — ✅ HECHO (13-09-2026)
+
+**Resultado: de 24 peticiones por minuto y pestaña a 2.** Los dos sondeos se fusionaron en uno:
+`ContadoresController::navbarAjax()` devuelve ahora `sesion_activa`, y `partials/scripts.php` dejó de
+pedir `/auth/verificar-sesion` por su cuenta (conserva solo la función del aviso, que el navbar
+invoca al recibir `sesion_activa:false` o un 401). El `setInterval` del navbar pasó de 5 s a 30 s.
+
+Con ~50 pestañas abiertas (el orden de magnitud de 100 empresas), eso baja de unas **20 peticiones por
+segundo a 1,7**, y las consultas a la base caen de ~14 a ~4 por minuto y pestaña.
+
+No degrada nada porque los cambios propios del usuario ya se reflejan al instante mediante el hook
+global de `fetch` que refresca los contadores tras cada guardado; el sondeo solo cubre lo que hacen
+otros usuarios de la empresa. Detalle, verificaciones y el gotcha del orden
+`validarToken` → `session_write_close` en la memoria del proyecto (`avisos-navbar-unificado`).
+
+**El `ETag`/`304` se descartó a propósito:** aportaba poco frente a la reducción de 12x y su clave
+tendría que incluir empresa y usuario — un error ahí serviría los contadores de otra empresa.
+
+Lo que decía el plan original:
 
 - Unificar los dos sondeos en **uno solo** y subir el intervalo a 30-60 s.
 - Devolver `ETag` / `304 Not Modified` cuando no cambió nada: la respuesta pasa de consultar la base
@@ -107,9 +125,17 @@ capacidad varias veces cada uno.**
   de infra no refleja la realidad. Cerrar esa brecha.
 - mod_php prefork reserva un proceso PHP completo por conexión, incluso para servir un CSS.
   PHP-FPM con `pm=dynamic` atiende mucho más con la misma RAM.
-- **OPcache no aparece configurado en ningún runbook.** En un sistema de 700k líneas, compilar PHP en
-  cada petición es de los desperdicios más grandes que hay. Activarlo es una línea de `php.ini`.
-- **Efecto estimado: 3-5x más peticiones con el mismo hardware.**
+- **OPcache: descartado como mejora — ya estaba activo.** Verificado en producción el 13-09-2026:
+  existe `/etc/php/8.3/apache2/conf.d/10-opcache.ini` desde el **27-05-2026**, y los valores por
+  defecto de PHP (`opcache.enable=1`, `memory_consumption=128`) bastan para que funcione. Medido en
+  caliente: 72 archivos en caché, 19,1 MB usados de 128, **91,4% de hits**. Es decir, el servidor
+  **ya no recompila PHP en cada petición** y la ganancia que yo había supuesto aquí no existe.
+  Se dejó un `99-cmg-opcache.ini` que solo fija explícitamente lo que el despliegue necesita
+  (`validate_timestamps=1`, `revalidate_freq=2`) más dos ajustes marginales.
+  **Lección: "no aparece en el runbook" no significa "no está configurado".**
+- Queda por tanto solo el cambio de **mod_php → PHP-FPM**, cuyo beneficio es real pero cuyo riesgo
+  está descrito arriba. **Efecto estimado de PHP-FPM solo: bastante menor que el 3-5x que había
+  estimado cuando creía que OPcache faltaba.**
 
 ### A3. Arreglar el `?v=time()` de los assets — ✅ HECHO (12-09-2026)
 
@@ -129,11 +155,12 @@ capacidad varias veces cada uno.**
   (`app.css` y `theme.css` en login y 404, `theme.css` en `head.php`, `face_asistencia.js`,
   `reasignar-establecimiento.js`). Ahora el **100%** de los CSS y JS propios lleva versión, que es la
   condición para poder cachear con seguridad.
-- **La otra mitad del beneficio está en el servidor y ya está escrita:** hoy Apache no manda
-  `Cache-Control`, así que el navegador aún hace una petición condicional por archivo y recibe un
-  `304 Not Modified` (respuesta vacía: la transferencia ya se ahorra). Con `Cache-Control` largo deja
-  de preguntar. Runbook con el bloque de vhost, la verificación y la reversión:
-  **`OPTIMIZACION_SERVIDOR.md`, Parte B** (pendiente de aplicar en el servidor).
+- **La otra mitad del beneficio, el `Cache-Control` del servidor, también está hecha (13-09-2026).**
+  Antes el navegador hacía una petición condicional por archivo y recibía `304 Not Modified`; ahora no
+  pregunta. Se aplicó con un `conf-available` propio (`cmg-cache.conf` + `a2enconf`), sin editar el
+  vhost ni ningún `.htaccess`, y verificado en producción: con `?v=` devuelve
+  `max-age=31536000, immutable`; sin `?v=` no devuelve cabecera. Detalle y reversión en
+  **`OPTIMIZACION_SERVIDOR.md`, Parte B**.
 
 ### A4. Pasar el pool de PostgreSQL a modo transaction
 

@@ -7,6 +7,7 @@ namespace App\controllers;
 use App\core\Controller;
 use App\models\PermisoSubmodulo;
 use App\Services\ContadoresNavbarService;
+use App\Services\SesionActivaService;
 use App\Traits\PermisoModuloTrait;
 
 /**
@@ -15,6 +16,13 @@ use App\Traits\PermisoModuloTrait;
  * Reemplaza a los ~10 endpoints countBorradoresAjax/countPendientesAjax por
  * una sola llamada con caché. Incluye únicamente los contadores cuyo módulo el
  * usuario tiene permiso de 'ver' (Nivel 3 ve todo). Tareas es global por usuario.
+ *
+ * Desde el 13-09-2026 devuelve también `sesion_activa`, absorbiendo el sondeo
+ * que hacía `partials/scripts.php` contra /auth/verificar-sesion. Eran dos
+ * peticiones cada 5 s por pestaña abierta (24 por minuto) y ahora es una cada
+ * 30 s (2 por minuto): el mismo aviso al usuario con 1/12 del trabajo para el
+ * servidor. /auth/verificar-sesion sigue existiendo — lo usa el respaldo de
+ * scripts.php para las pantallas que no cargan el navbar.
  */
 class ContadoresController extends Controller
 {
@@ -28,7 +36,7 @@ class ContadoresController extends Controller
         $this->service = new ContadoresNavbarService();
     }
 
-    /** GET /contadores/navbarAjax → { ok:true, contadores:{...} } */
+    /** GET /contadores/navbarAjax → { ok:true, sesion_activa:bool, contadores:{...} } */
     public function navbarAjax(): void
     {
         $this->requireAuth();
@@ -37,11 +45,34 @@ class ContadoresController extends Controller
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         $nivel     = (int) ($_SESSION['nivel'] ?? 1);
 
-        // Liberar el lock de sesión cuanto antes: este endpoint solo LEE la sesión
-        // (nunca escribe) y se consulta con alta frecuencia (polling del navbar).
+        // ── Sesión desplazada por otro dispositivo ───────────────────────────
+        // Va ANTES del session_write_close(): validarToken() escribe
+        // $_SESSION['_sesion_last_touch'] para hacer el UPDATE de actividad solo
+        // cada 5 min, y con la sesión ya cerrada ese write se perdería, así que el
+        // UPDATE volvería a ejecutarse en CADA sondeo. Orden invertido = una
+        // escritura de más en la BD por cada petición.
+        $sesionActiva = true;
+        $token = (string) ($_SESSION['session_token'] ?? '');
+        if ($token !== '') {
+            try {
+                $sesionActiva = (new SesionActivaService())->validarToken($token);
+            } catch (\Throwable $e) {
+                // Mismo criterio que AuthMiddleware: un error de BD no echa a nadie.
+                $sesionActiva = true;
+            }
+        }
+
+        // Liberar el lock de sesión cuanto antes: de aquí en adelante solo se LEE
+        // (nunca se escribe) y este endpoint se consulta con alta frecuencia.
         // Los valores de $_SESSION siguen siendo legibles tras cerrar la escritura.
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
+        }
+
+        // Sesión desplazada: no tiene sentido calcular los contadores, el navegador
+        // va camino del login.
+        if (!$sesionActiva) {
+            $this->json(['ok' => true, 'sesion_activa' => false, 'contadores' => (object) []]);
         }
 
         try {
@@ -51,10 +82,12 @@ class ContadoresController extends Controller
                 fn (string $ruta): bool => $this->permisosModuloPorRuta($ruta)['ver'] === true,
                 $nivel
             );
-            $this->json(['ok' => true, 'contadores' => $contadores]);
+            $this->json(['ok' => true, 'sesion_activa' => true, 'contadores' => $contadores]);
         } catch (\Throwable $e) {
             error_log('ContadoresController::navbarAjax ' . $e->getMessage());
-            $this->json(['ok' => false, 'contadores' => (object) []]);
+            // sesion_activa = true a propósito: que fallen los contadores no es
+            // motivo para sacar al usuario del sistema.
+            $this->json(['ok' => false, 'sesion_activa' => true, 'contadores' => (object) []]);
         }
     }
 

@@ -2889,6 +2889,29 @@ class MigracionMysqlService
      * IVA se deja en 0 (los pedidos no calculan impuesto en el sistema viejo). Requiere cliente.
      * tipo_ambiente se fija al de la empresa (el default '1' ocultaría los migrados en producción).
      */
+    /**
+     * Responsable de entrega de un pedido. En el viejo `encabezado_pedido.responsable` es un id de USUARIO;
+     * en el nuevo `pedidos_cabecera.id_responsable_entrega` apunta a `responsables_traslado`. Se resuelve por
+     * el NOMBRE del usuario viejo → get-or-create en `responsables_traslado` de la empresa. Cache por proceso.
+     */
+    private function responsableEntregaPedido(int $idEmpresa, int $idUsuario, int $oldResp, PDO $mysql, PDO $pg, array &$cache): ?int
+    {
+        if ($oldResp <= 0) { return null; }
+        if (array_key_exists($oldResp, $cache)) { return $cache[$oldResp]; }
+        $qn = $mysql->prepare("SELECT nombre FROM usuarios WHERE id = :id LIMIT 1");
+        $qn->execute([':id' => $oldResp]);
+        $nombre = trim((string) $qn->fetchColumn());
+        if ($nombre === '') { return $cache[$oldResp] = null; }
+        $nombre = mb_substr($nombre, 0, 150);
+        $sel = $pg->prepare("SELECT id FROM responsables_traslado WHERE id_empresa = ? AND nombre = ? LIMIT 1");
+        $sel->execute([$idEmpresa, $nombre]);
+        $id = $sel->fetchColumn();
+        if ($id !== false) { return $cache[$oldResp] = (int) $id; }
+        $ins = $pg->prepare("INSERT INTO responsables_traslado (id_empresa, nombre, email, created_by) VALUES (?, ?, NULL, ?) RETURNING id");
+        $ins->execute([$idEmpresa, $nombre, $idUsuario]);
+        return $cache[$oldResp] = (int) $ins->fetchColumn();
+    }
+
     private function migrarPedidos(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
@@ -2904,6 +2927,7 @@ class MigracionMysqlService
         $mapProd     = $this->mapaDe($pg, $idEmpresa, 'productos');
         $prodPorCod  = $this->productosPorCodigo($pg, $idEmpresa);
         $amb         = $this->ambienteEmpresa($pg, $idEmpresa);
+        $respCache   = []; // responsable de entrega: usuario viejo (encabezado_pedido.responsable) → responsables_traslado
 
         // Precio por producto nuevo (precio_base): el detalle viejo no trae precio.
         $precioProd = [];
@@ -2917,7 +2941,7 @@ class MigracionMysqlService
         // secuencial, tipo_ambiente): así se vincula al pedido que ya ocupa ese número en el punto en
         // vez de chocar con la constraint (el viejo numera por establecimiento y puede repetir).
         $buscar  = $pg->prepare("SELECT id FROM pedidos_cabecera WHERE id_empresa = :e AND id_punto_emision = :ipto AND secuencial = :sec AND tipo_ambiente = :amb ORDER BY eliminado, id LIMIT 1");
-        $insCab  = $pg->prepare("INSERT INTO pedidos_cabecera (id_empresa, id_cliente, fecha_pedido, estado, observaciones, observaciones_internas, fecha_entrega, hora_inicial_entrega, hora_maxima_entrega, id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        $insCab  = $pg->prepare("INSERT INTO pedidos_cabecera (id_empresa, id_cliente, fecha_pedido, estado, observaciones, observaciones_internas, fecha_entrega, hora_inicial_entrega, hora_maxima_entrega, id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial, tipo_ambiente, id_responsable_entrega, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO pedidos_detalle (id_pedido, id_producto, cantidad, precio_unitario, subtotal, iva, total) VALUES (?, ?, ?, ?, ?, 0, ?)");
         $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, producto, cantidad FROM detalle_pedido WHERE id_pedido = :id");
         // Reconcile (re-migrar): actualiza la cabecera (estado/entrega/observaciones) de los ya migrados
@@ -2926,7 +2950,7 @@ class MigracionMysqlService
         $qmd = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'pedidos'");
         $qmd->execute([$idEmpresa]);
         foreach ($qmd->fetchAll(PDO::FETCH_ASSOC) as $o) { $mapDest[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']]; }
-        $updCab = $pg->prepare("UPDATE pedidos_cabecera SET estado = :est, fecha_entrega = :fent, hora_inicial_entrega = :hi, hora_maxima_entrega = :hm, observaciones = :obs, observaciones_internas = :obsi, updated_at = now(), updated_by = :u WHERE id = :id");
+        $updCab = $pg->prepare("UPDATE pedidos_cabecera SET estado = :est, fecha_entrega = :fent, hora_inicial_entrega = :hi, hora_maxima_entrega = :hm, observaciones = :obs, observaciones_internas = :obsi, id_responsable_entrega = COALESCE(:idresp, id_responsable_entrega), updated_at = now(), updated_by = :u WHERE id = :id");
         $updSerie = $pg->prepare("UPDATE pedidos_cabecera
                                      SET id_establecimiento = COALESCE(id_establecimiento, :iest),
                                          id_punto_emision   = COALESCE(id_punto_emision, :ipto),
@@ -2938,7 +2962,7 @@ class MigracionMysqlService
         // a los pedidos que vienen con esos números — evita el efecto cascada al renumerar).
         $maxOldNumero = (int) $mysql->query("SELECT COALESCE(MAX(CAST(numero_pedido AS UNSIGNED)),0) FROM encabezado_pedido WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql))->fetchColumn();
 
-        $sql = "SELECT id, ruc_empresa, numero_pedido, id_cliente, datecreated, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones_cliente, observaciones_interna, status
+        $sql = "SELECT id, ruc_empresa, numero_pedido, id_cliente, datecreated, fecha_entrega, hora_entrega_desde, hora_entrega_hasta, observaciones_cliente, observaciones_interna, status, responsable
                   FROM encabezado_pedido WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('datecreated', $desde, $hasta, $mysql) . " ORDER BY id";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
@@ -2952,9 +2976,11 @@ class MigracionMysqlService
             // Serie del pedido: su propio establecimiento (del ruc_empresa de 13 díg.), o el destino elegido.
             $estabPed = str_pad(substr(preg_replace('/\D/', '', (string) $ep['ruc_empresa']), 10, 3) ?: '001', 3, '0', STR_PAD_LEFT);
             $serie = $this->serieParaEstab($idEmpresa, $estabPed, $idUsuario);
+            // Responsable de entrega: en el viejo es un id de USUARIO; en el nuevo apunta a responsables_traslado.
+            $idResp = $this->responsableEntregaPedido($idEmpresa, $idUsuario, (int) $ep['responsable'], $mysql, $pg, $respCache);
             if (isset($mapDest[(string) $old])) { // ya migrado: reconciliar estado + entrega (solo insertados)
                 if (!$mapDest[(string) $old]['vin']) {
-                    try { $updCab->execute([':est' => $est, ':fent' => self::fechaCorta($ep['fecha_entrega']), ':hi' => self::nz($ep['hora_entrega_desde']), ':hm' => self::nz($ep['hora_entrega_hasta']), ':obs' => self::nz($ep['observaciones_cliente']), ':obsi' => self::nz($ep['observaciones_interna']), ':u' => $idUsuario, ':id' => $mapDest[(string) $old]['id']]); }
+                    try { $updCab->execute([':est' => $est, ':fent' => self::fechaCorta($ep['fecha_entrega']), ':hi' => self::nz($ep['hora_entrega_desde']), ':hm' => self::nz($ep['hora_entrega_hasta']), ':obs' => self::nz($ep['observaciones_cliente']), ':obsi' => self::nz($ep['observaciones_interna']), ':idresp' => $idResp, ':u' => $idUsuario, ':id' => $mapDest[(string) $old]['id']]); }
                     catch (Throwable $ex) { $res['errores']++; if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); } }
                     // Completar la serie de los pedidos migrados antes de que se guardara. Va en su propio
                     // try: uq_pedidos_secuencial rechaza el UPDATE si otro pedido ya ocupa ese número en el
@@ -2986,7 +3012,7 @@ class MigracionMysqlService
                 // Red de seguridad: si aun así choca (imposible en un solo hilo), se OMITE sin abortar.
                 $pg->exec('SAVEPOINT sp_ped');
                 try {
-                    $insCab->execute([$idEmpresa, $idCliente, $fped, $est, self::nz($ep['observaciones_cliente']), self::nz($ep['observaciones_interna']), $fent, self::nz($ep['hora_entrega_desde']), self::nz($ep['hora_entrega_hasta']), $serie['id_establecimiento'], $serie['id_punto_emision'], $serie['establecimiento'], $serie['punto_emision'], $secFinal, $amb, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $idCliente, $fped, $est, self::nz($ep['observaciones_cliente']), self::nz($ep['observaciones_interna']), $fent, self::nz($ep['hora_entrega_desde']), self::nz($ep['hora_entrega_hasta']), $serie['id_establecimiento'], $serie['id_punto_emision'], $serie['establecimiento'], $serie['punto_emision'], $secFinal, $amb, $idResp, $idUsuario]);
                     $idPed = (int) $insCab->fetchColumn(); $res['migrados']++;
                     $pg->exec('RELEASE SAVEPOINT sp_ped');
                 } catch (Throwable $exI) {
