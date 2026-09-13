@@ -240,9 +240,15 @@ function PED_ocultarAvisoBloqueo() {
  * cabecera, "Agregar línea" y oculta Guardar/Eliminar) y además el botón
  * "Facturar", que vive fuera del <form>.
  */
-function bloquearPedidoProcesado(bloquear) {
+function bloquearPedidoProcesado(bloquear, motivo) {
     const aviso = document.getElementById('aviso-pedido-procesado');
-    if (aviso) aviso.classList.toggle('d-none', !bloquear);
+    if (aviso) {
+        aviso.classList.toggle('d-none', !bloquear);
+        if (bloquear && motivo) {
+            const span = aviso.querySelector('span');
+            if (span) span.textContent = motivo;
+        }
+    }
 
     PED_bloquearControles(bloquear);
 
@@ -936,7 +942,12 @@ async function editarPedido(id) {
 
             calcTotales();
             PED_ocultarAvisoBloqueo();
-            bloquearPedidoProcesado(todoRegistrado);
+            // Bloquear edición si el pedido está Procesado/Anulado (además del bloqueo por consumo).
+            const estadoBloqueado = (p.estado === 'Procesado' || p.estado === 'Anulado');
+            const motivoBloqueo = estadoBloqueado
+                ? `Este pedido está ${p.estado}: no se puede editar.`
+                : 'Este pedido ya está completamente registrado en una consignación o factura. No se puede editar.';
+            bloquearPedidoProcesado(todoRegistrado || estadoBloqueado, motivoBloqueo);
 
             const modalEl = document.getElementById('modalPedido');
             if (modalEl) {

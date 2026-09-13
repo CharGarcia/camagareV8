@@ -28,6 +28,9 @@ class MigracionMysqlService
         'proveedores'       => ['label' => 'Proveedores',                      'tabla' => 'proveedores',                'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
         'vendedores'        => ['label' => 'Vendedores',                       'tabla' => 'vendedores',                 'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
         'bodegas'           => ['label' => 'Bodegas',                          'tabla' => 'bodega',                     'fecha' => null,             'tipo' => 'catalogo'],
+        // Responsables de traslado/entrega (repartidores) del viejo `responsable_traslado` (por ruc_empresa).
+        // Se relacionan luego en pedidos y consignaciones. Conviene migrarlo ANTES de esos documentos.
+        'responsables_traslado' => ['label' => 'Responsables de traslado/entrega', 'tabla' => 'responsable_traslado', 'fecha' => null,      'tipo' => 'catalogo', 'filtro' => 'status = 1'],
         // La tabla vieja de empleados filtra por id_empresa (id viejo), NO por ruc_empresa; se resuelve
         // vía empresas (LEFT(ruc,10)). Marcado con 'ruc_via_empresa' para el conteo/análisis.
         'empleados'         => ['label' => 'Empleados',                        'tabla' => 'empleados',                  'fecha' => null,             'tipo' => 'catalogo', 'ruc_via_empresa' => true],
@@ -277,6 +280,8 @@ class MigracionMysqlService
                 return $this->migrarVendedores($idEmpresa, $ruc, $idUsuario);
             case 'bodegas':
                 return $this->migrarBodegas($idEmpresa, $ruc, $idUsuario);
+            case 'responsables_traslado':
+                return $this->migrarResponsablesTraslado($idEmpresa, $ruc, $idUsuario);
             case 'empleados':
                 return $this->migrarEmpleados($idEmpresa, $ruc, $idUsuario);
             case 'novedades':
@@ -400,6 +405,7 @@ class MigracionMysqlService
         'plan_cuentas' => 'plan_cuentas', 'clientes' => 'clientes', 'productos' => 'productos',
         'proveedores' => 'proveedores', 'vendedores' => 'vendedores', 'bodegas' => 'bodegas', 'empleados' => 'empleados', 'novedades' => 'novedades',
         'roles_pago' => 'rol_cabecera', 'quincenas' => 'rol_cabecera',
+        'responsables_traslado' => 'responsables_traslado',
         'cuentas_bancarias' => 'empresa_formas_pago', 'formas_pago' => 'empresa_formas_pago',
         'facturas' => 'ventas_cabecera', 'notas_credito' => 'notas_credito_cabecera',
         'retenciones_venta' => 'retencion_venta_cabecera', 'retenciones_compra' => 'retencion_compra_cabecera',
@@ -2890,26 +2896,38 @@ class MigracionMysqlService
      * tipo_ambiente se fija al de la empresa (el default '1' ocultaría los migrados en producción).
      */
     /**
-     * Responsable de entrega de un pedido. En el viejo `encabezado_pedido.responsable` es un id de USUARIO;
-     * en el nuevo `pedidos_cabecera.id_responsable_entrega` apunta a `responsables_traslado`. Se resuelve por
-     * el NOMBRE del usuario viejo → get-or-create en `responsables_traslado` de la empresa. Cache por proceso.
+     * Migra el catálogo de responsables de traslado/entrega del viejo (`responsable_traslado`, por
+     * `ruc_empresa`) → `responsables_traslado` de la empresa, con mapa (old id → new id). Se relaciona
+     * luego en pedidos (`id_responsable_entrega`) y consignaciones (`id_responsable_traslado`) vía
+     * `getOrCreateResponsableTraslado` (mismo get-or-create por nombre). Idempotente.
      */
-    private function responsableEntregaPedido(int $idEmpresa, int $idUsuario, int $oldResp, PDO $mysql, PDO $pg, array &$cache): ?int
+    private function migrarResponsablesTraslado(int $idEmpresa, string $ruc, int $idUsuario): array
     {
-        if ($oldResp <= 0) { return null; }
-        if (array_key_exists($oldResp, $cache)) { return $cache[$oldResp]; }
-        $qn = $mysql->prepare("SELECT nombre FROM usuarios WHERE id = :id LIMIT 1");
-        $qn->execute([':id' => $oldResp]);
-        $nombre = trim((string) $qn->fetchColumn());
-        if ($nombre === '') { return $cache[$oldResp] = null; }
-        $nombre = mb_substr($nombre, 0, 150);
-        $sel = $pg->prepare("SELECT id FROM responsables_traslado WHERE id_empresa = ? AND nombre = ? LIMIT 1");
-        $sel->execute([$idEmpresa, $nombre]);
-        $id = $sel->fetchColumn();
-        if ($id !== false) { return $cache[$oldResp] = (int) $id; }
-        $ins = $pg->prepare("INSERT INTO responsables_traslado (id_empresa, nombre, email, created_by) VALUES (?, ?, NULL, ?) RETURNING id");
-        $ins->execute([$idEmpresa, $nombre, $idUsuario]);
-        return $cache[$oldResp] = (int) $ins->fetchColumn();
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $res = ['entidad' => 'responsables_traslado', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done   = $this->idsMigrados($pg, $idEmpresa, 'responsables_traslado');
+        $insMap = $this->stmtMap($pg, 'responsables_traslado');
+        $cache  = [];
+        $q = "SELECT id, nombre FROM responsable_traslado WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND status = 1 ORDER BY id";
+        foreach ($mysql->query($q) as $r) {
+            $res['total']++;
+            $old = (int) $r['id'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            try {
+                // get-or-create por nombre en la empresa (mismo criterio que getOrCreateResponsableTraslado).
+                $nuevo = $this->getOrCreateResponsableTraslado($idEmpresa, $idUsuario, $old, $mysql, $pg, $cache);
+                if (!$nuevo) { $res['omitidos']++; continue; }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $nuevo, ':cn' => mb_substr(trim((string) $r['nombre']), 0, 120), ':vin' => 'f', ':cb' => $idUsuario]);
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
+            }
+        }
+        return $res;
     }
 
     private function migrarPedidos(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
@@ -2976,8 +2994,10 @@ class MigracionMysqlService
             // Serie del pedido: su propio establecimiento (del ruc_empresa de 13 díg.), o el destino elegido.
             $estabPed = str_pad(substr(preg_replace('/\D/', '', (string) $ep['ruc_empresa']), 10, 3) ?: '001', 3, '0', STR_PAD_LEFT);
             $serie = $this->serieParaEstab($idEmpresa, $estabPed, $idUsuario);
-            // Responsable de entrega: en el viejo es un id de USUARIO; en el nuevo apunta a responsables_traslado.
-            $idResp = $this->responsableEntregaPedido($idEmpresa, $idUsuario, (int) $ep['responsable'], $mysql, $pg, $respCache);
+            // Responsable de entrega: el viejo `responsable` es un id de `responsable_traslado` (catálogo de
+            // repartidores de la empresa, p. ej. "Logística", "Jesús Rojas"). Se resuelve al responsable de
+            // traslado migrado de ESA empresa (mismo helper que usa consignaciones), no a un usuario global.
+            $idResp = $this->getOrCreateResponsableTraslado($idEmpresa, $idUsuario, (int) $ep['responsable'], $mysql, $pg, $respCache);
             if (isset($mapDest[(string) $old])) { // ya migrado: reconciliar estado + entrega (solo insertados)
                 if (!$mapDest[(string) $old]['vin']) {
                     try { $updCab->execute([':est' => $est, ':fent' => self::fechaCorta($ep['fecha_entrega']), ':hi' => self::nz($ep['hora_entrega_desde']), ':hm' => self::nz($ep['hora_entrega_hasta']), ':obs' => self::nz($ep['observaciones_cliente']), ':obsi' => self::nz($ep['observaciones_interna']), ':idresp' => $idResp, ':u' => $idUsuario, ':id' => $mapDest[(string) $old]['id']]); }
