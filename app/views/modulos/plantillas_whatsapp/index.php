@@ -287,4 +287,4 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     })();
 </script>
 
-<script src="<?= $base ?>/js/modulos/plantillas_whatsapp.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/plantillas_whatsapp.js?v=<?= asset_ver('/js/modulos/plantillas_whatsapp.js') ?>"></script>

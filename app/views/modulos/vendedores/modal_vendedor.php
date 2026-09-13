@@ -135,4 +135,4 @@ $urlBaseVendShared = BASE_URL . '/modulos/vendedores';
     </div>
 </div>
 
-<script src="<?= BASE_URL ?>/js/modulos/vendedores_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/vendedores_modal.js?v=<?= asset_ver('/js/modulos/vendedores_modal.js') ?>"></script>

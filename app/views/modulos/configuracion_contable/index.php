@@ -896,4 +896,4 @@ $base = BASE_URL;
     window.BASE_URL = '<?= $base ?>';
 </script>
 
-<script src="<?= $base ?>/js/modulos/configuracion_contable_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/configuracion_contable_modal.js?v=<?= asset_ver('/js/modulos/configuracion_contable_modal.js') ?>"></script>

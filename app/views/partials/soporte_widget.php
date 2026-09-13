@@ -287,4 +287,4 @@ $sopEnHorario = !empty($sopConfig['en_horario']);
     // entrar, el botón aparece en su esquina de siempre.
     window.SOP_SESION = '<?= substr(hash('sha256', (string)($_SESSION['session_token'] ?? '')), 0, 16) ?>';
 </script>
-<script src="<?= $base ?>/js/soporte_widget.js?v=<?= @filemtime(MVC_ROOT . '/public/js/soporte_widget.js') ?: time() ?>"></script>
+<script src="<?= $base ?>/js/soporte_widget.js?v=<?= asset_ver('/js/soporte_widget.js') ?>"></script>

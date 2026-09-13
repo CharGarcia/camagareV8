@@ -104,4 +104,4 @@ $rutaUrl = $base . '/' . $rutaModulo;
     const BC_PERM_ELIMINAR = <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>;
     window.BASE_URL = '<?= $base ?>';
 </script>
-<script src="<?= $base ?>/js/modulos/balances_consolidados.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/balances_consolidados.js?v=<?= asset_ver('/js/modulos/balances_consolidados.js') ?>"></script>

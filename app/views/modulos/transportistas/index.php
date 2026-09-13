@@ -149,7 +149,7 @@ $tiposId = ['04' => 'RUC', '05' => 'Cédula', '06' => 'Pasaporte'];
 </div>
 
 <?php include __DIR__ . '/modal_transportista.php'; ?>
-<script src="<?= $base ?>/js/modulos/transportistas_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/transportistas_modal.js?v=<?= asset_ver('/js/modulos/transportistas_modal.js') ?>"></script>
 
 <script>
 (function () {

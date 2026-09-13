@@ -99,7 +99,7 @@ $base = BASE_URL;
 <script>
     window.BASE_URL = '<?= $base ?>';
 </script>
-<script src="<?= $base ?>/js/config/errores_sistema.js?v=<?= @filemtime(MVC_ROOT . '/public/js/config/errores_sistema.js') ?: time() ?>"></script>
+<script src="<?= $base ?>/js/config/errores_sistema.js?v=<?= asset_ver('/js/config/errores_sistema.js') ?>"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         if (typeof ERRSIS_cargarListado === 'function') ERRSIS_cargarListado(1);

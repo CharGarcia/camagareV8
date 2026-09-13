@@ -5016,9 +5016,9 @@ include_once MVC_APP . '/views/modulos/transportistas/modal_transportista.php';
 
 $perm = $permNCRespaldo;
 ?>
-<script src="<?= BASE_URL ?>/js/modulos/transportistas_modal.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/guias_remision_modal.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/notas_credito.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/transportistas_modal.js?v=<?= asset_ver('/js/modulos/transportistas_modal.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/guias_remision_modal.js?v=<?= asset_ver('/js/modulos/guias_remision_modal.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/notas_credito.js?v=<?= asset_ver('/js/modulos/notas_credito.js') ?>"></script>
 <script>
 // ── Descargar XML Original de Factura de Venta (detalle_xml de ventas_cabecera) ──
 window.FV_descargarXmlOriginal = function() {

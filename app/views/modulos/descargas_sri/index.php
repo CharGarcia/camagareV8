@@ -441,4 +441,4 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
 })();
 </script>
 
-<script src="<?= BASE_URL ?>/js/modulos/descargas_sri.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/descargas_sri.js?v=<?= asset_ver('/js/modulos/descargas_sri.js') ?>"></script>

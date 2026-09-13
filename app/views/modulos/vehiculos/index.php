@@ -138,7 +138,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.BASE_URL = '<?= $base ?>';
 </script>
 <?php include 'modal_vehiculo.php'; ?>
-<script src="<?= $base ?>/js/modulos/vehiculos_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/vehiculos_modal.js?v=<?= asset_ver('/js/modulos/vehiculos_modal.js') ?>"></script>
 
 <script>
     (function() {

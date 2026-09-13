@@ -44,8 +44,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
             <div id="fbBuscadorCASIS" style="width: 420px;"></div>
             <input type="hidden" id="buscarCasis" value="<?= htmlspecialchars($buscar) ?>">
             <script>
@@ -152,7 +152,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <?php include 'modal_punto.php'; ?>
 <?php include 'modal_qr.php'; ?>
 
-<script src="<?= $base ?>/js/modulos/puntos_servicio.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/puntos_servicio.js?v=<?= asset_ver('/js/modulos/puntos_servicio.js') ?>"></script>
 
 <script>
     (function () {

@@ -1304,8 +1304,8 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 <!-- Modal del Asiento Contable reutilizado para ver/editar el asiento desde el Mayor -->
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>
-<script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= time() ?>"></script>
-<script src="<?= $base ?>/js/modulos/asientos_pendientes.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= asset_ver('/js/modulos/asientos_contables_modal.js') ?>"></script>
+<script src="<?= $base ?>/js/modulos/asientos_pendientes.js?v=<?= asset_ver('/js/modulos/asientos_pendientes.js') ?>"></script>
 
 <!-- Modal reutilizable de Plan de Cuentas: lo abre el código de cada cuenta de nivel 5 del reporte.
      Necesita $centros y $proyectos (los envía el controlador). -->
@@ -1340,7 +1340,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 <!-- Modal del documento origen: lo abre la columna Documento Ref. del mayor auxiliar -->
 <?php include __DIR__ . '/../documento_origen/modal_documento.php'; ?>
 <script>window.DOCORIGEN_URL = '<?= $urlBaseReporte ?>/getDocumentoOrigenAjax';</script>
-<script src="<?= $base ?>/js/modulos/documento_origen_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/documento_origen_modal.js?v=<?= asset_ver('/js/modulos/documento_origen_modal.js') ?>"></script>
 
 <script>
     // Apilar el modal del Asiento y el del Documento por encima del modal del Mayor (z-index).

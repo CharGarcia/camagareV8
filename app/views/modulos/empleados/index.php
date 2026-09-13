@@ -177,7 +177,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.BASE_URL = '<?= $base ?>';
 </script>
 <?php include 'modal_empleado.php'; ?>
-<script src="<?= $base ?>/js/modulos/empleados_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/empleados_modal.js?v=<?= asset_ver('/js/modulos/empleados_modal.js') ?>"></script>
 
 <script>
     (function() {

@@ -363,4 +363,4 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
     const RUTA_MODULO_RRP = "<?= $rutaModulo ?>";
     const RRP_ANIO_ACTUAL = <?= (int) $anioActual ?>;
 </script>
-<script src="<?= $base ?>/js/modulos/reporte_retenciones_pendientes.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/reporte_retenciones_pendientes.js?v=<?= asset_ver('/js/modulos/reporte_retenciones_pendientes.js') ?>"></script>

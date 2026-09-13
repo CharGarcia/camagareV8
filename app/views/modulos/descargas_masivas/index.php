@@ -113,4 +113,4 @@ $hoy  = date('Y-m-d');
     </div>
 </div>
 
-<script src="<?= $base ?>/js/modulos/descargas_masivas.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/descargas_masivas.js?v=<?= asset_ver('/js/modulos/descargas_masivas.js') ?>"></script>

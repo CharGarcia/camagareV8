@@ -475,10 +475,10 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
 <!-- Modal del Asiento Contable reutilizado para ver el detalle del comprobante -->
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>
-<script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= asset_ver('/js/modulos/asientos_contables_modal.js') ?>"></script>
 
 <!-- Modal del documento origen: lo abre la columna Documento Ref. -->
 <?php include __DIR__ . '/../documento_origen/modal_documento.php'; ?>
 <script>window.DOCORIGEN_URL = '<?= $urlBaseReporte ?>/getDocumentoOrigenAjax';</script>
-<script src="<?= $base ?>/js/modulos/documento_origen_modal.js?v=<?= time() ?>"></script>
-<script src="<?= $base ?>/js/modulos/asientos_pendientes.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/documento_origen_modal.js?v=<?= asset_ver('/js/modulos/documento_origen_modal.js') ?>"></script>
+<script src="<?= $base ?>/js/modulos/asientos_pendientes.js?v=<?= asset_ver('/js/modulos/asientos_pendientes.js') ?>"></script>

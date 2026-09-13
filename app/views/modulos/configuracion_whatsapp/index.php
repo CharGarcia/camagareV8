@@ -299,4 +299,4 @@ $webhookUrl = 'https://erp.camagare.com.ec/whatsapp-webhook';
         });
     };
 </script>
-<script src="<?= $base ?>/js/modulos/configuracion_whatsapp.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/configuracion_whatsapp.js?v=<?= asset_ver('/js/modulos/configuracion_whatsapp.js') ?>"></script>

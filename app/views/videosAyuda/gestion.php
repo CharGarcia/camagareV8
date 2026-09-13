@@ -200,13 +200,13 @@ $fmtTam = static function ($bytes): string {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="<?= $base ?>/js/favoritos.js?v=<?= time() ?>"></script>
+    <script src="<?= $base ?>/js/favoritos.js?v=<?= asset_ver('/js/favoritos.js') ?>"></script>
     <script>
         window.VA_BASE = '<?= $base ?>';
         window.VA_MAX_UPLOAD = <?= (int) $limiteEfectivo ?>;
         window.VA_MAX_UPLOAD_TXT = '<?= htmlspecialchars($fmtTam($limiteEfectivo), ENT_QUOTES) ?>';
     </script>
-    <script src="<?= $base ?>/js/videos-ayuda.js?v=<?= time() ?>"></script>
+    <script src="<?= $base ?>/js/videos-ayuda.js?v=<?= asset_ver('/js/videos-ayuda.js') ?>"></script>
     <script>
     (function () {
         // Búsqueda y orden en tiempo real: reemplazan solo la tabla vía AJAX,

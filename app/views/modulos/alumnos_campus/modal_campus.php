@@ -59,4 +59,4 @@ $urlBaseCampusShared = BASE_URL . '/modulos/alumnos-campus';
     </div>
 </div>
 
-<script src="<?= BASE_URL ?>/js/modulos/alumnos_campus_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/alumnos_campus_modal.js?v=<?= asset_ver('/js/modulos/alumnos_campus_modal.js') ?>"></script>

@@ -2229,6 +2229,11 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
             }
         }
+        // Facturación de consignación: completa lote/NUP/caducidad de las facturas desde esta facturación
+        // (esos datos vienen de la consignación; cuerpo_factura del viejo no los trae todos). Idempotente.
+        if ($esFactura) {
+            $res['lote_nup_consignacion'] = $this->cruzarLoteNupConsignacion($pg, $idEmpresa);
+        }
         return $res;
     }
 
@@ -4202,7 +4207,68 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
             }
         }
+        // lote/NUP/caducidad de facturas de consignación: cuerpo_factura del viejo no trae NUP (y a veces le
+        // falta lote/caducidad), pero la consignación sí. Se completa desde la facturación de consignación.
+        // Se corre también al final de la Facturación de consignación (facturas se migran antes).
+        $res['lote_nup_consignacion'] = $this->cruzarLoteNupConsignacion($pg, $idEmpresa);
         return $res;
+    }
+
+    /**
+     * Completa lote / NUP / caducidad de las líneas de factura que provienen de una consignación:
+     * `cuerpo_factura` (viejo) no trae NUP y a veces le falta lote/caducidad, pero la consignación sí los
+     * tiene y quedaron en `consignaciones_facturas_detalles` (lote, nup, fecha_caducidad). Enlace:
+     * factura (`ventas_cabecera`) → `consignaciones_facturas` (id_factura) → `consignaciones_facturas_detalles`.
+     * Idempotente (solo rellena lo vacío). Se llama al final de migrarFacturas Y de la facturación de
+     * consignación (el orden por defecto migra facturas antes que consignaciones → quien corra 2º completa).
+     */
+    private function cruzarLoteNupConsignacion(PDO $pg, int $idEmpresa): int
+    {
+        $total = 0;
+        // A) Por producto + lote (cuando el lote YA coincide): completa NUP y caducidad vacíos.
+        try {
+            $st = $pg->prepare(
+                "UPDATE ventas_detalle vd
+                    SET nup = COALESCE(NULLIF(vd.nup, ''), cfd.nup),
+                        fecha_caducidad = COALESCE(vd.fecha_caducidad, cfd.fecha_caducidad)
+                   FROM ventas_cabecera vc, consignaciones_facturas cf
+                   JOIN consignaciones_facturas_detalles cfd ON cfd.id_consignacion_factura = cf.id
+                  WHERE vd.id_venta = vc.id AND vc.eliminado = false AND vc.id_empresa = :e
+                    AND cf.id_factura = vc.id AND cf.id_empresa = vc.id_empresa AND cf.eliminado = false
+                    AND cfd.id_producto = vd.id_producto
+                    AND COALESCE(cfd.lote, '') = COALESCE(vd.numero_lote, '')
+                    AND ( (cfd.nup IS NOT NULL AND cfd.nup <> '' AND (vd.nup IS NULL OR vd.nup = ''))
+                       OR (cfd.fecha_caducidad IS NOT NULL AND vd.fecha_caducidad IS NULL) )"
+            );
+            $st->execute([':e' => $idEmpresa]);
+            $total += $st->rowCount();
+        } catch (\Throwable $e) { /* columnas ausentes → se omite */ }
+
+        // B) Por producto, para líneas SIN lote, y SOLO cuando ese producto tiene UN único lote en la
+        //    facturación de esa factura (sin ambigüedad): completa lote + NUP + caducidad.
+        try {
+            $st = $pg->prepare(
+                "UPDATE ventas_detalle vd
+                    SET numero_lote = u.lote,
+                        nup = COALESCE(NULLIF(vd.nup, ''), u.nup),
+                        fecha_caducidad = COALESCE(vd.fecha_caducidad, u.fecha_caducidad)
+                   FROM ventas_cabecera vc,
+                        (SELECT cf.id_factura, cfd.id_producto,
+                                MAX(cfd.lote) AS lote, MAX(cfd.nup) AS nup, MAX(cfd.fecha_caducidad) AS fecha_caducidad
+                           FROM consignaciones_facturas cf
+                           JOIN consignaciones_facturas_detalles cfd ON cfd.id_consignacion_factura = cf.id
+                          WHERE cf.id_empresa = :e AND cf.eliminado = false
+                          GROUP BY cf.id_factura, cfd.id_producto
+                         HAVING COUNT(DISTINCT COALESCE(cfd.lote, '')) = 1 AND MAX(COALESCE(cfd.lote, '')) <> '') u
+                  WHERE vd.id_venta = vc.id AND vc.eliminado = false AND vc.id_empresa = :e2
+                    AND vc.id = u.id_factura AND vd.id_producto = u.id_producto
+                    AND (vd.numero_lote IS NULL OR vd.numero_lote = '')"
+            );
+            $st->execute([':e' => $idEmpresa, ':e2' => $idEmpresa]);
+            $total += $st->rowCount();
+        } catch (\Throwable $e) { /* columnas ausentes → se omite */ }
+
+        return $total;
     }
 
     private static function xmlEsc($v): string

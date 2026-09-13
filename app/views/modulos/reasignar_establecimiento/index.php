@@ -122,5 +122,5 @@ $multiEst = count($establecimientosDestino) > 1;
 </div>
 
 <script>window.REASIGNAR_RUTA = '<?= $rutaUrl ?>';</script>
-<script src="<?= $base ?>/js/modulos/reasignar-establecimiento.js"></script>
+<script src="<?= $base ?>/js/modulos/reasignar-establecimiento.js?v=<?= asset_ver('/js/modulos/reasignar-establecimiento.js') ?>"></script>
 <?php endif; ?>

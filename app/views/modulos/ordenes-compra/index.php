@@ -49,8 +49,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
             <form id="formOC" method="POST" action="<?= $urlBaseOc ?>" class="d-flex align-items-center m-0">
                 <input type="hidden" name="page" value="1">
                 <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
@@ -191,7 +191,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <?php include __DIR__ . '/modal_orden.php'; ?>
 <?php include __DIR__ . '/../proveedores/modal_proveedor.php'; ?>
-<script defer src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/proveedores_modal.js?v=<?= time() ?>"></script>
+<script defer src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/proveedores_modal.js?v=<?= asset_ver('/js/modulos/proveedores_modal.js') ?>"></script>
 
 <script>
 const OC_URL_BASE  = '<?= $urlBaseOc ?>';

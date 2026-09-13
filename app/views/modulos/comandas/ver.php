@@ -35,7 +35,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         // aquí a mano, igual que se hace con el token CSRF de arriba.
         echo \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo);
     ?>
-    <script src="<?= $base ?>/js/favoritos.js?v=<?= time() ?>"></script>
+    <script src="<?= $base ?>/js/favoritos.js?v=<?= asset_ver('/js/favoritos.js') ?>"></script>
     <style>
         html, body { height: 100%; }
         body { background: #f4f6f9; overflow: hidden; }
@@ -442,7 +442,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="<?= $base ?>/js/bloqueo-edicion.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/bloqueo-edicion.js?v=<?= asset_ver('/js/bloqueo-edicion.js') ?>"></script>
 <script>
 // Igual que el tablero de mesas: si el navegador restaura esta comanda desde el
 // bfcache al ir "atrás", se recarga contra el servidor — el turno de caja pudo

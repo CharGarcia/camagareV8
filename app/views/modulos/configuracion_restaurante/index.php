@@ -70,8 +70,8 @@ $filasHtml = $filasHtml ?? '';
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y exportación -->
         <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
             <div id="fbBuscadorCR" style="width: 420px;"></div>
             <input type="hidden" id="buscarEstacion" value="<?= htmlspecialchars($buscar) ?>">
             <script>
@@ -262,4 +262,4 @@ $filasHtml = $filasHtml ?? '';
     };
     let CR_ORDEN = { col: "<?= htmlspecialchars($ordenCol) ?>", dir: "<?= htmlspecialchars($ordenDir) ?>" };
 </script>
-<script src="<?= rtrim($base, '/') ?>/js/modulos/configuracion_restaurante.js?v=<?= time() ?>"></script>
+<script src="<?= rtrim($base, '/') ?>/js/modulos/configuracion_restaurante.js?v=<?= asset_ver('/js/modulos/configuracion_restaurante.js') ?>"></script>

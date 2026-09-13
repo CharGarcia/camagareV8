@@ -199,4 +199,4 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         'eliminar'   => (bool) $perm['eliminar'],
     ]) ?>;
 </script>
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/videollamadas.js?v=<?= time() ?>"></script>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/videollamadas.js?v=<?= asset_ver('/js/modulos/videollamadas.js') ?>"></script>

@@ -180,7 +180,7 @@ window.TF_ORIGEN_DATO = <?= json_encode($origenDato, JSON_UNESCAPED_UNICODE) ?>;
 window.TF_STORE_URL = '<?= $base ?>/config/transferenciaFormatosStore';
 window.TF_UPDATE_URL = '<?= $base ?>/config/transferenciaFormatosUpdate';
 </script>
-<script src="<?= $base ?>/js/transferenciaFormatos.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/transferenciaFormatos.js?v=<?= asset_ver('/js/transferenciaFormatos.js') ?>"></script>
 <script>
 (function() {
     // Búsqueda en tiempo real: reemplaza solo la tabla vía AJAX, sin recargar

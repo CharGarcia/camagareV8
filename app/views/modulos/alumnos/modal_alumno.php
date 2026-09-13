@@ -354,6 +354,6 @@ $permClientes = $permClientes ?? [];
      módulos): cada vista que incluye el modal debe cargarlo, igual que
      factura_venta/index.php. Sin esto abrirModalClienteCrear() no existe y el
      botón de nuevo cliente de la barra de acciones no hace nada. -->
-<script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>"></script>
 
-<script src="<?= BASE_URL ?>/js/modulos/alumnos_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/alumnos_modal.js?v=<?= asset_ver('/js/modulos/alumnos_modal.js') ?>"></script>

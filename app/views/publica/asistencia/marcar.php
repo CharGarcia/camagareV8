@@ -95,7 +95,7 @@ $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
     <canvas id="canvas" style="display:none;"></canvas>
 
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
-    <script src="<?= $h($base) ?>/js/modulos/face_asistencia.js"></script>
+    <script src="<?= $h($base) ?>/js/modulos/face_asistencia.js?v=<?= asset_ver('/js/modulos/face_asistencia.js') ?>"></script>
     <script>
     (function () {
         'use strict';

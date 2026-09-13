@@ -288,7 +288,14 @@ Todo módulo nuevo debe contemplar desde el diseño: **multiempresa, permisos, a
 5. **Model** en `app/models/` solo si se necesita acceso a datos adicional (extiende `BaseModel`).
 6. **Controller** en `app/controllers/modulos/{Nombre}Controller.php`: extiende `BaseModuloController`, implementa `getRutaModulo()` (p. ej. `'modulos/productos'`) y llama `requireLeer/requireCrear/requireActualizar/requireEliminar` en cada acción. Para el listado, calcular `$idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int)$_SESSION['id_usuario'] : null` y pasarlo al repository (registros propios). Sin lógica de negocio.
 7. **Vista** en `app/views/modulos/{nombre}/`: tabla estándar (§9) y modales estándar (§9). Para columnas visibles/anchos, pestañas y favoritos usar `PreferenciasHelper` (ver §9, *Preferencias de usuario*).
-8. **JS** en `public/js/modulos/{nombre}.js`.
+8. **JS** en `public/js/modulos/{nombre}.js`. Al referenciarlo desde la vista, la versión del
+   asset se pone con el helper `asset_ver()`, **nunca con `time()`**:
+   `<script src="<?= $base ?>/js/modulos/{nombre}.js?v=<?= asset_ver('/js/modulos/{nombre}.js') ?>"></script>`.
+   `asset_ver()` devuelve el `filemtime` del archivo, así que la URL cambia solo cuando el archivo
+   cambia: el navegador cachea lo que no se tocó y vuelve a descargar lo que el despliegue modificó
+   (y `git pull` actualiza el mtime, así que la garantía de "nadie se queda con JS viejo tras un
+   deploy" se mantiene). Con `time()` la URL era distinta en cada petición y **el navegador
+   redescargaba todo el CSS y el JS en cada carga de página**. Mismo criterio para el CSS.
 9. **Registrar la ruta** en `config/modulos_mvc.php` con `id_submodulo` y `legacy_rutas` (ese archivo documenta el procedimiento exacto).
 10. **Menú y permisos** (BD): registrar/actualizar el submódulo en `submodulos_menu` (campo `ruta` = ruta MVC, p. ej. `modulos/productos`) y asignar permisos en `modulos_asignados`. Verificar en `/config/permisos-modulos`.
 11. **Documentar el módulo** en `docs/manual/modulos/{ruta-mvc}.md` siguiendo `docs/manual/_PLANTILLA.md`. **Sin ese archivo el módulo no está terminado** (ver §12).

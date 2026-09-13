@@ -47,8 +47,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y exportación -->
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            <link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
-            <script src="<?= rtrim($base, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+            <link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
+            <script src="<?= rtrim($base, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
             <div id="fbBuscadorPF" style="width:480px;"></div>
             <input type="hidden" id="buscarProforma" value="<?= htmlspecialchars($buscar) ?>">
             <script>
@@ -214,9 +214,9 @@ window.PF_CONFIG  = {
 
 <?php include __DIR__ . '/modal_proforma.php'; ?>
 <!-- JS de los modales reutilizados para crear cliente/producto desde la proforma -->
-<script src="<?= $base ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
-<script src="<?= $base ?>/js/modulos/productos_modal.js?v=<?= time() ?>"></script>
-<script src="<?= $base ?>/js/modulos/proformas_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>"></script>
+<script src="<?= $base ?>/js/modulos/productos_modal.js?v=<?= asset_ver('/js/modulos/productos_modal.js') ?>"></script>
+<script src="<?= $base ?>/js/modulos/proformas_modal.js?v=<?= asset_ver('/js/modulos/proformas_modal.js') ?>"></script>
 
 <script>
 (function () {

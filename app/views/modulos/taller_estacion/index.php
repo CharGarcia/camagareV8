@@ -283,6 +283,6 @@ foreach ($departamentos as $d) {
         decimales_precio: <?= (int) ($decimalesPrecio ?? 2) ?>
     };
 </script>
-<script src="<?= $base ?>/js/modulos/taller_estacion.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/taller_estacion.js?v=<?= asset_ver('/js/modulos/taller_estacion.js') ?>"></script>
 </body>
 </html>

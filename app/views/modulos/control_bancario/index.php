@@ -187,8 +187,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
         <div class="card-header bg-white py-2 px-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div class="d-flex align-items-center gap-2">
-                    <link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
-                    <script src="<?= rtrim($base, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+                    <link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
+                    <script src="<?= rtrim($base, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
                     <div id="fbBuscadorCB" style="width: 420px;"></div>
                     <input type="hidden" id="cb-buscar" value="">
 
@@ -505,7 +505,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 </script>
 <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo) ?>
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>
-<script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= asset_ver('/js/modulos/asientos_contables_modal.js') ?>"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         if (!window.FiltrosBusqueda) return;
@@ -532,4 +532,4 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
         }).init();
     });
 </script>
-<script src="<?= $base ?>/js/modulos/control_bancario.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/control_bancario.js?v=<?= asset_ver('/js/modulos/control_bancario.js') ?>"></script>

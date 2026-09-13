@@ -173,4 +173,4 @@ $url  = $base . '/config/videollamadas';
 <script>
     window.VCFG_URL = '<?= $url ?>';
 </script>
-<script src="<?= $base ?>/js/config/videollamadas.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/config/videollamadas.js?v=<?= asset_ver('/js/config/videollamadas.js') ?>"></script>

@@ -49,8 +49,8 @@ $colsRecursos = [
 ?>
 
 <!-- FiltrosBusqueda -->
-<link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+<link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfigTipos,    'estiloVistaTipos') ?>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfigRecursos, 'estiloVistaRecursos') ?>

@@ -186,4 +186,4 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.AF_PAGE = <?= $page ?>;
     window.AF_PERM = <?= json_encode($perm) ?>;
 </script>
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/activos_fijos.js?v=<?= time() ?>"></script>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/activos_fijos.js?v=<?= asset_ver('/js/modulos/activos_fijos.js') ?>"></script>

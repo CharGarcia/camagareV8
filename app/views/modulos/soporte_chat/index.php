@@ -330,4 +330,4 @@ $base = rtrim(BASE_URL, '/');
 <script>
     window.SOC_BASE = '<?= $base ?>';
 </script>
-<script src="<?= $base ?>/js/modulos/soporte_chat.js?v=<?= @filemtime(MVC_ROOT . '/public/js/modulos/soporte_chat.js') ?: time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/soporte_chat.js?v=<?= asset_ver('/js/modulos/soporte_chat.js') ?>"></script>

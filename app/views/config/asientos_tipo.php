@@ -199,7 +199,7 @@ $base = BASE_URL;
     window.BASE_URL = '<?= $base ?>';
     window.ASIENTOTIPO_ROUTE = 'config';
 </script>
-<script src="<?= $base ?>/js/modulos/asientos_tipo_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/asientos_tipo_modal.js?v=<?= asset_ver('/js/modulos/asientos_tipo_modal.js') ?>"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         // Inicializar listado automáticamente al cargar la página de configuración

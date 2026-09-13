@@ -111,8 +111,8 @@ $pestanas = [
 
         <!-- Buscador y exportación -->
         <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= $base ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
-            <script src="<?= $base ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+            <link rel="stylesheet" href="<?= $base ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
+            <script src="<?= $base ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
             <div id="fbBuscadorADI" style="width: 480px;"></div>
             <input type="hidden" id="buscarAdi" value="<?= htmlspecialchars($buscar) ?>">
             <script>
@@ -212,4 +212,4 @@ $pestanas = [
     window.ADI_SBUS      = <?= json_encode((object) ($sbus ?? []), JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <?= PreferenciasHelper::getJavascriptVariables($rutaModulo) ?>
-<script src="<?= $base ?>/js/modulos/anexo_dividendos.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/anexo_dividendos.js?v=<?= asset_ver('/js/modulos/anexo_dividendos.js') ?>"></script>

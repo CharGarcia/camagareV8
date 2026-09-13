@@ -363,7 +363,7 @@ $fmtFecha = static function ($v): string {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
-    <script src="<?= $base ?>/js/favoritos.js?v=<?= time() ?>"></script>
+    <script src="<?= $base ?>/js/favoritos.js?v=<?= asset_ver('/js/favoritos.js') ?>"></script>
     <script>
     (function () {
         var base = '<?= $base ?>';

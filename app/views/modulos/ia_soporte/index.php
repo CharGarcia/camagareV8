@@ -352,6 +352,6 @@ $urlBase = $base . '/' . ltrim($rutaModulo, '/');
     window.IA_SOPORTE_URL = '<?= $urlBase ?>';
     window.IA_SOPORTE_PERM = <?= json_encode($perm) ?>;
 </script>
-<script src="<?= $base ?>/js/modulos/ia-soporte.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/ia-soporte.js?v=<?= asset_ver('/js/modulos/ia-soporte.js') ?>"></script>
 </body>
 </html>

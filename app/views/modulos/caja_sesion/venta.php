@@ -35,7 +35,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
     <link rel="shortcut icon" type="image/png" href="<?= $base ?>/image/logofinal.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <script src="<?= $base ?>/js/favoritos.js?v=<?= time() ?>"></script>
+    <script src="<?= $base ?>/js/favoritos.js?v=<?= asset_ver('/js/favoritos.js') ?>"></script>
     <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo) ?>
     <style>
         html, body { height: 100%; }

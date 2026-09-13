@@ -19,8 +19,8 @@ $inicioUrl = $base === '' ? '/' : $base . '/';
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <?php require __DIR__ . '/../partials/theme-vars.php'; ?>
-    <link href="<?= $base ?>/css/app.css" rel="stylesheet">
-    <link href="<?= $base ?>/css/theme.css" rel="stylesheet">
+    <link href="<?= $base ?>/css/app.css?v=<?= asset_ver('/css/app.css') ?>" rel="stylesheet">
+    <link href="<?= $base ?>/css/theme.css?v=<?= asset_ver('/css/theme.css') ?>" rel="stylesheet">
     <style>
         .error-404-wrap { min-height: 100vh; }
         .error-404-code {

@@ -266,4 +266,4 @@ $urlBase  = rtrim(BASE_URL, '/') . '/' . $rutaModulo;
     window.TRI_ORDEN_DIR = '<?= htmlspecialchars($ordenDir) ?>';
     window.TRI_MODULO    = '<?= $rutaModulo ?>';
 </script>
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/transferencias_inventario.js?v=<?= time() ?>"></script>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/transferencias_inventario.js?v=<?= asset_ver('/js/modulos/transferencias_inventario.js') ?>"></script>

@@ -57,4 +57,4 @@
     </div>
 </div>
 
-<script src="<?= BASE_URL ?>/js/modulos/alumnos_niveles_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/alumnos_niveles_modal.js?v=<?= asset_ver('/js/modulos/alumnos_niveles_modal.js') ?>"></script>

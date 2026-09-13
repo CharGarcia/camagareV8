@@ -270,4 +270,4 @@ $puedeEliminar   = !empty($perm['eliminar']);
     const CTAR_PROCESADORAS = <?php echo json_encode($procesadoras, JSON_UNESCAPED_UNICODE); ?>;
     const CTAR_DESTINOS     = <?php echo json_encode($destinos, JSON_UNESCAPED_UNICODE); ?>;
 </script>
-<script src="<?php echo BASE_URL; ?>/js/modulos/conciliacion_tarjetas.js?v=<?php echo time(); ?>"></script>
+<script src="<?php echo BASE_URL; ?>/js/modulos/conciliacion_tarjetas.js?v=<?= asset_ver('/js/modulos/conciliacion_tarjetas.js') ?>"></script>

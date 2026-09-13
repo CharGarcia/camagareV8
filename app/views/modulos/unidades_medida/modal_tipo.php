@@ -161,5 +161,5 @@ $urlBaseModalTipo = BASE_URL . '/modulos/unidades-medida';
     </div>
 </div>
 
-<script src="<?= BASE_URL ?>/js/modulos/unidades_medida_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/unidades_medida_modal.js?v=<?= asset_ver('/js/modulos/unidades_medida_modal.js') ?>"></script>
 

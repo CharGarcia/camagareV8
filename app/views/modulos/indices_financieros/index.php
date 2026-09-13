@@ -396,4 +396,4 @@ $ifinFormatoValor = function (?float $valor, string $unidad): string {
     ];
     window.IF_INDICES_DATA = <?= json_encode(array_map(fn ($i) => ['id' => (int) $i['id'], 'codigo' => $i['codigo'], 'nombre' => $i['nombre'], 'categoria' => $i['categoria'], 'unidad' => $i['unidad'], 'descripcion' => $i['descripcion'], 'tipo' => $i['tipo'], 'formula' => $i['formula']], $catalogoIndices)) ?>;
 </script>
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/indices_financieros.js?v=<?= time() ?>"></script>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/indices_financieros.js?v=<?= asset_ver('/js/modulos/indices_financieros.js') ?>"></script>

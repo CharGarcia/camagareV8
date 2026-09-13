@@ -135,4 +135,4 @@ $buscar = $buscar ?? '';
     window.AFC_URL_BASE = '<?= $urlBase ?>';
     window.AFC_PERM = <?= json_encode($perm) ?>;
 </script>
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/activos_fijos_categorias.js?v=<?= time() ?>"></script>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/activos_fijos_categorias.js?v=<?= asset_ver('/js/modulos/activos_fijos_categorias.js') ?>"></script>

@@ -229,4 +229,4 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 <script>
     window.CP_URL_BASE = '<?= $urlBase ?>';
 </script>
-<script src="<?= $base ?>/js/modulos/carga_productos.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/carga_productos.js?v=<?= asset_ver('/js/modulos/carga_productos.js') ?>"></script>

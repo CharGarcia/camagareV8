@@ -841,4 +841,4 @@
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="<?php echo BASE_URL; ?>/js/modulos/reporte_inventarios.js?v=<?php echo time(); ?>"></script>
+<script src="<?php echo BASE_URL; ?>/js/modulos/reporte_inventarios.js?v=<?= asset_ver('/js/modulos/reporte_inventarios.js') ?>"></script>

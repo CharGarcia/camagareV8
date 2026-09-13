@@ -234,4 +234,4 @@ let TR_APROBADORES   = <?= json_encode(array_values($aprobadoresNombres ?? []), 
 let TR_currentSort = '<?= $ordenCol ?? 'numero' ?>';
 let TR_currentDir  = '<?= $ordenDir ?? 'DESC' ?>';
 </script>
-<script src="<?= $base ?>/js/modulos/transferencias.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/transferencias.js?v=<?= asset_ver('/js/modulos/transferencias.js') ?>"></script>

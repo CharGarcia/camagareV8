@@ -292,7 +292,7 @@ $verIntentos = $nivel >= 3;
 <script>
     window.BASE_URL = '<?= $base ?>';
 </script>
-<script src="<?= $base ?>/js/config/log_sistema.js?v=<?= @filemtime(MVC_ROOT . '/public/js/config/log_sistema.js') ?: time() ?>"></script>
+<script src="<?= $base ?>/js/config/log_sistema.js?v=<?= asset_ver('/js/config/log_sistema.js') ?>"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         if (typeof LOGSIS_cargarListado === 'function') LOGSIS_cargarListado(1);

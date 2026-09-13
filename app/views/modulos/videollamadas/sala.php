@@ -248,6 +248,6 @@ $urlModulo = $base . '/' . $rutaModulo;
         document.getElementById('vcEspera').style.display = hay ? 'none' : '';
     }).observe(document.getElementById('vcGrid'), { childList: true });
 </script>
-<script src="<?= $base ?>/js/videollamada-sala.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/videollamada-sala.js?v=<?= asset_ver('/js/videollamada-sala.js') ?>"></script>
 </body>
 </html>

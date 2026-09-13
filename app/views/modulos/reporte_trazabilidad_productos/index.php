@@ -150,4 +150,4 @@
 <script>
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";
 </script>
-<script src="<?php echo BASE_URL; ?>/js/modulos/reporte_trazabilidad_productos.js?v=<?php echo time(); ?>"></script>
+<script src="<?php echo BASE_URL; ?>/js/modulos/reporte_trazabilidad_productos.js?v=<?= asset_ver('/js/modulos/reporte_trazabilidad_productos.js') ?>"></script>

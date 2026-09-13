@@ -111,14 +111,29 @@ capacidad varias veces cada uno.**
   cada petición es de los desperdicios más grandes que hay. Activarlo es una línea de `php.ini`.
 - **Efecto estimado: 3-5x más peticiones con el mismo hardware.**
 
-### A3. Arreglar el `?v=time()` de los assets ⭐ muy barato
+### A3. Arreglar el `?v=time()` de los assets — ✅ HECHO (12-09-2026)
 
-- **290 ocurrencias en 110 archivos** (medido): CSS y JS llevan la hora actual como parámetro, así
-  que **el navegador vuelve a descargar todo en cada carga de página**. Nunca hay caché.
-- Reemplazar por la versión del despliegue (hash del commit o `filemtime`), y servir con
-  `Cache-Control: immutable`.
-- **Efecto: menos ancho de banda, páginas visiblemente más rápidas, menos trabajo del servidor.
-  Es media hora de trabajo.**
+- Eran **287 ocurrencias en 128 vistas** (medido): CSS y JS llevaban la hora actual como parámetro,
+  así que **el navegador volvía a descargar todo en cada carga de página**. Nunca había caché.
+- El `time()` se había introducido en el despliegue a producción del **27-05-2026** para garantizar
+  que ningún cliente se quedara con JS viejo tras un deploy. Razón legítima, y la solución la
+  conserva.
+- **Resuelto con el helper `asset_ver()`** (`app/helpers/helpers.php`), que devuelve el `filemtime`
+  del archivo: la URL cambia solo cuando el archivo cambia, y `git pull` actualiza el mtime de lo que
+  trae. Si el archivo no existe cae a `time()`, el comportamiento anterior. El patrón ya existía en 5
+  vistas del proyecto (`@filemtime(...) ?: time()`); se generalizó y se unificó.
+- Ventaja extra: la versión es **por archivo**, así que tocar `app.css` ya no invalida el caché de
+  los 236 archivos de JS.
+- Documentado en `CLAUDE.md` §10.8 para que los módulos nuevos no vuelvan a copiar `time()`.
+- Como parte del mismo trabajo se versionaron las **7 referencias que quedaban sin `?v=`**
+  (`app.css` y `theme.css` en login y 404, `theme.css` en `head.php`, `face_asistencia.js`,
+  `reasignar-establecimiento.js`). Ahora el **100%** de los CSS y JS propios lleva versión, que es la
+  condición para poder cachear con seguridad.
+- **La otra mitad del beneficio está en el servidor y ya está escrita:** hoy Apache no manda
+  `Cache-Control`, así que el navegador aún hace una petición condicional por archivo y recibe un
+  `304 Not Modified` (respuesta vacía: la transferencia ya se ahorra). Con `Cache-Control` largo deja
+  de preguntar. Runbook con el bloque de vhost, la verificación y la reversión:
+  **`OPTIMIZACION_SERVIDOR.md`, Parte B** (pendiente de aplicar en el servidor).
 
 ### A4. Pasar el pool de PostgreSQL a modo transaction
 
@@ -616,9 +631,13 @@ servidor que ya está al límite.
 impuestos, XML, asientos, secuenciales, stock y aislamiento multiempresa · B3 `schema_migrations` ·
 B5 `pg_stat_statements` · limpieza de archivos del docroot.
 
-**Etapa 1 — reversible en minutos.** A3 `?v=time()` · OPcache en el Apache actual · A1 polling
-unificado a 30-60 s con `ETag` (con la clave por empresa y usuario probada) · C1 índices
-`CONCURRENTLY`, los 5 más calientes primero y midiendo · leer `csrf.log` y arreglar `videosAyuda`.
+**Etapa 1 — reversible en minutos.** ~~A3 `?v=time()`~~ ✅ hecho 12-09-2026 ·
+~~C1 los 5 índices calientes~~ ✅ aplicados en producción 12-09-2026 con `CONCURRENTLY`, los cinco
+válidos (`idx_modulos_asignados_usuario_empresa` ya usándose a los pocos minutos) · **siguiente:**
+OPcache + `Cache-Control` de assets — ambos escritos y listos en **`OPTIMIZACION_SERVIDOR.md`**,
+pendientes de aplicar en el servidor · A1 polling unificado a 30-60 s con `ETag` (con la clave por
+empresa y usuario probada) · leer `csrf.log` y arreglar `videosAyuda` · resto de índices de `C1` por
+tandas, midiendo `idx_scan`.
 
 **Etapa 2 — con staging ya funcionando.** F1 CSRF en `enforce` · A5 Redis (caché primero, sesiones
 después y de noche) · A6 colas con monitoreo.

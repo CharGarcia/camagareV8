@@ -758,7 +758,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
 
 <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
 <script>window.CASIS_FACE_MODELS = window.CASIS_FACE_MODELS || null;</script>
-<script src="<?= $baseEmp ?>/js/modulos/face_asistencia.js?v=<?= time() ?>"></script>
+<script src="<?= $baseEmp ?>/js/modulos/face_asistencia.js?v=<?= asset_ver('/js/modulos/face_asistencia.js') ?>"></script>
 <script>
 (function () {
     'use strict';

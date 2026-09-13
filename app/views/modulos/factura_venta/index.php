@@ -206,8 +206,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
             <!-- Buscador con filtros (componente reusable) -->
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
             <div id="fbBuscadorFV" style="width: 480px;"></div>
             <input type="hidden" id="buscarFactura" value="<?= htmlspecialchars($buscar) ?>">
             <script>
@@ -7403,16 +7403,16 @@ include_once MVC_APP . '/views/modulos/transportistas/modal_transportista.php';
 
 $perm = $permNCRespaldo;
 ?>
-<script src="<?= BASE_URL ?>/js/modulos/transportistas_modal.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/guias_remision_modal.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/notas_credito.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/nota_debito.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/productos_modal.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/categorias_modal.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/marcas_modal.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/unidades_medida_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/transportistas_modal.js?v=<?= asset_ver('/js/modulos/transportistas_modal.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/guias_remision_modal.js?v=<?= asset_ver('/js/modulos/guias_remision_modal.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/notas_credito.js?v=<?= asset_ver('/js/modulos/notas_credito.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/nota_debito.js?v=<?= asset_ver('/js/modulos/nota_debito.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/productos_modal.js?v=<?= asset_ver('/js/modulos/productos_modal.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/categorias_modal.js?v=<?= asset_ver('/js/modulos/categorias_modal.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/marcas_modal.js?v=<?= asset_ver('/js/modulos/marcas_modal.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/unidades_medida_modal.js?v=<?= asset_ver('/js/modulos/unidades_medida_modal.js') ?>"></script>
 <script>
 // ── Descargar XML Original de Factura de Venta (detalle_xml de ventas_cabecera) ──
 </script>

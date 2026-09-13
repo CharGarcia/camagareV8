@@ -126,6 +126,6 @@
     <script>
         const B_URL = '<?= rtrim(BASE_URL, '/') ?>';
     </script>
-    <script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/whatsapp_campanas.js?v=<?= time() ?>"></script>
+    <script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/whatsapp_campanas.js?v=<?= asset_ver('/js/modulos/whatsapp_campanas.js') ?>"></script>
     <?php endif; ?>
 </div>

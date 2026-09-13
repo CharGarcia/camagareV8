@@ -306,7 +306,7 @@
 <?php // Modal de Asiento Contable estándar (mismo del módulo Libro Diario / Asientos):
       // permite ver, modificar y agregar cuentas al asiento generado, sin cerrarse solo. ?>
 <?php require MVC_APP . '/views/modulos/asientos_contables/modal_asiento.php'; ?>
-<script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= asset_ver('/js/modulos/asientos_contables_modal.js') ?>"></script>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {

@@ -56,4 +56,4 @@ $urlBaseCatShared = BASE_URL . '/modulos/categorias';
     </div>
 </div>
 
-<script src="<?= BASE_URL ?>/js/modulos/categorias_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/categorias_modal.js?v=<?= asset_ver('/js/modulos/categorias_modal.js') ?>"></script>

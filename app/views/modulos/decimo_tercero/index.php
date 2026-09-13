@@ -95,7 +95,7 @@ $anioActual = (int) date('Y');
 <script>window.BASE_URL = '<?= $base ?>'; window.DT_ANIO_ACTUAL = <?= $anioActual ?>;</script>
 <?php include 'modal_calcular.php'; ?>
 <?php include 'modal_detalle.php'; ?>
-<script src="<?= $base ?>/js/modulos/decimo_tercero.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/decimo_tercero.js?v=<?= asset_ver('/js/modulos/decimo_tercero.js') ?>"></script>
 
 <script>
     (function () {

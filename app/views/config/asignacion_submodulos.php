@@ -181,4 +181,4 @@ unset($_SESSION['config_msg']);
     </div>
 </div>
 
-<script src="<?= $base ?>/js/config/asignacion_submodulos.js?v=<?= @filemtime(MVC_ROOT . '/public/js/config/asignacion_submodulos.js') ?: time() ?>"></script>
+<script src="<?= $base ?>/js/config/asignacion_submodulos.js?v=<?= asset_ver('/js/config/asignacion_submodulos.js') ?>"></script>

@@ -334,4 +334,4 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     const CC_PERM_CREAR = <?= !empty($perm['crear']) ? 'true' : 'false' ?>;
     window.CC_CLIENTES = <?= json_encode(array_map(fn ($c) => ['id' => (int) $c['id'], 'nombre' => $c['nombre']], $clientes), JSON_UNESCAPED_UNICODE) ?>;
 </script>
-<script src="<?= $base ?>/js/modulos/conciliacion_cobros.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/conciliacion_cobros.js?v=<?= asset_ver('/js/modulos/conciliacion_cobros.js') ?>"></script>

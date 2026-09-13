@@ -226,4 +226,4 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 <script>
     window.CS_URL_BASE = '<?= $urlBase ?>';
 </script>
-<script src="<?= $base ?>/js/modulos/carga_suscripciones.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/carga_suscripciones.js?v=<?= asset_ver('/js/modulos/carga_suscripciones.js') ?>"></script>

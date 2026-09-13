@@ -290,4 +290,4 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 <script>
     window.CF_URL_BASE = '<?= $urlBase ?>';
 </script>
-<script src="<?= $base ?>/js/modulos/carga_facturas.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/carga_facturas.js?v=<?= asset_ver('/js/modulos/carga_facturas.js') ?>"></script>

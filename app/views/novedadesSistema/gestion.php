@@ -253,4 +253,4 @@ foreach ($submodulos as $s) {
         ordenDir: '<?= $e($ordenDir) ?>'
     };
 </script>
-<script src="<?= $base ?>/js/novedades-sistema.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/novedades-sistema.js?v=<?= asset_ver('/js/novedades-sistema.js') ?>"></script>

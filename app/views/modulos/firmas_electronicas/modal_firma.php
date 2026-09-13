@@ -682,4 +682,4 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
     </div>
 </div>
 
-<script src="<?= BASE_URL ?>/js/modulos/firmas_electronicas_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/firmas_electronicas_modal.js?v=<?= asset_ver('/js/modulos/firmas_electronicas_modal.js') ?>"></script>

@@ -220,4 +220,4 @@ $puedeCrear = !empty($perm['crear']);
     </div>
 </div>
 
-<script src="<?= $base ?>/js/modulos/envio-lote-sri.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/envio-lote-sri.js?v=<?= asset_ver('/js/modulos/envio-lote-sri.js') ?>"></script>

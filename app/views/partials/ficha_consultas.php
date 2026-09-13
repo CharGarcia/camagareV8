@@ -100,7 +100,7 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
         white-space: normal !important;
     }
 </style>
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/ficha_consultas.js?v=<?= time() ?>"></script>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/ficha_consultas.js?v=<?= asset_ver('/js/components/ficha_consultas.js') ?>"></script>
 <?php endif; ?>
 
 <?php if ($fcPanTrx): ?>

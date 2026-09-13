@@ -19,6 +19,38 @@ if (!function_exists('asset')) {
     }
 }
 
+if (!function_exists('asset_ver')) {
+    /**
+     * Valor para el parámetro ?v= de un asset estático de public/ (/js/…, /css/…).
+     *
+     * Devuelve la fecha de modificación del archivo, así que la URL cambia SOLO
+     * cuando el archivo cambia: el navegador conserva en caché lo que no se tocó y
+     * vuelve a descargar únicamente lo que el despliegue modificó (`git pull`
+     * actualiza el mtime de cada archivo que trae).
+     *
+     * Antes aquí iba time(), que al ser distinto en cada petición obligaba al
+     * navegador a redescargar TODO el CSS y el JS en cada carga de página: no había
+     * caché nunca. Ese time() se puso en el despliegue a producción del 27-05-2026
+     * para garantizar que ningún cliente se quedara con una versión vieja tras un
+     * deploy, y esa garantía se mantiene: un archivo que cambia cambia su mtime.
+     *
+     * Si el archivo no existe se cae a time(), que es el comportamiento anterior:
+     * el peor caso posible es el de hoy, nunca una versión cacheada equivocada.
+     *
+     * @param string $path Ruta pública tal como aparece en el HTML, p. ej. '/js/app.js'.
+     */
+    function asset_ver(string $path): string
+    {
+        static $cache = [];
+        $path = '/' . ltrim($path, '/');
+        if (!array_key_exists($path, $cache)) {
+            $mtime = defined('MVC_ROOT') ? @filemtime(MVC_ROOT . '/public' . $path) : false;
+            $cache[$path] = (string) ($mtime !== false ? $mtime : time());
+        }
+        return $cache[$path];
+    }
+}
+
 if (!function_exists('url_absoluta')) {
     /**
      * URL absoluta (con esquema y dominio) para usar en correos u otros contextos

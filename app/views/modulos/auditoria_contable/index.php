@@ -510,4 +510,4 @@ $totalIncidencias = array_sum($resumen);
         totalPages: <?= (int) $totalPages ?>
     };
 </script>
-<script src="<?= rtrim($base, '/') ?>/js/modulos/auditoria_contable.js?v=<?= time() ?>"></script>
+<script src="<?= rtrim($base, '/') ?>/js/modulos/auditoria_contable.js?v=<?= asset_ver('/js/modulos/auditoria_contable.js') ?>"></script>

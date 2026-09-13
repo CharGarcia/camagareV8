@@ -56,4 +56,4 @@ $urlBaseMarShared = BASE_URL . '/modulos/marcas';
     </div>
 </div>
 
-<script src="<?= BASE_URL ?>/js/modulos/marcas_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/marcas_modal.js?v=<?= asset_ver('/js/modulos/marcas_modal.js') ?>"></script>

@@ -244,4 +244,4 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="<?php echo BASE_URL; ?>/js/modulos/reporte_pedidos.js?v=<?php echo time(); ?>"></script>
+<script src="<?php echo BASE_URL; ?>/js/modulos/reporte_pedidos.js?v=<?= asset_ver('/js/modulos/reporte_pedidos.js') ?>"></script>

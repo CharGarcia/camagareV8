@@ -89,4 +89,4 @@ $mesActual = date('m');
   window.R_MODULO   = '<?= $rutaModulo ?>';
   window.ID_EMPRESA = <?= (int) ($_SESSION['id_empresa'] ?? 0) ?>;
 </script>
-<script src="<?= $base ?>/js/modulos/anexo_ats.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/anexo_ats.js?v=<?= asset_ver('/js/modulos/anexo_ats.js') ?>"></script>

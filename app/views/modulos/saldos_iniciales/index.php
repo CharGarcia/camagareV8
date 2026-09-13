@@ -1139,4 +1139,4 @@ $urlBase = $base . '/' . $rutaModulo;
     /* stub compatibilidad — el JS real llama SI_cambiarTab */
     function SI_cambiarTab(tab) { /* no-op, Bootstrap maneja el tab */ }
 </script>
-<script src="<?= BASE_URL ?>/js/modulos/saldos_iniciales.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/saldos_iniciales.js?v=<?= asset_ver('/js/modulos/saldos_iniciales.js') ?>"></script>
