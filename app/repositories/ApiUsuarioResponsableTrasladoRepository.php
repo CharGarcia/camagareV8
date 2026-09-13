@@ -43,6 +43,57 @@ class ApiUsuarioResponsableTrasladoRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Vista INVERSA: usuarios vinculados a un responsable en esta empresa.
+     * La usa el módulo Responsables de Traslado (pestaña "Usuarios vinculados");
+     * listarPorUsuarioYEmpresa() es la misma relación vista desde el usuario.
+     */
+    public function listarUsuariosDeResponsable(int $idResponsable, int $idEmpresa): array
+    {
+        $sql = "SELECT ur.id, ur.id_usuario, u.nombre, u.mail, u.cedula,
+                       COALESCE(u.nivel, 1) AS nivel,
+                       COALESCE(u.puede_app_movil, false) AS puede_app_movil,
+                       COALESCE(u.estado, 0) AS estado
+                  FROM usuarios_responsables_traslado ur
+                  INNER JOIN usuarios u ON u.id = ur.id_usuario
+                 WHERE ur.id_responsable_traslado = :r AND ur.id_empresa = :e AND ur.eliminado = false
+                 ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':r' => $idResponsable, ':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Usuarios que PODRÍAN vincularse a este responsable: los que tienen la
+     * empresa asignada y todavía no están vinculados a él.
+     *
+     * Se excluye el nivel 3 (superadministrador): ya ve todas las entregas de
+     * cualquier empresa, así que un vínculo suyo no cambiaría nada y solo
+     * ensuciaría la lista.
+     */
+    public function usuariosDisponiblesParaResponsable(int $idResponsable, int $idEmpresa): array
+    {
+        $sql = "SELECT u.id AS id_usuario, u.nombre, u.mail, u.cedula,
+                       COALESCE(u.nivel, 1) AS nivel,
+                       COALESCE(u.puede_app_movil, false) AS puede_app_movil
+                  FROM empresa_asignada ea
+                  INNER JOIN usuarios u ON u.id = ea.id_usuario
+                 WHERE ea.id_empresa = :e
+                   AND COALESCE(u.eliminado, false) = false
+                   AND COALESCE(u.nivel, 1) < 3
+                   AND NOT EXISTS (
+                        SELECT 1 FROM usuarios_responsables_traslado ur
+                         WHERE ur.id_usuario = u.id
+                           AND ur.id_empresa = :e
+                           AND ur.id_responsable_traslado = :r
+                           AND ur.eliminado = false
+                   )
+                 ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':r' => $idResponsable, ':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function find(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT * FROM usuarios_responsables_traslado WHERE id = :id AND id_empresa = :e AND eliminado = false";

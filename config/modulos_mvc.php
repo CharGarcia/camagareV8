@@ -276,6 +276,18 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Responsables de Traslado: catálogo de quien lleva físicamente la mercadería
+    // (chofer / repartidor / asesor). Lo consumen Pedidos, Consignaciones de Venta,
+    // Retornos, Cambios de Producto y el vínculo con usuarios de la app móvil.
+    // La ruta va en PLURAL ('…-traslados') porque el submódulo 9 ya estaba
+    // registrado así en submodulos_menu (Ventas) desde antes de existir el módulo;
+    // cambiarla aquí dejaría ese ítem del menú apuntando a la nada.
+    // Falta solo asignar permisos en /config/permisos-modulos.
+    'modulos/responsables-traslados' => [
+        'id_submodulo' => 9,
+        'legacy_rutas' => [],
+    ],
+
     // Cargas de Inventario (Documentos, id_modulo 11). Actualizar id_submodulo con el
     // id real que retorne la migración de menú (create_menu_cargas_inventario.sql).
     'modulos/cargas-inventario' => [

@@ -863,66 +863,42 @@ class PedidosController extends BaseModuloController {
         }
     }
 
+    /**
+     * Alta rápida de responsable de traslado desde el modal de Pedidos.
+     *
+     * Delega en ResponsableTrasladoService (el mismo que usa el módulo
+     * modulos/responsables-traslados y el modal de Consignaciones): antes cada
+     * controller repetía aquí su propio INSERT + log a mano, así que las tres
+     * altas validaban y normalizaban distinto.
+     */
     public function guardarResponsableAjax() {
         $this->requireCrear();
         try {
             $idEmpresa = (int) $_SESSION['id_empresa'];
-            $idUsuario = (int) $_SESSION['id_usuario'];
-            $nombre = trim($_POST['nombre'] ?? '');
-            $identificacion = trim($_POST['identificacion'] ?? '');
-            $telefono = trim($_POST['telefono'] ?? '');
-            $email = trim($_POST['email'] ?? '');
+            $service   = new \App\Services\modulos\ResponsableTrasladoService();
 
-            if (empty($nombre)) {
-                throw new Exception('El nombre es obligatorio');
-            }
-
-            if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                throw new Exception('El formato del correo electrónico no es válido');
-            }
-
-            $db = \App\core\Database::getConnection();
-            $db->beginTransaction();
-
-            $sql = "INSERT INTO responsables_traslado (id_empresa, nombre, identificacion, telefono, email, estado, created_by, updated_by, created_at, updated_at, eliminado)
-                    VALUES (:id_empresa, :nombre, :identificacion, :telefono, :email, 'activo', :id_usuario, :id_usuario, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false)
-                    RETURNING id, nombre, email";
-            
-            $stmt = $db->prepare($sql);
-            $stmt->execute([
-                ':id_empresa' => $idEmpresa,
-                ':nombre' => $nombre,
-                ':identificacion' => $identificacion,
-                ':telefono' => $telefono,
-                ':email' => $email,
-                ':id_usuario' => $idUsuario
+            $id = $service->crear([
+                'nombre'         => $_POST['nombre'] ?? '',
+                'identificacion' => $_POST['identificacion'] ?? null,
+                'telefono'       => $_POST['telefono'] ?? null,
+                'email'          => $_POST['email'] ?? null,
+                'estado'         => 'activo',
+                'id_empresa'     => $idEmpresa,
+                'id_usuario'     => (int) $_SESSION['id_usuario'],
             ]);
 
-            $newRow = $stmt->fetch(\PDO::FETCH_ASSOC);
-
-            // Audit log
-            try {
-                $sqlLog = "INSERT INTO log_sistema (id_usuario, id_empresa, accion, tabla_afectada, datos_nuevos)
-                           VALUES (:id_usuario, :id_empresa, 'CREAR', 'responsables_traslado', :datos_nuevos)";
-                $stmtLog = $db->prepare($sqlLog);
-                $stmtLog->execute([
-                    ':id_usuario' => $idUsuario,
-                    ':id_empresa' => $idEmpresa,
-                    ':datos_nuevos' => json_encode($newRow)
-                ]);
-            } catch (\Throwable $e) {}
-
-            $db->commit();
+            $nuevo = $service->getPorId($id, $idEmpresa) ?? [];
 
             $this->json([
-                'status' => true,
+                'status'  => true,
                 'message' => 'Responsable creado con éxito',
-                'data' => $newRow
+                'data'    => [
+                    'id'     => $id,
+                    'nombre' => $nuevo['nombre'] ?? '',
+                    'email'  => $nuevo['email'] ?? null,
+                ],
             ]);
-        } catch (Exception $e) {
-            if (isset($db) && $db->inTransaction()) {
-                $db->rollBack();
-            }
+        } catch (\Throwable $e) {
             $this->json(['status' => false, 'message' => $e->getMessage()]);
         }
     }

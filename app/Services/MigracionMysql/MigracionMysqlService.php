@@ -5834,16 +5834,20 @@ class MigracionMysqlService
         $db = Database::getConnection();
         // Match tolerante al formato del código (p. ej. '1' vs '001') y reutiliza aunque
         // esté eliminado, para NO crear un establecimiento duplicado con el mismo número.
-        $st = $db->prepare("SELECT id, eliminado FROM empresa_establecimiento
+        $st = $db->prepare("SELECT id, eliminado, estado FROM empresa_establecimiento
                              WHERE id_empresa = ? AND LPAD(REGEXP_REPLACE(codigo, '[^0-9]', '', 'g'), 3, '0') = ?
                              ORDER BY eliminado ASC, id ASC LIMIT 1");
         $st->execute([$idEmpresa, $cod]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if ($row !== false) {
-            if (!empty($row['eliminado'])) { $db->prepare("UPDATE empresa_establecimiento SET eliminado = false WHERE id = ?")->execute([(int) $row['id']]); }
+            // Reactivar si está eliminado o inactivo: la serie de un documento migrado debe quedar ACTIVA,
+            // si no, el módulo (que filtra por estado activo) no muestra la serie del documento.
+            if (!empty($row['eliminado']) || (string) ($row['estado'] ?? '') !== 'activo') {
+                $db->prepare("UPDATE empresa_establecimiento SET eliminado = false, estado = 'activo' WHERE id = ?")->execute([(int) $row['id']]);
+            }
             return (int) $row['id'];
         }
-        $ins = $db->prepare("INSERT INTO empresa_establecimiento (id_empresa, nombre, codigo, direccion, tipo, logo_ruta, leyenda_pdf_titulo, leyenda_pdf_mensaje, created_by, updated_by) VALUES (?, ?, ?, '', 'otro', '', '', '', ?, ?) RETURNING id");
+        $ins = $db->prepare("INSERT INTO empresa_establecimiento (id_empresa, nombre, codigo, direccion, tipo, logo_ruta, leyenda_pdf_titulo, leyenda_pdf_mensaje, estado, created_by, updated_by) VALUES (?, ?, ?, '', 'otro', '', '', '', 'activo', ?, ?) RETURNING id");
         $ins->execute([$idEmpresa, "Establecimiento $cod", $cod, $idUsuario, $idUsuario]);
         return (int) $ins->fetchColumn();
     }
@@ -5856,13 +5860,16 @@ class MigracionMysqlService
         $db = Database::getConnection();
         // Match tolerante al formato ('1' vs '001') y reutiliza aunque esté eliminado:
         // si ya hay un punto con el mismo número en el establecimiento, NO se crea otro.
-        $st = $db->prepare("SELECT id, eliminado FROM empresa_punto_emision
+        $st = $db->prepare("SELECT id, eliminado, estado FROM empresa_punto_emision
                              WHERE id_establecimiento = ? AND LPAD(REGEXP_REPLACE(codigo_punto, '[^0-9]', '', 'g'), 3, '0') = ?
                              ORDER BY eliminado ASC, id ASC LIMIT 1");
         $st->execute([$idEst, $pto]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if ($row !== false) {
-            if (!empty($row['eliminado'])) { $db->prepare("UPDATE empresa_punto_emision SET eliminado = false WHERE id = ?")->execute([(int) $row['id']]); }
+            // Reactivar si está eliminado o inactivo: la serie del documento migrado debe quedar ACTIVA.
+            if (!empty($row['eliminado']) || (string) ($row['estado'] ?? '') !== 'activo') {
+                $db->prepare("UPDATE empresa_punto_emision SET eliminado = false, estado = 'activo' WHERE id = ?")->execute([(int) $row['id']]);
+            }
             return (int) $row['id'];
         }
         $ins = $db->prepare("INSERT INTO empresa_punto_emision (id_empresa, id_establecimiento, nombre, codigo_punto, logo_ruta, estado, created_by, updated_by) VALUES (?, ?, ?, ?, '', 'activo', ?, ?) RETURNING id");

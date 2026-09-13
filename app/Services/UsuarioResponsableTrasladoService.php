@@ -9,8 +9,9 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\models\EmpresaAsignada;
 use App\repositories\ApiUsuarioResponsableTrasladoRepository;
-use App\Repositories\Modulos\ResponsableTrasladoRepository;
+use App\repositories\modulos\ResponsableTrasladoRepository;
 use RuntimeException;
 
 class UsuarioResponsableTrasladoService
@@ -39,6 +40,18 @@ class UsuarioResponsableTrasladoService
         return array_values(array_filter($todos, fn($r) => !isset($vinculados[(int) $r['id']])));
     }
 
+    /** Vista INVERSA: usuarios vinculados a un responsable (módulo Responsables de Traslado). */
+    public function usuariosDeResponsable(int $idResponsable, int $idEmpresa): array
+    {
+        return $this->repo->listarUsuariosDeResponsable($idResponsable, $idEmpresa);
+    }
+
+    /** Usuarios con esta empresa asignada que aún no están vinculados a este responsable. */
+    public function usuariosDisponiblesParaResponsable(int $idResponsable, int $idEmpresa): array
+    {
+        return $this->repo->usuariosDisponiblesParaResponsable($idResponsable, $idEmpresa);
+    }
+
     public function vincular(int $idEmpresa, int $idUsuario, int $idResponsable, int $idActual): array
     {
         $existeResponsable = array_filter(
@@ -47,6 +60,22 @@ class UsuarioResponsableTrasladoService
         );
         if (empty($existeResponsable)) {
             throw new RuntimeException('El responsable de traslado no pertenece a esta empresa.');
+        }
+
+        // El usuario debe existir, estar activo y tener la empresa asignada. Desde la
+        // ficha del usuario esto se cumplía por la UI (la empresa se elige de SUS
+        // empresas); desde el módulo de Responsables se parte de la empresa activa y
+        // del responsable, así que la comprobación tiene que hacerse aquí. Un vínculo
+        // a una empresa que el usuario no tiene no le daría acceso, pero quedaría
+        // colgado y confundiría al revisar quién entrega qué.
+        $empresaAsignada = new EmpresaAsignada();
+        $usuario = $empresaAsignada->getUsuarioPorId($idUsuario);
+        if (!$usuario) {
+            throw new RuntimeException('El usuario no existe o está inactivo.');
+        }
+        // El nivel 3 no necesita asignación para entrar a una empresa.
+        if ((int) ($usuario['nivel'] ?? 1) < 3 && !$empresaAsignada->estaEmpresaAsignada($idEmpresa, $idUsuario)) {
+            throw new RuntimeException('El usuario no tiene asignada esta empresa. Asígnesela primero en Usuarios del sistema.');
         }
 
         $resultado = $this->repo->vincular($idEmpresa, $idUsuario, $idResponsable, $idActual);
