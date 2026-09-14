@@ -69,20 +69,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Autocomplete Clientes (Vanilla JS)
-    const inputBuscarCliente = document.getElementById('buscar-cliente');
-    if (inputBuscarCliente) {
-        inputBuscarCliente.addEventListener('keydown', (e) => {
-            if (e.key === 'Backspace' || e.key === 'Delete') {
-                e.preventDefault();
-                inputBuscarCliente.value = '';
-                document.getElementById('id_cliente').value = '';
-            }
-        });
-    }
     initAutocomplete('buscar-cliente', 'lista-clientes-sugerencias', (item) => {
         document.getElementById('id_cliente').value = item.id;
         document.getElementById('buscar-cliente').value = item.nombre;
-    }, `${window.CMG_urlBase}/buscarClientesAjax`);
+    }, `${window.CMG_urlBase}/buscarClientesAjax`, 'id_cliente');
 
     // Validaciones de Fecha y Horas de Entrega en Tiempo Real
     const inputFecha = document.getElementById('fecha_entrega');
@@ -96,23 +86,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /**
  * Función genérica para autocompletado nativo (Clientes)
+ *
+ * La lista se ancla a un contenedor propio que envuelve al campo, NO al .input-group:
+ * un `position:absolute` sin `top` dentro de un contenedor flex se dibuja en su posición
+ * estática (la esquina superior del .input-group) y termina montado SOBRE el propio campo
+ * de búsqueda — muy evidente en móvil. Con el contenedor + `top:100%` la lista cae siempre
+ * justo debajo del input, con alto acotado y scroll propio para no tapar la pantalla.
+ *
+ * hiddenId (opcional): input oculto con el id seleccionado. Solo cuando hay una selección
+ * activa el input muestra una etiqueta fija, así que ahí Backspace/Delete limpian toda la
+ * selección de una vez; mientras se escribe la búsqueda esas teclas borran carácter a
+ * carácter, como en cualquier input.
  */
-function initAutocomplete(inputId, listId, onSelect, url) {
+function initAutocomplete(inputId, listId, onSelect, url, hiddenId = null) {
     const input = document.getElementById(inputId);
     if (!input) return;
+    const hidden = hiddenId ? document.getElementById(hiddenId) : null;
 
     let list = document.getElementById(listId);
     if (!list) {
+        // Contenedor de anclaje con el ancho exacto del campo.
+        const campo = input.closest('.input-group') || input;
+        let host = campo.parentNode;
+        if (!host.classList.contains('js-autocomplete-host')) {
+            host = document.createElement('div');
+            host.className = 'js-autocomplete-host position-relative';
+            campo.parentNode.insertBefore(host, campo);
+            host.appendChild(campo);
+        }
+
         list = document.createElement('div');
         list.id = listId;
-        list.className = 'list-group position-absolute w-100 shadow-sm d-none';
+        list.className = 'list-group position-absolute shadow-sm d-none';
         list.style.zIndex = '1060';
-        input.parentNode.style.position = 'relative';
-        input.parentNode.appendChild(list);
+        list.style.top = '100%';
+        list.style.left = '0';
+        list.style.right = '0';
+        list.style.maxHeight = '45vh';
+        list.style.overflowY = 'auto';
+        host.appendChild(list);
+
+        // Móvil: al tocar una opción el input pierde el foco, el teclado se cierra y el
+        // reflow mueve la lista antes de que llegue el click. Evitando ese blur, el toque
+        // siempre cae sobre la opción que el usuario está viendo.
+        list.addEventListener('mousedown', (e) => e.preventDefault());
     }
+
+    input.addEventListener('keydown', (e) => {
+        if ((e.key === 'Backspace' || e.key === 'Delete') && hidden && hidden.value !== '') {
+            e.preventDefault();
+            hidden.value = '';
+            input.value = '';
+            list.classList.add('d-none');
+        }
+    });
 
     let timeout;
     input.addEventListener('input', (e) => {
+        // Al editar el texto la selección anterior deja de ser válida: hay que elegir de nuevo.
+        if (hidden) hidden.value = '';
         clearTimeout(timeout);
         const q = e.target.value.trim();
         if (q.length < 2) {
@@ -124,14 +156,17 @@ function initAutocomplete(inputId, listId, onSelect, url) {
             try {
                 const resp = await fetch(`${url}?term=${encodeURIComponent(q)}`);
                 const items = await resp.json();
-                
+
                 list.innerHTML = '';
                 if (items.length > 0) {
                     items.forEach(item => {
                         const btn = document.createElement('button');
                         btn.type = 'button';
-                        btn.className = 'list-group-item list-group-item-action py-2 px-3 small';
-                        btn.innerHTML = `<div><strong>${item.identificacion || item.codigo}</strong> - ${item.nombre}</div>`;
+                        btn.className = 'list-group-item list-group-item-action py-2 px-3 small text-start';
+                        const cod = document.createElement('strong');
+                        cod.textContent = item.identificacion || item.codigo || '';
+                        btn.appendChild(cod);
+                        btn.appendChild(document.createTextNode(' - ' + (item.nombre || '')));
                         btn.onclick = () => {
                             onSelect(item);
                             list.classList.add('d-none');
@@ -149,7 +184,7 @@ function initAutocomplete(inputId, listId, onSelect, url) {
     });
 
     document.addEventListener('click', (e) => {
-        if (!input.contains(e.target) && !list.contains(e.target)) {
+        if (e.target !== input && !list.contains(e.target)) {
             list.classList.add('d-none');
         }
     });
@@ -456,11 +491,18 @@ function agregarFilaProducto(prod = null) {
 
         inputEl.addEventListener('keydown', (e) => {
             if (e.key === 'Delete' || e.key === 'Backspace') {
-                e.preventDefault();
-                inputCod.value = '';
-                inputDesc.value = '';
-                tr.querySelector('.input-id-producto').value = '';
-                dropdownGlobal.classList.add('d-none');
+                // Solo con un producto ya elegido (la fila muestra su etiqueta fija) estas
+                // teclas limpian toda la selección; mientras se escribe la búsqueda borran
+                // carácter a carácter, como en cualquier input.
+                const inputIdProd = tr.querySelector('.input-id-producto');
+                if (inputIdProd && inputIdProd.value !== '') {
+                    e.preventDefault();
+                    inputCod.value = '';
+                    inputDesc.value = '';
+                    inputIdProd.value = '';
+                    tr.dataset.idProducto = '';
+                    dropdownGlobal.classList.add('d-none');
+                }
             }
             if (e.key === 'Enter') {
                 const firstBtn = dropdownGlobal.querySelector('button');
