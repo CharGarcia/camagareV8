@@ -4581,6 +4581,17 @@ $totalPages = $totalPagesOriginal;
                         };
                     }
 
+                    // Si el lote guardado ya no está en el stock actual (facturas migradas o
+                    // históricas: el lote se vendió y salió de stock), inyectarlo como opción
+                    // para no perder la visualización del dato ya guardado en el detalle.
+                    // stock=0: es un valor histórico, no altera validaciones de stock.
+                    if (selLote && currentLote && currentLote !== 'sin_lote'
+                        && !Array.from(selLote.options).some(o => o.value === currentLote)) {
+                        const optHist = new Option(currentLote, currentLote);
+                        optHist.dataset.stock = 0;
+                        selLote.appendChild(optHist);
+                    }
+
                     // Restauración de lote solo si ya existe un valor guardado (edición).
                     // No se dispara 'change': eso acotaría a la fecha del catálogo y pisaría
                     // la que tiene guardada la línea. Se acota a currentCad cuando existe.
@@ -4597,6 +4608,20 @@ $totalPages = $totalPagesOriginal;
                 if (lblSaldo) lblSaldo.textContent = '0.00';
                 if (selLote) selLote.innerHTML = '<option value="">Sin Stock</option>';
                 if (selCad) selCad.innerHTML = '<option value="">Sin Stock</option>';
+                // Sin stock actual pero con lote guardado (factura migrada/histórica):
+                // inyectar el lote y su caducidad guardados para poder mostrarlos.
+                if (selLote && currentLote && currentLote !== 'sin_lote') {
+                    const optHist = new Option(currentLote, currentLote);
+                    optHist.dataset.stock = 0;
+                    selLote.appendChild(optHist);
+                    selLote.value = currentLote;
+                    if (selCad && currentCad) {
+                        const optCad = new Option(fvFechaCadTexto(currentCad), currentCad);
+                        optCad.dataset.stock = 0;
+                        selCad.appendChild(optCad);
+                        selCad.value = currentCad;
+                    }
+                }
             }
         } catch (e) {
             console.error('Error cargando lotes', e);
