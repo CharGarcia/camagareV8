@@ -75,6 +75,15 @@ tipo.
 En una **factura de reembolso recibida** el sustento queda fijo en *08 - Valor
 pagado para solicitar Reembolso de Gasto (intermediario)* y no se puede cambiar.
 
+**Corregir el sustento en una compra migrada.** Una compra que viene de una
+migración es de solo lectura (no se puede editar nada más), pero el selector de
+**Sustento Tributario** queda habilitado con su propio botón de guardado (✓)
+junto al campo, porque las compras migradas llegan sin esta clasificación bien
+resuelta y el ATS/Declaración de IVA la necesitan correcta. Guardarlo no abre el
+resto del documento a edición, y sigue respetando las mismas reglas: no se puede
+tocar si el período contable de la compra está cerrado, y en una factura de
+reembolso recibida se sigue forzando al código 08.
+
 ## Pestaña ATS
 
 La pestaña **ATS** del modal reúne los datos que no cambian la compra en sí,
@@ -381,6 +390,11 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.9** — En una compra **migrada** (solo lectura) ahora se puede corregir el
+  **Sustento Tributario** sin abrir el resto del documento: el selector queda
+  habilitado con su propio botón de guardado. Antes, si el dato venía mal
+  clasificado desde el sistema anterior, no había forma de arreglarlo salvo
+  editando la base de datos directamente.
 - **2.8** — La pestaña **Pagos** de la compra ya toma en cuenta los **valores de
   terceros** de las planillas de luz y agua: antes el saldo pendiente se calculaba
   solo con el importe declarado al SRI, así que la planilla quedaba con unos

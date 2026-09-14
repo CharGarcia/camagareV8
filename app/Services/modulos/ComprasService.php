@@ -1165,6 +1165,54 @@ class ComprasService
         return $id;
     }
 
+    /**
+     * Actualiza SOLO el Sustento Tributario de una compra, incluidas las MIGRADAS
+     * (que por lo demás son de solo lectura, ver actualizar()): llegan desde el
+     * sistema viejo sin esta clasificación bien resuelta, y el usuario necesita poder
+     * corregirla para que el ATS/Declaración de IVA la tomen bien, sin abrir el resto
+     * del documento histórico a edición.
+     */
+    public function actualizarSustentoTributario(int $id, int $idEmpresa, int $idUsuario, int $idSustento): void
+    {
+        $cabecera = $this->repository->getPorId($id, $idEmpresa);
+        if (!$cabecera) {
+            throw new \Exception('Compra no encontrada.');
+        }
+
+        // El período contable sí protege este campo (afecta la declaración de ese
+        // período): a diferencia de la migración, aquí NO se omite el chequeo.
+        $this->periodosService->validarFechaPermitida(
+            $cabecera['fecha_emision'],
+            $idEmpresa,
+            'No se puede modificar el Sustento Tributario porque el periodo contable está cerrado.'
+        );
+
+        // Factura de Reembolso recibida: el sustento SIEMPRE es código 08 (mismo
+        // refuerzo que actualizar()), sin importar lo que se haya enviado.
+        if ((string) ($cabecera['cod_doc_reembolso'] ?? '') === '41') {
+            $idSustento08 = $this->getSustentoIdByCodigo('08');
+            if ($idSustento08) {
+                $idSustento = $idSustento08;
+            }
+        }
+
+        $db = Database::getConnection();
+        $st = $db->prepare("SELECT 1 FROM sustento_tributario WHERE id = ? AND status = 1");
+        $st->execute([$idSustento]);
+        if (!$st->fetchColumn()) {
+            throw new \Exception('El Sustento Tributario seleccionado no es válido.');
+        }
+
+        $this->repository->updateSustentoTributario($id, $idSustento, $idUsuario);
+
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa,
+            'MODIFICAR', 'compras_cabecera', $id,
+            ['id_sustento_tributario' => $cabecera['id_sustento_tributario'] ?? null],
+            ['id_sustento_tributario' => $idSustento]
+        );
+    }
+
     public function eliminar(int $id, int $idUsuario, int $idEmpresa): bool
     {
         $compra = $this->repository->getPorId($id, $idEmpresa);

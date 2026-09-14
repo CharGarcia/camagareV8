@@ -161,11 +161,20 @@
                 <label class="form-label form-label-sm mb-1 fw-semibold">
                   Sustento Tributario <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('compras', 'mcSustento', 'id_sustento_tributario') ?> <?php if (!$esPersonaNatural): ?><span class="text-danger">*</span><?php endif; ?>
                 </label>
-                <select id="mcSustento" class="form-select form-select-sm">
-                  <option value="">-- Seleccione Tipo de Comprobante --</option>
-                </select>
+                <div class="d-flex gap-1 align-items-start">
+                  <select id="mcSustento" class="form-select form-select-sm">
+                    <option value="">-- Seleccione Tipo de Comprobante --</option>
+                  </select>
+                  <button type="button" id="mcBtnGuardarSustentoMigrado" class="btn btn-sm btn-outline-primary d-none flex-shrink-0"
+                          title="Guardar Sustento Tributario" onclick="mcGuardarSustentoMigrado()">
+                    <i class="bi bi-check-lg"></i>
+                  </button>
+                </div>
                 <div id="mcSustentoReembolsoHelp" class="form-text small text-muted d-none">
                   <i class="bi bi-lock-fill"></i> Bloqueado: código 08 obligatorio por ser Factura de Reembolso recibida.
+                </div>
+                <div id="mcSustentoMigradoHelp" class="form-text small text-muted d-none">
+                  <i class="bi bi-pencil-fill"></i> Compra migrada: el Sustento Tributario se puede corregir aunque el resto del documento sea de solo lectura.
                 </div>
               </div>
 

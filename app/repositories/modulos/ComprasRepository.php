@@ -990,6 +990,20 @@ class ComprasRepository extends BaseRepository
     }
 
     /**
+     * Actualiza SOLO el Sustento Tributario de la cabecera (sin tocar el resto del
+     * documento). Usado por ComprasService::actualizarSustentoTributario() para poder
+     * corregir esta clasificación en compras migradas, que por lo demás son de solo
+     * lectura (ver esMigrado()) — las migradas llegan sin este dato bien clasificado.
+     */
+    public function updateSustentoTributario(int $idCompra, int $idSustento, int $idUsuario): void
+    {
+        $this->query(
+            "UPDATE compras_cabecera SET id_sustento_tributario = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
+            [$idSustento, $idUsuario, $idCompra]
+        );
+    }
+
+    /**
      * Total recaudado por cuenta de terceros de una compra (ver updateTotalTerceros).
      * Lo consulta el registro automático desde el SRI para pagar el valor real de la
      * planilla y no solo el importe declarado.

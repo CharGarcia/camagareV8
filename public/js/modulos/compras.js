@@ -506,6 +506,41 @@ async function mcRechazarCompra() {
 }
 
 /**
+ * Guarda SOLO el Sustento Tributario de una compra migrada (ver mcAplicarSoloLectura,
+ * bloque `permiteSustentoMigrado`). No recarga toda la compra: la migrada sigue de
+ * solo lectura en lo demás, solo se sincroniza el aviso/estado del propio selector.
+ */
+async function mcGuardarSustentoMigrado() {
+    const id         = document.getElementById('mcId')?.value;
+    const idSustento = document.getElementById('mcSustento')?.value;
+    if (!id) return;
+    if (!idSustento) {
+        Swal.fire('Atención', 'Seleccione un Sustento Tributario.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('mcBtnGuardarSustentoMigrado');
+    if (btn) btn.disabled = true;
+
+    const fd = new FormData();
+    fd.append('id_compra', id);
+    fd.append('id_sustento_tributario', idSustento);
+    try {
+        const res  = await fetch(`${BASE_URL}/modulos/compras/actualizarSustentoTributarioAjax`, { method: 'POST', body: fd });
+        const json = await res.json();
+        if (!json.ok) {
+            Swal.fire('No se pudo guardar', json.error || 'Error desconocido.', 'error');
+            return;
+        }
+        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Sustento Tributario guardado.', timer: 1800, showConfirmButton: false });
+    } catch (e) {
+        Swal.fire('Error de conexión', 'No se pudo contactar al servidor.', 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+/**
  * Revierte el bloqueo de solo-lectura: re-habilita SOLO lo que ese bloqueo
  * deshabilitó (marcado con `.mc-lock-off`) y oculta el banner. Es idempotente y
  * no toca campos deshabilitados por otra lógica (electrónica, naturales).
@@ -518,6 +553,8 @@ function mcLimpiarBloqueoSoloLectura() {
         el.classList.remove('mc-lock-off');
     });
     document.getElementById('mcBloqueoAviso')?.classList.add('d-none');
+    document.getElementById('mcBtnGuardarSustentoMigrado')?.classList.add('d-none');
+    document.getElementById('mcSustentoMigradoHelp')?.classList.add('d-none');
 }
 
 /**
@@ -554,12 +591,20 @@ function mcAplicarSoloLectura(d) {
     const modal    = document.getElementById('modalCompra');
     const pagoForm = document.getElementById('pagoFormNuevo');
 
+    // Sustento Tributario en compra MIGRADA (no en período cerrado): se deja editable
+    // y con guardado propio (ver mcGuardarSustentoMigrado/actualizarSustentoTributarioAjax)
+    // porque las migradas llegan sin esta clasificación bien resuelta y el ATS/
+    // Declaración de IVA la necesitan correcta, sin abrir el resto del documento.
+    const permiteSustentoMigrado = esMigrado && !periodoCerrado;
+
     // Deshabilita el elemento marcándolo, salvo que YA estuviera deshabilitado por
-    // otra lógica (no lo tocamos para no re-habilitarlo por error después), o que
-    // sea parte del formulario de pago interno (pagar sí se permite en migradas).
+    // otra lógica (no lo tocamos para no re-habilitarlo por error después), que
+    // sea parte del formulario de pago interno (pagar sí se permite en migradas),
+    // o el propio Sustento Tributario en el caso anterior.
     const bloquear = el => {
         if (el.disabled) return;
         if (pagoForm && pagoForm.contains(el)) return;
+        if (permiteSustentoMigrado && el.id === 'mcSustento') return;
         el.disabled = true;
         el.classList.add('mc-lock-off');
     };
@@ -568,8 +613,17 @@ function mcAplicarSoloLectura(d) {
     modal.querySelectorAll('.modal-body button').forEach(btn => {
         if (btn.id === 'mcBtnPdf' || btn.id === 'mcBtnExcel' || btn.id === 'mcBtnDescargarXml') return;
         if (btn.hasAttribute('data-bs-toggle')) return; // pestañas
+        if (permiteSustentoMigrado && btn.id === 'mcBtnGuardarSustentoMigrado') return;
         bloquear(btn);
     });
+
+    // Botón de guardado dedicado del Sustento Tributario: solo tiene sentido si el
+    // selector quedó editable (arriba) Y no está fijo por Reembolso (código 08).
+    const sustentoSel   = document.getElementById('mcSustento');
+    const fijoReembolso = !!(sustentoSel && sustentoSel.classList.contains('mc-lock-reembolso'));
+    const muestraSustentoMigrado = permiteSustentoMigrado && !fijoReembolso;
+    document.getElementById('mcBtnGuardarSustentoMigrado')?.classList.toggle('d-none', !muestraSustentoMigrado);
+    document.getElementById('mcSustentoMigradoHelp')?.classList.toggle('d-none', !muestraSustentoMigrado);
 
     // Sin edición: ocultar Guardar siempre que esté bloqueada (migrada o período cerrado).
     document.getElementById('btnGuardarCompra')?.classList.add('d-none');

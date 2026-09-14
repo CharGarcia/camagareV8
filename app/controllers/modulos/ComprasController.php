@@ -131,6 +131,38 @@ class ComprasController extends BaseModuloController
         }
     }
 
+    /**
+     * Actualiza SOLO el Sustento Tributario, incluso en compras migradas (que por
+     * lo demás son de solo lectura): el modal las bloquea, pero deja este selector
+     * habilitado y lo guarda por acá para poder completar/corregir la clasificación
+     * ATS sin abrir el resto del documento histórico a edición.
+     */
+    public function actualizarSustentoTributarioAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa  = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario  = (int) ($_SESSION['id_usuario'] ?? 0);
+        $idCompra   = (int) ($_POST['id_compra'] ?? 0);
+        $idSustento = (int) ($_POST['id_sustento_tributario'] ?? 0);
+
+        if (!$idCompra || !$idSustento) {
+            echo json_encode(['ok' => false, 'error' => 'Seleccione un Sustento Tributario.']);
+            return;
+        }
+
+        try {
+            $this->service->actualizarSustentoTributario($idCompra, $idEmpresa, $idUsuario, $idSustento);
+            echo json_encode(['ok' => true, 'mensaje' => 'Sustento Tributario actualizado.']);
+        } catch (\Exception $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo actualizar el Sustento Tributario.']);
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // INDEX
     // ─────────────────────────────────────────────────────────────────────────
