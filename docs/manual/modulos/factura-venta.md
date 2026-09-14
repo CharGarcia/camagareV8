@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional
+etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios
 version: 2.6
 orden: 20
 estado: activo
@@ -90,6 +90,10 @@ ni líneas en campos vacíos:
 - **Servicio** (propina) aparece **solo si el establecimiento tiene activada la
   propina** en *Empresa → Facturación*, o si la factura ya se emitió con un valor
   de servicio.
+- En la tabla de **formas de pago**, la columna *Días Crédito* lleva la cantidad
+  y la columna *Plazo* lleva **solo la unidad**: *Días*, *Meses* o *Años*. Un
+  crédito a 15 días se lee «15» y «Días», no «15» y «15 dias». Cuando el pago es
+  de contado (plazo 0), la columna *Plazo* muestra un guion.
 
 Las columnas *Subsidio* y *Precio sin Subsidio* y la línea *IRBPNR* ya no se
 imprimen: el sistema no factura bienes subsidiados ni ese impuesto, así que
@@ -206,7 +210,11 @@ la operación de inmediato.
   factura (antes un código largo se salía encima de la columna siguiente) y
   *Detalle Adicional* solo se dibuja si algún ítem lo trae. *Servicio* aparece
   solo si el establecimiento tiene activada la propina o la factura ya se emitió
-  con servicio. Ver *"Qué columnas y totales muestra el PDF"*.
+  con servicio. En la tabla de formas de pago, la columna *Plazo* muestra ahora
+  solo la unidad (*Días*, *Meses*, *Años*) en lugar de repetir el número que ya
+  está en *Días Crédito* —antes se leía «15 dias»—, con la misma etiqueta para
+  todas las variantes guardadas (`dias`, `DIAS`, `anios`, `AÑOS`…). Ver
+  *"Qué columnas y totales muestra el PDF"*.
 - **2.5** — La columna **Vencimiento** de cada línea se limita ahora al **lote
   seleccionado** (y elegir la fecha selecciona su lote). Antes se ofrecían todas
   las fechas del producto, con lo que podía facturarse una combinación

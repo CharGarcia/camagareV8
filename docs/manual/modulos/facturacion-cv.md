@@ -6,7 +6,7 @@ ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: facturacion de consignacion, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable
-version: 1.0
+version: 1.1
 orden: 47
 estado: activo
 ---
@@ -122,6 +122,11 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 - La base imponible de cada línea es `precio × cantidad − descuento`, redondeada
   a centavos **antes** de calcular el IVA, para que el total del modal coincida
   al centavo con la factura emitida.
+- Al generar la factura, el sistema añade automáticamente a su **información
+  adicional** una línea con el concepto **Consignación** y el número de cada
+  consignación facturada: **solo el secuencial, sin la serie y sin los ceros de
+  relleno** (`001-001-000000012` se escribe `12`), separados por coma si son
+  varias. Esa línea se suma a la información adicional que ya tenga el documento.
 - **Crear nueva desde esta** (duplicar) solo aparece en documentos *facturada* o
   *anulada*. Recorta cada cantidad al saldo vigente y **escala el descuento en la
   misma proporción**; las líneas sin saldo se omiten.
@@ -160,6 +165,9 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.1** — La línea *Consignación* de la información adicional de la factura
+  ahora lleva solo el número de la consignación: sin la serie y sin los ceros de
+  relleno.
 - **1.0** — Versión inicial. Documenta el flujo de dos pasos y el descuento por
   línea editable con descuento rápido (% o $, con opción de aplicarlo a todos los
   ítems), igual que en Facturas de Venta.

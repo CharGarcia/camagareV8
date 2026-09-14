@@ -115,11 +115,15 @@
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold">Hora Inicial <span class="text-danger">*</span></label>
-                                    <input type="time" id="hora_inicial_entrega" class="form-control form-control-sm">
+                                    <!-- type="text" (no "time") a propósito: se escribe libremente con la máscara
+                                         00:00 y sin el selector de horas del navegador. Ver pedMascaraHora(). -->
+                                    <input type="text" id="hora_inicial_entrega" class="form-control form-control-sm ped-hora"
+                                           placeholder="00:00" maxlength="5" inputmode="numeric" autocomplete="off">
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold">Hora Máxima <span class="text-danger">*</span></label>
-                                    <input type="time" id="hora_maxima_entrega" class="form-control form-control-sm">
+                                    <input type="text" id="hora_maxima_entrega" class="form-control form-control-sm ped-hora"
+                                           placeholder="00:00" maxlength="5" inputmode="numeric" autocomplete="off">
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold"><?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('pedidos', 'id_responsable_entrega', 'id_responsable_entrega') ?> Responsable de Entrega <span class="text-danger">*</span></label>

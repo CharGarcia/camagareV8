@@ -759,6 +759,7 @@ class PlantillasPdfRendererService
             '{iva}'                   => number_format($totales['iva'], 2),
             '{propina}'               => number_format($totales['propina'], 2),
             '{valor_total}'           => number_format($totales['valor_total'], 2),
+            '{total_items}'           => number_format($totales['total_items'] ?? 0, 2),
         ];
     }
 
@@ -983,8 +984,10 @@ class PlantillasPdfRendererService
         $totalDcto   = 0.0;
         $totalIce    = 0.0;
         $totalIva    = 0.0;
+        $totalItems  = 0.0;
 
         foreach ($detalles as $d) {
+            $totalItems += (float)($d['cantidad'] ?? 0);
             $totalDcto += (float)($d['descuento'] ?? 0);
             $base      = (float)($d['precio_total_sin_impuesto'] ?? 0);
             $tieneIva  = false;
@@ -1042,6 +1045,7 @@ class PlantillasPdfRendererService
             'iva'             => $totalIva,
             'propina'         => $propina,
             'valor_total'     => $valorTotal,
+            'total_items'     => $totalItems, // suma de cantidades de las líneas
         ];
     }
 

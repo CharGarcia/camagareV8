@@ -49,6 +49,16 @@ class PedidoRules {
             throw new Exception('La fecha de entrega no puede ser menor a la fecha del pedido.');
         }
 
+        // Formato de las horas. En el modal se escriben a mano (campo de texto con
+        // máscara 00:00, sin el selector del navegador), así que el formato deja de
+        // estar garantizado por el input: se valida aquí antes de tocar la BD, y
+        // además la comparación de abajo es textual y solo es correcta con HH:MM.
+        foreach (['hora inicial' => $horaInicial, 'hora máxima' => $horaMaxima] as $etiqueta => $hora) {
+            if (!empty($hora) && !preg_match('/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/', (string) $hora)) {
+                throw new Exception("La {$etiqueta} de entrega no tiene un formato válido (00:00).");
+            }
+        }
+
         if (!empty($horaInicial) && !empty($horaMaxima)) {
             if ($horaInicial > $horaMaxima) {
                 throw new Exception('La hora inicial no puede ser mayor a la hora máxima de entrega.');

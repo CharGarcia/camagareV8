@@ -93,20 +93,33 @@ En la pestaña General del comprobante, junto al botón **PDF**, hay un botón
 NUP, cantidad entregada, retornada y facturada) en una hoja de cálculo.
 Requiere que la consignación esté guardada.
 
-### Firmas del PDF
+### Cómo se arma el PDF
 
-El comprobante cierra con tres firmas en línea —**Emitido por**, **Responsable
-de traslado** y **Recibí conforme**— y, debajo, una cuarta para la
-**verificación de acondicionamiento**, que se firma a mano.
+Debajo del listado de productos, en este orden:
+
+1. **TOTAL ÍTEMS**, la suma de las cantidades entregadas, al pie de la columna
+   *Cantidad*.
+2. Las **observaciones** del documento, a ancho completo (antes iban apretadas
+   arriba, junto a los datos del cliente). Si la consignación no tiene
+   observaciones, ese recuadro no se dibuja.
+3. Las firmas.
+
+Las firmas son tres en línea —**Emitido por**, **Responsable de traslado** y
+**Recibí conforme**— y, debajo, una cuarta para la **verificación de
+acondicionamiento**.
 
 Bajo *Emitido por* sale el nombre del **usuario que registró la consignación**,
 no el de quien imprime el documento ni el de la empresa: el dato queda fijo con
 el comprobante, así que reimprimirlo meses después sigue mostrando a quien lo
-emitió.
+emitió. *Recibí conforme* y la verificación de acondicionamiento van **sin
+nombre impreso**: los escribe y firma a mano quien recibe la mercadería.
+
+Si el contenido llega muy abajo, las firmas pasan a una página nueva en vez de
+montarse sobre la tabla.
 
 Si la empresa usa una **plantilla propia** (módulo *Plantillas de Documentos*),
 manda esa plantilla y no este diseño; ahí el usuario emisor es el campo
-`{cg_emitido_por}`.
+`{cg_emitido_por}` y el total de ítems, `{total_items}`.
 
 ## Quién ve cada documento
 
@@ -180,10 +193,13 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
-- **1.9** — En el PDF, la firma **Entregado por** pasó a llamarse **Emitido por**
-  y muestra el nombre del usuario que registró la consignación (antes salía el
-  nombre de la empresa). Debajo se agregó una cuarta firma: **verificación de
-  acondicionamiento**.
+- **1.9** — Cambios en el PDF: la firma **Entregado por** pasó a llamarse
+  **Emitido por** y muestra el nombre del usuario que registró la consignación
+  (antes salía el nombre de la empresa); se agregó una cuarta firma,
+  **verificación de acondicionamiento**; **Recibí conforme** ya no imprime el
+  nombre del cliente, se llena a mano; las **observaciones** se movieron debajo
+  del listado de productos, a ancho completo; y al pie de la columna *Cantidad*
+  aparece el **total de ítems**.
 
 - **1.8** — El **número ya no se puede repetir**: lo asigna el servidor al
   guardar (antes se guardaba el de la vista previa, así que dos formularios

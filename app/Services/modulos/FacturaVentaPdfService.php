@@ -947,8 +947,10 @@ class FacturaVentaPdfService
                 $nombreP = $p['nombre_forma_pago'] ?? ($p['forma_pago'] ?? '');
                 $valorP  = number_format((float)($p['total'] ?? 0), 2);
                 $dias    = (int)($p['plazo'] ?? 0);
-                $unidad  = trim($p['unidad_tiempo'] ?? 'dias');
-                $plazoLbl = $dias > 0 ? $dias . ' ' . $unidad : '—';
+                // "Plazo" es la UNIDAD de tiempo (Días / Meses / Años). La
+                // cantidad ya va en la columna "Días Crédito", así que aquí no se
+                // repite el número (antes salía "15 dias" en las dos columnas).
+                $plazoLbl = $dias > 0 ? $this->etiquetaUnidadTiempo($p['unidad_tiempo'] ?? null) : '—';
                 $diasLbl  = $dias > 0 ? (string)$dias : '0';
 
                 // Calcular cuántas líneas ocupa el nombre de la forma de pago
@@ -1012,6 +1014,32 @@ class FacturaVentaPdfService
         $pdf->SetXY($x, $y);
         $pdf->Cell($lblW, $h, $lbl, 1, 0, 'L');
         $pdf->Cell($valW, $h, number_format($val, 2), 1, 0, 'R');
+    }
+
+    /**
+     * Etiqueta legible de la unidad de tiempo del plazo de crédito.
+     *
+     * El valor guardado cambia según de dónde venga el pago: el selector del
+     * módulo graba 'dias'|'meses'|'anios', pero los documentos migrados traen
+     * 'DIAS', 'Días', 'MESES'… Se compara en minúsculas y sin acentos para que
+     * todas esas variantes impriman la misma etiqueta.
+     */
+    private function etiquetaUnidadTiempo(?string $unidad): string
+    {
+        $u = mb_strtolower(trim((string)$unidad), 'UTF-8');
+        $u = strtr($u, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n']);
+
+        if ($u === '' || str_starts_with($u, 'dia') || str_starts_with($u, 'day')) {
+            return 'Días';
+        }
+        if (str_starts_with($u, 'mes') || str_starts_with($u, 'month')) {
+            return 'Meses';
+        }
+        if (str_starts_with($u, 'ani') || str_starts_with($u, 'ano') || str_starts_with($u, 'year')) {
+            return 'Años';
+        }
+        // Valor desconocido: se imprime tal cual llegó, capitalizado.
+        return mb_convert_case(trim((string)$unidad), MB_CASE_TITLE, 'UTF-8');
     }
 
     private function numeroFactura(array $cab): string

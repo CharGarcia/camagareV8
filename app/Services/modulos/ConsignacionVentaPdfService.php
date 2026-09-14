@@ -44,6 +44,7 @@ class ConsignacionVentaPdfService
         $y = $this->dibujarEncabezado($empresa, $numero, (string)($cabecera['estado'] ?? 'Emitida'));
         $y = $this->dibujarDatosCliente($cabecera, $y + 3);
         $y = $this->dibujarTablaDetalle($detalles, $y + 3);
+        $y = $this->dibujarObservaciones(trim((string)($cabecera['observaciones'] ?? '')), $y + 3);
         $this->dibujarFirmas($cabecera, $empresa, $y);
 
         $nombre = 'Consignacion_' . ($numero !== '' ? $numero : 'comprobante') . '.pdf';
@@ -135,21 +136,21 @@ class ConsignacionVentaPdfService
         $entrega = trim($fmtFecha($c['fecha_entrega'] ?? '') . ' '
             . $fmtHora($c['hora_entrega_desde'] ?? '')
             . (($c['hora_entrega_hasta'] ?? '') ? ' - ' . $fmtHora($c['hora_entrega_hasta'] ?? '') : ''));
-        $obs = trim((string)($c['observaciones'] ?? ''));
-
         $lblW = 30; $valW = 63; $lbl2W = 30; // col1 (label+val) + col2 (label+val)
         $val2W = $w - 4 - $lblW - $valW - $lbl2W;
         $fontVal = 8.5;
         $lineH   = 4.0; // alto por línea (mm) para el valor multilínea
 
-        // Filas: [label1, valor1, label2, valor2]. Todos los valores (cliente, dirección,
-        // observaciones, etc.) se muestran completos en varias líneas si no caben en una.
+        // Filas: [label1, valor1, label2, valor2]. Todos los valores (cliente, dirección, etc.)
+        // se muestran completos en varias líneas si no caben en una.
+        // Las observaciones NO van aquí: tienen su propio bloque bajo la tabla de productos,
+        // donde hay ancho completo para leerlas.
         $filas = [
             ['Cliente:', (string)($c['cliente_nombre'] ?? '—'), 'Fecha emisión:', $fmtFecha($c['fecha_emision'] ?? '')],
             ['Identificación:', (string)($c['cliente_identificacion'] ?? ''), 'Asesor:', (string)($c['vendedor_nombre'] ?? '—')],
             ['Dirección:', (string)($c['cliente_direccion'] ?? ''), 'Resp. traslado:', (string)($c['responsable_traslado_nombre'] ?? '—')],
             ['Punto partida:', (string)($c['punto_partida'] ?? ''), 'Punto llegada:', (string)($c['punto_llegada'] ?? '')],
-            ['Entrega:', $entrega !== '' ? $entrega : '—', 'Observaciones:', $obs !== '' ? $obs : '—'],
+            ['Entrega:', $entrega !== '' ? $entrega : '—', '', ''],
         ];
 
         // Altura real de cada fila = máximo de líneas que necesitan sus dos valores.
@@ -292,7 +293,63 @@ class ConsignacionVentaPdfService
             $pdf->SetXY($mL, $yRow + $h);
         }
 
+        // Fila de totales: la suma de lo entregado, justo debajo de la columna Cantidad.
+        $idxCant = null;
+        foreach ($cols as $i => $c) { if ($c['k'] === 'cantidad') { $idxCant = $i; break; } }
+        if ($idxCant !== null) {
+            $wAntes = 0.0;
+            for ($i = 0; $i < $idxCant; $i++) { $wAntes += $cols[$i]['w']; }
+            $totalCant = 0.0;
+            foreach ($detalles as $d) { $totalCant += (float)($d['cantidad'] ?? 0); }
+
+            $yTot = $pdf->GetY();
+            $pdf->SetXY($mL, $yTot);
+            $pdf->SetFont('helvetica', 'B', 7);
+            $pdf->SetFillColor(235, 238, 243);
+            $pdf->Cell($wAntes, 6, 'TOTAL ÍTEMS', 1, 0, 'R', true);
+            $pdf->Cell($cols[$idxCant]['w'], 6, number_format($totalCant, 2), 1, 0, 'R', true);
+            for ($i = $idxCant + 1; $i < count($cols); $i++) {
+                $pdf->Cell($cols[$i]['w'], 6, '', 1, 0, 'C', true);
+            }
+            $pdf->SetXY($mL, $yTot + 6);
+        }
+
         return $pdf->GetY();
+    }
+
+    /**
+     * Observaciones del documento, a ancho completo bajo la tabla de productos (antes iban
+     * apretadas en la caja de datos del cliente). Si no hay texto, no se dibuja nada.
+     */
+    private function dibujarObservaciones(string $obs, float $y): float
+    {
+        if ($obs === '') {
+            return $y;
+        }
+
+        $pdf  = $this->pdf;
+        $mL   = $this->marginL;
+        $w    = $this->contentW;
+        $lblW = 26;
+
+        $pdf->SetFont('helvetica', '', 8);
+        $nLin = max(1, $pdf->getNumLines($obs, $w - 4 - $lblW));
+        $h    = $nLin * 4.0 + 3;
+
+        $pdf->SetLineWidth(0.2);
+        $pdf->SetDrawColor(120, 120, 120);
+        $pdf->SetFillColor(250, 250, 250);
+        $pdf->RoundedRect($mL, $y, $w, $h, 1.5, '1111', 'DF');
+
+        $pdf->SetXY($mL + 2, $y + 1.5);
+        $pdf->SetFont('helvetica', 'B', 8);
+        $pdf->Cell($lblW, 4, 'Observaciones:', 0, 0, 'L');
+
+        $pdf->SetXY($mL + 2 + $lblW, $y + 1.5);
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->MultiCell($w - 4 - $lblW, 4, $obs, 0, 'L', false, 1);
+
+        return $y + $h;
     }
 
     private function dibujarFirmas(array $cabecera, array $empresa, float $y): void
@@ -302,16 +359,22 @@ class ConsignacionVentaPdfService
         $colW = $this->contentW / 3;
 
         // El tope deja sitio a la segunda fila de firmas (la de acondicionamiento), que va
-        // 14 mm más abajo: 258 + 14 = 272, el mismo límite inferior de antes.
+        // 14 mm más abajo: 258 + 14 = 272, el límite inferior útil de la página. Si el
+        // contenido llegó más abajo, las firmas pasan a una página nueva en vez de dibujarse
+        // encima de la tabla o de las observaciones.
         $yLinea = $y + 22;
-        if ($yLinea > 258) { $yLinea = 258; }
+        if ($yLinea > 258) {
+            $pdf->AddPage();
+            $yLinea = $pdf->GetY() + 22;
+        }
 
         // "Emitido por" lleva el usuario que REGISTRÓ la consignación (no la empresa ni quien
         // imprime): es el responsable de la emisión del documento.
+        // "Recibí conforme" va SIN nombre impreso: lo escribe y firma quien recibe.
         $firmas = [
             ['Emitido por', strtoupper(trim((string)($cabecera['creado_por_nombre'] ?? '')))],
             ['Responsable de traslado', (string)($cabecera['responsable_traslado_nombre'] ?? '')],
-            ['Recibí conforme', (string)($cabecera['cliente_nombre'] ?? '')],
+            ['Recibí conforme', ''],
         ];
 
         foreach ($firmas as $i => $f) {

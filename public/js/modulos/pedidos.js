@@ -20,6 +20,63 @@ function pedAvisarSecuencialNoConfigurado(tipo) {
     });
 }
 
+/** Formato que deben tener las horas de entrega al guardar: HH:MM de 24 horas. */
+const PED_RE_HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Normaliza lo que se escribió en un campo de hora a HH:MM.
+ *
+ * Se trabaja con los dígitos sueltos, así que sirve tanto para lo que teclea el
+ * usuario ("8" → 08:00, "830" → 08:30, "0830" → 08:30) como para lo que llega de
+ * la base, que devuelve la hora como "08:00:00". Hora y minutos se capan en 23 y
+ * 59: escribir 25:70 deja 23:59, nunca un valor que la base rechace.
+ */
+function pedNormalizarHora(valor) {
+    const texto = String(valor ?? '').trim();
+    if (texto.replace(/\D/g, '') === '') return '';
+
+    let h, m;
+    if (texto.includes(':')) {
+        // Ya hay separador (lo pone la máscara, o viene de la base como 08:00:00):
+        // se respeta lo que el usuario ve, "14:5" es 14:05 y no 01:45.
+        const partes = texto.split(':');
+        h = partes[0].replace(/\D/g, '');
+        m = (partes[1] || '').replace(/\D/g, '');
+    } else {
+        const digitos = texto.replace(/\D/g, '');
+        if (digitos.length <= 2)       { h = digitos;             m = ''; }
+        else if (digitos.length === 3) { h = digitos.slice(0, 1); m = digitos.slice(1); }
+        else                           { h = digitos.slice(0, 2); m = digitos.slice(2, 4); }
+    }
+
+    h = Math.min(23, parseInt(h, 10) || 0);
+    m = Math.min(59, parseInt(m || '0', 10) || 0);
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
+/**
+ * Máscara 00:00 mientras se escribe: solo dígitos y los dos puntos se ponen
+ * solos. El valor se reconstruye desde los dígitos, así que borrar con Backspace
+ * funciona igual que en cualquier campo de texto. Al salir del campo se completa
+ * a HH:MM (escribir "8" y salir deja 08:00).
+ */
+function pedMascaraHora(input) {
+    if (!input || input.dataset.mascaraHora === '1') return;
+    input.dataset.mascaraHora = '1';
+
+    input.addEventListener('input', () => {
+        const digitos = input.value.replace(/\D/g, '').slice(0, 4);
+        input.value = digitos.length > 2
+            ? digitos.slice(0, 2) + ':' + digitos.slice(2)
+            : digitos;
+    });
+
+    input.addEventListener('blur', () => {
+        input.value = pedNormalizarHora(input.value);
+        validarFechasYHoras();
+    });
+}
+
 /**
  * Descargas del listado (PDF / Excel): si la búsqueda actual devuelve más
  * pedidos que el tope del módulo, la generación del archivo satura el servidor,
@@ -99,6 +156,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (inputFecha) inputFecha.addEventListener('change', validarFechasYHoras);
     if (inputHoraIni) inputHoraIni.addEventListener('change', validarFechasYHoras);
     if (inputHoraMax) inputHoraMax.addEventListener('change', validarFechasYHoras);
+
+    // Máscara 00:00 en los dos campos de hora (se escriben a mano, sin selector).
+    pedMascaraHora(inputHoraIni);
+    pedMascaraHora(inputHoraMax);
 });
 
 /**
@@ -826,7 +887,18 @@ function validarFechasYHoras() {
     const hIni = inputHoraIni.value;
     const hMax = inputHoraMax.value;
 
-    if (hIni && hMax) {
+    // Formato: los campos son de texto con máscara, así que puede quedar algo a
+    // medio escribir ("8:") si se va directo a Guardar sin salir del campo.
+    [[inputHoraIni, hIni], [inputHoraMax, hMax]].forEach(([el, val]) => {
+        if (val && !PED_RE_HORA.test(val)) {
+            showError(el, 'Hora incompleta. Use el formato 00:00 (24 horas).');
+            isOk = false;
+        }
+    });
+
+    // La comparación es textual y por eso exige HH:MM con ceros a la izquierda,
+    // que es justo lo que deja pedNormalizarHora().
+    if (hIni && hMax && PED_RE_HORA.test(hIni) && PED_RE_HORA.test(hMax)) {
         if (hIni > hMax) {
             showError(inputHoraIni, 'La hora inicial no puede ser mayor a la hora máxima.');
             showError(inputHoraMax, 'La hora máxima debe ser mayor a la hora inicial.');
@@ -844,6 +916,13 @@ function validarFechasYHoras() {
 async function guardarPedido() {
     const selectPuntos = document.getElementById('id_punto_emision');
     const optionPunto = selectPuntos.options[selectPuntos.selectedIndex];
+
+    // Las horas se escriben a mano: se completan a HH:MM antes de leerlas, por si
+    // se llegó a Guardar sin que el campo perdiera el foco.
+    ['hora_inicial_entrega', 'hora_maxima_entrega'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = pedNormalizarHora(el.value);
+    });
 
     const cabecera = {
         id: document.getElementById('pedido_id').value,
@@ -1009,8 +1088,10 @@ async function editarPedido(id) {
 
             setVal('estado', p.estado || 'Pendiente');
             setVal('fecha_entrega', p.fecha_entrega);
-            setVal('hora_inicial_entrega', p.hora_inicial_entrega);
-            setVal('hora_maxima_entrega', p.hora_maxima_entrega);
+            // La base devuelve la hora como "08:00:00"; los campos son de texto con
+            // máscara 00:00, así que se recorta a HH:MM.
+            setVal('hora_inicial_entrega', pedNormalizarHora(p.hora_inicial_entrega));
+            setVal('hora_maxima_entrega', pedNormalizarHora(p.hora_maxima_entrega));
             setVal('id_responsable_entrega', p.id_responsable_entrega);
             setVal('observaciones', p.observaciones);
             setVal('observaciones_internas', p.observaciones_internas);

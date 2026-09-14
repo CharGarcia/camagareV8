@@ -305,8 +305,11 @@ class PlantillasPdfSeedService
                     ]),
                     [self::tabla('tabla:detalles', 12, 88, 186, 60)],
                     [
-                        self::texto('Observaciones:', 12, 152, 30, 5, 'L', 8, 'B'),
-                        self::campo('{observaciones}', 44, 152, 154, 8, 'L', 8),
+                        // Bajo la tabla: total de ítems entregados y observaciones.
+                        self::texto('TOTAL ÍTEMS:', 130, 150, 34, 5, 'R', 8, 'B'),
+                        self::campo('{total_items}', 166, 150, 32, 5, 'R', 8, 'B'),
+                        self::texto('Observaciones:', 12, 158, 30, 5, 'L', 8, 'B'),
+                        self::campo('{observaciones}', 44, 158, 154, 8, 'L', 8),
                     ],
                     self::firmasTriples(230)
                 ),

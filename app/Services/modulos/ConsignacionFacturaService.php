@@ -697,11 +697,15 @@ class ConsignacionFacturaService
         }
 
         // Info adicional de la factura = la del documento + una línea con el/los número(s)
-        // de consignación usados (concepto "Consignación").
+        // de consignación usados (concepto "Consignación"). Va SOLO el secuencial, sin la
+        // serie y sin los ceros de relleno (000000012 → 12): es como el usuario identifica
+        // la consignación en el día a día.
         $infoFactura = $this->decodeInfoAdicional($doc['info_adicional'] ?? null);
         $consigNums = [];
         foreach ($detalles as $d) {
-            $numC = trim(((string) ($d['consignacion_serie'] ?? '')) . '-' . ((string) ($d['consignacion_secuencial'] ?? '')), '-');
+            $sec  = trim((string) ($d['consignacion_secuencial'] ?? ''));
+            $numC = ltrim($sec, '0');
+            if ($numC === '' && $sec !== '') $numC = '0'; // secuencial "000000000"
             if ($numC !== '' && !in_array($numC, $consigNums, true)) $consigNums[] = $numC;
         }
         if ($consigNums) {
