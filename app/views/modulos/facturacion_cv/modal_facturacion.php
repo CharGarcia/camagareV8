@@ -1050,13 +1050,19 @@
 
     // ── Pestaña Asiento contable (reversa de la consignación, a costo) ────────
     function resetAsiento() {
-        $('faccv-tbody-asiento').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Guarde el documento para ver el asiento (se calcula a costo).</td></tr>';
+        // Sin permiso sobre Asientos Contables la pestaña no se renderiza: nada que limpiar.
+        // Sin esta guarda, resetForm() reventaba al abrir el modal ("Cannot set properties
+        // of null") y dejaba el formulario a medio inicializar para esos usuarios.
+        const tb = $('faccv-tbody-asiento');
+        if (!tb) return;
+        tb.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Guarde el documento para ver el asiento (se calcula a costo).</td></tr>';
         $('faccv-asiento-total-debe').textContent = '0.00';
         $('faccv-asiento-total-haber').textContent = '0.00';
         const b = $('faccv-asiento-badge'); b.textContent = '—'; b.className = 'badge bg-secondary bg-opacity-10 text-secondary border px-2';
     }
     async function cargarAsiento() {
         const id = $('faccv_id').value; const tb = $('faccv-tbody-asiento');
+        if (!tb) return;
         if (!id) { resetAsiento(); return; }
         tb.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Cargando asiento...</td></tr>';
         try {
