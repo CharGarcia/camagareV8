@@ -17,9 +17,47 @@
         return modalInstV;
     }
 
+    /**
+     * Llena el select "Usuario del sistema" con los usuarios de la empresa.
+     * Los que ya son otro vendedor salen deshabilitados (lo impide un índice
+     * único en la base). Si aún no se ejecutó
+     * database/vendedores_usuario_vinculado.sql, el campo queda oculto.
+     */
+    async function cargarUsuariosVinculablesV(idVendedor, idSeleccionado) {
+        const wrap = document.getElementById('vendedor_usuario_wrap');
+        const sel = document.getElementById('vendedor_id_usuario_vinculado');
+        if (!wrap || !sel) return;
+
+        sel.innerHTML = '<option value="">— Sin vincular —</option>';
+        try {
+            const resp = await fetch(`${urlBaseVendedores}/usuariosVinculablesAjax?id_vendedor=${idVendedor || 0}`);
+            const json = await resp.json();
+            if (!json.ok || !json.disponible) {
+                wrap.classList.add('d-none');
+                return;
+            }
+
+            (json.usuarios || []).forEach(u => {
+                const etiqueta = u.cedula ? `${u.nombre} (${u.cedula})` : u.nombre;
+                const opt = new Option(
+                    u.tomado_por ? `${etiqueta} — ya es ${u.tomado_por}` : etiqueta,
+                    u.id
+                );
+                if (u.tomado_por) opt.disabled = true;
+                sel.add(opt);
+            });
+
+            sel.value = idSeleccionado ? String(idSeleccionado) : '';
+            wrap.classList.remove('d-none');
+        } catch (e) {
+            wrap.classList.add('d-none');
+        }
+    }
+
     window.abrirModalVendedorCrear = function() {
         if (!formV) return;
         formV.reset();
+        cargarUsuariosVinculablesV(0, null);
         const timelineV = document.getElementById('auditoriaTimelineV');
         if (timelineV) timelineV.innerHTML = '<div class="text-center py-5 text-muted small">Aún no existe historial.</div>';
         
@@ -81,6 +119,8 @@
         
         const vstat = document.getElementById('vendedor_status');
         if (vstat) vstat.value = data.status ?? 1;
+
+        cargarUsuariosVinculablesV(data.id, data.id_usuario_vinculado || null);
 
         const title = document.getElementById('tituloModalVendedorLabel');
         if (title) title.textContent = 'Editar Vendedor';

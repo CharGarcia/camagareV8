@@ -419,6 +419,37 @@ class VendedoresController extends BaseModuloController
             'correo'         => trim($_POST['correo'] ?? '') !== '' ? trim($_POST['correo']) : null,
             'direccion'      => trim($_POST['direccion'] ?? '') !== '' ? trim($_POST['direccion']) : null,
             'status'         => (int) ($_POST['status'] ?? 1),
+            // Cuenta de usuario que ES este vendedor (para "ver solo mis
+            // ventas"). Vacío = sin vínculo explícito, se resuelve por cédula.
+            'id_usuario_vinculado' => (int) ($_POST['id_usuario_vinculado'] ?? 0) > 0
+                ? (int) $_POST['id_usuario_vinculado']
+                : null,
         ];
+    }
+
+    /**
+     * Usuarios que pueden vincularse como "Usuario del sistema" del vendedor:
+     * los asignados a la empresa activa. Alimenta el select de la ficha.
+     */
+    public function usuariosVinculablesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idVendedor = (int) ($_GET['id_vendedor'] ?? 0);
+            $repo = new VendedorRepository();
+
+            echo json_encode([
+                'ok'          => true,
+                'disponible'  => $repo->tieneVinculoExplicito(),
+                'usuarios'    => $repo->getUsuariosVinculables($idEmpresa, $idVendedor),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
     }
 }

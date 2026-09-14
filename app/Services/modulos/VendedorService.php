@@ -38,6 +38,8 @@ class VendedorService
             throw new Exception('Ya existe un vendedor con esta identificación para esta empresa.');
         }
 
+        $this->validarVinculoLibre($idEmpresa, $data['id_usuario_vinculado'] ?? null, null);
+
         $this->repository->beginTransaction();
         try {
             $id = $this->repository->create($data);
@@ -65,7 +67,7 @@ class VendedorService
      */
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
-        $this->rules->validar($data);
+        $this->rules->validar($data, $id);
 
         if ($this->repository->existeIdentificacion($idEmpresa, (string)$data['identificacion'], $id)) {
             throw new Exception('Ya existe otro vendedor con esta identificación para esta empresa.');
@@ -75,6 +77,8 @@ class VendedorService
         if (!$antes) {
             throw new Exception('El vendedor no existe o ha sido eliminado.');
         }
+
+        $this->validarVinculoLibre($idEmpresa, $data['id_usuario_vinculado'] ?? null, $id);
 
         $this->repository->beginTransaction();
         try {
@@ -125,6 +129,28 @@ class VendedorService
         } catch (Exception $e) {
             $this->repository->rollBack();
             throw $e;
+        }
+    }
+
+    /**
+     * Un usuario no puede ser dos vendedores dentro de la misma empresa: si ya
+     * lo está, el Reporte de Ventas por Vendedor tendría dos candidatos para
+     * "mis ventas". La base lo impide con un índice único parcial; aquí se
+     * comprueba antes para dar un mensaje entendible en vez de un error de BD.
+     */
+    private function validarVinculoLibre(int $idEmpresa, $idUsuarioVinculado, ?int $idVendedor): void
+    {
+        $idUsuarioVinculado = (int) ($idUsuarioVinculado ?? 0);
+        if ($idUsuarioVinculado <= 0) {
+            return;
+        }
+
+        foreach ($this->repository->getUsuariosVinculables($idEmpresa, $idVendedor ?? 0) as $u) {
+            if ((int) $u['id'] === $idUsuarioVinculado && !empty($u['tomado_por'])) {
+                throw new Exception(
+                    'Ese usuario ya está vinculado al vendedor "' . $u['tomado_por'] . '" en esta empresa.'
+                );
+            }
         }
     }
 

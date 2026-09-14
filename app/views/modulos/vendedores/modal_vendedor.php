@@ -84,6 +84,17 @@ $urlBaseVendShared = BASE_URL . '/modulos/vendedores';
                                     <label class="form-label mb-1 small fw-bold text-muted">Teléfono</label>
                                     <input type="text" name="telefono" id="vendedor_telefono" class="form-control form-control-sm shadow-none" maxlength="50">
                                 </div>
+                                <div class="col-md-12 d-none" id="vendedor_usuario_wrap">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Usuario del sistema</label>
+                                    <select name="id_usuario_vinculado" id="vendedor_id_usuario_vinculado" class="form-select form-select-sm shadow-none">
+                                        <option value="">— Sin vincular —</option>
+                                    </select>
+                                    <div class="form-text text-muted mt-1" style="font-size:.68rem;">
+                                        Cuenta con la que este asesor entra al sistema. Sirve para que en el
+                                        <strong>Reporte de Ventas por Vendedor</strong> vea solo sus ventas. Si se deja
+                                        sin vincular, se resuelve por la cédula.
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

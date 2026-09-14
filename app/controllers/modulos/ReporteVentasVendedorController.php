@@ -10,6 +10,10 @@ class ReporteVentasVendedorController extends BaseModuloController
 {
     private ReporteVentasVendedorRepository $repository;
 
+    /** Caché por petición de restriccionVendedor(): null = ve todos los asesores. */
+    private ?array $restriccionCache = null;
+    private bool $restriccionResuelta = false;
+
     protected function getRutaModulo(): string
     {
         return 'modulos/reporte_ventas_vendedor';
@@ -28,8 +32,11 @@ class ReporteVentasVendedorController extends BaseModuloController
 
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
 
-        $vendedores = (new \App\repositories\modulos\VendedorRepository())
-            ->getListado($idEmpresa, '', 1, 500, 'nombre', 'ASC')['rows'] ?? [];
+        // Restringido = el filtro de vendedor no se muestra; no hace falta (ni
+        // conviene) mandar el catálogo completo de asesores al HTML.
+        $restriccion = $this->restriccionVendedor();
+        $vendedores = $restriccion !== null ? [] : ((new \App\repositories\modulos\VendedorRepository())
+            ->getListado($idEmpresa, '', 1, 500, 'nombre', 'ASC')['rows'] ?? []);
         $marcas = (new \App\repositories\modulos\MarcaRepository())
             ->getListado($idEmpresa, '', 1, 500, 'nombre', 'ASC')['rows'] ?? [];
         $categorias = (new \App\repositories\modulos\CategoriaRepository())
@@ -46,7 +53,7 @@ class ReporteVentasVendedorController extends BaseModuloController
             'marcas'              => $marcas,
             'categorias'          => $categorias,
             'anios'               => $anios,
-            'vendedorRestringido' => $this->restriccionVendedor(),
+            'vendedorRestringido' => $restriccion,
             'fullWidth'           => true,
             'base'                => BASE_URL,
         ]);
@@ -65,10 +72,10 @@ class ReporteVentasVendedorController extends BaseModuloController
             'id_categoria'   => $_REQUEST['id_categoria'] ?? '',
         ];
 
-        // Si el usuario no tiene "acceso total" sobre este submódulo, se le
-        // fuerza a ver únicamente las ventas ASIGNADAS a su propio vendedor
-        // (ventas_cabecera.id_vendedor), sin importar quién facturó/tecleó el
-        // documento y sin importar lo que venga en la petición del cliente.
+        // Al usuario de nivel 1 (asesor) se le fuerza a ver únicamente las
+        // ventas ASIGNADAS a su propio vendedor (ventas_cabecera.id_vendedor),
+        // sin importar quién facturó/tecleó el documento y sin importar lo que
+        // venga en la petición del cliente.
         $restriccion = $this->restriccionVendedor();
         if ($restriccion !== null) {
             $filtros['id_vendedor'] = $restriccion['id'];
@@ -79,24 +86,35 @@ class ReporteVentasVendedorController extends BaseModuloController
 
     /**
      * Resuelve si el usuario actual debe quedar restringido a su propio
-     * vendedor. Retorna null si tiene "acceso total" (sin restricción), o un
-     * array ['id' => int, 'nombre' => ?string] cuando está restringido:
-     * 'id' es el id de su vendedor vinculado, o -1 si no tiene ninguno
-     * vinculado (fuerza un reporte vacío en vez de mostrar datos ajenos).
+     * vendedor. Retorna null cuando puede ver a todos los asesores, o un array
+     * ['id' => int, 'nombre' => ?string] cuando está restringido: 'id' es el id
+     * de su vendedor vinculado, o -1 si no tiene ninguno (fuerza un reporte
+     * vacío en vez de mostrar datos ajenos).
+     *
+     * El criterio es el NIVEL del usuario, no el permiso 't' del submódulo:
+     * nivel 3 (superadministrador) y nivel 2 (administrador) ven las ventas de
+     * todos los vendedores; el nivel 1 es el asesor y solo ve las suyas, aunque
+     * en modulos_asignados tenga marcado "acceso total".
      */
     private function restriccionVendedor(): ?array
     {
-        $perm = $this->getPermisos();
-        if (!empty($perm['todo'])) {
-            return null;
+        // Una sola resolución por petición: la consultan index(),
+        // getFiltrosDesdeRequest() y detalleVendedorAjax().
+        if ($this->restriccionResuelta) {
+            return $this->restriccionCache;
+        }
+        $this->restriccionResuelta = true;
+
+        if ((int) ($_SESSION['nivel'] ?? 1) >= 2) {
+            return $this->restriccionCache = null;
         }
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
         $vendedor = (new \App\repositories\modulos\VendedorRepository())->getPorUsuario($idEmpresa, $idUsuario);
 
-        return [
-            'id'     => $vendedor['id'] ?? -1,
+        return $this->restriccionCache = [
+            'id'     => (int) ($vendedor['id'] ?? -1),
             'nombre' => $vendedor['nombre'] ?? null,
         ];
     }

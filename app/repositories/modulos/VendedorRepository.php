@@ -128,15 +128,20 @@ class VendedorRepository extends BaseRepository
      */
     public function create(array $data): int
     {
+        // OJO: id_usuario guarda el usuario que CREA el registro (igual que
+        // created_by). El asesor dueño de la ficha va en id_usuario_vinculado.
+        $conVinculo = $this->tieneVinculoExplicito();
+        $colVinculo = $conVinculo ? ', id_usuario_vinculado' : '';
+        $valVinculo = $conVinculo ? ', :id_usuario_vinculado' : '';
+
         $sql = "INSERT INTO {$this->table} (
-                    id_empresa, id_usuario, nombre, identificacion, telefono, correo, 
-                    direccion, status, created_by, created_at, eliminado
+                    id_empresa, id_usuario, nombre, identificacion, telefono, correo,
+                    direccion, status, created_by, created_at, eliminado{$colVinculo}
                 ) VALUES (
-                    :id_empresa, :id_usuario, :nombre, :identificacion, :telefono, :correo, 
-                    :direccion, :status, :id_u, CURRENT_TIMESTAMP, false
+                    :id_empresa, :id_usuario, :nombre, :identificacion, :telefono, :correo,
+                    :direccion, :status, :id_u, CURRENT_TIMESTAMP, false{$valVinculo}
                 )";
-        $st = $this->db->prepare($sql);
-        $st->execute([
+        $params = [
             ':id_empresa'       => $data['id_empresa'],
             ':id_usuario'       => $data['id_usuario'],
             ':nombre'           => $data['nombre'],
@@ -146,7 +151,13 @@ class VendedorRepository extends BaseRepository
             ':direccion'        => $data['direccion'] ?? null,
             ':status'           => $data['status'] ?? 1,
             ':id_u'             => $data['id_usuario']
-        ]);
+        ];
+        if ($conVinculo) {
+            $params[':id_usuario_vinculado'] = $data['id_usuario_vinculado'] ?? null;
+        }
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $this->lastInsertId();
     }
 
@@ -155,7 +166,11 @@ class VendedorRepository extends BaseRepository
      */
     public function update(int $id, int $idEmpresa, array $data): bool
     {
-        $sql = "UPDATE {$this->table} SET 
+        $conVinculo = $this->tieneVinculoExplicito();
+        $setVinculo = $conVinculo ? ",
+                id_usuario_vinculado = :id_usuario_vinculado" : '';
+
+        $sql = "UPDATE {$this->table} SET
                 nombre = :nombre,
                 identificacion = :identificacion,
                 telefono = :telefono,
@@ -163,10 +178,9 @@ class VendedorRepository extends BaseRepository
                 direccion = :direccion,
                 status = :status,
                 updated_by = :id_u,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = CURRENT_TIMESTAMP{$setVinculo}
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
-        $st = $this->db->prepare($sql);
-        return $st->execute([
+        $params = [
             ':nombre'           => $data['nombre'],
             ':identificacion'   => $data['identificacion'],
             ':telefono'         => $data['telefono'] ?? null,
@@ -176,7 +190,13 @@ class VendedorRepository extends BaseRepository
             ':id_u'             => $data['id_usuario'],
             ':id'               => $id,
             ':id_empresa'       => $idEmpresa
-        ]);
+        ];
+        if ($conVinculo) {
+            $params[':id_usuario_vinculado'] = $data['id_usuario_vinculado'] ?? null;
+        }
+
+        $st = $this->db->prepare($sql);
+        return $st->execute($params);
     }
 
     /**
@@ -217,19 +237,133 @@ class VendedorRepository extends BaseRepository
     }
 
     /**
-     * Vendedor vinculado a una cuenta de usuario (vendedores.id_usuario). Se usa
-     * para restringir reportes a "mis ventas" cuando el usuario no tiene acceso
-     * total sobre el submódulo.
+     * Vendedor (asesor) que corresponde a una cuenta de usuario. Se usa para
+     * restringir reportes a "mis ventas" cuando quien consulta es un usuario de
+     * nivel 1.
+     *
+     * Se resuelve por dos vías, en este orden:
+     *   1. El VÍNCULO EXPLÍCITO de la ficha del vendedor
+     *      (vendedores.id_usuario_vinculado, campo "Usuario del sistema"). Manda
+     *      sobre todo lo demás: es lo que el administrador declaró a mano.
+     *   2. La CÉDULA: la identificación del vendedor contra la cédula del
+     *      usuario (que es además su usuario de inicio de sesión), comparando
+     *      solo los dígitos para que no estorben guiones ni espacios. También
+     *      calza si uno está registrado con el RUC de persona natural y el otro
+     *      con la cédula (1712345678 vs 1712345678001): se comparan entonces los
+     *      primeros 10 dígitos, que son la cédula. Un RUC de sociedad nunca
+     *      choca con una cédula válida (su tercer dígito es 6 o 9, el de una
+     *      cédula < 6).
+     *
+     * OJO con dos criterios que NO se usan a propósito:
+     *   - vendedores.id_usuario: esa columna guarda el usuario que CREÓ el
+     *     registro (así la escriben tanto el alta manual como el migrador de
+     *     MySQL), de modo que vincularía a todos los vendedores con el
+     *     administrador que los dio de alta. Por eso el vínculo explícito vive
+     *     en una columna aparte, id_usuario_vinculado.
+     *   - el correo: es habitual que varios usuarios compartan el correo
+     *     corporativo (info@empresa.com), y ahí el cruce le entregaría a un
+     *     asesor las ventas de otro. Ante la duda es preferible no resolver el
+     *     vendedor (reporte vacío + aviso) que resolverlo mal.
      */
     public function getPorUsuario(int $idEmpresa, int $idUsuario): ?array
     {
-        $sql = "SELECT id, nombre FROM {$this->table}
-                WHERE id_empresa = :id_empresa AND id_usuario = :id_usuario AND eliminado = false
+        // Solo dígitos: la identificación puede venir con guiones o espacios.
+        $identVend = "regexp_replace(COALESCE(v.identificacion, ''), '[^0-9]', '', 'g')";
+        $cedulaUsr = "regexp_replace(COALESCE(u.cedula, ''), '[^0-9]', '', 'g')";
+        // Igual, o igual en sus primeros 10 dígitos (RUC de persona natural
+        // frente a la cédula de esa misma persona).
+        $porCedula = "({$identVend} <> ''
+                       AND ({$identVend} = {$cedulaUsr}
+                            OR (LENGTH({$identVend}) >= 10 AND LENGTH({$cedulaUsr}) >= 10
+                                AND LEFT({$identVend}, 10) = LEFT({$cedulaUsr}, 10))))";
+
+        // Mientras no se haya ejecutado database/vendedores_usuario_vinculado.sql
+        // la columna no existe: se trabaja solo con la cédula en vez de romper.
+        $explicito = $this->tieneVinculoExplicito() ? 'v.id_usuario_vinculado = u.id' : 'false';
+
+        $sql = "SELECT v.id, v.nombre
+                FROM {$this->table} v
+                JOIN usuarios u ON u.id = :id_usuario AND u.eliminado = false
+                WHERE v.id_empresa = :id_empresa
+                  AND v.eliminado = false
+                  AND ({$explicito} OR {$porCedula})
+                ORDER BY CASE WHEN {$explicito} THEN 1 ELSE 2 END,
+                         COALESCE(v.status, 0) DESC, v.id ASC
                 LIMIT 1";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa, ':id_usuario' => $idUsuario]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    /**
+     * ¿Ya existe la columna del vínculo explícito? Se consulta una sola vez por
+     * petición para que el módulo siga funcionando entre el despliegue del
+     * código y la ejecución de database/vendedores_usuario_vinculado.sql.
+     */
+    public function tieneVinculoExplicito(): bool
+    {
+        static $existe = null;
+        if ($existe === null) {
+            $st = $this->db->query(
+                "SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'vendedores' AND column_name = 'id_usuario_vinculado' LIMIT 1"
+            );
+            $existe = (bool) $st->fetchColumn();
+        }
+        return $existe;
+    }
+
+    /**
+     * Usuarios que pueden vincularse como "Usuario del sistema" de un vendedor:
+     * los asignados a la empresa (empresa_asignada) y activos. Cada uno indica
+     * si ya está tomado por OTRO vendedor de la misma empresa, para que la ficha
+     * lo muestre deshabilitado en vez de fallar al guardar.
+     *
+     * Se incluye además el usuario que YA está vinculado al vendedor que se está
+     * editando, aunque hoy no cumpla esas condiciones (le quitaron la empresa o
+     * lo desactivaron): si no saliera en la lista, editar cualquier otro dato de
+     * la ficha borraría el vínculo sin avisar.
+     *
+     * @param int $idVendedorActual Vendedor que se está editando (0 = nuevo).
+     */
+    public function getUsuariosVinculables(int $idEmpresa, int $idVendedorActual = 0): array
+    {
+        $conVinculo = $this->tieneVinculoExplicito();
+
+        $ocupado = $conVinculo
+            ? "(SELECT vo.nombre FROM {$this->table} vo
+                 WHERE vo.id_empresa = :id_empresa_ocup AND vo.eliminado = false
+                   AND vo.id_usuario_vinculado = u.id AND vo.id <> :id_vendedor_ocup
+                 LIMIT 1)"
+            : 'NULL::text';
+
+        $yaVinculado = $conVinculo
+            ? "OR u.id = (SELECT vx.id_usuario_vinculado FROM {$this->table} vx
+                           WHERE vx.id = :id_vendedor_actual AND vx.id_empresa = :id_empresa_act)"
+            : '';
+
+        $sql = "SELECT u.id, u.nombre, u.cedula, u.nivel,
+                       {$ocupado} AS tomado_por
+                FROM usuarios u
+                WHERE u.eliminado = false
+                  AND ( (COALESCE(u.estado, 1) = 1
+                         AND EXISTS (SELECT 1 FROM empresa_asignada ea
+                                      WHERE ea.id_empresa = :id_empresa AND ea.id_usuario = u.id))
+                        {$yaVinculado} )
+                ORDER BY u.nombre ASC";
+
+        $params = [':id_empresa' => $idEmpresa];
+        if ($conVinculo) {
+            $params[':id_empresa_ocup']    = $idEmpresa;
+            $params[':id_empresa_act']     = $idEmpresa;
+            $params[':id_vendedor_ocup']   = $idVendedorActual;
+            $params[':id_vendedor_actual'] = $idVendedorActual;
+        }
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

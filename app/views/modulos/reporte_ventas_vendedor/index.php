@@ -21,15 +21,15 @@
         <?php if ((int) $vendedorRestringido['id'] > 0): ?>
             <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center gap-2">
                 <i class="bi bi-info-circle"></i>
-                No tienes acceso total a este reporte: estás viendo únicamente las ventas asignadas a ti como vendedor
+                Estás viendo únicamente las ventas asignadas a ti como asesor
                 (<strong><?= htmlspecialchars($vendedorRestringido['nombre']) ?></strong>).
             </div>
         <?php else: ?>
             <div class="alert alert-warning py-2 px-3 small mb-3 d-flex align-items-center gap-2">
                 <i class="bi bi-exclamation-triangle"></i>
-                No tienes acceso total a este reporte y tu usuario no está vinculado a ningún vendedor
-                (catálogo Vendedores), así que no se muestran resultados. Pide a un administrador que te asigne
-                acceso total o vincule tu usuario a un vendedor.
+                Este reporte muestra únicamente tus ventas como asesor, pero no hay ningún vendedor registrado
+                con tu cédula, así que no hay resultados. Pide a un administrador que registre tu vendedor
+                (catálogo Vendedores) con la misma cédula de tu usuario.
             </div>
         <?php endif; ?>
     <?php endif; ?>
