@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/reporte_ventas_vendedor
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor
-version: 1.1
+etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, subtotal sin impuestos, subtotal nc, total documentos por asesor, cuantas facturas hizo cada vendedor, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -54,31 +54,70 @@ incluye Recibos de Venta.
    derecha con el detalle documento por documento (factura, subtotal, NC,
    total neto y saldo) de ese vendedor. En el modo Detallado, el clic sobre una
    fila abre el detalle del documento (factura o nota de crédito).
+
+   > Ojo con la palabra *subtotal*: en ese panel (y en la hoja "Detalle
+   > Documentos" del Excel) las columnas Subtotal, NC y Total son importes
+   > **con impuestos** —el total de cada factura, el de su nota de crédito y la
+   > diferencia—, mientras que las columnas Subtotal y Subtotal NC de la tabla
+   > principal son **sin impuestos**. La columna Total sí coincide en ambos
+   > lados.
 8. Al exportar a Excel agrupando **Por Vendedor**, el archivo incluye una
    segunda hoja ("Detalle Documentos") con esa misma información documento
    por documento —incluido el **Saldo** de cada factura—, de todos los
    vendedores o solo del filtrado.
 
+## Columnas de la vista Por Vendedor
+
+Agrupando **Por Vendedor** —la vista principal— la tabla muestra una fila por
+asesor con estas cinco columnas, las mismas que salen en el **PDF** y en el
+**Excel**:
+
+| Columna | Qué muestra |
+|---|---|
+| Asesor | Nombre del vendedor. Las ventas sin vendedor asignado se agrupan en una fila "Sin vendedor asignado" |
+| Total Documentos | Cuántas facturas del asesor entran en el período y filtros aplicados |
+| Subtotal (sin impuestos) | Suma de las bases imponibles de esas facturas (base 0% / exento + base gravada), es decir el subtotal ANTES de IVA |
+| Subtotal NC | Suma de las bases imponibles de las notas de crédito que afectan a esas facturas (también sin IVA). Va en rojo cuando hay alguna |
+| Total | Venta neta del asesor CON impuestos: total de las facturas menos el total de las notas de crédito |
+
+Notas:
+
+- **Total Documentos cuenta solo facturas**, no las notas de crédito: cada NC
+  se descuenta dentro de la fila de su factura (columna Subtotal NC) en vez de
+  sumarse como un documento aparte. Así el número coincide con lo que se ve al
+  hacer clic en la fila.
+- **Subtotal y Subtotal NC no llevan IVA; Total sí.** Por eso Total no es
+  simplemente Subtotal − Subtotal NC: la diferencia es el IVA neto. El desglose
+  de bases e IVA está en las tarjetas superiores y en las demás agrupaciones.
+- Con el tipo de documento en *Solo Facturas*, Subtotal NC sale en 0. Con *Solo
+  Notas de Crédito*, el subtotal de las NC se muestra en la columna Subtotal NC
+  (la columna Subtotal queda en 0), porque esa columna siempre significa notas
+  de crédito.
+- Al pie del PDF se repiten los tres importes como **totales generales**.
+
 ## Columna Saldo (lo que falta por cobrar)
 
-Las agrupaciones que trabajan a nivel de documento —**Por Vendedor**, **Por
-Mes** y **Detallado**— muestran una columna **Saldo** al final, y la tarjeta
-superior resume el **Saldo Pendiente por Cobrar** de todo el reporte. El saldo
-se calcula igual que en Facturas de Venta y en Cuentas por Cobrar:
+Las agrupaciones **Por Mes** y **Detallado** muestran una columna **Saldo** al
+final, y la tarjeta superior resume el **Saldo Pendiente por Cobrar** de todo el
+reporte (también cuando se agrupa Por Vendedor). El saldo se calcula igual que
+en Facturas de Venta y en Cuentas por Cobrar:
 
 > Saldo = Total de la factura + Notas de débito − Cobros − Retenciones − Notas de crédito
 
-- En **Por Vendedor** y **Por Mes** es la suma de los saldos de las facturas de
-  ese grupo: sirve para ver cuánta cartera dejó pendiente cada asesor.
-- En **Detallado** y en el panel de detalle es el saldo de cada factura.
+- En **Por Mes** es la suma de los saldos de las facturas de ese mes.
+- En **Detallado**, en el panel de detalle por vendedor y en la segunda hoja del
+  Excel es el saldo de cada factura: ahí se ve cuánta cartera dejó pendiente
+  cada asesor, documento por documento.
 - Nunca es negativo: si una factura quedó sobrecobrada se muestra en 0, igual
   que en el listado de Facturas de Venta.
 - Las notas de crédito no tienen saldo propio (una NC no se cobra), así que
   aportan 0: su efecto ya está descontado dentro del saldo de la factura que
   modifican. Por eso el saldo no cambia entre *Ventas Netas* y *Solo Facturas*,
   y en *Solo Notas de Crédito* la columna sale en 0.
-- Las columnas Saldo aparecen también en el **PDF** y en el **Excel** (en ambas
-  hojas), con el total general al pie.
+- Las columnas Saldo aparecen también en el **PDF** y en el **Excel** (en la hoja
+  de Por Mes/Detallado y en la hoja "Detalle Documentos"), con el total general
+  al pie. La vista Por Vendedor no lleva columna Saldo: ahí el dato se consulta
+  en el panel de detalle o en la segunda hoja del Excel.
 
 ## Campos del formulario
 
@@ -159,6 +198,14 @@ Para vincular un usuario a un vendedor: editar el registro en **Vendedores**
 
 ## Historial de cambios
 
+- **1.2** — La vista **Por Vendedor** pasa a mostrar cinco columnas: Asesor,
+  Total Documentos, Subtotal (sin impuestos), Subtotal NC y Total, tanto en
+  pantalla como en el PDF y el Excel. Reemplazan al desglose anterior de Base
+  0% / Base IVA / Total IVA / Gran Total / Saldo, que sigue disponible en las
+  demás agrupaciones y en las tarjetas superiores. El saldo por asesor se
+  consulta ahora en el panel de detalle (clic en la fila) o en la hoja "Detalle
+  Documentos" del Excel. Además, en el PDF los conteos de documentos ya no se
+  imprimen con decimales.
 - **1.1** — Se agrega la columna **Saldo** (lo pendiente de cobro) en las
   agrupaciones Por Vendedor, Por Mes y Detallado, en el panel de detalle por
   vendedor, en el PDF y en las dos hojas del Excel, más la tarjeta "Saldo

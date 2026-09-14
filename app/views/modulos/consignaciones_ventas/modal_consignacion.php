@@ -2085,7 +2085,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             const selLoteRow = tr.querySelector('.item-lote');
                             const selVencRow = tr.querySelector('.item-caducidad');
                             if (selLoteRow && selVencRow && lotesData.length > 0) {
-                                const aplicarLote = (idx) => {
+                                // Elegido el lote, la fecha de vencimiento queda resuelta sola, así que
+                                // el único dato que falta teclear en la fila es el NUP: el cursor salta
+                                // ahí. Solo si la fecha quedó puesta — un lote sin caducidad deja ese
+                                // campo pendiente y el foco debe quedarse donde el usuario lo ve.
+                                const enfocarNup = () => {
+                                    const nup = tr.querySelector('.item-nup');
+                                    if (nup) { nup.focus(); nup.select(); }
+                                };
+                                const aplicarLote = (idx, moverFoco = false) => {
                                     if (idx <= 0) {
                                         selVencRow.innerHTML = vencOptions;
                                         selVencRow.selectedIndex = 0;
@@ -2095,15 +2103,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                     const c = (l && l.fecha_caducidad) ? l.fecha_caducidad : '';
                                     selVencRow.innerHTML = `<option value="${c}">${consFechaCadTexto(c)}</option>`;
                                     selVencRow.selectedIndex = 0;
+                                    if (moverFoco && c !== '') enfocarNup();
                                 };
-                                selLoteRow.addEventListener('change', () => aplicarLote(selLoteRow.selectedIndex));
+                                selLoteRow.addEventListener('change', () => aplicarLote(selLoteRow.selectedIndex, true));
                                 // Sincronía inversa (como en la grilla principal y en Factura de Venta):
                                 // elegir la fecha selecciona su lote y deja la lista acotada a ella.
+                                // También sigue al NUP: quedan resueltos lote y fecha igual que arriba.
                                 selVencRow.addEventListener('change', () => {
                                     const idx = selVencRow.selectedIndex;
                                     if (idx <= 0) return;
                                     selLoteRow.selectedIndex = idx;
-                                    aplicarLote(idx);
+                                    aplicarLote(idx, true);
                                 });
                             }
                         }

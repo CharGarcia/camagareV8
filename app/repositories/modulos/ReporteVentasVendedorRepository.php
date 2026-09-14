@@ -505,6 +505,24 @@ class ReporteVentasVendedorRepository extends BaseRepository
     }
 
     /**
+     * Subtotal SIN impuestos (base 0% + base gravada) separado en dos columnas
+     * según la fuente activa: las facturas alimentan 'subtotal' y las notas de
+     * crédito 'subtotal_nc'. Así la columna "Subtotal NC" siempre significa notas
+     * de crédito, tanto en el reporte neto (Facturas − NC) como cuando se consulta
+     * un solo tipo de documento.
+     *
+     * @return array{0: string, 1: string} [sql de subtotal, sql de subtotal_nc]
+     */
+    private function columnasSubtotal(array $f): array
+    {
+        $suma = 'SUM(COALESCE(b.base_0, 0) + COALESCE(b.base_iva, 0))';
+
+        return !empty($f['es_factura'])
+            ? [$suma, '0::numeric']
+            : ['0::numeric', $suma];
+    }
+
+    /**
      * Reporte agrupado por vendedor (vista principal de este módulo).
      */
     public function getReporteAgrupadoVendedor(int $idEmpresa, array $filtros): array
@@ -517,11 +535,16 @@ class ReporteVentasVendedorRepository extends BaseRepository
             // realmente aparece al hacer clic (p. ej. 4 en la tabla vs 2 en el detalle).
             // El saldo va en $sumar (no en $restar) porque la NC aporta 0: no tiene
             // cartera propia y ya está descontada dentro del saldo de la factura.
+            // 'subtotal' viaja en $restar solo por simetría: del lado NC vale 0 (su
+            // subtotal se expone aparte, en 'subtotal_nc'), así que restarlo no altera
+            // el subtotal de las facturas. 'subtotal_nc' va en $sumar porque del lado
+            // factura vale 0 y del lado NC trae el subtotal que va a su columna.
             return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoVendedor', ['id_vendedor'],
-                ['base_0', 'base_iva', 'valor_iva', 'total'], ['saldo']);
+                ['base_0', 'base_iva', 'valor_iva', 'total', 'subtotal'], ['saldo', 'subtotal_nc']);
         }
 
         list($f, $cteDocs, $params) = $this->prepararDocs($idEmpresa, $filtros);
+        list($subtotalSql, $subtotalNcSql) = $this->columnasSubtotal($f);
 
         $sql = "
             WITH docs AS ({$cteDocs}),
@@ -534,6 +557,8 @@ class ReporteVentasVendedorRepository extends BaseRepository
                 SUM(COALESCE(b.base_0, 0)) as base_0,
                 SUM(COALESCE(b.base_iva, 0)) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
+                {$subtotalSql} as subtotal,
+                {$subtotalNcSql} as subtotal_nc,
                 SUM(v.importe_total) as total,
                 SUM(COALESCE(s.saldo, 0)) as saldo
             FROM docs v
@@ -756,6 +781,10 @@ class ReporteVentasVendedorRepository extends BaseRepository
                 'total_iva'        => $sf['total_iva']      - $sn['total_iva'],
                 'gran_total'       => $sf['gran_total']     - $sn['gran_total'],
                 'total_documentos' => $sf['total_documentos'] + $sn['total_documentos'],
+                // Subtotales separados (mismo criterio que las filas): el de las
+                // facturas no se netea contra el de las NC, cada uno va a su columna.
+                'total_subtotal'    => $sf['total_subtotal'],
+                'total_subtotal_nc' => $sn['total_subtotal_nc'],
                 // La NC no tiene cartera propia (su saldo es 0) y ya está descontada
                 // dentro del saldo de la factura: no se vuelve a restar aquí.
                 'total_saldo'      => $sf['total_saldo'],
@@ -763,6 +792,7 @@ class ReporteVentasVendedorRepository extends BaseRepository
         }
 
         list($f, $cteDocs, $params) = $this->prepararDocs($idEmpresa, $filtros);
+        list($subtotalSql, $subtotalNcSql) = $this->columnasSubtotal($f);
 
         $sql = "
             WITH docs AS ({$cteDocs}),
@@ -772,6 +802,8 @@ class ReporteVentasVendedorRepository extends BaseRepository
                 SUM(COALESCE(b.base_0, 0)) as total_base_0,
                 SUM(COALESCE(b.base_iva, 0)) as total_base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as total_iva,
+                {$subtotalSql} as total_subtotal,
+                {$subtotalNcSql} as total_subtotal_nc,
                 SUM(v.importe_total) as gran_total,
                 SUM(COALESCE(s.saldo, 0)) as total_saldo,
                 COUNT(v.id) as total_documentos
@@ -785,12 +817,14 @@ class ReporteVentasVendedorRepository extends BaseRepository
         $row = $st->fetch(PDO::FETCH_ASSOC);
 
         return [
-            'total_base_0'     => (float)($row['total_base_0'] ?? 0),
-            'total_base_iva'   => (float)($row['total_base_iva'] ?? 0),
-            'total_iva'        => (float)($row['total_iva'] ?? 0),
-            'gran_total'       => (float)($row['gran_total'] ?? 0),
-            'total_saldo'      => (float)($row['total_saldo'] ?? 0),
-            'total_documentos' => (int)($row['total_documentos'] ?? 0),
+            'total_base_0'      => (float)($row['total_base_0'] ?? 0),
+            'total_base_iva'    => (float)($row['total_base_iva'] ?? 0),
+            'total_iva'         => (float)($row['total_iva'] ?? 0),
+            'total_subtotal'    => (float)($row['total_subtotal'] ?? 0),
+            'total_subtotal_nc' => (float)($row['total_subtotal_nc'] ?? 0),
+            'gran_total'        => (float)($row['gran_total'] ?? 0),
+            'total_saldo'       => (float)($row['total_saldo'] ?? 0),
+            'total_documentos'  => (int)($row['total_documentos'] ?? 0),
         ];
     }
 

@@ -176,8 +176,9 @@
                                     <button type="button" id="btn-agregar-linea" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="agregarFilaProducto()">
                                         <i class="bi bi-plus-circle me-1"></i> Agregar línea
                                     </button>
-                                    <div class="small fw-bold text-muted pe-3">
-                                        Items: <span id="m-count-items">0</span>
+                                    <div class="small fw-bold text-muted pe-3 d-flex flex-wrap gap-3">
+                                        <span>Items: <span id="m-count-items">0</span></span>
+                                        <span>Total cantidades: <span id="m-total-cantidades">0</span></span>
                                     </div>
                                 </div>
                             </div>

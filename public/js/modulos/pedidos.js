@@ -354,13 +354,28 @@ function PED_ocultarAvisoBloqueo() {
  * cabecera, "Agregar línea" y oculta Guardar/Eliminar) y además el botón
  * "Facturar", que vive fuera del <form>.
  */
-function bloquearPedidoProcesado(bloquear, motivo) {
+/**
+ * Estado de edición del modal.
+ *
+ * @param {boolean} bloquear  Congela el pedido entero. SOLO para Procesado/Anulado:
+ *                            un pedido en Pendiente se sigue editando aunque todas
+ *                            sus líneas ya estén facturadas — se le pueden agregar
+ *                            líneas nuevas, y cada línea ya registrada se protege
+ *                            sola (readonly, sin eliminar y sin bajar la cantidad).
+ * @param {string}  motivo    Texto del aviso.
+ * @param {boolean} sinSaldo  Todas las líneas ya están registradas: no queda nada
+ *                            por facturar, así que se avisa y se apaga "Facturar",
+ *                            pero NO se bloquea la edición.
+ */
+function bloquearPedidoProcesado(bloquear, motivo, sinSaldo = false) {
     const aviso = document.getElementById('aviso-pedido-procesado');
     if (aviso) {
-        aviso.classList.toggle('d-none', !bloquear);
-        if (bloquear && motivo) {
-            const span = aviso.querySelector('span');
-            if (span) span.textContent = motivo;
+        aviso.classList.toggle('d-none', !(bloquear || sinSaldo));
+        const span = aviso.querySelector('span');
+        if (span && (bloquear || sinSaldo)) {
+            span.textContent = bloquear
+                ? (motivo || 'Este pedido no se puede editar.')
+                : 'Todas las líneas de este pedido ya están registradas en una consignación o factura. Puede agregar líneas nuevas; las existentes no se modifican.';
         }
     }
 
@@ -368,8 +383,8 @@ function bloquearPedidoProcesado(bloquear, motivo) {
 
     const btnFacturar = document.getElementById('btn-facturar-pedido');
     if (btnFacturar) {
-        btnFacturar.disabled = bloquear;
-        btnFacturar.title = bloquear
+        btnFacturar.disabled = bloquear || sinSaldo;
+        btnFacturar.title = (bloquear || sinSaldo)
             ? 'No hay saldo pendiente: todo el pedido ya está registrado en una consignación o factura.'
             : 'Generar factura de venta desde este pedido';
     }
@@ -470,8 +485,22 @@ function pedActualizarColumnaEstado() {
  */
 function pedPosicionarDropdownProductos(inputEl) {
     const dropdown = document.getElementById('m-dropdown-productos-global');
-    if (!dropdown || !inputEl || typeof window.CMG_anclarDropdown !== 'function') return;
-    window.CMG_anclarDropdown(dropdown, inputEl, { anchoMinimo: 350, altoMaximo: 250 });
+    if (!dropdown || !inputEl) return;
+
+    if (typeof window.CMG_anclarDropdown === 'function') {
+        window.CMG_anclarDropdown(dropdown, inputEl, { anchoMinimo: 350, altoMaximo: 250 });
+        return;
+    }
+
+    // Respaldo por si el componente no se cargó: sin él la lista no se mostraría
+    // nunca y no se podría elegir ningún producto. Es `position: fixed`, así que
+    // las coordenadas van sin sumarle el scroll.
+    const rect = inputEl.getBoundingClientRect();
+    dropdown.style.top    = `${rect.bottom + 2}px`;
+    dropdown.style.bottom = 'auto';
+    dropdown.style.left   = `${rect.left}px`;
+    dropdown.style.width  = `${Math.max(rect.width, 350)}px`;
+    dropdown.classList.remove('d-none');
 }
 
 /**
@@ -523,6 +552,9 @@ function agregarFilaProducto(prod = null) {
     `;
     tbody.appendChild(tr);
     pedActualizarColumnaEstado();
+    // La fila nace con cantidad, así que el pie (ítems y total de cantidades) se
+    // recalcula acá: antes solo se actualizaba al tocar una cantidad.
+    calcTotales();
 
     if (registrada) {
         // Fila ya registrada en otro documento: no se puede quitar ni cambiar de
@@ -706,6 +738,19 @@ function calcTotales() {
     const rows = document.querySelectorAll('.fila-detalle');
     const countItems = document.getElementById('m-count-items');
     if (countItems) countItems.textContent = rows.length;
+
+    // Total de cantidades del pedido (mismo criterio que el "TOTAL PEDIDO" del PDF).
+    const totalCantidades = document.getElementById('m-total-cantidades');
+    if (totalCantidades) {
+        let suma = 0;
+        rows.forEach(tr => {
+            suma += parseFloat(tr.querySelector('.input-cantidad')?.value) || 0;
+        });
+        totalCantidades.textContent = suma.toLocaleString('es-EC', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    }
 }
 
 async function syncSerie(idPunto) {
@@ -1125,12 +1170,18 @@ async function editarPedido(id) {
 
             calcTotales();
             PED_ocultarAvisoBloqueo();
-            // Bloquear edición si el pedido está Procesado/Anulado (además del bloqueo por consumo).
+            // La edición se congela SOLO por estado (Procesado / Anulado). Que todas
+            // las líneas ya estén facturadas no bloquea: el pedido en Pendiente sigue
+            // abierto y se le pueden agregar líneas nuevas — solo se avisa y se apaga
+            // "Facturar", porque no queda saldo por facturar. Ojo: facturar desde el
+            // pedido no cambia su estado (solo Consignaciones lo pasa a Procesado),
+            // así que este caso es normal, no una inconsistencia.
             const estadoBloqueado = (p.estado === 'Procesado' || p.estado === 'Anulado');
-            const motivoBloqueo = estadoBloqueado
-                ? `Este pedido está ${p.estado}: no se puede editar.`
-                : 'Este pedido ya está completamente registrado en una consignación o factura. No se puede editar.';
-            bloquearPedidoProcesado(todoRegistrado || estadoBloqueado, motivoBloqueo);
+            bloquearPedidoProcesado(
+                estadoBloqueado,
+                `Este pedido está ${p.estado}: no se puede editar.`,
+                todoRegistrado
+            );
 
             const modalEl = document.getElementById('modalPedido');
             if (modalEl) {

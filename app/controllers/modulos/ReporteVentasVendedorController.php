@@ -162,7 +162,8 @@ class ReporteVentasVendedorController extends BaseModuloController
             'PRODUCTO'  => 10,
             'MARCA', 'CATEGORIA' => 6,
             'NINGUNO'   => 10,
-            default     => 7, // VENDEDOR, MES
+            'MES'       => 7,
+            default     => 5, // VENDEDOR
         };
     }
 
@@ -247,14 +248,17 @@ class ReporteVentasVendedorController extends BaseModuloController
             $html .= "<td class='text-end fw-bold text-success'>$total</td>";
             $html .= "<td class='text-end fw-bold {$saldoCls}'>$saldo</td>";
         } else {
-            // VENDEDOR (vista principal)
+            // VENDEDOR (vista principal): Asesor, documentos, subtotal sin impuestos,
+            // subtotal de las notas de crédito que lo afectan y total.
+            $subtotal   = number_format((float) ($r['subtotal'] ?? 0), 2);
+            $subtotalNc = (float) ($r['subtotal_nc'] ?? 0);
+            $ncCls      = $subtotalNc > 0.005 ? 'text-danger' : 'text-muted';
+
             $html .= "<td class='fw-bold'>".htmlspecialchars($r['vendedor_nombre'] ?? '')."</td>";
             $html .= "<td class='text-center'>".(int)($r['cantidad_documentos'] ?? 0)."</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
+            $html .= "<td class='text-end'>$subtotal</td>";
+            $html .= "<td class='text-end {$ncCls}'>".number_format($subtotalNc, 2)."</td>";
             $html .= "<td class='text-end fw-bold text-success'>$total</td>";
-            $html .= "<td class='text-end fw-bold {$saldoCls}'>$saldo</td>";
         }
 
         $html .= '</tr>';
@@ -292,13 +296,14 @@ class ReporteVentasVendedorController extends BaseModuloController
     }
 
     /**
-     * ¿La agrupación trabaja a nivel de documento y por lo tanto lleva columna
-     * "Saldo"? Producto/Marca/Categoría agrupan por línea de detalle, donde el
-     * saldo (que es de la factura completa) no aplica.
+     * ¿La agrupación lleva columna "Saldo"? Producto/Marca/Categoría agrupan por
+     * línea de detalle, donde el saldo (que es de la factura completa) no aplica.
+     * Vendedor sí trabaja a nivel de documento, pero su vista muestra Subtotal /
+     * Subtotal NC / Total en vez del desglose de bases y el saldo.
      */
     private static function agrupacionConSaldo(string $agruparPor): bool
     {
-        return !in_array($agruparPor, ['PRODUCTO', 'MARCA', 'CATEGORIA'], true);
+        return in_array($agruparPor, ['MES', 'NINGUNO'], true);
     }
 
     /**
@@ -342,11 +347,10 @@ class ReporteVentasVendedorController extends BaseModuloController
                 (float) ($r['saldo'] ?? 0),
             ], $rows);
         } else {
-            $headers = ['Vendedor', 'Nro Documentos', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Saldo'];
+            $headers = ['Asesor', 'Total Documentos', 'Subtotal (sin impuestos)', 'Subtotal NC', 'Total'];
             $data = array_map(fn($r) => [
                 $r['vendedor_nombre'], (int) $r['cantidad_documentos'],
-                (float) $r['base_0'], (float) $r['base_iva'], (float) $r['valor_iva'], (float) $r['total'],
-                (float) ($r['saldo'] ?? 0),
+                (float) ($r['subtotal'] ?? 0), (float) ($r['subtotal_nc'] ?? 0), (float) $r['total'],
             ], $rows);
         }
 
@@ -431,24 +435,35 @@ class ReporteVentasVendedorController extends BaseModuloController
                         <?php foreach ($fila as $i => $val): ?>
                             <?php $esNumerica = is_float($val) || is_int($val); ?>
                             <td class="<?= $esNumerica ? 'text-end' : '' ?>">
-                                <?= $esNumerica ? number_format((float) $val, 2) : htmlspecialchars((string) $val) ?>
+                                <?php // Los conteos (int) van sin decimales; los importes (float) con dos. ?>
+                                <?= is_int($val) ? number_format($val) : ($esNumerica ? number_format((float) $val, 2) : htmlspecialchars((string) $val)) ?>
                             </td>
                         <?php endforeach; ?>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
             <tfoot>
-                <?php $conSaldo = self::agrupacionConSaldo($agruparPor); ?>
-                <tr style="background-color: #e9ecef;">
-                    <th colspan="<?= max(count($export['headers']) - ($conSaldo ? 5 : 4), 1) ?>" class="text-center">TOTALES GENERALES:</th>
-                    <th class="text-end"><?= number_format((float) $totales['total_base_0'], 2) ?></th>
-                    <th class="text-end"><?= number_format((float) $totales['total_base_iva'], 2) ?></th>
-                    <th class="text-end"><?= number_format((float) $totales['total_iva'], 2) ?></th>
-                    <th class="text-end" style="font-weight:bold;color:#198754;">$<?= number_format((float) $totales['gran_total'], 2) ?></th>
-                    <?php if ($conSaldo): ?>
-                        <th class="text-end" style="font-weight:bold;color:#dc3545;">$<?= number_format((float) ($totales['total_saldo'] ?? 0), 2) ?></th>
-                    <?php endif; ?>
-                </tr>
+                <?php if (!in_array($agruparPor, ['PRODUCTO', 'MARCA', 'CATEGORIA', 'MES', 'NINGUNO'], true)): ?>
+                    <?php /* VENDEDOR: Asesor | Documentos | Subtotal | Subtotal NC | Total */ ?>
+                    <tr style="background-color: #e9ecef;">
+                        <th colspan="2" class="text-center">TOTALES GENERALES:</th>
+                        <th class="text-end"><?= number_format((float) ($totales['total_subtotal'] ?? 0), 2) ?></th>
+                        <th class="text-end" style="color:#dc3545;"><?= number_format((float) ($totales['total_subtotal_nc'] ?? 0), 2) ?></th>
+                        <th class="text-end" style="font-weight:bold;color:#198754;">$<?= number_format((float) $totales['gran_total'], 2) ?></th>
+                    </tr>
+                <?php else: ?>
+                    <?php $conSaldo = self::agrupacionConSaldo($agruparPor); ?>
+                    <tr style="background-color: #e9ecef;">
+                        <th colspan="<?= max(count($export['headers']) - ($conSaldo ? 5 : 4), 1) ?>" class="text-center">TOTALES GENERALES:</th>
+                        <th class="text-end"><?= number_format((float) $totales['total_base_0'], 2) ?></th>
+                        <th class="text-end"><?= number_format((float) $totales['total_base_iva'], 2) ?></th>
+                        <th class="text-end"><?= number_format((float) $totales['total_iva'], 2) ?></th>
+                        <th class="text-end" style="font-weight:bold;color:#198754;">$<?= number_format((float) $totales['gran_total'], 2) ?></th>
+                        <?php if ($conSaldo): ?>
+                            <th class="text-end" style="font-weight:bold;color:#dc3545;">$<?= number_format((float) ($totales['total_saldo'] ?? 0), 2) ?></th>
+                        <?php endif; ?>
+                    </tr>
+                <?php endif; ?>
             </tfoot>
         </table>
         <?php

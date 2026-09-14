@@ -67,6 +67,11 @@ combinación que no exista en bodega. También funciona al revés —elegir prim
 fecha selecciona su lote—. Para volver a ver todas las fechas, devuelva el lote a
 *Lote...*.
 
+Como al elegir el lote el vencimiento se llena solo, **el cursor salta directo al
+NUP**: es el único dato que queda por teclear en esa línea. Lo mismo si se elige
+primero la fecha. Si el lote no tiene vencimiento registrado, el cursor no se
+mueve, porque esa fecha queda pendiente.
+
 Al **abrir una consignación ya guardada**, cada línea muestra el lote y el
 vencimiento **con los que se guardó**, aunque el inventario haya cambiado desde
 entonces: manda el documento, no el catálogo.
@@ -199,7 +204,8 @@ Contables**; reabrir el período permite la operación de inmediato.
   **verificación de acondicionamiento**; **Recibí conforme** ya no imprime el
   nombre del cliente, se llena a mano; las **observaciones** se movieron debajo
   del listado de productos, a ancho completo; y al pie de la columna *Cantidad*
-  aparece el **total de ítems**.
+  aparece el **total de ítems**. Además, al cargar ítems desde un pedido, elegir
+  el lote lleva el cursor directo al **NUP**.
 
 - **1.8** — El **número ya no se puede repetir**: lo asigna el servidor al
   guardar (antes se guardaba el de la vista previa, así que dos formularios

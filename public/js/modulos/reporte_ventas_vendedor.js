@@ -142,7 +142,8 @@ function RVV_colSpanPara(agruparPor) {
     if (agruparPor === 'PRODUCTO') return 10;
     if (agruparPor === 'MARCA' || agruparPor === 'CATEGORIA') return 6;
     if (agruparPor === 'NINGUNO') return 10;
-    return 7; // VENDEDOR, MES
+    if (agruparPor === 'MES') return 7;
+    return 5; // VENDEDOR
 }
 
 function RVV_dibujarCabecera(agruparPor) {
@@ -205,13 +206,11 @@ function RVV_dibujarCabecera(agruparPor) {
     } else {
         // VENDEDOR
         theadHtml += `
-            <th class="ps-4">Vendedor</th>
-            <th class="text-center">Nro Documentos</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end">Gran Total</th>
-            <th class="text-end pe-4">Saldo</th>
+            <th class="ps-4">Asesor</th>
+            <th class="text-center">Total Documentos</th>
+            <th class="text-end">Subtotal (sin impuestos)</th>
+            <th class="text-end">Subtotal NC</th>
+            <th class="text-end pe-4">Total</th>
         `;
     }
 
