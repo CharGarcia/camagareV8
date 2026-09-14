@@ -162,7 +162,7 @@
                                                     <th class="py-2 small fw-bold text-muted">Bodega</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width:100px;">Precio</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width:90px;">Cant.</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end" style="width:90px;">Desc.</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end" style="width:120px;">Desc.</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width:70px;">IVA</th>
                                                     <th class="py-2 small fw-bold text-muted text-end pe-3">Subtotal</th>
                                                     <th style="width:36px;"></th>
@@ -375,10 +375,56 @@
     </div>
 </div>
 
+<!-- Sub-modal: Descuento rápido (mismo comportamiento que Factura de Venta) -->
+<div class="modal fade" id="modalFaccvDescuento" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered" style="max-width:320px;">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-light py-1 px-3 border-bottom-0">
+                <h6 class="modal-title small text-primary" style="font-size:0.85rem;"><i class="bi bi-percent me-1"></i> Aplicar Descuento</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" style="font-size:0.5rem;padding:0.8rem;"></button>
+            </div>
+            <div class="modal-body py-2 px-3">
+                <div class="mb-2 text-center">
+                    <label class="small text-muted mb-1 d-block text-start" style="font-size:0.75rem;">Modo</label>
+                    <div class="btn-group w-100 btn-group-sm" role="group">
+                        <input type="radio" class="btn-check" name="faccvTipoDesc" id="faccvDescPorc" value="P" checked onchange="faccvDescCalc()">
+                        <label class="btn btn-outline-primary py-1" for="faccvDescPorc" style="font-size:0.75rem;">Porcentaje (%)</label>
+                        <input type="radio" class="btn-check" name="faccvTipoDesc" id="faccvDescVal" value="V" onchange="faccvDescCalc()">
+                        <label class="btn btn-outline-primary py-1" for="faccvDescVal" style="font-size:0.75rem;">Valor ($)</label>
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="small text-muted mb-1 d-block" style="font-size:0.75rem;">Ingreso</label>
+                        <input type="number" id="faccv_desc_ingreso" class="form-control form-control-sm text-center shadow-none border-secondary-subtle" value="0" step="any" min="0" oninput="faccvDescCalc()" style="font-size:0.9rem;">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted mb-1 d-block" style="font-size:0.75rem;">Calculado ($)</label>
+                        <input type="number" id="faccv_desc_calculado" class="form-control form-control-sm text-center shadow-none border-0 bg-light text-primary" value="0" readonly style="font-size:0.9rem;">
+                    </div>
+                </div>
+
+                <div class="form-check form-switch mb-1" style="min-height:auto;">
+                    <input class="form-check-input" type="checkbox" id="faccv_desc_todos" style="height:1rem;width:1.8rem;margin-top:0.2rem;">
+                    <label class="form-check-label text-muted ms-1" for="faccv_desc_todos" style="font-size:0.7rem;vertical-align:middle;">Aplicar a todos los ítems</label>
+                </div>
+            </div>
+            <div class="modal-footer bg-light p-2 border-top-0 justify-content-center">
+                <button type="button" class="btn btn-primary btn-sm w-100 py-1" onclick="faccvDescConfirmar()" style="font-size:0.8rem;">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     const RUTA = window.RUTA_MODULO_FACCV;
     const DEC_P = (window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.decimales_precio) || 2;
+    // Edición manual del descuento por línea, igual que en Factura de Venta: la empresa
+    // la puede apagar con el switch `editar_descuento_factura` de la ficha de Empresa
+    // ("¿Se puede editar el descuento en un producto o servicio en la factura?").
+    const EDITAR_DESC = !(window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.editar_descuento_factura === false);
     let modal, tCli = null;
     const added = new Set();
 
@@ -687,17 +733,17 @@
 
     // Manejo de modal anidado: apilar por encima del modal principal y, al cerrar,
     // restaurar el body y quitar backdrops sobrantes (si no, un backdrop bloquea la edición).
-    (function () {
-        const cgEl = document.getElementById('modalFaccvCargar');
-        if (!cgEl) return;
-        cgEl.addEventListener('shown.bs.modal', () => {
+    function apilarModalAnidado(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('shown.bs.modal', () => {
             const abiertos = document.querySelectorAll('.modal.show').length;
             const z = 1055 + abiertos * 20;
-            cgEl.style.zIndex = z;
+            el.style.zIndex = z;
             const bds = document.querySelectorAll('.modal-backdrop');
             if (bds.length) bds[bds.length - 1].style.zIndex = z - 5;
         });
-        cgEl.addEventListener('hidden.bs.modal', () => {
+        el.addEventListener('hidden.bs.modal', () => {
             const abiertos = document.querySelectorAll('.modal.show').length;
             if (abiertos > 0) {
                 document.body.classList.add('modal-open');
@@ -705,7 +751,11 @@
                 for (let i = bds.length - 1; i >= abiertos; i--) bds[i].remove();
             }
         });
-    })();
+    }
+    apilarModalAnidado('modalFaccvCargar');
+    // El de descuento rápido se puede abrir sobre el modal principal o sobre el
+    // sub-modal "Cargar consignación": necesita el mismo apilado/limpieza.
+    apilarModalAnidado('modalFaccvDescuento');
 
     window.faccvAbrirCargar = function () {
         $('faccv_cg_busqueda').value = '';
@@ -763,7 +813,12 @@
                 <td><select class="form-select form-select-sm cg-precios" style="min-width:130px;font-size:.78rem;" onchange="faccvCgPrecioSel(this)" ${ya ? 'disabled' : ''}>${opts}</select></td>
                 <td><input type="number" class="form-control form-control-sm text-end cg-precio" style="width:80px;font-size:.78rem;" value="${precioCons.toFixed(DEC_P)}" min="0" step="any" oninput="faccvCgRowCalc(this)" ${ya ? 'disabled' : ''}></td>
                 <td><input type="number" class="form-control form-control-sm text-end cg-cant" style="width:70px;font-size:.78rem;" value="${saldo}" min="0" max="${saldo}" step="any" oninput="faccvCgRowCalc(this)" ${ya ? 'disabled' : ''}></td>
-                <td><input type="number" class="form-control form-control-sm text-end cg-desc" style="width:70px;font-size:.78rem;" value="0.00" min="0" step="any" oninput="faccvCgRowCalc(this)" ${ya ? 'disabled' : ''}></td>
+                <td>
+                    <div class="d-flex align-items-center">
+                        <input type="number" class="form-control form-control-sm text-end cg-desc" style="width:70px;font-size:.78rem;" value="0.00" min="0" step="any" oninput="faccvCgRowCalc(this)" ${(ya || !EDITAR_DESC) ? 'disabled' : ''}>
+                        ${(ya || !EDITAR_DESC) ? '' : `<button type="button" class="btn btn-link btn-sm p-0 ps-1 text-primary shadow-none border-0" onclick="faccvAbrirDescuento(this)" title="Aplicar descuento rápido (% o $)"><i class="bi bi-plus-circle"></i></button>`}
+                    </div>
+                </td>
                 <td class="text-end small pe-2 cg-subtotal">0.00</td>
             </tr>`;
         }).join('');
@@ -813,9 +868,11 @@
     };
 
     // cfg: {idcd, numero, producto_codigo, producto_nombre, lote, nup, bodega_nombre, precio, saldo, cantidad, descuento, porc, readonly}
-    // Los ítems agregados NO se editan aquí (precio/cantidad/descuento se definen en el
-    // sub-modal "Cargar consignación"). Se muestran como valores fijos; para cambiarlos
-    // se quita la línea y se vuelve a cargar. Los valores viven en data-* de la fila.
+    // Precio y cantidad se definen en el sub-modal "Cargar consignación" y aquí se muestran
+    // como valores fijos (para cambiarlos se quita la línea y se vuelve a cargar). El
+    // DESCUENTO sí es editable aquí, igual que en Factura de Venta: input por línea más el
+    // botón de descuento rápido (% o $, con opción de aplicarlo a todos los ítems).
+    // Los valores vigentes viven siempre en los data-* de la fila.
     function addLinea(cfg) {
         const idcd = parseInt(cfg.idcd, 10);
         if (added.has(idcd)) return false;
@@ -835,14 +892,104 @@
             <td class="small">${esc(cfg.bodega_nombre || '—')}</td>
             <td class="text-end small">${precio.toFixed(DEC_P)}</td>
             <td class="text-end small">${cant.toFixed(2)}</td>
-            <td class="text-end small">${desc.toFixed(2)}</td>
+            <td class="text-end">${(!cfg.readonly && EDITAR_DESC) ? `
+                <div class="d-flex align-items-center justify-content-end">
+                    <input type="number" class="form-control form-control-sm input-detalle text-end text-danger faccv-input-desc" style="width:74px;" value="${desc.toFixed(2)}" step="any" min="0" oninput="faccvLineaDesc(this)" onblur="faccvLineaDescBlur(this)">
+                    <button type="button" class="btn btn-link btn-sm p-0 ps-1 text-primary shadow-none border-0" onclick="faccvAbrirDescuento(this)" title="Aplicar descuento rápido (% o $)"><i class="bi bi-plus-circle"></i></button>
+                </div>` : `<span class="small">${desc.toFixed(2)}</span>`}</td>
             <td class="text-center small">${fmtPct(porc)}</td>
-            <td class="text-end small pe-3 fw-semibold">${neto.toFixed(2)}</td>
+            <td class="text-end small pe-3 fw-semibold faccv-sub">${neto.toFixed(2)}</td>
             <td class="text-center">${cfg.readonly ? '' : `<i class="bi bi-x-circle remove-row" role="button" onclick="faccvQuitar(this)" title="Quitar"></i>`}</td>`;
         body.appendChild(tr);
         $('faccv_lineas_info').textContent = added.size + ' línea(s)';
         return true;
     }
+
+    // ── Descuento por línea en la tabla principal ───────────────────────────
+    // El descuento se capea al subtotal bruto de la línea (precio × cantidad), igual
+    // que hace el servidor en ConsignacionFacturaService::normalizarDetalles(), que
+    // rechaza el documento si el descuento supera ese bruto.
+    window.faccvLineaDesc = function (inp) {
+        const tr = inp.closest('tr'); if (!tr) return;
+        const bruto = round2(num(tr.dataset.precio) * num(tr.dataset.cant));
+        let d = num(inp.value);
+        if (d < 0) { d = 0; inp.value = '0.00'; }
+        if (d > bruto) { d = bruto; inp.value = bruto.toFixed(2); }
+        tr.dataset.desc = d;
+        const sub = tr.querySelector('.faccv-sub');
+        if (sub) sub.textContent = round2(Math.max(0, bruto - d)).toFixed(2);
+        recalc();
+    };
+    window.faccvLineaDescBlur = function (inp) { inp.value = num(inp.value).toFixed(2); };
+
+    // ── Descuento rápido (% o $) — mismo comportamiento que Factura de Venta ──
+    // Sirve para las dos tablas del módulo: las filas de la tabla principal (precio y
+    // cantidad viven en data-*) y las del sub-modal "Cargar consignación" (viven en
+    // inputs). `descCtx()` normaliza ambos casos para que el modal sea uno solo.
+    let descModal = null, descTr = null;
+
+    function descCtx(tr) {
+        if (!tr) return null;
+        const inpCg = tr.querySelector('.cg-desc');
+        if (inpCg) return {
+            input: inpCg,
+            precio: num(tr.querySelector('.cg-precio')?.value),
+            cant: num(tr.querySelector('.cg-cant')?.value),
+            aplicar: () => faccvCgRowCalc(inpCg)
+        };
+        const inpLn = tr.querySelector('.faccv-input-desc');
+        if (!inpLn) return null;
+        return {
+            input: inpLn,
+            precio: num(tr.dataset.precio),
+            cant: num(tr.dataset.cant),
+            aplicar: () => faccvLineaDesc(inpLn)
+        };
+    }
+
+    function descFilas(tr) {
+        return tr && tr.querySelector('.cg-desc')
+            ? document.querySelectorAll('#faccv_cg_body tr[data-idcd]')
+            : document.querySelectorAll('#faccv_lineas_body tr[data-idcd]');
+    }
+
+    window.faccvAbrirDescuento = function (btn) {
+        descTr = btn.closest('tr');
+        const ctx = descCtx(descTr); if (!ctx) return;
+        if (!descModal) descModal = new bootstrap.Modal(document.getElementById('modalFaccvDescuento'));
+        const actual = num(ctx.input.value);
+        $('faccv_desc_ingreso').value = actual;
+        // Si la línea ya trae un descuento, se asume que fue en $; si no, se parte en %.
+        $('faccvDescVal').checked  = actual > 0;
+        $('faccvDescPorc').checked = actual <= 0;
+        $('faccv_desc_todos').checked = false;
+        faccvDescCalc();
+        descModal.show();
+        setTimeout(() => { const i = $('faccv_desc_ingreso'); i.focus(); i.select(); }, 400);
+    };
+
+    window.faccvDescCalc = function () {
+        const ctx = descCtx(descTr); if (!ctx) return;
+        const tipo = document.querySelector('input[name="faccvTipoDesc"]:checked').value;
+        const v = num($('faccv_desc_ingreso').value);
+        const bruto = ctx.precio * ctx.cant;
+        $('faccv_desc_calculado').value = round2(tipo === 'P' ? bruto * (v / 100) : v).toFixed(2);
+    };
+
+    window.faccvDescConfirmar = function () {
+        const tipo = document.querySelector('input[name="faccvTipoDesc"]:checked').value;
+        const v = num($('faccv_desc_ingreso').value);
+        if (v < 0) { Swal.fire('Valor inválido', 'El valor no puede ser negativo.', 'warning'); return; }
+        const filas = $('faccv_desc_todos').checked ? descFilas(descTr) : [descTr];
+        filas.forEach(tr => {
+            const c = descCtx(tr);
+            if (!c || c.input.disabled || c.input.readOnly) return;
+            const d = (tipo === 'P') ? (c.precio * c.cant) * (v / 100) : v;
+            c.input.value = round2(d).toFixed(2);
+            c.aplicar(); // capea al bruto de la línea y repinta subtotal/totales
+        });
+        descModal.hide();
+    };
 
     window.faccvQuitar = function (btn) {
         const tr = btn.closest('tr'); added.delete(parseInt(tr.dataset.idcd, 10)); tr.remove();

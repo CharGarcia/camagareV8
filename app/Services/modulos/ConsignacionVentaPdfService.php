@@ -11,8 +11,9 @@ use TCPDF;
  *
  * A4 vertical. Estructura: encabezado empresa + comprobante (mismo diseño que el
  * comprobante de Ingresos/Egresos), datos del cliente y del traslado, tabla de
- * productos, total valorizado + monto en letras y tres firmas
- * (Entregado por / Responsable de traslado / Recibí conforme).
+ * productos, total valorizado + monto en letras y las firmas: tres en la primera fila
+ * (Emitido por / Responsable de traslado / Recibí conforme) y, debajo, la verificación
+ * de acondicionamiento.
  *
  * Cuando la empresa tenga una plantilla activa (módulo Plantillas de Documentos)
  * se usará PlantillasPdfRendererService en su lugar; este es el respaldo estándar.
@@ -300,11 +301,15 @@ class ConsignacionVentaPdfService
         $mL  = $this->marginL;
         $colW = $this->contentW / 3;
 
+        // El tope deja sitio a la segunda fila de firmas (la de acondicionamiento), que va
+        // 14 mm más abajo: 258 + 14 = 272, el mismo límite inferior de antes.
         $yLinea = $y + 22;
-        if ($yLinea > 272) { $yLinea = 272; }
+        if ($yLinea > 258) { $yLinea = 258; }
 
+        // "Emitido por" lleva el usuario que REGISTRÓ la consignación (no la empresa ni quien
+        // imprime): es el responsable de la emisión del documento.
         $firmas = [
-            ['Entregado por', strtoupper((string)($empresa['nombre'] ?? ''))],
+            ['Emitido por', strtoupper(trim((string)($cabecera['creado_por_nombre'] ?? '')))],
             ['Responsable de traslado', (string)($cabecera['responsable_traslado_nombre'] ?? '')],
             ['Recibí conforme', (string)($cabecera['cliente_nombre'] ?? '')],
         ];
@@ -325,6 +330,13 @@ class ConsignacionVentaPdfService
             $pdf->SetXY($x + 3, $yName);
             $pdf->MultiCell($colW - 6, 3.4, $f[1] !== '' ? $f[1] : ' ', 0, 'C', false, 0, '', '', true, 0, false, true, 0, 'T');
         }
+
+        // Segunda fila: verificación de acondicionamiento (se firma a mano, sin nombre impreso).
+        $yAcond = $yLinea + 14;
+        $pdf->Line($mL + 6, $yAcond, $mL + $colW - 6, $yAcond);
+        $pdf->SetFont('helvetica', 'B', 7);
+        $pdf->SetXY($mL, $yAcond + 1);
+        $pdf->Cell($colW, 4, 'VERIFICACIÓN DE ACONDICIONAMIENTO POR:', 0, 0, 'C');
     }
 
     /** Resuelve la ruta en disco del logo (maneja el prefijo web /sistema/public). */

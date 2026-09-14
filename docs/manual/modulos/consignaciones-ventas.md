@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que
-version: 1.8
+version: 1.9
 orden: 45
 estado: activo
 ---
@@ -93,6 +93,21 @@ En la pestaña General del comprobante, junto al botón **PDF**, hay un botón
 NUP, cantidad entregada, retornada y facturada) en una hoja de cálculo.
 Requiere que la consignación esté guardada.
 
+### Firmas del PDF
+
+El comprobante cierra con tres firmas en línea —**Emitido por**, **Responsable
+de traslado** y **Recibí conforme**— y, debajo, una cuarta para la
+**verificación de acondicionamiento**, que se firma a mano.
+
+Bajo *Emitido por* sale el nombre del **usuario que registró la consignación**,
+no el de quien imprime el documento ni el de la empresa: el dato queda fijo con
+el comprobante, así que reimprimirlo meses después sigue mostrando a quien lo
+emitió.
+
+Si la empresa usa una **plantilla propia** (módulo *Plantillas de Documentos*),
+manda esa plantilla y no este diseño; ahí el usuario emisor es el campo
+`{cg_emitido_por}`.
+
 ## Quién ve cada documento
 
 Depende del permiso **Acceso total** del módulo (se administra en
@@ -164,6 +179,11 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.9** — En el PDF, la firma **Entregado por** pasó a llamarse **Emitido por**
+  y muestra el nombre del usuario que registró la consignación (antes salía el
+  nombre de la empresa). Debajo se agregó una cuarta firma: **verificación de
+  acondicionamiento**.
 
 - **1.8** — El **número ya no se puede repetir**: lo asigna el servidor al
   guardar (antes se guardaba el de la vista previa, así que dos formularios

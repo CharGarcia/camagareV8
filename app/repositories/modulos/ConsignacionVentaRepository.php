@@ -375,15 +375,19 @@ class ConsignacionVentaRepository extends BaseRepository
 
     public function find(int $id, int $idEmpresa): ?array
     {
+        // `creado_por_nombre`: el usuario que registró la consignación. Lo usa el PDF en la
+        // firma "Emitido por"; el dato es del documento, no de la sesión que lo imprime.
         $sql = "SELECT cv.*,
                        c.nombre as cliente_nombre, c.identificacion as cliente_identificacion, c.direccion as cliente_direccion,
                        c.email as cliente_email,
                        v.nombre as vendedor_nombre,
-                       rt.nombre as responsable_traslado_nombre
+                       rt.nombre as responsable_traslado_nombre,
+                       ucre.nombre as creado_por_nombre
                 FROM consignaciones_ventas cv
                 INNER JOIN clientes c ON c.id = cv.id_cliente
                 LEFT JOIN vendedores v ON v.id = cv.id_vendedor
                 LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
+                LEFT JOIN usuarios ucre ON ucre.id = cv.created_by
                 WHERE cv.id = :id AND cv.id_empresa = :e AND cv.eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':e' => $idEmpresa]);

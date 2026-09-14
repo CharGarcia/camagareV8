@@ -498,16 +498,24 @@ class PlantillasPdfSeedService
         ];
     }
 
-    /** Tres firmas (consignación: entregado / traslado / recibí conforme). */
+    /**
+     * Firmas de la consignación: tres en la primera fila (emitido / traslado / recibí
+     * conforme) y, 14 mm más abajo, la verificación de acondicionamiento.
+     *
+     * Bajo "Emitido por" va el usuario que registró el documento ({cg_emitido_por}).
+     */
     private static function firmasTriples(float $y): array
     {
         return [
             self::linea(20, $y, 58, '#000000'),
             self::linea(84, $y, 58, '#000000'),
             self::linea(148, $y, 58, '#000000'),
-            self::texto('Entregado por', 20, $y + 1, 58, 4, 'C', 7.5, 'B'),
+            self::texto('Emitido por', 20, $y + 1, 58, 4, 'C', 7.5, 'B'),
             self::texto('Responsable de traslado', 84, $y + 1, 58, 4, 'C', 7.5, 'B'),
             self::texto('Recibí conforme', 148, $y + 1, 58, 4, 'C', 7.5, 'B'),
+            self::campo('{cg_emitido_por}', 20, $y + 5, 58, 4, 'C', 7),
+            self::linea(20, $y + 14, 58, '#000000'),
+            self::texto('VERIFICACIÓN DE ACONDICIONAMIENTO POR:', 20, $y + 15, 58, 4, 'C', 7, 'B'),
         ];
     }
 

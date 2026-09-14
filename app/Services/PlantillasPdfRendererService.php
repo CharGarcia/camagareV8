@@ -852,6 +852,8 @@ class PlantillasPdfRendererService
                 '{cg_responsable_traslado}' => (string) ($cabecera['responsable_traslado_nombre'] ?? ''),
                 '{cg_punto_partida}'        => (string) ($cabecera['punto_partida'] ?? ''),
                 '{cg_punto_llegada}'        => (string) ($cabecera['punto_llegada'] ?? ''),
+                // Usuario que REGISTRÓ la consignación (firma "Emitido por"), no quien imprime.
+                '{cg_emitido_por}'          => strtoupper(trim((string) ($cabecera['creado_por_nombre'] ?? ''))),
                 '{titulo_documento}'        => 'Consignación en Ventas',
             ],
             'cambio_producto_cv' => [
