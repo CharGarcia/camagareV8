@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.6
+etiquetas: recibo de venta, recibos, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento
+version: 1.7
 orden: 35
 estado: activo
 ---
@@ -33,6 +33,18 @@ tributarias. Elija según lo que respalde el documento.
 4. Decida si lleva impuestos.
 5. Registre el cobro.
 6. Guarde.
+
+### Lote y fecha de vencimiento
+
+En los productos que manejan lote, la columna **Vencimiento** depende del lote
+elegido: mientras no se elija lote se listan todas las fechas disponibles del
+producto en esa bodega, y al elegir uno la lista queda **acotada a la fecha de ese
+lote**. Así no puede quedar registrada una combinación lote/vencimiento que no
+exista en bodega. También funciona al revés: elegir la fecha selecciona su lote.
+Para volver a ver todas las fechas, devuelva el lote a *Lote...*.
+
+Al **abrir un recibo ya guardado**, la línea muestra el lote y el vencimiento **con
+los que se emitió**, aunque el inventario haya cambiado desde entonces.
 
 ## Qué genera
 
@@ -98,6 +110,11 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.7** — La columna **Vencimiento** de cada línea se limita ahora al **lote
+  seleccionado** (y elegir la fecha selecciona su lote). Antes se ofrecían todas
+  las fechas del producto, con lo que podía registrarse una combinación
+  lote/vencimiento inexistente en bodega. Al reabrir un recibo se conserva el
+  vencimiento con el que se emitió. Las fechas se muestran en formato `d-m-a`.
 - **1.6** — El módulo respeta ahora el **cierre contable**: no se puede emitir,
   modificar, anular ni eliminar un recibo cuyo período esté cerrado. Antes no se
   comprobaba en ninguna de las cuatro operaciones.

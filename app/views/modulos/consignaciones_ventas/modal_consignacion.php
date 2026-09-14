@@ -809,20 +809,25 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         fLote.value = d.lote || '';
                     }
                     if (fCad) {
-                        fCad.innerHTML = '<option value="">Vencimiento...</option>';
+                        let vencTodas = '<option value="">Vencimiento...</option>';
                         opts.forEach(l => {
                             const c = l.fecha_caducidad || '';
-                            fCad.innerHTML += `<option value="${c}">${c || 'Sin Fecha'}</option>`;
+                            vencTodas += `<option value="${c}">${consFechaCadTexto(c)}</option>`;
                         });
                         // Garantiza que la caducidad guardada de la línea se muestre aunque no coincida con un lote del inventario.
-                        if (d.fecha_caducidad && !Array.from(fCad.options).some(o => o.value === d.fecha_caducidad)) {
-                            fCad.insertAdjacentHTML('beforeend', `<option value="${d.fecha_caducidad}">${d.fecha_caducidad}</option>`);
+                        if (d.fecha_caducidad && !opts.some(l => (l.fecha_caducidad || '') === d.fecha_caducidad)) {
+                            vencTodas += `<option value="${d.fecha_caducidad}">${consFechaCadTexto(d.fecha_caducidad)}</option>`;
                         }
+                        fCad.innerHTML = vencTodas;
                         fCad.value = d.fecha_caducidad || '';
+                        consSincronizarLoteVencimiento(fLote, fCad, opts, vencTodas);
+                        // Al abrir una línea ya guardada, el vencimiento se acota a la fecha CON
+                        // LA QUE SE GUARDÓ, no a la que hoy diga el catálogo: manda el documento.
+                        if (d.lote) consAcotarVencimiento(fCad, d.fecha_caducidad || '');
                     }
                 } else {
                     if (fLote) fLote.innerHTML = `<option value="${d.lote || ''}">${d.lote || 'Sin Lote'}</option>`;
-                    if (fCad) fCad.innerHTML = `<option value="${d.fecha_caducidad || ''}">${d.fecha_caducidad || 'Sin Fecha'}</option>`;
+                    if (fCad) fCad.innerHTML = `<option value="${d.fecha_caducidad || ''}">${consFechaCadTexto(d.fecha_caducidad)}</option>`;
                 }
             } catch(e) {}
         }
@@ -1142,28 +1147,19 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     if (selCad) {
                         const optC = document.createElement('option');
                         optC.value = cadVal;
-                        optC.textContent = cadVal || 'Sin Fecha';
+                        optC.textContent = consFechaCadTexto(cadVal);
                         selCad.appendChild(optC);
                     }
                 });
 
-                if (selLote && selCad) {
-                    selLote.onchange = () => {
-                        const index = selLote.selectedIndex;
-                        if (index >= 0) selCad.selectedIndex = index;
-                    };
-                    selCad.onchange = () => {
-                        const index = selCad.selectedIndex;
-                        if (index >= 0) selLote.selectedIndex = index;
-                    };
-                }
+                // El vencimiento se lista SEGÚN el lote elegido, así que no puede quedar
+                // una combinación lote/fecha que no exista en bodega.
+                consSincronizarLoteVencimiento(selLote, selCad, json.data, selCad ? selCad.innerHTML : '');
 
-                // Seleccionar por defecto el lote y vencimiento más antiguo (el primero de la lista)
+                // Por defecto, el lote más antiguo (el primero de la lista) con su vencimiento.
                 if (selLote && selLote.options.length > 1) {
                     selLote.selectedIndex = 1;
-                }
-                if (selCad && selCad.options.length > 1) {
-                    selCad.selectedIndex = 1;
+                    consAcotarVencimiento(selCad, json.data[0] ? (json.data[0].fecha_caducidad || '') : '');
                 }
             }
         } catch (e) {
@@ -1639,6 +1635,50 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }
     };
 
+    // Etiqueta visible de una fecha de caducidad (§9: formato d-m-Y). El value del
+    // <option> se mantiene en ISO porque es lo que se envía al backend.
+    function consFechaCadTexto(iso) {
+        if (!iso) return 'Sin Fecha';
+        const p = String(iso).substring(0, 10).split('-');
+        return (p.length === 3) ? `${p[2]}-${p[1]}-${p[0]}` : iso;
+    }
+
+    /** Deja el select de vencimiento con una sola opción: la fecha indicada. */
+    function consAcotarVencimiento(selCad, iso) {
+        if (!selCad) return;
+        const c = iso || '';
+        selCad.innerHTML = `<option value="${c}">${consFechaCadTexto(c)}</option>`;
+        selCad.selectedIndex = 0;
+    }
+
+    /**
+     * Ata el vencimiento al lote: elegir un lote deja la lista de vencimiento acotada
+     * a la fecha de ESE lote (la relación lote -> fecha es 1:1; getLotesDisponibles()
+     * agrupa por numero_lote y devuelve MAX(fecha_caducidad)), y elegir una fecha
+     * selecciona su lote. Volver a "Lote..." restaura la lista completa.
+     * El mapeo es por índice: las opciones [1..n] de ambos selects van en el mismo
+     * orden que `lotes`.
+     */
+    function consSincronizarLoteVencimiento(selLote, selCad, lotes, vencTodasHtml) {
+        if (!selLote || !selCad || !lotes || lotes.length === 0) return;
+        const aplicar = (idx) => {
+            if (idx <= 0) {
+                selCad.innerHTML = vencTodasHtml;
+                selCad.selectedIndex = 0;
+                return;
+            }
+            const l = lotes[idx - 1];
+            consAcotarVencimiento(selCad, l ? (l.fecha_caducidad || '') : '');
+        };
+        selLote.onchange = () => aplicar(selLote.selectedIndex);
+        selCad.onchange = () => {
+            const idx = selCad.selectedIndex;
+            if (idx <= 0) return;
+            selLote.selectedIndex = idx;
+            aplicar(idx);
+        };
+    }
+
     let consBuscarPedidoModal = null;
 
     window.llamarPedido = function() {
@@ -1865,7 +1905,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                         const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
                                         const c = l.fecha_caducidad || '';
                                         lotesOptions += `<option value="${lv}">${lv || 'Sin Lote'}</option>`;
-                                        vencOptions += `<option value="${c}">${c || 'Sin Fecha'}</option>`;
+                                        vencOptions += `<option value="${c}">${consFechaCadTexto(c)}</option>`;
                                     });
                                 } else if (manejaNup) {
                                     lotesOptions = '<option value="">Sin Lote</option>';
@@ -1980,13 +2020,34 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 }
                             }
 
-                            // Al elegir un lote, autocompletar la fecha de vencimiento que le corresponde.
+                            // El vencimiento se lista SEGÚN el lote elegido: al seleccionar un lote,
+                            // el select de caducidad queda acotado a la fecha de ESE lote (la relación
+                            // lote -> fecha es 1:1; getLotesDisponibles() agrupa por numero_lote y
+                            // devuelve MAX(fecha_caducidad)). Sin lote elegido se listan todas.
+                            // Se sincroniza por índice: las opciones [1..n] de ambos selects están en
+                            // el mismo orden que lotesData, igual que en la grilla principal del modal.
                             const selLoteRow = tr.querySelector('.item-lote');
                             const selVencRow = tr.querySelector('.item-caducidad');
-                            if (selLoteRow && selVencRow) {
-                                selLoteRow.addEventListener('change', () => {
-                                    const match = lotesData.find(l => (l.numero_lote === 'sin_lote' ? '' : l.numero_lote) === selLoteRow.value);
-                                    selVencRow.value = match ? (match.fecha_caducidad || '') : '';
+                            if (selLoteRow && selVencRow && lotesData.length > 0) {
+                                const aplicarLote = (idx) => {
+                                    if (idx <= 0) {
+                                        selVencRow.innerHTML = vencOptions;
+                                        selVencRow.selectedIndex = 0;
+                                        return;
+                                    }
+                                    const l = lotesData[idx - 1];
+                                    const c = (l && l.fecha_caducidad) ? l.fecha_caducidad : '';
+                                    selVencRow.innerHTML = `<option value="${c}">${consFechaCadTexto(c)}</option>`;
+                                    selVencRow.selectedIndex = 0;
+                                };
+                                selLoteRow.addEventListener('change', () => aplicarLote(selLoteRow.selectedIndex));
+                                // Sincronía inversa (como en la grilla principal y en Factura de Venta):
+                                // elegir la fecha selecciona su lote y deja la lista acotada a ella.
+                                selVencRow.addEventListener('change', () => {
+                                    const idx = selVencRow.selectedIndex;
+                                    if (idx <= 0) return;
+                                    selLoteRow.selectedIndex = idx;
+                                    aplicarLote(idx);
                                 });
                             }
                         }
@@ -2619,9 +2680,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 if (fLote && d.lote) {
                     if (!Array.from(fLote.options).some(o => o.value === d.lote)) fLote.appendChild(new Option(d.lote, d.lote));
                     fLote.value = d.lote;
-                }
-                if (fCad && d.fecha_caducidad) {
-                    if (!Array.from(fCad.options).some(o => o.value === d.fecha_caducidad)) fCad.appendChild(new Option(d.fecha_caducidad, d.fecha_caducidad));
+                    // consCargarLotesFila() dejó el vencimiento acotado al lote por defecto;
+                    // aquí se acota al de la línea guardada, que es el que manda.
+                    consAcotarVencimiento(fCad, d.fecha_caducidad || '');
+                } else if (fCad && d.fecha_caducidad) {
+                    if (!Array.from(fCad.options).some(o => o.value === d.fecha_caducidad)) fCad.appendChild(new Option(consFechaCadTexto(d.fecha_caducidad), d.fecha_caducidad));
                     fCad.value = d.fecha_caducidad;
                 }
                 if (fNup) fNup.value = d.nup || '';

@@ -3667,6 +3667,15 @@ $totalPages = $totalPagesOriginal;
         inputCodigoVisible.addEventListener('blur', () => setTimeout(() => dropdownGlobal.classList.add('d-none'), 200));
     }
 
+    // Etiqueta visible de una fecha de caducidad (§9: formato d-m-Y). El value del
+    // <option> se mantiene en ISO porque es lo que se envía al backend.
+    function rvFechaCadTexto(iso) {
+        if (!iso) return 'Sin Fecha';
+        if (typeof formatDate === 'function') return formatDate(iso);
+        const p = String(iso).substring(0, 10).split('-');
+        return (p.length === 3) ? `${p[2]}-${p[1]}-${p[0]}` : iso;
+    }
+
     async function cargarLotesFila(row) {
         const idProd = row.dataset.idProducto;
         const idBod = row.querySelector('.select-bodega')?.value || document.getElementById('m-select-bodega')?.value;
@@ -3732,17 +3741,14 @@ $totalPages = $totalPagesOriginal;
                             optL.value = loteVal;
                             optL.textContent = loteVal || 'Sin Lote';
                             optL.dataset.stock = stockConvertido;
-                            optL.dataset.caducidad = cadVal;
                             selLote.appendChild(optL);
                         }
 
                         if (selCad) {
                             const optC = document.createElement('option');
                             optC.value = cadVal;
-                            const labelCad = cadVal ? (typeof formatDate === 'function' ? formatDate(cadVal) : cadVal) : 'Sin Fecha';
-                            optC.textContent = labelCad;
+                            optC.textContent = rvFechaCadTexto(cadVal);
                             optC.dataset.stock = stockConvertido;
-                            optC.dataset.lote = loteVal;
                             selCad.appendChild(optC);
                         }
                     });
@@ -3757,29 +3763,59 @@ $totalPages = $totalPagesOriginal;
                         }
                     };
 
+                    // El vencimiento se lista SEGÚN el lote elegido: la relación lote -> fecha
+                    // es 1:1, así que al elegir un lote el select de caducidad queda con una
+                    // sola opción (la suya) y no puede guardarse una combinación inexistente.
+                    // Se guarda una copia de las opciones completas —clonadas, para no perder
+                    // dataset.stock, del que depende el saldo por línea— y se restauran al
+                    // volver a "Lote...".
+                    const cadOptionsCompletas = selCad ? Array.from(selCad.options).map(o => o.cloneNode(true)) : [];
+
+                    // idx: 0 = sin lote (lista completa); 1..n = lote de lotes[idx-1]. Con
+                    // `isoGuardado` se fuerza la fecha con la que se guardó la línea, aunque
+                    // hoy el catálogo diga otra: en edición manda el documento.
+                    const acotarCadAlLote = (idx, isoGuardado) => {
+                        if (!selCad) return;
+                        selCad.innerHTML = '';
+                        if (idx <= 0) {
+                            cadOptionsCompletas.forEach(o => selCad.appendChild(o.cloneNode(true)));
+                            selCad.selectedIndex = 0;
+                            return;
+                        }
+                        const base = cadOptionsCompletas[idx];
+                        if (isoGuardado && (!base || base.value !== isoGuardado)) {
+                            selCad.appendChild(new Option(rvFechaCadTexto(isoGuardado), isoGuardado));
+                        } else if (base) {
+                            selCad.appendChild(base.cloneNode(true));
+                        }
+                        selCad.selectedIndex = 0;
+                    };
+
                     if (selLote) {
                         selLote.onchange = () => {
-                            const opt = selLote.options[selLote.selectedIndex];
-                            if (opt && opt.dataset.caducidad && selCad) {
-                                selCad.value = opt.dataset.caducidad;
-                            }
+                            acotarCadAlLote(selLote.selectedIndex);
                             actualizarSaldoLote(selLote);
                         };
                     }
                     if (selCad) {
+                        // Inverso: elegir la fecha selecciona su lote y acota la lista. Solo
+                        // aplica con la lista completa; ya acotada hay una opción (índice 0).
                         selCad.onchange = () => {
-                            const opt = selCad.options[selCad.selectedIndex];
-                            if (opt && opt.dataset.lote && selLote) {
-                                selLote.value = opt.dataset.lote;
-                            }
-                            actualizarSaldoLote(selCad);
+                            const idx = selCad.selectedIndex;
+                            if (idx <= 0) return;
+                            if (selLote) selLote.selectedIndex = idx;
+                            acotarCadAlLote(idx);
+                            actualizarSaldoLote(selLote || selCad);
                         };
                     }
 
-                    // Restauración de lote solo si ya existe un valor guardado (edición)
+                    // Restauración de lote solo si ya existe un valor guardado (edición).
+                    // No se dispara 'change': eso acotaría a la fecha del catálogo y pisaría
+                    // la que tiene guardada la línea. Se acota a currentCad cuando existe.
                     if (selLote && currentLote && Array.from(selLote.options).some(o => o.value === currentLote)) {
                         selLote.value = currentLote;
-                        selLote.dispatchEvent(new Event('change'));
+                        acotarCadAlLote(selLote.selectedIndex, currentCad || '');
+                        actualizarSaldoLote(selLote);
                     } else if (selCad && currentCad && Array.from(selCad.options).some(o => o.value === currentCad)) {
                         selCad.value = currentCad;
                         selCad.dispatchEvent(new Event('change'));

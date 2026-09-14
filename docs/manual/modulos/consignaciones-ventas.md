@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.3
+etiquetas: consignacion, consignaciones, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP
+version: 1.5
 orden: 45
 estado: activo
 ---
@@ -32,6 +32,34 @@ evidencia: ubicación, hora y firma de quien recibe.
 
 Marcar una entrega como realizada desde la web también deja registro del usuario,
 la hora y el canal.
+
+## Cargar ítems desde un pedido
+
+El botón **Cargar desde Pedido** trae a la consignación las líneas pendientes de un
+pedido, con su cantidad y su precio ya cargados. De cada línea se elige la
+cantidad a despachar y, en los productos que manejan lote, el **lote**, la **fecha
+de vencimiento** y el **NUP**.
+
+**El vencimiento depende del lote**, igual que al cargar una línea a mano en el
+detalle de la consignación. Mientras no se elija lote, la lista muestra todas las
+fechas disponibles del producto en esa bodega. Al elegir un lote, la lista de
+vencimiento queda **acotada a la fecha de ese lote**: no es posible guardar una
+combinación que no exista en bodega. También funciona al revés —elegir primero la
+fecha selecciona su lote—. Para volver a ver todas las fechas, devuelva el lote a
+*Lote...*.
+
+Al **abrir una consignación ya guardada**, cada línea muestra el lote y el
+vencimiento **con los que se guardó**, aunque el inventario haya cambiado desde
+entonces: manda el documento, no el catálogo.
+
+Cada línea muestra el **stock disponible** en la bodega seleccionada (verde si
+alcanza para todo lo pendiente, rojo si no). La casilla **Desagr.** parte la
+línea en una fila por unidad, para asignar un NUP distinto a cada una; conviene
+desmarcarla en cantidades grandes.
+
+No es todo o nada: las filas a las que les falte lote, vencimiento o NUP (cuando
+la empresa los exige) se omiten y se listan al final, pero las filas completas sí
+se agregan.
 
 ## Contabilidad
 
@@ -86,6 +114,15 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.5** — La regla del vencimiento por lote se aplica también al **detalle de la
+  consignación** (las líneas cargadas a mano), no solo a las que vienen de un
+  pedido. Al abrir una consignación guardada se respeta el lote y el vencimiento
+  con los que se registró.
+- **1.4** — Al cargar ítems **desde un pedido**, la lista de **fecha de
+  vencimiento** se limita ahora al **lote seleccionado** (y elegir la fecha
+  selecciona su lote). Antes se ofrecían todas las fechas del producto, con lo
+  que podía quedar guardada una combinación lote/vencimiento inexistente en
+  bodega. Las fechas se muestran además en formato `d-m-a`.
 - **1.3** — El módulo respeta ahora el **cierre contable**: no se puede operar
   sobre una consignación cuyo período esté cerrado. Antes no se comprobaba.
 - **1.2** — El número del documento puede numerarse **por fecha de emisión**,

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos
-version: 2.4
+etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento
+version: 2.5
 orden: 20
 estado: activo
 ---
@@ -51,6 +51,18 @@ de elegir el producto, sin tener que agregarlo a la factura para enterarse.
 - Al editar una factura ya guardada, el saldo se muestra **sin contar esa misma
   factura**, es decir, el stock que habría si el documento no existiera — el mismo
   criterio que usan los lotes y la validación de cantidades.
+
+### Lote y fecha de vencimiento
+
+En los productos que manejan lote, la columna **Vencimiento** depende del lote
+elegido: mientras no se elija lote se listan todas las fechas disponibles del
+producto en esa bodega, y al elegir uno la lista queda **acotada a la fecha de ese
+lote**. Así no puede quedar facturada una combinación lote/vencimiento que no
+exista en bodega. También funciona al revés: elegir la fecha selecciona su lote.
+Para volver a ver todas las fechas, devuelva el lote a *Lote...*.
+
+Al **abrir una factura ya guardada**, la línea muestra el lote y el vencimiento
+**con los que se emitió**, aunque el inventario haya cambiado desde entonces.
 
 ## Barra de acciones del documento
 
@@ -159,6 +171,11 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.5** — La columna **Vencimiento** de cada línea se limita ahora al **lote
+  seleccionado** (y elegir la fecha selecciona su lote). Antes se ofrecían todas
+  las fechas del producto, con lo que podía facturarse una combinación
+  lote/vencimiento inexistente en bodega. Al reabrir una factura se conserva el
+  vencimiento con el que se emitió. Las fechas se muestran en formato `d-m-a`.
 - **2.4** — Errores **43 y 45 del SRI**. El número de una factura eliminada que el SRI ya
   recibió o autorizó ya no se reutiliza, no se puede eliminar un borrador en esa
   situación (salvo el borrado forzado del superadministrador) y el error 45
