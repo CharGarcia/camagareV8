@@ -645,6 +645,11 @@ $base = BASE_URL;
                 if (d.revividos > 0) {
                     html += `<br><span class="text-success small">♻ ${fmt(d.revividos)} estaban eliminado(s) y se restauraron (volvieron a mostrarse).</span>`;
                 }
+                // Clientes: vendedor asignado traído del sistema anterior (incluye los completados
+                // en clientes que ya estaban migrados de una corrida anterior).
+                if (d.vendedores_asignados > 0) {
+                    html += `<br><span class="text-success small">👤 ${fmt(d.vendedores_asignados)} cliente(s) con su vendedor asignado.</span>`;
+                }
                 // Pagos (egresos) de liquidaciones de compra: se enlazan a la liquidación por su número.
                 if (d.pagos_liquidacion > 0) {
                     html += `<br><span class="text-success small">🔗 ${fmt(d.pagos_liquidacion)} pago(s) enlazado(s) a su liquidación de compra.</span>`;

@@ -90,11 +90,13 @@ class TareaRepository extends BaseRepository
         }
 
         if ($buscar !== '') {
-            $whereSql .= " AND (t.cliente_nombre ILIKE :b OR t.cliente_correo ILIKE :b2
-                              OR co.nombre ILIKE :b3)";
-            $params[':b']  = '%' . $buscar . '%';
-            $params[':b2'] = '%' . $buscar . '%';
-            $params[':b3'] = '%' . $buscar . '%';
+            // Todas las palabras escritas, en cualquier orden y sin distinguir tildes.
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['t.cliente_nombre', 't.cliente_correo', 'co.nombre'], $buscar, $params, 'ac'
+            );
+            if ($condicion !== '') {
+                $whereSql .= " AND {$condicion}";
+            }
         }
 
         $cols = [
@@ -430,18 +432,26 @@ class TareaRepository extends BaseRepository
 
     /**
      * Busca usuarios del sistema para el selector de responsables.
+     *
+     * El texto pasa por FiltrosBusqueda::condicionTexto(): todas las palabras
+     * escritas, en cualquier orden y sin distinguir tildes.
      */
     public function buscarUsuariosSistema(string $buscar, int $limit = 15): array
     {
+        $params    = [];
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(['nombre', 'mail'], trim($buscar), $params, 'ac');
+        $filtro    = $condicion !== '' ? "AND {$condicion}" : '';
+
         $sql = "SELECT id, nombre, mail, 'usuario' AS tipo
                 FROM usuarios
                 WHERE estado = 1
-                  AND (nombre ILIKE :b OR mail ILIKE :b2)
+                  {$filtro}
                 ORDER BY nombre ASC
                 LIMIT :lim";
         $st  = $this->db->prepare($sql);
-        $st->bindValue(':b',   '%' . $buscar . '%');
-        $st->bindValue(':b2',  '%' . $buscar . '%');
+        foreach ($params as $ph => $valor) {
+            $st->bindValue($ph, $valor);
+        }
         $st->bindValue(':lim', $limit, PDO::PARAM_INT);
         $st->execute();
         return $st->fetchAll(PDO::FETCH_ASSOC);
@@ -452,16 +462,22 @@ class TareaRepository extends BaseRepository
      */
     public function buscarResponsablesPropios(string $buscar, int $limit = 15): array
     {
+        $params    = [];
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['nombre', 'correo', 'cedula'], trim($buscar), $params, 'ac'
+        );
+        $filtro    = $condicion !== '' ? "AND {$condicion}" : '';
+
         $sql = "SELECT id, cedula, nombre, correo AS mail, 'propio' AS tipo
                 FROM responsables_tareas
                 WHERE eliminado = false
-                  AND (nombre ILIKE :b OR correo ILIKE :b2 OR cedula ILIKE :b3)
+                  {$filtro}
                 ORDER BY nombre ASC
                 LIMIT :lim";
         $st  = $this->db->prepare($sql);
-        $st->bindValue(':b',   '%' . $buscar . '%');
-        $st->bindValue(':b2',  '%' . $buscar . '%');
-        $st->bindValue(':b3',  '%' . $buscar . '%');
+        foreach ($params as $ph => $valor) {
+            $st->bindValue($ph, $valor);
+        }
         $st->bindValue(':lim', $limit, PDO::PARAM_INT);
         $st->execute();
         return $st->fetchAll(PDO::FETCH_ASSOC);
@@ -553,16 +569,22 @@ class TareaRepository extends BaseRepository
      */
     public function buscarClientesTareas(string $buscar, int $limit = 20): array
     {
+        $params    = [];
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['nombre', 'correo', 'ruc'], trim($buscar), $params, 'ac'
+        );
+        $filtro    = $condicion !== '' ? "AND {$condicion}" : '';
+
         $sql = "SELECT id, ruc, nombre, correo, 'propio' AS origen
                 FROM clientes_tareas
                 WHERE eliminado = false
-                  AND (nombre ILIKE :b OR correo ILIKE :b2 OR ruc ILIKE :b3)
+                  {$filtro}
                 ORDER BY nombre ASC
                 LIMIT :lim";
         $st  = $this->db->prepare($sql);
-        $st->bindValue(':b',   '%' . $buscar . '%');
-        $st->bindValue(':b2',  '%' . $buscar . '%');
-        $st->bindValue(':b3',  '%' . $buscar . '%');
+        foreach ($params as $ph => $valor) {
+            $st->bindValue($ph, $valor);
+        }
         $st->bindValue(':lim', $limit, PDO::PARAM_INT);
         $st->execute();
         return $st->fetchAll(PDO::FETCH_ASSOC);
@@ -573,12 +595,18 @@ class TareaRepository extends BaseRepository
      */
     public function buscarClientesEmpresa(string $buscar, ?int $idEmpresa = null, int $limit = 15): array
     {
-        $sql = "SELECT DISTINCT c.id, c.identificacion AS ruc, c.nombre, 
+        $params    = [];
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['c.nombre', 'c.email', 'c.identificacion'], trim($buscar), $params, 'ac'
+        );
+        $filtro    = $condicion !== '' ? "AND {$condicion}" : '';
+
+        $sql = "SELECT DISTINCT c.id, c.identificacion AS ruc, c.nombre,
                        COALESCE(c.email, '') AS correo, 'empresa' AS origen
                 FROM clientes c
                 WHERE c.eliminado = false
-                  AND (c.nombre ILIKE :b OR c.email ILIKE :b2 OR c.identificacion ILIKE :b3)";
-        
+                  {$filtro}";
+
         if ($idEmpresa !== null && $idEmpresa > 0) {
             $sql .= " AND c.id_empresa = :id_empresa";
         }
@@ -586,9 +614,9 @@ class TareaRepository extends BaseRepository
         $sql .= " ORDER BY c.nombre ASC LIMIT :lim";
 
         $st  = $this->db->prepare($sql);
-        $st->bindValue(':b',   '%' . $buscar . '%');
-        $st->bindValue(':b2',  '%' . $buscar . '%');
-        $st->bindValue(':b3',  '%' . $buscar . '%');
+        foreach ($params as $ph => $valor) {
+            $st->bindValue($ph, $valor);
+        }
         $st->bindValue(':lim', $limit, PDO::PARAM_INT);
         if ($idEmpresa !== null && $idEmpresa > 0) {
             $st->bindValue(':id_empresa', $idEmpresa, PDO::PARAM_INT);
@@ -920,10 +948,13 @@ class TareaRepository extends BaseRepository
 
         $buscarSql = '';
         if ($buscar !== '') {
-            $buscarSql = ' AND (c.nombre ILIKE :b OR c.ruc ILIKE :b2 OR c.correo ILIKE :b3)';
-            $params[':b']  = '%' . $buscar . '%';
-            $params[':b2'] = '%' . $buscar . '%';
-            $params[':b3'] = '%' . $buscar . '%';
+            // Todas las palabras escritas, en cualquier orden y sin distinguir tildes.
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['c.nombre', 'c.ruc', 'c.correo'], $buscar, $params, 'ac'
+            );
+            if ($condicion !== '') {
+                $buscarSql = " AND {$condicion}";
+            }
         }
 
         // Subconsulta única (evita repetir los mismos parámetros con nombre dos veces

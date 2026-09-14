@@ -1275,7 +1275,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     function seleccionarClienteCons(c) {
         document.getElementById('cons_id_cliente').value = c.id;
         document.getElementById('cons_cliente_busqueda').value = c.identificacion + ' - ' + c.nombre;
-        
+
+        // Autocompletar Asesor (vendedor asignado al cliente), igual que en Factura de Venta.
+        // Solo se asigna si ese vendedor está entre las opciones del select: la lista trae
+        // únicamente vendedores activos (y, sin permiso 'todo', los del propio usuario), así que
+        // un cliente con un vendedor inactivo o ajeno dejaría el select en blanco, borrando lo
+        // que el usuario —o su favorito— ya tenía puesto.
+        const selVendedorCons = document.getElementById('cons_id_vendedor');
+        if (selVendedorCons && c.id_vendedor) {
+            const idVendCliente = String(c.id_vendedor);
+            if (Array.from(selVendedorCons.options).some(o => o.value === idVendCliente)) {
+                selVendedorCons.value = idVendCliente;
+            }
+        }
+
         // Autocompletar Punto de Llegada (dirección del cliente)
         document.getElementById('cons_punto_llegada').value = c.direccion || '';
         

@@ -883,20 +883,34 @@ class SaldosInicialesRepository extends BaseRepository
     // CLIENTES (para vincular CXC)
     // ─────────────────────────────────────────────────────────
 
-    /** Busca clientes registrados por identificación o nombre. */
+    /**
+     * Busca clientes registrados por identificación o nombre. El texto pasa por
+     * FiltrosBusqueda::condicionTexto(): todas las palabras escritas, en cualquier
+     * orden y sin distinguir tildes.
+     */
     public function buscarClientes(int $idEmpresa, string $q, int $limit = 20): array
     {
+        $params = [':ie' => $idEmpresa];
+        // Sin texto no se filtra: devuelve las primeras filas, como antes.
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['c.identificacion', 'c.nombre'],
+            trim($q),
+            $params,
+            'ac'
+        );
+        $filtro = $condicion !== '' ? "AND {$condicion}" : '';
+
         $st = $this->db->prepare("
             SELECT c.id, c.identificacion, c.nombre AS nombre,
                    icv.nombre AS tipo_nombre
             FROM clientes c
             LEFT JOIN identificador_comprador_vendedor icv ON icv.codigo = c.tipo_id
             WHERE c.id_empresa = :ie AND c.eliminado = false AND c.status = 1
-              AND (c.identificacion ILIKE :q OR c.nombre ILIKE :q)
+              {$filtro}
             ORDER BY c.nombre ASC
             LIMIT {$limit}
         ");
-        $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%']);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

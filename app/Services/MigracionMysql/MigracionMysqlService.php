@@ -23,10 +23,12 @@ class MigracionMysqlService
     public const ENTIDADES = [
         // Prerequisito de Contabilidad y de la configuración contable: ambas apuntan a cuentas.
         'plan_cuentas'      => ['label' => 'Plan de cuentas',                  'tabla' => 'plan_cuentas',               'fecha' => null,             'tipo' => 'catalogo'],
+        // Vendedores va ANTES que Clientes: cada cliente trae su vendedor asignado (viejo
+        // `clientes.id_vendedor`) y necesita el mapa de vendedores ya construido para resolverlo.
+        'vendedores'        => ['label' => 'Vendedores',                       'tabla' => 'vendedores',                 'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
         'clientes'          => ['label' => 'Clientes',                         'tabla' => 'clientes',                   'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
         'productos'         => ['label' => 'Productos y servicios',            'tabla' => 'productos_servicios',        'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
         'proveedores'       => ['label' => 'Proveedores',                      'tabla' => 'proveedores',                'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
-        'vendedores'        => ['label' => 'Vendedores',                       'tabla' => 'vendedores',                 'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
         'bodegas'           => ['label' => 'Bodegas',                          'tabla' => 'bodega',                     'fecha' => null,             'tipo' => 'catalogo'],
         // Responsables de traslado/entrega (repartidores) del viejo `responsable_traslado` (por ruc_empresa).
         // Se relacionan luego en pedidos y consignaciones. Conviene migrarlo ANTES de esos documentos.
@@ -749,23 +751,38 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'clientes', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'cliente sin identificación (RUC/cédula)', 'errores' => 0];
+        $res = ['entidad' => 'clientes', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'cliente sin identificación (RUC/cédula)', 'errores' => 0, 'vendedores_asignados' => 0];
 
-        // Ya migrados (anti-reproceso)
-        $done = [];
-        $q = $pg->prepare("SELECT id_origen FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'clientes'");
+        // Ya migrados (anti-reproceso). Se guarda el id DESTINO —no solo un booleano— para poder
+        // reconciliar en la re-corrida lo que la primera pasada no trajo (el vendedor asignado).
+        $done = []; // id_origen => id_destino
+        $q = $pg->prepare("SELECT id_origen, id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'clientes'");
         $q->execute([$idEmpresa]);
-        foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $o) {
-            $done[(string) $o] = true;
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $o) {
+            $done[(string) $o['id_origen']] = (int) $o['id_destino'];
         }
+
+        // Vendedor asignado al cliente: viejo `clientes.id_vendedor` → nuevo `clientes.id_vendedor`,
+        // mapeando el id viejo al nuevo con el mapa de la entidad 'vendedores' (por eso Vendedores va
+        // ANTES que Clientes en ENTIDADES). Si los vendedores aún no se migraron queda null, y se
+        // completa al volver a correr Clientes (ver $updVend).
+        $mapVend = $this->mapaDe($pg, $idEmpresa, 'vendedores');
+        $vendNuevo = static function ($oldVend) use ($mapVend): ?int {
+            $ov = (int) $oldVend;
+            return ($ov > 0 && isset($mapVend[(string) $ov])) ? (int) $mapVend[(string) $ov] : null;
+        };
 
         // Buscar SIN filtrar eliminado: la restricción unique_cliente_empresa cubre TODAS las filas
         // (incluidas las soft-deleted); si existe una borrada, hay que enlazar a ella, no insertar.
         $buscar = $pg->prepare("SELECT id FROM clientes WHERE id_empresa = :e AND identificacion = :ident LIMIT 1");
         $ins = $pg->prepare(
-            "INSERT INTO clientes (id_empresa, id_usuario, nombre, tipo_id, identificacion, telefono, email, direccion, plazo, provincia, ciudad, status, created_by)
-             VALUES (:e, :u, :nom, :tipo, :ident, :tel, :mail, :dir, :plazo, :prov, :ciu, :status, :cb) RETURNING id"
+            "INSERT INTO clientes (id_empresa, id_usuario, nombre, tipo_id, identificacion, telefono, email, direccion, plazo, provincia, ciudad, status, id_vendedor, created_by)
+             VALUES (:e, :u, :nom, :tipo, :ident, :tel, :mail, :dir, :plazo, :prov, :ciu, :status, :vend, :cb) RETURNING id"
         );
+        // Completa el vendedor asignado de un cliente que YA existía (migrado en una corrida anterior
+        // o vinculado a uno nativo del sistema). Solo cuando aún no tiene vendedor: nunca pisa una
+        // asignación hecha a mano en el sistema nuevo.
+        $updVend = $pg->prepare("UPDATE clientes SET id_vendedor = :v, updated_at = now(), updated_by = :u WHERE id = :id AND id_empresa = :e AND id_vendedor IS NULL");
         $insMap = $pg->prepare(
             "INSERT INTO migracion_mysql_map (id_empresa, entidad, id_origen, id_destino, clave_natural, vinculado, created_by)
              VALUES (:e, 'clientes', :o, :d, :cn, :vin, :cb)
@@ -773,14 +790,21 @@ class MigracionMysqlService
         );
 
         $stmt = $mysql->query(
-            "SELECT id, nombre, tipo_id, ruc, telefono, email, direccion, plazo, provincia, ciudad, status
+            "SELECT id, nombre, tipo_id, ruc, telefono, email, direccion, plazo, provincia, ciudad, status, id_vendedor
                FROM clientes WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')
         );
 
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $r['id'];
+            $idVend = $vendNuevo($r['id_vendedor'] ?? 0);
             if (isset($done[(string) $old])) {
+                // Ya migrado: completa el vendedor asignado si quedó vacío (corridas anteriores no
+                // traían el dato, o migraron los clientes antes que los vendedores).
+                if ($idVend !== null) {
+                    $updVend->execute([':v' => $idVend, ':u' => $idUsuario, ':id' => $done[(string) $old], ':e' => $idEmpresa]);
+                    $res['vendedores_asignados'] += $updVend->rowCount();
+                }
                 $res['ya_migrados']++;
                 continue;
             }
@@ -805,6 +829,11 @@ class MigracionMysqlService
                 if ($existente !== false) {
                     $idDest = (int) $existente;
                     $vin = true;
+                    // Cliente nativo del sistema nuevo: solo se le completa el vendedor si no tiene.
+                    if ($idVend !== null) {
+                        $updVend->execute([':v' => $idVend, ':u' => $idUsuario, ':id' => $idDest, ':e' => $idEmpresa]);
+                        $res['vendedores_asignados'] += $updVend->rowCount();
+                    }
                     $res['vinculados']++;
                     if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $nombre; }
                 } else {
@@ -812,15 +841,16 @@ class MigracionMysqlService
                         ':e' => $idEmpresa, ':u' => $idUsuario, ':nom' => $nombre, ':tipo' => $tipo, ':ident' => $ident,
                         ':tel' => self::nz($r['telefono']), ':mail' => self::nz($r['email']), ':dir' => self::nz($r['direccion']),
                         ':plazo' => (int) ($r['plazo'] ?? 0), ':prov' => self::nz($r['provincia']), ':ciu' => self::nz($r['ciudad']),
-                        ':status' => (int) ($r['status'] ?? 1), ':cb' => $idUsuario,
+                        ':status' => (int) ($r['status'] ?? 1), ':vend' => $idVend, ':cb' => $idUsuario,
                     ]);
                     $idDest = (int) $ins->fetchColumn();
+                    if ($idVend !== null) { $res['vendedores_asignados']++; }
                     $vin = false;
                     $res['migrados']++;
                 }
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($ident, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
                 $pg->commit();
-                $done[(string) $old] = true;
+                $done[(string) $old] = $idDest;
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) {
                     $pg->rollBack();

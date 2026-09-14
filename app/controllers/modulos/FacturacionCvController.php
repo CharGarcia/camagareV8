@@ -559,16 +559,12 @@ class FacturacionCvController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q = trim($_GET['q'] ?? '');
         try {
-            $db = \App\Core\Database::getConnection();
-            $sql = "SELECT id, nombre, identificacion, direccion, email, id_vendedor,
-                           COALESCE(plazo, 0) AS plazo, id_forma_pago_sri
-                    FROM clientes
-                    WHERE id_empresa = :e AND eliminado = false
-                      AND (nombre ILIKE :q OR identificacion ILIKE :q)
-                    ORDER BY nombre ASC LIMIT 15";
-            $st = $db->prepare($sql);
-            $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
-            echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
+            // Búsqueda estándar del sistema: todas las palabras en cualquier orden y
+            // sin distinguir tildes (ClienteRepository::buscarAutocomplete, que ya trae
+            // vendedor, plazo y forma de pago para autocompletar la cabecera).
+            $rows = (new \App\repositories\modulos\ClienteRepository())
+                ->buscarAutocomplete($idEmpresa, $q, 15, false);
+            echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

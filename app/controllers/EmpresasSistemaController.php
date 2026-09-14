@@ -584,16 +584,24 @@ class EmpresasSistemaController extends Controller
         $this->requireNivel(2);
 
         $q = trim($_GET['q'] ?? '');
+
+        // Todas las palabras escritas, en cualquier orden y sin distinguir tildes.
+        $params    = [];
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['nombre', 'nombre_comercial', 'ruc'], $q, $params, 'ac'
+        );
+        $filtro = $condicion !== '' ? "AND {$condicion}" : '';
+
         $db = Database::getConnection();
         $st = $db->prepare(
             "SELECT id, COALESCE(NULLIF(nombre_comercial,''), nombre) AS nombre, ruc, establecimiento
              FROM empresas
              WHERE eliminado = false
-               AND (nombre ILIKE :q OR nombre_comercial ILIKE :q OR ruc ILIKE :q)
+               {$filtro}
              ORDER BY nombre_comercial, nombre
              LIMIT 20"
         );
-        $st->execute([':q' => '%' . $q . '%']);
+        $st->execute($params);
 
         $data = array_map(static fn($r) => [
             'id'    => (int) $r['id'],
@@ -731,16 +739,23 @@ class EmpresasSistemaController extends Controller
             return;
         }
 
+        // Todas las palabras escritas, en cualquier orden y sin distinguir tildes.
+        $params    = [':e' => $idEmpresa];
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['nombre', 'identificacion'], $q, $params, 'ac'
+        );
+        $filtro = $condicion !== '' ? "AND {$condicion}" : '';
+
         $db = Database::getConnection();
         $st = $db->prepare(
             "SELECT id, nombre, identificacion
              FROM clientes
              WHERE id_empresa = :e AND eliminado = false
-               AND (nombre ILIKE :q OR identificacion ILIKE :q)
+               {$filtro}
              ORDER BY nombre
              LIMIT 20"
         );
-        $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
+        $st->execute($params);
 
         $data = array_map(static fn($r) => [
             'id'    => (int) $r['id'],

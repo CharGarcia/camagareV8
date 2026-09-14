@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que
-version: 1.6
+etiquetas: consignacion, consignaciones, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que
+version: 1.7
 orden: 45
 estado: activo
 ---
@@ -32,6 +32,18 @@ evidencia: ubicación, hora y firma de quien recibe.
 
 Marcar una entrega como realizada desde la web también deja registro del usuario,
 la hora y el canal.
+
+## El asesor se llena solo al elegir el cliente
+
+Al seleccionar un cliente en el buscador del comprobante, el campo **Asesor** se
+completa automáticamente con el vendedor asignado a ese cliente (en *Clientes →
+Vendedor*), igual que en las facturas de venta. Siempre se puede cambiar a mano
+después.
+
+Si el cliente no tiene vendedor asignado —o el que tiene está inactivo, o el
+usuario no tiene **Acceso total** y el vendedor no le pertenece— el campo se
+deja como estaba, para no borrar lo que ya estaba elegido ni el valor marcado
+como favorito con la estrella.
 
 ## Cargar ítems desde un pedido
 
@@ -127,6 +139,9 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.7** — Al seleccionar un cliente, el campo **Asesor** se completa
+  automáticamente con el vendedor asignado a ese cliente (antes había que
+  elegirlo a mano en cada consignación).
 - **1.6** — El permiso **Acceso total** ahora manda también fuera del
   listado: sin él, un usuario ya no puede abrir, exportar, enviar por correo,
   cambiar de estado ni eliminar una consignación creada por otro usuario, ni

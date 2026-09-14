@@ -385,8 +385,13 @@ class ProveedoresController extends BaseModuloController
         $where = "WHERE impuesto_ret = :tipo AND status = 1";
         
         if ($q !== '') {
-            $where .= " AND (codigo_ret ILIKE :q OR concepto_ret ILIKE :q)";
-            $params[':q'] = "%$q%";
+            // Todas las palabras escritas, en cualquier orden y sin distinguir tildes.
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['codigo_ret', 'concepto_ret'], $q, $params, 'ac'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         $sql = "SELECT id, codigo_ret, concepto_ret, porcentaje_ret, 

@@ -203,15 +203,28 @@ class ReporteRetencionesPendientesRepository extends BaseRepository
         return array_map('intval', $this->q($sql, [':e' => $idEmpresa])->fetchAll(PDO::FETCH_COLUMN));
     }
 
-    /** Autocomplete de clientes. */
+    /**
+     * Autocomplete de clientes. El texto pasa por FiltrosBusqueda::condicionTexto():
+     * todas las palabras escritas, en cualquier orden y sin distinguir tildes.
+     */
     public function buscarClientes(int $idEmpresa, string $q): array
     {
+        $params = [':e' => $idEmpresa];
+        // Sin texto no se filtra: devuelve las primeras filas, como antes.
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['nombre', 'identificacion'],
+            trim($q),
+            $params,
+            'ac'
+        );
+        $filtro = $condicion !== '' ? "AND {$condicion}" : '';
+
         $sql = "SELECT id, nombre, identificacion AS ident, email
                 FROM clientes
                 WHERE id_empresa = :e AND eliminado = false
-                  AND (nombre ILIKE :q OR identificacion ILIKE :q)
+                  {$filtro}
                 ORDER BY nombre LIMIT 15";
-        return $this->q($sql, [':e' => $idEmpresa, ':q' => '%' . trim($q) . '%'])->fetchAll(PDO::FETCH_ASSOC);
+        return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     // ── Avisos enviados ──────────────────────────────────────────────────────

@@ -297,18 +297,18 @@ class ServicioExternoController extends ApiBaseController
     {
         $this->requireLeer();
 
-        $q = trim($_GET['q'] ?? '');
-        $db = \App\core\Database::getConnection();
-        $st = $db->prepare(
-            "SELECT id, identificacion, nombre, direccion, email AS correo, telefono
-             FROM clientes
-             WHERE (nombre ILIKE :q OR identificacion ILIKE :q)
-               AND id_empresa = :e AND status = '1' AND eliminado = false
-             ORDER BY nombre ASC
-             LIMIT 10"
+        // Búsqueda estándar del sistema: todas las palabras en cualquier orden y sin
+        // distinguir tildes (ClienteRepository::buscarAutocomplete).
+        $rows = (new \App\repositories\modulos\ClienteRepository())->buscarAutocomplete(
+            (int) $_SESSION['id_empresa'],
+            trim($_GET['q'] ?? '')
         );
-        $st->execute([':q' => "%{$q}%", ':e' => (int) $_SESSION['id_empresa']]);
-        $this->jsonOk($st->fetchAll(PDO::FETCH_ASSOC));
+        foreach ($rows as &$fila) {
+            $fila['correo'] = $fila['email']; // la app lo consume como "correo"
+        }
+        unset($fila);
+
+        $this->jsonOk($rows);
     }
 
     /**

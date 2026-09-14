@@ -299,17 +299,32 @@ class CitaAgendaRepository extends BaseRepository
         ];
     }
 
+    /**
+     * Clientes para el autocompletar de la cita. El texto pasa por
+     * FiltrosBusqueda::condicionTexto(): todas las palabras escritas, en cualquier
+     * orden y sin distinguir tildes.
+     */
     public function buscarClientes(string $buscar, int $idEmpresa): array
     {
+        $params = [':ie' => $idEmpresa];
+        // Sin texto no se filtra: devuelve las primeras filas, como antes.
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['nombre', 'identificacion', 'email'],
+            trim($buscar),
+            $params,
+            'ac'
+        );
+        $filtro = $condicion !== '' ? "AND {$condicion}" : '';
+
         $stmt = $this->db->prepare("
             SELECT id, nombre, identificacion, email, telefono
             FROM clientes
             WHERE id_empresa = :ie AND eliminado = false AND status = 1
-              AND (nombre ILIKE :q OR identificacion ILIKE :q OR email ILIKE :q)
+              {$filtro}
             ORDER BY nombre
             LIMIT 20
         ");
-        $stmt->execute([':ie' => $idEmpresa, ':q' => '%' . $buscar . '%']);
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

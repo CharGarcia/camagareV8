@@ -904,6 +904,11 @@ class ConfiguracionContableController extends BaseModuloController
 
     /**
      * Busca clientes o proveedores para el autocompletado en el formulario.
+     *
+     * El texto pasa por FiltrosBusqueda::condicionTexto(), la forma estándar del
+     * sistema: todas las palabras escritas, en cualquier orden y sin distinguir
+     * tildes. Antes cada rama repetía su propio `ILIKE '%frase%'` con marcadores
+     * posicionales, que solo acertaba con la frase pegada y exacta.
      */
     public function searchEntidadesAjax(): void
     {
@@ -919,54 +924,50 @@ class ConfiguracionContableController extends BaseModuloController
             exit;
         }
 
-        $db = Database::getConnection();
-        $results = [];
+        // tipo => [tabla, columna mostrada como "text", columnas donde se busca,
+        //          columnas extra del SELECT]
+        $dimensiones = [
+            'cliente'   => ['clientes',    'nombre',            ['nombre', 'identificacion'],            ', identificacion'],
+            'proveedor' => ['proveedores', 'razon_social',      ['razon_social', 'identificacion'],      ', identificacion'],
+            'producto'  => ['productos',   'nombre',            ['nombre', 'codigo'],                    ', codigo'],
+            'categoria' => ['categorias',  'nombre',            ['nombre'],                              ''],
+            'marca'     => ['marcas',      'nombre',            ['nombre'],                              ''],
+            'empleado'  => ['empleados',   'nombres_apellidos', ['nombres_apellidos', 'identificacion'], ', identificacion'],
+        ];
 
-        if ($tipo === 'cliente') {
-            $st = $db->prepare("SELECT id, nombre AS text, identificacion FROM clientes 
-                                WHERE id_empresa = ? AND eliminado = false AND (nombre ILIKE ? OR identificacion ILIKE ?) 
-                                ORDER BY nombre ASC LIMIT 10");
-            $st->execute([$idEmpresa, "%$q%", "%$q%"]);
-            $results = $st->fetchAll(PDO::FETCH_ASSOC);
-        } elseif ($tipo === 'proveedor') {
-            $st = $db->prepare("SELECT id, razon_social AS text, identificacion FROM proveedores 
-                                WHERE id_empresa = ? AND eliminado = false AND (razon_social ILIKE ? OR identificacion ILIKE ?) 
-                                ORDER BY razon_social ASC LIMIT 10");
-            $st->execute([$idEmpresa, "%$q%", "%$q%"]);
-            $results = $st->fetchAll(PDO::FETCH_ASSOC);
-        } elseif ($tipo === 'producto') {
-            $st = $db->prepare("SELECT id, nombre AS text, codigo FROM productos 
-                                WHERE id_empresa = ? AND eliminado = false AND (nombre ILIKE ? OR codigo ILIKE ?) 
-                                ORDER BY nombre ASC LIMIT 10");
-            $st->execute([$idEmpresa, "%$q%", "%$q%"]);
-            $results = $st->fetchAll(PDO::FETCH_ASSOC);
-        } elseif ($tipo === 'categoria') {
-            $st = $db->prepare("SELECT id, nombre AS text FROM categorias 
-                                WHERE id_empresa = ? AND eliminado = false AND nombre ILIKE ? 
-                                ORDER BY nombre ASC LIMIT 10");
-            $st->execute([$idEmpresa, "%$q%"]);
-            $results = $st->fetchAll(PDO::FETCH_ASSOC);
-        } elseif ($tipo === 'marca') {
-            $st = $db->prepare("SELECT id, nombre AS text FROM marcas 
-                                WHERE id_empresa = ? AND eliminado = false AND nombre ILIKE ? 
-                                ORDER BY nombre ASC LIMIT 10");
-            $st->execute([$idEmpresa, "%$q%"]);
-            $results = $st->fetchAll(PDO::FETCH_ASSOC);
-        } elseif ($tipo === 'iva') {
-            $st = $db->prepare("SELECT codigo::integer AS id, tarifa AS text FROM tarifa_iva
-                                WHERE (tarifa ILIKE ? OR porcentaje_iva::text ILIKE ? OR codigo ILIKE ?)
-                                ORDER BY tarifa ASC LIMIT 10");
-            $st->execute(["%$q%", "%$q%", "%$q%"]);
-            $results = $st->fetchAll(PDO::FETCH_ASSOC);
-        } elseif ($tipo === 'empleado') {
-            $st = $db->prepare("SELECT id, nombres_apellidos AS text, identificacion FROM empleados
-                                WHERE id_empresa = ? AND eliminado = false AND (nombres_apellidos ILIKE ? OR identificacion ILIKE ?)
-                                ORDER BY nombres_apellidos ASC LIMIT 10");
-            $st->execute([$idEmpresa, "%$q%", "%$q%"]);
-            $results = $st->fetchAll(PDO::FETCH_ASSOC);
+        if ($tipo === 'iva') {
+            // Catálogo global: no lleva id_empresa ni eliminado.
+            $params    = [];
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['tarifa', 'porcentaje_iva::text', 'codigo'],
+                $q,
+                $params,
+                'ac'
+            );
+            $sql = "SELECT codigo::integer AS id, tarifa AS text FROM tarifa_iva
+                    WHERE {$condicion}
+                    ORDER BY tarifa ASC LIMIT 10";
+        } elseif (isset($dimensiones[$tipo])) {
+            [$tabla, $colTexto, $colsBusqueda, $extra] = $dimensiones[$tipo];
+            $params    = [':e' => $idEmpresa];
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto($colsBusqueda, $q, $params, 'ac');
+            $sql = "SELECT id, {$colTexto} AS text{$extra}
+                    FROM {$tabla}
+                    WHERE id_empresa = :e AND eliminado = false AND {$condicion}
+                    ORDER BY {$colTexto} ASC LIMIT 10";
+        } else {
+            echo json_encode([]);
+            exit;
         }
 
-        echo json_encode($results);
+        if ($condicion === '') {
+            echo json_encode([]);
+            exit;
+        }
+
+        $st = Database::getConnection()->prepare($sql);
+        $st->execute($params);
+        echo json_encode($st->fetchAll(PDO::FETCH_ASSOC));
         exit;
     }
 
@@ -1000,7 +1001,9 @@ class ConfiguracionContableController extends BaseModuloController
                              WHERE ap.id_empresa = :e AND ap.tipo_referencia = :tref
                                AND ap.id_referencia = ent.id AND ap.eliminado = false))::int AS configurado";
             $params = [':e' => $idEmpresa, ':tref' => $tipo];
-            $like = '';
+            // Columnas donde busca el texto escrito; la condición la arma
+            // FiltrosBusqueda::condicionTexto() más abajo (multi-palabra, sin tildes).
+            $colsBusqueda = [];
 
             // Filtro de año sobre la fecha del documento que hace relevante a la entidad. Se agrega
             // dentro del EXISTS del movimiento; si no se envía año, la consulta queda igual que antes.
@@ -1013,14 +1016,14 @@ class ConfiguracionContableController extends BaseModuloController
                         FROM proveedores ent
                         WHERE ent.id_empresa = :e AND ent.eliminado = false
                           AND EXISTS (SELECT 1 FROM compras_cabecera c WHERE c.id_proveedor = ent.id AND c.id_empresa = :e AND c.eliminado = false{$filtroAnio})";
-                $like = "(ent.razon_social ILIKE :q OR ent.identificacion ILIKE :q)";
+                $colsBusqueda = ['ent.razon_social', 'ent.identificacion'];
             } elseif ($tipo === 'cliente') {
                 if ($anio !== '') { $filtroAnio = " AND EXTRACT(YEAR FROM v.fecha_emision) = :anio"; $usaAnio = true; }
                 $sql = "SELECT ent.id, ent.nombre AS nombre, ent.identificacion, $cfg
                         FROM clientes ent
                         WHERE ent.id_empresa = :e AND ent.eliminado = false
                           AND EXISTS (SELECT 1 FROM ventas_cabecera v WHERE v.id_cliente = ent.id AND v.id_empresa = :e AND v.eliminado = false{$filtroAnio})";
-                $like = "(ent.nombre ILIKE :q OR ent.identificacion ILIKE :q)";
+                $colsBusqueda = ['ent.nombre', 'ent.identificacion'];
             } elseif ($tipo === 'producto') {
                 // En compras los ítems llegan como texto libre; los productos del catálogo entran a
                 // compras vía homologación (productos_homologacion). En ventas sí van por id_producto.
@@ -1045,12 +1048,12 @@ class ConfiguracionContableController extends BaseModuloController
                 $sql = "SELECT ent.id, ent.nombre AS nombre, ent.codigo AS identificacion, $cfg
                         FROM productos ent
                         WHERE ent.id_empresa = :e AND ent.eliminado = false AND {$movim}";
-                $like = "(ent.nombre ILIKE :q OR ent.codigo ILIKE :q)";
+                $colsBusqueda = ['ent.nombre', 'ent.codigo'];
             } elseif ($tipo === 'empleado') {
                 $sql = "SELECT ent.id, ent.nombres_apellidos AS nombre, ent.identificacion, $cfg
                         FROM empleados ent
                         WHERE ent.id_empresa = :e AND ent.eliminado = false AND ent.estado = 'activo'";
-                $like = "(ent.nombres_apellidos ILIKE :q OR ent.identificacion ILIKE :q)";
+                $colsBusqueda = ['ent.nombres_apellidos', 'ent.identificacion'];
             } else {
                 $tabla = $tipo === 'categoria' ? 'categorias' : 'marcas';
                 $colProd = $tipo === 'categoria' ? 'id_categoria' : 'id_marca';
@@ -1077,14 +1080,16 @@ class ConfiguracionContableController extends BaseModuloController
                     }
                     $usaAnio = true;
                 }
-                $like = "ent.nombre ILIKE :q";
+                $colsBusqueda = ['ent.nombre'];
             }
 
             if ($usaAnio) { $params[':anio'] = (int) $anio; }
 
             if ($q !== '') {
-                $sql .= " AND $like";
-                $params[':q'] = "%$q%";
+                $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto($colsBusqueda, $q, $params, 'ac');
+                if ($condicion !== '') {
+                    $sql .= " AND {$condicion}";
+                }
             }
             $sql .= " ORDER BY configurado DESC, nombre ASC LIMIT 200";
             $st = $db->prepare($sql);
@@ -1187,8 +1192,13 @@ class ConfiguracionContableController extends BaseModuloController
                 $params[':anio'] = (int) $anio;
             }
             if ($q !== '') {
-                $sql .= " AND TRIM(d.descripcion) ILIKE :q";
-                $params[':q'] = "%$q%";
+                // Todas las palabras escritas, en cualquier orden y sin distinguir tildes.
+                $condicionItem = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                    ['TRIM(d.descripcion)'], $q, $params, 'ai'
+                );
+                if ($condicionItem !== '') {
+                    $sql .= " AND {$condicionItem}";
+                }
             }
             $sql .= " GROUP BY TRIM(d.descripcion) ORDER BY configurado DESC, descripcion ASC LIMIT 1000";
             $st = $db->prepare($sql);

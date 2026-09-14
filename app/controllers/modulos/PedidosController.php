@@ -844,21 +844,23 @@ class PedidosController extends BaseModuloController {
         exit;
     }
 
+    /**
+     * Clientes para el autocompletar del modal. La búsqueda la arma
+     * ClienteRepository::buscarAutocomplete(): todas las palabras escritas en
+     * cualquier orden y sin distinguir tildes ("carlos garcia" encuentra a
+     * "CARLOS MAURICIO GARCÍA REVELO").
+     */
     public function buscarClientesAjax() {
         $this->requireLeer();
         try {
-            $term = $_GET['term'] ?? '';
-            $db = \App\core\Database::getConnection();
-            $sql = "SELECT id, identificacion, nombre 
-                    FROM clientes 
-                    WHERE (nombre ILIKE :term OR identificacion ILIKE :term) 
-                    AND id_empresa = :id_empresa 
-                    AND status = '1' 
-                    LIMIT 10";
-            $stmt = $db->prepare($sql);
-            $stmt->execute(['term' => "%$term%", 'id_empresa' => $_SESSION['id_empresa']]);
-            echo json_encode($stmt->fetchAll(\PDO::FETCH_ASSOC));
-        } catch (Exception $e) {
+            $repo = new \App\repositories\modulos\ClienteRepository();
+            $rows = $repo->buscarAutocomplete(
+                (int) $_SESSION['id_empresa'],
+                trim($_GET['term'] ?? $_GET['q'] ?? '')
+            );
+            echo json_encode($rows);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode([]);
         }
     }

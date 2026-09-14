@@ -723,15 +723,13 @@ class CambioProductoCvController extends BaseModuloController
         if (mb_strlen($q) < 2) { echo json_encode(['ok' => true, 'data' => []]); exit; }
 
         try {
-            $db = \App\Core\Database::getConnection();
-            $sql = "SELECT id, nombre, identificacion, direccion, email
-                    FROM clientes
-                    WHERE id_empresa = :e AND eliminado = false
-                      AND (nombre ILIKE :q OR identificacion ILIKE :q)
-                    ORDER BY nombre ASC LIMIT 15";
-            $st = $db->prepare($sql);
-            $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
-            echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
+            // Búsqueda estándar del sistema: todas las palabras en cualquier orden y
+            // sin distinguir tildes (ClienteRepository::buscarAutocomplete). Aquí se
+            // buscan también los clientes inactivos: el cambio puede venir de una
+            // factura antigua de un cliente que ya se dio de baja.
+            $rows = (new \App\repositories\modulos\ClienteRepository())
+                ->buscarAutocomplete($idEmpresa, $q, 15, false);
+            echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

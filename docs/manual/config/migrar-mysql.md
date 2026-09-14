@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador
-version: 1.5
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador
+version: 1.6
 orden: 2
 estado: activo
 ---
@@ -140,7 +140,31 @@ de aquí). Ese enlace se pierde en dos situaciones:
 En ambos casos Cuentas por Pagar muestra la compra pendiente aunque el pago
 exista (ver *Errores frecuentes*).
 
+## Vendedor asignado a cada cliente
+
+El sistema anterior guarda, en la ficha de cada cliente, el **vendedor
+asignado**. La migración lo trae tal cual al campo *Vendedor asignado* del
+cliente en este sistema.
+
+Para que pueda resolverlo, **Vendedores se migra antes que Clientes** — ese es
+el orden en que aparecen en la lista de datos por migrar, y conviene marcar
+las dos casillas juntas. Si se migran los clientes sin haber migrado antes los
+vendedores, los clientes entran **sin vendedor**; basta con migrar
+**Vendedores** y volver a correr **Clientes** para completarlos.
+
+Al volver a correr Clientes, la migración **solo rellena** el vendedor de los
+clientes que no tienen ninguno. Nunca pisa una asignación hecha a mano en este
+sistema, ni la de un cliente que ya existía aquí y se vinculó al del sistema
+anterior. El resumen de la migración informa cuántos clientes quedaron con su
+vendedor.
+
 ## Errores frecuentes
+
+- **Los clientes migrados no traen el vendedor asignado**: se migraron con una
+  versión anterior de la herramienta, o se migraron antes que los Vendedores.
+  Se corrige migrando **Vendedores** y volviendo a correr **Clientes**: no se
+  duplica nada, solo se completa el vendedor de los que están sin él (ver
+  *Vendedor asignado a cada cliente*).
 
 - **Un ingreso, egreso o pedido migrado no aparece con serie**: su número
   ya estaba usado por otro documento en el punto de emisión de destino (el
@@ -192,6 +216,11 @@ exista (ver *Errores frecuentes*).
 
 ## Historial de cambios
 
+- **1.6** — Clientes: ahora se trae el **vendedor asignado** de cada cliente
+  desde el sistema anterior (antes se perdía). **Vendedores** pasa a migrarse
+  **antes** que Clientes, y al volver a correr Clientes se completa el
+  vendedor de los que ya estaban migrados sin él, sin pisar las asignaciones
+  hechas a mano.
 - **1.5** — Se documenta cuándo se pierde el enlace pago↔compra (pagos
   migrados antes que las compras; compras borradas y vueltas a migrar) y el
   diagnóstico por motivo de las compras/liquidaciones migradas que siguen

@@ -274,19 +274,31 @@ class ReporteRetencionesRepository extends BaseRepository
             ->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** Autocomplete de terceros por tipo (CLIENTE|PROVEEDOR). */
+    /**
+     * Autocomplete de terceros por tipo (CLIENTE|PROVEEDOR). El texto pasa por
+     * FiltrosBusqueda::condicionTexto(): todas las palabras escritas, en cualquier
+     * orden y sin distinguir tildes.
+     */
     public function buscarTerceros(int $idEmpresa, string $tipo, string $q): array
     {
-        $q = '%' . trim($q) . '%';
-        if ($tipo === 'PROVEEDOR') {
-            $sql = "SELECT id, razon_social AS nombre, identificacion AS ident FROM proveedores
-                    WHERE id_empresa = :e AND eliminado = false AND (razon_social ILIKE :q OR identificacion ILIKE :q)
-                    ORDER BY razon_social LIMIT 15";
-        } else {
-            $sql = "SELECT id, nombre, identificacion AS ident FROM clientes
-                    WHERE id_empresa = :e AND eliminado = false AND (nombre ILIKE :q OR identificacion ILIKE :q)
-                    ORDER BY nombre LIMIT 15";
-        }
-        return $this->q($sql, [':e' => $idEmpresa, ':q' => $q])->fetchAll(PDO::FETCH_ASSOC);
+        [$tabla, $colNombre] = $tipo === 'PROVEEDOR'
+            ? ['proveedores', 'razon_social']
+            : ['clientes', 'nombre'];
+
+        $params = [':e' => $idEmpresa];
+        // Sin texto no se filtra: devuelve las primeras filas, como antes.
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            [$colNombre, 'identificacion'],
+            trim($q),
+            $params,
+            'ac'
+        );
+        $filtro = $condicion !== '' ? "AND {$condicion}" : '';
+
+        $sql = "SELECT id, {$colNombre} AS nombre, identificacion AS ident
+                FROM {$tabla}
+                WHERE id_empresa = :e AND eliminado = false {$filtro}
+                ORDER BY {$colNombre} LIMIT 15";
+        return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 }

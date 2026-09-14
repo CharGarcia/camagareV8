@@ -210,19 +210,12 @@ class PedidosController extends ApiBaseController
     {
         $this->requireLeer();
 
-        $term = trim($_GET['q'] ?? $_GET['term'] ?? '');
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-
-        $db = \App\core\Database::getConnection();
-        $stmt = $db->prepare(
-            "SELECT id, identificacion, nombre FROM clientes
-             WHERE (nombre ILIKE :term OR identificacion ILIKE :term)
-               AND id_empresa = :id_empresa AND status = '1'
-             LIMIT 10"
+        $rows = (new \App\repositories\modulos\ClienteRepository())->buscarAutocomplete(
+            (int) $_SESSION['id_empresa'],
+            trim($_GET['q'] ?? $_GET['term'] ?? '')
         );
-        $stmt->execute(['term' => "%{$term}%", 'id_empresa' => $idEmpresa]);
 
-        $this->jsonOk($stmt->fetchAll(\PDO::FETCH_ASSOC));
+        $this->jsonOk($rows);
     }
 
     /**

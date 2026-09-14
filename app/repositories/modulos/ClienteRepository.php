@@ -288,6 +288,59 @@ class ClienteRepository extends BaseRepository
     }
 
     /**
+     * Clientes para los buscadores tipo "autocompletar" (modal de Pedidos, Car-Wash,
+     * Taller, Servicio Externo, Cambio de Producto…).
+     *
+     * El texto pasa por FiltrosBusqueda::condicionTexto(), la forma estándar del
+     * sistema para texto libre: exige TODAS las palabras escritas, en cualquier
+     * orden, y sin distinguir tildes/eñe (si la extensión `unaccent` está
+     * instalada; si no, degrada a búsqueda sensible a tildes). Así "carlos garcia"
+     * encuentra a "CARLOS MAURICIO GARCÍA REVELO". Cada controlador repetía antes
+     * su propio `ILIKE '%frase%'`, que solo acertaba con la frase pegada y exacta.
+     *
+     * Devuelve un superconjunto de columnas para que sirva a todos esos modales sin
+     * que cada uno tenga que repetir su propio SELECT (Facturación de Consignaciones
+     * usa vendedor/plazo/forma de pago; los demás ignoran lo que no necesitan).
+     *
+     * @param bool $soloActivos Excluye los clientes inactivos (status = '0').
+     * @return array<int, array<string, mixed>> id, identificacion, nombre, direccion,
+     *         email, telefono, id_vendedor, plazo, id_forma_pago_sri
+     */
+    public function buscarAutocomplete(int $idEmpresa, string $termino, int $limite = 10, bool $soloActivos = true): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $where  = $this->getBaseWhere($idEmpresa);
+
+        // Sin texto no se filtra: devuelve las primeras filas, como cuando el
+        // buscador se abre vacío.
+        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['nombre', 'identificacion'],
+            trim($termino),
+            $params,
+            'ac'
+        );
+        if ($condicion !== '') {
+            $where .= " AND {$condicion}";
+        }
+
+        if ($soloActivos) {
+            $where .= " AND status = '1'";
+        }
+
+        $limite = max(1, min($limite, 50));
+        $sql = "SELECT id, identificacion, nombre, direccion, email, telefono,
+                       id_vendedor, COALESCE(plazo, 0) AS plazo, id_forma_pago_sri
+                FROM {$this->table}
+                {$where}
+                ORDER BY nombre ASC
+                LIMIT {$limite}";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Cliente por id, con los mismos joins/columnas que getListado() (nombre_vendedor,
      * nombre_tipo_id, etc.) — mismo shape que espera seleccionarCliente() en Factura de Venta.
      */

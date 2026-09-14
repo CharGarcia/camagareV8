@@ -1159,18 +1159,17 @@ class TallerController extends BaseModuloController
         header('Content-Type: application/json');
 
         try {
-            $q  = trim($_GET['q'] ?? $_GET['term'] ?? '');
-            $db = \App\core\Database::getConnection();
-            $st = $db->prepare(
-                "SELECT id, identificacion, nombre, direccion, email AS correo, telefono
-                 FROM clientes
-                 WHERE (nombre ILIKE :q OR identificacion ILIKE :q)
-                   AND id_empresa = :e AND status = '1' AND eliminado = false
-                 ORDER BY nombre ASC
-                 LIMIT 10"
+            // Búsqueda estándar del sistema: todas las palabras en cualquier orden y
+            // sin distinguir tildes (ClienteRepository::buscarAutocomplete).
+            $rows = (new \App\repositories\modulos\ClienteRepository())->buscarAutocomplete(
+                (int) $_SESSION['id_empresa'],
+                trim($_GET['q'] ?? $_GET['term'] ?? '')
             );
-            $st->execute([':q' => "%$q%", ':e' => (int) $_SESSION['id_empresa']]);
-            echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
+            foreach ($rows as &$fila) {
+                $fila['correo'] = $fila['email']; // el modal lo consume como "correo"
+            }
+            unset($fila);
+            echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
