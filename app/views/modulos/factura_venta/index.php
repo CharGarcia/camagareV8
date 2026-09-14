@@ -4581,24 +4581,30 @@ $totalPages = $totalPagesOriginal;
                         };
                     }
 
-                    // Si el lote guardado ya no está en el stock actual (facturas migradas o
-                    // históricas: el lote se vendió y salió de stock), inyectarlo como opción
-                    // para no perder la visualización del dato ya guardado en el detalle.
-                    // stock=0: es un valor histórico, no altera validaciones de stock.
-                    if (selLote && currentLote && currentLote !== 'sin_lote'
-                        && !Array.from(selLote.options).some(o => o.value === currentLote)) {
-                        const optHist = new Option(currentLote, currentLote);
-                        optHist.dataset.stock = 0;
-                        selLote.appendChild(optHist);
-                    }
-
-                    // Restauración de lote solo si ya existe un valor guardado (edición).
-                    // No se dispara 'change': eso acotaría a la fecha del catálogo y pisaría
-                    // la que tiene guardada la línea. Se acota a currentCad cuando existe.
-                    if (selLote && currentLote && Array.from(selLote.options).some(o => o.value === currentLote)) {
+                    // Mostrar SIEMPRE el lote y la caducidad GUARDADOS en el detalle, aunque el
+                    // lote ya no esté en stock, o su caducidad en el stock actual DIFIERA de la
+                    // guardada (facturas migradas/históricas). Se inyecta como opción lo que falte
+                    // en cada select y se fuerza el valor guardado. stock=0 en lo inyectado: es
+                    // histórico, no altera validaciones de stock.
+                    if (selLote && currentLote && currentLote !== 'sin_lote') {
+                        if (!Array.from(selLote.options).some(o => o.value === currentLote)) {
+                            const optHist = new Option(currentLote, currentLote);
+                            optHist.dataset.stock = 0;
+                            selLote.appendChild(optHist);
+                        }
                         selLote.value = currentLote;
                         acotarCadAlLote(selLote.selectedIndex, currentCad || '');
                         actualizarSaldoLote(selLote);
+                        // Garantía de la caducidad: forzar el valor guardado, inyectándolo si el
+                        // stock no lo tiene o su fecha difiere de la guardada.
+                        if (selCad && currentCad) {
+                            if (!Array.from(selCad.options).some(o => o.value === currentCad)) {
+                                const optCad = new Option(fvFechaCadTexto(currentCad), currentCad);
+                                optCad.dataset.stock = 0;
+                                selCad.appendChild(optCad);
+                            }
+                            selCad.value = currentCad;
+                        }
                     } else if (selCad && currentCad && Array.from(selCad.options).some(o => o.value === currentCad)) {
                         selCad.value = currentCad;
                         selCad.dispatchEvent(new Event('change'));
