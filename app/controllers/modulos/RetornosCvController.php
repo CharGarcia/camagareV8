@@ -158,7 +158,7 @@ class RetornosCvController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-arrow-return-left fs-3 d-block mb-2"></i>No se encontraron retornos.</td></tr>';
+            echo '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-arrow-return-left fs-3 d-block mb-2"></i>No se encontraron retornos.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 if (!empty($r['fecha_retorno'])) $r['fecha_retorno'] = date('d-m-Y', strtotime($r['fecha_retorno']));
@@ -171,7 +171,6 @@ class RetornosCvController extends BaseModuloController
                         <td data-col="secuencial">' . htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) . '</td>
                         <td data-col="cliente" class="text-truncate" style="max-width:250px">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</td>
                         <td data-col="motivo" class="text-truncate" style="max-width:220px">' . htmlspecialchars($r['motivo'] ?? '—') . '</td>
-                        <td data-col="total" class="text-end pe-3">' . number_format((float)($r['total'] ?? 0), 2) . '</td>
                         <td class="text-center pe-3" data-col="estado">' . $statusBadge . '</td>
                       </tr>';
             }

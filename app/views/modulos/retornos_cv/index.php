@@ -94,7 +94,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'secuencial'    => 'Secuencial',
                     'cliente'       => 'Cliente',
                     'motivo'        => 'Motivo',
-                    'total'         => 'Total',
                     'estado'        => 'Estado'
                 ], $vistaConfig ?? [], 'retornos-cv'); ?>
 
@@ -121,14 +120,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header" role="button" data-col="secuencial">Secuencial <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-col="cliente">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-col="motivo">Motivo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-end sortable-header" role="button" data-col="total">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center pe-3 sortable-header" role="button" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="grid-body">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="6" class="text-center py-5 text-muted">
+                            <td colspan="5" class="text-center py-5 text-muted">
                                 <i class="bi bi-arrow-return-left fs-3 d-block mb-2"></i>
                                 No se encontraron retornos.
                             </td>
@@ -143,7 +141,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="secuencial"><?= htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) ?></td>
                                 <td data-col="cliente" class="text-truncate" style="max-width:250px" title="<?= htmlspecialchars($r['cliente_nombre'] ?? '') ?>"><?= htmlspecialchars($r['cliente_nombre'] ?? '') ?></td>
                                 <td data-col="motivo" class="text-truncate" style="max-width:220px" title="<?= htmlspecialchars($r['motivo'] ?? '—') ?>"><?= htmlspecialchars($r['motivo'] ?? '—') ?></td>
-                                <td data-col="total" class="text-end"><?= number_format((float)($r['total'] ?? 0), 2) ?></td>
                                 <td class="text-center pe-3" data-col="estado"><?= $statusBadge ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -214,7 +211,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     async function cargarGrid() {
         try {
             const tbody = document.getElementById('grid-body');
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></td></tr>';
 
             const b_input = document.getElementById('b');
             g_buscar = b_input ? b_input.value : '';

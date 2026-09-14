@@ -6,7 +6,7 @@ ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: retorno, retornos, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo
-version: 1.6
+version: 1.7
 orden: 46
 estado: activo
 ---
@@ -142,6 +142,11 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.7** — El listado ya **no muestra la columna Total**: el valor del retorno se
+  consulta abriendo el documento. Las columnas del listado son ahora Fecha,
+  Secuencial, Cliente, Motivo y Estado. Las exportaciones a **PDF** y **Excel**
+  del listado siguen incluyendo el total.
 
 - **1.6** — El **número ya no se puede repetir**: lo asigna el servidor al
   guardar (antes se guardaba el de la vista previa, así que dos formularios
