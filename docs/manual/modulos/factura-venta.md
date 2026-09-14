@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento
-version: 2.5
+etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional
+version: 2.6
 orden: 20
 estado: activo
 ---
@@ -70,6 +70,35 @@ En la parte superior del formulario están las acciones sobre el documento ya
 guardado: generar el **PDF**, ver el **XML**, descargar un **Excel** con el
 detalle y los totales, enviarlo por **correo** o por **WhatsApp** y remitirlo
 al **SRI**. Cada acción comprueba primero que la factura esté guardada.
+
+## Qué columnas y totales muestra el PDF
+
+El PDF (RIDE) imprime solo lo que la factura realmente usa, para no gastar ancho
+ni líneas en campos vacíos:
+
+- **Columnas del detalle**: *Cód. Principal*, *Cód. Auxiliar*, *Cantidad*,
+  *Descripción*, *Detalle Adicional*, *Precio Unitario*, *Descuento* y
+  *Precio Total*.
+- **Cód. Auxiliar** y **Detalle Adicional** aparecen **solo si algún ítem de la
+  factura trae ese dato**. Si no, la columna no se dibuja y su espacio pasa a la
+  descripción.
+- El ancho de **Cód. Principal** se ajusta al código más largo de la factura, de
+  modo que el código se vea completo. Si es excepcionalmente largo, el texto se
+  condensa dentro de su celda en lugar de invadir la columna siguiente.
+- **Totales**: se imprimen los subtotales por tarifa de IVA, *Subtotal sin
+  impuestos*, *Total descuento*, *ICE*, el *IVA* por tarifa y el *Valor total*.
+- **Servicio** (propina) aparece **solo si el establecimiento tiene activada la
+  propina** en *Empresa → Facturación*, o si la factura ya se emitió con un valor
+  de servicio.
+
+Las columnas *Subsidio* y *Precio sin Subsidio* y la línea *IRBPNR* ya no se
+imprimen: el sistema no factura bienes subsidiados ni ese impuesto, así que
+salían siempre en 0,00. Cuando una factura sí tiene subsidio, el ahorro sigue
+apareciendo en el bloque de totales (*Valor total sin subsidio* y *Ahorro por
+subsidio*).
+
+> Si usas una **plantilla de factura personalizada**, el diseño lo define la
+> plantilla y no esta sección.
 
 ## Enviar la factura y el enlace de pago por WhatsApp
 
@@ -171,6 +200,13 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.6** — **PDF de la factura**. Se quitaron las columnas *Subsidio* y *Precio
+  sin Subsidio* y la línea *IRBPNR* de los totales: iban siempre en 0,00. La
+  columna *Cód. Principal* se ensancha ahora según el código más largo de la
+  factura (antes un código largo se salía encima de la columna siguiente) y
+  *Detalle Adicional* solo se dibuja si algún ítem lo trae. *Servicio* aparece
+  solo si el establecimiento tiene activada la propina o la factura ya se emitió
+  con servicio. Ver *"Qué columnas y totales muestra el PDF"*.
 - **2.5** — La columna **Vencimiento** de cada línea se limita ahora al **lote
   seleccionado** (y elegir la fecha selecciona su lote). Antes se ofrecían todas
   las fechas del producto, con lo que podía facturarse una combinación

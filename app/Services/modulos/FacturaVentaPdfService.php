@@ -496,8 +496,13 @@ class FacturaVentaPdfService
     }
 
     // ─── DETALLE ─────────────────────────────────────────────────────────────
-    // 10 columnas RIDE: Cod.Principal | Cod.Auxiliar | Cantidad | Descripción |
-    // Detalle Adicional | Precio Unitario | Subsidio | Precio sin Subsidio | Descuento | Precio Total
+    // Columnas RIDE: Cod.Principal | Cod.Auxiliar | Cantidad | Descripción |
+    // Detalle Adicional | Precio Unitario | Descuento | Precio Total
+    // "Subsidio" y "Precio sin Subsidio" no se imprimen: el sistema no factura
+    // bienes subsidiados, así que eran dos columnas fijas en 0.00 robándole
+    // ancho al código y a la descripción (si algún día hay subsidio, sigue
+    // apareciendo en el bloque de totales del pie).
+    // "Cód. Auxiliar" y "Detalle Adicional" se ocultan si ningún ítem los trae.
 
     private function dibujarDetalle(array $detalles, float $y): float
     {
@@ -505,17 +510,16 @@ class FacturaVentaPdfService
         $mL  = $this->marginL;
         $cW  = $this->contentW;
 
+        // Anchos base (suman contentW). Descripción absorbe cualquier sobrante.
         $cols = [
-            ['key' => 'codp', 'titulo' => "Cod.\nPrincipal",    'w' => 16, 'align' => 'L'],
-            ['key' => 'coda', 'titulo' => "Cod.\nAuxiliar",     'w' => 14, 'align' => 'L'],
-            ['key' => 'cant', 'titulo' => "Cantidad",           'w' => 14, 'align' => 'R'],
-            ['key' => 'desc', 'titulo' => "Descripción",        'w' => 36, 'align' => 'L'],
-            ['key' => 'deta', 'titulo' => "Detalle\nAdicional", 'w' => 24, 'align' => 'L'],
-            ['key' => 'pu',   'titulo' => "Precio\nUnitario",   'w' => 20, 'align' => 'R'],
-            ['key' => 'sub',  'titulo' => "Subsidio",           'w' => 16, 'align' => 'R'],
-            ['key' => 'pss',  'titulo' => "Precio sin\nSubsidio",'w' => 20, 'align' => 'R'],
-            ['key' => 'dcto', 'titulo' => "Descuento",          'w' => 16, 'align' => 'R'],
-            ['key' => 'ptot', 'titulo' => "Precio\nTotal",      'w' => 14, 'align' => 'R'],
+            ['key' => 'codp', 'titulo' => "Cod.\nPrincipal",    'w' => 20.0, 'align' => 'L'],
+            ['key' => 'coda', 'titulo' => "Cod.\nAuxiliar",     'w' => 18.0, 'align' => 'L'],
+            ['key' => 'cant', 'titulo' => "Cantidad",           'w' => 16.0, 'align' => 'R'],
+            ['key' => 'desc', 'titulo' => "Descripción",        'w' => 50.0, 'align' => 'L'],
+            ['key' => 'deta', 'titulo' => "Detalle\nAdicional", 'w' => 28.0, 'align' => 'L'],
+            ['key' => 'pu',   'titulo' => "Precio\nUnitario",   'w' => 22.0, 'align' => 'R'],
+            ['key' => 'dcto', 'titulo' => "Descuento",          'w' => 18.0, 'align' => 'R'],
+            ['key' => 'ptot', 'titulo' => "Precio\nTotal",      'w' => 18.0, 'align' => 'R'],
         ];
 
         // Ocultar la columna "Cód. Auxiliar" si ningún ítem tiene código auxiliar.
@@ -528,12 +532,68 @@ class FacturaVentaPdfService
             $cols = array_values(array_filter($cols, fn($c) => $c['key'] !== 'coda'));
         }
 
+        // Ocultar "Detalle Adicional" si ningún ítem trae información (mismo
+        // criterio que "Cód. Auxiliar"): su ancho lo reabsorbe la Descripción.
+        // Ojo: se mira el valor YA preparado por FacturaItemsPresentacionService,
+        // que es quien puede inyectar lote/caducidad/NUP en info_adicional.
+        $hayDetalle = false;
+        foreach ($detalles as $d) {
+            $txt = trim((string)($d['info_adicional'] ?? ($d['detalle_adicional'] ?? '')));
+            if ($txt !== '') { $hayDetalle = true; break; }
+        }
+        if (!$hayDetalle) {
+            $cols = array_values(array_filter($cols, fn($c) => $c['key'] !== 'deta'));
+        }
+
+        // Ancho de las columnas de código según su CONTENIDO real: TCPDF no
+        // recorta el texto de Cell(), así que un código largo se desbordaba
+        // encima de la columna siguiente en vez de ensanchar la suya. Se mide
+        // con la misma fuente de las filas y se acota entre el ancho base y un
+        // máximo, para no dejar sin sitio a la Descripción.
+        $pdf->SetFont('helvetica', '', 7);
+        $campoCod = ['codp' => 'codigo_principal', 'coda' => 'codigo_auxiliar'];
+        $maxCod   = ['codp' => 42.0,               'coda' => 26.0];
+        $minCod   = [];
+        foreach ($cols as &$c) {
+            if (!isset($campoCod[$c['key']])) { continue; }
+            $minCod[$c['key']] = (float)$c['w'];
+            $wTexto = 0.0;
+            foreach ($detalles as $d) {
+                $txt = trim((string)($d[$campoCod[$c['key']]] ?? ''));
+                if ($txt !== '') { $wTexto = max($wTexto, $pdf->GetStringWidth($txt)); }
+            }
+            // +2mm = padding izquierdo/derecho de la celda.
+            $c['w'] = round(max((float)$c['w'], min($maxCod[$c['key']], $wTexto + 2.0)), 1);
+        }
+        unset($c);
+
+        // Piso de la Descripción: si los códigos se llevaron demasiado ancho, se
+        // les devuelve el exceso (primero al auxiliar, que es el prescindible).
+        $minDesc  = 28.0;
+        $wDescRes = $cW - array_sum(array_map(
+            fn($c) => $c['key'] === 'desc' ? 0.0 : (float)$c['w'],
+            $cols
+        ));
+        if ($wDescRes < $minDesc) {
+            $porRecortar = $minDesc - $wDescRes;
+            foreach (['coda', 'codp'] as $k) {
+                if ($porRecortar <= 0.01) { break; }
+                foreach ($cols as &$c) {
+                    if ($c['key'] !== $k) { continue; }
+                    $quita = min($porRecortar, max(0.0, (float)$c['w'] - ($minCod[$k] ?? 0.0)));
+                    $c['w'] -= $quita;
+                    $porRecortar -= $quita;
+                }
+                unset($c);
+            }
+        }
+
         // Ajustar Descripción para que la suma sea exactamente contentW
         $sumaW = array_sum(array_column($cols, 'w'));
-        if ($sumaW !== (int)$cW) {
+        if (abs($sumaW - $cW) > 0.01) {
             foreach ($cols as &$c) {
                 if ($c['key'] === 'desc') {
-                    $c['w'] += ((int)$cW - $sumaW);
+                    $c['w'] += ($cW - $sumaW);
                     break;
                 }
             }
@@ -581,8 +641,6 @@ class FacturaVentaPdfService
             $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
 
             $pu      = (float)($d['precio_unitario'] ?? 0);
-            $subsidio = (float)($d['subsidio'] ?? 0);
-            $pss     = $pu + $subsidio;
             $dcto    = (float)($d['descuento'] ?? 0);
             $ptot    = (float)($d['precio_total_sin_impuesto'] ?? 0);
 
@@ -593,15 +651,13 @@ class FacturaVentaPdfService
                 'desc' => $d['descripcion'] ?? '',
                 'deta' => $d['info_adicional'] ?? ($d['detalle_adicional'] ?? ''),
                 'pu'   => number_format($pu, $this->decPrecio),
-                'sub'  => number_format($subsidio, $this->decPrecio),
-                'pss'  => number_format($pss, $this->decPrecio),
                 'dcto' => number_format($dcto, 2),
                 'ptot' => number_format($ptot, 2),
             ];
 
             // Calcular altura de fila según columnas multilinea
-            $nDesc = max(1, $pdf->getNumLines($vals['desc'], $wDesc));
-            $nDeta = max(1, $pdf->getNumLines($vals['deta'], $wDeta));
+            $nDesc = $wDesc > 0 ? max(1, $pdf->getNumLines($vals['desc'], $wDesc)) : 1;
+            $nDeta = $wDeta > 0 ? max(1, $pdf->getNumLines($vals['deta'], $wDeta)) : 1;
             $ch    = max(3.6, max($nDesc, $nDeta) * 3.1);
 
             $xCur = $mL;
@@ -626,6 +682,12 @@ class FacturaVentaPdfService
                 if ($col['key'] === 'desc' || $col['key'] === 'deta') {
                     // Alineación horizontal izquierda + vertical centrada (valign 'M')
                     $pdf->MultiCell($col['w'], $ch, $val, 1, $col['align'], true, 0, '', '', true, 0, false, true, 0, 'M');
+                } elseif ($col['key'] === 'codp' || $col['key'] === 'coda') {
+                    // stretch = 1: si un código excepcionalmente largo no cabe ni
+                    // con el ancho calculado arriba (llegó al tope), TCPDF lo
+                    // condensa para que se vea COMPLETO dentro de su celda, en vez
+                    // de desbordarse encima de la columna siguiente.
+                    $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true, '', 1);
                 } else {
                     $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true);
                 }
@@ -786,10 +848,20 @@ class FacturaVentaPdfService
             $yTot += $lh;
         }
 
-        $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'IRBPNR', 0.0);
-        $yTot += $lh;
-        $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'SERVICIO', $propina);
-        $yTot += $lh;
+        // IRBPNR ya no se imprime: el sistema no emite ese impuesto y la fila
+        // iba fija en 0.00, ocupando una línea de totales en todas las facturas.
+
+        // SERVICIO (propina) solo si el establecimiento lo tiene activado en su
+        // configuración (Empresa → Facturación → propina). Se imprime igual
+        // cuando el documento ya trae propina > 0, para que un comprobante
+        // emitido con servicio nunca lo oculte aunque después se apague el
+        // interruptor o la config no llegue hasta este PDF.
+        $propinaActiva = in_array((string)($empresa['mostrar_propina_factura'] ?? 'false'), ['t', 'true', '1'], true)
+            || ($empresa['mostrar_propina_factura'] ?? false) === true;
+        if ($propinaActiva || abs($propina) >= 0.005) {
+            $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'SERVICIO', $propina);
+            $yTot += $lh;
+        }
 
         // VALOR TOTAL (negrita, fondo)
         $pdf->SetFont('helvetica', 'B', 8);

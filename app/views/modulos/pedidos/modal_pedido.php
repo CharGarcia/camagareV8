@@ -156,7 +156,9 @@
                                             <tr class="table-light border-bottom">
                                                 <th class="ps-3 py-2 small fw-bold text-muted text-center" style="width: 150px;">Código</th>
                                                 <th class="py-2 small fw-bold text-muted" style="width: 60%;">Descripción <span class="text-danger">*</span></th>
-                                                <th class="py-2 small fw-bold text-muted text-center" style="width: 100px;">Estado</th>
+                                                <!-- Columna Estado: se oculta en un pedido nuevo (no hay nada que informar
+                                                     todavía) y aparece al abrir un pedido existente. Ver pedActualizarColumnaEstado(). -->
+                                                <th class="py-2 small fw-bold text-muted text-center ped-col-estado d-none" style="width: 100px;">Estado</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width: 15%;">Cant. <span class="text-danger">*</span></th>
                                                 <th style="width: 40px;"></th>
                                             </tr>

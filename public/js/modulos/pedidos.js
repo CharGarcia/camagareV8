@@ -350,6 +350,8 @@ function nuevoPedido() {
 
     // Activar primera pestaña
     agregarFilaProducto();
+    // Pedido nuevo: sin columna "Estado" (no hay nada registrado todavía).
+    pedActualizarColumnaEstado();
 
     // Configurar serie y secuencial
     const selPuntos = document.getElementById('id_punto_emision');
@@ -374,6 +376,27 @@ function nuevoPedido() {
     if (typeof window.aplicarFavoritosModal === 'function') {
         window.aplicarFavoritosModal('#modalPedido');
     }
+}
+
+/**
+ * Muestra u oculta la columna "Estado" del detalle.
+ *
+ * Esa columna informa si la línea ya se registró en una consignación o factura,
+ * así que en un pedido NUEVO no tiene nada que decir y solo roba ancho (se nota
+ * sobre todo en el celular). Se muestra al abrir un pedido ya existente —
+ * editarlo o consultarlo — o si alguna línea trae su badge.
+ */
+function pedActualizarColumnaEstado() {
+    const modal = document.getElementById('modalPedido');
+    if (!modal) return;
+
+    const esExistente = !!(document.getElementById('pedido_id')?.value || '').trim();
+    const hayBadge    = !!modal.querySelector('#detalle-productos .ped-col-estado .badge');
+    const mostrar     = esExistente || hayBadge;
+
+    modal.querySelectorAll('.ped-col-estado').forEach(celda => {
+        celda.classList.toggle('d-none', !mostrar);
+    });
 }
 
 /**
@@ -409,7 +432,7 @@ function agregarFilaProducto(prod = null) {
         ? `<button type="button" class="btn btn-link btn-sm text-info p-0 shadow-none border-0" onclick="verHistorialItem(this)" title="Ver historial (no se puede eliminar: ya está registrado)">
                <i class="bi bi-clock-history fs-6"></i>
            </button>`
-        : `<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); calcTotales();" title="Eliminar ítem">
+        : `<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); calcTotales(); pedActualizarColumnaEstado();" title="Eliminar ítem">
                <i class="bi bi-trash3 fs-6"></i>
            </button>`;
 
@@ -417,6 +440,9 @@ function agregarFilaProducto(prod = null) {
     tr.className = 'row-detalle fila-detalle';
     tr.dataset.cantidadConsumida = consumida;
 
+    // La celda de "Estado" nace oculta; pedActualizarColumnaEstado() — que se
+    // llama justo después del append — la muestra si corresponde, así nunca
+    // quedan más celdas que encabezados.
     tr.innerHTML = `
         <td class="text-center align-middle position-relative" style="width: 150px;">
             <input type="text" class="form-control form-control-sm input-detalle input-codigo text-center border-primary border-opacity-25" placeholder="Código..." autocomplete="off" value="${prod ? prod.producto_codigo : ''}" ${registrada ? 'readonly' : ''}>
@@ -426,7 +452,7 @@ function agregarFilaProducto(prod = null) {
             <input type="hidden" class="input-id-producto" value="${prod ? prod.id_producto : ''}">
             <input type="hidden" class="input-id-detalle" value="${prod && prod.id ? prod.id : ''}">
         </td>
-        <td class="align-middle text-center">${badgeHtml}</td>
+        <td class="align-middle text-center ped-col-estado d-none">${badgeHtml}</td>
         <td class="align-middle text-center" style="width: 15%;">
             <input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${cantidadOriginal}" step="any" min="${consumida}" oninput="calcFila(this)">
         </td>
@@ -435,6 +461,7 @@ function agregarFilaProducto(prod = null) {
         </td>
     `;
     tbody.appendChild(tr);
+    pedActualizarColumnaEstado();
 
     if (registrada) {
         // Fila ya registrada en otro documento: no se puede quitar ni cambiar de
@@ -1001,6 +1028,8 @@ async function editarPedido(id) {
                     agregarFilaProducto();
                 }
             }
+            // Pedido existente (editar / ver): la columna "Estado" sí se muestra.
+            pedActualizarColumnaEstado();
 
             const elTitulo = document.getElementById('titulo-modal');
             if (elTitulo) {
