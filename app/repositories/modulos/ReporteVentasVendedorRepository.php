@@ -539,8 +539,10 @@ class ReporteVentasVendedorRepository extends BaseRepository
             // subtotal se expone aparte, en 'subtotal_nc'), así que restarlo no altera
             // el subtotal de las facturas. 'subtotal_nc' va en $sumar porque del lado
             // factura vale 0 y del lado NC trae el subtotal que va a su columna.
-            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoVendedor', ['id_vendedor'],
-                ['base_0', 'base_iva', 'valor_iva', 'total', 'subtotal'], ['saldo', 'subtotal_nc']);
+            return $this->conSubtotalNeto(
+                $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoVendedor', ['id_vendedor'],
+                    ['base_0', 'base_iva', 'valor_iva', 'total', 'subtotal'], ['saldo', 'subtotal_nc'])
+            );
         }
 
         list($f, $cteDocs, $params) = $this->prepararDocs($idEmpresa, $filtros);
@@ -570,7 +572,29 @@ class ReporteVentasVendedorRepository extends BaseRepository
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        return $this->conSubtotalNeto($st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * Agrega a cada fila el TOTAL de la vista Por Vendedor: subtotal de las
+     * facturas − subtotal de las notas de crédito, ambos SIN impuestos. Se
+     * calcula aquí (y no en SQL) porque los dos subtotales vienen de fuentes
+     * distintas y recién quedan juntos en la misma fila después de combinarNeto().
+     *
+     * Las filas se reordenan por ese total para que el listado quede ordenado de
+     * mayor a menor por la columna que el usuario ve (el ORDER BY del SQL trabaja
+     * sobre el total CON impuestos, que puede diferir cuando se mezclan tarifas).
+     */
+    private function conSubtotalNeto(array $rows): array
+    {
+        foreach ($rows as &$r) {
+            $r['subtotal_neto'] = (float) ($r['subtotal'] ?? 0) - (float) ($r['subtotal_nc'] ?? 0);
+        }
+        unset($r);
+
+        usort($rows, fn($a, $b) => $b['subtotal_neto'] <=> $a['subtotal_neto']);
+
+        return $rows;
     }
 
     /**
@@ -783,8 +807,9 @@ class ReporteVentasVendedorRepository extends BaseRepository
                 'total_documentos' => $sf['total_documentos'] + $sn['total_documentos'],
                 // Subtotales separados (mismo criterio que las filas): el de las
                 // facturas no se netea contra el de las NC, cada uno va a su columna.
-                'total_subtotal'    => $sf['total_subtotal'],
-                'total_subtotal_nc' => $sn['total_subtotal_nc'],
+                'total_subtotal'      => $sf['total_subtotal'],
+                'total_subtotal_nc'   => $sn['total_subtotal_nc'],
+                'total_subtotal_neto' => $sf['total_subtotal'] - $sn['total_subtotal_nc'],
                 // La NC no tiene cartera propia (su saldo es 0) y ya está descontada
                 // dentro del saldo de la factura: no se vuelve a restar aquí.
                 'total_saldo'      => $sf['total_saldo'],
@@ -817,14 +842,15 @@ class ReporteVentasVendedorRepository extends BaseRepository
         $row = $st->fetch(PDO::FETCH_ASSOC);
 
         return [
-            'total_base_0'      => (float)($row['total_base_0'] ?? 0),
-            'total_base_iva'    => (float)($row['total_base_iva'] ?? 0),
-            'total_iva'         => (float)($row['total_iva'] ?? 0),
-            'total_subtotal'    => (float)($row['total_subtotal'] ?? 0),
-            'total_subtotal_nc' => (float)($row['total_subtotal_nc'] ?? 0),
-            'gran_total'        => (float)($row['gran_total'] ?? 0),
-            'total_saldo'       => (float)($row['total_saldo'] ?? 0),
-            'total_documentos'  => (int)($row['total_documentos'] ?? 0),
+            'total_base_0'        => (float)($row['total_base_0'] ?? 0),
+            'total_base_iva'      => (float)($row['total_base_iva'] ?? 0),
+            'total_iva'           => (float)($row['total_iva'] ?? 0),
+            'total_subtotal'      => (float)($row['total_subtotal'] ?? 0),
+            'total_subtotal_nc'   => (float)($row['total_subtotal_nc'] ?? 0),
+            'total_subtotal_neto' => (float)($row['total_subtotal'] ?? 0) - (float)($row['total_subtotal_nc'] ?? 0),
+            'gran_total'          => (float)($row['gran_total'] ?? 0),
+            'total_saldo'         => (float)($row['total_saldo'] ?? 0),
+            'total_documentos'    => (int)($row['total_documentos'] ?? 0),
         ];
     }
 

@@ -27,6 +27,11 @@ class MigracionMysqlService
         // `clientes.id_vendedor`) y necesita el mapa de vendedores ya construido para resolverlo.
         'vendedores'        => ['label' => 'Vendedores',                       'tabla' => 'vendedores',                 'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
         'clientes'          => ['label' => 'Clientes',                         'tabla' => 'clientes',                   'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
+        // Marcas va ANTES que Productos: el viejo guarda la marca del producto en la tabla puente
+        // `marca_producto` (no en `productos_servicios`), así que el enlace producto → marca necesita el
+        // mapa de marcas ya construido. Si se migra después, al re-correr Marcas los productos ya
+        // migrados se enlazan igual (ver enlazarMarcasEnProductos).
+        'marcas'            => ['label' => 'Marcas',                           'tabla' => 'marca',                      'fecha' => null,             'tipo' => 'catalogo'],
         'productos'         => ['label' => 'Productos y servicios',            'tabla' => 'productos_servicios',        'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
         'proveedores'       => ['label' => 'Proveedores',                      'tabla' => 'proveedores',                'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
         'bodegas'           => ['label' => 'Bodegas',                          'tabla' => 'bodega',                     'fecha' => null,             'tipo' => 'catalogo'],
@@ -278,6 +283,8 @@ class MigracionMysqlService
                 return $this->migrarPlanCuentasEntidad($idEmpresa, $ruc, $idUsuario);
             case 'clientes':
                 return $this->migrarClientes($idEmpresa, $ruc, $idUsuario);
+            case 'marcas':
+                return $this->migrarMarcas($idEmpresa, $ruc, $idUsuario);
             case 'productos':
                 return $this->migrarProductos($idEmpresa, $ruc, $idUsuario);
             case 'proveedores':
@@ -412,7 +419,7 @@ class MigracionMysqlService
 
     /** Tabla destino (sistema nuevo) por entidad. Se usa para avisar de registros ya existentes. */
     private const DESTINO_TABLA = [
-        'plan_cuentas' => 'plan_cuentas', 'clientes' => 'clientes', 'productos' => 'productos',
+        'plan_cuentas' => 'plan_cuentas', 'clientes' => 'clientes', 'productos' => 'productos', 'marcas' => 'marcas',
         'proveedores' => 'proveedores', 'vendedores' => 'vendedores', 'bodegas' => 'bodegas', 'empleados' => 'empleados', 'novedades' => 'novedades',
         'roles_pago' => 'rol_cabecera', 'quincenas' => 'rol_cabecera',
         'responsables_traslado' => 'responsables_traslado',
@@ -503,7 +510,7 @@ class MigracionMysqlService
     }
 
     /** Catálogos: NO se eliminan con esta herramienta (se auto-corrigen al re-migrar por reconciliación). */
-    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'novedades', 'cuentas_bancarias', 'formas_pago'];
+    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'marcas', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'novedades', 'cuentas_bancarias', 'formas_pago'];
 
     /**
      * Cuántos registros ELIMINARÍA por entidad (para la confirmación previa). Solo cuenta lo que la
@@ -905,6 +912,139 @@ class MigracionMysqlService
         return ['map' => $map, 'default' => $default];
     }
 
+    /**
+     * Migra el catálogo de MARCAS del contribuyente (viejo `marca` → nuevo `marcas`).
+     *
+     * El sistema viejo no guarda la marca dentro del producto: la relación vive en la tabla puente
+     * `marca_producto` (id_producto, id_marca). El nuevo sí la guarda en `productos.id_marca` (una
+     * marca por producto). Por eso esta entidad hace DOS cosas:
+     *   1) trae el catálogo (dedup por nombre, insensible a mayúsculas/espacios, como en bodegas), y
+     *   2) enlaza los productos YA migrados con su marca (ver enlazarMarcasEnProductos), de modo que
+     *      funcione en cualquier orden: si Marcas corre antes que Productos, el enlace lo hace
+     *      Productos al final; si corre después (empresas ya migradas), lo hace esta entidad.
+     */
+    private function migrarMarcas(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $res = ['entidad' => 'marcas', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'marca sin nombre', 'errores' => 0];
+
+        $done = $this->idsMigrados($pg, $idEmpresa, 'marcas');
+        // Dedup INSENSIBLE a mayúsculas y espacios: el mismo RUC base puede traer la marca repetida
+        // desde varios establecimientos ("ACE" del 001 y del 002) y no debe duplicarse. Prefiere la
+        // marca viva (eliminado = false ordena primero) con el id más bajo.
+        $buscar = $pg->prepare("SELECT id FROM marcas WHERE id_empresa = :e AND UPPER(TRIM(nombre)) = UPPER(TRIM(:nom)) ORDER BY eliminado, id LIMIT 1");
+        $ins = $pg->prepare("INSERT INTO marcas (id_empresa, id_usuario, nombre, status, created_by) VALUES (:e, :u, :nom, 1, :cb) RETURNING id");
+        $insMap = $this->stmtMap($pg, 'marcas');
+
+        $stmt = $mysql->query("SELECT id_marca, nombre_marca FROM marca WHERE ruc_empresa LIKE " . $mysql->quote($base . '%'));
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $r['id_marca'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            // Mismo criterio que el módulo Marcas (MarcaService::crear): el nombre se guarda en
+            // MAYÚSCULAS. Capado al largo de la columna destino (varchar 150).
+            $nombre = mb_substr(mb_strtoupper(trim((string) $r['nombre_marca']), 'UTF-8'), 0, 150, 'UTF-8');
+            if ($nombre === '') { $res['omitidos']++; continue; }
+            try {
+                $pg->beginTransaction();
+                $buscar->execute([':e' => $idEmpresa, ':nom' => $nombre]);
+                $ex = $buscar->fetchColumn();
+                if ($ex !== false) { $idDest = (int) $ex; $vin = true; $res['vinculados']++; if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $nombre; } }
+                else {
+                    $ins->execute([':e' => $idEmpresa, ':u' => $idUsuario, ':nom' => $nombre, ':cb' => $idUsuario]);
+                    $idDest = (int) $ins->fetchColumn(); $vin = false; $res['migrados']++;
+                }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($nombre, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
+                $pg->commit(); $done[(string) $old] = true;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) $pg->rollBack();
+                $res['errores']++;
+            }
+        }
+        // Enlaza los productos que ya estaban migrados (empresas migradas antes de que existiera esta
+        // entidad). Si Productos aún no se migra, no hay nada que enlazar y devuelve 0.
+        $res['productos_marcados'] = $this->enlazarMarcasEnProductos($idEmpresa, $idUsuario, $pg, $mysql);
+        return $res;
+    }
+
+    /**
+     * Mapa `id_producto (viejo) => id_marca (nueva)` a partir de la tabla puente vieja `marca_producto`
+     * y del mapa de marcas ya migradas de la empresa. Devuelve [] si aún no se migró el catálogo.
+     *
+     * Se filtra por `id_marca` (no por `ruc_empresa`): hay filas de `marca_producto` con el
+     * ruc_empresa en blanco cuya marca sí pertenece a la empresa, y filtrando por RUC se perderían.
+     * El viejo admite varias filas por producto — casi siempre la MISMA marca repetida —; se queda con
+     * la última (mayor id_marca_producto).
+     *
+     * @return array<int,int>
+     */
+    private function mapaMarcaPorProducto(int $idEmpresa, PDO $pg, PDO $mysql): array
+    {
+        $mapMarca = [];
+        $q = $pg->prepare("SELECT id_origen, id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'marcas'");
+        $q->execute([$idEmpresa]);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) { $mapMarca[(int) $r['id_origen']] = (int) $r['id_destino']; }
+        if (!$mapMarca) { return []; }
+
+        $out = [];
+        $ids = array_map('intval', array_keys($mapMarca)); // ya casteados a int → seguro para interpolar
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $st = $mysql->query("SELECT id_producto, id_marca FROM marca_producto WHERE id_marca IN (" . implode(',', $chunk) . ") ORDER BY id_marca_producto");
+            while ($r = $st->fetch(PDO::FETCH_ASSOC)) {
+                $idm = $mapMarca[(int) $r['id_marca']] ?? null;
+                if ($idm !== null) { $out[(int) $r['id_producto']] = $idm; } // la última fila gana
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Escribe `productos.id_marca` en los productos migrados de la empresa, según la tabla puente vieja.
+     * Devuelve cuántos productos quedaron marcados (solo cuenta los que cambiaron).
+     *
+     * A los productos que la migración INSERTÓ se les fija/corrige la marca; a los VINCULADOS (nativos
+     * del sistema nuevo) solo se les completa si no tienen ninguna — igual que en el resto de la
+     * migración, un registro nativo no se machaca. Todo en una sola transacción.
+     */
+    private function enlazarMarcasEnProductos(int $idEmpresa, int $idUsuario, PDO $pg, PDO $mysql): int
+    {
+        $marcaDe = $this->mapaMarcaPorProducto($idEmpresa, $pg, $mysql);
+        if (!$marcaDe) { return 0; }
+
+        $q = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'productos'");
+        $q->execute([$idEmpresa]);
+        $prods = $q->fetchAll(PDO::FETCH_ASSOC);
+        if (!$prods) { return 0; }
+
+        // Placeholders distintos para el mismo valor (:m / :m2): PDO/pgsql no admite repetir un
+        // placeholder con nombre en la misma sentencia.
+        $upd = $pg->prepare("UPDATE productos SET id_marca = :m, updated_at = now(), updated_by = :u
+                              WHERE id = :p AND id_empresa = :e AND id_marca IS DISTINCT FROM :m2");
+        $updVin = $pg->prepare("UPDATE productos SET id_marca = :m, updated_at = now(), updated_by = :u
+                                 WHERE id = :p AND id_empresa = :e AND id_marca IS NULL");
+        $n = 0;
+        $pg->beginTransaction();
+        try {
+            foreach ($prods as $row) {
+                $idMarca = $marcaDe[(int) $row['id_origen']] ?? null;
+                if ($idMarca === null) { continue; }
+                $vinculado = in_array((string) $row['vinculado'], ['1', 't', 'true'], true); // pgsql/PDO devuelve '1' / ''
+                $st  = $vinculado ? $updVin : $upd;
+                $par = [':m' => $idMarca, ':u' => $idUsuario, ':p' => (int) $row['id_destino'], ':e' => $idEmpresa];
+                if (!$vinculado) { $par[':m2'] = $idMarca; }
+                $st->execute($par);
+                $n += $st->rowCount();
+            }
+            $pg->commit();
+        } catch (Throwable $ex) {
+            if ($pg->inTransaction()) $pg->rollBack();
+            throw $ex;
+        }
+        return $n;
+    }
+
     private function migrarProductos(int $idEmpresa, string $ruc, int $idUsuario): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
@@ -1010,6 +1150,9 @@ class MigracionMysqlService
                 $res['errores']++;
             }
         }
+        // Marca de cada producto: el viejo la guarda en la tabla puente `marca_producto`, no en
+        // `productos_servicios`. Requiere el catálogo de Marcas ya migrado (si no, devuelve 0).
+        $res['productos_marcados'] = $this->enlazarMarcasEnProductos($idEmpresa, $idUsuario, $pg, $mysql);
         return $res;
     }
 

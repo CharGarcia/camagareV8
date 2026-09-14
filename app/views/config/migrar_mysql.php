@@ -650,6 +650,11 @@ $base = BASE_URL;
                 if (d.vendedores_asignados > 0) {
                     html += `<br><span class="text-success small">👤 ${fmt(d.vendedores_asignados)} cliente(s) con su vendedor asignado.</span>`;
                 }
+                // Marcas: el viejo guarda la marca del producto en una tabla aparte; al migrarla se
+                // escribe en el producto (también en los productos migrados en corridas anteriores).
+                if (d.productos_marcados > 0) {
+                    html += `<br><span class="text-success small">🏷 ${fmt(d.productos_marcados)} producto(s) quedaron con su marca.</span>`;
+                }
                 // Pagos (egresos) de liquidaciones de compra: se enlazan a la liquidación por su número.
                 if (d.pagos_liquidacion > 0) {
                     html += `<br><span class="text-success small">🔗 ${fmt(d.pagos_liquidacion)} pago(s) enlazado(s) a su liquidación de compra.</span>`;
@@ -739,7 +744,7 @@ $base = BASE_URL;
 
     // ── Eliminar migrados (para re-migrar y corregir) ──
     // Catálogos vedados: se auto-corrigen al re-migrar (reconciliación), no se borran.
-    const NO_ELIMINABLES = ['plan_cuentas', 'clientes', 'productos', 'proveedores', 'vendedores', 'bodegas'];
+    const NO_ELIMINABLES = ['plan_cuentas', 'clientes', 'productos', 'marcas', 'proveedores', 'vendedores', 'bodegas'];
 
     $('btnEliminar').addEventListener('click', async () => {
         const idEmpresa = $('selEmpresa').value;

@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador
-version: 1.6
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas
+version: 1.7
 orden: 2
 estado: activo
 ---
@@ -158,6 +158,38 @@ sistema, ni la de un cliente que ya existía aquí y se vinculó al del sistema
 anterior. El resumen de la migración informa cuántos clientes quedaron con su
 vendedor.
 
+## Marcas de los productos
+
+El sistema anterior no guarda la marca dentro de la ficha del producto: tiene
+un **catálogo de marcas** aparte y una tabla que relaciona cada producto con
+su marca. En este sistema la marca vive en el propio producto (campo *Marca*)
+y el catálogo está en **Marcas**. La migración reconstruye las dos cosas:
+
+- Trae el **catálogo de marcas** de la empresa (una entrada por marca, con el
+  nombre en mayúsculas y en estado activo).
+- Escribe la **marca de cada producto** migrado.
+
+Para que pueda resolverlo, **Marcas se migra antes que Productos** — ese es el
+orden en que aparecen en la lista de datos por migrar, y conviene marcar las
+dos casillas juntas. El resumen de la migración informa cuántos productos
+quedaron con su marca.
+
+Si los productos ya se habían migrado antes (por ejemplo, con una versión
+anterior de la herramienta, que no traía marcas), **no hay que volver a migrar
+Productos**: al correr **Marcas** se completan también los productos que ya
+estaban migrados.
+
+Qué respeta la migración:
+
+- **Marca repetida**: si la marca ya existe en la empresa (mismo nombre, sin
+  importar mayúsculas o espacios), se **vincula** a la existente en lugar de
+  duplicarla. Eso incluye la misma marca traída desde dos establecimientos del
+  mismo RUC.
+- **Productos que ya existían en este sistema** (los que la migración vincula
+  por código, no los que inserta): solo se les completa la marca **si no
+  tienen ninguna**. Una marca puesta a mano aquí nunca se pisa.
+- Volver a correr **Marcas** no duplica nada: corrige y completa.
+
 ## Errores frecuentes
 
 - **Los clientes migrados no traen el vendedor asignado**: se migraron con una
@@ -165,6 +197,12 @@ vendedor.
   Se corrige migrando **Vendedores** y volviendo a correr **Clientes**: no se
   duplica nada, solo se completa el vendedor de los que están sin él (ver
   *Vendedor asignado a cada cliente*).
+
+- **Los productos migrados no traen marca**: se migraron con una versión
+  anterior de la herramienta, o se migraron antes que las Marcas. Se corrige
+  corriendo **Marcas**: completa el catálogo y la marca de los productos que
+  ya estaban migrados, sin duplicar nada ni volver a migrar Productos (ver
+  *Marcas de los productos*).
 
 - **Un ingreso, egreso o pedido migrado no aparece con serie**: su número
   ya estaba usado por otro documento en el punto de emisión de destino (el
@@ -216,6 +254,10 @@ vendedor.
 
 ## Historial de cambios
 
+- **1.7** — Nueva entidad **Marcas**: se trae el catálogo de marcas del
+  sistema anterior y se escribe la marca de cada producto (antes se perdían
+  las dos cosas). **Marcas** se migra **antes** que Productos, y al correrla
+  se completan también los productos que ya estaban migrados sin marca.
 - **1.6** — Clientes: ahora se trae el **vendedor asignado** de cada cliente
   desde el sistema anterior (antes se perdía). **Vendedores** pasa a migrarse
   **antes** que Clientes, y al volver a correr Clientes se completa el

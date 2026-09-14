@@ -249,16 +249,18 @@ class ReporteVentasVendedorController extends BaseModuloController
             $html .= "<td class='text-end fw-bold {$saldoCls}'>$saldo</td>";
         } else {
             // VENDEDOR (vista principal): Asesor, documentos, subtotal sin impuestos,
-            // subtotal de las notas de crédito que lo afectan y total.
-            $subtotal   = number_format((float) ($r['subtotal'] ?? 0), 2);
-            $subtotalNc = (float) ($r['subtotal_nc'] ?? 0);
-            $ncCls      = $subtotalNc > 0.005 ? 'text-danger' : 'text-muted';
+            // subtotal de las notas de crédito que lo afectan y el neto entre ambos.
+            $subtotal    = number_format((float) ($r['subtotal'] ?? 0), 2);
+            $subtotalNc  = (float) ($r['subtotal_nc'] ?? 0);
+            $neto        = (float) ($r['subtotal_neto'] ?? 0);
+            $ncCls       = $subtotalNc > 0.005 ? 'text-danger' : 'text-muted';
+            $netoCls     = $neto < -0.005 ? 'text-danger' : 'text-success';
 
             $html .= "<td class='fw-bold'>".htmlspecialchars($r['vendedor_nombre'] ?? '')."</td>";
             $html .= "<td class='text-center'>".(int)($r['cantidad_documentos'] ?? 0)."</td>";
             $html .= "<td class='text-end'>$subtotal</td>";
             $html .= "<td class='text-end {$ncCls}'>".number_format($subtotalNc, 2)."</td>";
-            $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            $html .= "<td class='text-end fw-bold {$netoCls}'>".number_format($neto, 2)."</td>";
         }
 
         $html .= '</tr>';
@@ -350,7 +352,8 @@ class ReporteVentasVendedorController extends BaseModuloController
             $headers = ['Asesor', 'Total Documentos', 'Subtotal (sin impuestos)', 'Subtotal NC', 'Total'];
             $data = array_map(fn($r) => [
                 $r['vendedor_nombre'], (int) $r['cantidad_documentos'],
-                (float) ($r['subtotal'] ?? 0), (float) ($r['subtotal_nc'] ?? 0), (float) $r['total'],
+                (float) ($r['subtotal'] ?? 0), (float) ($r['subtotal_nc'] ?? 0),
+                (float) ($r['subtotal_neto'] ?? 0),
             ], $rows);
         }
 
@@ -449,7 +452,7 @@ class ReporteVentasVendedorController extends BaseModuloController
                         <th colspan="2" class="text-center">TOTALES GENERALES:</th>
                         <th class="text-end"><?= number_format((float) ($totales['total_subtotal'] ?? 0), 2) ?></th>
                         <th class="text-end" style="color:#dc3545;"><?= number_format((float) ($totales['total_subtotal_nc'] ?? 0), 2) ?></th>
-                        <th class="text-end" style="font-weight:bold;color:#198754;">$<?= number_format((float) $totales['gran_total'], 2) ?></th>
+                        <th class="text-end" style="font-weight:bold;color:#198754;">$<?= number_format((float) ($totales['total_subtotal_neto'] ?? 0), 2) ?></th>
                     </tr>
                 <?php else: ?>
                     <?php $conSaldo = self::agrupacionConSaldo($agruparPor); ?>

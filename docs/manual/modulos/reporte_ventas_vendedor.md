@@ -13,8 +13,9 @@ estado: activo
 
 Reporte para analizar cuánto vendió cada asesor (vendedor) de la empresa, con la
 posibilidad de acotar por período, por un vendedor específico o todos, y por
-producto, marca o categoría. La métrica principal es la **venta neta**: el
-subtotal de las facturas menos el subtotal de las notas de crédito asociadas.
+producto, marca o categoría. La métrica principal es la **venta neta sin
+impuestos**: el subtotal de las facturas menos el subtotal de las notas de
+crédito asociadas.
 
 ## Qué es y para qué sirve
 
@@ -59,8 +60,8 @@ incluye Recibos de Venta.
    > Documentos" del Excel) las columnas Subtotal, NC y Total son importes
    > **con impuestos** —el total de cada factura, el de su nota de crédito y la
    > diferencia—, mientras que las columnas Subtotal y Subtotal NC de la tabla
-   > principal son **sin impuestos**. La columna Total sí coincide en ambos
-   > lados.
+   > principal son **sin impuestos** —Total incluido—. Por eso el total del
+   > panel (con IVA) es mayor que el de la fila del asesor.
 8. Al exportar a Excel agrupando **Por Vendedor**, el archivo incluye una
    segunda hoja ("Detalle Documentos") con esa misma información documento
    por documento —incluido el **Saldo** de cada factura—, de todos los
@@ -78,7 +79,7 @@ asesor con estas cinco columnas, las mismas que salen en el **PDF** y en el
 | Total Documentos | Cuántas facturas del asesor entran en el período y filtros aplicados |
 | Subtotal (sin impuestos) | Suma de las bases imponibles de esas facturas (base 0% / exento + base gravada), es decir el subtotal ANTES de IVA |
 | Subtotal NC | Suma de las bases imponibles de las notas de crédito que afectan a esas facturas (también sin IVA). Va en rojo cuando hay alguna |
-| Total | Venta neta del asesor CON impuestos: total de las facturas menos el total de las notas de crédito |
+| Total | **Subtotal − Subtotal NC**: la venta neta del asesor, sin impuestos |
 
 Notas:
 
@@ -86,13 +87,16 @@ Notas:
   se descuenta dentro de la fila de su factura (columna Subtotal NC) en vez de
   sumarse como un documento aparte. Así el número coincide con lo que se ve al
   hacer clic en la fila.
-- **Subtotal y Subtotal NC no llevan IVA; Total sí.** Por eso Total no es
-  simplemente Subtotal − Subtotal NC: la diferencia es el IVA neto. El desglose
-  de bases e IVA está en las tarjetas superiores y en las demás agrupaciones.
-- Con el tipo de documento en *Solo Facturas*, Subtotal NC sale en 0. Con *Solo
-  Notas de Crédito*, el subtotal de las NC se muestra en la columna Subtotal NC
-  (la columna Subtotal queda en 0), porque esa columna siempre significa notas
-  de crédito.
+- **Las tres columnas de importes son SIN IVA.** El Total de esta vista no
+  coincide con la tarjeta "Ventas Netas (Gran Total)" de arriba ni con el Gran
+  Total de las demás agrupaciones, que sí incluyen impuestos: la diferencia es
+  el IVA. El desglose de bases e IVA está en las tarjetas superiores.
+- Las filas salen ordenadas de mayor a menor por la columna Total.
+- Con el tipo de documento en *Solo Facturas*, Subtotal NC sale en 0 y el Total
+  es el subtotal facturado. Con *Solo Notas de Crédito*, el subtotal de las NC
+  se muestra en la columna Subtotal NC (la columna Subtotal queda en 0), porque
+  esa columna siempre significa notas de crédito; el Total queda entonces en
+  **negativo**, que es el resultado de aplicar la misma resta.
 - Al pie del PDF se repiten los tres importes como **totales generales**.
 
 ## Columna Saldo (lo que falta por cobrar)
@@ -199,10 +203,11 @@ Para vincular un usuario a un vendedor: editar el registro en **Vendedores**
 ## Historial de cambios
 
 - **1.2** — La vista **Por Vendedor** pasa a mostrar cinco columnas: Asesor,
-  Total Documentos, Subtotal (sin impuestos), Subtotal NC y Total, tanto en
-  pantalla como en el PDF y el Excel. Reemplazan al desglose anterior de Base
-  0% / Base IVA / Total IVA / Gran Total / Saldo, que sigue disponible en las
-  demás agrupaciones y en las tarjetas superiores. El saldo por asesor se
+  Total Documentos, Subtotal (sin impuestos), Subtotal NC y Total —este último
+  es la resta de los dos anteriores, es decir la venta neta SIN impuestos—,
+  tanto en pantalla como en el PDF y el Excel. Reemplazan al desglose anterior
+  de Base 0% / Base IVA / Total IVA / Gran Total / Saldo, que sigue disponible
+  en las demás agrupaciones y en las tarjetas superiores. El saldo por asesor se
   consulta ahora en el panel de detalle (clic en la fila) o en la hoja "Detalle
   Documentos" del Excel. Además, en el PDF los conteos de documentos ya no se
   imprimen con decimales.
