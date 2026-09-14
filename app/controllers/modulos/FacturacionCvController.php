@@ -164,9 +164,9 @@ class FacturacionCvController extends BaseModuloController
                 echo '<tr class="factcv-row" role="button" tabindex="0" data-row=\'' . $dataJson . '\' onclick="abrirModalFacturacionVer(this)">
                         <td class="ps-3" data-col="fecha">' . htmlspecialchars($fecha) . '</td>
                         <td data-col="secuencial">' . htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) . '</td>
-                        <td data-col="cliente" class="text-truncate" style="max-width:230px">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</td>
+                        <td data-col="cliente" class="text-truncate" style="max-width:230px" title="' . htmlspecialchars($r['cliente_nombre'] ?? '') . '">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</td>
                         <td data-col="factura">' . htmlspecialchars($r['numero_factura'] ?? '—') . '</td>
-                        <td data-col="total" class="text-end pe-3">' . number_format((float) ($r['total'] ?? 0), 2) . '</td>
+                        <td data-col="observaciones" class="text-truncate" style="max-width:280px" title="' . htmlspecialchars($r['observaciones'] ?? '') . '">' . htmlspecialchars($r['observaciones'] ?? '') . '</td>
                         <td class="text-center pe-3" data-col="estado">' . $badge . '</td>
                       </tr>';
             }

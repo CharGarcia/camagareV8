@@ -154,7 +154,12 @@
 
                             <!-- Fila 4: Productos (Mismo estilo que Factura Venta) -->
                             <div class="border rounded-3 overflow-hidden bg-white shadow-sm mb-3">
-                                <div class="table-responsive" style="max-height: 350px; overflow: visible;">
+                                <!-- overflow: auto (antes "visible"): con max-height y overflow visible las
+                                     filas que pasaban de 350px se dibujaban FUERA del contenedor, encima del
+                                     pie, y tapaban el botón "Agregar línea" en los pedidos con muchos ítems.
+                                     Con auto, la tabla scrollea dentro y el pie queda siempre visible. El
+                                     dropdown de productos no se recorta: vive fuera, con position: fixed. -->
+                                <div class="table-responsive" style="max-height: 350px; overflow: auto;">
                                     <table class="table table-sm table-detalle mb-0 text-nowrap align-middle">
                                         <thead>
                                             <tr class="table-light border-bottom">

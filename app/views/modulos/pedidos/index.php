@@ -85,11 +85,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         background-color: rgba(13, 110, 253, 0.03);
     }
 
+    /* Encabezados del detalle fijos al scrollear la tabla dentro del modal. */
+    #modalPedido .table-detalle thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
     /* Detalle del modal en móvil: la columna Código se comprimía hasta no dejar
        ver el código completo (no se sabía qué producto ya estaba cargado). Se le
        fija un ancho mínimo y, si la fila ya no cabe, la tabla scrollea en
-       horizontal — el `overflow: visible` en línea del contenedor hay que
-       forzarlo desde aquí, por eso el !important. */
+       horizontal. El !important gana sobre el overflow en línea del contenedor,
+       sea cual sea el valor con el que quede. */
     @media (max-width: 767.98px) {
         #modalPedido .table-responsive {
             overflow-x: auto !important;

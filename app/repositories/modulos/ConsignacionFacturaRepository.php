@@ -208,8 +208,9 @@ class ConsignacionFacturaRepository extends BaseRepository
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [
-                'cliente'    => 'c.nombre',
-                'factura'    => 'cf.numero_factura',
+                'cliente'       => 'c.nombre',
+                'factura'       => 'cf.numero_factura',
+                'observaciones' => 'cf.observaciones',
             ],
             'exacto' => [
                 'estado' => 'cf.estado',
@@ -239,12 +240,12 @@ class ConsignacionFacturaRepository extends BaseRepository
         }
 
         $colMap = [
-            'fecha'      => 'cf.fecha_emision',
-            'secuencial' => 'cf.secuencial',
-            'cliente'    => 'c.nombre',
-            'factura'    => 'cf.numero_factura',
-            'total'      => 'cf.total',
-            'estado'     => 'cf.estado',
+            'fecha'         => 'cf.fecha_emision',
+            'secuencial'    => 'cf.secuencial',
+            'cliente'       => 'c.nombre',
+            'factura'       => 'cf.numero_factura',
+            'observaciones' => 'cf.observaciones',
+            'estado'        => 'cf.estado',
         ];
         $sort = $colMap[$ordenCol] ?? 'cf.fecha_emision';
         $dir  = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';

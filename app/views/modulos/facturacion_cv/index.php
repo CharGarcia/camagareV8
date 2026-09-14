@@ -66,6 +66,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',      type: 'text' },
                             { key: 'cliente',    label: 'Cliente',    icon: 'bi-person',   type: 'text' },
                             { key: 'factura',    label: 'Factura',    icon: 'bi-receipt',  type: 'text' },
+                            { key: 'observaciones', label: 'Observaciones', icon: 'bi-chat-left-text', type: 'text' },
                             { key: 'fecha',      label: 'Fecha',      icon: 'bi-calendar', type: 'date_range' },
                             { key: 'total',      label: 'Total',      icon: 'bi-currency-dollar', type: 'number_range' },
                             { key: 'estado',     label: 'Estado',     icon: 'bi-flag',   type: 'select', options: [
@@ -90,7 +91,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'secuencial' => 'Secuencial',
                     'cliente'    => 'Cliente',
                     'factura'    => 'Factura',
-                    'total'      => 'Total',
+                    'observaciones' => 'Observaciones',
                     'estado'     => 'Estado'
                 ], $vistaConfig ?? [], 'facturacion-cv'); ?>
 
@@ -117,7 +118,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header" role="button" data-col="secuencial">Secuencial <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-col="cliente">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-col="factura">Factura <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-end sortable-header" role="button" data-col="total">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-col="observaciones">Observaciones <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center pe-3 sortable-header" role="button" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
@@ -134,7 +135,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="secuencial"><?= htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) ?></td>
                                 <td data-col="cliente" class="text-truncate" style="max-width:230px" title="<?= htmlspecialchars($r['cliente_nombre'] ?? '') ?>"><?= htmlspecialchars($r['cliente_nombre'] ?? '') ?></td>
                                 <td data-col="factura"><?= htmlspecialchars($r['numero_factura'] ?? '—') ?></td>
-                                <td data-col="total" class="text-end"><?= number_format((float)($r['total'] ?? 0), 2) ?></td>
+                                <td data-col="observaciones" class="text-truncate" style="max-width:280px" title="<?= htmlspecialchars($r['observaciones'] ?? '') ?>"><?= htmlspecialchars($r['observaciones'] ?? '') ?></td>
                                 <td class="text-center pe-3" data-col="estado"><?= $badge ?></td>
                             </tr>
                         <?php endforeach; ?>

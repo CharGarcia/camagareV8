@@ -1,6 +1,12 @@
 <?php /** @var array $perm */ ?>
 <style>
-    .oc-detalle-wrap { max-height: 350px; overflow: visible; }
+    /* overflow: auto (antes "visible"): con max-height y overflow visible las filas
+       que pasaban de 350px se dibujaban FUERA del contenedor, encima del pie, y
+       tapaban el botón "Agregar línea" en las órdenes con muchos ítems. Con auto la
+       tabla scrollea dentro, el pie queda siempre visible y el thead sticky de abajo
+       empieza a funcionar (sin contenedor con scroll no tenía a qué pegarse). La
+       lista de productos no se recorta: vive fuera, con position: fixed. */
+    .oc-detalle-wrap { max-height: 350px; overflow: auto; }
     .oc-detalle-wrap thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; }
 </style>
 
