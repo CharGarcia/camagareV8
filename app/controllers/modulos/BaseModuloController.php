@@ -86,6 +86,47 @@ abstract class BaseModuloController extends Controller
         return $this->permisosModuloPorRuta($this->getRutaModulo());
     }
 
+    /**
+     * Registros propios: si el usuario NO tiene acceso total ('t') en este
+     * módulo, solo puede operar sobre los documentos que él creó.
+     *
+     * Los listados ya lo resuelven con $idUsuarioFiltro / getBaseWhere(); este
+     * guard cubre las acciones que reciben un id suelto (abrir, PDF, Excel,
+     * correo, cambiar estado, duplicar, eliminar…), que sin él permiten llegar
+     * por id a un documento que el listado sí oculta.
+     *
+     * Se le pasa la cabecera YA leída (debe traer created_by) para no repetir la
+     * consulta. Si es null no hace nada: el llamador responde su propio "no
+     * encontrado". Nivel 3 y quien tenga 't' pasan siempre.
+     */
+    protected function requireRegistroPropio(?array $registro, string $campo = 'created_by'): void
+    {
+        if ($registro === null) {
+            return;
+        }
+        if ((int) ($_SESSION['nivel'] ?? 1) >= 3) {
+            return;
+        }
+        $perm = $this->getPermisos();
+        if (!empty($perm['todo'])) {
+            return;
+        }
+
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $creador   = (int) ($registro[$campo] ?? 0);
+        if ($idUsuario > 0 && $creador === $idUsuario) {
+            return;
+        }
+
+        $msg = 'No tiene permiso sobre este registro: lo creó otro usuario.';
+        if ($this->esAjaxRequest()) {
+            $this->json(['ok' => false, 'error' => $msg], 403);
+        }
+        http_response_code(403);
+        echo $msg;
+        exit;
+    }
+
     // ─── Replicación de registros entre empresas del mismo usuario ────────────
     // Compartido por los módulos que ofrecen "aplicar también en otras empresas"
     // (Clientes, Productos, …). La lógica de qué copiar/omitir es específica de

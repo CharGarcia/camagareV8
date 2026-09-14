@@ -336,6 +336,15 @@ class EntregasConsignacionesController extends BaseModuloController
         $idEntrega = (int) ($_GET['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
+        // Sin acceso total, la firma solo se sirve si la entrega es de uno de los
+        // responsables del usuario — igual que el listado, que ya la oculta.
+        $idsResponsables = $this->filtroResponsablesActual($this->getPermisos());
+        if ($idEntrega > 0 && !$this->service->puedeVerEntrega($idEntrega, $idEmpresa, $idsResponsables)) {
+            http_response_code(404);
+            echo 'Firma no encontrada';
+            exit;
+        }
+
         $rel = $idEntrega > 0 ? $this->service->getFirmaEntrega($idEntrega, $idEmpresa) : null;
         if (!$rel) { http_response_code(404); echo 'Firma no encontrada'; exit; }
 

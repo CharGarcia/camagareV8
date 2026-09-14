@@ -764,6 +764,21 @@ class ConsignacionVentaService
     }
 
     /** Ruta relativa de la firma de una entrega (validando empresa), o null. */
+    /**
+     * Id de la consignación dueña de una entrega (0 si no existe en la empresa).
+     * Lo usa el controlador para validar el acceso antes de servir la firma.
+     */
+    public function getConsignacionDeEntrega(int $idEntrega, int $idEmpresa): int
+    {
+        try {
+            $entregaRepo = new \App\repositories\modulos\ConsignacionVentaEntregaRepository();
+            $ent = $entregaRepo->find($idEntrega, $idEmpresa);
+            return (int) ($ent['id_consignacion'] ?? 0);
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
     public function getFirmaEntrega(int $idEntrega, int $idEmpresa): ?string
     {
         try {

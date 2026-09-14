@@ -180,6 +180,18 @@ class ConsignacionesVentasController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Cabecera de la consignación de la empresa activa, cortando con 403 si el
+     * usuario no tiene acceso total y la creó otro (mismo criterio que el
+     * listado). Para las acciones que reciben un id suelto.
+     */
+    private function docPropioOCortar(int $id): ?array
+    {
+        $doc = $this->service->getPorId($id, (int) $_SESSION['id_empresa']);
+        $this->requireRegistroPropio($doc);
+        return $doc;
+    }
+
     /** Filas del listado con el filtro/orden actual, sin paginar (para exportar). */
     private function filasParaExport(): array
     {
@@ -345,6 +357,7 @@ class ConsignacionesVentasController extends BaseModuloController
             if (!empty($input['id'])) {
                 // Actualizar
                 $this->requireActualizar();
+                $this->docPropioOCortar((int) $input['id']);
                 $this->service->actualizar((int) $input['id'], (int) $input['id_empresa'], $input);
                 echo json_encode(['ok' => true, 'msg' => 'Consignación de Venta actualizada correctamente.']);
             } else {
@@ -372,6 +385,7 @@ class ConsignacionesVentasController extends BaseModuloController
         if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
 
         try {
+            $this->docPropioOCortar($id);
             $cons = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$cons) { http_response_code(404); echo 'Consignación no encontrada'; exit; }
 
@@ -413,6 +427,7 @@ class ConsignacionesVentasController extends BaseModuloController
         if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
 
         try {
+            $this->docPropioOCortar($id);
             $cons = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$cons) { http_response_code(404); echo 'Consignación no encontrada'; exit; }
 
@@ -527,6 +542,7 @@ class ConsignacionesVentasController extends BaseModuloController
         if (!$id) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
 
         try {
+            $this->docPropioOCortar($id);
             $cons = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$cons) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Consignación no encontrada.']); exit; }
 
@@ -602,6 +618,7 @@ class ConsignacionesVentasController extends BaseModuloController
                 echo json_encode(['ok' => true, 'data' => []]);
                 exit;
             }
+            $this->docPropioOCortar($idCons);
             $rows = $this->service->getEntregasDeConsignacion($idCons, $idEmpresa);
             $base = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
             foreach ($rows as &$r) {
@@ -625,6 +642,9 @@ class ConsignacionesVentasController extends BaseModuloController
 
         $idEntrega = (int) ($_GET['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        $idCons = $idEntrega > 0 ? $this->service->getConsignacionDeEntrega($idEntrega, $idEmpresa) : 0;
+        if ($idCons > 0) $this->docPropioOCortar($idCons);
 
         $rel = $idEntrega > 0 ? $this->service->getFirmaEntrega($idEntrega, $idEmpresa) : null;
         if (!$rel) { http_response_code(404); echo 'Firma no encontrada'; exit; }
@@ -656,6 +676,7 @@ class ConsignacionesVentasController extends BaseModuloController
                 echo json_encode(['ok' => true, 'data' => []]);
                 exit;
             }
+            $this->docPropioOCortar($idCons);
             $data = $this->service->getKardexDeConsignacion($idCons, $idEmpresa);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
@@ -675,6 +696,7 @@ class ConsignacionesVentasController extends BaseModuloController
             $id     = (int) ($_POST['id'] ?? 0);
             $estado = trim($_POST['estado'] ?? '');
             if ($id <= 0) throw new Exception("ID no válido.");
+            $this->docPropioOCortar($id);
 
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
@@ -729,6 +751,7 @@ class ConsignacionesVentasController extends BaseModuloController
         try {
             if ($idCons > 0) {
                 $cab = $this->service->getPorId($idCons, $idEmpresa) ?? [];
+                $this->requireRegistroPropio($cab ?: null);
                 $idAsiento = (int) ($cab['id_asiento_contable'] ?? 0);
 
                 // Si aún no tiene asiento, intentar generarlo ahora: procesarAsientoContable
@@ -792,6 +815,7 @@ class ConsignacionesVentasController extends BaseModuloController
         try {
             $id = (int) ($_POST['id'] ?? 0);
             if ($id <= 0) throw new Exception("ID no válido.");
+            $this->docPropioOCortar($id);
 
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
@@ -877,6 +901,7 @@ class ConsignacionesVentasController extends BaseModuloController
         try {
             $id = (int) ($_GET['id'] ?? 0);
             $idEmpresa = (int) $_SESSION['id_empresa'];
+            $this->docPropioOCortar($id);
 
             $data = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$data) throw new Exception("Consignación no encontrada.");

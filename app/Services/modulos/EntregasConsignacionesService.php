@@ -48,6 +48,26 @@ class EntregasConsignacionesService
         return $resumen;
     }
 
+    /**
+     * ¿Esta entrega entra en lo que el usuario puede ver? Mismo criterio que el
+     * listado: con acceso total ($idsResponsables = null) ve todas; si no, solo
+     * las de las consignaciones de sus responsables de traslado.
+     */
+    public function puedeVerEntrega(int $idEntrega, int $idEmpresa, ?array $idsResponsables): bool
+    {
+        if ($idsResponsables === null) {
+            return true;
+        }
+        if (empty($idsResponsables)) {
+            return false;
+        }
+        $idResponsable = $this->repository->getResponsableDeEntrega($idEntrega, $idEmpresa);
+        if ($idResponsable === null) {
+            return false;
+        }
+        return in_array($idResponsable, array_map('intval', $idsResponsables), true);
+    }
+
     /** Ruta relativa de la firma de una entrega (validando empresa), o null. Anti path-traversal: solo storage/entregas/. */
     public function getFirmaEntrega(int $idEntrega, int $idEmpresa): ?string
     {

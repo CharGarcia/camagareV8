@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP
-version: 1.5
+etiquetas: consignacion, consignaciones, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que
+version: 1.6
 orden: 45
 estado: activo
 ---
@@ -74,6 +74,19 @@ En la pestaña General del comprobante, junto al botón **PDF**, hay un botón
 NUP, cantidad entregada, retornada y facturada) en una hoja de cálculo.
 Requiere que la consignación esté guardada.
 
+## Quién ve cada documento
+
+Depende del permiso **Acceso total** del módulo (se administra en
+*Configuración → Permisos de módulos*):
+
+- **Con acceso total**: ve y gestiona los documentos de toda la empresa.
+- **Sin acceso total**: solo los que creó ese mismo usuario. El listado ya los
+  filtraba; ahora el alcance es el mismo también al **abrir un documento, su
+  PDF, su Excel, enviarlo por correo, cambiarle el estado o eliminarlo**. Si se
+  intenta llegar a un documento ajeno por un enlace directo, el sistema
+  responde *«No tiene permiso sobre este registro: lo creó otro usuario»*.
+
+El superadministrador (nivel 3) siempre ve todo.
 ## Errores frecuentes
 
 - **La consignación no aparece en ventas**: es correcto, no es una venta hasta
@@ -114,6 +127,10 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.6** — El permiso **Acceso total** ahora manda también fuera del
+  listado: sin él, un usuario ya no puede abrir, exportar, enviar por correo,
+  cambiar de estado ni eliminar una consignación creada por otro usuario, ni
+  siquiera con el enlace directo. Igual para la firma de una entrega.
 - **1.5** — La regla del vencimiento por lote se aplica también al **detalle de la
   consignación** (las líneas cargadas a mano), no solo a las que vienen de un
   pedido. Al abrir una consignación guardada se respeta el lote y el vencimiento

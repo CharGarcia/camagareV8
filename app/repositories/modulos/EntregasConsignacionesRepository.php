@@ -28,6 +28,28 @@ class EntregasConsignacionesRepository extends BaseRepository
     }
 
     /**
+     * Responsable de traslado de la consignación dueña de una entrega (null si la
+     * entrega no existe en la empresa o la consignación no tiene responsable).
+     * Lo usa el guard de la firma: mismo criterio de visibilidad que el listado.
+     */
+    public function getResponsableDeEntrega(int $idEntrega, int $idEmpresa): ?int
+    {
+        $sql = "SELECT cv.id_responsable_traslado
+                FROM consignaciones_ventas_entregas e
+                INNER JOIN consignaciones_ventas cv ON cv.id = e.id_consignacion
+                WHERE e.id = :id AND e.id_empresa = :e
+                  AND e.eliminado = false AND cv.eliminado = false
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idEntrega, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return null;
+        }
+        return $row['id_responsable_traslado'] !== null ? (int) $row['id_responsable_traslado'] : null;
+    }
+
+    /**
      * Arma el WHERE + params compartido por getListado()/getResumen(), aplicando:
      * multiempresa + soft-delete, filtro "solo mis responsables" (repartidor sin
      * acceso total), buscador de texto libre y sintaxis clave:valor (FiltrosBusqueda).

@@ -39,6 +39,18 @@ class FacturacionCvController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
+    /**
+     * Cabecera del documento de la empresa activa, cortando con 403 si el usuario
+     * no tiene acceso total y el documento lo creó otro (mismo criterio que el
+     * listado). Para las acciones que reciben un id suelto.
+     */
+    private function docPropioOCortar(int $id): ?array
+    {
+        $doc = $this->service->getPorId($id, (int) $_SESSION['id_empresa']);
+        $this->requireRegistroPropio($doc);
+        return $doc;
+    }
+
     public function index(): void
     {
         $this->requireLeer();
@@ -182,6 +194,136 @@ class FacturacionCvController extends BaseModuloController
         exit;
     }
 
+    /** Filas del listado con el filtro/orden actual, sin paginar (para exportar). */
+    private function filasParaExport(): array
+    {
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $buscar     = trim($_GET['b'] ?? '');
+        $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha');
+        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        // perPage = 0 => sin LIMIT (todas las filas que calcen con el filtro actual).
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $data['rows'] ?? [];
+    }
+
+    /** Exporta el listado (con el filtro/orden actual del buscador) a PDF. */
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $rows = $this->filasParaExport();
+
+        try {
+            $empresaModel  = new \App\models\Empresa();
+            $empresa       = $empresaModel->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+            ?>
+            <style>
+                table { width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:7pt; }
+                th { background:#f2f2f2; border:1px solid #ccc; padding:3px; text-align:left; }
+                td { border:1px solid #ccc; padding:3px; }
+                .r { text-align:right; }
+                h2 { font-family:Arial,sans-serif; font-size:12pt; margin:0 0 2px 0; }
+                .sub { font-family:Arial,sans-serif; font-size:8pt; color:#555; margin-bottom:6px; }
+            </style>
+            <page backtop="8mm" backbottom="8mm" backleft="6mm" backright="6mm">
+                <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
+                <div class="sub">Facturación de Consignaciones &mdash; <?= date('d-m-Y H:i:s') ?></div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:10%">Fecha</th>
+                            <th style="width:14%">Secuencial</th>
+                            <th style="width:27%">Cliente</th>
+                            <th style="width:13%">Identificación</th>
+                            <th style="width:16%">Factura</th>
+                            <th style="width:10%" class="r">Total</th>
+                            <th style="width:10%">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($rows as $r):
+                        $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                    ?>
+                        <tr>
+                            <td><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
+                            <td><?= htmlspecialchars($numero) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['cliente_nombre'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['cliente_identificacion'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['numero_factura'] ?? '-')) ?></td>
+                            <td class="r"><?= number_format((float) ($r['total'] ?? 0), 2) ?></td>
+                            <td><?= ucfirst((string) ($r['estado'] ?? '')) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+            <?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Facturacion_consignaciones_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar PDF: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    /** Exporta el listado (con el filtro/orden actual del buscador) a Excel. */
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $rows = $this->filasParaExport();
+
+        try {
+            $empresaModel  = new \App\models\Empresa();
+            $empresa       = $empresaModel->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Factura', 'Total', 'Estado'];
+
+            $exportData = [];
+            foreach ($rows as $r) {
+                $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                $exportData[] = [
+                    !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-',
+                    $numero,
+                    (string) ($r['cliente_nombre'] ?? ''),
+                    (string) ($r['cliente_identificacion'] ?? ''),
+                    (string) ($r['numero_factura'] ?? '-'),
+                    number_format((float) ($r['total'] ?? 0), 2, '.', ''),
+                    ucfirst((string) ($r['estado'] ?? '')),
+                ];
+            }
+
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('Facturacion_consignaciones', $headers, $exportData, 'Facturación de Consignaciones', $nombreEmpresa);
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar Excel: ' . $e->getMessage();
+            exit;
+        }
+    }
     public function store(): void
     {
         $this->requireCrear();
@@ -197,6 +339,7 @@ class FacturacionCvController extends BaseModuloController
 
             if (!empty($input['id'])) {
                 $this->requireActualizar();
+                $this->docPropioOCortar((int) $input['id']);
                 $this->service->actualizar((int) $input['id'], (int) $input['id_empresa'], $input);
                 echo json_encode(['ok' => true, 'msg' => 'Documento actualizado correctamente.']);
             } else {
@@ -218,6 +361,7 @@ class FacturacionCvController extends BaseModuloController
         try {
             $id = (int) ($_POST['id'] ?? 0);
             if ($id <= 0) throw new Exception('ID no válido.');
+            $this->docPropioOCortar($id);
             $this->service->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Documento eliminado.']);
         } catch (\Throwable $e) {
@@ -234,6 +378,7 @@ class FacturacionCvController extends BaseModuloController
 
         try {
             $id = (int) ($_GET['id'] ?? 0);
+            $this->docPropioOCortar($id);
             $data = $this->service->getDetalleCompleto($id, (int) $_SESSION['id_empresa']);
             if (!$data) throw new Exception('Documento no encontrado.');
             echo json_encode(['ok' => true, 'data' => $data]);
@@ -253,6 +398,7 @@ class FacturacionCvController extends BaseModuloController
         try {
             $id = (int) ($_POST['id'] ?? 0);
             if ($id <= 0) throw new Exception('Documento no válido.');
+            $this->docPropioOCortar($id);
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
             $res = $this->service->generarFactura($id, $idEmpresa, $idUsuario, $this->getEmpresaConfig($idEmpresa));
@@ -273,6 +419,7 @@ class FacturacionCvController extends BaseModuloController
         try {
             $id = (int) ($_POST['id'] ?? 0);
             if ($id <= 0) throw new Exception('Documento no válido.');
+            $this->docPropioOCortar($id);
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
             $newId = $this->service->duplicar($id, $idEmpresa, $idUsuario, $this->getEmpresaConfig($idEmpresa));
@@ -295,6 +442,16 @@ class FacturacionCvController extends BaseModuloController
             if ($idFactura <= 0) throw new Exception('Factura no válida.');
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
+
+            // Este módulo solo anula la factura que ÉL generó. Sin este cruce, el
+            // permiso 'u' de Facturación CV bastaría para anular cualquier factura
+            // de venta de la empresa — con su reverso de inventario, asiento y
+            // cobros — sin tener ningún permiso en Facturas de Venta.
+            $doc = (new ConsignacionFacturaRepository())->getDocPorFactura($idFactura, $idEmpresa);
+            if (!$doc) {
+                throw new Exception('Esa factura no corresponde a una facturación de consignaciones de esta empresa.');
+            }
+            $this->requireRegistroPropio($doc);
 
             $facturaService = new \App\Services\modulos\FacturaVentaService(
                 new \App\repositories\modulos\FacturaVentaRepository(),
@@ -352,6 +509,7 @@ class FacturacionCvController extends BaseModuloController
             if ($idDoc <= 0) { echo json_encode(['ok' => true, 'detalles' => [], 'es_guardado' => false]); exit; }
 
             $doc = $this->service->getPorId($idDoc, $idEmpresa) ?? [];
+            $this->requireRegistroPropio($doc ?: null);
 
             // Documento anulado: el asiento de reingreso fue reversado, no se muestra.
             if (($doc['estado'] ?? '') === 'anulada') {
@@ -492,6 +650,7 @@ class FacturacionCvController extends BaseModuloController
         if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
 
         try {
+            $this->docPropioOCortar($id);
             $doc = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$doc) { http_response_code(404); echo 'Documento no encontrado'; exit; }
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
@@ -528,6 +687,7 @@ class FacturacionCvController extends BaseModuloController
         if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
 
         try {
+            $this->docPropioOCortar($id);
             $doc = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$doc) { http_response_code(404); echo 'Documento no encontrado'; exit; }
 
@@ -638,6 +798,7 @@ class FacturacionCvController extends BaseModuloController
         if (!$id) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
 
         try {
+            $this->docPropioOCortar($id);
             $doc = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$doc) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Documento no encontrado.']); exit; }
 

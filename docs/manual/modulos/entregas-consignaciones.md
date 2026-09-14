@@ -6,7 +6,7 @@ ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: entregas, entrega, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas
-version: 1.0
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -83,6 +83,10 @@ Módulo de solo lectura: solo existe el permiso **Ver**. Lo que cambia con
   usa la app móvil de entregas). Si no está vinculado a ningún responsable, no
   ve ninguna fila.
 
+Ese alcance vale para todo lo que sirve el módulo, **incluida la imagen de la
+firma** de una entrega: si la entrega no es de uno de sus responsables, la
+firma no se muestra aunque se pida por su enlace directo.
+
 ## Reglas de negocio
 
 - No se puede crear, editar ni eliminar nada desde aquí: la fuente de verdad es
@@ -110,6 +114,10 @@ Módulo de solo lectura: solo existe el permiso **Ver**. Lo que cambia con
   entregas registradas manualmente desde la web nunca tienen firma).
 
 ## Historial de cambios
+
+- **1.1** — La imagen de la **firma** de una entrega respeta el mismo alcance
+  que el listado: sin acceso total solo se ve la de los responsables de
+  traslado del usuario.
 
 - **1.0** — Versión inicial: KPIs, listado filtrable (fecha, año/mes, producto,
   cliente, responsable, canal), detalle con mapa y firma, export PDF/Excel.

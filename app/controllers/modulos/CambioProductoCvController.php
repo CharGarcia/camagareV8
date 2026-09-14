@@ -39,6 +39,18 @@ class CambioProductoCvController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
+    /**
+     * Cabecera del cambio de la empresa activa, cortando con 403 si el usuario
+     * no tiene acceso total y el documento lo creó otro (mismo criterio que el
+     * listado). Para las acciones que reciben un id suelto.
+     */
+    private function docPropioOCortar(int $id): ?array
+    {
+        $doc = $this->service->getPorId($id, (int) $_SESSION['id_empresa']);
+        $this->requireRegistroPropio($doc);
+        return $doc;
+    }
+
     public function index(): void
     {
         $this->requireLeer();
@@ -170,6 +182,137 @@ class CambioProductoCvController extends BaseModuloController
         exit;
     }
 
+    /** Filas del listado con el filtro/orden actual, sin paginar (para exportar). */
+    private function filasParaExport(): array
+    {
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $buscar     = trim($_GET['b'] ?? '');
+        $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_cambio');
+        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        // perPage = 0 => sin LIMIT (todas las filas que calcen con el filtro actual).
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $data['rows'] ?? [];
+    }
+
+    /** Exporta el listado (con el filtro/orden actual del buscador) a PDF. */
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $rows = $this->filasParaExport();
+
+        try {
+            $empresaModel  = new \App\models\Empresa();
+            $empresa       = $empresaModel->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+            ?>
+            <style>
+                table { width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:7pt; }
+                th { background:#f2f2f2; border:1px solid #ccc; padding:3px; text-align:left; }
+                td { border:1px solid #ccc; padding:3px; }
+                .r { text-align:right; }
+                h2 { font-family:Arial,sans-serif; font-size:12pt; margin:0 0 2px 0; }
+                .sub { font-family:Arial,sans-serif; font-size:8pt; color:#555; margin-bottom:6px; }
+            </style>
+            <page backtop="8mm" backbottom="8mm" backleft="6mm" backright="6mm">
+                <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
+                <div class="sub">Cambios de Producto de Consignaciones &mdash; <?= date('d-m-Y H:i:s') ?></div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:10%">Fecha</th>
+                            <th style="width:13%">Secuencial</th>
+                            <th style="width:25%">Cliente</th>
+                            <th style="width:12%">Identificación</th>
+                            <th style="width:20%">Motivo</th>
+                            <th style="width:10%" class="r">Diferencia</th>
+                            <th style="width:10%">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($rows as $r):
+                        $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                    ?>
+                        <tr>
+                            <td><?= !empty($r['fecha_cambio']) ? date('d-m-Y', strtotime($r['fecha_cambio'])) : '-' ?></td>
+                            <td><?= htmlspecialchars($numero) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['cliente_nombre'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['cliente_identificacion'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['motivo'] ?? '-')) ?></td>
+                            <td class="r"><?= number_format((float) ($r['diferencia'] ?? 0), 2) ?></td>
+                            <td><?= ucfirst((string) ($r['estado'] ?? '')) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+            <?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Cambios_producto_cv_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar PDF: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    /** Exporta el listado (con el filtro/orden actual del buscador) a Excel. */
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $rows = $this->filasParaExport();
+
+        try {
+            $empresaModel  = new \App\models\Empresa();
+            $empresa       = $empresaModel->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Motivo', 'Diferencia', 'Estado'];
+
+            $exportData = [];
+            foreach ($rows as $r) {
+                $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                $exportData[] = [
+                    !empty($r['fecha_cambio']) ? date('d-m-Y', strtotime($r['fecha_cambio'])) : '-',
+                    $numero,
+                    (string) ($r['cliente_nombre'] ?? ''),
+                    (string) ($r['cliente_identificacion'] ?? ''),
+                    (string) ($r['motivo'] ?? '-'),
+                    number_format((float) ($r['diferencia'] ?? 0), 2, '.', ''),
+                    ucfirst((string) ($r['estado'] ?? '')),
+                ];
+            }
+
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('Cambios_producto_cv', $headers, $exportData, 'Cambios de Producto de Consignaciones', $nombreEmpresa);
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar Excel: ' . $e->getMessage();
+            exit;
+        }
+    }
+
     public function store(): void
     {
         $this->requireCrear();
@@ -187,6 +330,7 @@ class CambioProductoCvController extends BaseModuloController
 
             if (!empty($input['id'])) {
                 $this->requireActualizar();
+                $this->docPropioOCortar((int) $input['id']);
                 $this->service->actualizar((int) $input['id'], $input['id_empresa'], $input);
                 echo json_encode(['ok' => true, 'msg' => 'Cambio actualizado correctamente.']);
             } else {
@@ -208,6 +352,7 @@ class CambioProductoCvController extends BaseModuloController
         try {
             $id = (int) ($_POST['id'] ?? 0);
             if ($id <= 0) throw new Exception("ID no válido.");
+            $this->docPropioOCortar($id);
 
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
@@ -230,6 +375,7 @@ class CambioProductoCvController extends BaseModuloController
             $id     = (int) ($_POST['id'] ?? 0);
             $estado = trim($_POST['estado'] ?? '');
             if ($id <= 0) throw new Exception("ID no válido.");
+            $this->docPropioOCortar($id);
 
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
@@ -251,6 +397,7 @@ class CambioProductoCvController extends BaseModuloController
         try {
             $id = (int) ($_GET['id'] ?? 0);
             $idEmpresa = (int) $_SESSION['id_empresa'];
+            $this->docPropioOCortar($id);
             $data = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$data) throw new Exception("Cambio no encontrado.");
             echo json_encode(['ok' => true, 'data' => $data]);
@@ -281,6 +428,7 @@ class CambioProductoCvController extends BaseModuloController
             }
 
             $cab = $this->service->getPorId($idCambio, $idEmpresa) ?? [];
+            $this->requireRegistroPropio($cab ?: null);
             $idAsiento = (int) ($cab['id_asiento_contable'] ?? 0);
 
             if ($idAsiento <= 0 && !empty($cab)) {
@@ -333,6 +481,7 @@ class CambioProductoCvController extends BaseModuloController
         if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
 
         try {
+            $this->docPropioOCortar($id);
             $cambio = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$cambio) { http_response_code(404); echo 'Cambio no encontrado'; exit; }
 
@@ -373,6 +522,7 @@ class CambioProductoCvController extends BaseModuloController
         if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
 
         try {
+            $this->docPropioOCortar($id);
             $cambio = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$cambio) { http_response_code(404); echo 'Cambio no encontrado'; exit; }
 
@@ -495,6 +645,7 @@ class CambioProductoCvController extends BaseModuloController
         if (!$id) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
 
         try {
+            $this->docPropioOCortar($id);
             $cambio = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$cambio) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Cambio no encontrado.']); exit; }
 

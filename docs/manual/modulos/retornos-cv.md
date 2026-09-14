@@ -6,7 +6,7 @@ ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: retorno, retornos, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.3
+version: 1.4
 orden: 46
 estado: activo
 ---
@@ -36,6 +36,24 @@ En la barra de acciones del comprobante, junto al botón **PDF**, hay un botón
 **Excel** que descarga el detalle del retorno (código, descripción, lote, NUP
 y cantidad) en una hoja de cálculo. Requiere que el retorno esté guardado.
 
+Arriba del listado hay otro par de botones **PDF** y **Excel** que exportan la
+**lista completa de retornos** tal como se esté viendo: respetan el buscador,
+los filtros y el orden aplicados, y salen todas las filas que calcen, no solo
+la página en pantalla.
+
+## Quién ve cada documento
+
+Depende del permiso **Acceso total** del módulo (se administra en
+*Configuración → Permisos de módulos*):
+
+- **Con acceso total**: ve y gestiona los documentos de toda la empresa.
+- **Sin acceso total**: solo los que creó ese mismo usuario. El listado ya los
+  filtraba; ahora el alcance es el mismo también al **abrir un documento, su
+  PDF, su Excel, enviarlo por correo, cambiarle el estado o eliminarlo**. Si se
+  intenta llegar a un documento ajeno por un enlace directo, el sistema
+  responde *«No tiene permiso sobre este registro: lo creó otro usuario»*.
+
+El superadministrador (nivel 3) siempre ve todo.
 ## Errores frecuentes
 
 - **El saldo no cuadra**: revise si falta registrar un retorno o si hay
@@ -73,6 +91,11 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.4** — Los botones **PDF** y **Excel** del listado ya funcionan (antes
+  daban error al pulsarlos). Además, el permiso **Acceso total** manda ahora
+  también fuera del listado: sin él no se puede abrir, exportar, enviar ni
+  eliminar un retorno creado por otro usuario.
 
 - **1.3** — El módulo respeta ahora el **cierre contable**: no se puede operar
   sobre un retorno cuyo período esté cerrado. Antes no se comprobaba.
