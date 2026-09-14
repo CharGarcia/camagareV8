@@ -4689,7 +4689,33 @@ $totalPages = $totalPagesOriginal;
                 }
 
                 if ((esInventariable || tieneDatoGuardado) && (selLote || selCad)) {
-                    cargarLotesFila(tr);
+                    // Garantía final: tras cargarLotesFila (async: trae lotes de stock y arma
+                    // los selects), forzar SIEMPRE el lote y la caducidad GUARDADOS en la BD.
+                    // Es inmune a cualquier corte interno de cargarLotesFila (excepción, caso
+                    // borde de "lote en stock con caducidad distinta", etc.): lo que está en
+                    // recibos_venta_detalle se muestra, inyectando la opción si no está.
+                    const savedLote = d.numero_lote || '';
+                    const savedCad  = d.fecha_caducidad || '';
+                    Promise.resolve(cargarLotesFila(tr)).then(() => {
+                        const sl = tr.querySelector('.input-lote');
+                        const sc = tr.querySelector('.input-caducidad');
+                        if (sl && savedLote && savedLote !== 'sin_lote') {
+                            if (!Array.from(sl.options).some(o => o.value === savedLote)) {
+                                const o = new Option(savedLote, savedLote);
+                                o.dataset.stock = 0;
+                                sl.appendChild(o);
+                            }
+                            sl.value = savedLote;
+                        }
+                        if (sc && savedCad) {
+                            if (!Array.from(sc.options).some(o => o.value === savedCad)) {
+                                const o = new Option(rvFechaCadTexto(savedCad), savedCad);
+                                o.dataset.stock = 0;
+                                sc.appendChild(o);
+                            }
+                            sc.value = savedCad;
+                        }
+                    });
                 }
 
                 // Carga de Medidas y Factores
