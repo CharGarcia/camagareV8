@@ -4046,11 +4046,17 @@ class MigracionMysqlService
                 $l = $lotes[$i] ?? null;
                 if ($l === null) { break; }
                 $lote = trim((string) $l['lote']);
-                // Caducidad a TODAS las líneas: vencimiento, o la fecha de la factura si viene en cero.
+                // NO pisar las líneas cuyo cuerpo_factura viejo viene SIN lote: en las empresas
+                // que facturan desde consignación, el lote/caducidad de la factura NO está en
+                // cuerpo_factura (viene vacío) sino en la consignación, y lo completa el cruce
+                // cruzarLoteNupConsignacion(). Si aquí escribiéramos lote=NULL y caducidad=fecha
+                // de la factura, borraríamos lo que el cruce ya recuperó. Solo se reaplica cuando
+                // cuerpo_factura SÍ trae un lote real.
+                if ($lote === '') { continue; }
                 // updateDetalleLoteCaducidad (no updateDetalleLoteNup): la tabla vieja cuerpo_factura
                 // no tiene columna de NUP, así que esta reconciliación no debe tocar esa columna —
                 // updateDetalleLoteNup la habría forzado a NULL y pisado un NUP cargado a mano.
-                $repo->updateDetalleLoteCaducidad((int) $idDet, ($lote !== '' ? mb_substr($lote, 0, 100) : null), self::caducidadODef($l['vencimiento'], $ef['fecha_factura']));
+                $repo->updateDetalleLoteCaducidad((int) $idDet, mb_substr($lote, 0, 100), self::caducidadODef($l['vencimiento'], $ef['fecha_factura']));
             }
         };
 
@@ -4309,6 +4315,36 @@ class MigracionMysqlService
                   WHERE vd.id_venta = vc.id AND vc.eliminado = false AND vc.id_empresa = :e2
                     AND vc.id = u.id_factura AND vd.id_producto = u.id_producto
                     AND (vd.numero_lote IS NULL OR vd.numero_lote = '')"
+            );
+            $st->execute([':e' => $idEmpresa, ':e2' => $idEmpresa]);
+            $total += $st->rowCount();
+        } catch (\Throwable $e) { /* columnas ausentes → se omite */ }
+
+        // C) Caducidad REAL desde la ENTRADA de consignación. `consignaciones_facturas_detalles`
+        //    (la facturación) NO guarda fecha_caducidad, pero `consignaciones_ventas_detalles`
+        //    (la entrada, de donde salió la línea) SÍ la tiene, migrada desde detalle_consignacion.
+        //    Se casa por producto+lote y se REEMPLAZA el fallback (la fecha de emisión de la
+        //    factura, que caducidadODef puso cuando cuerpo_factura.vencimiento venía en cero).
+        //    Solo toca líneas con lote y cuya caducidad actual es NULL o == la fecha de la factura
+        //    (no pisa una caducidad ya real ni una cargada a mano distinta del fallback).
+        try {
+            $st = $pg->prepare(
+                "UPDATE ventas_detalle vd
+                    SET fecha_caducidad = src.cad
+                   FROM ventas_cabecera vc,
+                        (SELECT cf.id_factura, cvd.id_producto, cvd.lote AS lote,
+                                MAX(cvd.fecha_caducidad) AS cad
+                           FROM consignaciones_facturas cf
+                           JOIN consignaciones_ventas_detalles cvd ON cvd.id_consignacion = cf.id_consignacion
+                          WHERE cf.id_empresa = :e AND cf.eliminado = false AND cvd.fecha_caducidad IS NOT NULL
+                          GROUP BY cf.id_factura, cvd.id_producto, cvd.lote) src
+                  WHERE vd.id_venta = vc.id AND vc.eliminado = false AND vc.id_empresa = :e2
+                    AND vc.id = src.id_factura
+                    AND vd.id_producto = src.id_producto
+                    AND COALESCE(vd.numero_lote, '') = COALESCE(src.lote, '')
+                    AND vd.numero_lote IS NOT NULL AND vd.numero_lote <> ''
+                    AND (vd.fecha_caducidad IS NULL OR vd.fecha_caducidad = vc.fecha_emision::date)
+                    AND vd.fecha_caducidad IS DISTINCT FROM src.cad"
             );
             $st->execute([':e' => $idEmpresa, ':e2' => $idEmpresa]);
             $total += $st->rowCount();
