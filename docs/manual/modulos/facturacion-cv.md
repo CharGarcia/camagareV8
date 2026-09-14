@@ -6,7 +6,7 @@ ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: facturacion de consignacion, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable
-version: 1.2
+version: 1.3
 orden: 47
 estado: activo
 ---
@@ -167,9 +167,19 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   *Editar descuento en factura*, o el documento ya no está en borrador.
 - **Sin saldo facturable** al buscar una consignación: ya se facturó o se retornó
   toda su mercadería.
+- **A un documento migrado del sistema anterior le faltan ítems**: ocurría con
+  documentos que repiten el mismo producto en varias líneas (una por número de
+  serie / NUP). Los ítems siempre estuvieron guardados; la pantalla los agrupaba
+  por línea de consignación y mostraba solo el primero de cada grupo. Ya está
+  corregido: basta recargar la página. Si además la consignación de origen
+  aparece con saldo pendiente de mercadería que sí se facturó, hay que volver a
+  ejecutar la migración de *Facturación de consignaciones* (y de *Retornos*),
+  que repara el enlace de esas líneas.
 
 ## Historial de cambios
 
+- **1.3** — Los documentos que repiten un producto en varias líneas (una por NUP)
+  ya muestran todos sus ítems; antes se agrupaban por línea de consignación.
 - **1.2** — El listado muestra **Observaciones** en lugar de *Total*.
 - **1.1** — La línea *Consignación* de la información adicional de la factura
   ahora lleva solo el número de la consignación: sin la serie y sin los ceros de

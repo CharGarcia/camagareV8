@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos
-version: 2.3
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras
+version: 2.4
 orden: 40
 estado: activo
 ---
@@ -50,6 +50,21 @@ saldo = total de la factura + notas de débito − cobros − retenciones − no
   el estado de pago de **Facturas de Venta**, así que los tres muestran el
   mismo saldo para la misma factura.
 
+## Buscar el cliente: tildes, ñ y varias palabras
+
+El buscador **Cliente** de la tarjeta de filtros encuentra al cliente aunque no
+se escriban las tildes ni la eñe: `PENA` encuentra a *MENDOZA PEÑA*, `COMPANIA`
+encuentra a *COMPAÑIA…* y `MOVIL` encuentra a *ARMARIO MÓVIL*. También funciona
+al revés: escribir la tilde o la eñe aunque la ficha esté guardada sin ellas.
+
+Además busca **por palabras sueltas y en cualquier orden**: `PEÑA MENDOZA`
+encuentra a *MENDOZA PEÑA DANILO*, sin necesidad de escribir el nombre completo
+ni en el mismo orden en que está guardado. Cada palabra puede aparecer en el
+nombre o en la identificación, así que `1716782832001` también sirve.
+
+Basta con escribir **dos letras** para que aparezca la lista. Al elegir un
+cliente queda como una etiqueta y se pueden elegir varios.
+
 ## Filtrar por tipo de documento
 
 El filtro **Documento** permite ver todo junto o solo un tipo:
@@ -91,6 +106,8 @@ productos filtrados.
 - Si se escribe un texto y se presiona **Enter** sin elegir de la lista, se
   filtra por ese texto sobre el **nombre o código de las líneas** (útil para
   familias: "ACEITE" trae todos los aceites).
+- Encuentra igual **sin tildes ni eñe** y por palabras en cualquier orden, como
+  el buscador de Cliente.
 - Aplica a **facturas y recibos de venta**, buscando en sus líneas de detalle.
 - En el consolidado de establecimientos, el producto elegido se cruza con los
   productos de las sucursales por **código**.
@@ -347,6 +364,12 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
+- **2.4** — El buscador de **Cliente** (y el de **Producto**) ya no distingue
+  tildes ni eñe —`PENA` encuentra a *MENDOZA PEÑA*, `COMPANIA` a *COMPAÑIA*— y
+  busca por palabras sueltas en cualquier orden, igual que el resto de
+  buscadores del sistema. Antes exigía escribir el texto exacto, con sus tildes
+  y en el mismo orden. Nueva sección *Buscar el cliente: tildes, ñ y varias
+  palabras*.
 - **2.3** — Un mismo cliente cargado **dos veces** —una ficha con la cédula y otra con el
   RUC, que es esa cédula + `001`— deja de aparecer partido en dos: el buscador
   muestra una sola entrada, el listado trae los documentos de las dos fichas, la

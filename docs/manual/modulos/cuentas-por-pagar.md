@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos
-version: 1.10
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras
+version: 1.11
 orden: 50
 estado: activo
 ---
@@ -26,6 +26,22 @@ Menos lo ya pagado mediante egresos.
 El **vencimiento** se calcula con el *plazo* configurado en la ficha del
 proveedor. Si un documento vence antes de lo que esperaba, ese es el campo a
 revisar.
+
+## Buscar el proveedor: tildes, ñ y varias palabras
+
+El buscador **Proveedor** de la tarjeta de filtros encuentra al proveedor aunque
+no se escriban las tildes ni la eñe: `ORDONEZ` encuentra a *OCHOA ORDOÑEZ*,
+`Electrica` a *Empresa Eléctrica Quito* y `RUMINAHUI` a *Rumiñahui*. También
+funciona al revés: escribir la tilde o la eñe aunque la ficha esté guardada sin
+ellas.
+
+Además busca **por palabras sueltas y en cualquier orden**: `ORDONEZ OCHOA`
+encuentra a *OCHOA ORDOÑEZ ERMA*, sin escribir la razón social completa ni en el
+mismo orden en que está guardada. Cada palabra puede aparecer en la razón social
+o en la identificación, así que el RUC también sirve.
+
+Basta con escribir **dos letras** para que aparezca la lista. Al elegir un
+proveedor queda como una etiqueta y se pueden elegir varios.
 
 ## Consolidado de establecimientos (solo desde la matriz)
 
@@ -182,6 +198,11 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.11** — El buscador de **Proveedor** ya no distingue tildes ni eñe
+  —`ORDONEZ` encuentra a *OCHOA ORDOÑEZ*, `Electrica` a *Eléctrica*— y busca por
+  palabras sueltas en cualquier orden, igual que el resto de buscadores del
+  sistema. Antes exigía escribir el texto exacto, con sus tildes y en el mismo
+  orden. Nueva sección *Buscar el proveedor: tildes, ñ y varias palabras*.
 - **1.10** — Un mismo proveedor cargado **dos veces** —una ficha con la cédula y otra con el
   RUC, que es esa cédula + `001`— deja de aparecer partido en dos: el buscador
   muestra una sola entrada, el listado trae los documentos de las dos fichas y la

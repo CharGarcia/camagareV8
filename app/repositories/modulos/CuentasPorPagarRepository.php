@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\FiltrosBusqueda;
 use App\repositories\BaseRepository;
 use App\Traits\AmbienteEmpresaTrait;
 use App\Traits\ExpansionTerceroTrait;
@@ -1198,13 +1199,18 @@ class CuentasPorPagarRepository extends BaseRepository
         if ($q === '') {
             return [];
         }
-        $params = [':q' => '%' . mb_strtolower($q) . '%', ':q2' => '%' . $q . '%', ':actual' => $idEmpresaActual];
+        $params = [':actual' => $idEmpresaActual];
         $inEmp  = $this->phIn($ids, 'bpe', $params);
+        // Texto por palabras, en cualquier orden y sin distinguir tildes/eñe (regla del sistema).
+        $cond   = FiltrosBusqueda::condicionTexto(['razon_social', "COALESCE(identificacion, '')"], $q, $params, 'bpe_t');
+        if ($cond === '') {
+            return [];
+        }
         $sql = "SELECT id, razon_social AS nombre, identificacion, id_empresa
                 FROM proveedores
                 WHERE id_empresa IN ({$inEmp})
                   AND eliminado  = false
-                  AND (LOWER(razon_social) LIKE :q OR identificacion LIKE :q2)
+                  AND {$cond}
                 ORDER BY (id_empresa = :actual) DESC, razon_social, LENGTH(COALESCE(identificacion, '')) DESC
                 LIMIT " . max(30, $limite * 2 * count($ids));
         $st = $this->db->prepare($sql);

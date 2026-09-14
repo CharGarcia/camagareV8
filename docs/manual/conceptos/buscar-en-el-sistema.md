@@ -5,7 +5,7 @@ categoria: Primeros pasos
 tipo: concepto
 visibilidad: todos
 etiquetas: buscar, busqueda, buscador, no encuentra, no me aparece, no sale el cliente, tildes, acentos, ñ, mayusculas, filtrar, lupa, buscar cliente, buscar producto, buscar proveedor, autocompletar, sugerencias, palabras sueltas, orden de las palabras, filtros, clave valor
-version: 1.1
+version: 1.2
 orden: 15
 estado: activo
 ---
@@ -53,6 +53,8 @@ En todos los buscadores del sistema:
   categoría, marca, empleado, tarifa de IVA y descripciones de ítems.
 - El catálogo de **retenciones del SRI** (busca por código y por concepto).
 - El buscador de **empresas** del panel de plataforma.
+- Los filtros de **Cuentas por Cobrar** (cliente y producto) y de **Cuentas por
+  Pagar** (proveedor).
 
 Lo mismo en la aplicación móvil: usa los mismos buscadores del servidor.
 
@@ -104,5 +106,6 @@ Antes de dar por perdido un registro, revise:
 
 | Versión | Cambio |
 |---------|--------|
+| 1.2 | Se suman los filtros de Cuentas por Cobrar (cliente y producto) y de Cuentas por Pagar (proveedor), que hasta ahora exigían escribir el texto exacto con sus tildes. |
 | 1.1 | Se suman Tareas y Obligaciones, Configuración Contable, retenciones del SRI y el buscador de empresas. |
 | 1.0 | Primera versión: búsqueda por palabras sueltas, sin tildes, en todos los buscadores de clientes y terceros. |

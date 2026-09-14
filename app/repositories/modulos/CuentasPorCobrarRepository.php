@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\repositories\modulos;
 
 use App\Helpers\AbonosVentaSql;
+use App\Helpers\FiltrosBusqueda;
 use App\repositories\BaseRepository;
 use App\Traits\AmbienteEmpresaTrait;
 use App\Traits\ExpansionTerceroTrait;
@@ -1458,13 +1459,18 @@ class CuentasPorCobrarRepository extends BaseRepository
         if ($q === '') {
             return [];
         }
-        $params = [':q' => '%' . mb_strtolower($q) . '%', ':q2' => '%' . mb_strtolower($q) . '%', ':actual' => $idEmpresaActual];
+        $params = [':actual' => $idEmpresaActual];
         $inEmp  = $this->phIn($ids, 'bpr', $params);
+        // Texto por palabras, en cualquier orden y sin distinguir tildes/eñe (regla del sistema).
+        $cond   = FiltrosBusqueda::condicionTexto(['nombre', "COALESCE(codigo, '')"], $q, $params, 'bpr_t');
+        if ($cond === '') {
+            return [];
+        }
         $sql = "SELECT id, COALESCE(codigo, '') AS codigo, nombre, id_empresa
                 FROM productos
                 WHERE id_empresa IN ({$inEmp})
                   AND eliminado = false
-                  AND (LOWER(nombre) LIKE :q OR LOWER(COALESCE(codigo, '')) LIKE :q2)
+                  AND {$cond}
                 ORDER BY (id_empresa = :actual) DESC, nombre
                 LIMIT " . max(15, $limite * count($ids));
         $st = $this->db->prepare($sql);
@@ -1622,13 +1628,18 @@ class CuentasPorCobrarRepository extends BaseRepository
         if ($q === '') {
             return [];
         }
-        $params = [':q' => '%' . mb_strtolower($q) . '%', ':q2' => '%' . $q . '%', ':actual' => $idEmpresaActual];
+        $params = [':actual' => $idEmpresaActual];
         $inEmp  = $this->phIn($ids, 'bce', $params);
+        // Texto por palabras, en cualquier orden y sin distinguir tildes/eñe (regla del sistema).
+        $cond   = FiltrosBusqueda::condicionTexto(['nombre', "COALESCE(identificacion, '')"], $q, $params, 'bce_t');
+        if ($cond === '') {
+            return [];
+        }
         $sql = "SELECT id, nombre, identificacion, id_empresa
                 FROM clientes
                 WHERE id_empresa IN ({$inEmp})
                   AND eliminado  = false
-                  AND (LOWER(nombre) LIKE :q OR identificacion LIKE :q2)
+                  AND {$cond}
                 ORDER BY (id_empresa = :actual) DESC, nombre, LENGTH(COALESCE(identificacion, '')) DESC
                 LIMIT " . max(30, $limite * 2 * count($ids));
         $st = $this->db->prepare($sql);

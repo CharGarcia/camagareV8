@@ -575,7 +575,8 @@
             producto_codigo: d.producto_codigo, producto_nombre: d.producto_nombre, lote: d.lote, nup: d.nup, bodega_nombre: d.bodega_nombre,
             precio: d.precio_unitario, porc: d.porcentaje_impuesto,
             saldo: editable ? num(d.saldo_facturable) : num(d.cantidad),
-            cantidad: num(d.cantidad), descuento: num(d.descuento), readonly: !editable
+            cantidad: num(d.cantidad), descuento: num(d.descuento), readonly: !editable,
+            permitirDuplicado: true // pintar TODAS las líneas guardadas (ver addLinea)
         }));
         if (!dets.length) body.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Sin líneas.</td></tr>';
         recalc();
@@ -875,7 +876,12 @@
     // Los valores vigentes viven siempre en los data-* de la fila.
     function addLinea(cfg) {
         const idcd = parseInt(cfg.idcd, 10);
-        if (added.has(idcd)) return false;
+        // `added` evita agregar DOS VECES la misma línea de consignación desde el sub-modal
+        // "Cargar consignación". Al CARGAR un documento ya guardado (cfg.permitirDuplicado)
+        // no se filtra: hay documentos —los migrados del sistema anterior— cuyas líneas
+        // comparten id_consignacion_detalle, y filtrarlos escondía ítems que sí están en la
+        // base (una factura de 43 ítems por NUP se veía con 5).
+        if (cfg.permitirDuplicado !== true && added.has(idcd)) return false;
         added.add(idcd);
         const body = $('faccv_lineas_body');
         if (body.querySelector('td[colspan]')) body.innerHTML = '';
@@ -901,9 +907,13 @@
             <td class="text-end small pe-3 fw-semibold faccv-sub">${neto.toFixed(2)}</td>
             <td class="text-center">${cfg.readonly ? '' : `<i class="bi bi-x-circle remove-row" role="button" onclick="faccvQuitar(this)" title="Quitar"></i>`}</td>`;
         body.appendChild(tr);
-        $('faccv_lineas_info').textContent = added.size + ' línea(s)';
+        $('faccv_lineas_info').textContent = contarLineas() + ' línea(s)';
         return true;
     }
+
+    // Número de líneas realmente pintadas. NO usar added.size: un documento puede tener
+    // varias líneas con el mismo id_consignacion_detalle (ver addLinea).
+    function contarLineas() { return document.querySelectorAll('#faccv_lineas_body tr[data-idcd]').length; }
 
     // ── Descuento por línea en la tabla principal ───────────────────────────
     // El descuento se capea al subtotal bruto de la línea (precio × cantidad), igual
@@ -992,9 +1002,12 @@
     };
 
     window.faccvQuitar = function (btn) {
-        const tr = btn.closest('tr'); added.delete(parseInt(tr.dataset.idcd, 10)); tr.remove();
+        const tr = btn.closest('tr'); const idcd = parseInt(tr.dataset.idcd, 10); tr.remove();
+        // Solo se libera el id_consignacion_detalle si ya no queda ninguna otra fila con él.
+        if (!document.querySelector(`#faccv_lineas_body tr[data-idcd="${idcd}"]`)) added.delete(idcd);
         if (!$('faccv_lineas_body').children.length) $('faccv_lineas_body').innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Use <b>Cargar consignación</b> para agregar productos.</td></tr>';
-        $('faccv_lineas_info').textContent = added.size ? added.size + ' línea(s)' : '';
+        const n = contarLineas();
+        $('faccv_lineas_info').textContent = n ? n + ' línea(s)' : '';
         recalc();
     };
 
@@ -1045,7 +1058,7 @@
         });
 
         $('faccv_tot_total').textContent = (netTotal + ivaTotal).toFixed(2);
-        $('faccv_count_items').textContent = added.size;
+        $('faccv_count_items').textContent = contarLineas();
     }
 
     document.addEventListener('click', (e) => {

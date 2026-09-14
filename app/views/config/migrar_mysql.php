@@ -650,6 +650,12 @@ $base = BASE_URL;
                 if (d.vendedores_asignados > 0) {
                     html += `<br><span class="text-success small">👤 ${fmt(d.vendedores_asignados)} cliente(s) con su vendedor asignado.</span>`;
                 }
+                // Facturación de consignaciones / retornos: reparación del enlace de cada línea con la
+                // línea de su consignación (migraciones previas casaban solo por producto, así que las
+                // líneas del mismo producto con distinto lote/NUP colgaban todas de la misma).
+                if (d.reenlazados > 0) {
+                    html += `<br><span class="text-success small">🔗 ${fmt(d.reenlazados)} línea(s) reenlazada(s) a su línea de consignación (por lote y NUP).</span>`;
+                }
                 // Marcas: el viejo guarda la marca del producto en una tabla aparte; al migrarla se
                 // escribe en el producto (también en los productos migrados en corridas anteriores).
                 if (d.productos_marcados > 0) {

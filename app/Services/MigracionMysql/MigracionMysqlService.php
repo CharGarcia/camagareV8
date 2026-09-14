@@ -2182,9 +2182,43 @@ class MigracionMysqlService
     }
 
     /**
+     * Elige, entre las líneas de una consignación de ENTRADA, la que corresponde a una línea del
+     * documento derivado (facturación o retorno). Casa por especificidad decreciente —
+     * producto+lote+NUP → producto+lote → producto — y NUNCA devuelve una línea ya consumida por
+     * otra línea del mismo documento ($usadas), para que N líneas del mismo producto (una por NUP)
+     * queden enlazadas a N líneas distintas y no todas a la primera.
+     * Como último recurso reutiliza la primera del producto: es preferible un enlace repetido a
+     * perder el documento entero (id_consignacion_detalle es NOT NULL).
+     *
+     * @param array<int,array{id:int|string,id_producto:int|string,lote:string,nup:string}> $lineasEntrada
+     * @param array<int,bool> $usadas ids ya consumidos por este documento
+     */
+    private static function casarLineaEntrada(array $lineasEntrada, ?int $idProducto, ?string $lote, ?string $nup, array $usadas): ?int
+    {
+        if (!$idProducto) { return null; }
+        $lote = (string) ($lote ?? '');
+        $nup  = (string) ($nup ?? '');
+        $delProducto = [];
+        foreach ($lineasEntrada as $e) {
+            if ((int) $e['id_producto'] === $idProducto) { $delProducto[] = $e; }
+        }
+        if (!$delProducto) { return null; }
+
+        foreach ([2, 1, 0] as $nivel) {
+            foreach ($delProducto as $e) {
+                if (isset($usadas[(int) $e['id']])) { continue; }
+                if ($nivel >= 1 && (string) $e['lote'] !== $lote) { continue; }
+                if ($nivel >= 2 && (string) $e['nup'] !== $nup)  { continue; }
+                return (int) $e['id'];
+            }
+        }
+        return (int) $delProducto[0]['id']; // todas consumidas: se repite antes que descartar el documento
+    }
+
+    /**
      * Migra los documentos derivados de una consignación: FACTURA → consignaciones_facturas,
-     * DEVOLUCION → retornos_cv. Cada línea se enlaza a su ENTRADA por numero_orden_entrada + producto.
-     * Requiere las consignaciones base migradas antes.
+     * DEVOLUCION → retornos_cv. Cada línea se enlaza a la línea de su ENTRADA (numero_orden_entrada)
+     * que le corresponde por producto + lote + NUP. Requiere las consignaciones base migradas antes.
      */
     private function migrarConsignacionesDerivado(int $idEmpresa, string $ruc, int $idUsuario, int $limite, ?string $desde, ?string $hasta, string $modo): array
     {
@@ -2210,7 +2244,14 @@ class MigracionMysqlService
         // consumir una ENTRADA de meses previos, por eso no se limita por fecha sino por referencia).
         $mapCons = $this->mapaDe($pg, $idEmpresa, 'consignaciones');
         $mapEntrada = [];
-        $lineLookup = $pg->prepare("SELECT id FROM consignaciones_ventas_detalles WHERE id_consignacion = ? AND id_producto = ? AND eliminado = false LIMIT 1");
+        // Líneas de la ENTRADA por consignación, con lote y NUP. NO basta con (consignación,
+        // producto): cuando el producto se maneja por NUP, la ENTRADA trae una línea por número
+        // de serie y el documento derivado también — casar solo por producto engancharía TODAS
+        // esas líneas a la misma línea de entrada (enlace colapsado: el saldo facturable de esa
+        // línea se va a negativo y las demás quedan como facturables aunque ya se vendieron).
+        $lineLookup = $pg->prepare("SELECT id, id_producto, COALESCE(lote,'') AS lote, COALESCE(nup,'') AS nup
+                                      FROM consignaciones_ventas_detalles
+                                     WHERE id_consignacion = ? AND eliminado = false ORDER BY id");
         $lineCache = [];
         // Bodega del ítem (old id_bodega → nueva) + una por defecto; y el número de la factura vieja.
         $mapBod = $this->mapaDe($pg, $idEmpresa, 'bodegas');
@@ -2328,18 +2369,19 @@ class MigracionMysqlService
             $lineas = [];
             $sub = 0.0;
             $incompleto = false;
+            $usadas = []; // líneas de ENTRADA ya consumidas por ESTE documento (id => true)
             foreach ($dets as $d) {
                 $numEnt  = (int) $d['numero_orden_entrada'];
                 $idCons  = $mapEntrada[(string) $numEnt] ?? null;
                 $idProd  = $this->resolverOCrearProducto($prodPorCod, $mapProd, (int) $d['id_producto'], (string) $d['codigo_producto'], (string) $d['nombre_producto'], '0', $idEmpresa, $idUsuario, $pg);
                 if (!$idCons) { $incompleto = true; break; }
-                $ckey = $idCons . '-' . $idProd;
-                if (!array_key_exists($ckey, $lineCache)) {
-                    $lineLookup->execute([$idCons, $idProd]);
-                    $lineCache[$ckey] = ($lineLookup->fetchColumn() ?: null);
+                if (!array_key_exists($idCons, $lineCache)) {
+                    $lineLookup->execute([$idCons]);
+                    $lineCache[$idCons] = $lineLookup->fetchAll(PDO::FETCH_ASSOC);
                 }
-                $idConsDet = $lineCache[$ckey];
+                $idConsDet = self::casarLineaEntrada($lineCache[$idCons], $idProd, self::nz($d['lote']), self::nz($d['nup']), $usadas);
                 if (!$idConsDet) { $incompleto = true; break; }
+                $usadas[$idConsDet] = true;
                 $cant = (float) $d['cant_consignacion'];
                 $pu   = (float) $d['precio'];
                 $st   = round($cant * $pu, 2);
@@ -2401,6 +2443,19 @@ class MigracionMysqlService
             }
         }
 
+        // RE-ENLACE en LOTE de los documentos ya migrados (set-based, toda la empresa de una vez, no
+        // solo el rango de fechas). Las migraciones anteriores casaban la línea de ENTRADA solo por
+        // (consignación, producto): con NUP individuales, las N líneas del mismo producto quedaban
+        // apuntando a la MISMA línea de entrada. Se corrige emparejando 1:1 por
+        // (consignación, producto, lote, NUP) — datos que el detalle migrado ya guarda bien, así que
+        // no hace falta volver a leer la base vieja. Solo toca documentos INSERTADOS por la migración
+        // (migracion_mysql_map.vinculado = false); los nativos no se tocan. Idempotente.
+        try {
+            $res['reenlazados'] = $this->reenlazarDetalleDerivado($pg, $idEmpresa, $esFactura);
+        } catch (Throwable $ex) {
+            if (empty($res['error_muestra'])) { $res['error_muestra'] = 'reenlace detalle: ' . substr($ex->getMessage(), 0, 150); }
+        }
+
         // Toda consignación de venta que YA fue facturada debe quedar 'Entregada' (el módulo exige que una
         // consignación esté Entregada para poder facturarla). Se mira el DETALLE de la facturación (una
         // factura puede cubrir VARIAS consignaciones — multi-consignación). No toca anuladas ni ya entregadas.
@@ -2423,6 +2478,63 @@ class MigracionMysqlService
             $res['lote_nup_consignacion'] = $this->cruzarLoteNupConsignacion($pg, $idEmpresa);
         }
         return $res;
+    }
+
+    /**
+     * Repara el enlace `id_consignacion_detalle` de los documentos derivados YA migrados
+     * (facturación de consignación / retornos), emparejando cada línea con la línea de la ENTRADA
+     * que le corresponde por (consignación, producto, lote, NUP).
+     *
+     * El emparejamiento es 1:1: ROW_NUMBER() sobre esa misma clave a ambos lados — la n-ésima línea
+     * del documento con ese producto/lote/NUP va a la n-ésima línea de la entrada. Si no hay
+     * contraparte (p. ej. dos documentos facturan el mismo NUP), la fila se queda con su enlace
+     * actual en lugar de apuntar a cualquier otra.
+     *
+     * Solo documentos insertados por la migración; no toca los nativos ni los vinculados.
+     */
+    private function reenlazarDetalleDerivado(PDO $pg, int $idEmpresa, bool $esFactura): int
+    {
+        $tablaDet = $esFactura ? 'consignaciones_facturas_detalles' : 'retornos_cv_detalles';
+        $tablaCab = $esFactura ? 'consignaciones_facturas'          : 'retornos_cv';
+        $fkCab    = $esFactura ? 'id_consignacion_factura'          : 'id_retorno';
+        $entidad  = $esFactura ? 'consignaciones_fact'              : 'consignaciones_ret';
+
+        $sql = "WITH det AS (
+                    SELECT d.id AS det_id, d.id_consignacion, d.id_producto,
+                           COALESCE(d.lote, '') AS lote, COALESCE(d.nup, '') AS nup,
+                           ROW_NUMBER() OVER (PARTITION BY d.$fkCab, d.id_consignacion, d.id_producto,
+                                                           COALESCE(d.lote, ''), COALESCE(d.nup, '')
+                                              ORDER BY d.id) AS rn
+                      FROM $tablaDet d
+                      JOIN $tablaCab c ON c.id = d.$fkCab
+                      JOIN migracion_mysql_map m
+                        ON m.id_empresa = c.id_empresa AND m.entidad = :ent
+                       AND m.id_destino = c.id AND m.vinculado = false
+                     WHERE c.id_empresa = :e AND c.eliminado = false
+                       AND (d.eliminado = false OR d.eliminado IS NULL)
+                ), ent AS (
+                    SELECT e.id AS ent_id, e.id_consignacion, e.id_producto,
+                           COALESCE(e.lote, '') AS lote, COALESCE(e.nup, '') AS nup,
+                           ROW_NUMBER() OVER (PARTITION BY e.id_consignacion, e.id_producto,
+                                                           COALESCE(e.lote, ''), COALESCE(e.nup, '')
+                                              ORDER BY e.id) AS rn
+                      FROM consignaciones_ventas_detalles e
+                      JOIN consignaciones_ventas cv ON cv.id = e.id_consignacion
+                     WHERE cv.id_empresa = :e AND cv.eliminado = false AND e.eliminado = false
+                )
+                UPDATE $tablaDet t
+                   SET id_consignacion_detalle = ent.ent_id
+                  FROM det, ent
+                 WHERE t.id = det.det_id
+                   AND ent.id_consignacion = det.id_consignacion
+                   AND ent.id_producto     = det.id_producto
+                   AND ent.lote            = det.lote
+                   AND ent.nup             = det.nup
+                   AND ent.rn              = det.rn
+                   AND t.id_consignacion_detalle IS DISTINCT FROM ent.ent_id";
+        $st = $pg->prepare($sql);
+        $st->execute([':e' => $idEmpresa, ':ent' => $entidad]);
+        return $st->rowCount();
     }
 
     /** Migra los cambios de productos facturados (cambio_productos_facturados) → cambios_producto_cv (2 líneas: devuelto/entregado). */
