@@ -20,25 +20,42 @@ function pedAvisarSecuencialNoConfigurado(tipo) {
     });
 }
 
-/** Restringe "Hora Máxima" a horas posteriores a "Hora Inicial" (sin precargar su valor). */
-function pedActualizarMinHoraMaxima() {
-    const inputHoraIni = document.getElementById('hora_inicial_entrega');
-    const inputHoraMax = document.getElementById('hora_maxima_entrega');
-    if (!inputHoraIni || !inputHoraMax) return;
-    if (inputHoraIni.value) {
-        inputHoraMax.min = inputHoraIni.value;
-    } else {
-        inputHoraMax.removeAttribute('min');
+/**
+ * Descargas del listado (PDF / Excel): si la búsqueda actual devuelve más
+ * pedidos que el tope del módulo, la generación del archivo satura el servidor,
+ * así que no se deja bajar y se pide acotar la búsqueda. El controlador revalida
+ * lo mismo por si se entra con la URL directa.
+ */
+function pedBloquearExportSiExcede(e) {
+    const max   = Number(window.PED_EXPORT_MAX || 0);
+    const total = Number(window.PED_TOTAL || 0);
+    if (!max || total <= max) return;
+
+    e.preventDefault();
+    if (typeof Swal === 'undefined') {
+        alert(`El listado tiene ${total} pedidos y el máximo por descarga es ${max}. Acote la búsqueda antes de exportar.`);
+        return;
     }
+    Swal.fire({
+        icon: 'warning',
+        title: 'Listado demasiado grande',
+        html: `La búsqueda actual devuelve <strong>${total.toLocaleString('es-EC')} pedidos</strong> y el máximo por descarga es de <strong>${max.toLocaleString('es-EC')}</strong>.<br><br>`
+            + 'Acote la búsqueda con el buscador (fecha, estado, cliente o serie) y vuelva a descargar.',
+        confirmButtonText: 'Acotar la búsqueda',
+        confirmButtonColor: '#f39c12',
+    }).then(() => {
+        const inputBuscar = document.getElementById('buscarPedido');
+        const widget = document.querySelector('#fbBuscadorPED input');
+        (widget || inputBuscar)?.focus();
+    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     PED_fetchSearch(window.currentPage);
 
-    const inputHoraIniGlobal = document.getElementById('hora_inicial_entrega');
-    if (inputHoraIniGlobal) {
-        inputHoraIniGlobal.addEventListener('input', pedActualizarMinHoraMaxima);
-    }
+    ['btnExportPdf', 'btnExportExcel'].forEach(id => {
+        document.getElementById(id)?.addEventListener('click', pedBloquearExportSiExcede);
+    });
 
     // Buscador principal (widget FiltrosBusqueda): respaldo por si el valor del
     // input oculto cambia sin pasar por onApply (mismo patrón que Egresos).
@@ -212,6 +229,7 @@ async function PED_fetchSearch(page = 1) {
         
         if (data.ok) {
             window.currentPage = page;
+            window.PED_TOTAL = Number(data.total || 0); // tope de exportación
             tbody.innerHTML = data.rows;
             document.getElementById('paginacion-pedidos').innerHTML = data.pagination;
             infoPag.textContent = data.info;
@@ -321,10 +339,11 @@ function nuevoPedido() {
     
     // Configurar fecha de entrega con la fecha actual por defecto
     document.getElementById('fecha_entrega').value = CMG_fechaLocal();
-    const _ahora = new Date();
-    document.getElementById('hora_inicial_entrega').value = String(_ahora.getHours()).padStart(2, '0') + ':' + String(_ahora.getMinutes()).padStart(2, '0');
+    // Las horas de entrega arrancan VACÍAS: no se sugiere la hora actual ni se
+    // limita la hora máxima con `min`, para que se puedan escribir libremente.
+    // La coherencia (inicial < máxima) se sigue validando en validarFechasYHoras().
+    document.getElementById('hora_inicial_entrega').value = '';
     document.getElementById('hora_maxima_entrega').value = '';
-    pedActualizarMinHoraMaxima();
     document.getElementById('id_responsable_entrega').value = '';
     document.getElementById('observaciones').value = '';
     document.getElementById('observaciones_internas').value = '';
@@ -355,6 +374,20 @@ function nuevoPedido() {
     if (typeof window.aplicarFavoritosModal === 'function') {
         window.aplicarFavoritosModal('#modalPedido');
     }
+}
+
+/**
+ * Muestra la lista de productos pegada al input que la abrió.
+ *
+ * El cálculo (sin sumarle el scroll, midiendo contra `visualViewport` y abriendo
+ * hacia arriba cuando el teclado no deja espacio abajo) vive en el componente
+ * compartido `js/components/dropdown_flotante.js`, que usan también Órdenes de
+ * Compra y Consignaciones de Venta. Aquí solo se aplica al dropdown del módulo.
+ */
+function pedPosicionarDropdownProductos(inputEl) {
+    const dropdown = document.getElementById('m-dropdown-productos-global');
+    if (!dropdown || !inputEl || typeof window.CMG_anclarDropdown !== 'function') return;
+    window.CMG_anclarDropdown(dropdown, inputEl, { anchoMinimo: 350, altoMaximo: 250 });
 }
 
 /**
@@ -446,11 +479,7 @@ function agregarFilaProducto(prod = null) {
             return;
         }
 
-        const rect = sourceInput.getBoundingClientRect();
-        dropdownGlobal.style.top = `${rect.bottom + window.scrollY + 2}px`;
-        dropdownGlobal.style.left = `${rect.left + window.scrollX}px`;
-        dropdownGlobal.style.width = `${Math.max(rect.width, 350)}px`;
-        dropdownGlobal.classList.remove('d-none');
+        pedPosicionarDropdownProductos(sourceInput);
         dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
 
         try {
@@ -481,6 +510,9 @@ function agregarFilaProducto(prod = null) {
             } else {
                 dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Sin coincidencias en el catálogo</div>';
             }
+            // Entre la búsqueda y la respuesta el teclado pudo abrirse o el modal
+            // pudo scrollear: se vuelve a anclar al input con el alto ya definitivo.
+            pedPosicionarDropdownProductos(sourceInput);
         } catch (err) {
             console.error('Error productos', err);
         }
@@ -952,7 +984,6 @@ async function editarPedido(id) {
             setVal('fecha_entrega', p.fecha_entrega);
             setVal('hora_inicial_entrega', p.hora_inicial_entrega);
             setVal('hora_maxima_entrega', p.hora_maxima_entrega);
-            pedActualizarMinHoraMaxima();
             setVal('id_responsable_entrega', p.id_responsable_entrega);
             setVal('observaciones', p.observaciones);
             setVal('observaciones_internas', p.observaciones_internas);

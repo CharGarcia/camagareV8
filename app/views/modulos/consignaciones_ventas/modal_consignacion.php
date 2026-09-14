@@ -8,6 +8,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 <!-- Leaflet (mapas) — mismo vendor local que el módulo de clientes -->
 <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/vendor/leaflet/leaflet.css">
 <script src="<?= rtrim(BASE_URL, '/') ?>/vendor/leaflet/leaflet.js"></script>
+<!-- Posicionamiento de la lista flotante de productos (compartido con Pedidos y Órdenes de Compra) -->
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/dropdown_flotante.js?v=<?= asset_ver('/js/components/dropdown_flotante.js') ?>"></script>
 <div class="modal fade" id="modalConsignacion" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-focus="false" style="z-index: 1060;">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
@@ -418,6 +420,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         document.getElementById('formConsignacion').reset();
         document.getElementById('cons_id').value = '';
         document.getElementById('cons_id_cliente').value = '';
+        consAplicarVendedor(null); // quita el asesor agregado al vuelo por el documento anterior
         document.getElementById('tituloModalConsignacion').textContent = 'Nueva Consignación en Ventas';
         document.getElementById('cons_estado_badge').textContent = 'Nueva';
         document.getElementById('cons_estado_badge').className = 'badge bg-secondary bg-opacity-10 text-secondary ms-2 d-none';
@@ -539,7 +542,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         document.getElementById('cons_observaciones').value = row.observaciones || '';
 
         // Selects estáticos
-        if (row.id_vendedor) document.getElementById('cons_id_vendedor').value = row.id_vendedor;
+        // Con consAplicarVendedor, un asesor que ya no esté en la lista (inactivo, o de otro
+        // usuario sin permiso 'todo') se muestra igual en vez de dejar el combo en blanco y
+        // perderse al volver a guardar.
+        if (row.id_vendedor) consAplicarVendedor(row.id_vendedor, row.vendedor_nombre);
         if (row.id_bodega) document.getElementById('cons_id_bodega').value = row.id_bodega;
         if (row.id_responsable_traslado) document.getElementById('cons_id_responsable_traslado').value = row.id_responsable_traslado;
 
@@ -1058,18 +1064,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 dropdownGlobal.appendChild(btn);
                             });
 
-                            const rect = inputDesc.getBoundingClientRect();
-                            dropdownGlobal.style.top = `${rect.bottom + window.scrollY}px`;
-                            dropdownGlobal.style.left = `${rect.left + window.scrollX}px`;
-                            dropdownGlobal.style.width = `${rect.width}px`;
-                            dropdownGlobal.classList.remove('d-none');
+                            consAnclarDropdownProductos(dropdownGlobal, inputDesc);
                         } else {
                             dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">No se encontraron resultados</div>';
-                            const rect = inputDesc.getBoundingClientRect();
-                            dropdownGlobal.style.top = `${rect.bottom + window.scrollY}px`;
-                            dropdownGlobal.style.left = `${rect.left + window.scrollX}px`;
-                            dropdownGlobal.style.width = `${rect.width}px`;
-                            dropdownGlobal.classList.remove('d-none');
+                            consAnclarDropdownProductos(dropdownGlobal, inputDesc);
                         }
                     } catch (e) {
                         console.error('Error al buscar productos:', e);
@@ -1091,6 +1089,26 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         div.style.overflowY = 'auto';
         document.body.appendChild(div);
         return div;
+    }
+
+    /**
+     * Abre la lista de productos pegada al input, con el componente compartido
+     * js/components/dropdown_flotante.js (el mismo de Pedidos y Órdenes de Compra):
+     * la lista es `position: fixed`, así que NO se le suma el scroll, y el alto
+     * visible se mide con `visualViewport` para que en el celular no quede debajo
+     * del teclado. El respaldo solo corre si esa librería no se cargó.
+     */
+    function consAnclarDropdownProductos(dropdown, inputEl) {
+        if (!dropdown || !inputEl) return;
+        if (typeof window.CMG_anclarDropdown === 'function') {
+            window.CMG_anclarDropdown(dropdown, inputEl, { anchoMinimo: 280, altoMaximo: 250 });
+            return;
+        }
+        const rect = inputEl.getBoundingClientRect();
+        dropdown.style.top = `${rect.bottom + 2}px`;
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.width = `${rect.width}px`;
+        dropdown.classList.remove('d-none');
     }
 
     async function consCargarLotesFila(row) {
@@ -1272,22 +1290,47 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }, 300);
     }
 
+    /**
+     * Pone en el select "Asesor" el vendedor que venga con el cliente (o con el documento).
+     *
+     * El select solo trae vendedores ACTIVOS y —sin permiso 'todo'— los que creó el propio
+     * usuario (VendedorRepository::getVendedoresActivos), así que el vendedor asignado a un
+     * cliente puede no estar en la lista. Antes, en ese caso, `select.value = id` dejaba el
+     * combo EN BLANCO sin avisar: la consignación se guardaba sin asesor o con otro. Ahora esa
+     * opción se agrega al vuelo, marcada, para que el asesor del cliente quede seleccionado.
+     *
+     * Devuelve true si quedó un asesor seleccionado.
+     */
+    function consAplicarVendedor(idVendedor, nombreVendedor) {
+        const sel = document.getElementById('cons_id_vendedor');
+        if (!sel) return false;
+
+        // La opción agregada al vuelo pertenece al cliente/documento anterior: se descarta antes
+        // de evaluar el nuevo, para no dejar nombres sueltos de un cliente que ya no está.
+        sel.querySelectorAll('option[data-fuera-de-lista="1"]').forEach(o => o.remove());
+
+        if (!idVendedor) return false;
+        const idVend = String(idVendedor);
+
+        if (!Array.from(sel.options).some(o => o.value === idVend)) {
+            if (!nombreVendedor) return false; // sin nombre no se puede mostrar: se deja como estaba
+            const opt = document.createElement('option');
+            opt.value = idVend;
+            opt.textContent = nombreVendedor;
+            opt.dataset.fueraDeLista = '1';
+            sel.appendChild(opt);
+        }
+
+        sel.value = idVend;
+        return true;
+    }
+
     function seleccionarClienteCons(c) {
         document.getElementById('cons_id_cliente').value = c.id;
         document.getElementById('cons_cliente_busqueda').value = c.identificacion + ' - ' + c.nombre;
 
         // Autocompletar Asesor (vendedor asignado al cliente), igual que en Factura de Venta.
-        // Solo se asigna si ese vendedor está entre las opciones del select: la lista trae
-        // únicamente vendedores activos (y, sin permiso 'todo', los del propio usuario), así que
-        // un cliente con un vendedor inactivo o ajeno dejaría el select en blanco, borrando lo
-        // que el usuario —o su favorito— ya tenía puesto.
-        const selVendedorCons = document.getElementById('cons_id_vendedor');
-        if (selVendedorCons && c.id_vendedor) {
-            const idVendCliente = String(c.id_vendedor);
-            if (Array.from(selVendedorCons.options).some(o => o.value === idVendCliente)) {
-                selVendedorCons.value = idVendCliente;
-            }
-        }
+        consAplicarVendedor(c.id_vendedor, c.nombre_vendedor);
 
         // Autocompletar Punto de Llegada (dirección del cliente)
         document.getElementById('cons_punto_llegada').value = c.direccion || '';
@@ -2218,9 +2261,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (!currentClientVal) {
             document.getElementById('cons_id_cliente').value = c.id_cliente;
             document.getElementById('cons_cliente_busqueda').value = (c.cliente_identificacion || '') + ' - ' + (c.cliente_nombre || '');
-            if (c.id_vendedor) {
-                document.getElementById('cons_id_vendedor').value = c.id_vendedor;
-            }
+            // El cliente entra aquí desde el pedido, así que el Asesor se autocompleta igual que
+            // al buscarlo a mano: `id_vendedor` de la cabecera del pedido es el vendedor asignado
+            // AL CLIENTE (pedidos_cabecera no guarda vendedor; el endpoint lo trae de `clientes`).
+            consAplicarVendedor(c.id_vendedor, c.nombre_vendedor);
+        } else if (String(currentClientVal) === String(c.id_cliente) && !document.getElementById('cons_id_vendedor').value) {
+            // Mismo cliente ya puesto pero sin asesor (p. ej. quedó en blanco al abrir): se completa.
+            // Si ya hay un asesor elegido no se toca: puede ser una decisión del usuario.
+            consAplicarVendedor(c.id_vendedor, c.nombre_vendedor);
         }
 
         // Quitar filas vacías (p. ej. la línea en blanco inicial de "Nueva Consignación")
@@ -2516,6 +2564,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         e.id_punto_emision        = document.getElementById('cons_id_punto_emision')?.value || '';
         e.id_bodega               = document.getElementById('cons_id_bodega')?.value || '';
         e.id_vendedor             = document.getElementById('cons_id_vendedor')?.value || '';
+        // El nombre va junto al id porque el asesor puede no estar en la lista del select
+        // (inactivo / de otro usuario): sin él, al restaurar el borrador se perdería.
+        e.nombre_vendedor         = document.getElementById('cons_id_vendedor')?.selectedOptions?.[0]?.textContent || '';
         e.id_responsable_traslado = document.getElementById('cons_id_responsable_traslado')?.value || '';
         e.id_cliente              = document.getElementById('cons_id_cliente')?.value || '';
         e.cliente_busqueda        = document.getElementById('cons_cliente_busqueda')?.value || '';
@@ -2629,7 +2680,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         // Cabecera (la bodega debe fijarse antes de reconstruir los detalles para cargar lotes correctos)
         if (b.fecha_emision)           document.getElementById('cons_fecha_emision').value = b.fecha_emision;
         if (b.id_bodega)               document.getElementById('cons_id_bodega').value = b.id_bodega;
-        if (b.id_vendedor)             document.getElementById('cons_id_vendedor').value = b.id_vendedor;
+        if (b.id_vendedor)             consAplicarVendedor(b.id_vendedor, b.nombre_vendedor);
         if (b.id_responsable_traslado) document.getElementById('cons_id_responsable_traslado').value = b.id_responsable_traslado;
         if (b.fecha_entrega)           document.getElementById('cons_fecha_entrega').value = b.fecha_entrega;
         if (b.hora_entrega_desde)      document.getElementById('cons_hora_entrega_desde').value = b.hora_entrega_desde;

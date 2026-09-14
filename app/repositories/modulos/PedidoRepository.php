@@ -11,6 +11,20 @@ class PedidoRepository {
     /** Caché por request: ¿existe ventas_detalle.id_pedido_detalle? (migración database/agregar_id_pedido_detalle_ventas.sql). */
     private ?bool $columnaVentasDetalleExiste = null;
 
+    /**
+     * Orden lógico del estado para el ORDER BY (no alfabético).
+     * Los estados reales son Pendiente / Procesado / Anulado (la migración mapea
+     * status 1/2/3); "Facturado" existe como opción del buscador, por eso se
+     * contempla aquí. Cualquier valor no listado cae al final (99).
+     */
+    private const ORDEN_ESTADO_SQL = "CASE UPPER(TRIM(COALESCE(p.estado, '')))
+                                          WHEN 'PENDIENTE' THEN 1
+                                          WHEN 'PROCESADO' THEN 2
+                                          WHEN 'FACTURADO' THEN 3
+                                          WHEN 'ANULADO'   THEN 4
+                                          ELSE 99
+                                      END";
+
     public const COLUMNAS_ORDEN = [
         'numero_pedido', 'establecimiento', 'punto_emision', 'secuencial', 'fecha_pedido', 'cliente_nombre',
         'fecha_entrega', 'rango_horario', 'responsable_entrega',
@@ -106,6 +120,11 @@ class PedidoRepository {
             'cliente_nombre'     => 'c.nombre',
             'responsable_entrega'=> 'rt.nombre',
             'rango_horario'      => 'p.hora_inicial_entrega',
+            // El estado NO se ordena alfabéticamente (ASC dejaría: Anulado,
+            // Facturado, Pendiente, Procesado) sino por el orden lógico del flujo
+            // del pedido: primero lo que falta atender, al final lo cerrado.
+            // ASC = Pendiente → Procesado → Facturado → Anulado; DESC lo invierte.
+            'estado'             => self::ORDEN_ESTADO_SQL,
             default              => "p.{$ordenCol}"
         };
 
@@ -150,12 +169,17 @@ class PedidoRepository {
                        c.email as cliente_email,
                        uc.nombre as creado_por_nombre, uu.nombre as modificado_por_nombre,
                        rt.nombre as responsable_entrega,
+                       -- Pedidos no guarda vendedor propio: el asesor del pedido es el
+                       -- que tiene asignado el cliente (clientes.id_vendedor), igual
+                       -- criterio que usa Factura de Venta / Consignaciones.
+                       v.nombre as vendedor_nombre,
                        (p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) AS numero_pedido
                 FROM pedidos_cabecera p
                 JOIN clientes c ON p.id_cliente = c.id
                 LEFT JOIN usuarios uc ON p.created_by = uc.id
                 LEFT JOIN usuarios uu ON p.updated_by = uu.id
                 LEFT JOIN responsables_traslado rt ON p.id_responsable_entrega = rt.id
+                LEFT JOIN vendedores v ON v.id = c.id_vendedor
                 WHERE p.id = :id AND p.id_empresa = :id_empresa AND p.eliminado = false";
         $stmt = $this->db->prepare($sql);
         $stmt->execute(['id' => $id, 'id_empresa' => $id_empresa]);

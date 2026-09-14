@@ -334,8 +334,16 @@ class CambioProductoCvController extends BaseModuloController
                 $this->service->actualizar((int) $input['id'], $input['id_empresa'], $input);
                 echo json_encode(['ok' => true, 'msg' => 'Cambio actualizado correctamente.']);
             } else {
-                $id = $this->service->crear($input);
-                echo json_encode(['ok' => true, 'msg' => 'Cambio registrado correctamente. El inventario ha sido actualizado.', 'id' => $id]);
+                // El número lo asigna el servidor al guardar (no el que se vio al abrir el
+                // modal), así que se informa cuál quedó.
+                $id     = $this->service->crear($input);
+                $numero = $this->service->getUltimoNumeroGenerado();
+                echo json_encode([
+                    'ok'     => true,
+                    'msg'    => 'Cambio ' . ($numero ?? '') . ' registrado correctamente. El inventario ha sido actualizado.',
+                    'id'     => $id,
+                    'numero' => $numero,
+                ]);
             }
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

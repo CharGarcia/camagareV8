@@ -27,6 +27,9 @@ class ConsignacionVentaService
     private ClienteRepository $clienteRepo;
     private BloqueoEdicionService $bloqueoService;
 
+    /** Número (serie-secuencial) que el servidor asignó en el último crear(); lo muestra el controlador. */
+    private ?string $ultimoNumeroGenerado = null;
+
     public function __construct(
         ConsignacionVentaRepository $repository,
         ConsignacionVentaRules $rules,
@@ -108,6 +111,66 @@ class ConsignacionVentaService
         }
     }
 
+    /** Número (serie-secuencial) que el servidor asignó en el último crear(). */
+    public function getUltimoNumeroGenerado(): ?string
+    {
+        return $this->ultimoNumeroGenerado;
+    }
+
+    /**
+     * Reserva el número de la consignación: serie y secuencial los decide el SERVIDOR.
+     *
+     * DEBE llamarse con la transacción del llamador YA ABIERTA y mantenerla hasta el INSERT de la
+     * cabecera (CLAUDE.md §8): `obtenerSiguienteSecuencial()` toma por dentro un
+     * `pg_advisory_xact_lock` por (punto, tipo de documento) que solo se libera en el
+     * COMMIT/ROLLBACK — es ese candado el que pone en fila a dos usuarios guardando a la vez, de
+     * modo que el segundo recalcula su número viendo ya la consignación que confirmó el primero.
+     *
+     * Antes se insertaba el secuencial TAL CUAL llegaba del POST. Ese número lo calculaba
+     * `getSecuencialAjax()` al abrir el modal, sin transacción ni candado: dos modales abiertos a
+     * la vez (o uno abierto un rato mientras otro usuario emitía) guardaban el mismo número.
+     *
+     * La serie también se deriva aquí del punto de emisión validado contra la empresa, no del
+     * texto que manda el navegador: así no puede llegar una serie que no corresponde al punto.
+     */
+    private function reservarNumero(int $idEmpresa, array $data): array
+    {
+        $idPunto = (int) ($data['id_punto_emision'] ?? 0);
+        if ($idPunto <= 0) {
+            throw new Exception("Debe seleccionar la serie (punto de emisión) de la consignación.");
+        }
+
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $punto   = $secRepo->getPuntoEmisionSerie($idPunto, $idEmpresa);
+        if (!$punto) {
+            throw new Exception("La serie seleccionada no pertenece a esta empresa.");
+        }
+
+        $config = $secRepo->getConfigSecuencial($idPunto, 'Consignaciones ventas');
+        if (empty($config['id'])) {
+            throw new Exception('No hay configuración de secuencial para "Consignaciones ventas" en este punto de emisión. Configúrelo en Empresa / Secuenciales.');
+        }
+
+        $res        = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Consignaciones ventas', $data['fecha_emision'] ?? null);
+        $secuencial = (string) ($res['formateado'] ?? str_pad((string) ($res['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT));
+
+        $tipoAmbiente = (string) ($data['empresa_config']['tipo_ambiente'] ?? '1');
+
+        // Pre-check para dar un mensaje entendible en vez del error crudo del índice único.
+        if ($this->repository->existeSecuencial($idEmpresa, $idPunto, $secuencial, $tipoAmbiente)) {
+            throw new Exception("El número {$punto['establecimiento']}-{$punto['punto']}-{$secuencial} ya está en uso. Vuelva a guardar para tomar el siguiente número libre.");
+        }
+
+        return [
+            'id_punto_emision' => $idPunto,
+            'establecimiento'  => (string) $punto['establecimiento'],
+            'punto_emision'    => (string) $punto['punto'],
+            'serie'            => $punto['establecimiento'] . '-' . $punto['punto'],
+            'secuencial'       => $secuencial,
+            'tipo_ambiente'    => $tipoAmbiente,
+        ];
+    }
+
     public function crear(array $data): int
     {
         $this->rules->validarCreacion($data);
@@ -127,16 +190,20 @@ class ConsignacionVentaService
         try {
             $db->beginTransaction();
 
+            // Número del documento: lo decide el SERVIDOR, dentro de esta transacción.
+            // Lo que manda el navegador es solo la vista previa que se cargó al abrir el modal.
+            $numero = $this->reservarNumero((int) $idEmpresa, $data);
+
             // Cabecera
             $cabecera = [
                 'id_empresa' => $idEmpresa,
                 'fecha_emision' => $data['fecha_emision'],
-                'serie' => $data['serie'],
-                'secuencial' => str_pad((string)($data['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT),
-                'id_punto_emision' => $data['id_punto_emision'] ?? null,
-                'establecimiento' => $data['establecimiento'] ?? null,
-                'punto_emision' => $data['punto_emision'] ?? null,
-                'tipo_ambiente' => (string) ($data['empresa_config']['tipo_ambiente'] ?? '1'),
+                'serie' => $numero['serie'],
+                'secuencial' => $numero['secuencial'],
+                'id_punto_emision' => $numero['id_punto_emision'],
+                'establecimiento' => $numero['establecimiento'],
+                'punto_emision' => $numero['punto_emision'],
+                'tipo_ambiente' => $numero['tipo_ambiente'],
                 'id_vendedor' => empty($data['id_vendedor']) ? null : (int) $data['id_vendedor'],
                 'id_cliente' => (int) $data['id_cliente'],
                 'punto_partida' => $data['punto_partida'] ?? '',
@@ -154,7 +221,17 @@ class ConsignacionVentaService
                 'updated_by' => $idUsuario,
             ];
 
-            $idConsignacion = $this->repository->create($cabecera);
+            try {
+                $idConsignacion = $this->repository->create($cabecera);
+            } catch (\PDOException $e) {
+                // Última línea de defensa: el índice único de la base (uq_consignaciones_ventas_secuencial_activo).
+                if (($e->errorInfo[0] ?? '') === '23505') {
+                    throw new Exception("El número {$numero['serie']}-{$numero['secuencial']} ya está en uso. Vuelva a guardar para tomar el siguiente número libre.");
+                }
+                throw $e;
+            }
+
+            $this->ultimoNumeroGenerado = $numero['serie'] . '-' . $numero['secuencial'];
 
             // Detalles y Kardex
             $detalles = $data['detalles'] ?? [];
@@ -239,7 +316,8 @@ class ConsignacionVentaService
                     'numero_lote' => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
                     'fecha_caducidad' => (isset($det['fecha_caducidad']) && $det['fecha_caducidad'] !== '') ? $det['fecha_caducidad'] : null,
                     'nup' => (isset($det['nup']) && $det['nup'] !== '') ? $det['nup'] : null,
-                    'observaciones' => 'Salida por Consignación Venta ' . $data['serie'] . '-' . $data['secuencial'],
+                    // El número REAL asignado por el servidor, no el de la vista previa del modal.
+                    'observaciones' => 'Salida por Consignación Venta ' . $numero['serie'] . '-' . $numero['secuencial'],
                     'id_usuario' => $idUsuario
                 ]);
                 
@@ -415,12 +493,31 @@ class ConsignacionVentaService
                 $total += $det['subtotal']; // asumiendo sin impuestos por ahora para coincidir con crear
             }
 
-            // 4. Actualizar cabecera
+            // 4. Actualizar cabecera.
+            // La serie solo cambia si el usuario eligió OTRO punto de emisión; en ese caso el
+            // documento estrena número en la serie nueva (el anterior queda libre y el generador
+            // lo volverá a ofrecer). Antes se guardaban el punto y los códigos nuevos dejando
+            // `serie`/`secuencial` con los viejos: el documento quedaba con un número que no
+            // correspondía a su serie y, con el índice único activo, podía chocar contra el
+            // documento que ya tuviera ese número en la serie de destino.
+            // Un documento SIN punto de emisión (migrado del sistema anterior) no se renumera ni
+            // recibe punto al editarlo: su serie se completa con el script de backfill, no aquí.
+            $puntoActual = (int) ($cabecera['id_punto_emision'] ?? 0);
+            $puntoNuevo  = (int) ($data['id_punto_emision'] ?? 0);
+            $numeroUpd   = ($puntoActual > 0 && $puntoNuevo > 0 && $puntoNuevo !== $puntoActual)
+                ? $this->reservarNumero($idEmpresa, $data)
+                : null;
+            $this->ultimoNumeroGenerado = ($numeroUpd !== null)
+                ? $numeroUpd['serie'] . '-' . $numeroUpd['secuencial']
+                : ($cabecera['serie'] ?? '') . '-' . ($cabecera['secuencial'] ?? '');
+
             $updData = [
                 'fecha_emision' => $data['fecha_emision'] ?? date('Y-m-d'),
-                'id_punto_emision' => empty($data['id_punto_emision']) ? null : $data['id_punto_emision'],
-                'establecimiento' => $data['establecimiento'] ?? null,
-                'punto_emision' => $data['punto_emision'] ?? null,
+                'id_punto_emision' => $numeroUpd['id_punto_emision'] ?? $cabecera['id_punto_emision'],
+                'establecimiento' => $numeroUpd['establecimiento'] ?? $cabecera['establecimiento'],
+                'punto_emision' => $numeroUpd['punto_emision'] ?? $cabecera['punto_emision'],
+                'serie' => $numeroUpd['serie'] ?? $cabecera['serie'],
+                'secuencial' => $numeroUpd['secuencial'] ?? $cabecera['secuencial'],
                 'id_vendedor' => empty($data['id_vendedor']) ? null : $data['id_vendedor'],
                 'id_cliente' => empty($data['id_cliente']) ? null : $data['id_cliente'],
                 'id_responsable_traslado' => empty($data['id_responsable_traslado']) ? null : $data['id_responsable_traslado'],
@@ -438,7 +535,14 @@ class ConsignacionVentaService
                 'updated_at' => date('Y-m-d H:i:s')
             ];
 
-            $this->repository->update($id, $idEmpresa, $updData);
+            try {
+                $this->repository->update($id, $idEmpresa, $updData);
+            } catch (\PDOException $e) {
+                if (($e->errorInfo[0] ?? '') === '23505') {
+                    throw new Exception("El número {$this->ultimoNumeroGenerado} ya está en uso. Vuelva a guardar para tomar el siguiente número libre.");
+                }
+                throw $e;
+            }
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR_CONSIGNACION', 'consignaciones_ventas', $id, $cabecera, $updData);
 

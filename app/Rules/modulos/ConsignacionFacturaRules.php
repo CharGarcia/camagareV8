@@ -23,9 +23,9 @@ class ConsignacionFacturaRules
         if (empty($data['id_punto_emision']) || (int) $data['id_punto_emision'] <= 0) {
             throw new Exception('Debe seleccionar la serie (punto de emisión).');
         }
-        if (empty($data['secuencial'])) {
-            throw new Exception('Falta el secuencial. Configure el punto de emisión en Empresa / Secuenciales.');
-        }
+        // El secuencial NO se valida aquí: ya no llega del navegador (era la vista previa del
+        // modal), lo reserva el servidor al guardar —ConsignacionFacturaService::reservarNumero()—,
+        // que es también quien avisa si el punto de emisión no tiene la numeración configurada.
 
         $detalles = $data['detalles'] ?? [];
         if (!is_array($detalles) || count($detalles) === 0) {

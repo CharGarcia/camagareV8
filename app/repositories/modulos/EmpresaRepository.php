@@ -674,13 +674,25 @@ class EmpresaRepository extends BaseModel
         return $this->execute($sql);
     }
 
-    public function getPuntosEmision(int $idEmpresa): array
+    /**
+     * Puntos de emisión de la empresa.
+     *
+     * $soloActivos = true excluye los puntos en estado 'inactivo'. Se usa en los
+     * selectores de "serie" de documentos NUEVOS: una serie inactiva no debe poder
+     * elegirse. El default es false porque la pantalla de administración de la
+     * empresa (Empresa → Puntos de emisión) sí necesita listar los inactivos, y
+     * porque al REABRIR un documento cuya serie se inactivó después hay que poder
+     * seguir mostrando su serie.
+     */
+    public function getPuntosEmision(int $idEmpresa, bool $soloActivos = false): array
     {
         $id = (int) $idEmpresa;
+        $filtroEstado = $soloActivos ? " AND LOWER(COALESCE(p.estado, '')) = 'activo'" : '';
         $sql = "SELECT p.*, e.codigo AS cod_establecimiento 
                 FROM empresa_punto_emision p
                 LEFT JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
                 WHERE p.id_empresa = {$id} AND p.eliminado = false 
+                  {$filtroEstado}
                 ORDER BY e.codigo, p.codigo_punto ASC";
         return $this->query($sql);
     }

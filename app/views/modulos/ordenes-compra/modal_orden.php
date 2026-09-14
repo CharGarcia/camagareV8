@@ -218,6 +218,7 @@
      style="z-index:9999;min-width:380px;max-height:260px;overflow-y:auto;background:#fff">
 </div>
 
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/dropdown_flotante.js?v=<?= asset_ver('/js/components/dropdown_flotante.js') ?>"></script>
 <script>
 function ocEscHtml(str) {
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
@@ -225,6 +226,25 @@ function ocEscHtml(str) {
 
 function ocDebounce(fn, ms) {
     let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+/**
+ * Abre la lista de productos pegada al input, con el componente compartido
+ * js/components/dropdown_flotante.js (mismo que Pedidos y Consignaciones).
+ * El respaldo solo corre si esa librería no se cargó.
+ */
+function ocAnclarDropdown(srcInput) {
+    const dropdown = document.getElementById('oc-dropdown-productos-global');
+    if (!dropdown || !srcInput) return;
+    if (typeof window.CMG_anclarDropdown === 'function') {
+        window.CMG_anclarDropdown(dropdown, srcInput, { anchoMinimo: 380, altoMaximo: 260 });
+        return;
+    }
+    const rect = srcInput.getBoundingClientRect(); // fixed: sin sumar el scroll
+    dropdown.style.top   = `${rect.bottom + 2}px`;
+    dropdown.style.left  = `${rect.left}px`;
+    dropdown.style.width = `${Math.max(rect.width, 380)}px`;
+    dropdown.classList.remove('d-none');
 }
 
 // ── Detalle helpers ───────────────────────────────────────────────────────────
@@ -459,11 +479,10 @@ window.ocAgregarFilaDetalle = function(item = {}) {
     const buscarProducto = async (q, srcInput) => {
         q = q.trim();
         if (q.length < 2) { dropdown.classList.add('d-none'); return; }
-        const rect = srcInput.getBoundingClientRect();
-        dropdown.style.top   = `${rect.bottom + window.scrollY + 2}px`;
-        dropdown.style.left  = `${rect.left   + window.scrollX}px`;
-        dropdown.style.width = `${Math.max(rect.width, 380)}px`;
-        dropdown.classList.remove('d-none');
+        // Posicionamiento en js/components/dropdown_flotante.js: sin sumarle el
+        // scroll (la lista es position:fixed) y midiendo el alto visible real,
+        // para que en el celular no quede debajo del teclado.
+        ocAnclarDropdown(srcInput);
         dropdown.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
         try {
             const resp = await fetch(`${OC_URL_BASE}/getProductosAjax?q=${encodeURIComponent(q)}`, {
@@ -490,6 +509,9 @@ window.ocAgregarFilaDetalle = function(item = {}) {
             } else {
                 dropdown.innerHTML = '<div class="list-group-item small text-muted">Sin coincidencias en el catálogo</div>';
             }
+            // Entre la búsqueda y la respuesta pudo abrirse el teclado o scrollear
+            // el modal: se vuelve a anclar al input.
+            if (typeof window.CMG_reanclarDropdown === 'function') window.CMG_reanclarDropdown();
         } catch(e) {}
     };
 

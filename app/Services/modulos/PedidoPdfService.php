@@ -155,6 +155,10 @@ class PedidoPdfService
         $par('Cliente:', (string) ($c['cliente_nombre'] ?? '—'), 'Fecha pedido:', $fmtFecha($c['fecha_pedido'] ?? ''));
         $par('Identificación:', (string) ($c['cliente_identificacion'] ?? ''), 'Fecha entrega:', $entrega !== '' ? $entrega : '—');
         $par('Resp. entrega:', (string) ($c['responsable_entrega'] ?? '—'), 'Estado:', ucfirst((string) ($c['estado'] ?? '')));
+        // Vendedor / asesor: Pedidos no lo guarda en su cabecera, viene del
+        // vendedor asignado al cliente (clientes.id_vendedor).
+        $vendedor = trim((string) ($c['vendedor_nombre'] ?? ''));
+        $par('Vendedor:', $vendedor !== '' ? $vendedor : '—', '', '');
 
         return $y + $boxH;
     }
@@ -228,6 +232,21 @@ class PedidoPdfService
             }
             $pdf->SetXY($mL, $yRow + $h);
         }
+
+        // Fila de totales: suma de lo pedido, al pie de la columna Cantidad.
+        $totalCantidad = 0.0;
+        foreach ($detalles as $d) {
+            $totalCantidad += (float) ($d['cantidad'] ?? 0);
+        }
+        $cantW = $this->contentW;
+        foreach ($cols as $c) {
+            if ($c['k'] === 'cantidad') { $cantW = $c['w']; break; }
+        }
+        $pdf->SetX($mL);
+        $pdf->SetFont('helvetica', 'B', 7.5);
+        $pdf->SetFillColor(230, 233, 238);
+        $pdf->Cell($this->contentW - $cantW, 6, 'TOTAL PEDIDO', 1, 0, 'R', true);
+        $pdf->Cell($cantW, 6, number_format($totalCantidad, 2), 1, 1, 'R', true);
 
         return $pdf->GetY();
     }

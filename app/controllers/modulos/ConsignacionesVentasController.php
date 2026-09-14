@@ -359,11 +359,24 @@ class ConsignacionesVentasController extends BaseModuloController
                 $this->requireActualizar();
                 $this->docPropioOCortar((int) $input['id']);
                 $this->service->actualizar((int) $input['id'], (int) $input['id_empresa'], $input);
-                echo json_encode(['ok' => true, 'msg' => 'Consignación de Venta actualizada correctamente.']);
+                $numero = $this->service->getUltimoNumeroGenerado();
+                echo json_encode([
+                    'ok'     => true,
+                    'msg'    => 'Consignación de Venta ' . ($numero ?? '') . ' actualizada correctamente.',
+                    'numero' => $numero,
+                ]);
             } else {
-                // Crear
-                $id = $this->service->crear($input);
-                echo json_encode(['ok' => true, 'msg' => 'Consignación de Venta registrada correctamente.', 'id' => $id]);
+                // Crear. El número lo asigna el servidor al guardar (no el que se vio al abrir el
+                // modal), así que se informa cuál quedó: puede no ser el de la vista previa si
+                // otro usuario emitió mientras tanto.
+                $id     = $this->service->crear($input);
+                $numero = $this->service->getUltimoNumeroGenerado();
+                echo json_encode([
+                    'ok'     => true,
+                    'msg'    => 'Consignación de Venta ' . ($numero ?? '') . ' registrada correctamente.',
+                    'id'     => $id,
+                    'numero' => $numero,
+                ]);
             }
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -1087,10 +1100,15 @@ class ConsignacionesVentasController extends BaseModuloController
 
             $db = \App\Core\Database::getConnection();
 
+            // `id_vendedor`/`nombre_vendedor` son los del CLIENTE (pedidos_cabecera no guarda
+            // vendedor): con ellos el modal autocompleta el Asesor al cargar el pedido, incluso
+            // si ese vendedor no está en la lista del select (inactivo o de otro usuario).
             $sql = "SELECT p.*, (p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) AS numero_pedido,
-                           c.nombre as cliente_nombre, c.identificacion as cliente_identificacion, c.id_vendedor, c.direccion as cliente_direccion
+                           c.nombre as cliente_nombre, c.identificacion as cliente_identificacion, c.id_vendedor, c.direccion as cliente_direccion,
+                           v.nombre as nombre_vendedor
                     FROM pedidos_cabecera p
                     JOIN clientes c ON p.id_cliente = c.id
+                    LEFT JOIN vendedores v ON v.id = c.id_vendedor
                     WHERE p.id = :id AND p.id_empresa = :id_empresa AND p.eliminado = false";
             $stmt = $db->prepare($sql);
             $stmt->execute([':id' => $id, ':id_empresa' => $idEmpresa]);

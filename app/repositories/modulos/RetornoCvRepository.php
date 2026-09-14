@@ -115,7 +115,7 @@ class RetornoCvRepository extends BaseRepository
         return ['total' => $total, 'rows' => $rows];
     }
 
-    // ─── CONSIGNACIONES PENDIENTES POR CLIENTE ────────────────────────────────
+    // ─── LÍNEAS DE CONSIGNACIÓN PENDIENTES DE RETORNAR ────────────────────────
 
     /**
      * Devuelve todas las líneas de consignaciones del cliente con saldo pendiente
@@ -125,7 +125,34 @@ class RetornoCvRepository extends BaseRepository
      */
     public function getLineasPendientesPorCliente(int $idEmpresa, int $idCliente, ?int $excluirRetorno = null): array
     {
-        $params = [':e' => $idEmpresa, ':cli' => $idCliente];
+        return $this->getLineasPendientes($idEmpresa, $idCliente, null, $excluirRetorno);
+    }
+
+    /**
+     * Líneas con saldo pendiente de retornar de UNA consignación concreta. Es lo que
+     * alimenta la grilla del modal: el usuario agrega la consignación por su número y
+     * solo ve los ítems de esa consignación.
+     */
+    public function getLineasPendientesPorConsignacion(int $idEmpresa, int $idConsignacion, ?int $excluirRetorno = null): array
+    {
+        return $this->getLineasPendientes($idEmpresa, null, $idConsignacion, $excluirRetorno);
+    }
+
+    /**
+     * Motor común de las dos consultas anteriores: acota por cliente o por consignación
+     * (exactamente uno de los dos) para no duplicar el cálculo del saldo pendiente.
+     */
+    private function getLineasPendientes(int $idEmpresa, ?int $idCliente, ?int $idConsignacion, ?int $excluirRetorno): array
+    {
+        $params = [':e' => $idEmpresa];
+
+        if ($idConsignacion !== null) {
+            $filtroAlcance = ' AND cv.id = :idc';
+            $params[':idc'] = $idConsignacion;
+        } else {
+            $filtroAlcance = ' AND cv.id_cliente = :cli';
+            $params[':cli'] = (int) $idCliente;
+        }
 
         // Al editar un retorno, sus propias líneas no deben restar del saldo disponible.
         $excludeSql = '';
@@ -185,7 +212,7 @@ class RetornoCvRepository extends BaseRepository
                 INNER JOIN productos p ON p.id = cvd.id_producto
                 LEFT JOIN bodegas b ON b.id = cvd.id_bodega
                 WHERE cv.id_empresa = :e
-                  AND cv.id_cliente = :cli
+                  $filtroAlcance
                   AND cv.eliminado = false
                   AND cv.estado = 'Entregada'
                   AND cvd.eliminado = false
@@ -212,9 +239,24 @@ class RetornoCvRepository extends BaseRepository
      */
     public function buscarConsignacionesPendientes(int $idEmpresa, string $q): array
     {
+        $params = [':e' => $idEmpresa, ':q' => '%' . $q . '%'];
+
+        // Número "desnudo": del texto tecleado se toma el último segmento (para que
+        // "001-001-000000012" también sirva), se dejan solo dígitos y se quitan los ceros
+        // de relleno. Así "12", "000000012" y "001-001-000000012" encuentran el mismo
+        // documento, sin importar si el secuencial quedó guardado con ceros o sin ellos.
+        $partes = preg_split('/[-\s]+/', trim($q)) ?: [];
+        $qnum   = ltrim(preg_replace('/\D/', '', (string) end($partes)), '0');
+        $porNumero = '';
+        if ($qnum !== '') {
+            $porNumero = " OR regexp_replace(TRIM(cv.secuencial), '^0+', '') = :qnum";
+            $params[':qnum'] = $qnum;
+        }
+
         $sql = "
             SELECT cv.id AS id_consignacion, cv.serie, cv.secuencial, cv.fecha_emision,
-                   cv.id_cliente, c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion
+                   cv.id_cliente, c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+                   c.email AS cliente_email
             FROM consignaciones_ventas cv
             INNER JOIN clientes c ON c.id = cv.id_cliente
             WHERE cv.id_empresa = :e AND cv.eliminado = false
@@ -223,6 +265,7 @@ class RetornoCvRepository extends BaseRepository
                     c.nombre ILIKE :q OR c.identificacion ILIKE :q
                     OR cv.secuencial ILIKE :q
                     OR (cv.serie || '-' || cv.secuencial) ILIKE :q
+                    {$porNumero}
               )
               AND EXISTS (
                     SELECT 1
@@ -246,7 +289,7 @@ class RetornoCvRepository extends BaseRepository
             LIMIT 15
         ";
         $st = $this->db->prepare($sql);
-        $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -302,6 +345,36 @@ class RetornoCvRepository extends BaseRepository
     }
 
     // ─── CRUD ─────────────────────────────────────────────────────────────────
+
+    /**
+     * ¿Ya hay un retorno ACTIVO con este número en esta serie (punto + ambiente)?
+     *
+     * Compara el secuencial SIN los ceros de relleno: '1' y '000000001' son el mismo número
+     * para el generador —que trabaja con `CAST(secuencial AS BIGINT)`— pero no para una
+     * comparación de texto plano. Misma clave que usa `SecuencialRepository` para saber qué
+     * números están ocupados (`id_punto_emision`), para que el pre-check nunca rechace un
+     * número que el generador acaba de proponer.
+     */
+    public function existeSecuencial(int $idEmpresa, int $idPuntoEmision, string $secuencial, string $tipoAmbiente, ?int $excluirId = null): bool
+    {
+        $sql = "SELECT 1
+                  FROM retornos_cv
+                 WHERE id_empresa = :e
+                   AND id_punto_emision = :punto
+                   AND COALESCE(tipo_ambiente, '1') = :amb
+                   AND eliminado = false
+                   AND regexp_replace(TRIM(secuencial), '^0+', '') = regexp_replace(TRIM(:sec), '^0+', '')";
+        $params = [':e' => $idEmpresa, ':punto' => $idPuntoEmision, ':amb' => $tipoAmbiente, ':sec' => $secuencial];
+
+        if ($excluirId !== null) {
+            $sql .= " AND id <> :excluir";
+            $params[':excluir'] = $excluirId;
+        }
+
+        $st = $this->db->prepare($sql . " LIMIT 1");
+        $st->execute($params);
+        return (bool) $st->fetchColumn();
+    }
 
     public function create(array $data): int
     {

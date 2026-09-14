@@ -287,6 +287,41 @@ class ConsignacionVentaRepository extends BaseRepository
         return (bool) $st->fetchColumn();
     }
 
+    /**
+     * ¿Ya hay una consignación ACTIVA con este número en esta serie (punto + ambiente)?
+     *
+     * Compara el secuencial SIN los ceros de relleno (`regexp_replace(...,'^0+','')`) porque
+     * '1' y '000000001' son el mismo número para el generador — que trabaja con
+     * `CAST(secuencial AS BIGINT)` — pero no para una comparación de texto plano. Los migrados
+     * del sistema viejo no siempre llegaron con el relleno de 9 dígitos, así que comparar por
+     * texto crudo dejaría pasar duplicados reales (pasó en ingresos/egresos).
+     *
+     * Se cruza por `id_punto_emision`, la misma clave que usa `SecuencialRepository` para saber
+     * qué números están ocupados: así el pre-check nunca rechaza un número que el generador
+     * acaba de proponer (con `serie` en texto rechazaría los de migrados sin punto, que el
+     * generador no ve, y el módulo quedaría sin poder emitir).
+     */
+    public function existeSecuencial(int $idEmpresa, int $idPuntoEmision, string $secuencial, string $tipoAmbiente, ?int $excluirId = null): bool
+    {
+        $sql = "SELECT 1
+                  FROM consignaciones_ventas
+                 WHERE id_empresa = :e
+                   AND id_punto_emision = :punto
+                   AND COALESCE(tipo_ambiente, '1') = :amb
+                   AND eliminado = false
+                   AND regexp_replace(TRIM(secuencial), '^0+', '') = regexp_replace(TRIM(:sec), '^0+', '')";
+        $params = [':e' => $idEmpresa, ':punto' => $idPuntoEmision, ':amb' => $tipoAmbiente, ':sec' => $secuencial];
+
+        if ($excluirId !== null) {
+            $sql .= " AND id <> :excluir";
+            $params[':excluir'] = $excluirId;
+        }
+
+        $st = $this->db->prepare($sql . " LIMIT 1");
+        $st->execute($params);
+        return (bool) $st->fetchColumn();
+    }
+
     public function create(array $data): int
     {
         $fields = array_keys($data);

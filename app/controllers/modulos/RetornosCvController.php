@@ -92,11 +92,13 @@ class RetornosCvController extends BaseModuloController
         $responsableRepo = new \App\repositories\modulos\ResponsableTrasladoRepository();
         $responsables = $responsableRepo->listarPorEmpresa($idEmpresa);
 
-        // Serie unificada (establecimiento-punto): solo puntos con secuencial de retornos configurado.
+        // Serie unificada (establecimiento-punto): solo puntos ACTIVOS y con secuencial de
+        // retornos configurado. Una serie inactiva no debe poder elegirse para un documento
+        // nuevo (si un retorno viejo la usa, la vista la reinyecta al abrirlo, solo para verla).
         $empresaRepo    = new \App\repositories\modulos\EmpresaRepository();
         $repoSecuencial = new \App\repositories\SecuencialRepository();
         $puntos = [];
-        foreach ($empresaRepo->getPuntosEmision($idEmpresa) as $p) {
+        foreach ($empresaRepo->getPuntosEmision($idEmpresa, true) as $p) {
             $cfg = $repoSecuencial->getConfigSecuencial((int) $p['id'], self::TIPO_SECUENCIAL);
             if (!empty($cfg['id'])) {
                 $puntos[] = $p;
@@ -349,8 +351,16 @@ class RetornosCvController extends BaseModuloController
                 $this->service->actualizar((int) $input['id'], $input['id_empresa'], $input);
                 echo json_encode(['ok' => true, 'msg' => 'Retorno actualizado correctamente.']);
             } else {
-                $id = $this->service->crear($input);
-                echo json_encode(['ok' => true, 'msg' => 'Retorno registrado correctamente. El inventario ha sido actualizado.', 'id' => $id]);
+                // El número lo asigna el servidor al guardar (no el que se vio al abrir el
+                // modal), así que se informa cuál quedó.
+                $id     = $this->service->crear($input);
+                $numero = $this->service->getUltimoNumeroGenerado();
+                echo json_encode([
+                    'ok'     => true,
+                    'msg'    => 'Retorno ' . ($numero ?? '') . ' registrado correctamente. El inventario ha sido actualizado.',
+                    'id'     => $id,
+                    'numero' => $numero,
+                ]);
             }
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -737,6 +747,35 @@ class RetornosCvController extends BaseModuloController
 
         $data = $this->service->buscarConsignacionesPendientes($idEmpresa, $buscar);
         echo json_encode(['ok' => true, 'data' => $data]);
+        exit;
+    }
+
+    /**
+     * Ítems pendientes de retornar de UNA consignación. Es lo que el modal agrega a la
+     * grilla cuando el usuario elige una consignación por su número: solo los ítems de
+     * esa consignación, no todo lo pendiente del cliente.
+     */
+    public function getLineasConsignacionAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa      = (int) $_SESSION['id_empresa'];
+            $idConsignacion = (int) ($_GET['id_consignacion'] ?? 0);
+            $excluirRetorno = (int) ($_GET['excluir_retorno'] ?? 0);
+            if ($idConsignacion <= 0) throw new Exception("Consignación no válida.");
+
+            $rows = $this->service->getLineasPendientesPorConsignacion(
+                $idEmpresa,
+                $idConsignacion,
+                $excluirRetorno > 0 ? $excluirRetorno : null
+            );
+            echo json_encode(['ok' => true, 'data' => $rows]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
         exit;
     }
 

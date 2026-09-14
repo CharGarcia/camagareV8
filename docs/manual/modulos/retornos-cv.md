@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.4
+etiquetas: retorno, retornos, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo
+version: 1.6
 orden: 46
 estado: activo
 ---
@@ -17,9 +17,34 @@ vuelve a entrar.
 
 ## Cómo funciona
 
-1. Se elige el cliente y la consignación de la que devuelve.
-2. Se indican los productos y cantidades que regresan.
-3. Al registrar el retorno, la mercadería **vuelve al inventario**.
+1. Se **agrega la consignación por su número**. El **cliente se llena solo** con
+   el de esa consignación: no hay que buscarlo aparte.
+2. La tabla muestra **únicamente los ítems de esa consignación** que siguen
+   pendientes de devolver.
+3. Se indican las cantidades que regresan.
+4. Al registrar el retorno, la mercadería **vuelve al inventario**.
+
+## Agregar la consignación por su número
+
+El campo **Agregar consignación** busca entre las consignaciones **entregadas**
+que aún tienen saldo por devolver. Sirve escribir:
+
+- el número completo (`001-001-000000012`),
+- solo el secuencial (`000000012` o `12` — los ceros de relleno no importan),
+- o el nombre / identificación del cliente, si no se tiene el número a mano.
+
+Al elegir una de la lista:
+
+- el **Cliente** queda fijado con el de esa consignación (es un campo de solo
+  lectura: lo determina la consignación, no se teclea);
+- sus ítems pendientes se cargan en la tabla;
+- aparece una **etiqueta con el número** encima de la tabla.
+
+Se pueden agregar **varias consignaciones del mismo cliente** en un mismo
+retorno: cada una suma sus ítems y su propia etiqueta. Para quitar una, se pulsa
+la **×** de su etiqueta y sus filas salen de la tabla. Si se intenta agregar una
+consignación de **otro cliente**, el sistema avisa y no la agrega — un retorno
+es siempre de un solo cliente.
 
 ## Devoluciones parciales
 
@@ -59,7 +84,33 @@ El superadministrador (nivel 3) siempre ve todo.
 - **El saldo no cuadra**: revise si falta registrar un retorno o si hay
   mercadería vendida sin facturar.
 - **El stock no subió**: compruebe la bodega de destino del retorno.
-- **No aparece la consignación**: puede estar ya liquidada por completo.
+- **No aparece la consignación**: puede estar ya liquidada por completo, no
+  estar en estado **Entregada**, o no tener saldo pendiente (ya devuelta o
+  facturada en su totalidad).
+- **No aparece la serie que uso**: el selector **Serie** solo ofrece puntos de
+  emisión **activos** y con el secuencial de retornos configurado. Si la serie
+  se inactivó en *Empresa → Puntos de emisión*, ya no se puede usar para
+  documentos nuevos; los retornos viejos que la tengan siguen mostrándola
+  (marcada como *inactiva*) al abrirlos.
+
+## El número no se puede repetir
+
+El número que se ve al abrir un retorno nuevo es una **vista previa**: el número
+definitivo lo asigna el sistema **al guardar**, no antes.
+
+Por eso, si dos personas abren el formulario a la vez —o si uno lo deja abierto
+un rato mientras otro emite—, cada retorno recibe un número distinto: el segundo
+toma el siguiente libre en el momento de guardar. Puede entonces guardarse con un
+número diferente al que mostraba la pantalla; el mensaje de confirmación dice cuál
+quedó.
+
+La base de datos rechaza además, por su cuenta, cualquier intento de guardar dos
+retornos activos con el mismo número en la misma serie. Si eso llega a ocurrir
+aparece *«El número … ya está en uso. Vuelva a guardar para tomar el siguiente
+número libre»*: basta con volver a pulsar **Guardar**.
+
+Un retorno **eliminado** libera su número, que se volverá a ofrecer; uno
+**anulado** lo conserva.
 
 ## Numeración por fecha de emisión
 
@@ -91,6 +142,19 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.6** — El **número ya no se puede repetir**: lo asigna el servidor al
+  guardar (antes se guardaba el de la vista previa, así que dos formularios
+  abiertos a la vez podían tomar el mismo) y la base lo rechaza si aun así
+  coincidiera. El mensaje de confirmación indica con qué número quedó.
+
+- **1.5** — El retorno se arma **a partir del número de consignación**: se
+  agrega la consignación por su número (completo, solo el secuencial, o por
+  cliente), el **cliente se llena automáticamente** con el de esa consignación
+  y la tabla muestra **solo los ítems de esa consignación** (antes había que
+  buscar el cliente y salían todas sus consignaciones pendientes juntas). Se
+  pueden agregar varias del mismo cliente y quitarlas con la **×** de su
+  etiqueta. Además, el selector **Serie** ya **no muestra series inactivas**.
 
 - **1.4** — Los botones **PDF** y **Excel** del listado ya funcionan (antes
   daban error al pulsarlos). Además, el permiso **Acceso total** manda ahora

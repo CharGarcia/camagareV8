@@ -84,6 +84,34 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     .row-detalle:hover {
         background-color: rgba(13, 110, 253, 0.03);
     }
+
+    /* Detalle del modal en móvil: la columna Código se comprimía hasta no dejar
+       ver el código completo (no se sabía qué producto ya estaba cargado). Se le
+       fija un ancho mínimo y, si la fila ya no cabe, la tabla scrollea en
+       horizontal — el `overflow: visible` en línea del contenedor hay que
+       forzarlo desde aquí, por eso el !important. */
+    @media (max-width: 767.98px) {
+        #modalPedido .table-responsive {
+            overflow-x: auto !important;
+            overflow-y: auto !important;
+        }
+
+        #modalPedido .table-detalle th:first-child,
+        #modalPedido .table-detalle td:first-child {
+            width: 150px;
+            min-width: 150px;
+        }
+
+        #modalPedido .input-codigo {
+            min-width: 140px;
+        }
+
+        /* La descripción cede el espacio: ya no arrastra a la fila entera. */
+        #modalPedido .table-detalle th:nth-child(2) {
+            width: auto;
+            min-width: 170px;
+        }
+    }
 </style>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfig ?? []) ?>
@@ -261,6 +289,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.currentSort = '<?= $ordenCol ?>';
     window.currentDir  = '<?= $ordenDir ?>';
     window.currentPage = <?= $page ?>;
+    // Tope de filas por descarga (PDF / Excel del listado) y total actual del
+    // listado: si se pasa del tope, el JS pide acotar la búsqueda antes de bajar
+    // el archivo. El mismo tope se revalida en el controlador.
+    window.PED_EXPORT_MAX = <?= (int)($exportMaxFilas ?? 500) ?>;
+    window.PED_TOTAL      = <?= (int)($total ?? 0) ?>;
     const TARIFAS_IVA    = <?= json_encode($tarifasIva ?? []) ?>;
     const UNIDADES       = <?= json_encode($unidades ?? []) ?>;
     const EMPRESA_CONFIG = <?= json_encode($empresa ?? []) ?>;
@@ -299,4 +332,5 @@ $perm = $permOriginal;
 ?>
 
 <script src="<?= $base ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>"></script>
+<script src="<?= $base ?>/js/components/dropdown_flotante.js?v=<?= asset_ver('/js/components/dropdown_flotante.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/pedidos.js?v=<?= asset_ver('/js/modulos/pedidos.js') ?>"></script>

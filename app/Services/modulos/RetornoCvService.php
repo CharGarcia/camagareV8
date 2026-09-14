@@ -23,11 +23,17 @@ class RetornoCvService
 {
     use \App\Traits\PeriodoContableTrait;
 
+    /** Tipo de documento en `empresa_secuencial` (SecuencialRepository::DOCUMENT_MAP). */
+    private const TIPO_SECUENCIAL = 'Retornos consignaciones ventas';
+
     private RetornoCvRepository $repository;
     private RetornoCvRules $rules;
     private LogSistemaService $logService;
     private InventarioRepository $inventarioRepo;
     private ProductoRepository $productoRepo;
+
+    /** Número (serie-secuencial) que el servidor asignó en el último crear(); lo muestra el controlador. */
+    private ?string $ultimoNumeroGenerado = null;
 
     public function __construct(
         RetornoCvRepository $repository,
@@ -51,6 +57,12 @@ class RetornoCvService
         return $this->repository->getLineasPendientesPorCliente($idEmpresa, $idCliente);
     }
 
+    /** Ítems con saldo pendiente de UNA consignación (la que el usuario agregó por su número). */
+    public function getLineasPendientesPorConsignacion(int $idEmpresa, int $idConsignacion, ?int $excluirRetorno = null): array
+    {
+        return $this->repository->getLineasPendientesPorConsignacion($idEmpresa, $idConsignacion, $excluirRetorno);
+    }
+
     public function buscarConsignacionesPendientes(int $idEmpresa, string $q): array
     {
         return $this->repository->buscarConsignacionesPendientes($idEmpresa, $q);
@@ -67,6 +79,7 @@ class RetornoCvService
     public function crear(array $data): int
     {
         $this->rules->validarCreacion($data);
+        $this->validarSerieActiva((int) ($data['id_empresa'] ?? 0), $data['id_punto_emision'] ?? null);
 
         $this->validarPeriodoContable(
             $data["fecha_retorno"] ?? null,
@@ -82,16 +95,20 @@ class RetornoCvService
         try {
             $db->beginTransaction();
 
+            // Número del documento: lo decide el SERVIDOR, dentro de esta transacción.
+            // Lo que manda el navegador es solo la vista previa que se cargó al abrir el modal.
+            $numero = $this->reservarNumero($idEmpresa, $data);
+
             // Cabecera
             $cabecera = [
                 'id_empresa'              => $idEmpresa,
                 'fecha_retorno'           => $data['fecha_retorno'],
-                'serie'                   => $data['serie'] ?? '',
-                'secuencial'              => str_pad((string)($data['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT),
-                'id_punto_emision'        => empty($data['id_punto_emision']) ? null : (int) $data['id_punto_emision'],
-                'establecimiento'         => $data['establecimiento'] ?? null,
-                'punto_emision'           => $data['punto_emision'] ?? null,
-                'tipo_ambiente'           => (string) ($empresaConfig['tipo_ambiente'] ?? '1'),
+                'serie'                   => $numero['serie'],
+                'secuencial'              => $numero['secuencial'],
+                'id_punto_emision'        => $numero['id_punto_emision'],
+                'establecimiento'         => $numero['establecimiento'],
+                'punto_emision'           => $numero['punto_emision'],
+                'tipo_ambiente'           => $numero['tipo_ambiente'],
                 'id_cliente'              => (int) $data['id_cliente'],
                 'id_responsable_traslado' => empty($data['id_responsable_traslado']) ? null : (int) $data['id_responsable_traslado'],
                 'punto_partida'           => $data['punto_partida'] ?? null,
@@ -105,7 +122,17 @@ class RetornoCvService
                 'created_by'              => $idUsuario,
                 'updated_by'              => $idUsuario,
             ];
-            $idRetorno = $this->repository->create($cabecera);
+            try {
+                $idRetorno = $this->repository->create($cabecera);
+            } catch (\PDOException $e) {
+                // Última línea de defensa: el índice único de la base (uq_retornos_cv_secuencial_activo).
+                if (($e->errorInfo[0] ?? '') === '23505') {
+                    throw new Exception("El número {$numero['serie']}-{$numero['secuencial']} ya está en uso. Vuelva a guardar para tomar el siguiente número libre.");
+                }
+                throw $e;
+            }
+
+            $this->ultimoNumeroGenerado = $numero['serie'] . '-' . $numero['secuencial'];
 
             $totSubtotal = 0.0;
             $totImpuesto = 0.0;
@@ -215,6 +242,80 @@ class RetornoCvService
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * La serie (punto de emisión) de un retorno NUEVO debe estar activa y tener el
+     * secuencial de retornos configurado. El selector del modal ya solo ofrece esas,
+     * pero el POST puede traer cualquier id: si la serie se inactivó mientras el modal
+     * estaba abierto, o si alguien manda el id a mano, se rechaza aquí.
+     */
+    private function validarSerieActiva(int $idEmpresa, $idPuntoEmision): void
+    {
+        $idPunto = (int) ($idPuntoEmision ?? 0);
+        if ($idPunto <= 0) {
+            return; // Sin punto de emisión no hay serie que validar (lo cubre el secuencial).
+        }
+
+        $repoSec = new \App\repositories\SecuencialRepository();
+        if (!$repoSec->getPuntoEmisionSerie($idPunto, $idEmpresa, true)) {
+            throw new Exception('La serie seleccionada está inactiva o no pertenece a esta empresa. Elija una serie activa.');
+        }
+        if (empty($repoSec->getConfigSecuencial($idPunto, self::TIPO_SECUENCIAL)['id'])) {
+            throw new Exception('La serie seleccionada no tiene configurado el secuencial de "' . self::TIPO_SECUENCIAL . '". Configúrelo en Empresa / Secuenciales.');
+        }
+    }
+
+    /** Número (serie-secuencial) que el servidor asignó en el último crear(). */
+    public function getUltimoNumeroGenerado(): ?string
+    {
+        return $this->ultimoNumeroGenerado;
+    }
+
+    /**
+     * Reserva el número del retorno: serie y secuencial los decide el SERVIDOR.
+     *
+     * DEBE llamarse con la transacción del llamador YA ABIERTA y mantenerla hasta el INSERT de
+     * la cabecera (CLAUDE.md §8): `obtenerSiguienteSecuencial()` toma por dentro un
+     * `pg_advisory_xact_lock` por (punto, tipo de documento) que solo se libera en el
+     * COMMIT/ROLLBACK — es ese candado el que pone en fila a dos usuarios guardando a la vez.
+     *
+     * Antes se insertaba el secuencial TAL CUAL llegaba del POST: ese número lo calcula
+     * `getSecuencialAjax()` al abrir el modal, sin transacción ni candado, así que dos modales
+     * abiertos a la vez guardaban el mismo. La serie se deriva del punto ya validado por
+     * `validarSerieActiva()`, no del texto que manda el navegador.
+     */
+    private function reservarNumero(int $idEmpresa, array $data): array
+    {
+        $idPunto = (int) ($data['id_punto_emision'] ?? 0);
+        if ($idPunto <= 0) {
+            throw new Exception('Debe seleccionar la serie (punto de emisión) del retorno.');
+        }
+
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $punto   = $secRepo->getPuntoEmisionSerie($idPunto, $idEmpresa);
+        if (!$punto) {
+            throw new Exception('La serie seleccionada no pertenece a esta empresa.');
+        }
+
+        $res        = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, self::TIPO_SECUENCIAL, $data['fecha_retorno'] ?? null);
+        $secuencial = (string) ($res['formateado'] ?? str_pad((string) ($res['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT));
+
+        $tipoAmbiente = (string) ($data['empresa_config']['tipo_ambiente'] ?? '1');
+
+        // Pre-check para dar un mensaje entendible en vez del error crudo del índice único.
+        if ($this->repository->existeSecuencial($idEmpresa, $idPunto, $secuencial, $tipoAmbiente)) {
+            throw new Exception("El número {$punto['establecimiento']}-{$punto['punto']}-{$secuencial} ya está en uso. Vuelva a guardar para tomar el siguiente número libre.");
+        }
+
+        return [
+            'id_punto_emision' => $idPunto,
+            'establecimiento'  => (string) $punto['establecimiento'],
+            'punto_emision'    => (string) $punto['punto'],
+            'serie'            => $punto['establecimiento'] . '-' . $punto['punto'],
+            'secuencial'       => $secuencial,
+            'tipo_ambiente'    => $tipoAmbiente,
+        ];
     }
 
     /**

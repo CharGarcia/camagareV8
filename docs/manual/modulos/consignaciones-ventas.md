@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que
-version: 1.7
+version: 1.8
 orden: 45
 estado: activo
 ---
@@ -40,10 +40,17 @@ completa automáticamente con el vendedor asignado a ese cliente (en *Clientes �
 Vendedor*), igual que en las facturas de venta. Siempre se puede cambiar a mano
 después.
 
-Si el cliente no tiene vendedor asignado —o el que tiene está inactivo, o el
-usuario no tiene **Acceso total** y el vendedor no le pertenece— el campo se
-deja como estaba, para no borrar lo que ya estaba elegido ni el valor marcado
-como favorito con la estrella.
+Pasa lo mismo **al cargar un pedido**: el cliente entra desde el pedido y el
+Asesor se completa con el vendedor de ese cliente. Si antes de cargar el pedido
+ya había un asesor elegido, no se toca.
+
+Si el vendedor asignado al cliente **no está en la lista** del campo —porque está
+inactivo, o porque el usuario no tiene **Acceso total** y ese vendedor no le
+pertenece— igualmente se selecciona: se agrega a la lista solo para ese
+documento. Así la consignación queda con el asesor correcto del cliente en vez de
+quedarse en blanco. Si el cliente no tiene vendedor asignado, el campo se deja
+como estaba, para no borrar lo que ya estaba elegido ni el valor marcado como
+favorito con la estrella.
 
 ## Cargar ítems desde un pedido
 
@@ -108,6 +115,25 @@ El superadministrador (nivel 3) siempre ve todo.
 - **No puedo facturar lo consignado**: use el módulo de facturación de
   consignaciones, no el de facturas de venta.
 
+## El número no se puede repetir
+
+El número que se ve al abrir una consignación nueva es una **vista previa**: el
+número definitivo lo asigna el sistema **al guardar**, no antes.
+
+Por eso, si dos personas abren el formulario a la vez —o si uno lo deja abierto
+un rato mientras otro emite—, cada consignación recibe un número distinto: la
+segunda toma el siguiente libre en el momento de guardar. Puede entonces guardarse
+con un número diferente al que mostraba la pantalla; el mensaje de confirmación
+dice cuál quedó.
+
+La base de datos rechaza además, por su cuenta, cualquier intento de guardar dos
+consignaciones activas con el mismo número en la misma serie. Si eso llega a
+ocurrir aparece *«El número … ya está en uso. Vuelva a guardar para tomar el
+siguiente número libre»*: basta con volver a pulsar **Guardar**.
+
+Una consignación **eliminada** libera su número, que se volverá a ofrecer; una
+**anulada** lo conserva.
+
 ## Numeración por fecha de emisión
 
 Por defecto el número de estos documentos es un **correlativo corrido** que nunca
@@ -139,6 +165,12 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.8** — El **número ya no se puede repetir**: lo asigna el servidor al
+  guardar (antes se guardaba el de la vista previa, así que dos formularios
+  abiertos a la vez podían tomar el mismo) y la base lo rechaza si aun así
+  coincidiera. Además, el **Asesor** también se completa al cargar un pedido, y
+  el vendedor asignado al cliente se selecciona aunque no esté en la lista
+  (inactivo o de otro usuario) en vez de dejar el campo en blanco.
 - **1.7** — Al seleccionar un cliente, el campo **Asesor** se completa
   automáticamente con el vendedor asignado a ese cliente (antes había que
   elegirlo a mano en cada consignación).

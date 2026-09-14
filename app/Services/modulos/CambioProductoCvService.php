@@ -35,6 +35,9 @@ class CambioProductoCvService
     private InventarioRepository $inventarioRepo;
     private ProductoRepository $productoRepo;
 
+    /** Número (serie-secuencial) que el servidor asignó en el último crear(); lo muestra el controlador. */
+    private ?string $ultimoNumeroGenerado = null;
+
     public function __construct(
         CambioProductoCvRepository $repository,
         CambioProductoCvRules $rules,
@@ -45,6 +48,61 @@ class CambioProductoCvService
         $this->logService     = $logService;
         $this->inventarioRepo = new InventarioRepository();
         $this->productoRepo   = new ProductoRepository();
+    }
+
+    /** Número (serie-secuencial) que el servidor asignó en el último crear(). */
+    public function getUltimoNumeroGenerado(): ?string
+    {
+        return $this->ultimoNumeroGenerado;
+    }
+
+    /**
+     * Reserva el número del cambio: serie y secuencial los decide el SERVIDOR.
+     *
+     * DEBE llamarse con la transacción del llamador YA ABIERTA y mantenerla hasta el INSERT de
+     * la cabecera (CLAUDE.md §8): `obtenerSiguienteSecuencial()` toma por dentro un
+     * `pg_advisory_xact_lock` por (punto, tipo de documento) que solo se libera en el
+     * COMMIT/ROLLBACK — es ese candado el que pone en fila a dos usuarios guardando a la vez.
+     *
+     * Antes se insertaba el secuencial que llegaba del POST: el candado y el pre-check ya
+     * estaban, pero al no recalcular, el segundo usuario recibía un error y tenía que recargar.
+     * Ahora simplemente toma el siguiente número libre. La serie se deriva del punto validado
+     * contra la empresa, no del texto del navegador.
+     */
+    private function reservarNumero(int $idEmpresa, array $data): array
+    {
+        $idPunto = (int) ($data['id_punto_emision'] ?? 0);
+        if ($idPunto <= 0) {
+            throw new Exception('Debe seleccionar la serie (punto de emisión) del documento.');
+        }
+
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $punto   = $secRepo->getPuntoEmisionSerie($idPunto, $idEmpresa);
+        if (!$punto) {
+            throw new Exception('La serie seleccionada no pertenece a esta empresa.');
+        }
+        if (empty($secRepo->getConfigSecuencial($idPunto, self::TIPO_SECUENCIAL)['id'])) {
+            throw new Exception('La serie seleccionada no tiene configurado el secuencial de "' . self::TIPO_SECUENCIAL . '". Configúrelo en Empresa / Secuenciales.');
+        }
+
+        $res        = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, self::TIPO_SECUENCIAL, $data['fecha_cambio'] ?? null);
+        $secuencial = (string) ($res['formateado'] ?? str_pad((string) ($res['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT));
+
+        $tipoAmbiente = (string) ($data['empresa_config']['tipo_ambiente'] ?? '1');
+
+        // Pre-check para dar un mensaje entendible en vez del error crudo del índice único.
+        if ($this->repository->existeSecuencial($idEmpresa, $idPunto, $secuencial, $tipoAmbiente)) {
+            throw new Exception("El número {$punto['establecimiento']}-{$punto['punto']}-{$secuencial} ya está en uso. Vuelva a guardar para tomar el siguiente número libre.");
+        }
+
+        return [
+            'id_punto_emision' => $idPunto,
+            'establecimiento'  => (string) $punto['establecimiento'],
+            'punto_emision'    => (string) $punto['punto'],
+            'serie'            => $punto['establecimiento'] . '-' . $punto['punto'],
+            'secuencial'       => $secuencial,
+            'tipo_ambiente'    => $tipoAmbiente,
+        ];
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
@@ -87,34 +145,23 @@ class CambioProductoCvService
         $idUsuario = (int) $data['id_usuario'];
         $empresaConfig = $data['empresa_config'] ?? [];
 
-        $idPunto      = empty($data['id_punto_emision']) ? 0 : (int) $data['id_punto_emision'];
-        $tipoAmbiente = (string) ($empresaConfig['tipo_ambiente'] ?? '1');
-        $secuencial   = str_pad((string) preg_replace('/\D/', '', (string)($data['secuencial'] ?? '')), 9, '0', STR_PAD_LEFT);
-
         $db = Database::getConnection();
         try {
             $db->beginTransaction();
 
-            // Numeración, igual que en Facturas de Venta: el secuencial se calcula por AJAX al
-            // abrir el modal, así que aquí —ya dentro de la transacción— se toma el candado del
-            // punto de emisión (CLAUDE.md §8; se libera solo al COMMIT/ROLLBACK) y se comprueba
-            // que nadie lo haya usado entre medio.
-            if ($idPunto > 0) {
-                (new \App\repositories\SecuencialRepository())->lockSecuencial($idPunto, self::TIPO_SECUENCIAL);
-            }
-            if ($this->repository->existeSecuencial($idEmpresa, $idPunto, $secuencial, $tipoAmbiente)) {
-                throw new Exception('El número de secuencial ya existe para este punto de emisión. Recargue e intente nuevamente.');
-            }
+            // Número del documento: lo decide el SERVIDOR, dentro de esta transacción.
+            // Lo que manda el navegador es solo la vista previa que se cargó al abrir el modal.
+            $num = $this->reservarNumero($idEmpresa, $data);
 
             $cabecera = [
                 'id_empresa'              => $idEmpresa,
                 'fecha_cambio'            => $data['fecha_cambio'],
-                'serie'                   => $data['serie'] ?? '',
-                'secuencial'              => $secuencial,
-                'id_punto_emision'        => empty($data['id_punto_emision']) ? null : (int) $data['id_punto_emision'],
-                'establecimiento'         => $data['establecimiento'] ?? null,
-                'punto_emision'           => $data['punto_emision'] ?? null,
-                'tipo_ambiente'           => $tipoAmbiente,
+                'serie'                   => $num['serie'],
+                'secuencial'              => $num['secuencial'],
+                'id_punto_emision'        => $num['id_punto_emision'],
+                'establecimiento'         => $num['establecimiento'],
+                'punto_emision'           => $num['punto_emision'],
+                'tipo_ambiente'           => $num['tipo_ambiente'],
                 'id_cliente'              => (int) $data['id_cliente'],
                 'id_responsable_traslado' => empty($data['id_responsable_traslado']) ? null : (int) $data['id_responsable_traslado'],
                 'motivo'                  => $data['motivo'] ?? null,
@@ -126,8 +173,18 @@ class CambioProductoCvService
                 'created_by'              => $idUsuario,
                 'updated_by'              => $idUsuario,
             ];
-            $idCambio = $this->repository->create($cabecera);
-            $numero = ($cabecera['serie'] ?? '') . '-' . ($cabecera['secuencial'] ?? '');
+            try {
+                $idCambio = $this->repository->create($cabecera);
+            } catch (\PDOException $e) {
+                // Última línea de defensa: el índice único (uq_cambios_producto_cv_secuencial_activo).
+                if (($e->errorInfo[0] ?? '') === '23505') {
+                    throw new Exception("El número {$num['serie']}-{$num['secuencial']} ya está en uso. Vuelva a guardar para tomar el siguiente número libre.");
+                }
+                throw $e;
+            }
+
+            $numero = $num['serie'] . '-' . $num['secuencial'];
+            $this->ultimoNumeroGenerado = $numero;
 
             $totDev = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['devoluciones'] ?? [], 'devolucion', true, $numero, null);
             $totEnt = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['entregas'] ?? [], 'entrega', true, $numero, null);

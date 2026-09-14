@@ -53,7 +53,7 @@
                             <label class="form-label small mb-1">Serie</label>
                             <select id="ret_select_serie" class="form-select form-select-sm" onchange="retSerieChange()">
                                 <?php if (empty($puntos)): ?>
-                                    <option value="">— Sin secuencial configurado —</option>
+                                    <option value="">— Sin serie activa con secuencial —</option>
                                 <?php else: ?>
                                     <?php foreach ($puntos as $p): ?>
                                         <option value="<?= (int)$p['id'] ?>"
@@ -72,21 +72,32 @@
                             <input type="text" id="ret_secuencial" class="form-control form-control-sm bg-light text-center" readonly placeholder="000000000">
                         </div>
                         <div class="col-md-6 position-relative">
-                            <label class="form-label small mb-1">Cliente</label>
-                            <input type="text" id="ret_cliente_busqueda" class="form-control form-control-sm" placeholder="Buscar por cliente o N° de consignación..." oninput="retBuscarConsignaciones(this.value)" autocomplete="off">
-                            <input type="hidden" id="ret_id_cliente">
-                            <input type="hidden" id="ret_cliente_email">
-                            <div id="ret_clientes_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1080; max-height:240px; overflow:auto;"></div>
+                            <label class="form-label small mb-1">Agregar consignación</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+                                <input type="text" id="ret_consig_busqueda" class="form-control form-control-sm" placeholder="N° de consignación (001-001-000000012, 12) o cliente..." oninput="retBuscarConsignaciones(this.value)" autocomplete="off">
+                            </div>
+                            <div id="ret_consig_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1080; max-height:240px; overflow:auto;"></div>
                         </div>
                     </div>
 
-                    <!-- Motivo, Observaciones y Estado -->
+                    <!-- Cliente (lo determina la consignación agregada), motivo, observaciones y estado -->
                     <div class="row g-2 mb-2 align-items-end">
-                        <div class="col-md-4">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Cliente</label>
+                            <input type="text" id="ret_cliente_busqueda" class="form-control form-control-sm bg-light" readonly
+                                   placeholder="Se completa con la consignación" title="El cliente es el de la consignación agregada">
+                            <input type="hidden" id="ret_id_cliente">
+                            <input type="hidden" id="ret_cliente_email">
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label small mb-1">Motivo</label>
                             <input type="text" id="ret_motivo" class="form-control form-control-sm" placeholder="Motivo del retorno (opcional)">
                         </div>
-                        <div class="col-md-6">
+                    </div>
+
+                    <div class="row g-2 mb-2 align-items-end">
+                        <div class="col-md-10">
                             <label class="form-label small mb-1">Observaciones</label>
                             <input type="text" id="ret_observaciones" class="form-control form-control-sm" placeholder="Observaciones (opcional)">
                         </div>
@@ -105,6 +116,8 @@
                         <h6 class="mb-0 fw-bold text-secondary"><i class="bi bi-box-seam me-1"></i> Productos a retornar</h6>
                         <span id="ret_lineas_info" class="small text-muted"></span>
                     </div>
+                    <!-- Consignaciones agregadas al retorno: la grilla muestra únicamente sus ítems. -->
+                    <div id="ret_consig_chips" class="d-flex flex-wrap gap-1 mb-1"></div>
                     <div class="table-responsive border rounded-3" style="max-height:40vh; overflow:auto;">
                         <table class="table table-sm table-hover mb-0 align-middle" id="tablaRetLineas">
                             <thead class="table-light">
@@ -121,7 +134,7 @@
                                 </tr>
                             </thead>
                             <tbody id="ret_lineas_body">
-                                <tr><td colspan="7" class="text-center text-muted py-4">Seleccione un cliente para ver sus consignaciones pendientes.</td></tr>
+                                <tr><td colspan="7" class="text-center text-muted py-4">Agregue una consignación por su número para ver sus ítems pendientes.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -166,6 +179,10 @@
     const DEC_P = (window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.decimales_precio) || 2;
     let modal;
     let retClientesTimer = null;
+    // Consignaciones agregadas al retorno: [{ id, numero, id_cliente }]. La grilla
+    // muestra SOLO los ítems de estas consignaciones (una por una, por su número).
+    let retConsignaciones = [];
+    let retEditable = true;
 
     function getModal() {
         if (!modal) modal = new bootstrap.Modal(document.getElementById('modalRetorno'));
@@ -179,24 +196,65 @@
     function resetForm() {
         document.getElementById('formRetorno').reset();
         document.getElementById('ret_id').value = '';
-        document.getElementById('ret_id_cliente').value = '';
-        document.getElementById('ret_cliente_email').value = '';
         document.getElementById('ret_serie').value = '';
         document.getElementById('ret_id_punto_emision').value = '';
-        document.getElementById('ret_lineas_body').innerHTML =
-            '<tr><td colspan="7" class="text-center text-muted py-4">Seleccione un cliente para ver sus consignaciones pendientes.</td></tr>';
-        document.getElementById('ret_lineas_info').textContent = '';
-        document.getElementById('ret_check_all').checked = false;
+        document.getElementById('ret_consig_busqueda').value = '';
+        document.getElementById('ret_consig_dropdown').classList.add('d-none');
+        // Serie de un retorno anterior que estaba inactiva: no debe quedar disponible aquí.
+        document.querySelectorAll('#ret_select_serie option[data-inactiva]').forEach(o => o.remove());
+        retConsignaciones = [];
+        retLimpiarCliente();
+        retVaciarGrilla();
+        retRenderChips();
         retRecalcular();
     }
 
     function setCamposEditables(editable) {
+        retEditable = editable;
         ['ret_select_serie','ret_fecha_retorno',
-         'ret_cliente_busqueda','ret_motivo','ret_observaciones','ret_check_all'].forEach(id => {
+         'ret_consig_busqueda','ret_motivo','ret_observaciones','ret_check_all'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.disabled = !editable;
         });
         document.getElementById('btnGuardarRetorno').classList.toggle('d-none', !editable);
+    }
+
+    /** El cliente no se teclea: lo pone la consignación que se agrega. */
+    function retLimpiarCliente() {
+        document.getElementById('ret_id_cliente').value = '';
+        document.getElementById('ret_cliente_email').value = '';
+        document.getElementById('ret_cliente_busqueda').value = '';
+    }
+
+    function retFijarCliente(o) {
+        document.getElementById('ret_id_cliente').value = o.id_cliente || '';
+        document.getElementById('ret_cliente_email').value = o.cliente_email || '';
+        document.getElementById('ret_cliente_busqueda').value =
+            (o.cliente_identificacion || '') + ' — ' + (o.cliente_nombre || '');
+    }
+
+    function retVaciarGrilla() {
+        document.getElementById('ret_lineas_body').innerHTML =
+            '<tr><td colspan="7" class="text-center text-muted py-4">Agregue una consignación por su número para ver sus ítems pendientes.</td></tr>';
+        document.getElementById('ret_lineas_info').textContent = '';
+        const chk = document.getElementById('ret_check_all');
+        if (chk) chk.checked = false;
+    }
+
+    /**
+     * El selector de serie solo ofrece series ACTIVAS. Un retorno guardado con una serie
+     * que después se inactivó igual debe mostrar la suya al reabrirlo: se reinyecta como
+     * opción (el selector está deshabilitado en ese modo, así que no se puede elegir).
+     */
+    function retAsegurarOpcionSerie(idPunto, serie) {
+        if (!idPunto) return;
+        const sel = document.getElementById('ret_select_serie');
+        if (sel.querySelector(`option[value="${idPunto}"]`)) return;
+        const opt = document.createElement('option');
+        opt.value = idPunto;
+        opt.textContent = (serie || '') + ' (inactiva)';
+        opt.dataset.inactiva = '1';
+        sel.appendChild(opt);
     }
 
     window.abrirModalRetornoNuevo = async function () {
@@ -267,6 +325,7 @@
         // Numeración: se conserva la del retorno (no se regenera). El selector de serie queda bloqueado.
         document.getElementById('ret_serie').value = r.serie || '';
         const selSerie = document.getElementById('ret_select_serie');
+        retAsegurarOpcionSerie(r.id_punto_emision, r.serie);
         if (r.id_punto_emision && selSerie.querySelector(`option[value="${r.id_punto_emision}"]`)) {
             selSerie.value = r.id_punto_emision;
         }
@@ -276,15 +335,13 @@
         document.getElementById('ret_secuencial').dataset.sec = r.secuencial || '';
         if (r.fecha_retorno) document.getElementById('ret_fecha_retorno').value = String(r.fecha_retorno).slice(0, 10);
 
-        // Cliente
-        document.getElementById('ret_id_cliente').value = r.id_cliente || '';
-        document.getElementById('ret_cliente_email').value = r.cliente_email || '';
-        document.getElementById('ret_cliente_busqueda').value = (r.cliente_identificacion || '') + ' — ' + (r.cliente_nombre || '');
+        // Cliente: lo determinan las consignaciones del retorno (no se teclea).
+        retFijarCliente(r);
         document.getElementById('ret_motivo').value = r.motivo || '';
         document.getElementById('ret_observaciones').value = r.observaciones || '';
 
-        // Grilla editable con las líneas pendientes del cliente y las cantidades del retorno precargadas.
-        await retCargarLineasCliente(r.id_cliente);
+        // Grilla editable: solo los ítems de las consignaciones que ya tiene el retorno.
+        await retCargarConsignacionesDelRetorno(r);
         (r.detalles || []).forEach(d => {
             const tr = document.querySelector(`#ret_lineas_body tr[data-idcd="${d.id_consignacion_detalle}"]`);
             if (tr) {
@@ -292,6 +349,37 @@
                 if (inp) { inp.value = d.cantidad; retOnCant(inp); }
             }
         });
+    }
+
+    /**
+     * Reconstruye la grilla de un retorno existente: toma las consignaciones que
+     * aparecen en sus detalles y carga de cada una solo sus ítems. Se excluye el
+     * propio retorno del cálculo del saldo para que sus cantidades quepan.
+     */
+    async function retCargarConsignacionesDelRetorno(r) {
+        retConsignaciones = [];
+        retVaciarGrilla();
+
+        const numeros = new Map();
+        (r.detalles || []).forEach(d => {
+            const idc = parseInt(d.id_consignacion, 10);
+            if (!idc || numeros.has(idc)) return;
+            numeros.set(idc, (d.consignacion_serie || '') + '-' + (d.consignacion_secuencial || ''));
+        });
+
+        for (const [idc, numero] of numeros) {
+            let lineas = [];
+            try {
+                lineas = await retCargarLineasDeConsignacion(idc, r.id);
+            } catch (e) {
+                lineas = [];
+            }
+            retConsignaciones.push({ id: idc, numero: numero, id_cliente: parseInt(r.id_cliente, 10) });
+            if (lineas.length) retAgregarFilas(lineas);
+        }
+
+        retRenderChips();
+        retActualizarInfo();
     }
 
     function retPintarBadge(estado) {
@@ -369,74 +457,151 @@
         document.getElementById('ret_secuencial').dataset.sec = data.secuencial || '';
     }
 
-    // ─── Cliente ─────────────────────────────────────────────────────────────
+    // ─── Consignación: buscar por número y agregarla al retorno ──────────────
+    // Se busca por número (serie-secuencial, o solo el número) y también por cliente.
+    // Al elegir una, el CLIENTE del retorno se llena con el de esa consignación y la
+    // grilla carga únicamente los ítems pendientes de ESA consignación.
     window.retBuscarConsignaciones = function (q) {
         clearTimeout(retClientesTimer);
-        const dd = document.getElementById('ret_clientes_dropdown');
+        const dd = document.getElementById('ret_consig_dropdown');
         if (!q || q.length < 2) { dd.classList.add('d-none'); return; }
         retClientesTimer = setTimeout(async () => {
             const res = await fetch(`${RUTA}/buscarConsignacionesAjax?q=${encodeURIComponent(q)}`);
             const data = await res.json();
             dd.innerHTML = '';
             (data.data || []).forEach(c => {
-                const numero = (c.serie || '') + '-' + (c.secuencial || '');
+                const ya = retConsignaciones.some(x => x.id === parseInt(c.id_consignacion, 10));
                 const a = document.createElement('a');
                 a.href = '#'; a.className = 'list-group-item list-group-item-action py-1';
-                a.innerHTML = `<span class="fw-bold text-primary small">${numero}</span>
+                a.innerHTML = `<span class="fw-bold text-primary small">${retNumeroConsignacion(c)}</span>
                                <span class="small text-dark ms-2">${(c.cliente_nombre || '')}</span>
-                               <span class="small text-muted ms-1">${c.cliente_identificacion ? '· ' + c.cliente_identificacion : ''}</span>`;
-                a.onclick = (ev) => { ev.preventDefault(); retSeleccionarConsignacion(c); };
+                               <span class="small text-muted ms-1">${c.cliente_identificacion ? '· ' + c.cliente_identificacion : ''}</span>
+                               ${ya ? '<span class="badge bg-secondary bg-opacity-10 text-secondary ms-1">ya agregada</span>' : ''}`;
+                a.onclick = (ev) => { ev.preventDefault(); retAgregarConsignacion(c); };
                 dd.appendChild(a);
             });
             if (!data.data || !data.data.length) {
-                dd.innerHTML = '<span class="list-group-item small text-muted">Sin resultados con saldo pendiente.</span>';
+                dd.innerHTML = '<span class="list-group-item small text-muted">Sin consignaciones entregadas con saldo pendiente.</span>';
             }
             dd.classList.remove('d-none');
         }, 300);
     };
 
-    function retSeleccionarConsignacion(c) {
-        document.getElementById('ret_id_cliente').value = c.id_cliente;
-        document.getElementById('ret_cliente_busqueda').value = (c.cliente_identificacion || '') + ' — ' + (c.cliente_nombre || '');
-        document.getElementById('ret_clientes_dropdown').classList.add('d-none');
-        retCargarLineasCliente(c.id_cliente);
+    function retNumeroConsignacion(c) {
+        return (c.serie || '') + '-' + (c.secuencial || '');
+    }
+
+    function retSwal(opts) {
+        return Swal.fire(Object.assign({ target: document.getElementById('modalRetorno') }, opts));
+    }
+
+    /** Agrega una consignación al retorno: fija el cliente y suma sus ítems a la grilla. */
+    async function retAgregarConsignacion(c) {
+        const dd = document.getElementById('ret_consig_dropdown');
+        dd.classList.add('d-none');
+        document.getElementById('ret_consig_busqueda').value = '';
+
+        const idc = parseInt(c.id_consignacion, 10);
+        if (!idc) return;
+        if (retConsignaciones.some(x => x.id === idc)) {
+            retSwal({ icon: 'info', title: 'Ya agregada', text: 'Esa consignación ya está en el retorno.' });
+            return;
+        }
+
+        // Un retorno agrupa consignaciones de UN solo cliente (la cabecera guarda id_cliente).
+        const idClienteActual = parseInt(document.getElementById('ret_id_cliente').value || '0', 10);
+        if (retConsignaciones.length && idClienteActual !== parseInt(c.id_cliente, 10)) {
+            retSwal({
+                icon: 'warning', title: 'Es de otro cliente',
+                text: 'El retorno agrupa consignaciones de un solo cliente. Quite las consignaciones actuales o registre otro retorno.'
+            });
+            return;
+        }
+
+        const inp = document.getElementById('ret_consig_busqueda');
+        inp.disabled = true;
+        try {
+            const lineas = await retCargarLineasDeConsignacion(idc, document.getElementById('ret_id').value);
+            if (!lineas.length) {
+                retSwal({ icon: 'info', title: 'Sin saldo', text: 'La consignación ' + retNumeroConsignacion(c) + ' no tiene ítems pendientes de retornar.' });
+                return;
+            }
+            retFijarCliente(c);
+            retConsignaciones.push({ id: idc, numero: retNumeroConsignacion(c), id_cliente: parseInt(c.id_cliente, 10) });
+            retAgregarFilas(lineas);
+            retRenderChips();
+            retActualizarInfo();
+        } catch (err) {
+            retSwal({ icon: 'error', title: 'Error', text: err.message || 'No se pudieron cargar los ítems de la consignación.' });
+        } finally {
+            inp.disabled = !retEditable;
+            if (retEditable) inp.focus();
+        }
+    }
+
+    /** Quita una consignación del retorno junto con todas sus filas. */
+    window.retQuitarConsignacion = function (ev, idc) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (!retEditable) return;
+        retConsignaciones = retConsignaciones.filter(x => x.id !== idc);
+        document.querySelectorAll(`#ret_lineas_body tr[data-idc="${idc}"]`).forEach(tr => tr.remove());
+        if (!retConsignaciones.length) {
+            retLimpiarCliente();
+            retVaciarGrilla();
+        }
+        retRenderChips();
+        retActualizarInfo();
+    };
+
+    function retRenderChips() {
+        const cont = document.getElementById('ret_consig_chips');
+        if (!cont) return;
+        cont.innerHTML = retConsignaciones.map(c => `
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 d-inline-flex align-items-center gap-1 fw-normal">
+                <i class="bi bi-upc"></i> ${c.numero}
+                ${retEditable ? `<a href="#" class="text-danger text-decoration-none ms-1 fw-bold" title="Quitar esta consignación del retorno" onclick="retQuitarConsignacion(event, ${c.id})">&times;</a>` : ''}
+            </span>`).join('');
+    }
+
+    function retActualizarInfo() {
+        const n = document.querySelectorAll('#ret_lineas_body tr[data-idcd]').length;
+        const c = retConsignaciones.length;
+        document.getElementById('ret_lineas_info').textContent =
+            n ? (n + ' ítem(s) · ' + c + ' consignación(es)') : '';
     }
 
     document.addEventListener('click', (e) => {
-        const dd = document.getElementById('ret_clientes_dropdown');
-        if (dd && !e.target.closest('#ret_cliente_busqueda') && !e.target.closest('#ret_clientes_dropdown')) {
+        const dd = document.getElementById('ret_consig_dropdown');
+        if (dd && !e.target.closest('#ret_consig_busqueda') && !e.target.closest('#ret_consig_dropdown')) {
             dd.classList.add('d-none');
         }
     });
 
-    // ─── Líneas pendientes ───────────────────────────────────────────────────
-    async function retCargarLineasCliente(idCliente) {
+    // ─── Ítems pendientes de UNA consignación ────────────────────────────────
+    /** excluirRetorno: al editar, las propias líneas del retorno no restan del saldo. */
+    async function retCargarLineasDeConsignacion(idConsignacion, excluirRetorno) {
+        let url = `${RUTA}/getLineasConsignacionAjax?id_consignacion=${idConsignacion}`;
+        if (excluirRetorno) url += `&excluir_retorno=${excluirRetorno}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'No se pudieron cargar los ítems de la consignación.');
+        return data.data || [];
+    }
+
+    /** Suma filas a la grilla sin borrar las de las consignaciones ya agregadas. */
+    function retAgregarFilas(lineas) {
         const body = document.getElementById('ret_lineas_body');
-        body.innerHTML = '<tr><td colspan="7" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
-        try {
-            const res = await fetch(`${RUTA}/getLineasClienteAjax?id_cliente=${idCliente}`);
-            const data = await res.json();
-            if (!data.ok) throw new Error(data.error || 'Error');
-            const lineas = data.data || [];
-            if (!lineas.length) {
-                body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Este cliente no tiene consignaciones pendientes de retornar.</td></tr>';
-                document.getElementById('ret_lineas_info').textContent = '';
-                retRecalcular();
-                return;
-            }
-            body.innerHTML = lineas.map(retRenderLinea).join('');
-            document.getElementById('ret_lineas_info').textContent = lineas.length + ' línea(s) pendiente(s)';
-            retRecalcular();
-        } catch (err) {
-            body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">No se pudieron cargar las consignaciones.</td></tr>';
-        }
+        if (!body.querySelector('tr[data-idcd]')) body.innerHTML = '';
+        body.insertAdjacentHTML('beforeend', lineas.map(retRenderLinea).join(''));
+        retRecalcular();
     }
 
     function retRenderLinea(l, i) {
         const saldo = num(l.saldo_pendiente);
         const consig = (l.serie || '') + '-' + (l.secuencial || '');
         const loteNup = [l.lote, l.nup].filter(Boolean).join(' / ') || '—';
-        return `<tr data-idcd="${l.id_consignacion_detalle}" data-saldo="${saldo}" data-precio="${num(l.precio_unitario)}" data-porc="${num(l.porcentaje_impuesto)}" style="cursor:pointer" onclick="retFilaClick(event, this)">
+        return `<tr data-idcd="${l.id_consignacion_detalle}" data-idc="${l.id_consignacion}" data-saldo="${saldo}" data-precio="${num(l.precio_unitario)}" data-porc="${num(l.porcentaje_impuesto)}" style="cursor:pointer" onclick="retFilaClick(event, this)">
             <td class="text-center"><input type="checkbox" class="ret-chk" onchange="retChkLinea(this)"></td>
             <td class="small">${consig}</td>
             <td class="small">${(l.producto_codigo ? l.producto_codigo + ' · ' : '')}${l.producto_nombre || ''}</td>
@@ -494,21 +659,35 @@
         const r = data.data;
         document.getElementById('ret_serie').value = r.serie || '';
         const selSerie = document.getElementById('ret_select_serie');
+        retAsegurarOpcionSerie(r.id_punto_emision, r.serie);
         if (r.id_punto_emision && selSerie.querySelector(`option[value="${r.id_punto_emision}"]`)) {
             selSerie.value = r.id_punto_emision;
         }
         document.getElementById('ret_secuencial').value = r.secuencial || '';
-        document.getElementById('ret_cliente_email').value = r.cliente_email || '';
-        document.getElementById('ret_cliente_busqueda').value = (r.cliente_identificacion || '') + ' — ' + (r.cliente_nombre || '');
+        retFijarCliente(r);
         document.getElementById('ret_motivo').value = r.motivo || '';
         document.getElementById('ret_observaciones').value = r.observaciones || '';
         if (r.fecha_retorno) document.getElementById('ret_fecha_retorno').value = String(r.fecha_retorno).slice(0, 10);
 
         const dets = r.detalles || [];
+
+        // Chips de las consignaciones del retorno (sin la "x": aquí no se edita).
+        retConsignaciones = [];
+        dets.forEach(d => {
+            const idc = parseInt(d.id_consignacion, 10);
+            if (!idc || retConsignaciones.some(x => x.id === idc)) return;
+            retConsignaciones.push({
+                id: idc,
+                numero: (d.consignacion_serie || '') + '-' + (d.consignacion_secuencial || ''),
+                id_cliente: parseInt(r.id_cliente, 10)
+            });
+        });
+        retRenderChips();
+
         body.innerHTML = dets.map(d => {
             const consig = (d.consignacion_serie || '') + '-' + (d.consignacion_secuencial || '');
             const loteNup = [d.lote, d.nup].filter(Boolean).join(' / ') || '—';
-            return `<tr>
+            return `<tr data-idcd="${d.id_consignacion_detalle}" data-idc="${d.id_consignacion}">
                 <td class="text-center"><i class="bi bi-check2 text-success"></i></td>
                 <td class="small">${consig}</td>
                 <td class="small">${(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${d.producto_nombre || ''}</td>
@@ -518,13 +697,13 @@
                 <td class="text-end small fw-bold">${fmt(d.cantidad, DEC_C)}</td>
             </tr>`;
         }).join('');
-        document.getElementById('ret_lineas_info').textContent = dets.length + ' línea(s)';
+        retActualizarInfo();
     }
 
     // ─── Guardar ─────────────────────────────────────────────────────────────
     window.retGuardar = async function () {
         const idCliente = document.getElementById('ret_id_cliente').value;
-        if (!idCliente) { Swal.fire('Atención', 'Seleccione un cliente.', 'warning'); return; }
+        if (!idCliente) { Swal.fire('Atención', 'Agregue una consignación por su número.', 'warning'); return; }
         if (!document.getElementById('ret_secuencial').value) { Swal.fire('Atención', 'Falta el secuencial. Configure el punto de emisión.', 'warning'); return; }
 
         const detalles = [];

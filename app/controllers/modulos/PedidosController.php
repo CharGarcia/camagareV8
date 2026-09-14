@@ -16,6 +16,14 @@ class PedidosController extends BaseModuloController {
     /** Tabla protegida por el bloqueo de edición (compartida con Consignaciones de Venta). */
     private const TABLA_BLOQUEO = 'pedidos_cabecera';
 
+    /**
+     * Máximo de pedidos que se pueden exportar de una vez (PDF / Excel del listado).
+     * Por encima de esto la generación consume demasiada memoria y tiempo en el
+     * servidor, así que se exige acotar la búsqueda. El listado lo valida en el
+     * navegador y aquí se vuelve a validar por si se entra con la URL directa.
+     */
+    public const EXPORT_MAX_FILAS = 500;
+
     private $service;
     private $repository;
 
@@ -101,6 +109,7 @@ class PedidosController extends BaseModuloController {
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
             'vistaConfig' => $prefsVista,
+            'exportMaxFilas' => self::EXPORT_MAX_FILAS,
             'fullWidth' => true
         ]);
     }
@@ -132,6 +141,33 @@ class PedidosController extends BaseModuloController {
         return '';
     }
 
+    /**
+     * Corta la exportación cuando el listado supera EXPORT_MAX_FILAS y explica
+     * cómo acotarlo. Termina la ejecución: no se genera ningún archivo.
+     */
+    private function bloquearExportPorVolumen(int $total): void
+    {
+        $max     = number_format(self::EXPORT_MAX_FILAS, 0, ',', '.');
+        $totalTx = number_format($total, 0, ',', '.');
+        $volver  = BASE_URL . '/' . $this->getRutaModulo();
+
+        http_response_code(400);
+        header('Content-Type: text/html; charset=utf-8');
+        echo '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">'
+            . '<title>Listado demasiado grande</title>'
+            . '<style>body{font-family:Arial,Helvetica,sans-serif;background:#f6f7f9;color:#333;margin:0;padding:48px 16px}'
+            . '.caja{max-width:560px;margin:0 auto;background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:24px 28px}'
+            . 'h1{font-size:18px;margin:0 0 12px}p{line-height:1.5;margin:0 0 12px}'
+            . 'a{display:inline-block;margin-top:8px;background:#0d6efd;color:#fff;text-decoration:none;padding:8px 16px;border-radius:4px}</style>'
+            . '</head><body><div class="caja">'
+            . '<h1>El listado es demasiado grande para descargar</h1>'
+            . '<p>La búsqueda actual devuelve <strong>' . htmlspecialchars($totalTx) . ' pedidos</strong> y el máximo permitido por descarga es de <strong>' . htmlspecialchars($max) . '</strong>.</p>'
+            . '<p>Acote la búsqueda del listado (por ejemplo por fecha, estado, cliente o serie) hasta quedar dentro del máximo y vuelva a exportar.</p>'
+            . '<a href="' . htmlspecialchars($volver) . '">Volver al listado</a>'
+            . '</div></body></html>';
+        exit;
+    }
+
     /** Exporta el listado (filtrado) de pedidos a PDF, con membrete de la empresa. */
     public function exportPdf(): void
     {
@@ -144,7 +180,12 @@ class PedidosController extends BaseModuloController {
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        // Se piden como mucho EXPORT_MAX_FILAS + 1 filas: alcanza para saber si el
+        // listado excede el tope sin traer a memoria miles de pedidos.
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, self::EXPORT_MAX_FILAS + 1, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        if ((int) $data['total'] > self::EXPORT_MAX_FILAS) {
+            $this->bloquearExportPorVolumen((int) $data['total']);
+        }
         $rows = $data['rows'];
 
         try {
@@ -230,7 +271,12 @@ class PedidosController extends BaseModuloController {
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        // Mismo tope que el PDF: se trae una fila más que el máximo solo para saber
+        // si el listado lo excede (ver EXPORT_MAX_FILAS).
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, self::EXPORT_MAX_FILAS + 1, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        if ((int) $data['total'] > self::EXPORT_MAX_FILAS) {
+            $this->bloquearExportPorVolumen((int) $data['total']);
+        }
         $rows = $data['rows'];
 
         try {

@@ -43,6 +43,12 @@ class ConsignacionFacturaService
 
     private const REF_TIPO = 'FACTURACION_CV';
 
+    /** Tipo de documento en `empresa_secuencial` (SecuencialRepository::DOCUMENT_MAP). */
+    private const TIPO_SECUENCIAL = 'Facturacion consignaciones ventas';
+
+    /** Número (serie-secuencial) que el servidor asignó en el último crear(); lo muestra el controlador. */
+    private ?string $ultimoNumeroGenerado = null;
+
     public function __construct(
         ConsignacionFacturaRepository $repository,
         ConsignacionFacturaRules $rules,
@@ -178,6 +184,77 @@ class ConsignacionFacturaService
 
     // ─── Paso 1: guardar el documento (borrador) ──────────────────────────────
 
+    /** Número (serie-secuencial) que el servidor asignó en el último crear(). */
+    public function getUltimoNumeroGenerado(): ?string
+    {
+        return $this->ultimoNumeroGenerado;
+    }
+
+    /**
+     * Reserva el número del documento: serie y secuencial los decide el SERVIDOR.
+     *
+     * DEBE llamarse con la transacción del llamador YA ABIERTA y mantenerla hasta el INSERT de
+     * la cabecera (CLAUDE.md §8): `obtenerSiguienteSecuencial()` toma por dentro un
+     * `pg_advisory_xact_lock` por (punto, tipo de documento) que solo se libera en el
+     * COMMIT/ROLLBACK — es ese candado el que pone en fila a dos usuarios guardando a la vez.
+     *
+     * Antes se insertaba el secuencial TAL CUAL llegaba del POST: ese número lo calcula el
+     * modal al abrirse, sin transacción ni candado, así que dos modales abiertos a la vez
+     * guardaban el mismo. La serie se deriva del punto validado contra la empresa.
+     */
+    private function reservarNumero(int $idEmpresa, array $data): array
+    {
+        $idPunto = (int) ($data['id_punto_emision'] ?? 0);
+        if ($idPunto <= 0) {
+            throw new Exception('Debe seleccionar la serie (punto de emisión) del documento.');
+        }
+
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $punto   = $secRepo->getPuntoEmisionSerie($idPunto, $idEmpresa);
+        if (!$punto) {
+            throw new Exception('La serie seleccionada no pertenece a esta empresa.');
+        }
+        if (empty($secRepo->getConfigSecuencial($idPunto, self::TIPO_SECUENCIAL)['id'])) {
+            throw new Exception('No hay secuencial configurado para "' . self::TIPO_SECUENCIAL . '" en el punto de emisión del documento.');
+        }
+
+        $res        = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, self::TIPO_SECUENCIAL, $data['fecha_emision'] ?? null);
+        $secuencial = (string) ($res['formateado'] ?? str_pad((string) ($res['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT));
+
+        $tipoAmbiente = (string) ($data['empresa_config']['tipo_ambiente'] ?? '1');
+
+        // Pre-check para dar un mensaje entendible en vez del error crudo del índice único.
+        if ($this->repository->existeSecuencial($idEmpresa, $idPunto, $secuencial, $tipoAmbiente)) {
+            throw new Exception("El número {$punto['establecimiento']}-{$punto['punto']}-{$secuencial} ya está en uso. Vuelva a guardar para tomar el siguiente número libre.");
+        }
+
+        return [
+            'id_punto_emision' => $idPunto,
+            'establecimiento'  => (string) $punto['establecimiento'],
+            'punto_emision'    => (string) $punto['punto'],
+            'serie'            => $punto['establecimiento'] . '-' . $punto['punto'],
+            'secuencial'       => $secuencial,
+            'tipo_ambiente'    => $tipoAmbiente,
+        ];
+    }
+
+    /**
+     * Inserta la cabecera traduciendo el choque del índice único
+     * (uq_consignaciones_facturas_secuencial_activo) a un mensaje entendible. Es la última
+     * línea de defensa si dos peticiones llegaran a sortear el candado del secuencial.
+     */
+    private function crearCabecera(array $cabecera, array $numero): int
+    {
+        try {
+            return $this->repository->create($cabecera);
+        } catch (\PDOException $e) {
+            if (($e->errorInfo[0] ?? '') === '23505') {
+                throw new Exception("El número {$numero['serie']}-{$numero['secuencial']} ya está en uso. Vuelva a guardar para tomar el siguiente número libre.");
+            }
+            throw $e;
+        }
+    }
+
     public function crear(array $data): int
     {
         $this->rules->validarDocumento($data);
@@ -199,17 +276,22 @@ class ConsignacionFacturaService
         try {
             if ($managed) $db->beginTransaction();
 
+            // Número del documento: lo decide el SERVIDOR, dentro de esta transacción (la propia
+            // o la que abrió el llamador, p. ej. duplicar()). Lo que manda el navegador es solo
+            // la vista previa que se cargó al abrir el modal.
+            $numero = $this->reservarNumero($idEmpresa, $data);
+
             [$detalles, $tot] = $this->normalizarDetalles($data['detalles'], $idEmpresa, null);
 
-            $idDoc = $this->repository->create([
+            $idDoc = $this->crearCabecera([
                 'id_empresa'       => $idEmpresa,
                 'fecha_emision'    => $data['fecha_emision'],
-                'serie'            => $data['serie'] ?? '',
-                'secuencial'       => str_pad((string) ($data['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT),
-                'id_punto_emision' => (int) $data['id_punto_emision'],
-                'establecimiento'  => $data['establecimiento'] ?? null,
-                'punto_emision'    => $data['punto_emision'] ?? null,
-                'tipo_ambiente'    => (string) ($data['empresa_config']['tipo_ambiente'] ?? '1'),
+                'serie'            => $numero['serie'],
+                'secuencial'       => $numero['secuencial'],
+                'id_punto_emision' => $numero['id_punto_emision'],
+                'establecimiento'  => $numero['establecimiento'],
+                'punto_emision'    => $numero['punto_emision'],
+                'tipo_ambiente'    => $numero['tipo_ambiente'],
                 'id_cliente'       => (int) $data['id_cliente'],
                 'id_vendedor'      => empty($data['id_vendedor']) ? null : (int) $data['id_vendedor'],
                 'dias_credito'     => (int) ($data['dias_credito'] ?? 0),
@@ -224,7 +306,9 @@ class ConsignacionFacturaService
                 'total'            => $tot['total'],
                 'created_by'       => $idUsuario,
                 'updated_by'       => $idUsuario,
-            ]);
+            ], $numero);
+
+            $this->ultimoNumeroGenerado = $numero['serie'] . '-' . $numero['secuencial'];
 
             foreach ($detalles as $d) {
                 $d['id_consignacion_factura'] = $idDoc;
@@ -340,10 +424,9 @@ class ConsignacionFacturaService
             throw new Exception('El documento de origen no tiene punto de emisión; no se puede duplicar.');
         }
 
-        // Nuevo secuencial propio para el punto de emisión. Se abre la transacción ANTES de
-        // calcularlo y se mantiene hasta el INSERT final ($this->crear() más abajo, que se
-        // engancha a esta misma transacción): el lock de obtenerSiguienteSecuencial() se libera
-        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        // La transacción se abre ANTES de llamar a crear(), que es quien reserva el número
+        // nuevo, y se mantiene hasta su INSERT: el lock de obtenerSiguienteSecuencial() se
+        // libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
         $db = Database::getConnection();
         $managedTransaction = !$db->inTransaction();
         if ($managedTransaction) {
@@ -351,13 +434,6 @@ class ConsignacionFacturaService
         }
 
         try {
-        $repoSec = new \App\repositories\SecuencialRepository();
-        $cfgSec  = $repoSec->getConfigSecuencial($idPunto, 'Facturacion consignaciones ventas');
-        if (empty($cfgSec['id'])) {
-            throw new Exception('No hay secuencial configurado para "Facturacion consignaciones ventas" en el punto de emisión del documento.');
-        }
-        $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Facturacion consignaciones ventas', date('Y-m-d'));
-
         // Copiar líneas capando cada cantidad al saldo facturable actual.
         $detsSrc  = $this->repository->getDetalles($idDoc, $idEmpresa);
         $detalles = [];
@@ -389,11 +465,9 @@ class ConsignacionFacturaService
             'id_usuario'       => $idUsuario,
             'empresa_config'   => $empresaConfig,
             'fecha_emision'    => date('Y-m-d'),
-            'serie'            => $src['serie'] ?? '',
-            'secuencial'       => $sec['secuencial'],
+            // serie/secuencial/establecimiento/punto los resuelve crear() a partir del punto
+            // de emisión; aquí solo se indica en qué serie debe nacer la copia.
             'id_punto_emision' => $idPunto,
-            'establecimiento'  => $src['establecimiento'] ?? null,
-            'punto_emision'    => $src['punto_emision'] ?? null,
             'id_cliente'       => (int) ($src['id_cliente'] ?? 0),
             'id_vendedor'      => $src['id_vendedor'] ?? null,
             'dias_credito'     => (int) ($src['dias_credito'] ?? 0),

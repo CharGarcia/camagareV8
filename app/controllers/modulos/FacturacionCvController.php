@@ -343,8 +343,16 @@ class FacturacionCvController extends BaseModuloController
                 $this->service->actualizar((int) $input['id'], (int) $input['id_empresa'], $input);
                 echo json_encode(['ok' => true, 'msg' => 'Documento actualizado correctamente.']);
             } else {
-                $id = $this->service->crear($input);
-                echo json_encode(['ok' => true, 'msg' => 'Documento guardado como borrador.', 'id' => $id]);
+                // El número lo asigna el servidor al guardar (no el que se vio al abrir el
+                // modal), así que se informa cuál quedó.
+                $id     = $this->service->crear($input);
+                $numero = $this->service->getUltimoNumeroGenerado();
+                echo json_encode([
+                    'ok'     => true,
+                    'msg'    => 'Documento ' . ($numero ?? '') . ' guardado como borrador.',
+                    'id'     => $id,
+                    'numero' => $numero,
+                ]);
             }
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
