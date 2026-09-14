@@ -63,6 +63,10 @@ class MigracionMysqlService
         'consignaciones_fact' => ['label' => 'Facturación de consignación',       'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion = 'FACTURA'"],
         'consignaciones_ret' => ['label' => 'Retornos de consignación',           'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion LIKE 'DEVOL%'"],
         'cambios_producto'  => ['label' => 'Cambios de productos',               'tabla' => 'cambio_productos_facturados', 'fecha' => 'fecha_cambio',  'tipo' => 'documento'],
+        // Historial de "aprobar inventario" (cargas por Excel en cuarentena) → inventario_cargas.
+        // Solo registro: NO re-aplica al kardex (ese se migra en 'inventario'). El detalle solo se
+        // recupera para las APROBADAS (sus movimientos quedaron en `inventarios` por `referencia`).
+        'cargas_inventario' => ['label' => 'Cargas de inventario (aprobaciones)', 'tabla' => 'aprobaciones_inventario',  'fecha' => 'fecha_registro', 'tipo' => 'documento', 'filtro' => "modulo = 'INVENTARIOS'"],
         // Inventario va al FINAL: es el libro (kardex) que consolida los movimientos de todos los
         // documentos. Al migrarlo después de consignaciones/retornos, sus movimientos migrados se
         // ENLAZAN a esos documentos (referencia_tipo/id) desde la primera pasada. Ver migrarInventario().
@@ -330,6 +334,8 @@ class MigracionMysqlService
                 return $this->migrarConsignacionesDerivado($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta, 'DEVOLUCION');
             case 'cambios_producto':
                 return $this->migrarCambiosProducto($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'cargas_inventario':
+                return $this->migrarCargasInventario($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -386,6 +392,8 @@ class MigracionMysqlService
             'nietos' => [], 'hijos' => [['cambios_producto_cv_detalles', 'id_cambio']]],
         'pedidos' => ['cab' => 'pedidos_cabecera', 'fecha' => 'fecha_pedido',
             'nietos' => [], 'hijos' => [['pedidos_detalle', 'id_pedido']]],
+        'cargas_inventario' => ['cab' => 'inventario_cargas', 'fecha' => 'fecha',
+            'nietos' => [], 'hijos' => [['inventario_cargas_detalle', 'id_carga']]],
         'roles_pago' => ['cab' => 'rol_cabecera', 'fecha' => 'fecha_pago',
             'nietos' => [['rol_detalle_rubro', 'id_detalle', 'rol_detalle', 'id_rol']],
             'hijos'  => [['rol_detalle', 'id_rol']]],
@@ -416,6 +424,7 @@ class MigracionMysqlService
         'proformas' => 'proformas_cabecera', 'consignaciones' => 'consignaciones_ventas',
         'consignaciones_fact' => 'consignaciones_facturas', 'consignaciones_ret' => 'retornos_cv',
         'cambios_producto' => 'cambios_producto_cv', 'pedidos' => 'pedidos_cabecera',
+        'cargas_inventario' => 'inventario_cargas',
     ];
 
     /**
@@ -3204,6 +3213,157 @@ class MigracionMysqlService
                 $upsertStock->execute([$idEmpresa, $idProd, $idBod, $post, $idUsuario, $idUsuario]);
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $kid, ':cn' => (string) $old, ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Migra el historial de "aprobar inventario" del viejo (aprobaciones_inventario, modulo='INVENTARIOS')
+     * → inventario_cargas (+ detalle). SOLO REGISTRO: NO re-aplica al kardex (el kardex viejo `inventarios`
+     * se migra aparte, entidad 'inventario') para no duplicar stock.
+     *
+     * Estado: status 1 → 'pendiente', 2 → 'aprobada', 3 → 'rechazada'.
+     * Detalle: la tabla NO guarda líneas (vivían en el Excel `dir_documento`). Solo para las APROBADAS
+     * (status 2) el detalle es recuperable: sus movimientos quedaron en `inventarios` con la misma
+     * `referencia`. Las pendientes/rechazadas nunca llegaron al kardex → van solo cabecera (y así se evita
+     * el choque cuando una rechazada y una aprobada comparten la referencia). Idempotente por el mapa.
+     */
+    private function migrarCargasInventario(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'cargas_inventario', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done       = $this->idsMigrados($pg, $idEmpresa, 'cargas_inventario');
+        $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $prodPorCod = $this->productosPorCodigo($pg, $idEmpresa);
+        $mapBod     = $this->mapaDe($pg, $idEmpresa, 'bodegas');
+        $insMap     = $this->stmtMap($pg, 'cargas_inventario');
+
+        $bodDef = (int) $pg->query("SELECT id FROM bodegas WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY id LIMIT 1")->fetchColumn();
+        // Correlativo interno (numero) por empresa: arranca en el MAX actual (respeta cargas nativas).
+        $numSig = (int) $pg->query("SELECT COALESCE(MAX(numero),0) FROM inventario_cargas WHERE id_empresa = " . (int) $idEmpresa)->fetchColumn();
+
+        $insCab = $pg->prepare(
+            "INSERT INTO inventario_cargas
+                (id_empresa, numero, fecha, tipo_movimiento, observacion, estado, validada,
+                 total_lineas, created_by, created_at, aprobada_por, aprobada_at, motivo_rechazo, eliminado)
+             VALUES
+                (:e, :num, :fecha, :tipo, :obs, :estado, true,
+                 :total, :cb, :creado, :apr, :apr_at, :motivo, false)
+             RETURNING id"
+        );
+        $insDet = $pg->prepare(
+            "INSERT INTO inventario_cargas_detalle
+                (id_carga, id_empresa, id_producto, id_bodega, cantidad, costo_unitario,
+                 numero_lote, fecha_caducidad, nup, observacion, linea_valida, error_linea,
+                 cod_producto_raw, cod_bodega_raw, created_by, created_at, eliminado)
+             VALUES
+                (:c, :e, :prod, :bod, :cant, :costo, :lote, :cad, NULL, NULL, true, NULL,
+                 :codp, NULL, :cb, CURRENT_TIMESTAMP, false)"
+        );
+        // Detalle desde el kardex viejo por referencia (solo aprobadas).
+        $detStmt = $mysql->prepare(
+            "SELECT id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida,
+                    costo_unitario, precio, operacion, lote, fecha_vencimiento
+               FROM inventarios
+              WHERE ruc_empresa LIKE :r AND TRIM(referencia) = :ref"
+        );
+
+        $estadoMap = [1 => 'pendiente', 2 => 'aprobada', 3 => 'rechazada'];
+
+        $sql = "SELECT id, fecha_registro, fecha_aprobado, status, id_usuario, id_usuario_aprobado, referencia, dir_documento
+                  FROM aprobaciones_inventario
+                 WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . " AND modulo = 'INVENTARIOS'"
+             . $this->clausulaFecha('fecha_registro', $desde, $hasta, $mysql)
+             . " ORDER BY fecha_registro, id";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ap = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ap['id'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+
+            $estado = $estadoMap[(int) $ap['status']] ?? 'pendiente';
+            $ref    = trim((string) $ap['referencia']);
+
+            // Detalle solo para aprobadas con referencia (las demás nunca tocaron el kardex).
+            $lineas = [];
+            $tipos  = [];
+            if ($estado === 'aprobada' && $ref !== '') {
+                $detStmt->execute([':r' => $base . '%', ':ref' => $ref]);
+                foreach ($detStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                    $esEnt = strtoupper(trim((string) $d['operacion'])) === 'ENTRADA';
+                    $cant  = $esEnt ? (float) $d['cantidad_entrada'] : (float) $d['cantidad_salida'];
+                    if ($cant <= 0) { continue; } // movimiento en cero: ruido
+                    $lineas[] = $d;
+                    $tipos[$esEnt ? 'entrada' : 'salida'] = true;
+                }
+            }
+            // tipo_movimiento: por el kardex (entrada / salida / mixto=ajuste); heurística por referencia;
+            // default 'entrada' (las cargas por Excel al inventario son entradas).
+            if (count($tipos) > 1)              { $tipo = 'ajuste'; }
+            elseif (isset($tipos['salida']))    { $tipo = 'salida'; }
+            elseif (isset($tipos['entrada']))   { $tipo = 'entrada'; }
+            elseif (stripos($ref, 'AJUSTE') !== false) { $tipo = 'ajuste'; }
+            else                                { $tipo = 'entrada'; }
+
+            $fApr = (self::fechaCorta($ap['fecha_aprobado']) !== null) ? substr((string) $ap['fecha_aprobado'], 0, 19) : null;
+            $obs  = 'Migrado de aprobar inventario (sistema anterior). Archivo: ' . (self::nz($ap['dir_documento']) ?? '—')
+                  . ' · Ref: ' . ($ref !== '' ? $ref : '—')
+                  . ' · Usuario orig: ' . (int) $ap['id_usuario']
+                  . ' · Aprobó orig: ' . (int) $ap['id_usuario_aprobado'];
+
+            try {
+                $pg->beginTransaction();
+                $numSig++;
+                $insCab->execute([
+                    ':e'      => $idEmpresa,
+                    ':num'    => $numSig,
+                    ':fecha'  => substr((string) $ap['fecha_registro'], 0, 10),
+                    ':tipo'   => $tipo,
+                    ':obs'    => $obs,
+                    ':estado' => $estado,
+                    ':total'  => count($lineas),
+                    ':cb'     => $idUsuario,
+                    ':creado' => substr((string) $ap['fecha_registro'], 0, 19),
+                    ':apr'    => ($estado === 'aprobada' ? $idUsuario : null),
+                    ':apr_at' => ($estado === 'aprobada' ? $fApr : null),
+                    ':motivo' => ($estado === 'rechazada' ? 'Rechazada en el sistema anterior' : null),
+                ]);
+                $idCarga = (int) $insCab->fetchColumn();
+
+                foreach ($lineas as $d) {
+                    $esEnt  = strtoupper(trim((string) $d['operacion'])) === 'ENTRADA';
+                    $cant   = $esEnt ? (float) $d['cantidad_entrada'] : (float) $d['cantidad_salida'];
+                    $idProd = $this->resolverOCrearProducto($prodPorCod, $mapProd, (int) $d['id_producto'], (string) $d['codigo_producto'], (string) $d['nombre_producto'], '0', $idEmpresa, $idUsuario, $pg);
+                    $idBod  = $mapBod[(string) (int) $d['id_bodega']] ?? ($bodDef ?: null);
+                    $cu     = (float) ($d['costo_unitario'] ?: $d['precio']);
+                    $insDet->execute([
+                        ':c'    => $idCarga,
+                        ':e'    => $idEmpresa,
+                        ':prod' => $idProd ?: null,
+                        ':bod'  => $idBod ?: null,
+                        ':cant' => $cant,
+                        ':costo'=> $cu,
+                        ':lote' => self::nz($d['lote']),
+                        ':cad'  => self::caducidadODef($d['fecha_vencimiento'], $ap['fecha_registro']),
+                        ':codp' => self::nz($d['codigo_producto']),
+                        ':cb'   => $idUsuario,
+                    ]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idCarga, ':cn' => ($ref !== '' ? mb_substr($ref, 0, 120) : (string) $old), ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();
                 $done[(string) $old] = true;
                 $res['migrados']++;
