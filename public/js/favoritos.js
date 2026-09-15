@@ -339,9 +339,14 @@ window.CMG_initSort = function(modulo, onSort, opts) {
         if (th.dataset.sortBound === '1') return; // evitar doble binding
         th.dataset.sortBound = '1';
         if (!th.getAttribute('role')) th.setAttribute('role', 'button');
-        // Sin pista visible nadie descubre el Shift+clic.
-        if (multi && !th.getAttribute('title')) {
-            th.setAttribute('title', 'Clic para ordenar · Shift+clic para ordenar por varias columnas');
+        // Sin pista nadie descubre el Shift+clic. Si el encabezado ya tiene su propio
+        // title (p. ej. "Estado" en Pedidos, que explica su orden por flujo), la pista
+        // se le AÑADE: omitirla dejaba justo a esas columnas sin ninguna indicación.
+        if (multi) {
+            const titulo = th.getAttribute('title');
+            th.setAttribute('title', titulo
+                ? titulo + ' — Shift+clic para ordenar por varias columnas'
+                : 'Clic para ordenar · Shift+clic para ordenar por varias columnas');
         }
 
         th.addEventListener('click', (ev) => {
