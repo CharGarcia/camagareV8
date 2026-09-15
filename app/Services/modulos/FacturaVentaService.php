@@ -522,6 +522,30 @@ class FacturaVentaService
         try {
             $this->repository->actualizarVendedor($id, $idVendedor, $idUsuario);
 
+            // Espejo de lo que hace el modal en pantalla: el JS agrega/quita una fila
+            // "Vendedor" en información adicional al cambiar el combo, pero esta ruta
+            // (factura ya autorizada) solo toca id_vendedor en la cabecera — nunca pasa
+            // por el reemplazo completo de info_adicional de actualizar()/crear(). Sin
+            // este sync, esa fila se veía en el modal pero nunca quedaba guardada, así
+            // que el PDF/XML no la mostraban aunque "Mostrar vendedor en factura" esté
+            // activo. Solo se sincroniza si esa configuración está encendida — igual
+            // que el JS, que solo agrega la fila cuando EMPRESA_CONFIG.mostrar_vendedor_factura.
+            $idEstablecimiento = (int) ($cabecera['id_establecimiento'] ?? 0);
+            $mostrarVendedor = false;
+            if ($idEstablecimiento > 0) {
+                $estConfig = $this->getEmpresaRepository()->getEstablecimientoConfig($idEstablecimiento);
+                $mostrarVendedor = (($estConfig['mostrar_vendedor_factura'] ?? 'false') === 'true')
+                    || ($estConfig['mostrar_vendedor_factura'] ?? false) === true;
+            }
+            if ($mostrarVendedor) {
+                $nombreVendedor = null;
+                if ($idVendedor) {
+                    $vendedor = (new \App\repositories\modulos\VendedorRepository())->getDetalleCompleto($idVendedor, $idEmpresa);
+                    $nombreVendedor = $vendedor['nombre'] ?? null;
+                }
+                $this->repository->syncVendedorInfoAdicional($id, $nombreVendedor);
+            }
+
             $this->logService->registrar(
                 $idUsuario,
                 $idEmpresa,

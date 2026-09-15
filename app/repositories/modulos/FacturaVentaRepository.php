@@ -392,6 +392,27 @@ class FacturaVentaRepository extends BaseRepository
         $this->db->prepare($sql)->execute([$idVendedor, $idUsuario, $id]);
     }
 
+    /**
+     * Sincroniza SOLO la fila "Vendedor" de ventas_adicional con el vendedor
+     * actual — la usa actualizarVendedor() (factura ya autorizada), que solo
+     * toca id_vendedor en la cabecera y no pasa por el reemplazo completo de
+     * info_adicional que sí hace actualizar()/crear(). Sin esto, el modal
+     * mostraba la fila "Vendedor" en pantalla (la agrega el JS al cambiar el
+     * combo) pero nunca quedaba guardada, así que el PDF/XML no la traían.
+     * Actualiza in situ en vez de borrar+reinsertar todo info_adicional, para
+     * no tocar otras filas (RUC Proveedor, correo del cliente, etc.).
+     */
+    public function syncVendedorInfoAdicional(int $idVenta, ?string $nombreVendedor): void
+    {
+        $this->query("DELETE FROM ventas_adicional WHERE id_venta = ? AND nombre = 'Vendedor'", [$idVenta]);
+        if (trim((string) $nombreVendedor) !== '') {
+            $this->query(
+                "INSERT INTO ventas_adicional (id_venta, nombre, valor) VALUES (?, 'Vendedor', ?)",
+                [$idVenta, $nombreVendedor]
+            );
+        }
+    }
+
 
 
     public function eliminarLogico(int $id, int $idUsuario): void
