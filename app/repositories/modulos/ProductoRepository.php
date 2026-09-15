@@ -8,12 +8,33 @@ use PDO;
 
 class ProductoRepository extends BaseRepository
 {
-    public const COLUMNAS_ORDEN = [
-        'codigo', 'nombre', 'precio_base', 'status', 'tipo_produccion',
-        'nombre_categoria', 'nombre_marca', 'codigo_auxiliar', 'codigo_barras',
-        'nombre_medida', 'nombre_tarifa_iva', 'valor_iva', 'pvp',
-        'inventariable', 'stock_minimo', 'stock_maximo', 'valor_ice', 'saldo_actual',
-        'ubicacion'
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL con la que se ordena. Es la whitelist del ORDER BY y el mapa que
+     * necesita `OrdenListado::clausula()` para encadenar varias columnas.
+     */
+    public const MAPA_ORDEN = [
+        'codigo'            => 'p.codigo',
+        'nombre'            => 'p.nombre',
+        'precio_base'       => 'p.precio_base',
+        'status'            => 'p.status',
+        'tipo_produccion'   => 'p.tipo_produccion',
+        'codigo_auxiliar'   => 'p.codigo_auxiliar',
+        'codigo_barras'     => 'p.codigo_barras',
+        'inventariable'     => 'p.inventariable',
+        'stock_minimo'      => 'p.stock_minimo',
+        'stock_maximo'      => 'p.stock_maximo',
+        'valor_ice'         => 'p.valor_ice',
+        'ubicacion'         => 'p.ubicacion',
+        // Columnas que vienen de un JOIN: se prefija la tabla correcta.
+        'nombre_categoria'  => 'cat.nombre',
+        'nombre_marca'      => 'mar.nombre',
+        'nombre_medida'     => 'um.nombre',
+        'nombre_tarifa_iva' => 'ti.tarifa',
+        // Calculadas: no son columnas, se recalculan igual que en el SELECT.
+        'valor_iva'         => '((p.precio_base + COALESCE(p.valor_ice, 0)) * (COALESCE(ti.porcentaje_iva, 0) / 100))',
+        'pvp'               => '((p.precio_base + COALESCE(p.valor_ice, 0)) * (1 + COALESCE(ti.porcentaje_iva, 0) / 100))',
+        'saldo_actual'      => '(SELECT COALESCE(SUM(k.cantidad), 0) FROM inventario_kardex k WHERE k.id_producto = p.id AND k.id_empresa = p.id_empresa AND k.eliminado = false)',
     ];
 
     public function __construct()
@@ -30,12 +51,21 @@ class ProductoRepository extends BaseRepository
         string $ordenDir,
         ?int $idUsuarioFiltro = null,
         ?string $soloOpcion = null,
-        bool $soloActivos = false
+        bool $soloActivos = false,
+        array $ordenMulti = []
     ): array {
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre';
-        }
-        $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
+        // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
+        // MAPA_ORDEN, con p.id como desempate para que las filas empatadas no bailen
+        // entre páginas.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = \App\Helpers\OrdenListado::clausula(
+            $ordenMulti,
+            self::MAPA_ORDEN,
+            'p.nombre',
+            'p.id DESC'
+        );
 
         $whereSql = $this->getBaseWhere($idEmpresa, 'p', $idUsuarioFiltro);
         $params   = [':id_empresa' => $idEmpresa];
@@ -119,17 +149,6 @@ class ProductoRepository extends BaseRepository
 
         $offset = ($page - 1) * $perPage;
         
-        $orderExpr = match($ordenCol) {
-            'nombre_categoria' => 'cat.nombre',
-            'nombre_marca'     => 'mar.nombre',
-            'nombre_medida'    => 'um.nombre',
-            'nombre_tarifa_iva' => 'ti.tarifa',
-            'valor_iva'        => '((p.precio_base + COALESCE(p.valor_ice, 0)) * (COALESCE(ti.porcentaje_iva, 0) / 100))',
-            'pvp'              => '((p.precio_base + COALESCE(p.valor_ice, 0)) * (1 + COALESCE(ti.porcentaje_iva, 0) / 100))',
-            'saldo_actual'     => '(SELECT COALESCE(SUM(k.cantidad), 0) FROM inventario_kardex k WHERE k.id_producto = p.id AND k.id_empresa = p.id_empresa AND k.eliminado = false)',
-            default            => "p.{$ordenCol}"
-        };
-
         $sqlRows = "SELECT p.*,
                            cat.nombre AS nombre_categoria,
                            mar.nombre AS nombre_marca,
@@ -152,7 +171,7 @@ class ProductoRepository extends BaseRepository
                     LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
                     LEFT JOIN unidades_medida um ON um.id = p.id_medida
                     {$whereSql}
-                    ORDER BY $orderExpr $dir, p.id DESC";
+                    $orderBy";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

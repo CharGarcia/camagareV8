@@ -18,6 +18,7 @@ class CargasInventarioController extends BaseModuloController
 {
     private CargaInventarioService $service;
     private const RUTA_MODULO = 'modulos/cargas-inventario';
+    private const PER_PAGE = 20;
 
     public function __construct()
     {
@@ -40,13 +41,15 @@ class CargasInventarioController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
 
+        $prefsVista = PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? 'numero');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? 'DESC'));
-        $perPage  = 20;
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'numero', 'DESC');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'numero');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden);
+        $perPage  = self::PER_PAGE;
 
-        $res = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $this->idUsuarioFiltro());
+        $res = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $orden);
         $total = $res['total'];
 
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
@@ -60,10 +63,12 @@ class CargasInventarioController extends BaseModuloController
             'total'       => $total,
             'page'        => $page,
             'perPage'     => $perPage,
-            'totalPages'  => $perPage > 0 ? (int) ceil($total / $perPage) : 1,
+            'totalPages'  => $perPage > 0 ? max(1, (int) ceil($total / $perPage)) : 1,
             'buscar'      => $buscar,
             'ordenCol'    => $ordenCol,
             'ordenDir'    => $ordenDir,
+            'ordenJson'   => \App\Helpers\OrdenListado::aJson($orden),
+            'ordenParam'  => \App\Helpers\OrdenListado::aCadena($orden),
             'esAprobador' => $esAprobador,
             'esSuperAdmin' => $nivel >= 3,
             'idUsuarioActual' => $idUsuario,
@@ -71,6 +76,74 @@ class CargasInventarioController extends BaseModuloController
             'rutaModulo'  => self::RUTA_MODULO,
             'fullWidth'   => true,
         ]);
+    }
+
+    /**
+     * Refresco del listado por AJAX (búsqueda, orden y paginación) al estilo del
+     * resto de listados: devuelve las filas ya renderizadas, la paginación, el
+     * contador y los enlaces de exportación con los filtros vigentes.
+     */
+    public function searchAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa  = (int) ($_SESSION['id_empresa'] ?? 0);
+        $prefsVista = PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $buscar     = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $page       = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
+        $orden      = \App\Helpers\OrdenListado::leer($prefsVista, 'numero', 'DESC');
+        $ordenCol   = \App\Helpers\OrdenListado::primeraCol($orden, 'numero');
+        $ordenDir   = \App\Helpers\OrdenListado::primeraDir($orden);
+        $perPage    = self::PER_PAGE;
+
+        $res        = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $orden);
+        $rows       = $res['rows'];
+        $total      = (int) $res['total'];
+        $totalPages = max(1, (int) ceil($total / $perPage));
+        $from       = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+        $to         = $total > 0 ? min($page * $perPage, $total) : 0;
+
+        ob_start();
+        if (empty($rows)) {
+            echo '<tr><td colspan="8" class="text-center py-5 text-muted">'
+               . '<i class="bi bi-box-seam fs-3 d-block mb-2"></i>No hay cargas de inventario registradas.</td></tr>';
+        } else {
+            foreach ($rows as $r) {
+                echo $this->renderFila($r);
+            }
+        }
+        $rowsHtml = (string) ob_get_clean();
+
+        $prevDis = ($page <= 1) ? 'disabled' : '';
+        $nextDis = ($page >= $totalPages) ? 'disabled' : '';
+        $paginationHtml =
+            "<button type='button' class='btn btn-outline-secondary' {$prevDis} onclick='CI_buscar(" . ($page - 1) . ")'><i class='bi bi-chevron-left'></i></button>"
+          . "<button type='button' class='btn btn-outline-secondary' {$nextDis} onclick='CI_buscar(" . ($page + 1) . ")'><i class='bi bi-chevron-right'></i></button>";
+
+        $qs = '?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden));
+        echo json_encode([
+            'ok'         => true,
+            'rows'       => $rowsHtml,
+            'pagination' => $paginationHtml,
+            'info'       => "{$from}-{$to}/{$total}",
+            'total'      => $total,
+            'pdf_url'    => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf' . $qs,
+            'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel' . $qs,
+        ]);
+        exit;
+    }
+
+    /**
+     * Una fila del listado. El HTML vive en un único partial que incluyen tanto
+     * la carga inicial (index.php) como este refresco AJAX: escribirlo en dos
+     * sitios deja una de las dos versiones desfasada al tocar una columna.
+     */
+    private function renderFila(array $r): string
+    {
+        ob_start();
+        include MVC_APP . '/views/modulos/cargas_inventario/_fila.php';
+        return (string) ob_get_clean();
     }
 
     public function importarAjax(): void
@@ -283,9 +356,16 @@ class CargasInventarioController extends BaseModuloController
     {
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
         $buscar    = trim($_GET['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? 'numero');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? 'DESC'));
-        $res = $this->service->getListado($idEmpresa, $buscar, 1, 10000, $ordenCol, $ordenDir, $this->idUsuarioFiltro());
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; si se abre sin
+        // parámetros, se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(
+            PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO),
+            'numero',
+            'DESC'
+        );
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'numero');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
+        $res = $this->service->getListado($idEmpresa, $buscar, 1, 10000, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $orden);
         return $res['rows'];
     }
 
@@ -315,10 +395,11 @@ class CargasInventarioController extends BaseModuloController
                 . '<td align="center">' . $e($this->etiquetaEstado($r['estado'] ?? '')) . '</td>'
                 . '<td>' . $e($r['creado_por_nombre'] ?? '') . '</td>'
                 . '<td>' . $e($r['aprobado_por_nombre'] ?? '') . '</td>'
+                . '<td>' . $e($r['observacion'] ?? '') . '</td>'
                 . '</tr>';
         }
         if ($filas === '') {
-            $filas = '<tr><td colspan="7" align="center">Sin registros</td></tr>';
+            $filas = '<tr><td colspan="8" align="center">Sin registros</td></tr>';
         }
 
         $html = '
@@ -330,14 +411,14 @@ class CargasInventarioController extends BaseModuloController
             <table border="1" cellpadding="4" cellspacing="0" style="font-size:8px;">
                 <thead>
                     <tr style="background-color:#eef2f7;font-weight:bold;">
-                        <th>N°</th><th>Fecha</th><th>Tipo</th><th>Líneas</th><th>Estado</th><th>Creado por</th><th>Aprobado por</th>
+                        <th>N°</th><th>Fecha</th><th>Tipo</th><th>Líneas</th><th>Estado</th><th>Creado por</th><th>Aprobado por</th><th>Observación</th>
                     </tr>
                 </thead>
                 <tbody>' . $filas . '</tbody>
             </table>';
 
         try {
-            $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8');
+            $pdf = new \TCPDF('L', 'mm', 'A4', true, 'UTF-8');
             $pdf->SetPrintHeader(false);
             $pdf->SetPrintFooter(false);
             $pdf->SetMargins(12, 12, 12);
@@ -357,7 +438,7 @@ class CargasInventarioController extends BaseModuloController
         $empresa = (new \App\models\Empresa())->getPorId((int) ($_SESSION['id_empresa'] ?? 0)) ?? [];
         $nombreEmpresa = $empresa['nombre'] ?? '';
 
-        $headers = ['N°', 'Fecha', 'Tipo', 'Líneas', 'Estado', 'Creado por', 'Aprobado por'];
+        $headers = ['N°', 'Fecha', 'Tipo', 'Líneas', 'Estado', 'Creado por', 'Aprobado por', 'Observación'];
         $data = [];
         foreach ($rows as $r) {
             $data[] = [
@@ -368,6 +449,7 @@ class CargasInventarioController extends BaseModuloController
                 $this->etiquetaEstado($r['estado'] ?? ''),
                 (string) ($r['creado_por_nombre'] ?? ''),
                 (string) ($r['aprobado_por_nombre'] ?? ''),
+                (string) ($r['observacion'] ?? ''),
             ];
         }
 

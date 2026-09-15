@@ -49,6 +49,26 @@ class ProformaRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL con la que se ordena. Es la whitelist del ORDER BY y el mapa que
+     * necesita `OrdenListado::clausula()` para encadenar varias columnas.
+     */
+    public const MAPA_ORDEN = [
+        'id'              => 'p.id',
+        'fecha_emision'   => 'p.fecha_emision',
+        'secuencial'      => 'p.secuencial',
+        'importe_total'   => 'p.importe_total',
+        'estado'          => 'p.estado',
+        'estado_correo'   => 'p.estado_correo',
+        'observaciones'   => 'p.observaciones',
+        // De un JOIN o compuestas: el número que se ve no es una columna.
+        'cliente_nombre'  => 'c.nombre',
+        'cliente_ruc'     => 'c.identificacion',
+        'vendedor_nombre' => 'ven.nombre',
+        'numero'          => "p.establecimiento||'-'||p.punto_emision||'-'||p.secuencial",
+    ];
+
     public function getListado(
         int $idEmpresa,
         string $buscar = '',
@@ -56,7 +76,8 @@ class ProformaRepository extends BaseRepository
         int $perPage = 20,
         string $ordenCol = 'fecha_emision',
         string $ordenDir = 'DESC',
-        ?int $idUsuario = null
+        ?int $idUsuario = null,
+        array $ordenMulti = []
     ): array {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
@@ -112,17 +133,14 @@ class ProformaRepository extends BaseRepository
         $sqlCount = "SELECT COUNT(*) FROM proformas_cabecera p $joins $where";
         $total = $this->query($sqlCount, $params)->fetchColumn();
 
-        $allowedCols = ['id', 'fecha_emision', 'secuencial', 'importe_total', 'estado', 'estado_correo', 'cliente_nombre', 'cliente_ruc', 'vendedor_nombre', 'observaciones', 'numero'];
-        if (!in_array($ordenCol, $allowedCols)) $ordenCol = 'fecha_emision';
+        // Una o varias columnas (Shift+clic), siempre validadas contra MAPA_ORDEN,
+        // con p.id como desempate para que las filas empatadas no bailen entre páginas.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'p.fecha_emision', 'p.id DESC');
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
-        $ordenExpr = match ($ordenCol) {
-            'cliente_nombre'  => 'c.nombre',
-            'cliente_ruc'     => 'c.identificacion',
-            'vendedor_nombre' => 'ven.nombre',
-            'numero'          => "p.establecimiento||'-'||p.punto_emision||'-'||p.secuencial",
-            default           => "p.$ordenCol",
-        };
 
         $sql = "SELECT p.*,
                        c.nombre         AS cliente_nombre,
@@ -132,7 +150,7 @@ class ProformaRepository extends BaseRepository
                        u.nombre         AS usuario_nombre
                 FROM proformas_cabecera p $joins
                 $where
-                ORDER BY $ordenExpr $ordenDir, p.id DESC
+                $orderBy
                 LIMIT $perPage OFFSET $offset";
 
         $rows = $this->query($sql, $params)->fetchAll();

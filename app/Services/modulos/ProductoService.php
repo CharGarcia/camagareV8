@@ -43,9 +43,13 @@ class ProductoService
         return $this->repository->getSiguienteCodigoPorPrefijo($idEmpresa, $tipo, $prefijo);
     }
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
+    /**
+     * @param array $ordenMulti Criterios de orden múltiple (ver App\Helpers\OrdenListado).
+     *        Vacío = se ordena por $ordenCol/$ordenDir, como siempre.
+     */
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, array $ordenMulti = []): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, null, false, $ordenMulti);
     }
 
     public function crear(array $data): int

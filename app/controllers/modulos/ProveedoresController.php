@@ -63,13 +63,15 @@ class ProveedoresController extends BaseModuloController
 
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? $_GET['buscar'] ?? $_POST['buscar'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'razon_social');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'asc'));
+        // Orden múltiple (Shift+clic): la vista lo manda como `orden=col:DIR,col:DIR`.
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'razon_social');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'razon_social');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden);
         $perPage  = 20;
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
 
@@ -95,6 +97,8 @@ class ProveedoresController extends BaseModuloController
             'buscar'     => $buscar,
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
+            'ordenJson'  => \App\Helpers\OrdenListado::aJson($orden),
+            'ordenParam' => \App\Helpers\OrdenListado::aCadena($orden),
             'vistaConfig'=> $prefsVista,
             'fullWidth'  => true,
         ]);
@@ -125,14 +129,15 @@ class ProveedoresController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
         $buscar    = trim($_GET['b'] ?? $_GET['q'] ?? $_POST['b'] ?? $_POST['q'] ?? '');
         $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'razon_social');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'asc'));
+        $orden     = \App\Helpers\OrdenListado::leer($prefsVista, 'razon_social');
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'razon_social');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
         $perPage   = 20;
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -188,8 +193,8 @@ class ProveedoresController extends BaseModuloController
             'pagination' => $paginationHtml,
             'info'      => "$from-$to/$total",
             'total'     => $total,
-            'pdf_url'   => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
-            'excel_url' => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir"
+            'pdf_url'   => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden)),
+            'excel_url' => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden))
         ]);
         exit;
     }
@@ -1010,13 +1015,19 @@ class ProveedoresController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'razon_social');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; si se abre sin
+        // parámetros, se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(
+            \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO),
+            'razon_social'
+        );
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'razon_social');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $data['rows'];
 
         try {
@@ -1120,13 +1131,19 @@ class ProveedoresController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'razon_social');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; si se abre sin
+        // parámetros, se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(
+            \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO),
+            'razon_social'
+        );
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'razon_social');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $data['rows'];
 
         try {

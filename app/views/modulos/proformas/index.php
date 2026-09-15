@@ -104,11 +104,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
-                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-danger" title="Exportar PDF">
                     <i class="bi bi-file-earmark-pdf"></i> PDF
                 </a>
-                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-success" title="Exportar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>
@@ -225,7 +225,11 @@ window.PF_CONFIG  = {
     const inputBusc = document.getElementById('buscarProforma');
     window.currentSort = '<?= $ordenCol ?>';
     window.currentDir  = '<?= $ordenDir ?>';
+    // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que lee
+    // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
+    window.currentSorts = <?= $ordenJson ?? '[]' ?>;
     window.currentPage = <?= $page ?>;
+    let sorter = null;
 
     let timerId;
     const debounce = (fn, ms = 350) => (...a) => { clearTimeout(timerId); timerId = setTimeout(() => fn(...a), ms); };
@@ -234,7 +238,8 @@ window.PF_CONFIG  = {
 
     window.fetchSearch = async (page = 1) => {
         const b = inputBusc ? inputBusc.value.trim() : '';
-        const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        const orden = window.CMG_ordenParam(window.currentSorts || []);
+        const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&orden=${encodeURIComponent(orden)}`;
         try {
             const data = await (await fetch(uri)).json();
             if (!data.ok) return;
@@ -245,25 +250,22 @@ window.PF_CONFIG  = {
             if (data.pdf_url)   document.getElementById('btnExportPdf').href   = data.pdf_url;
             if (data.excel_url) document.getElementById('btnExportExcel').href = data.excel_url;
 
-            document.querySelectorAll('.sortable-header').forEach(th => {
-                const icon  = th.querySelector('i');
-                const field = th.dataset.sort;
-                icon.className = field === window.currentSort
-                    ? (window.currentDir.toLowerCase() === 'asc' ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1')
-                    : 'bi bi-arrow-down-up small text-muted ms-1';
-            });
+            // Los íconos (incluida la prioridad 1/2/3 del orden múltiple) los repinta
+            // el motor global; aquí solo se le pide que se refresque.
+            if (sorter) sorter.refreshIcons();
         } catch (e) { console.error('Error búsqueda proformas:', e); }
     };
 
-    document.querySelectorAll('.sortable-header').forEach(h => {
-        h.addEventListener('click', () => {
-            const f = h.dataset.sort;
-            if (window.currentSort === f) window.currentDir = window.currentDir.toLowerCase() === 'asc' ? 'DESC' : 'ASC';
-            else { window.currentSort = f; window.currentDir = 'ASC'; }
-            if (typeof window.guardarOrdenacionVista === 'function') window.guardarOrdenacionVista('proformas', window.currentSort, window.currentDir);
-            fetchSearch(1);
-        });
-    });
+    // Ordenamiento: motor global (window.CMG_initSort, en public/js/favoritos.js).
+    // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+    // (ASC → DESC → fuera del orden), con la prioridad numerada en cada encabezado.
+    // reload:false porque fetchSearch repinta todo lo que depende del orden.
+    sorter = window.CMG_initSort('proformas', (col, dir, sorts) => {
+        window.currentSort  = col;
+        window.currentDir   = dir;
+        window.currentSorts = sorts;
+        fetchSearch(1);
+    }, { sorts: window.currentSorts, multi: true, container: '.pf-scroll', reload: false });
 
     if (inputBusc) inputBusc.addEventListener('input', debounce(() => fetchSearch(1), 400));
 })();

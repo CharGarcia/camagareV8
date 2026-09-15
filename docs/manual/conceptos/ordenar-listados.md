@@ -5,7 +5,7 @@ categoria: Primeros pasos
 tipo: concepto
 visibilidad: todos
 etiquetas: ordenar, orden, ordenamiento, clasificar, alfabetico, de mayor a menor, de menor a mayor, ascendente, descendente, flechita, encabezado, titulo de columna, columna, dos columnas, varias columnas, ordenar por dos campos, subordenar, agrupar por ciudad, shift, mayusculas, prioridad, 1 2 3, se me desordena, quitar el orden, ordenar la lista, ordenar la tabla
-version: 1.0
+version: 1.1
 orden: 16
 estado: activo
 ---
@@ -33,6 +33,10 @@ Pulse **otra vez** el mismo título para invertir el sentido. Pulse el título d
 
 A veces una sola columna no alcanza: usted quiere ver los clientes **agrupados
 por ciudad** y, dentro de cada ciudad, **ordenados por nombre**.
+
+> La primera vez que ordena en un listado que lo permite, el sistema le recuerda
+> abajo a la derecha que existe el **Shift + clic**. Ese aviso sale una sola vez
+> por módulo y se cierra solo.
 
 1. Pulse normalmente el título de la primera columna (*Ciudad*).
 2. Mantenga presionada la tecla **Shift** (⇧, la de las mayúsculas) y pulse el
@@ -88,5 +92,8 @@ viendo en pantalla.
 
 ## Historial de cambios
 
+- **1.1** — La primera vez que se ordena en un listado con orden múltiple, el
+  sistema avisa en pantalla que existe el Shift+clic (antes solo se veía al dejar
+  el cursor sobre el encabezado, así que la función pasaba desapercibida).
 - **1.0** — Primera versión: ordenamiento por una y por varias columnas
   (Shift+clic), con la prioridad numerada en cada encabezado.

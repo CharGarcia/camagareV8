@@ -136,11 +136,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
-                <a id="btnExportPdf" href="<?= $urlBaseProv ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportPdf" href="<?= $urlBaseProv ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
                     <i class="bi bi-file-earmark-pdf"></i> PDF
                 </a>
-                <a id="btnExportExcel" href="<?= $urlBaseProv ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportExcel" href="<?= $urlBaseProv ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>
@@ -273,7 +273,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const inputBuscar = document.getElementById('buscarProveedor');
         window.currentSort = '<?= $ordenCol ?>';
         window.currentDir = '<?= $ordenDir ?>';
+        // Orden multiple (Shift+clic): lista completa de criterios, en el formato que lee
+        // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
+        window.currentSorts = <?= $ordenJson ?? '[]' ?>;
         window.currentPage = <?= $page ?>;
+        let sorter = null;
 
         let timerId;
 
@@ -288,7 +292,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         window.fetchSearch = async (page = 1) => {
             const term = inputBuscar ? inputBuscar.value.trim() : '';
-            const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+            const orden = window.CMG_ordenParam(window.currentSorts || []);
+            const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -300,26 +305,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     document.getElementById('btnExportPdf').href = data.pdf_url;
                     document.getElementById('btnExportExcel').href = data.excel_url;
 
-                    document.querySelectorAll('.sortable-header').forEach(th => {
-                        const icon = th.querySelector('i');
-                        const field = th.dataset.sort;
-                        if (field === window.currentSort) {
-                            icon.className = (window.currentDir.toLowerCase() === 'asc') ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
-                        } else {
-                            icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                        }
-                    });
+                    // Los iconos (incluida la prioridad 1/2/3 del orden multiple) los
+                    // repinta el motor global; aqui solo se le pide que se refresque.
+                    if (sorter) sorter.refreshIcons();
                 }
             } catch (e) {
                 console.error('Error en búsqueda de proveedores:', e);
             }
         };
 
-        window.CMG_initSort('proveedores', (col, dir) => {
-            window.currentSort = col;
-            window.currentDir = dir;
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+        // (ASC -> DESC -> fuera del orden), con la prioridad numerada en cada encabezado.
+        // reload:false porque fetchSearch repinta todo lo que depende del orden.
+        sorter = window.CMG_initSort('proveedores', (col, dir, sorts) => {
+            window.currentSort  = col;
+            window.currentDir   = dir;
+            window.currentSorts = sorts;
             fetchSearch(1);
-        }, { col: window.currentSort, dir: window.currentDir });
+        }, { sorts: window.currentSorts, multi: true, container: '.prov-scroll', reload: false });
 
         if (inputBuscar) inputBuscar.addEventListener('input', debounce(() => fetchSearch(1), 400));
     })();

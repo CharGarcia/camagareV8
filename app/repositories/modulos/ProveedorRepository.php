@@ -11,10 +11,27 @@ class ProveedorRepository extends BaseRepository
     use \App\Traits\LineasDocumentoTrait;
     use \App\Traits\ExpansionTerceroTrait;
 
-    public const COLUMNAS_ORDEN = [
-        'razon_social', 'identificacion', 'nombre_tipo_id', 'email', 'telefono',
-        'nombre_comercial', 'direccion', 'plazo', 'relacionado', 'status',
-        'nombre_tipo_empresa', 'nombre_banco', 'nombre_provincia', 'nombre_ciudad'
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL con la que se ordena. Es la whitelist del ORDER BY y el mapa que
+     * necesita `OrdenListado::clausula()` para encadenar varias columnas.
+     */
+    public const MAPA_ORDEN = [
+        'razon_social'        => 'p.razon_social',
+        'identificacion'      => 'p.identificacion',
+        'email'               => 'p.email',
+        'telefono'            => 'p.telefono',
+        'nombre_comercial'    => 'p.nombre_comercial',
+        'direccion'           => 'p.direccion',
+        'plazo'               => 'p.plazo',
+        'relacionado'         => 'p.relacionado',
+        'status'              => 'p.status',
+        // Columnas que vienen de un JOIN: se prefija la tabla correcta.
+        'nombre_tipo_id'      => 'icv.nombre',
+        'nombre_banco'        => 'b.nombre_banco',
+        'nombre_provincia'    => 'prov.nombre',
+        'nombre_ciudad'       => 'ciu.nombre',
+        'nombre_tipo_empresa' => 'te.nombre',
     ];
 
     public function __construct()
@@ -32,12 +49,21 @@ class ProveedorRepository extends BaseRepository
         int $perPage,
         string $ordenCol,
         string $ordenDir,
-        ?int $idUsuarioFiltro = null
+        ?int $idUsuarioFiltro = null,
+        array $ordenMulti = []
     ): array {
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'razon_social';
-        }
-        $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
+        // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
+        // MAPA_ORDEN, con p.id como desempate para que las filas empatadas no bailen
+        // entre páginas.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = \App\Helpers\OrdenListado::clausula(
+            $ordenMulti,
+            self::MAPA_ORDEN,
+            'p.razon_social',
+            'p.id DESC'
+        );
 
         $whereSql = $this->getBaseWhere($idEmpresa, 'p', $idUsuarioFiltro);
         $params   = [':id_empresa' => $idEmpresa];
@@ -147,15 +173,6 @@ class ProveedorRepository extends BaseRepository
         // 2. Obtener filas
         $offset = ($page - 1) * $perPage;
         
-        $orderExpr = match($ordenCol) {
-            'nombre_tipo_id' => 'icv.nombre',
-            'nombre_banco'   => 'b.nombre_banco',
-            'nombre_provincia' => 'prov.nombre',
-            'nombre_ciudad'    => 'ciu.nombre',
-            'nombre_tipo_empresa' => 'te.nombre',
-            default            => "p.{$ordenCol}"
-        };
-
         $sqlRows = "SELECT p.*, icv.nombre AS nombre_tipo_id,
                            b.nombre_banco AS nombre_banco,                            prov.nombre AS nombre_provincia,
                            ciu.nombre AS nombre_ciudad,
@@ -169,7 +186,7 @@ class ProveedorRepository extends BaseRepository
                     LEFT JOIN retenciones_sri rs_iva ON rs_iva.id = p.id_retencion_iva
                     LEFT JOIN sustento_tributario st ON st.id = p.id_sustento_tributario
                     {$whereSql}
-                    ORDER BY $orderExpr $dir, p.id DESC";
+                    $orderBy";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

@@ -5,6 +5,7 @@ namespace App\repositories\modulos;
 
 use App\repositories\BaseRepository;
 use App\Helpers\FiltrosBusqueda;
+use App\Helpers\OrdenListado;
 use PDO;
 
 /**
@@ -15,7 +16,25 @@ use PDO;
  */
 class CargaInventarioRepository extends BaseRepository
 {
-    public const COLUMNAS_ORDEN = ['numero', 'fecha', 'tipo_movimiento', 'estado', 'total_lineas', 'created_at'];
+    /**
+     * Whitelist + mapa del ORDER BY (ver App\Helpers\OrdenListado). La clave es
+     * el `data-sort` del encabezado en la vista; el valor, la única expresión SQL
+     * que puede llegar al ORDER BY para esa clave.
+     */
+    public const MAPA_ORDEN = [
+        'numero'      => 'c.numero',
+        'fecha'       => 'c.fecha',
+        'tipo'        => 'c.tipo_movimiento',
+        'lineas'      => 'c.total_lineas',
+        'estado'      => 'c.estado',
+        'observacion' => 'c.observacion',
+        'creado'      => 'u.nombre',
+        'aprobado'    => 'ua.nombre',
+        'created_at'  => 'c.created_at',
+        // Claves antiguas (preferencias ya guardadas y enlaces viejos de PDF/Excel).
+        'tipo_movimiento' => 'c.tipo_movimiento',
+        'total_lineas'    => 'c.total_lineas',
+    ];
 
     public function __construct()
     {
@@ -24,12 +43,28 @@ class CargaInventarioRepository extends BaseRepository
 
     // ─── LISTADO ──────────────────────────────────────────────────────────────
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
-    {
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'numero';
-        }
-        $dir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
+    public function getListado(
+        int $idEmpresa,
+        string $buscar,
+        int $page,
+        int $perPage,
+        string $ordenCol,
+        string $ordenDir,
+        ?int $idUsuarioFiltro = null,
+        array $ordenMulti = []
+    ): array {
+        // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
+        // MAPA_ORDEN, con c.id como desempate para que las filas empatadas no bailen
+        // entre páginas.
+        $ordenMulti = OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = OrdenListado::clausula(
+            $ordenMulti,
+            self::MAPA_ORDEN,
+            'c.numero',
+            'c.id DESC'
+        );
 
         $where  = "WHERE c.id_empresa = :e AND c.eliminado = false";
         $params = [':e' => $idEmpresa];
@@ -42,7 +77,7 @@ class CargaInventarioRepository extends BaseRepository
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
             $condicion = FiltrosBusqueda::condicionTexto(
-                ['CAST(c.numero AS TEXT)', 'c.tipo_movimiento', 'c.estado', 'c.observacion'],
+                ['CAST(c.numero AS TEXT)', 'c.tipo_movimiento', 'c.estado', 'c.observacion', 'u.nombre', 'ua.nombre'],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -52,12 +87,18 @@ class CargaInventarioRepository extends BaseRepository
             }
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto'    => ['observacion' => 'c.observacion', 'creado' => 'u.nombre', 'aprobado' => 'ua.nombre'],
             'exacto'   => ['estado' => 'c.estado', 'tipo' => 'c.tipo_movimiento'],
-            'numerico' => ['numero' => 'c.numero'],
+            'numerico' => ['numero' => 'c.numero', 'lineas' => 'c.total_lineas'],
             'fecha'    => ['fecha' => 'c.fecha'],
         ]);
 
-        $stCount = $this->db->prepare("SELECT COUNT(*) FROM inventario_cargas c $where");
+        // Los JOIN van también en el COUNT: el buscador filtra por nombre del
+        // creador/aprobador, así que sin ellos el total no cuadraría con las filas.
+        $joins = "LEFT JOIN usuarios u  ON u.id = c.created_by
+                  LEFT JOIN usuarios ua ON ua.id = c.aprobada_por";
+
+        $stCount = $this->db->prepare("SELECT COUNT(*) FROM inventario_cargas c $joins $where");
         $stCount->execute($params);
         $total = (int) $stCount->fetchColumn();
 
@@ -71,10 +112,9 @@ class CargaInventarioRepository extends BaseRepository
                        u.nombre AS creado_por_nombre,
                        ua.nombre AS aprobado_por_nombre
                 FROM inventario_cargas c
-                LEFT JOIN usuarios u  ON u.id = c.created_by
-                LEFT JOIN usuarios ua ON ua.id = c.aprobada_por
+                $joins
                 $where
-                ORDER BY c.$ordenCol $dir, c.id DESC
+                $orderBy
                 $limit";
         $st = $this->db->prepare($sql);
         $st->execute($params);

@@ -247,6 +247,52 @@ window.CMG_ordenParam = function(sorts) {
     return (sorts || []).map(s => s.col + ':' + s.dir).join(',');
 };
 
+/** Módulos en los que ya se enseñó el Shift+clic durante esta carga de página. */
+const _cmgAvisoMultiVisto = {};
+
+/**
+ * Enseña el Shift+clic la PRIMERA vez que alguien ordena en un módulo.
+ *
+ * El orden por varias columnas no se descubre solo: el `title` del encabezado solo
+ * aparece si el usuario deja el ratón quieto encima, así que sin este aviso la
+ * función existe pero nadie se entera. Se muestra una sola vez por módulo (queda
+ * anotado en localStorage) y en el momento justo: cuando el usuario acaba de
+ * ordenar por una columna, que es cuando la idea le sirve.
+ *
+ * @param {string} modulo Módulo ya normalizado.
+ * @param {boolean} yaLoSabe true si el usuario llegó aquí usando Shift: entonces no
+ *        hay nada que enseñarle, solo se marca como visto.
+ */
+function _cmgAvisoMulti(modulo, yaLoSabe) {
+    if (_cmgAvisoMultiVisto[modulo]) return;
+    _cmgAvisoMultiVisto[modulo] = true;
+
+    const clave = 'cmg_sort_hint_' + modulo;
+    try {
+        if (localStorage.getItem(clave)) return;
+        localStorage.setItem(clave, '1');
+    } catch (e) {
+        // Sin localStorage (ventana privada, cookies bloqueadas) el aviso se muestra
+        // una vez por carga de página, que es suficiente y no molesta.
+    }
+    if (yaLoSabe) return;
+
+    const aviso = document.createElement('div');
+    aviso.className = 'cmg-sort-hint';
+    aviso.setAttribute('role', 'status');
+    aviso.innerHTML = '<i class="bi bi-lightbulb-fill"></i>'
+        + '<span><strong>Shift + clic</strong> en otra columna para ordenar por varias a la vez.</span>'
+        + '<button type="button" class="cmg-sort-hint__close" aria-label="Cerrar">&times;</button>';
+
+    const cerrar = () => {
+        aviso.classList.add('cmg-sort-hint--out');
+        setTimeout(() => aviso.remove(), 300);
+    };
+    aviso.querySelector('.cmg-sort-hint__close').addEventListener('click', cerrar);
+    document.body.appendChild(aviso);
+    setTimeout(cerrar, 9000);
+}
+
 /**
  * Motor global de ordenamiento de tablas.
  *
@@ -372,6 +418,10 @@ window.CMG_initSort = function(modulo, onSort, opts) {
             }
 
             refreshIcons();
+            if (multi) {
+                // La primera vez que se ordena aquí, contarle que existe el Shift+clic.
+                _cmgAvisoMulti(modulo.split('/').pop().replace(/-/g, '_'), !!(ev && ev.shiftKey));
+            }
             if (typeof window.CMG_guardarOrden === 'function') {
                 window.CMG_guardarOrden(modulo, sorts, { reload: reload });
             }

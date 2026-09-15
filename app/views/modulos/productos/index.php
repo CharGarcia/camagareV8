@@ -140,8 +140,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                <a id="btnExportPdf" href="<?= $urlBaseProd ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a id="btnExportExcel" href="<?= $urlBaseProd ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <a id="btnExportPdf" href="<?= $urlBaseProd ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+                <a id="btnExportExcel" href="<?= $urlBaseProd ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
                 <?php if (!empty($perm['actualizar'])): ?>
                     <button type="button" class="btn btn-outline-primary" onclick="actualizarCostosMasivo()" title="Recalcula el costo de todos los productos inventariables desde el Kardex">
                         <i class="bi bi-arrow-repeat"></i> Actualizar Costos
@@ -298,7 +298,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
         window.currentSort = '<?= $ordenCol ?>';
         window.currentDir = '<?= $ordenDir ?>';
+        // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que
+        // lee OrdenListado en PHP. currentSort/currentDir quedan como el principal.
+        window.currentSorts = <?= $ordenJson ?? '[]' ?>;
         window.currentPage = <?= $page ?>;
+        let sorter = null;
         let timerId;
 
         const debounce = (func, delay = 400) => (...args) => {
@@ -308,22 +312,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         window.cambiarPaginaAjax = (n) => window.fetchSearch(n);
 
-        const updateSortIcons = () => {
-            document.querySelectorAll('.sortable-header').forEach(th => {
-                const icon = th.querySelector('i');
-                if (!icon) return;
-                const field = th.dataset.sort;
-                if (field === window.currentSort) {
-                    icon.className = (window.currentDir.toLowerCase() === 'asc') ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
-                } else {
-                    icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                }
-            });
-        };
-
         window.fetchSearch = async (page = 1) => {
             const term = inputBuscar ? inputBuscar.value.trim() : '';
-            const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+            const orden = window.CMG_ordenParam(window.currentSorts || []);
+            const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -335,27 +327,25 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     document.getElementById('btnExportPdf').href = data.pdf_url;
                     document.getElementById('btnExportExcel').href = data.excel_url;
 
-                    updateSortIcons();
+                    // Los íconos (incluida la prioridad 1/2/3 del orden múltiple) los
+                    // repinta el motor global; aquí solo se le pide que se refresque.
+                    if (sorter) sorter.refreshIcons();
                 }
             } catch (e) {
                 console.error(e);
             }
         };
 
-        updateSortIcons();
-
-        document.querySelectorAll('.sortable-header').forEach(h => {
-            h.addEventListener('click', () => {
-                const f = h.dataset.sort;
-                if (window.currentSort === f) window.currentDir = (window.currentDir.toLowerCase() === 'asc') ? 'DESC' : 'ASC';
-                else {
-                    window.currentSort = f;
-                    window.currentDir = 'ASC';
-                }
-                if (typeof window.guardarOrdenacionVista === 'function') window.guardarOrdenacionVista('<?= basename($rutaModulo) ?>', window.currentSort, window.currentDir);
-                fetchSearch(1);
-            });
-        });
+        // Ordenamiento: motor global (window.CMG_initSort, en public/js/favoritos.js).
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+        // (ASC → DESC → fuera del orden), con la prioridad numerada en cada encabezado.
+        // reload:false porque fetchSearch repinta todo lo que depende del orden.
+        sorter = window.CMG_initSort('<?= basename($rutaModulo) ?>', (col, dir, sorts) => {
+            window.currentSort  = col;
+            window.currentDir   = dir;
+            window.currentSorts = sorts;
+            fetchSearch(1);
+        }, { sorts: window.currentSorts, multi: true, container: '.productos-scroll', reload: false });
 
         if (inputBuscar) inputBuscar.addEventListener('input', debounce(() => fetchSearch(1), 400));
     })();

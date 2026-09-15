@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
-etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
-version: 2.1
+etiquetas: proveedores, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
+version: 2.2
 orden: 10
 estado: activo
 ---
@@ -261,6 +261,27 @@ Estos valores son **propuestas**, no imposiciones: al registrar la compra o la
 retención se pueden cambiar. Configurarlos bien evita el error más común, que es
 retener con el porcentaje equivocado por descuido.
 
+## Ordenar el listado
+
+Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
+invertir el sentido. De fábrica el listado sale por razón social.
+
+Puede **encadenar hasta tres columnas**: mantenga presionada la tecla **Shift**
+(⇧) y pulse el título de la segunda.
+
+| Para ver… | Ordene así |
+|-----------|-----------|
+| Los proveedores de cada ciudad, en orden alfabético | *Ciudad*, luego Shift+clic en *Razón Social* |
+| Cada tipo de contribuyente por separado | *Tipo*, luego Shift+clic en *Razón Social* |
+| Los proveedores agrupados por banco | *Banco*, luego Shift+clic en *Razón Social* |
+
+El número pequeño junto a cada flecha indica qué columna manda (`1`) y cuál
+desempata (`2`). Un tercer Shift+clic sobre la misma columna la saca del orden, y
+un clic normal en cualquier encabezado vuelve a dejar una sola.
+
+El orden se guarda para usted y las exportaciones salen con ese mismo orden.
+Detalles en *Cómo ordenar los listados*.
+
 ## Buscar en el listado
 
 El buscador revisa **todas las columnas del listado**: identificación, tipo de
@@ -361,6 +382,11 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 - **Un pago no se despliega al hacer clic**: necesita permiso para ver Egresos.
 
 ## Historial de cambios
+
+- **2.2** — El listado se puede **ordenar por hasta tres columnas a la vez**:
+  Shift+clic en el título de la segunda columna la encadena a la primera (por
+  ejemplo *Ciudad* y, dentro de cada una, la *Razón Social*). Cada encabezado
+  activo muestra un número con su prioridad. Nueva sección *Ordenar el listado*.
 
 - **2.1** — Si el mismo contribuyente está cargado **dos veces** —una ficha con la cédula y
   otra con el RUC, que es esa cédula + `001`—, el **Resumen comercial**, las

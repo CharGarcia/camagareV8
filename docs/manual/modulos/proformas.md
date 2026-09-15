@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.11
+etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.12
 orden: 15
 estado: activo
 ---
@@ -136,6 +136,27 @@ tarifa** y el **TOTAL**.
 > Si cambia la configuración de decimales o de cálculo del IVA, las proformas ya
 > guardadas conservan los valores con los que se grabaron. Se actualizan cuando
 > se vuelve a abrir y guardar la proforma.
+
+## Ordenar el listado
+
+Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
+invertir el sentido. De fábrica el listado muestra lo más reciente primero.
+
+Puede **encadenar hasta tres columnas**: mantenga presionada la tecla **Shift**
+(⇧) y pulse el título de la segunda.
+
+| Para ver… | Ordene así |
+|-----------|-----------|
+| Lo pendiente de aprobar, por antigüedad | *Estado*, luego Shift+clic en *Fecha* |
+| Las proformas de cada cliente en el tiempo | *Cliente*, luego Shift+clic en *Fecha* |
+| El trabajo de cada vendedor, por importe | *Vendedor*, luego Shift+clic en *Total* |
+
+El número pequeño junto a cada flecha indica qué columna manda (`1`) y cuál
+desempata (`2`). Un tercer Shift+clic sobre la misma columna la saca del orden, y
+un clic normal en cualquier encabezado vuelve a dejar una sola.
+
+El orden se guarda para usted y las exportaciones salen con ese mismo orden.
+Detalles en *Cómo ordenar los listados*.
 
 ## Exportar a Excel
 
@@ -318,6 +339,11 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.12** — El listado se puede **ordenar por hasta tres columnas a la vez**:
+  Shift+clic en el título de la segunda columna la encadena a la primera (por
+  ejemplo *Estado* y, dentro de cada uno, la *Fecha*). Cada encabezado activo
+  muestra un número con su prioridad. Nueva sección *Ordenar el listado*.
 
 - **1.11** — El botón **Duplicar** ya funciona (antes solo avisaba "próximamente").
   Crea una copia en borrador con número nuevo de la misma serie y fecha de hoy,

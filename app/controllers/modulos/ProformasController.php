@@ -42,14 +42,16 @@ class ProformasController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+        // Orden múltiple (Shift+clic): la vista lo manda como `orden=col:DIR,col:DIR`.
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_emision', 'DESC');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage  = 20;
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $total      = $result['total'];
         $totalPages = (int) ceil($total / $perPage);
 
@@ -80,6 +82,8 @@ class ProformasController extends BaseModuloController
             'to'              => $total > 0 ? min($page * $perPage, $total) : 0,
             'buscar'          => $buscar,
             'ordenCol'        => $ordenCol,
+            'ordenJson'       => \App\Helpers\OrdenListado::aJson($orden),
+            'ordenParam'      => \App\Helpers\OrdenListado::aCadena($orden),
             'ordenDir'        => $ordenDir,
             'vistaConfig'     => $prefsVista,
             'rutaModulo'      => $this->getRutaModulo(),
@@ -106,14 +110,15 @@ class ProformasController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $buscar     = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page       = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol   = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
-        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+        $orden      = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_emision', 'DESC');
+        $ordenCol   = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
+        $ordenDir   = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage    = 20;
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $total      = $result['total'];
         $totalPages = (int) ceil($total / $perPage);
         $from       = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
@@ -138,7 +143,7 @@ class ProformasController extends BaseModuloController
 
         $urlBase = rtrim(BASE_URL, '/') . '/' . $this->getRutaModulo();
         $bEnc    = urlencode($buscar);
-        $sEnc    = urlencode($ordenCol);
+        $sEnc    = urlencode(\App\Helpers\OrdenListado::aCadena($orden));
         $dEnc    = urlencode($ordenDir);
 
         echo json_encode([
@@ -147,8 +152,8 @@ class ProformasController extends BaseModuloController
             'pagination' => $paginationHtml,
             'info'       => "$from-$to/$total",
             'total'      => $total,
-            'pdf_url'    => "{$urlBase}/export-pdf?b={$bEnc}&sort={$sEnc}&dir={$dEnc}",
-            'excel_url'  => "{$urlBase}/export-excel?b={$bEnc}&sort={$sEnc}&dir={$dEnc}",
+            'pdf_url'    => "{$urlBase}/export-pdf?b={$bEnc}&orden={$sEnc}",
+            'excel_url'  => "{$urlBase}/export-excel?b={$bEnc}&orden={$sEnc}",
         ]);
         exit;
     }

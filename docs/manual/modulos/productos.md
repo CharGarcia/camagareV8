@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
-etiquetas: productos, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
-version: 1.4
+etiquetas: productos, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
+version: 1.5
 orden: 10
 estado: activo
 ---
@@ -136,6 +136,30 @@ respeta los filtros de búsqueda activos e incluye, además de los datos básico
 **IVA, ICE, PVP, Costo, Margen y Utilidad %** de cada producto (Margen = Precio
 Base − Costo; Utilidad % = Margen sobre el Costo).
 
+## Ordenar el listado
+
+Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
+invertir el sentido. De fábrica el listado sale por descripción.
+
+Puede **encadenar hasta tres columnas**: mantenga presionada la tecla **Shift**
+(⇧) y pulse el título de la segunda.
+
+| Para ver… | Ordene así |
+|-----------|-----------|
+| El catálogo agrupado por categoría, y dentro por descripción | *Categoría*, luego Shift+clic en *Descripción* |
+| Lo que menos queda en bodega dentro de cada categoría | *Categoría*, luego Shift+clic en *Saldo* |
+| Los productos más caros de cada marca | *Marca*, luego Shift+clic en *PVP* |
+
+El número pequeño junto a cada flecha indica qué columna manda (`1`) y cuál
+desempata (`2`). Un tercer Shift+clic sobre la misma columna la saca del orden, y
+un clic normal en cualquier encabezado vuelve a dejar una sola.
+
+Las columnas calculadas se ordenan por su valor real, no por el texto: el
+**Saldo** por las existencias, y el **PVP** y el **IVA** por el importe.
+
+El orden se guarda para usted y las exportaciones salen con ese mismo orden.
+Detalles en *Cómo ordenar los listados*.
+
 ## Permisos
 
 Con **acceso total** se ven los productos de toda la empresa. Sin él, cada
@@ -162,6 +186,12 @@ aparecer al facturar.
   compras que lo afectan quedaron vinculadas a este producto del catálogo.
 
 ## Historial de cambios
+
+- **1.5** — El listado se puede **ordenar por hasta tres columnas a la vez**:
+  Shift+clic en el título de la segunda columna la encadena a la primera (por
+  ejemplo *Categoría* y, dentro de cada una, la *Descripción*). Cada encabezado
+  activo muestra un número con su prioridad, y el orden se respeta al exportar.
+  Nueva sección *Ordenar el listado*.
 
 - **1.4** — Nueva marca **"Permitir cambiar el precio de este producto en la
   comanda"**, que también habilita el botón de precio en el carrito del punto de

@@ -4,32 +4,60 @@
 /** @var int $total */
 /** @var bool $esAprobador */
 /** @var string $rutaModulo */
+/** @var int $page */
+/** @var int $totalPages */
+/** @var int $perPage */
+/** @var string $buscar */
+/** @var string $ordenCol */
+/** @var string $ordenDir */
 
 $base    = BASE_URL;
-$urlBase = $base . '/' . $rutaModulo;
-$rows    = $rows ?? [];
-$total   = (int) ($total ?? 0);
-$page    = (int) ($page ?? 1);
-$totalPages = (int) ($totalPages ?? 1);
-$vistaConfig = \App\Helpers\PreferenciasHelper::getPreferenciasVista($rutaModulo);
+$urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 
-$estadoBadge = function (string $estado): string {
-    return match ($estado) {
-        'aprobada'  => '<span class="badge bg-success bg-opacity-10 text-success border border-success">Aprobada</span>',
-        'rechazada' => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger">Rechazada</span>',
-        default     => '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning">Pendiente</span>',
-    };
-};
-$tipoBadge = function (string $tipo): string {
-    $c = match ($tipo) { 'entrada' => 'success', 'salida' => 'danger', default => 'secondary' };
-    return '<span class="badge bg-' . $c . ' bg-opacity-10 text-' . $c . ' border border-' . $c . '">' . ucfirst($tipo) . '</span>';
-};
+$rows       = $rows ?? [];
+$total      = (int) ($total ?? 0);
+$page       = (int) ($page ?? 1);
+$totalPages = (int) ($totalPages ?? 1);
+$perPage    = (int) ($perPage ?? 20);
+$buscar     = $buscar ?? '';
+$ordenCol   = $ordenCol ?? 'numero';
+$ordenDir   = $ordenDir ?? 'DESC';
+$from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+$to   = $total > 0 ? min($page * $perPage, $total) : 0;
+
+$vistaConfig = \App\Helpers\PreferenciasHelper::getPreferenciasVista($rutaModulo);
 
 echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig);
 ?>
+<style>
+    .cargas-header {
+        flex-shrink: 0;
+    }
 
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2 px-1">
-    <h5 class="mb-0 fw-bold text-dark"><i class="bi bi-box-seam text-primary me-2"></i> <?= htmlspecialchars($titulo) ?></h5>
+    .cargas-scroll {
+        max-height: calc(100dvh - 240px);
+        overflow-y: auto;
+    }
+
+    .cargas-scroll thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f8f9fa;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .carga-row {
+        cursor: pointer;
+    }
+
+    .carga-row:hover {
+        background-color: rgba(0, 0, 0, .04);
+    }
+</style>
+
+<div class="cargas-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam text-primary me-2"></i><?= htmlspecialchars($titulo) ?></h5>
     <?php if (!empty($perm['crear'])): ?>
         <button type="button" class="btn btn-primary btn-sm px-3" onclick="CI_abrirImportar()">
             <i class="bi bi-upload me-1"></i> Importar carga
@@ -37,76 +65,110 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
     <?php endif; ?>
 </div>
 
-<div class="card cmg-table-card border-0 shadow-sm rounded-3 w-100">
+<div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <!-- Buscador y Exportación -->
         <div class="d-flex align-items-center gap-2">
-            <form class="d-flex align-items-center m-0" onsubmit="event.preventDefault(); CI_buscar(1);">
-                <div class="input-group input-group-sm" style="width: 300px;">
-                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                    <input type="text" id="ci-buscar" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar por número, tipo, estado…" value="<?= htmlspecialchars($buscar ?? '') ?>" autocomplete="off">
-                    <?php if (!empty($buscar)): ?>
-                        <a href="<?= $urlBase ?>/index" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
-                    <?php endif; ?>
-                </div>
-            </form>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
+            <div id="fbBuscadorCI" style="width: 480px;"></div>
+            <input type="hidden" id="ci-buscar" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosBusqueda) return;
+                    new FiltrosBusqueda({
+                        containerId: 'fbBuscadorCI',
+                        hiddenInputId: 'ci-buscar',
+                        fields: [
+                            { key: 'numero',      label: 'N° de carga',  icon: 'bi-hash',             type: 'number_range' },
+                            { key: 'fecha',       label: 'Fecha',        icon: 'bi-calendar-event',   type: 'date_range' },
+                            { key: 'observacion', label: 'Observación',  icon: 'bi-chat-left-text',   type: 'text' },
+                            { key: 'creado',      label: 'Creado por',   icon: 'bi-person',           type: 'text' },
+                            { key: 'aprobado',    label: 'Aprobado por', icon: 'bi-person-check',     type: 'text' },
+                            { key: 'lineas',      label: 'Líneas',       icon: 'bi-list-ol',          type: 'number_range' },
+                            { key: 'tipo',        label: 'Tipo',         icon: 'bi-arrow-left-right', type: 'select', options: [
+                                { v: 'entrada', l: 'Entrada' },
+                                { v: 'salida',  l: 'Salida' },
+                                { v: 'ajuste',  l: 'Ajuste' },
+                            ]},
+                            { key: 'estado',      label: 'Estado',       icon: 'bi-flag',             type: 'select', options: [
+                                { v: 'pendiente', l: 'Pendiente' },
+                                { v: 'aprobada',  l: 'Aprobada' },
+                                { v: 'rechazada', l: 'Rechazada' },
+                            ]},
+                        ],
+                        quickFilters: [
+                            { id: 'qf_pendiente', label: 'Pendientes', mk: () => ({ key: 'estado', op: '=', value: 'pendiente', display: 'Pendiente' }) },
+                            { id: 'qf_aprobada',  label: 'Aprobadas',  mk: () => ({ key: 'estado', op: '=', value: 'aprobada',  display: 'Aprobada' }) },
+                            { id: 'qf_rechazada', label: 'Rechazadas', mk: () => ({ key: 'estado', op: '=', value: 'rechazada', display: 'Rechazada' }) },
+                            { id: 'qf_entrada',   label: 'Entradas',   mk: () => ({ key: 'tipo',   op: '=', value: 'entrada',   display: 'Entrada' }) },
+                            { id: 'qf_salida',    label: 'Salidas',    mk: () => ({ key: 'tipo',   op: '=', value: 'salida',    display: 'Salida' }) },
+                        ],
+                        onApply: () => window.CI_buscar && window.CI_buscar(1),
+                    }).init();
+                });
+            </script>
+
             <div class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
-                    'numero' => 'N°', 'fecha' => 'Fecha', 'tipo' => 'Tipo', 'lineas' => 'Líneas',
-                    'estado' => 'Estado', 'creado' => 'Creado por', 'aprobado' => 'Aprobado por',
+                    'numero'      => 'N°',
+                    'fecha'       => 'Fecha',
+                    'tipo'        => 'Tipo',
+                    'lineas'      => 'Líneas',
+                    'estado'      => 'Estado',
+                    'creado'      => 'Creado por',
+                    'aprobado'    => 'Aprobado por',
+                    'observacion' => 'Observación',
                 ];
                 echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig, $rutaModulo);
                 ?>
-                <a href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar ?? '') ?>&sort=<?= urlencode($ordenCol ?? '') ?>&dir=<?= urlencode($ordenDir ?? '') ?>" target="_blank" class="btn btn-outline-danger" title="Descargar PDF">
+
+                <a id="ci-btn-pdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
+                   target="_blank" class="btn btn-outline-danger" title="Descargar PDF">
                     <i class="bi bi-file-earmark-pdf"></i> PDF
                 </a>
-                <a href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar ?? '') ?>&sort=<?= urlencode($ordenCol ?? '') ?>&dir=<?= urlencode($ordenDir ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
+                <a id="ci-btn-excel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
+                   class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>
             </div>
         </div>
-        <div class="d-flex align-items-center gap-2">
-            <span class="text-muted small fw-medium"><?= $total ?> registros</span>
-            <div class="btn-group btn-group-sm">
-                <button class="btn btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="CI_buscar(<?= $page - 1 ?>)"><i class="bi bi-chevron-left"></i></button>
-                <button class="btn btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="CI_buscar(<?= $page + 1 ?>)"><i class="bi bi-chevron-right"></i></button>
+
+        <!-- Paginación -->
+        <div class="d-flex align-items-center gap-3">
+            <span id="ci-pagination-info" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
+            <div id="ci-pagination" class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="CI_buscar(<?= $page - 1 ?>)"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="btn btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="CI_buscar(<?= $page + 1 ?>)"><i class="bi bi-chevron-right"></i></button>
             </div>
         </div>
     </div>
 
+    <!-- Tabla -->
     <div class="card-body p-0">
-        <div class="cargas-scroll">
+        <div class="cargas-scroll w-100">
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3 py-2" data-col="numero">N°</th>
-                        <th data-col="fecha">Fecha</th>
-                        <th data-col="tipo">Tipo</th>
-                        <th class="text-center" data-col="lineas">Líneas</th>
-                        <th class="text-center" data-col="estado">Estado</th>
-                        <th data-col="creado">Creado por</th>
-                        <th data-col="aprobado">Aprobado por</th>
+                        <th class="ps-3 py-2 sortable-header" role="button" data-sort="numero" data-col="numero">N° <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="fecha" data-col="fecha">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="tipo" data-col="tipo">Tipo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" role="button" data-sort="lineas" data-col="lineas">Líneas <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="creado" data-col="creado">Creado por <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="aprobado" data-col="aprobado">Aprobado por <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="pe-3 sortable-header" role="button" data-sort="observacion" data-col="observacion">Observación <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="ci-tbody">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-box-seam fs-2 d-block mb-2"></i> No hay cargas de inventario registradas.</td></tr>
-                    <?php else: foreach ($rows as $r): ?>
-                        <tr style="cursor:pointer;" onclick="CI_verDetalle(<?= (int) $r['id'] ?>)">
-                            <td class="ps-3 fw-bold" data-col="numero">#<?= (int) $r['numero'] ?></td>
-                            <td data-col="fecha"><?= $r['fecha'] ? date('d-m-Y', strtotime($r['fecha'])) : '-' ?></td>
-                            <td data-col="tipo"><?= $tipoBadge($r['tipo_movimiento'] ?? '') ?></td>
-                            <td class="text-center" data-col="lineas"><?= (int) $r['total_lineas'] ?></td>
-                            <td class="text-center" data-col="estado">
-                                <?= $estadoBadge($r['estado'] ?? 'pendiente') ?>
-                                <?php if (($r['estado'] ?? '') === 'pendiente' && (empty($r['validada']) || $r['validada'] === 'f')): ?>
-                                    <i class="bi bi-exclamation-triangle-fill text-warning ms-1" title="Tiene líneas con error; no se puede aprobar"></i>
-                                <?php endif; ?>
-                            </td>
-                            <td class="small text-muted" data-col="creado"><?= htmlspecialchars($r['creado_por_nombre'] ?? '-') ?></td>
-                            <td class="small text-muted" data-col="aprobado"><?= htmlspecialchars($r['aprobado_por_nombre'] ?? '-') ?></td>
-                        </tr>
-                    <?php endforeach; endif; ?>
+                        <tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-box-seam fs-3 d-block mb-2"></i>No hay cargas de inventario registradas.</td></tr>
+                    <?php else: ?>
+                        <?php foreach ($rows as $r): ?>
+                            <?php include __DIR__ . '/_fila.php'; ?>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>
@@ -201,14 +263,41 @@ const CI_ES_APROBADOR  = <?= !empty($esAprobador) ? 'true' : 'false' ?>;
 const CI_ES_SUPERADMIN = <?= !empty($esSuperAdmin) ? 'true' : 'false' ?>;
 const CI_ID_USUARIO    = <?= (int) ($idUsuarioActual ?? 0) ?>;
 const CI_APROBADORES   = <?= json_encode(array_values($aprobadoresNombres ?? []), JSON_UNESCAPED_UNICODE) ?>;
-let CI_currentSort = '<?= $ordenCol ?? 'numero' ?>';
-let CI_currentDir  = '<?= $ordenDir ?? 'DESC' ?>';
+let CI_currentSort = '<?= $ordenCol ?>';
+let CI_currentDir  = '<?= $ordenDir ?>';
+// Orden múltiple (Shift+clic): lista completa de criterios, en el formato que lee
+// OrdenListado en PHP. CI_currentSort/CI_currentDir quedan como el principal.
+let CI_currentSorts = <?= $ordenJson ?? '[]' ?>;
+let CI_currentPage = <?= $page ?>;
 let CI_cargaActual = null;
+let CI_sorter = null;
 
-function CI_buscar(p = 1) {
-    const b = document.getElementById('ci-buscar').value;
-    window.location.href = `${CI_URL}/index?b=${encodeURIComponent(b)}&page=${p}&sort=${CI_currentSort}&dir=${CI_currentDir}`;
-}
+/**
+ * Refresca el listado por AJAX (búsqueda, orden y paginación) sin recargar la
+ * página: repinta filas, paginación, contador y los enlaces de PDF/Excel.
+ */
+window.CI_buscar = async function (p = 1) {
+    const b = (document.getElementById('ci-buscar')?.value || '').trim();
+    const orden = window.CMG_ordenParam(CI_currentSorts || []);
+    const uri = `${CI_URL}/searchAjax?b=${encodeURIComponent(b)}&page=${p}&orden=${encodeURIComponent(orden)}`;
+    try {
+        const resp = await fetch(uri);
+        const data = await resp.json();
+        if (!data.ok) return;
+        CI_currentPage = p;
+        document.getElementById('ci-tbody').innerHTML = data.rows;
+        document.getElementById('ci-pagination').innerHTML = data.pagination;
+        document.getElementById('ci-pagination-info').textContent = data.info;
+        document.getElementById('ci-btn-pdf').href = data.pdf_url;
+        document.getElementById('ci-btn-excel').href = data.excel_url;
+
+        // Los íconos (incluida la prioridad 1/2/3 del orden múltiple) los repinta
+        // el motor global; aquí solo se le pide que se refresque.
+        if (CI_sorter) CI_sorter.refreshIcons();
+    } catch (e) {
+        console.error('Error en búsqueda de cargas de inventario:', e);
+    }
+};
 
 function CI_abrirImportar() {
     document.getElementById('ci-importar-msg').innerHTML = '';
@@ -352,4 +441,14 @@ function CI_eliminar() {
     if (!CI_cargaActual) return;
     CI_accion(`${CI_URL}/eliminarAjax`, `id=${CI_cargaActual.id}`, '¿Eliminar esta carga?');
 }
+
+// multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+// (ASC → DESC → fuera del orden), con la prioridad numerada en cada encabezado.
+// reload:false porque CI_buscar repinta todo lo que depende del orden.
+CI_sorter = window.CMG_initSort('<?= $rutaModulo ?>', (col, dir, sorts) => {
+    CI_currentSort  = col;
+    CI_currentDir   = dir;
+    CI_currentSorts = sorts;
+    CI_buscar(1);
+}, { sorts: CI_currentSorts, multi: true, container: '.cargas-scroll', reload: false });
 </script>
