@@ -6,7 +6,7 @@ ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
 etiquetas: pedidos, pedido de cliente, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes
-version: 1.1
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -46,7 +46,11 @@ Los pedidos son por empresa: solo se ven los de la empresa activa.
 3. Ponga la **fecha del pedido**, la **fecha de entrega** y el **rango horario**
    (hora inicial y hora máxima).
 4. Elija el **responsable de entrega**.
-5. Agregue los **productos** con su cantidad. No se piden precios.
+5. Agregue los **productos** con su cantidad. No se piden precios. Escriba dos o más
+   caracteres en **Código** o en **Descripción** y aparece la lista de coincidencias
+   del catálogo; toque o haga clic en una para cargarla en la línea. En el celular,
+   si el teclado tapa el campo, la lista se muestra igualmente: aparece a lo ancho de
+   la pantalla, justo encima del teclado.
 6. Guarde. El pedido nace en estado **Pendiente**.
 7. Para modificarlo, haga clic en la fila del listado.
 
@@ -148,9 +152,18 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
   en el pasado; corrija la fecha.
 - **La descarga pide acotar la búsqueda**: el listado supera las 500 filas. Use el
   buscador (por ejemplo, un rango de fechas) y vuelva a exportar.
+- **En el celular no aparece la lista de productos al buscar**: si su navegador
+  quedó con la versión anterior guardada en caché, ciérrelo y vuelva a abrirlo (o
+  recargue la pantalla). Resuelto en la versión 1.2.
 
 ## Historial de cambios
 
+- **1.2** — En el celular, la lista de productos ya no desaparece al buscar por
+  código o descripción. Antes, cuando el teclado tapaba el campo del detalle —lo
+  habitual, porque la tabla de productos queda en la parte baja del formulario— la
+  lista se ocultaba y se escribía sin ver ningún resultado. Ahora se muestra a lo
+  ancho de la pantalla, justo encima del teclado, y al tocar el campo el formulario
+  lo sube para que se vea lo que se escribe.
 - **1.1** — El listado abre ordenado por fecha de emisión, del más reciente al más
   antiguo (antes, por número de pedido ascendente). La columna por la que se está
   ordenando ahora se distingue con su flecha desde que se abre la pantalla, y

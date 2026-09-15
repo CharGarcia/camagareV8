@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar
-version: 1.12
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos
+version: 1.13
 orden: 50
 estado: activo
 ---
@@ -34,36 +34,56 @@ va a buscar la deuda.
 
 ## Vista "Por proveedor": la deuda como el mayor de una cuenta
 
-El botón **Por proveedor** presenta la deuda con la misma forma que el **mayor de
-una cuenta contable**: una sección por proveedor, con su identificación y su
-nombre en la cabecera, debajo **todos sus documentos** y, al cerrar la sección,
-una fila de **SUBTOTAL** con el total, lo pagado, las NC/retenciones y el saldo
-de ese proveedor. Al final del listado va la fila **TOTAL GENERAL**.
+El botón **Por proveedor** resume la deuda en **una línea por proveedor**: su
+identificación, cuántos documentos tiene y sus totales —total, NC, abonos,
+retenciones y, sobre todo, el **saldo por pagar** de ese proveedor, en rojo
+mientras se le deba algo—. Al desplegar una línea se lee como el **mayor de una
+cuenta contable**: los documentos del proveedor y, cerrando la sección, una fila
+de **SUBTOTAL**. Al final del listado va la fila **TOTAL GENERAL**.
 
-- Las secciones aparecen **desplegadas**, como se lee un mayor. Si un proveedor
-  estorba, se pliega con un clic en su cabecera (su subtotal sigue a la vista).
+- El listado arranca **plegado**: de un vistazo se ve cuánto se le debe a cada
+  proveedor. Un clic en su línea despliega los documentos y otro la vuelve a
+  plegar; el saldo del proveedor se sigue viendo en los dos estados.
+
+**El detalle de cada proveedor** no repite las columnas del listado general (el
+proveedor ya es la cabecera de la sección): muestra **fecha, n. de documento,
+total, NC, abonos, retenciones, saldo y días**.
+
+| Columna | Qué muestra |
+|---|---|
+| Fecha | Fecha de emisión del documento. |
+| N. Documento | Número del comprobante. Las liquidaciones, importaciones y saldos iniciales llevan una marca (`LIQ`, `IMP`, `SI`); las facturas de compra no. En consolidado antecede el código del establecimiento. |
+| Total | Valor del documento. Si tuvo **nota de débito**, se indica al lado (`+valor`), porque esa nota suma al saldo. |
+| NC | Notas de crédito del proveedor aplicadas al documento. |
+| Abonos | Pagos realizados (egresos). |
+| Retenciones | Retenciones practicadas al proveedor. |
+| Saldo | Lo que falta pagar: total + ND − NC − abonos − retenciones. En rojo si hay saldo. |
+| Días | Días vencidos (en rojo); si aún no vence, muestra `—` y la fecha de vencimiento al pasar el mouse. |
+
 - Dentro de cada proveedor los documentos van en **orden cronológico** por fecha
   de emisión; los proveedores se ordenan por **saldo**, al que más se le debe
   primero.
-- Cada documento conserva sus acciones normales (pagar, historial) y su estado
-  (vigente, vencida o pagada).
+- Cada documento conserva sus acciones normales (pagar, historial).
 - Un proveedor cargado dos veces —con la cédula y con el RUC— forma **una sola
   sección** (ver *Un mismo proveedor registrado con cédula y con RUC*).
 
 ### PDF y Excel de esta vista
 
 Con la vista **Por proveedor** activa, los botones **PDF** y **Excel** salen con
-esa misma estructura, no como lista plana:
+esa misma estructura, no como lista plana. A diferencia de la pantalla, en el
+archivo **todas las secciones salen desplegadas** (con su detalle), esté como
+esté el listado en ese momento:
 
 - **PDF**: cabecera con la identificación y el nombre del proveedor, la tabla de
-  sus documentos (documento y tipo, emisión, vencimiento, total, pagado/ret/NC y
-  saldo), la fila **SUBTOTAL** del proveedor y, al cierre del reporte, el **TOTAL
-  GENERAL**. Arriba se mantienen los filtros aplicados y las tarjetas de resumen.
+  sus documentos con **las mismas columnas de la pantalla** (fecha, n. de
+  documento, total, NC, abonos, retenciones, saldo y días), la fila **SUBTOTAL**
+  del proveedor y, al cierre del reporte, el **TOTAL GENERAL**. Arriba se
+  mantienen los filtros aplicados y las tarjetas de resumen.
 - **Excel**: una **sección por proveedor** (título con su identificación, nombre
-  y número de documentos), sus documentos con el desglose completo —abonos, notas
-  de crédito, retenciones, pagado y saldo—, la fila **SUBTOTAL** y el **TOTAL
-  GENERAL** al final de la hoja. El proveedor no va como columna: es el título de
-  la sección, igual que la cuenta en el mayor.
+  y número de documentos), sus documentos con esas mismas columnas —más *Tipo* y
+  *Estado*, que en una hoja de cálculo no estorban—, la fila **SUBTOTAL** y el
+  **TOTAL GENERAL** al final de la hoja. El proveedor no va como columna: es el
+  título de la sección, igual que la cuenta en el mayor.
 - En **consolidado por RUC** ambos archivos agregan la columna **Estab.** con el
   establecimiento dueño de cada documento.
 - Para la lista plana de siempre (una fila por documento, con proveedor y RUC
@@ -253,10 +273,18 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
-- **1.12** — La vista **Por proveedor** ahora se presenta como el **mayor de una
-  cuenta**: secciones desplegadas por proveedor, fila de **SUBTOTAL** al cerrar
-  cada una y **TOTAL GENERAL** al final; el **PDF** y el **Excel** de esa vista
-  salen con la misma estructura (antes salían siempre como lista plana). Además,
+- **1.13** — El **detalle de cada proveedor** (vista *Por proveedor*) pasa a
+  mostrar **fecha, n. de documento, total, NC, abonos, retenciones, saldo y
+  días** —con NC y retenciones separadas, antes iban sumadas en una sola columna
+  *NC/Ret.*—, en vez de repetir las columnas del listado general; el **PDF** y el
+  **Excel** de esa vista salen con las mismas columnas. Mismo cambio que en
+  Cuentas por Cobrar.
+- **1.12** — La vista **Por proveedor** ahora se lee como el **mayor de una
+  cuenta**: cada proveedor es una línea con su **saldo por pagar** y, al
+  desplegarla, aparecen sus documentos cerrados con una fila de **SUBTOTAL**;
+  al final del listado, el **TOTAL GENERAL**. El **PDF** y el **Excel** de esa
+  vista salen con la misma estructura (antes salían siempre como lista plana,
+  y en pantalla la agrupación no mostraba subtotales ni total general). Además,
   al entrar al módulo **ya no se carga nada**: el listado se consulta al
   presionar **Aplicar Filtros**. Nuevas secciones *El listado se consulta al
   presionar Aplicar Filtros* y *Vista "Por proveedor": la deuda como el mayor de

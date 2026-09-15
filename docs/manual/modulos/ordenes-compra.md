@@ -6,7 +6,7 @@ ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.11
+version: 1.12
 orden: 15
 estado: activo
 ---
@@ -273,6 +273,10 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.12** — En el celular, la lista de productos ya no desaparece al buscar
+  por código o descripción. Cuando el teclado tapa el campo del detalle —la tabla
+  de productos queda en la parte baja del formulario— la lista se muestra
+  igualmente: a lo ancho de la pantalla, justo encima del teclado.
 - **1.11** — El número del documento puede numerarse **por fecha de emisión**,
   reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
   activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue

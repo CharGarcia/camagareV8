@@ -144,6 +144,9 @@ function CXP_renderTabla(filas) {
     const tbody = document.getElementById('cxp-tbody');
     const label = document.getElementById('cxp-count-label');
 
+    // Las columnas dependen de la vista: la de "Por proveedor" muestra otro detalle.
+    CXP_renderCabecera();
+
     // Todavía sin aplicar: la tabla muestra la invitación a filtrar, no "sin resultados".
     if (!CXP_cargado) { CXP_estadoInicial(); return; }
 
@@ -179,7 +182,6 @@ function CXP_filaHtml(r) {
         const pagada  = saldo <= 0.001;
         // Consolidado: documento de OTRO establecimiento del RUC → solo lectura
         const esHermana  = !!r.es_hermana;
-        const idEmpresa  = parseInt(r.id_empresa) || 0;
         const estabTxt   = `${r.establecimiento || ''}${r.empresa_nombre ? ' - ' + r.empresa_nombre : ''}`;
         const estabBadge = (CXP_consolidado && r.establecimiento)
             ? `<span class="badge ${esHermana ? 'bg-info bg-opacity-10 text-info border-info' : 'bg-primary bg-opacity-10 text-primary border-primary'} border border-opacity-25 me-1 fw-normal" style="font-size:.65rem;" title="${cxpEsc(estabTxt)}">${cxpEsc(r.establecimiento)}</span>`
@@ -271,7 +273,19 @@ function CXP_filaHtml(r) {
             <td class="text-center">${badgeHtml}</td>
 
             <!-- Acciones -->
-            <td class="text-center">
+            <td class="text-center">${CXP_accionesHtml(r)}</td>
+        </tr>`;
+}
+
+/* Botonera de un documento (pagar, historial). La comparten la fila detallada y la fila del
+   detalle por proveedor, para no duplicar las reglas de permisos del consolidado. */
+function CXP_accionesHtml(r) {
+    const pagada    = (parseFloat(r.saldo) || 0) <= 0.001;
+    const esHermana = !!r.es_hermana;
+    const idEmpresa = parseInt(r.id_empresa) || 0;
+    const estabTxt  = `${r.establecimiento || ''}${r.empresa_nombre ? ' - ' + r.empresa_nombre : ''}`;
+
+    return `
                 <div class="d-flex justify-content-center gap-1">
                     ${(!pagada && esHermana && r.puede_operar) ? `
                     <button class="btn btn-primary btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar pago en el establecimiento ${cxpEsc(estabTxt)}"
@@ -292,22 +306,121 @@ function CXP_filaHtml(r) {
                             onclick="CXP_abrirHistorial(${r.id}, '${r.tipo_fuente}', '${cxpEsc(r.numero_documento)}', ${idEmpresa})">
                         <i class="bi bi-clock-history"></i>
                     </button>
-                </div>
-            </td>
+                </div>`;
+}
+
+/* ════════════════════════════════════════════════════
+   CABECERA DE LA TABLA SEGÚN LA VISTA
+   Detallado usa las columnas de siempre. En "Por proveedor"
+   el proveedor ya es la cabecera de la sección, así que su
+   detalle muestra lo que hace falta dentro del proveedor:
+   fecha, documento, total, NC, abonos, retenciones, saldo
+   y días vencidos.
+════════════════════════════════════════════════════ */
+const CXP_COLS_ESTANDAR = `
+    <col style="width:165px;"><col style="width:120px;"><col><col style="width:92px;">
+    <col style="width:108px;"><col style="width:98px;"><col style="width:88px;">
+    <col style="width:82px;"><col style="width:102px;"><col style="width:128px;"><col style="width:80px;">`;
+const CXP_TH_ESTANDAR = `
+    <tr>
+        <th class="ps-2">Documento</th>
+        <th class="text-center">Origen</th>
+        <th>Proveedor</th>
+        <th class="text-center">F.Emisión</th>
+        <th class="text-center">F.Vencimiento</th>
+        <th class="text-end">Total</th>
+        <th class="text-end">Pagado</th>
+        <th class="text-end" title="Notas de Crédito / Retenciones">NC/Ret.</th>
+        <th class="text-end pe-2 fw-bold">Saldo</th>
+        <th class="text-center">Estado</th>
+        <th class="text-center">Acciones</th>
+    </tr>`;
+const CXP_COLS_MAYOR = `
+    <col style="width:100px;"><col><col style="width:105px;"><col style="width:95px;">
+    <col style="width:100px;"><col style="width:105px;"><col style="width:110px;">
+    <col style="width:70px;"><col style="width:80px;">`;
+const CXP_TH_MAYOR = `
+    <tr>
+        <th class="ps-2">Fecha</th>
+        <th>N. Documento</th>
+        <th class="text-end">Total</th>
+        <th class="text-end" title="Notas de crédito del proveedor">NC</th>
+        <th class="text-end" title="Pagos realizados">Abonos</th>
+        <th class="text-end" title="Retenciones practicadas al proveedor">Retenciones</th>
+        <th class="text-end pe-2 fw-bold">Saldo</th>
+        <th class="text-center" title="Días vencidos">Días</th>
+        <th class="text-center">Acciones</th>
+    </tr>`;
+
+function CXP_renderCabecera() {
+    const cg = document.getElementById('cxp-colgroup');
+    const th = document.getElementById('cxp-thead');
+    if (!cg || !th) return;
+    cg.innerHTML = CXP_agrupado ? CXP_COLS_MAYOR : CXP_COLS_ESTANDAR;
+    th.innerHTML = CXP_agrupado ? CXP_TH_MAYOR   : CXP_TH_ESTANDAR;
+}
+
+/* Fila de un documento dentro de la sección de su proveedor (vista "Por proveedor"):
+   fecha, documento, total, NC, abonos, retenciones, saldo y días vencidos. */
+function CXP_filaMayorHtml(r) {
+    const dias   = parseInt(r.dias_vencido) || 0;
+    const saldo  = parseFloat(r.saldo) || 0;
+    const total  = parseFloat(r.total) || 0;
+    const nc     = parseFloat(r.total_nc) || 0;
+    const nd     = parseFloat(r.total_nd) || 0;
+    const abonos = parseFloat(r.total_pagado) || 0;
+    const ret    = parseFloat(r.total_retenido) || 0;
+    const esHermana = !!r.es_hermana;
+
+    let rowClass = '';
+    if (saldo > 0.001 && dias > 90)      rowClass = 'table-danger';
+    else if (saldo > 0.001 && dias > 30) rowClass = 'table-warning';
+
+    // El tipo de documento no tiene columna propia: una factura de compra no lleva marca y
+    // los demás sí, que son los casos que conviene distinguir de un vistazo.
+    const estabTxt   = `${r.establecimiento || ''}${r.empresa_nombre ? ' - ' + r.empresa_nombre : ''}`;
+    const estabBadge = (CXP_consolidado && r.establecimiento)
+        ? `<span class="badge ${esHermana ? 'bg-info bg-opacity-10 text-info border-info' : 'bg-primary bg-opacity-10 text-primary border-primary'} border border-opacity-25 me-1 fw-normal" style="font-size:.65rem;" title="${cxpEsc(estabTxt)}">${cxpEsc(r.establecimiento)}</span>`
+        : '';
+    const tipos = { LIQUIDACION: ['LIQ', 'badge-liquid', 'Liquidación de compra'],
+                    IMPORTACION: ['IMP', 'badge-importacion', 'Importación'],
+                    SALDO_INICIAL: ['SI', 'badge-proxima', 'Saldo inicial de apertura'] };
+    const t = tipos[r.tipo_fuente];
+    const tipoBadge = t ? `<span class="badge ${t[1]} me-1 fw-normal" style="font-size:.65rem;" title="${t[2]}">${t[0]}</span>` : '';
+
+    // La nota de débito suma al documento: se avisa junto al total para que
+    // total − NC − abonos − retenciones siga cuadrando con el saldo.
+    const ndTxt = nd > 0 ? ` <span class="text-muted" style="font-size:.68rem;" title="Nota de débito sumada al documento">+${CXP_fmt(nd)}</span>` : '';
+
+    const diasTxt = dias > 0
+        ? `<span class="fw-bold" style="color:#dc3545;" title="Venció el ${CXP_fmtFecha(r.fecha_vencimiento)}">${dias}</span>`
+        : `<span class="text-muted" title="Vence el ${CXP_fmtFecha(r.fecha_vencimiento)}">—</span>`;
+
+    return `
+        <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle" data-id="${r.id}" data-tipo="${r.tipo_fuente}">
+            <td class="ps-2" style="font-size:.78rem;white-space:nowrap;">${CXP_fmtFecha(r.fecha_emision)}</td>
+            <td class="fw-semibold text-truncate" title="${cxpEsc(r.numero_documento)}" style="font-size:.8rem;">${estabBadge}${tipoBadge}${cxpEsc(r.numero_documento)}</td>
+            <td class="text-end" style="font-size:.78rem;white-space:nowrap;">$${CXP_fmt(total)}${ndTxt}</td>
+            <td class="text-end" style="font-size:.78rem;white-space:nowrap;">${nc > 0.001 ? '$' + CXP_fmt(nc) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end text-success" style="font-size:.78rem;white-space:nowrap;">${abonos > 0.001 ? '$' + CXP_fmt(abonos) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end" style="font-size:.78rem;white-space:nowrap;">${ret > 0.001 ? '$' + CXP_fmt(ret) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end fw-bold pe-2" style="font-size:.82rem;white-space:nowrap;color:${saldo > 0.001 ? '#dc3545' : '#198754'};">$${CXP_fmt(saldo > 0 ? saldo : 0)}</td>
+            <td class="text-center" style="font-size:.78rem;white-space:nowrap;">${diasTxt}</td>
+            <td class="text-center">${CXP_accionesHtml(r)}</td>
         </tr>`;
 }
 
 /* ════════════════════════════════════════════════════
    VISTA AGRUPADA POR PROVEEDOR — formato "mayor"
-   Se lee como el mayor de una cuenta contable: una sección
-   por proveedor (cabecera con su nombre e identificación),
-   sus documentos desplegados debajo, una fila de SUBTOTAL al
-   cerrar cada sección y un TOTAL GENERAL al final. El PDF y
-   el Excel de esta vista reproducen la misma estructura.
+   El listado arranca PLEGADO: una línea por proveedor con sus
+   totales. Al desplegar una, se lee como el mayor de una cuenta
+   contable: los documentos del proveedor y, cerrando la sección,
+   su fila de SUBTOTAL. Al final del listado, el TOTAL GENERAL.
+   El PDF y el Excel salen siempre con el detalle desplegado.
 ════════════════════════════════════════════════════ */
-/* Secciones PLEGADAS de la vista por proveedor: un mayor se lee desplegado, así que
-   todas arrancan abiertas y el set recuerda solo las que el usuario pliega. */
-const CXP_proveedoresCerrados = new Set();
+/* Secciones DESPLEGADAS de la vista por proveedor: el listado arranca plegado —una línea
+   por proveedor con sus totales— y el set recuerda las que el usuario abre. */
+const CXP_proveedoresAbiertos = new Set();
 
 /* Agrupa las filas por proveedor. La clave es la identificación BASE, no el texto del RUC:
    el proveedor registrado dos veces —con la cédula y con el RUC, que es esa cédula + '001'—
@@ -318,17 +431,16 @@ function CXP_agruparPorProveedor(filas) {
         const key = IdentificacionTercero.claveGrupo(r.proveedor_ruc, r.proveedor_nombre || 'Sin proveedor');
         let g = mapa.get(key);
         if (!g) {
-            g = { key, nombre: r.proveedor_nombre || 'Sin proveedor', ruc: r.proveedor_ruc || '', items: [], total: 0, pagado: 0, ncret: 0, saldo: 0 };
+            g = { key, nombre: r.proveedor_nombre || 'Sin proveedor', ruc: r.proveedor_ruc || '', items: [],
+                  total: 0, nc: 0, abonos: 0, retenciones: 0, saldo: 0 };
             mapa.set(key, g);
         }
-        const nc  = parseFloat(r.total_nc       || 0);
-        const nd  = parseFloat(r.total_nd       || 0);
-        const ret = parseFloat(r.total_retenido || 0);
         g.items.push(r);
-        g.total  += parseFloat(r.total)        || 0;
-        g.pagado += parseFloat(r.total_pagado) || 0;
-        g.ncret  += (nc + ret - nd);
-        g.saldo  += parseFloat(r.saldo)        || 0;
+        g.total       += parseFloat(r.total)          || 0;
+        g.nc          += parseFloat(r.total_nc)       || 0;
+        g.abonos      += parseFloat(r.total_pagado)   || 0;
+        g.retenciones += parseFloat(r.total_retenido) || 0;
+        g.saldo       += parseFloat(r.saldo)          || 0;
     }
     // Dentro de cada proveedor los documentos van en orden cronológico (como los movimientos
     // de un mayor); entre proveedores manda el saldo, al que más se le debe primero.
@@ -347,47 +459,60 @@ function CXP_renderAgrupado(filas) {
 
     label.textContent = `${filas.length} docs · ${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''}`;
 
-    let tTotal = 0, tPagado = 0, tNcret = 0, tSaldo = 0;
+    // Columnas de esta vista: Fecha | N. Documento | Total | NC | Abonos | Retenciones |
+    // Saldo | Días | Acciones (ver CXP_TH_MAYOR).
+    let tTotal = 0, tNc = 0, tAbonos = 0, tRet = 0, tSaldo = 0;
     let html = '';
     for (const g of grupos) {
         tTotal  += g.total;
-        tPagado += g.pagado;
-        tNcret  += g.ncret;
+        tNc     += g.nc;
+        tAbonos += g.abonos;
+        tRet    += g.retenciones;
         tSaldo  += g.saldo;
 
-        const cerrado = CXP_proveedoresCerrados.has(g.key);
-        const chev    = cerrado ? 'bi-chevron-right' : 'bi-chevron-down';
+        const abierto = CXP_proveedoresAbiertos.has(g.key);
+        const chev    = abierto ? 'bi-chevron-down' : 'bi-chevron-right';
+        const importes = () => `
+            <td class="text-end" style="font-size:.8rem;">$${CXP_fmt(g.total)}</td>
+            <td class="text-end" style="font-size:.8rem;">${g.nc > 0.001 ? '$' + CXP_fmt(g.nc) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end text-success" style="font-size:.8rem;">${g.abonos > 0.001 ? '$' + CXP_fmt(g.abonos) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end" style="font-size:.8rem;">${g.retenciones > 0.001 ? '$' + CXP_fmt(g.retenciones) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end pe-2" style="font-size:.82rem;color:${g.saldo > 0.001 ? '#dc3545' : '#198754'};">$${CXP_fmt(g.saldo > 0 ? g.saldo : 0)}</td>`;
+
+        // Cabecera del proveedor: siempre lleva sus totales, así plegada lo resume en una
+        // línea. Al desplegarla salen sus documentos y se cierra con la fila de SUBTOTAL.
         html += `
-        <tr class="cxp-mayor-grp" data-gkey="${cxpEsc(g.key)}" onclick="CXP_toggleProveedor(this)" style="cursor:pointer;" title="Clic para plegar o desplegar este proveedor">
-            <td colspan="11" class="ps-2 fw-bold" style="font-size:.82rem;">
+        <tr class="cxp-mayor-grp" data-gkey="${cxpEsc(g.key)}" onclick="CXP_toggleProveedor(this)" style="cursor:pointer;" title="Clic para desplegar o plegar los documentos de este proveedor">
+            <td colspan="2" class="ps-2 fw-bold text-truncate" title="${cxpEsc(g.nombre)}${g.ruc ? ' · ' + cxpEsc(g.ruc) : ''}" style="font-size:.82rem;">
                 <i class="bi ${chev} text-primary me-1"></i>${cxpEsc(g.nombre)}
                 ${g.ruc ? `<span class="text-muted fw-normal ms-1">${cxpEsc(g.ruc)}</span>` : ''}
-                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2 fw-normal">${g.items.length} doc${g.items.length !== 1 ? 's' : ''}</span>
             </td>
+            ${importes()}
+            <td class="text-center" style="font-size:.72rem;">
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fw-normal" title="${g.items.length} documento${g.items.length !== 1 ? 's' : ''}">${g.items.length}</span>
+            </td>
+            <td></td>
         </tr>`;
 
-        if (!cerrado) {
-            for (const r of g.items) html += CXP_filaHtml(r);
-        }
-
-        html += `
+        if (abierto) {
+            for (const r of g.items) html += CXP_filaMayorHtml(r);
+            html += `
         <tr class="cxp-mayor-sub">
-            <td colspan="5" class="text-end" style="font-size:.78rem;">SUBTOTAL ${cxpEsc(g.nombre)}</td>
-            <td class="text-end" style="font-size:.8rem;">$${CXP_fmt(g.total)}</td>
-            <td class="text-end text-success" style="font-size:.8rem;">${g.pagado > 0 ? '$' + CXP_fmt(g.pagado) : '<span class="text-muted">—</span>'}</td>
-            <td class="text-end" style="font-size:.78rem;">${g.ncret > 0.001 ? '$' + CXP_fmt(g.ncret) : '<span class="text-muted">—</span>'}</td>
-            <td class="text-end pe-2" style="font-size:.82rem;color:${g.saldo > 0.001 ? '#dc3545' : '#198754'};">$${CXP_fmt(g.saldo > 0 ? g.saldo : 0)}</td>
+            <td colspan="2" class="text-end" style="font-size:.78rem;">SUBTOTAL ${cxpEsc(g.nombre)}</td>
+            ${importes()}
             <td colspan="2"></td>
         </tr>
-        <tr class="cxp-mayor-gap"><td colspan="11"></td></tr>`;
+        <tr class="cxp-mayor-gap"><td colspan="9"></td></tr>`;
+        }
     }
 
     html += `
         <tr class="cxp-mayor-total">
-            <td colspan="5" class="text-end" style="font-size:.8rem;">TOTAL GENERAL (${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''})</td>
+            <td colspan="2" class="text-end" style="font-size:.8rem;">TOTAL GENERAL (${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''})</td>
             <td class="text-end" style="font-size:.82rem;">$${CXP_fmt(tTotal)}</td>
-            <td class="text-end text-success" style="font-size:.82rem;">${tPagado > 0 ? '$' + CXP_fmt(tPagado) : '<span class="text-muted">—</span>'}</td>
-            <td class="text-end" style="font-size:.8rem;">${tNcret > 0.001 ? '$' + CXP_fmt(tNcret) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end" style="font-size:.82rem;">${tNc > 0.001 ? '$' + CXP_fmt(tNc) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end text-success" style="font-size:.82rem;">${tAbonos > 0.001 ? '$' + CXP_fmt(tAbonos) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end" style="font-size:.82rem;">${tRet > 0.001 ? '$' + CXP_fmt(tRet) : '<span class="text-muted">—</span>'}</td>
             <td class="text-end pe-2" style="font-size:.85rem;color:${tSaldo > 0.001 ? '#dc3545' : '#198754'};">$${CXP_fmt(tSaldo > 0 ? tSaldo : 0)}</td>
             <td colspan="2"></td>
         </tr>`;
@@ -395,11 +520,11 @@ function CXP_renderAgrupado(filas) {
     tbody.innerHTML = html;
 }
 
-/* Pliega/despliega la sección de un proveedor (el set guarda las cerradas). */
+/* Despliega/pliega la sección de un proveedor (el set guarda las abiertas). */
 function CXP_toggleProveedor(el) {
     const k = el.getAttribute('data-gkey');
-    if (CXP_proveedoresCerrados.has(k)) CXP_proveedoresCerrados.delete(k);
-    else CXP_proveedoresCerrados.add(k);
+    if (CXP_proveedoresAbiertos.has(k)) CXP_proveedoresAbiertos.delete(k);
+    else CXP_proveedoresAbiertos.add(k);
     CXP_renderTabla(CXP_filtradoLocal);
 }
 

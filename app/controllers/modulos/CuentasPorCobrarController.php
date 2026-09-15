@@ -386,7 +386,9 @@ class CuentasPorCobrarController extends BaseModuloController
      * Excel de la vista "Por cliente": misma estructura que el mayor de una cuenta contable —
      * una sección por cliente (subtítulo con su identificación y nombre, más los encabezados
      * repetidos), sus documentos, una fila de SUBTOTAL al cerrar la sección y un TOTAL GENERAL
-     * al final de la hoja. El cliente no va como columna: es el título de la sección.
+     * al final de la hoja. El cliente no va como columna: es el título de la sección, y el
+     * detalle es el mismo que se ve en pantalla dentro de cada cliente (fecha, documento,
+     * total, NC, abonos, retenciones, saldo, días y asesor).
      */
     private function exportExcelPorCliente(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
     {
@@ -396,52 +398,46 @@ class CuentasPorCobrarController extends BaseModuloController
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
             $filtrosTxt    = ['Vista' => 'Por cliente (formato mayor)'] + $this->describirFiltros($idsEmpresa, $filtros);
 
-            $headers = ['Documento', 'Origen', 'Vendedor', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos',
-                        'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
+            $headers = ['Fecha', 'N. Documento', 'Origen', 'Total', 'NC', 'Abonos', 'Retenciones',
+                        'Saldo', 'Días Vencidos', 'Asesor', 'Estado'];
             if ($consolidado) {
                 array_unshift($headers, 'Estab.');
             }
             // La etiqueta de SUBTOTAL/TOTAL va en la última columna de texto antes de los
             // importes (igual que en el mayor): a su izquierda quedan celdas vacías.
-            $huecos = $consolidado ? 6 : 5;
+            $huecos = $consolidado ? 3 : 2;
 
             $secciones  = [];
             $totTotal   = 0.0;
-            $totAbonos  = 0.0;
             $totNc      = 0.0;
+            $totAbonos  = 0.0;
             $totRet     = 0.0;
-            $totCobrado = 0.0;
             $totSaldo   = 0.0;
 
             foreach ($grupos as $g) {
-                $totTotal   += $g['total'];
-                $totAbonos  += $g['abonos'];
-                $totNc      += $g['nc'];
-                $totRet     += $g['retenciones'];
-                $totCobrado += $g['cobrado'];
-                $totSaldo   += $g['saldo'];
+                $totTotal  += $g['total'];
+                $totNc     += $g['nc'];
+                $totAbonos += $g['abonos'];
+                $totRet    += $g['retenciones'];
+                $totSaldo  += $g['saldo'];
 
                 $filasSec = [];
                 foreach ($g['items'] as $r) {
-                    $dias   = (int)($r['dias_vencido'] ?? 0);
-                    $abonos = (float)($r['total_cobrado'] ?? 0);
-                    $nc     = (float)($r['total_nc'] ?? 0);
-                    $ret    = (float)($r['total_retenido'] ?? 0);
+                    $dias  = (int)($r['dias_vencido'] ?? 0);
+                    $saldo = (float)($r['saldo'] ?? 0);
                     $filasSec[] = [
                         ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
+                        $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
                         (string)($r['numero_factura'] ?? ''),
                         $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
-                        (string)($r['vendedor_nombre'] ?? ''),
-                        $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
-                        $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
+                        round((float)($r['total'] ?? 0), 2),
+                        round((float)($r['total_nc'] ?? 0), 2),
+                        round((float)($r['total_cobrado'] ?? 0), 2),
+                        round((float)($r['total_retenido'] ?? 0), 2),
+                        round($saldo, 2),
                         $dias > 0 ? $dias : 0,
-                        round((float)$r['total'], 2),
-                        round($abonos, 2),
-                        round($nc, 2),
-                        round($ret, 2),
-                        round($abonos + $nc + $ret, 2),
-                        round((float)$r['saldo'], 2),
-                        $dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE',
+                        (string)($r['vendedor_nombre'] ?? ''),
+                        $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE'),
                     ];
                 }
 
@@ -455,8 +451,8 @@ class CuentasPorCobrarController extends BaseModuloController
                     'resumen' => [
                         ...array_fill(0, $huecos, ''),
                         'SUBTOTAL ' . $g['nombre'],
-                        round($g['total'], 2), round($g['abonos'], 2), round($g['nc'], 2),
-                        round($g['retenciones'], 2), round($g['cobrado'], 2), round($g['saldo'], 2), '',
+                        round($g['total'], 2), round($g['nc'], 2), round($g['abonos'], 2),
+                        round($g['retenciones'], 2), round($g['saldo'], 2), '', '', '',
                     ],
                 ];
             }
@@ -464,8 +460,8 @@ class CuentasPorCobrarController extends BaseModuloController
             $filaFinal = [
                 ...array_fill(0, $huecos, ''),
                 'TOTAL GENERAL (' . count($grupos) . ' cliente' . (count($grupos) !== 1 ? 's' : '') . ')',
-                round($totTotal, 2), round($totAbonos, 2), round($totNc, 2),
-                round($totRet, 2), round($totCobrado, 2), round($totSaldo, 2), '',
+                round($totTotal, 2), round($totNc, 2), round($totAbonos, 2),
+                round($totRet, 2), round($totSaldo, 2), '', '', '',
             ];
 
             (new \App\Services\ReportService())->exportToExcelSeccionado(
@@ -490,8 +486,9 @@ class CuentasPorCobrarController extends BaseModuloController
     /**
      * PDF de la vista "Por cliente": el listado sale como el mayor de una cuenta contable —
      * una sección por cliente (cabecera con su identificación y nombre), la tabla de sus
-     * documentos en orden cronológico, una fila de SUBTOTAL al cerrar la sección y, al final,
-     * el TOTAL GENERAL de la cartera. El cliente no va como columna: es la cabecera.
+     * documentos en orden cronológico con el mismo detalle que la pantalla (fecha, documento,
+     * total, NC, abonos, retenciones, saldo, días y asesor), una fila de SUBTOTAL al cerrar la
+     * sección y, al final, el TOTAL GENERAL de la cartera.
      */
     private function exportPdfPorCliente(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
     {
@@ -504,21 +501,25 @@ class CuentasPorCobrarController extends BaseModuloController
             $e = static fn ($v): string => htmlspecialchars((string)$v);
 
             // Anchos por columna (table-layout: fixed, deben sumar 100%). La columna del
-            // establecimiento solo aparece en consolidado y le resta ancho al vendedor.
+            // establecimiento solo aparece en consolidado y le resta ancho al asesor.
             $wEst   = $consolidado ? 6 : 0;
-            $wVen   = 16 - $wEst;
-            $wEtq   = 66;                        // ancho del texto que une la fila de SUBTOTAL/TOTAL
-            $colEtq = $consolidado ? 6 : 5;      // columnas de texto que abarca esa fila
+            $wAse   = 20 - $wEst;
+            $wEtq   = 26 + $wEst;                // Fecha + N. Documento (+ Estab.)
+            $colEtq = $consolidado ? 3 : 2;      // columnas de texto que une la fila de SUBTOTAL
 
-            $totTotal   = 0.0;
-            $totCobrado = 0.0;
-            $totSaldo   = 0.0;
-            $cuerpo     = '';
+            $totTotal  = 0.0;
+            $totNc     = 0.0;
+            $totAbonos = 0.0;
+            $totRet    = 0.0;
+            $totSaldo  = 0.0;
+            $cuerpo    = '';
 
             foreach ($grupos as $g) {
-                $totTotal   += $g['total'];
-                $totCobrado += $g['cobrado'];
-                $totSaldo   += $g['saldo'];
+                $totTotal  += $g['total'];
+                $totNc     += $g['nc'];
+                $totAbonos += $g['abonos'];
+                $totRet    += $g['retenciones'];
+                $totSaldo  += $g['saldo'];
 
                 $nDocs  = count($g['items']);
                 $titulo = trim(($g['ruc'] !== '' ? $g['ruc'] . ' - ' : '') . $g['nombre']);
@@ -530,43 +531,53 @@ class CuentasPorCobrarController extends BaseModuloController
 
                 $cuerpo .= "<table><thead><tr>"
                     . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
-                    . "<th style='width:14%;'>Documento</th>"
-                    . "<th style='width:9%;'>Origen</th>"
-                    . "<th style='width:{$wVen}%;'>Vendedor</th>"
-                    . "<th style='width:10%;'>F. Emisión</th>"
-                    . "<th style='width:17%;'>F. Vencimiento</th>"
-                    . "<th style='width:11%;'>Total</th>"
-                    . "<th style='width:11%;'>Cobrado</th>"
-                    . "<th style='width:12%;'>Saldo</th>"
+                    . "<th style='width:9%;'>Fecha</th>"
+                    . "<th style='width:17%;'>N. Documento</th>"
+                    . "<th style='width:10%;'>Total</th>"
+                    . "<th style='width:9%;'>NC</th>"
+                    . "<th style='width:10%;'>Abonos</th>"
+                    . "<th style='width:10%;'>Retenciones</th>"
+                    . "<th style='width:10%;'>Saldo</th>"
+                    . "<th style='width:5%;'>Días</th>"
+                    . "<th style='width:{$wAse}%;'>Asesor</th>"
                     . "</tr></thead><tbody>";
 
                 foreach ($g['items'] as $r) {
-                    $dias  = (int)($r['dias_vencido'] ?? 0);
-                    $ts    = (float)($r['total'] ?? 0);
-                    // "Cobrado" = abonos + retenciones + notas de crédito aplicadas
-                    $tc    = (float)($r['total_cobrado'] ?? 0) + (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
-                    $tsal  = (float)($r['saldo'] ?? 0);
-                    $badge = $dias > 0 ? "<small style='font-weight:bold;'> ({$dias}d vencida)</small>" : "<small>Vigente</small>";
-                    $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
-                    $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
+                    $dias   = (int)($r['dias_vencido'] ?? 0);
+                    $ts     = (float)($r['total'] ?? 0);
+                    $nc     = (float)($r['total_nc'] ?? 0);
+                    $nd     = (float)($r['total_nd'] ?? 0);
+                    $abonos = (float)($r['total_cobrado'] ?? 0);
+                    $ret    = (float)($r['total_retenido'] ?? 0);
+                    $tsal   = (float)($r['saldo'] ?? 0);
+                    $color  = $dias > 0 && $tsal > 0 ? 'color:#dc3545;' : '';
+                    $fEmis  = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
+                    // La nota de débito suma al documento: se avisa junto al total para que
+                    // total − NC − abonos − retenciones siga cuadrando con el saldo.
+                    $ndTxt  = $nd > 0 ? " <small>+" . number_format($nd, 2) . "</small>" : '';
+                    $tipo   = ($r['origen'] ?? 'FACTURA') === 'FACTURA' ? '' : "<small style='color:#6c757d;'>" . $this->getOrigenLabel($r['origen'] ?? '') . "</small><br>";
                     $cuerpo .= "<tr>"
                         . ($consolidado ? "<td class='text-center' style='width:{$wEst}%;'>" . $e($r['establecimiento'] ?? '') . "</td>" : '')
-                        . "<td style='width:14%;'>" . $e($r['numero_factura'] ?? '') . "</td>"
-                        . "<td class='text-center' style='width:9%;'>" . $this->getOrigenLabel($r['origen'] ?? 'FACTURA') . "</td>"
-                        . "<td style='width:{$wVen}%;'>" . $e($r['vendedor_nombre'] ?? '') . "</td>"
-                        . "<td class='text-center' style='width:10%;'>{$fEmis}</td>"
-                        . "<td class='text-center' style='width:17%;'>{$fVenc} {$badge}</td>"
-                        . "<td class='text-end' style='width:11%;'>$" . number_format($ts, 2) . "</td>"
-                        . "<td class='text-end' style='width:11%;'>$" . number_format($tc, 2) . "</td>"
-                        . "<td class='text-end' style='width:12%;font-weight:bold;'>$" . number_format($tsal, 2) . "</td>"
+                        . "<td class='text-center' style='width:9%;'>{$fEmis}</td>"
+                        . "<td style='width:17%;'>{$tipo}" . $e($r['numero_factura'] ?? '') . "</td>"
+                        . "<td class='text-end' style='width:10%;'>$" . number_format($ts, 2) . "{$ndTxt}</td>"
+                        . "<td class='text-end' style='width:9%;'>" . ($nc > 0 ? '$' . number_format($nc, 2) : '—') . "</td>"
+                        . "<td class='text-end' style='width:10%;'>" . ($abonos > 0 ? '$' . number_format($abonos, 2) : '—') . "</td>"
+                        . "<td class='text-end' style='width:10%;'>" . ($ret > 0 ? '$' . number_format($ret, 2) : '—') . "</td>"
+                        . "<td class='text-end' style='width:10%;{$color}font-weight:bold;'>$" . number_format($tsal, 2) . "</td>"
+                        . "<td class='text-center' style='width:5%;{$color}'>" . ($dias > 0 ? $dias : '—') . "</td>"
+                        . "<td style='width:{$wAse}%;'>" . $e($r['vendedor_nombre'] ?? '') . "</td>"
                         . "</tr>";
                 }
 
                 $cuerpo .= "<tr class='sub'>"
                     . "<td colspan='{$colEtq}' class='text-end' style='width:{$wEtq}%;'>SUBTOTAL " . $e($g['nombre']) . "</td>"
-                    . "<td class='text-end' style='width:11%;'>$" . number_format($g['total'], 2) . "</td>"
-                    . "<td class='text-end' style='width:11%;'>$" . number_format($g['cobrado'], 2) . "</td>"
-                    . "<td class='text-end' style='width:12%;'>$" . number_format($g['saldo'], 2) . "</td>"
+                    . "<td class='text-end' style='width:10%;'>$" . number_format($g['total'], 2) . "</td>"
+                    . "<td class='text-end' style='width:9%;'>$" . number_format($g['nc'], 2) . "</td>"
+                    . "<td class='text-end' style='width:10%;'>$" . number_format($g['abonos'], 2) . "</td>"
+                    . "<td class='text-end' style='width:10%;'>$" . number_format($g['retenciones'], 2) . "</td>"
+                    . "<td class='text-end' style='width:10%;'>$" . number_format($g['saldo'], 2) . "</td>"
+                    . "<td colspan='2' style='width:" . (5 + $wAse) . "%;'></td>"
                     . "</tr></tbody></table>";
             }
 
@@ -629,9 +640,12 @@ class CuentasPorCobrarController extends BaseModuloController
             <table class="tot">
                 <tr>
                     <td class="text-end" style="width:<?= $wEtq ?>%;">TOTAL GENERAL (<?= count($grupos) ?> cliente<?= count($grupos) !== 1 ? 's' : '' ?>)</td>
-                    <td class="text-end" style="width:11%;">$<?= number_format($totTotal, 2) ?></td>
-                    <td class="text-end" style="width:11%;">$<?= number_format($totCobrado, 2) ?></td>
-                    <td class="text-end" style="width:12%;">$<?= number_format($totSaldo, 2) ?></td>
+                    <td class="text-end" style="width:10%;">$<?= number_format($totTotal, 2) ?></td>
+                    <td class="text-end" style="width:9%;">$<?= number_format($totNc, 2) ?></td>
+                    <td class="text-end" style="width:10%;">$<?= number_format($totAbonos, 2) ?></td>
+                    <td class="text-end" style="width:10%;">$<?= number_format($totRet, 2) ?></td>
+                    <td class="text-end" style="width:10%;">$<?= number_format($totSaldo, 2) ?></td>
+                    <td style="width:<?= 5 + $wAse ?>%;"></td>
                 </tr>
             </table>
             </page>

@@ -488,12 +488,16 @@ function pedPosicionarDropdownProductos(inputEl) {
 
     // Respaldo por si el componente no se cargó: sin él la lista no se mostraría
     // nunca y no se podría elegir ningún producto. Es `position: fixed`, así que
-    // las coordenadas van sin sumarle el scroll.
-    const rect = inputEl.getBoundingClientRect();
-    dropdown.style.top    = `${rect.bottom + 2}px`;
-    dropdown.style.bottom = 'auto';
-    dropdown.style.left   = `${rect.left}px`;
-    dropdown.style.width  = `${Math.max(rect.width, 350)}px`;
+    // las coordenadas van sin sumarle el scroll. En pantalla angosta se fuerza el
+    // ancho completo: con el mínimo de 350px anclado a `rect.left` la lista se
+    // salía por la derecha en un celular de 360px.
+    const rect  = inputEl.getBoundingClientRect();
+    const movil = window.innerWidth <= 767;
+    dropdown.style.top      = `${rect.bottom + 2}px`;
+    dropdown.style.bottom   = 'auto';
+    dropdown.style.left     = movil ? '8px' : `${rect.left}px`;
+    dropdown.style.minWidth = movil ? '0px' : '350px';
+    dropdown.style.width    = movil ? `${window.innerWidth - 16}px` : `${Math.max(rect.width, 350)}px`;
     dropdown.classList.remove('d-none');
 }
 
@@ -633,6 +637,22 @@ function agregarFilaProducto(prod = null) {
     };
 
     const setupAutocompleteEvents = (inputEl) => {
+        // Celular: el detalle está en el tercio inferior del modal, así que al tocar
+        // el campo el teclado lo tapa y se escribe a ciegas. El navegador intenta
+        // subirlo, pero el `modal-body` ya suele estar al final de su scroll. Se le
+        // insiste una vez cuando el teclado ya redujo la pantalla (de ahí el
+        // retardo): centrarlo mueve también el scroll de la tabla de detalle.
+        inputEl.addEventListener('focus', () => {
+            if (window.innerWidth > 767) return;
+            setTimeout(() => {
+                if (document.activeElement !== inputEl) return;
+                inputEl.scrollIntoView({ block: 'center' });
+                // Reanclar, no abrir: si la lista no estaba visible debe seguir
+                // oculta (enfocar un campo no es buscar).
+                if (typeof window.CMG_reanclarDropdown === 'function') window.CMG_reanclarDropdown();
+            }, 300);
+        });
+
         inputEl.addEventListener('input', debounce((e) => buscarProducto(e.target.value, inputEl), 400));
 
         inputEl.addEventListener('keydown', (e) => {

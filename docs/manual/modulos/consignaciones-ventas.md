@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que
-version: 1.9
+version: 1.10
 orden: 45
 estado: activo
 ---
@@ -198,6 +198,10 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.10** — En el celular, la lista de productos ya no desaparece al buscar
+  por código o descripción. Cuando el teclado tapa el campo del detalle —la tabla
+  de productos queda en la parte baja del formulario— la lista se muestra
+  igualmente: a lo ancho de la pantalla, justo encima del teclado.
 - **1.9** — Cambios en el PDF: la firma **Entregado por** pasó a llamarse
   **Emitido por** y muestra el nombre del usuario que registró la consignación
   (antes salía el nombre de la empresa); se agregó una cuarta firma,

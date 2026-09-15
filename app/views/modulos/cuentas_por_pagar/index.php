@@ -20,9 +20,10 @@
     .badge-liquid   { background: rgba(102,16,242,.1);  color: #6610f2; border: 1px solid rgba(102,16,242,.2); font-size:.6rem; }
     .badge-compra   { background: rgba(13,110,253,.08); color: #0d6efd; border: 1px solid rgba(13,110,253,.2);  font-size:.6rem; }
     .badge-importacion { background: rgba(255,140,0,.1); color: #d2691e; border: 1px solid rgba(255,140,0,.25); font-size:.6rem; }
-    /* Vista "Por proveedor": se presenta como el mayor de una cuenta contable — cabecera de
-       sección por proveedor, sus documentos, fila de SUBTOTAL y TOTAL GENERAL al final. */
-    .cxp-mayor-grp   > td { background:#eaf1fb; border-top:2px solid #0d6efd; }
+    /* Vista "Por proveedor": arranca plegada (una línea por proveedor con sus totales) y, al
+       desplegar, se lee como el mayor de una cuenta: documentos, SUBTOTAL de la sección y
+       TOTAL GENERAL al final del listado. */
+    .cxp-mayor-grp   > td { background:#eaf1fb; border-top:1px solid rgba(13,110,253,.45); }
     .cxp-mayor-sub   > td { background:rgba(13,110,253,.06); font-weight:700; border-top:1px solid #0d6efd; }
     .cxp-mayor-total > td { background:#f8f9fa; font-weight:800; border-top:2px solid #343a40; }
     .cxp-mayor-gap   > td { height:10px; padding:0; border:0; background:transparent; }
@@ -221,7 +222,10 @@
             <div class="cxp-scroll w-100">
                 <table class="table table-hover table-sm mb-0 align-middle" id="tabla-cxp"
                        style="table-layout:fixed; min-width:980px;">
-                    <colgroup>
+                    <!-- Columnas de la vista Detallado. La vista "Por proveedor" reemplaza
+                         colgroup y thead desde el JS (CXP_renderCabecera), porque dentro de
+                         cada proveedor el detalle que se necesita es otro. -->
+                    <colgroup id="cxp-colgroup">
                         <col style="width:165px;"><!-- Documento (badge+nro) -->
                         <col style="width:120px;"><!-- Origen -->
                         <col>                    <!-- Proveedor (flex) -->
@@ -234,7 +238,7 @@
                         <col style="width:128px;"><!-- Estado -->
                         <col style="width:80px;"><!-- Acciones -->
                     </colgroup>
-                    <thead class="table-light">
+                    <thead class="table-light" id="cxp-thead">
                         <tr>
                             <th class="ps-2">Documento</th>
                             <th class="text-center">Origen</th>

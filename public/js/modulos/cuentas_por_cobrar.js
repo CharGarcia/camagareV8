@@ -162,6 +162,9 @@ function CXC_renderTabla(filas) {
     const tbody = document.getElementById('cxc-tbody');
     const label = document.getElementById('cxc-count-label');
 
+    // Las columnas dependen de la vista: la de "Por cliente" muestra otro detalle.
+    CXC_renderCabecera();
+
     // Todavía sin aplicar: la tabla muestra la invitación a filtrar, no "sin resultados".
     if (!CXC_cargado) { CXC_estadoInicial(); return; }
 
@@ -219,7 +222,6 @@ function CXC_filaHtml(r) {
     const esRecibo   = r.origen === 'RECIBO';
     // Consolidado: documento de OTRO establecimiento del RUC → solo lectura
     const esHermana  = !!r.es_hermana;
-    const idEmpresa  = parseInt(r.id_empresa) || 0;
     const estabTxt   = `${r.establecimiento || ''}${r.empresa_nombre ? ' - ' + r.empresa_nombre : ''}`;
     const estabBadge = (CXC_consolidado && r.establecimiento)
         ? `<span class="badge ${esHermana ? 'bg-info bg-opacity-10 text-info border-info' : 'bg-success bg-opacity-10 text-success border-success'} border border-opacity-25 me-1 fw-normal" style="font-size:.65rem;" title="${esc(estabTxt)}">${esc(r.establecimiento)}</span>`
@@ -250,7 +252,21 @@ function CXC_filaHtml(r) {
             <td class="text-end text-success" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(CXC_totalCobrado(r))}</td>
             <td class="text-end fw-bold pe-3" style="font-size:.82rem;white-space:nowrap;color:${saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(saldo)}</td>
             <td class="text-center" style="overflow:hidden;white-space:nowrap;">${badgeHtml}</td>
-            <td class="text-center">
+            <td class="text-center">${CXC_accionesHtml(r)}</td>
+        </tr>`;
+}
+
+/* Botonera de un documento (cobrar, historial, correo, WhatsApp). La comparten la fila
+   detallada y la fila del detalle por cliente, para no duplicar reglas de permisos. */
+function CXC_accionesHtml(r) {
+    const saldo     = parseFloat(r.saldo) || 0;
+    const esSaldo   = r.origen === 'SALDO_INICIAL';
+    const esRecibo  = r.origen === 'RECIBO';
+    const esHermana = !!r.es_hermana;
+    const idEmpresa = parseInt(r.id_empresa) || 0;
+    const estabTxt  = `${r.establecimiento || ''}${r.empresa_nombre ? ' - ' + r.empresa_nombre : ''}`;
+
+    return `
                 <div class="d-flex justify-content-center gap-1">
                     ${(saldo > 0 && esHermana && r.puede_operar) ? `
                     <button class="btn btn-success btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar cobro en el establecimiento ${esc(estabTxt)}"
@@ -281,23 +297,135 @@ function CXC_filaHtml(r) {
                             onclick="CXC_abrirWA(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_telefono || '')}', '${esc(r.cliente_nombre)}')">
                         <i class="bi bi-whatsapp"></i>
                     </button>` : ''}
-                </div>
+                </div>`;
+}
+
+/* ════════════════════════════════════════════════════
+   CABECERA DE LA TABLA SEGÚN LA VISTA
+   Detallado y Por producto usan las columnas de siempre.
+   En "Por cliente" el cliente ya es la cabecera de la sección,
+   así que su detalle muestra lo que hace falta dentro del
+   cliente: fecha, documento, total, NC, abonos, retenciones,
+   saldo, días vencidos y asesor.
+════════════════════════════════════════════════════ */
+const CXC_COLS_ESTANDAR = `
+    <col style="width:36px;"><col style="width:160px;"><col style="width:120px;"><col>
+    <col style="width:92px;"><col style="width:100px;"><col style="width:95px;">
+    <col style="width:95px;"><col style="width:95px;"><col style="width:125px;"><col style="width:162px;">`;
+const CXC_TH_ESTANDAR = `
+    <tr>
+        <th class="text-center p-1"></th>
+        <th class="ps-2">Documento</th>
+        <th class="text-center">Origen</th>
+        <th>Cliente</th>
+        <th>F.Emisión</th>
+        <th>F.Vencimiento</th>
+        <th class="text-end">Total</th>
+        <th class="text-end">Cobrado</th>
+        <th class="text-end pe-3">Saldo</th>
+        <th class="text-center">Estado</th>
+        <th class="text-center">Acciones</th>
+    </tr>`;
+const CXC_COLS_MAYOR = `
+    <col style="width:36px;"><col style="width:92px;"><col style="width:170px;"><col style="width:100px;">
+    <col style="width:90px;"><col style="width:95px;"><col style="width:100px;">
+    <col style="width:105px;"><col style="width:62px;"><col><col style="width:162px;">`;
+const CXC_TH_MAYOR = `
+    <tr>
+        <th class="text-center p-1"></th>
+        <th class="ps-2">Fecha</th>
+        <th>N. Documento</th>
+        <th class="text-end">Total</th>
+        <th class="text-end" title="Notas de crédito aplicadas">NC</th>
+        <th class="text-end" title="Cobros recibidos (efectivo, banco, tarjeta…)">Abonos</th>
+        <th class="text-end">Retenciones</th>
+        <th class="text-end pe-2">Saldo</th>
+        <th class="text-center" title="Días vencidos">Días</th>
+        <th>Asesor</th>
+        <th class="text-center">Acciones</th>
+    </tr>`;
+
+function CXC_renderCabecera() {
+    const cg = document.getElementById('cxc-colgroup');
+    const th = document.getElementById('cxc-thead');
+    if (!cg || !th) return;
+    const mayor = (CXC_vista === 'agrupado');
+    cg.innerHTML = mayor ? CXC_COLS_MAYOR   : CXC_COLS_ESTANDAR;
+    th.innerHTML = mayor ? CXC_TH_MAYOR     : CXC_TH_ESTANDAR;
+}
+
+/* Fila de un documento dentro de la sección de su cliente (vista "Por cliente"):
+   fecha, documento, total, NC, abonos, retenciones, saldo, días y asesor. */
+function CXC_filaMayorHtml(r) {
+    const dias    = parseInt(r.dias_vencido) || 0;
+    const saldo   = parseFloat(r.saldo) || 0;
+    const total   = parseFloat(r.total) || 0;
+    const nc      = parseFloat(r.total_nc) || 0;
+    const nd      = parseFloat(r.total_nd) || 0;
+    const abonos  = parseFloat(r.total_cobrado) || 0;
+    const ret     = parseFloat(r.total_retenido) || 0;
+    const key     = CXC_keyFila(r);
+    const selec   = CXC_seleccionados.has(key);
+    const esSaldo = r.origen === 'SALDO_INICIAL';
+    const esRecibo= r.origen === 'RECIBO';
+    const esHermana = !!r.es_hermana;
+
+    let rowClass = '';
+    if (saldo > 0 && dias > 90)      rowClass = 'table-danger';
+    else if (saldo > 0 && dias > 30) rowClass = 'table-warning';
+
+    // El origen no tiene columna propia: una factura no lleva marca y los demás sí,
+    // que son los casos que conviene distinguir de un vistazo.
+    const estabTxt   = `${r.establecimiento || ''}${r.empresa_nombre ? ' - ' + r.empresa_nombre : ''}`;
+    const estabBadge = (CXC_consolidado && r.establecimiento)
+        ? `<span class="badge ${esHermana ? 'bg-info bg-opacity-10 text-info border-info' : 'bg-success bg-opacity-10 text-success border-success'} border border-opacity-25 me-1 fw-normal" style="font-size:.65rem;" title="${esc(estabTxt)}">${esc(r.establecimiento)}</span>`
+        : '';
+    let origenBadge = '';
+    if (esSaldo) {
+        origenBadge = `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 me-1 fw-normal" style="font-size:.65rem;" title="Saldo inicial de apertura">SI</span>`;
+    } else if (esRecibo) {
+        origenBadge = `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 me-1 fw-normal" style="font-size:.65rem;" title="Recibo de venta">REC</span>`;
+    }
+
+    // Total con nota de débito: el saldo la incluye, así que se avisa en la misma celda
+    // para que total − NC − abonos − retenciones siga cuadrando con el saldo.
+    const ndTxt = nd > 0 ? ` <span class="text-muted" style="font-size:.68rem;" title="Nota de débito sumada al documento">+${CXC_fmt(nd)}</span>` : '';
+
+    const diasTxt = dias > 0
+        ? `<span class="fw-bold" style="color:#dc3545;" title="Venció el ${CXC_fmtFecha(r.fecha_vencimiento)}">${dias}</span>`
+        : `<span class="text-muted" title="Vence el ${CXC_fmtFecha(r.fecha_vencimiento)}">—</span>`;
+
+    return `
+        <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle" data-id="${r.id}" data-origen="${r.origen}" data-hermana="${esHermana ? 1 : 0}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
+            <td class="text-center p-1">
+                <input class="form-check-input cxc-chk" type="checkbox" value="${key}"
+                       ${(esSaldo || esHermana) ? 'disabled' : (selec ? 'checked' : '')}
+                       onchange="CXC_toggleSeleccion('${key}', this.checked)">
             </td>
+            <td class="ps-2" style="font-size:.78rem;white-space:nowrap;">${CXC_fmtFecha(r.fecha_emision)}</td>
+            <td class="fw-semibold text-truncate" title="${esc(r.numero_factura)}" style="font-size:.8rem;">${estabBadge}${origenBadge}${esc(r.numero_factura)}</td>
+            <td class="text-end" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(total)}${ndTxt}</td>
+            <td class="text-end" style="font-size:.78rem;white-space:nowrap;">${nc > 0 ? '$' + CXC_fmt(nc) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end text-success" style="font-size:.78rem;white-space:nowrap;">${abonos > 0 ? '$' + CXC_fmt(abonos) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end" style="font-size:.78rem;white-space:nowrap;">${ret > 0 ? '$' + CXC_fmt(ret) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end fw-bold pe-2" style="font-size:.82rem;white-space:nowrap;color:${saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(saldo)}</td>
+            <td class="text-center" style="font-size:.78rem;white-space:nowrap;">${diasTxt}</td>
+            <td class="text-truncate" title="${esc(r.vendedor_nombre || '')}" style="font-size:.78rem;">${r.vendedor_nombre ? esc(r.vendedor_nombre) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-center">${CXC_accionesHtml(r)}</td>
         </tr>`;
 }
 
 /* ════════════════════════════════════════════════════
    VISTA AGRUPADA POR CLIENTE — formato "mayor"
-   Se lee como el mayor de una cuenta contable: una sección
-   por cliente (cabecera con su nombre e identificación), sus
-   documentos desplegados debajo, una fila de SUBTOTAL al
-   cerrar cada sección y un TOTAL GENERAL al final. El PDF y
-   el Excel de esta vista reproducen la misma estructura.
+   El listado arranca PLEGADO: una línea por cliente con sus
+   totales. Al desplegar una, se lee como el mayor de una cuenta
+   contable: los documentos del cliente y, cerrando la sección,
+   su fila de SUBTOTAL. Al final del listado, el TOTAL GENERAL.
+   El PDF y el Excel salen siempre con el detalle desplegado.
 ════════════════════════════════════════════════════ */
-/* Secciones PLEGADAS de la vista por cliente. Al revés que la vista por producto
-   (CXC_gruposAbiertos guarda las abiertas): un mayor se lee desplegado, así que
-   todas arrancan abiertas y el set recuerda solo las que el usuario pliega. */
-const CXC_clientesCerrados = new Set();
+/* Secciones DESPLEGADAS de la vista por cliente: el listado arranca plegado —una línea
+   por cliente con sus totales— y el set recuerda las que el usuario abre. */
+const CXC_clientesAbiertos = new Set();
 
 /* Agrupa las filas por cliente. La clave es la identificación BASE, no el texto del RUC: así
    el cliente registrado dos veces —con la cédula y con el RUC, que es esa cédula + '001'—
@@ -308,13 +436,17 @@ function CXC_agruparPorCliente(filas) {
         const key = IdentificacionTercero.claveGrupo(r.cliente_ruc, r.cliente_nombre || 'Sin cliente');
         let g = mapa.get(key);
         if (!g) {
-            g = { key, nombre: r.cliente_nombre || 'Sin cliente', ruc: r.cliente_ruc || '', items: [], total: 0, cobrado: 0, saldo: 0 };
+            g = { key, nombre: r.cliente_nombre || 'Sin cliente', ruc: r.cliente_ruc || '', items: [],
+                  total: 0, nc: 0, abonos: 0, retenciones: 0, cobrado: 0, saldo: 0 };
             mapa.set(key, g);
         }
         g.items.push(r);
-        g.total   += parseFloat(r.total)         || 0;
-        g.cobrado += CXC_totalCobrado(r);
-        g.saldo   += parseFloat(r.saldo)         || 0;
+        g.total       += parseFloat(r.total)          || 0;
+        g.nc          += parseFloat(r.total_nc)       || 0;
+        g.abonos      += parseFloat(r.total_cobrado)  || 0;
+        g.retenciones += parseFloat(r.total_retenido) || 0;
+        g.cobrado     += CXC_totalCobrado(r);
+        g.saldo       += parseFloat(r.saldo)          || 0;
     }
     // Dentro de cada cliente, los documentos van en orden cronológico (como los movimientos
     // de un mayor); entre clientes manda el saldo, el que más debe primero.
@@ -333,57 +465,73 @@ function CXC_renderAgrupado(filas) {
 
     label.textContent = `${filas.length} docs · ${grupos.length} cliente${grupos.length !== 1 ? 's' : ''}`;
 
-    let tTotal = 0, tCobrado = 0, tSaldo = 0;
+    // Columnas de esta vista: [chevron] Fecha | N. Documento | Total | NC | Abonos |
+    // Retenciones | Saldo | Días | Asesor | Acciones (ver CXC_TH_MAYOR).
+    let tTotal = 0, tNc = 0, tAbonos = 0, tRet = 0, tSaldo = 0;
     let html = '';
     for (const g of grupos) {
-        tTotal   += g.total;
-        tCobrado += g.cobrado;
-        tSaldo   += g.saldo;
+        tTotal  += g.total;
+        tNc     += g.nc;
+        tAbonos += g.abonos;
+        tRet    += g.retenciones;
+        tSaldo  += g.saldo;
 
-        const cerrado = CXC_clientesCerrados.has(g.key);
-        const chev    = cerrado ? 'bi-chevron-right' : 'bi-chevron-down';
+        const abierto = CXC_clientesAbiertos.has(g.key);
+        const chev    = abierto ? 'bi-chevron-down' : 'bi-chevron-right';
+        const importes = () => `
+            <td class="text-end" style="font-size:.8rem;">$${CXC_fmt(g.total)}</td>
+            <td class="text-end" style="font-size:.8rem;">${g.nc > 0.001 ? '$' + CXC_fmt(g.nc) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end text-success" style="font-size:.8rem;">${g.abonos > 0.001 ? '$' + CXC_fmt(g.abonos) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end" style="font-size:.8rem;">${g.retenciones > 0.001 ? '$' + CXC_fmt(g.retenciones) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end pe-2" style="font-size:.82rem;color:${g.saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(g.saldo)}</td>`;
+
+        // Cabecera del cliente: siempre lleva sus totales, así plegada resume al cliente en
+        // una línea. Al desplegarla salen sus documentos y se cierra con la fila de SUBTOTAL.
         html += `
-        <tr class="cxc-mayor-grp" data-gkey="${esc(g.key)}" onclick="CXC_toggleCliente(this)" style="cursor:pointer;" title="Clic para plegar o desplegar este cliente">
+        <tr class="cxc-mayor-grp" data-gkey="${esc(g.key)}" onclick="CXC_toggleCliente(this)" style="cursor:pointer;" title="Clic para desplegar o plegar los documentos de este cliente">
             <td class="text-center p-1"><i class="bi ${chev} text-success"></i></td>
-            <td colspan="10" class="fw-bold" style="font-size:.82rem;">
-                <i class="bi bi-person-lines-fill me-1 text-success"></i>${esc(g.nombre)}
+            <td colspan="2" class="fw-bold text-truncate" title="${esc(g.nombre)}${g.ruc ? ' · ' + esc(g.ruc) : ''}" style="font-size:.82rem;">
+                ${esc(g.nombre)}
                 ${g.ruc ? `<span class="text-muted fw-normal ms-1">${esc(g.ruc)}</span>` : ''}
-                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 fw-normal">${g.items.length} doc${g.items.length !== 1 ? 's' : ''}</span>
             </td>
+            ${importes()}
+            <td class="text-center" style="font-size:.72rem;">
+                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-normal" title="${g.items.length} documento${g.items.length !== 1 ? 's' : ''}">${g.items.length}</span>
+            </td>
+            <td colspan="2"></td>
         </tr>`;
 
-        if (!cerrado) {
-            for (const r of g.items) html += CXC_filaHtml(r);
-        }
-
-        html += `
+        if (abierto) {
+            for (const r of g.items) html += CXC_filaMayorHtml(r);
+            html += `
         <tr class="cxc-mayor-sub">
-            <td colspan="6" class="text-end" style="font-size:.78rem;">SUBTOTAL ${esc(g.nombre)}</td>
-            <td class="text-end" style="font-size:.8rem;">$${CXC_fmt(g.total)}</td>
-            <td class="text-end text-success" style="font-size:.8rem;">$${CXC_fmt(g.cobrado)}</td>
-            <td class="text-end pe-3" style="font-size:.82rem;color:${g.saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(g.saldo)}</td>
-            <td colspan="2"></td>
+            <td colspan="3" class="text-end" style="font-size:.78rem;">SUBTOTAL ${esc(g.nombre)}</td>
+            ${importes()}
+            <td colspan="3"></td>
         </tr>
         <tr class="cxc-mayor-gap"><td colspan="11"></td></tr>`;
+        }
     }
 
     html += `
         <tr class="cxc-mayor-total">
-            <td colspan="6" class="text-end" style="font-size:.8rem;">TOTAL GENERAL (${grupos.length} cliente${grupos.length !== 1 ? 's' : ''})</td>
+            <td colspan="3" class="text-end" style="font-size:.8rem;">TOTAL GENERAL (${grupos.length} cliente${grupos.length !== 1 ? 's' : ''})</td>
             <td class="text-end" style="font-size:.82rem;">$${CXC_fmt(tTotal)}</td>
-            <td class="text-end text-success" style="font-size:.82rem;">$${CXC_fmt(tCobrado)}</td>
-            <td class="text-end pe-3" style="font-size:.85rem;color:${tSaldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(tSaldo)}</td>
-            <td colspan="2"></td>
+            <td class="text-end" style="font-size:.82rem;">${tNc > 0.001 ? '$' + CXC_fmt(tNc) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end text-success" style="font-size:.82rem;">${tAbonos > 0.001 ? '$' + CXC_fmt(tAbonos) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end" style="font-size:.82rem;">${tRet > 0.001 ? '$' + CXC_fmt(tRet) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end pe-2" style="font-size:.85rem;color:${tSaldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(tSaldo)}</td>
+            <td colspan="3"></td>
         </tr>`;
 
     tbody.innerHTML = html;
 }
 
-/* Pliega/despliega la sección de un cliente (el set guarda las cerradas: ver CXC_clientesCerrados). */
+/* Despliega/pliega la sección de un cliente (el set guarda las abiertas). */
 function CXC_toggleCliente(el) {
     const k = el.getAttribute('data-gkey');
-    if (CXC_clientesCerrados.has(k)) CXC_clientesCerrados.delete(k);
-    else CXC_clientesCerrados.add(k);
+    if (CXC_clientesAbiertos.has(k)) CXC_clientesAbiertos.delete(k);
+    else CXC_clientesAbiertos.add(k);
     CXC_renderTabla(CXC_filtradoLocal);
 }
 
@@ -1390,8 +1538,11 @@ function CXC_totalCobrado(r) {
 
 function CXC_fmtFecha(s) {
     if (!s) return '—';
-    const d = new Date(s.replace(' ', 'T').replace(/T.*/, 'T12:00:00'));
-    return isNaN(d) ? s : d.toLocaleDateString('es-EC', { day:'2-digit', month:'2-digit', year:'numeric' });
+    // Solo YYYY-MM-DD y medianoche LOCAL: 'new Date("2026-01-05")' se interpreta como
+    // medianoche UTC y en Ecuador (UTC-5) mostraba el día anterior. Las fechas del listado
+    // vienen de columnas DATE, así que siempre caían en ese caso.
+    const d = new Date(String(s).substring(0, 10) + 'T00:00:00');
+    return isNaN(d.getTime()) ? s : d.toLocaleDateString('es-EC', { day:'2-digit', month:'2-digit', year:'numeric' });
 }
 
 function CXC_fmtFechaHora(s) {

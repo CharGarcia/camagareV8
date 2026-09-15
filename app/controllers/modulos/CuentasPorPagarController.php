@@ -734,7 +734,8 @@ class CuentasPorPagarController extends BaseModuloController
      * contable — una sección por proveedor (subtítulo con su identificación y nombre, más
      * los encabezados repetidos), sus documentos, una fila de SUBTOTAL al cerrar la sección
      * y un TOTAL GENERAL al final de la hoja. El proveedor no va como columna: es el título
-     * de la sección.
+     * de la sección, y el detalle es el mismo que se ve en pantalla dentro de cada proveedor
+     * (fecha, documento, total, NC, abonos, retenciones, saldo y días).
      */
     private function exportExcelPorProveedor(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
     {
@@ -744,51 +745,44 @@ class CuentasPorPagarController extends BaseModuloController
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
             $filtrosTxt    = ['Vista' => 'Por proveedor (formato mayor)'] + $this->describirFiltros($idsEmpresa, $filtros);
 
-            $headers = ['Tipo', 'Documento', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos',
-                        'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Pagado', 'Saldo', 'Estado'];
+            $headers = ['Fecha', 'N. Documento', 'Tipo', 'Total', 'NC', 'Abonos', 'Retenciones',
+                        'Saldo', 'Días Vencidos', 'Estado'];
             if ($consolidado) {
                 array_unshift($headers, 'Estab.');
             }
             // La etiqueta de SUBTOTAL/TOTAL va en la última columna de texto antes de los
             // importes (igual que en el mayor): a su izquierda quedan celdas vacías.
-            $huecos = $consolidado ? 5 : 4;
+            $huecos = $consolidado ? 3 : 2;
 
             $secciones = [];
             $totTotal  = 0.0;
-            $totAbonos = 0.0;
             $totNc     = 0.0;
+            $totAbonos = 0.0;
             $totRet    = 0.0;
-            $totPagado = 0.0;
             $totSaldo  = 0.0;
 
             foreach ($grupos as $g) {
                 $totTotal  += $g['total'];
-                $totAbonos += $g['abonos'];
                 $totNc     += $g['nc'];
+                $totAbonos += $g['abonos'];
                 $totRet    += $g['retenciones'];
-                $totPagado += $g['pagado'];
                 $totSaldo  += $g['saldo'];
 
                 $filasSec = [];
                 foreach ($g['items'] as $r) {
-                    $dias   = (int)($r['dias_vencido'] ?? 0);
-                    $saldo  = (float)($r['saldo'] ?? 0);
-                    $abonos = (float)($r['total_pagado'] ?? 0);
-                    $nc     = (float)($r['total_nc'] ?? 0);
-                    $ret    = (float)($r['total_retenido'] ?? 0);
+                    $dias  = (int)($r['dias_vencido'] ?? 0);
+                    $saldo = (float)($r['saldo'] ?? 0);
                     $filasSec[] = [
                         ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
-                        $this->getTipoLabel((string)($r['tipo_fuente'] ?? '')),
-                        (string)($r['numero_documento'] ?? ''),
                         $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
-                        $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
-                        $dias > 0 ? $dias : 0,
+                        (string)($r['numero_documento'] ?? ''),
+                        $this->getTipoLabel((string)($r['tipo_fuente'] ?? '')),
                         round((float)($r['total'] ?? 0), 2),
-                        round($abonos, 2),
-                        round($nc, 2),
-                        round($ret, 2),
-                        round($abonos + $nc + $ret, 2),
+                        round((float)($r['total_nc'] ?? 0), 2),
+                        round((float)($r['total_pagado'] ?? 0), 2),
+                        round((float)($r['total_retenido'] ?? 0), 2),
                         round($saldo, 2),
+                        $dias > 0 ? $dias : 0,
                         $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE'),
                     ];
                 }
@@ -803,8 +797,8 @@ class CuentasPorPagarController extends BaseModuloController
                     'resumen' => [
                         ...array_fill(0, $huecos, ''),
                         'SUBTOTAL ' . $g['nombre'],
-                        round($g['total'], 2), round($g['abonos'], 2), round($g['nc'], 2),
-                        round($g['retenciones'], 2), round($g['pagado'], 2), round($g['saldo'], 2), '',
+                        round($g['total'], 2), round($g['nc'], 2), round($g['abonos'], 2),
+                        round($g['retenciones'], 2), round($g['saldo'], 2), '', '',
                     ],
                 ];
             }
@@ -812,8 +806,8 @@ class CuentasPorPagarController extends BaseModuloController
             $filaFinal = [
                 ...array_fill(0, $huecos, ''),
                 'TOTAL GENERAL (' . count($grupos) . ' proveedor' . (count($grupos) !== 1 ? 'es' : '') . ')',
-                round($totTotal, 2), round($totAbonos, 2), round($totNc, 2),
-                round($totRet, 2), round($totPagado, 2), round($totSaldo, 2), '',
+                round($totTotal, 2), round($totNc, 2), round($totAbonos, 2),
+                round($totRet, 2), round($totSaldo, 2), '', '',
             ];
 
             (new \App\Services\ReportService())->exportToExcelSeccionado(
@@ -838,8 +832,9 @@ class CuentasPorPagarController extends BaseModuloController
     /**
      * PDF de la vista "Por proveedor": el listado sale como el mayor de una cuenta contable —
      * una sección por proveedor (cabecera con su identificación y nombre), la tabla de sus
-     * documentos en orden cronológico, una fila de SUBTOTAL al cerrar la sección y, al final,
-     * el TOTAL GENERAL de la cartera. El proveedor no va como columna: es la cabecera.
+     * documentos en orden cronológico con el mismo detalle que la pantalla (fecha, documento,
+     * total, NC, abonos, retenciones, saldo y días), una fila de SUBTOTAL al cerrar la sección
+     * y, al final, el TOTAL GENERAL de la deuda.
      */
     private function exportPdfPorProveedor(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
     {
@@ -854,18 +849,22 @@ class CuentasPorPagarController extends BaseModuloController
             // Anchos por columna (table-layout: fixed, deben sumar 100%). La columna del
             // establecimiento solo aparece en consolidado y le resta ancho al documento.
             $wEst   = $consolidado ? 6 : 0;
-            $wDoc   = 26 - $wEst;
-            $wEtq   = 60;                        // ancho del texto que une la fila de SUBTOTAL/TOTAL
-            $colEtq = $consolidado ? 4 : 3;      // columnas de texto que abarca esa fila
+            $wDoc   = 25 - $wEst;
+            $wEtq   = 35;                        // Fecha + N. Documento (+ Estab.)
+            $colEtq = $consolidado ? 3 : 2;      // columnas de texto que une la fila de SUBTOTAL
 
             $totTotal  = 0.0;
-            $totPagado = 0.0;
+            $totNc     = 0.0;
+            $totAbonos = 0.0;
+            $totRet    = 0.0;
             $totSaldo  = 0.0;
             $cuerpo    = '';
 
             foreach ($grupos as $g) {
                 $totTotal  += $g['total'];
-                $totPagado += $g['pagado'];
+                $totNc     += $g['nc'];
+                $totAbonos += $g['abonos'];
+                $totRet    += $g['retenciones'];
                 $totSaldo  += $g['saldo'];
 
                 $nDocs  = count($g['items']);
@@ -878,45 +877,52 @@ class CuentasPorPagarController extends BaseModuloController
 
                 $cuerpo .= "<table><thead><tr>"
                     . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
-                    . "<th style='width:{$wDoc}%;'>Documento</th>"
-                    . "<th style='width:14%;'>F. Emisión</th>"
-                    . "<th style='width:20%;'>F. Vencimiento</th>"
-                    . "<th style='width:13%;'>Total</th>"
-                    . "<th style='width:13%;'>Pagado/Ret/NC</th>"
-                    . "<th style='width:14%;'>Saldo</th>"
+                    . "<th style='width:10%;'>Fecha</th>"
+                    . "<th style='width:{$wDoc}%;'>N. Documento</th>"
+                    . "<th style='width:12%;'>Total</th>"
+                    . "<th style='width:10%;'>NC</th>"
+                    . "<th style='width:12%;'>Abonos</th>"
+                    . "<th style='width:12%;'>Retenciones</th>"
+                    . "<th style='width:12%;'>Saldo</th>"
+                    . "<th style='width:7%;'>Días</th>"
                     . "</tr></thead><tbody>";
 
                 foreach ($g['items'] as $r) {
-                    $dias  = (int)($r['dias_vencido'] ?? 0);
-                    $ts    = (float)($r['total'] ?? 0);
-                    $tp    = (float)($r['total_pagado'] ?? 0);
-                    $tsal  = (float)($r['saldo'] ?? 0);
-                    $tret  = (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
-                    $color = $dias > 0 && $tsal > 0 ? 'color:#dc3545;' : '';
-                    $badge = $tsal <= 0
-                        ? "<small style='color:#6c757d;'>Pagada</small>"
-                        : ($dias > 0
-                            ? "<small style='color:#dc3545;font-weight:bold;'>{$dias}d vencida</small>"
-                            : "<small style='color:#198754;'>Vigente</small>");
-                    $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
-                    $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
-                    $tipo  = $this->getTipoLabel((string)($r['tipo_fuente'] ?? ''), true);
-                    $cuerpo .= "<tr style='{$color}'>"
+                    $dias   = (int)($r['dias_vencido'] ?? 0);
+                    $ts     = (float)($r['total'] ?? 0);
+                    $nc     = (float)($r['total_nc'] ?? 0);
+                    $nd     = (float)($r['total_nd'] ?? 0);
+                    $abonos = (float)($r['total_pagado'] ?? 0);
+                    $ret    = (float)($r['total_retenido'] ?? 0);
+                    $tsal   = (float)($r['saldo'] ?? 0);
+                    $color  = $dias > 0 && $tsal > 0 ? 'color:#dc3545;' : '';
+                    $fEmis  = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
+                    // La nota de débito suma al documento: se avisa junto al total para que
+                    // total − NC − abonos − retenciones siga cuadrando con el saldo.
+                    $ndTxt  = $nd > 0 ? " <small>+" . number_format($nd, 2) . "</small>" : '';
+                    $tipo   = ($r['tipo_fuente'] ?? '') === 'FACTURA' || ($r['tipo_fuente'] ?? '') === ''
+                        ? '' : "<small style='color:#6c757d;'>" . $this->getTipoLabel((string)$r['tipo_fuente'], true) . "</small><br>";
+                    $cuerpo .= "<tr>"
                         . ($consolidado ? "<td class='text-center' style='width:{$wEst}%;'>" . $e($r['establecimiento'] ?? '') . "</td>" : '')
-                        . "<td style='width:{$wDoc}%;'><small style='color:#6c757d;'>{$tipo}</small><br>" . $e($r['numero_documento'] ?? '') . "</td>"
-                        . "<td class='text-center' style='width:14%;'>{$fEmis}</td>"
-                        . "<td class='text-center' style='width:20%;'>{$fVenc}<br>{$badge}</td>"
-                        . "<td class='text-end' style='width:13%;'>$" . number_format($ts, 2) . "</td>"
-                        . "<td class='text-end' style='width:13%;color:#198754;'>$" . number_format($tp + $tret, 2) . "</td>"
-                        . "<td class='text-end' style='width:14%;{$color}font-weight:bold;'>$" . number_format($tsal, 2) . "</td>"
+                        . "<td class='text-center' style='width:10%;'>{$fEmis}</td>"
+                        . "<td style='width:{$wDoc}%;'>{$tipo}" . $e($r['numero_documento'] ?? '') . "</td>"
+                        . "<td class='text-end' style='width:12%;'>$" . number_format($ts, 2) . "{$ndTxt}</td>"
+                        . "<td class='text-end' style='width:10%;'>" . ($nc > 0 ? '$' . number_format($nc, 2) : '—') . "</td>"
+                        . "<td class='text-end' style='width:12%;'>" . ($abonos > 0 ? '$' . number_format($abonos, 2) : '—') . "</td>"
+                        . "<td class='text-end' style='width:12%;'>" . ($ret > 0 ? '$' . number_format($ret, 2) : '—') . "</td>"
+                        . "<td class='text-end' style='width:12%;{$color}font-weight:bold;'>$" . number_format($tsal, 2) . "</td>"
+                        . "<td class='text-center' style='width:7%;{$color}'>" . ($dias > 0 ? $dias : '—') . "</td>"
                         . "</tr>";
                 }
 
                 $cuerpo .= "<tr class='sub'>"
                     . "<td colspan='{$colEtq}' class='text-end' style='width:{$wEtq}%;'>SUBTOTAL " . $e($g['nombre']) . "</td>"
-                    . "<td class='text-end' style='width:13%;'>$" . number_format($g['total'], 2) . "</td>"
-                    . "<td class='text-end' style='width:13%;color:#198754;'>$" . number_format($g['pagado'], 2) . "</td>"
-                    . "<td class='text-end' style='width:14%;'>$" . number_format($g['saldo'], 2) . "</td>"
+                    . "<td class='text-end' style='width:12%;'>$" . number_format($g['total'], 2) . "</td>"
+                    . "<td class='text-end' style='width:10%;'>$" . number_format($g['nc'], 2) . "</td>"
+                    . "<td class='text-end' style='width:12%;'>$" . number_format($g['abonos'], 2) . "</td>"
+                    . "<td class='text-end' style='width:12%;'>$" . number_format($g['retenciones'], 2) . "</td>"
+                    . "<td class='text-end' style='width:12%;'>$" . number_format($g['saldo'], 2) . "</td>"
+                    . "<td style='width:7%;'></td>"
                     . "</tr></tbody></table>";
             }
 
@@ -978,9 +984,12 @@ class CuentasPorPagarController extends BaseModuloController
             <table class="tot">
                 <tr>
                     <td class="text-end" style="width:<?= $wEtq ?>%;">TOTAL GENERAL (<?= count($grupos) ?> proveedor<?= count($grupos) !== 1 ? 'es' : '' ?>)</td>
-                    <td class="text-end" style="width:13%;">$<?= number_format($totTotal, 2) ?></td>
-                    <td class="text-end" style="width:13%;">$<?= number_format($totPagado, 2) ?></td>
-                    <td class="text-end" style="width:14%;">$<?= number_format($totSaldo, 2) ?></td>
+                    <td class="text-end" style="width:12%;">$<?= number_format($totTotal, 2) ?></td>
+                    <td class="text-end" style="width:10%;">$<?= number_format($totNc, 2) ?></td>
+                    <td class="text-end" style="width:12%;">$<?= number_format($totAbonos, 2) ?></td>
+                    <td class="text-end" style="width:12%;">$<?= number_format($totRet, 2) ?></td>
+                    <td class="text-end" style="width:12%;">$<?= number_format($totSaldo, 2) ?></td>
+                    <td style="width:7%;"></td>
                 </tr>
             </table>
             </page>
