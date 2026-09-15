@@ -327,7 +327,7 @@ class ReporteInventariosController extends BaseModuloController
         // front-end nunca lee `rawData`. Calcularlos obligaba a repetir entera la consulta de
         // saldos (la más cara del módulo) y a serializar dos veces el mismo resultado.
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 7 : 3),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 9 : 3),
             'agrupacion' => $modo,
         ];
     }
@@ -528,12 +528,26 @@ class ReporteInventariosController extends BaseModuloController
             ];
             $estado = $r['estado'] ?? '';
             $badgeClass = $badgesEstado[$estado] ?? 'bg-secondary';
+            // Lote y NUP llegan agregados (string_agg) porque la fila es el documento completo:
+            // si la consignación mezcla varios, se listan separados por coma y la celda recorta
+            // con ellipsis dejando el valor entero en el title.
+            $lotes = trim((string) ($r['lotes'] ?? '')) !== '' ? (string) $r['lotes'] : '-';
+            $nups  = trim((string) ($r['nups']  ?? '')) !== '' ? (string) $r['nups']  : '-';
+
+            $totalProductos = (float) ($r['total_productos'] ?? 0);
+            $tituloTotal = 'Consignado ' . number_format($totalProductos, 2)
+                . ' · Retornado ' . number_format((float) ($r['total_retornado'] ?? 0), 2)
+                . ' · Facturado ' . number_format((float) ($r['total_facturado'] ?? 0), 2);
+
             return '<tr class="ri-cv-row" style="cursor:pointer;" onclick="window.RI_Consignaciones.verDetalle(' . (int) ($r['id_consignacion'] ?? 0) . ')" title="Ver detalle de productos">'
                 . '<td class="small">' . date('d-m-Y', strtotime($r['fecha_emision'] ?? '')) . '<br><small class="text-muted">' . htmlspecialchars($r['secuencial'] ?? '') . '</small></td>'
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['cliente_identificacion'] ?? '') . '</small></td>'
                 . '<td class="small">' . htmlspecialchars($r['vendedor_nombre'] ?? '-') . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['responsable_traslado_nombre'] ?? '-') . '</td>'
-                . '<td class="text-center">' . (int) ($r['cantidad_productos'] ?? 0) . '</td>'
+                . '<td class="small text-truncate" style="max-width:150px;" title="' . htmlspecialchars($lotes, ENT_QUOTES) . '">' . htmlspecialchars($lotes) . '</td>'
+                . '<td class="small text-truncate" style="max-width:150px;" title="' . htmlspecialchars($nups, ENT_QUOTES) . '">' . htmlspecialchars($nups) . '</td>'
+                . '<td class="text-end" title="' . htmlspecialchars($tituloTotal, ENT_QUOTES) . '">' . number_format($totalProductos, 2)
+                . '<br><small class="text-muted">' . (int) ($r['cantidad_productos'] ?? 0) . ' ítem(s)</small></td>'
                 . '<td class="text-end fw-bold">' . number_format($saldo, 2) . '</td>'
                 . '<td class="text-center"><span class="badge ' . $badgeClass . '">' . htmlspecialchars($estado) . '</span></td>'
                 . '</tr>';
@@ -817,12 +831,25 @@ class ReporteInventariosController extends BaseModuloController
                 throw new \InvalidArgumentException('Consignación no válida.');
             }
 
-            $lineas = $this->repository->getConsignacionDetalleLineas($idEmpresa, $idConsignacion);
+            // El modal reaplica los mismos filtros de línea del listado para que sus totales
+            // cuadren con el "Total productos" y el "Saldo" de la fila. Con `sin_filtros=1`
+            // (enlace "Ver todas las líneas" del modal) se muestra el documento completo.
+            $filtrosLinea = empty($_REQUEST['sin_filtros'])
+                ? array_intersect_key(
+                    $this->getFiltrosConsignaciones(),
+                    array_flip(ReporteInventarioRepository::FILTROS_LINEA_CONSIGNACION)
+                )
+                : [];
+            $hayFiltros = !empty(array_filter($filtrosLinea, fn($v) => $v !== '' && $v !== null));
+
+            $lineas = $this->repository->getConsignacionDetalleLineas($idEmpresa, $idConsignacion, $filtrosLinea);
             if (empty($lineas)) {
                 echo json_encode(['ok' => false, 'error' => 'No se encontró la consignación o no pertenece a esta empresa.']);
                 exit;
             }
             $cab = $lineas[0];
+
+            $suma = fn(string $campo) => array_sum(array_map(fn($l) => (float) ($l[$campo] ?? 0), $lineas));
 
             echo json_encode([
                 'ok' => true,
@@ -835,6 +862,13 @@ class ReporteInventariosController extends BaseModuloController
                     'responsable'   => $cab['responsable_traslado_nombre'] ?? '-',
                     'estado'        => $cab['estado'] ?? '',
                 ],
+                'filtrado' => $hayFiltros,
+                'totales'  => [
+                    'consignado' => number_format($suma('cantidad_consignada'), 2),
+                    'retornado'  => number_format($suma('cantidad_retornada'), 2),
+                    'facturado'  => number_format($suma('cantidad_facturada'), 2),
+                    'saldo'      => number_format($suma('saldo'), 2),
+                ],
                 'rows' => $this->renderRows($lineas, fn($r) => $this->filaConsignacionDetalleLinea($r), 8),
             ]);
         } catch (\Throwable $e) {
@@ -844,16 +878,64 @@ class ReporteInventariosController extends BaseModuloController
         exit;
     }
 
-    /** Fila de documento (retorno o factura) dentro del sub-modal de una línea de consignación. */
-    private function filaDocumentoLinea(array $r, string $tipo): string
+    /** Fila de documento (retorno o factura) dentro del sub-modal de una línea de consignación.
+     *  En "factura" el documento es la FACTURA DE VENTA (establecimiento-punto-secuencial), no el
+     *  documento interno de facturación de consignación, y el PDF apunta al de Facturas de Venta. */
+    private function filaDocumentoLinea(array $r, string $tipo, bool $puedeVerPdf): string
     {
-        $fecha = $tipo === 'retorno' ? ($r['fecha_retorno'] ?? '') : ($r['fecha_emision'] ?? '');
-        $doc = trim(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? ''), '-');
+        $base = rtrim(BASE_URL, '/');
+
+        if ($tipo === 'retorno') {
+            $fecha  = $r['fecha_retorno'] ?? '';
+            $doc    = trim(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? ''), '-');
+            $sub    = '';
+            $urlPdf = $base . '/modulos/retornos-cv/pdf?id=' . (int) ($r['id'] ?? 0);
+        } else {
+            $fecha = $r['fecha_emision'] ?? '';
+            // La factura de venta se numera establecimiento-punto_emision-secuencial. Si ya no
+            // existe en ventas_cabecera, se cae al número que guardó la facturación.
+            $partes = array_filter([
+                trim((string) ($r['establecimiento'] ?? '')),
+                trim((string) ($r['punto_emision'] ?? '')),
+                trim((string) ($r['secuencial'] ?? '')),
+            ], fn($p) => $p !== '');
+            $doc = count($partes) === 3 ? implode('-', $partes) : trim((string) ($r['numero_factura'] ?? ''));
+            if ($doc === '') $doc = '-';
+
+            // El PDF solo se ofrece si la factura sigue existiendo (id_venta viene del LEFT JOIN
+            // contra ventas_cabecera): con solo `id_factura` se enlazaba a un documento borrado y
+            // el botón terminaba en un 404.
+            $idFactura = (int) ($r['id_venta'] ?? 0);
+            $urlPdf = ($idFactura > 0 && empty($r['factura_eliminada']))
+                ? $base . '/modulos/factura-venta/exportar-pdf-ajax?id=' . $idFactura
+                : '';
+
+            $estadoFac = trim((string) ($r['estado'] ?? ''));
+            $sub = ($estadoFac !== '' && strcasecmp($estadoFac, 'facturada') !== 0)
+                ? '<br><small class="text-muted">' . htmlspecialchars($estadoFac) . '</small>'
+                : '';
+        }
+
+        // Sin permiso de lectura sobre el módulo dueño del documento no se emite la celda: el JS
+        // oculta también su <th>, así no queda una columna llena de guiones para quien no puede
+        // abrir ninguno. El guard real sigue viviendo en el módulo destino (requireLeer), esto
+        // es solo no ofrecer un botón que iba a terminar en "no tiene permiso".
+        if (!$puedeVerPdf) {
+            $tdPdf = '';
+        } elseif ($urlPdf !== '') {
+            $tdPdf = '<td class="text-center"><a href="' . htmlspecialchars($urlPdf, ENT_QUOTES) . '" target="_blank" rel="noopener"'
+                . ' class="btn btn-sm btn-outline-danger py-0 px-1" title="Imprimir PDF del documento">'
+                . '<i class="bi bi-file-earmark-pdf"></i></a></td>';
+        } else {
+            $tdPdf = '<td class="text-center"><span class="text-muted small" title="El documento ya no está disponible">-</span></td>';
+        }
+
         return '<tr>'
             . '<td class="small">' . (!empty($fecha) ? date('d-m-Y', strtotime($fecha)) : '-') . '</td>'
-            . '<td class="small fw-bold">' . htmlspecialchars($doc) . '</td>'
+            . '<td class="small fw-bold">' . htmlspecialchars($doc) . $sub . '</td>'
             . '<td class="text-end small">' . number_format((float) ($r['cantidad'] ?? 0), 2) . '</td>'
             . '<td class="text-end small">' . number_format((float) ($r['total'] ?? 0), 2) . '</td>'
+            . $tdPdf
             . '</tr>';
     }
 
@@ -875,10 +957,17 @@ class ReporteInventariosController extends BaseModuloController
                 ? $this->repository->getRetornosDeLineaConsignacion($idEmpresa, $idDetalle)
                 : $this->repository->getFacturasDeLineaConsignacion($idEmpresa, $idDetalle);
 
+            // El PDF se sirve desde el módulo dueño del documento, que exige su propio permiso de
+            // lectura: si el usuario no lo tiene, el botón no se muestra en lugar de ofrecerle un
+            // enlace que iba a rebotar. Se resuelve una vez por petición (Permisos cachea).
+            $rutaDocumento = $tipo === 'retorno' ? 'modulos/retornos-cv' : 'modulos/factura-venta';
+            $puedeVerPdf   = !empty($this->permisosModuloPorRuta($rutaDocumento)['ver']);
+
             echo json_encode([
-                'ok'    => true,
-                'tipo'  => $tipo,
-                'rows'  => $this->renderRows($rows, fn($r) => $this->filaDocumentoLinea($r, $tipo), 4),
+                'ok'        => true,
+                'tipo'      => $tipo,
+                'puede_pdf' => $puedeVerPdf,
+                'rows'      => $this->renderRows($rows, fn($r) => $this->filaDocumentoLinea($r, $tipo, $puedeVerPdf), $puedeVerPdf ? 5 : 4),
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -1085,12 +1174,16 @@ class ReporteInventariosController extends BaseModuloController
                     default    => $this->repository->getConsignacionesDetalle($idEmpresa, $filtros),
                 };
                 if ($modo === 'NINGUNO') {
-                    $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Responsable de traslado', 'Producto', 'Bodega', 'Consignado', 'Saldo', 'Valor a costo'];
+                    $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Asesor', 'Responsable de traslado',
+                                'Producto', 'Bodega', 'Lote', 'NUP', 'Consignado', 'Retornado', 'Facturado', 'Saldo', 'Valor a costo'];
                     $data = array_map(fn($r) => [
                         date('d-m-Y', strtotime($r['fecha_emision'])), $r['secuencial'] ?? '',
-                        $r['cliente_nombre'] ?? '', $r['cliente_identificacion'] ?? '', $r['responsable_traslado_nombre'] ?? '',
+                        $r['cliente_nombre'] ?? '', $r['cliente_identificacion'] ?? '',
+                        $r['vendedor_nombre'] ?? '', $r['responsable_traslado_nombre'] ?? '',
                         $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? '',
-                        (float) $r['cantidad_consignada'], (float) $r['saldo'], (float) $r['valor_saldo'],
+                        $r['numero_lote'] ?? '-', $r['nup'] ?? '-',
+                        (float) $r['cantidad_consignada'], (float) $r['cantidad_retornada'], (float) $r['cantidad_facturada'],
+                        (float) $r['saldo'], (float) $r['valor_saldo'],
                     ], $rows);
                 } else {
                     $headers = ['Grupo', 'Consignaciones', 'Saldo', 'Valor a costo'];

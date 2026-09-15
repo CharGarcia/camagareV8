@@ -255,6 +255,61 @@ class CuentasPorPagarRepository extends BaseRepository
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // ORDEN DE LAS FILAS
+    //
+    // El listado mezcla los documentos del SQL (compras, liquidaciones e
+    // importaciones) con los saldos iniciales, así que el ORDER BY de la consulta
+    // no manda: el orden final se aplica sobre el arreglo ya unido (ver el
+    // controller). Como la pantalla, el Excel y el PDF parten de ese mismo
+    // arreglo, los tres salen igual.
+    //
+    // La pantalla ordena haciendo clic en las cabeceras y manda la columna elegida
+    // en `orden_col`/`orden_dir`; la lista blanca de abajo es la que decide qué se
+    // acepta. El gemelo en el navegador es CXP_ORDEN (public/js/modulos/cuentas_por_pagar.js).
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Orden por defecto: cartera alfabética por proveedor (A-Z). */
+    public const ORDEN_DEFECTO = ['proveedor_nombre', 'ASC'];
+
+    /** A igualdad de la columna elegida, el documento más próximo a vencer primero. */
+    private const ORDEN_DESEMPATES = ['fecha_vencimiento' => 'ASC', 'numero_documento' => 'ASC'];
+
+    /**
+     * Columnas por las que se puede ordenar el listado: clave (la misma que la vista
+     * manda en `data-sort`) => definición para App\Helpers\OrdenFilas.
+     */
+    private static function ordenColumnas(): array
+    {
+        return [
+            'numero_documento'  => ['tipo' => 'texto'],
+            'tipo_fuente'       => ['tipo' => 'texto'],
+            'proveedor_nombre'  => ['tipo' => 'texto'],
+            'fecha_emision'     => ['tipo' => 'fecha'],
+            'fecha_vencimiento' => ['tipo' => 'fecha'],
+            'total'             => ['tipo' => 'numero'],
+            'total_pagado'      => ['tipo' => 'numero'],
+            // Columna "NC/Ret." de la tabla: notas de crédito + retenciones − notas de débito.
+            'nc_ret'            => ['tipo' => 'numero', 'valor' => static fn (array $f): float =>
+                (float) ($f['total_nc'] ?? 0) + (float) ($f['total_retenido'] ?? 0) - (float) ($f['total_nd'] ?? 0)],
+            'saldo'             => ['tipo' => 'numero'],
+            'dias_vencido'      => ['tipo' => 'numero'],
+        ];
+    }
+
+    /** Aplica a las filas ya unificadas el orden pedido en los filtros. */
+    public function ordenarFilas(array $filas, array $filtros): array
+    {
+        return \App\Helpers\OrdenFilas::aplicar(
+            $filas,
+            self::ordenColumnas(),
+            self::ORDEN_DEFECTO,
+            $filtros['orden_col'] ?? '',
+            $filtros['orden_dir'] ?? '',
+            self::ORDEN_DESEMPATES
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // CONSULTA PRINCIPAL
     // ─────────────────────────────────────────────────────────────────────
 

@@ -105,7 +105,7 @@
                                     </div>
                                     <div class="col-md-2">
                                         <label class="x-small fw-bold text-muted mb-1">Vendedor</label>
-                                        <select class="form-select form-select-sm border-primary border-opacity-10" id="faccv_id_vendedor" style="height:31px;">
+                                        <select class="form-select form-select-sm border-primary border-opacity-10" id="faccv_id_vendedor" style="height:31px;" onchange="faccvInfoVendedor()">
                                             <option value="">Seleccione...</option>
                                             <?php foreach (($vendedores ?? []) as $v): ?>
                                                 <option value="<?= (int)$v['id'] ?>"><?= htmlspecialchars($v['nombre'] ?? '') ?></option>
@@ -114,7 +114,7 @@
                                     </div>
                                     <div class="col-md-4">
                                         <label class="x-small fw-bold text-muted mb-1">Observaciones</label>
-                                        <input type="text" class="form-control form-control-sm border-primary border-opacity-10" id="faccv_observaciones" style="height:31px;" placeholder="Notas internas (opcional)">
+                                        <input type="text" class="form-control form-control-sm border-primary border-opacity-10" id="faccv_observaciones" style="height:31px;" placeholder="Sale en la factura como info adicional" oninput="faccvInfoObservaciones()">
                                     </div>
                                 </div>
 
@@ -478,7 +478,7 @@
         $('faccv_btn_duplicar').classList.add('d-none');
         $('faccv_select_serie').disabled = false;
         $('faccv_fecha').value = CMG_fechaLocal();
-        $('faccv_tbody_info').innerHTML = ''; faccvAgregarInfo();
+        $('faccv_tbody_info').innerHTML = ''; faccvAgregarInfo(); faccvInfoDerivadas();
         // Forma de pago por defecto de la empresa (hasta elegir cliente).
         if (window.EMPRESA_CONFIG && EMPRESA_CONFIG.id_forma_pago_sri_def) faccvAplicarFormaPago(EMPRESA_CONFIG.id_forma_pago_sri_def);
         const sel = $('faccv_select_serie');
@@ -558,13 +558,22 @@
         faccvCargarPagos(r.pagos_sri || []);
         if (!editable) document.querySelectorAll('#faccv_pagos_container .faccv-fpago, #faccv_pagos_container .faccv-vpago').forEach(el => el.disabled = true);
 
-        // Info adicional (el "Correo del cliente" se recrea como fila fija).
-        $('faccv_tbody_info').innerHTML = '';
+        // Info adicional: el "Correo del cliente" y las filas derivadas se recrean
+        // como filas fijas. Las derivadas se pintan PRIMERO para saber cuáles quedaron
+        // repuestas desde la cabecera; una fila guardada con ese mismo concepto se
+        // descarta solo si ya está repuesta — si no (campo vacío, interruptor apagado,
+        // documento anterior a este cambio), se conserva tal cual para no perderla.
+        const tbInfo = $('faccv_tbody_info');
+        tbInfo.innerHTML = '';
+        faccvInfoDerivadas(editable);
+        const DERIVADAS = ['observaciones', 'vendedor', 'cajero'];
         (r.info_adicional || []).forEach(ia => {
             const nombre = ia.nombre || ia.concepto || '';
             const valor = ia.valor || ia.detalle || '';
-            if (nombre === 'Correo del cliente') faccvInfoCorreo(valor);
-            else faccvAgregarInfo(nombre, valor, !editable);
+            if (nombre === 'Correo del cliente') { faccvInfoCorreo(valor); return; }
+            const tipo = nombre.trim().toLowerCase();
+            if (DERIVADAS.includes(tipo) && tbInfo.querySelector(`tr[data-tipo="${tipo}"]`)) return;
+            faccvAgregarInfo(nombre, valor, !editable);
         });
 
         const dets = r.detalles || [];
@@ -631,18 +640,66 @@
             dd.classList.remove('d-none');
         }, 300);
     };
+    /**
+     * Fila fija de info adicional (como en factura de venta): la mantiene el modal,
+     * no se escribe a mano. Se identifica con data-tipo y se coloca al final.
+     * Si el valor viene vacío, la fila se elimina.
+     *
+     * `derivada = true` marca las filas que salen de OTRO campo del documento
+     * (observaciones, vendedor, cajero): se muestran para que se vea qué llevará
+     * la factura, pero NO se guardan en `info_adicional` del documento — al generar
+     * la factura las vuelve a armar el servidor desde la cabecera
+     * (ConsignacionFacturaService::conCamposDeCabecera), así nunca quedan
+     * desfasadas respecto del campo del que salen.
+     */
+    function faccvInfoFija(tipo, concepto, valor, titulo, opts) {
+        const o = opts || {};
+        const tb = $('faccv_tbody_info');
+        let fila = tb.querySelector(`tr[data-tipo="${tipo}"]`);
+        const v = String(valor || '').trim();
+        if (!v) { if (fila) fila.remove(); return; }
+        if (fila) { fila.querySelector('.input-info-detalle').value = v; return; }
+        const tr = document.createElement('tr');
+        tr.className = 'row-faccv-info' + (o.derivada ? ' faccv-info-derivada' : '');
+        tr.dataset.tipo = tipo;
+        tr.innerHTML = `
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:22px;font-size:0.78rem;" value="${esc(concepto)}" readonly></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:22px;font-size:0.78rem;" value="${esc(v)}" ${o.detalleEditable ? '' : 'readonly'}></td>
+            <td class="p-0 text-center pe-1"><span class="text-muted small" title="${esc(titulo)}"><i class="bi bi-lock-fill"></i></span></td>`;
+        tb.appendChild(tr);
+    }
+
     // Fila fija "Correo del cliente" en info adicional (como en factura de venta).
     function faccvInfoCorreo(email) {
-        const tb = $('faccv_tbody_info');
-        let fila = tb.querySelector('tr[data-tipo="correo-cliente"]');
-        if (!email) { if (fila) fila.remove(); return; }
-        if (fila) { fila.querySelector('.input-info-detalle').value = email; return; }
-        const tr = document.createElement('tr'); tr.className = 'row-faccv-info'; tr.dataset.tipo = 'correo-cliente';
-        tr.innerHTML = `
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:22px;font-size:0.78rem;" value="Correo del cliente" readonly></td>
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:22px;font-size:0.78rem;" value="${esc(email)}"></td>
-            <td class="p-0 text-center pe-1"><span class="text-muted small" title="Se actualiza al cambiar el cliente"><i class="bi bi-lock-fill"></i></span></td>`;
-        tb.appendChild(tr);
+        faccvInfoFija('correo-cliente', 'Correo del cliente', email, 'Se actualiza al cambiar el cliente', { detalleEditable: true });
+    }
+
+    /**
+     * Filas derivadas de la cabecera del documento que viajan a la factura de venta:
+     * Observaciones siempre, Vendedor y Cajero según la configuración del
+     * establecimiento (los mismos interruptores que usa Factura de Venta).
+     */
+    window.faccvInfoObservaciones = function () {
+        faccvInfoFija('observaciones', 'Observaciones', $('faccv_observaciones')?.value || '', 'Sale de las Observaciones del documento', { derivada: true });
+    };
+    window.faccvInfoVendedor = function () {
+        if (!(window.EMPRESA_CONFIG && EMPRESA_CONFIG.mostrar_vendedor_factura)) return;
+        const sel = $('faccv_id_vendedor');
+        const nombre = (sel && sel.value) ? (sel.options[sel.selectedIndex]?.text || '') : '';
+        faccvInfoFija('vendedor', 'Vendedor', nombre === 'Seleccione...' ? '' : nombre, 'Sale del Vendedor del documento', { derivada: true });
+    };
+    // El cajero solo se anticipa mientras el documento es un borrador: en uno ya
+    // facturado el cajero real es quien generó esa factura, no quien lo está viendo.
+    function faccvInfoCajero(mostrar) {
+        if (!(window.EMPRESA_CONFIG && EMPRESA_CONFIG.mostrar_cajero_factura)) return;
+        faccvInfoFija('cajero', 'Cajero', mostrar ? (window.FACCV_USUARIO_NOMBRE || '') : '', 'Usuario que genera la factura', { derivada: true });
+    }
+
+    /** Refresca las tres filas derivadas de una sola vez. */
+    function faccvInfoDerivadas(editable) {
+        faccvInfoObservaciones();
+        faccvInfoVendedor();
+        faccvInfoCajero(editable !== false);
     }
     // Preselecciona la forma de pago SRI (data-id) en la PRIMERA fila y, si es la única
     // y su valor está en 0, le asigna el total del documento.
@@ -719,6 +776,8 @@
         // Vendedor del cliente.
         const selV = $('faccv_id_vendedor');
         if (c.id_vendedor && selV && selV.querySelector(`option[value="${c.id_vendedor}"]`)) selV.value = c.id_vendedor;
+        faccvInfoVendedor(); // asignar por código no dispara el onchange del select
+
         // Correo del cliente → info adicional.
         faccvInfoCorreo(c.email || '');
         // Días de crédito del cliente.
@@ -1075,12 +1134,16 @@
             <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:22px;font-size:0.78rem;" placeholder="Concepto..." value="${esc(concepto || '')}" ${dis}></td>
             <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:22px;font-size:0.78rem;" placeholder="Detalle..." value="${esc(detalle || '')}" ${dis}></td>
             <td class="p-0 text-center pe-1">${readonly ? '' : `<button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none" onclick="this.closest('tr').remove();"><i class="bi bi-x-circle-fill"></i></button>`}</td>`;
-        tb.appendChild(tr);
+        // Siempre antes de la primera fila fija (data-tipo): las fijas van al final.
+        const primeraFija = tb.querySelector('tr[data-tipo]');
+        if (primeraFija) tb.insertBefore(tr, primeraFija); else tb.appendChild(tr);
         if (!readonly) tr.querySelector('.input-info-concepto').focus();
     };
     function collectInfo() {
         const out = [];
-        document.querySelectorAll('#faccv_tbody_info .row-faccv-info').forEach(tr => {
+        // Las filas derivadas (Observaciones / Vendedor / Cajero) no se guardan: se
+        // arman solas desde la cabecera, aquí y al generar la factura (ver faccvInfoFija).
+        document.querySelectorAll('#faccv_tbody_info .row-faccv-info:not(.faccv-info-derivada)').forEach(tr => {
             const nombre = (tr.querySelector('.input-info-concepto')?.value || '').trim();
             const valor  = (tr.querySelector('.input-info-detalle')?.value || '').trim();
             if (nombre && valor) out.push({ nombre, valor });

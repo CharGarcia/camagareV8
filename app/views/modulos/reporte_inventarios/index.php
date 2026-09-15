@@ -511,7 +511,7 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor</label>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Asesor</label>
                                 <select id="ri-cv-vendedor" class="form-select form-select-sm shadow-none border" style="width:140px;">
                                     <option value="">Todos</option>
                                     <?php foreach (($vendedores ?? []) as $v): ?><option value="<?= (int) $v['id'] ?>"><?= htmlspecialchars($v['nombre']) ?></option><?php endforeach; ?>
@@ -592,7 +592,7 @@
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-cv-thead"></thead>
                             <tbody id="ri-cv-tbody">
-                                <tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -698,10 +698,11 @@
                 <div class="row g-2 mb-3 small">
                     <div class="col-md-3"><span class="text-muted">Fecha:</span> <span id="ri-cv-modal-fecha" class="fw-bold"></span></div>
                     <div class="col-md-4"><span class="text-muted">Cliente:</span> <span id="ri-cv-modal-cliente" class="fw-bold"></span></div>
-                    <div class="col-md-2"><span class="text-muted">Vendedor:</span> <span id="ri-cv-modal-vendedor" class="fw-bold"></span></div>
+                    <div class="col-md-2"><span class="text-muted">Asesor:</span> <span id="ri-cv-modal-vendedor" class="fw-bold"></span></div>
                     <div class="col-md-3"><span class="text-muted">Estado:</span> <span id="ri-cv-modal-estado" class="fw-bold"></span></div>
                     <div class="col-md-3"><span class="text-muted">Responsable traslado:</span> <span id="ri-cv-modal-responsable" class="fw-bold"></span></div>
                 </div>
+                <div id="ri-cv-modal-aviso" class="alert alert-info py-1 px-2 small mb-2 d-none"></div>
                 <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">
@@ -714,6 +715,7 @@
                         <tbody id="ri-cv-modal-tbody">
                             <tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
                         </tbody>
+                        <tfoot id="ri-cv-modal-tfoot"></tfoot>
                     </table>
                 </div>
             </div>
@@ -746,10 +748,11 @@
                             <tr class="text-secondary">
                                 <th>Fecha</th><th>Documento</th>
                                 <th class="text-end">Cantidad</th><th class="text-end">Total</th>
+                                <th class="text-center" id="ri-cv-docs-th-pdf">PDF</th>
                             </tr>
                         </thead>
                         <tbody id="ri-cv-docs-tbody">
-                            <tr><td colspan="4" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                            <tr><td colspan="5" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
                         </tbody>
                     </table>
                 </div>

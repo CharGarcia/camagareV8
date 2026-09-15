@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable
-version: 1.5
+etiquetas: facturacion de consignacion, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura
+version: 1.6
 orden: 47
 estado: activo
 ---
@@ -61,8 +61,7 @@ y solo cuando está correcto se emite la factura.
 3. **Agregar seleccionados** lleva las líneas a la tabla del documento. Si aún no
    hay cliente, se toma el de la consignación junto con su vendedor, días de
    crédito, forma de pago y correo.
-4. Se completan Info. Adicional, Forma de pago SRI y Crédito en el pie, igual que
-   en una factura de venta.
+4. Se completan Info. Adicional, Forma de pago SRI y Crédito en el pie, igual que en una factura de venta. En *Info. Adicional* aparecen además, con un candado, las líneas que el sistema mantiene solo (correo del cliente, observaciones, vendedor y cajero): no se editan ahí, se cambian en su propio campo, y son las que viajarán a la factura.
 5. **Guardar** deja el documento en **Borrador**: todavía no toca inventario ni
    emite nada, y se puede seguir editando.
 6. **Generar factura** reingresa la mercadería al inventario y emite la
@@ -98,12 +97,12 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 | Serie | Sí | Punto de emisión con secuencial de facturación de consignaciones. |
 | Secuencial | — | Lo asigna el servidor al guardar; no se teclea. |
 | Vendedor | No | Se precarga con el vendedor del cliente. |
-| Observaciones | No | Notas internas; no salen en la factura. |
+| Observaciones | No | Nota del documento. **Sale en la factura** como una línea de información adicional con el concepto *Observaciones*. |
 | Cliente a facturar | Sí | A quién se le emite. Puede ser distinto del cliente de la consignación. |
 | Precio | Sí | Precio de la consignación o uno de la lista de precios del producto. |
 | Cant. | Sí | Nunca mayor al saldo facturable de esa línea. |
 | Desc. | No | Descuento en dólares de la línea; tope = precio × cantidad. |
-| Info. Adicional | No | Pares concepto/detalle que viajan a la factura; incluye el correo del cliente. |
+| Info. Adicional | No | Pares concepto/detalle que viajan a la factura. Las filas con candado (correo del cliente, observaciones, vendedor, cajero) las completa el sistema. |
 | Forma de pago SRI | No | Una o varias formas con su valor. Si no se indica ninguna, se emite una sola por el total. |
 | Días de crédito / Plazo | No | Se precargan con el plazo del cliente. |
 
@@ -129,11 +128,12 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 - La base imponible de cada línea es `precio × cantidad − descuento`, redondeada
   a centavos **antes** de calcular el IVA, para que el total del modal coincida
   al centavo con la factura emitida.
-- Al generar la factura, el sistema añade automáticamente a su **información
-  adicional** una línea con el concepto **Consignación** y el número de cada
-  consignación facturada: **solo el secuencial, sin la serie y sin los ceros de
-  relleno** (`001-001-000000012` se escribe `12`), separados por coma si son
-  varias. Esa línea se suma a la información adicional que ya tenga el documento.
+- Al generar la factura, el sistema completa su **información adicional** con lo que el documento ya tiene, sin teclear nada:
+  - **Consignación**: el número de cada consignación facturada, solo el secuencial, sin la serie y sin los ceros de relleno (`001-001-000000012` se escribe `12`), separados por coma si son varias.
+  - **Observaciones**: lo escrito en el campo *Observaciones* del documento.
+  - **Vendedor** y **Cajero**: el vendedor del documento y el usuario que genera la factura, siempre que la empresa los tenga activados en su ficha (*¿Mostrar el cajero / el vendedor en la factura?*).
+  - **Correo del cliente** y **RUC Proveedor**: los agrega la factura de venta, igual que en cualquier otra factura.
+- Si el documento ya trae una línea de información adicional escrita a mano con uno de esos conceptos, manda la suya: el sistema no la duplica ni la pisa. Todas estas líneas salen en el **RIDE** y viajan en el **XML** autorizado.
 - **Crear nueva desde esta** (duplicar) solo aparece en documentos *facturada* o
   *anulada*. Recorta cada cantidad al saldo vigente y **escala el descuento en la
   misma proporción**; las líneas sin saldo se omiten.
@@ -179,6 +179,8 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   que repara el enlace de esas líneas.
 
 ## Historial de cambios
+
+- **1.6** — La factura generada ya lleva en su información adicional las **Observaciones** del documento y, según la configuración de la empresa, el **Vendedor** y el **Cajero**. Antes las observaciones solo se veían en el PDF del sistema y no viajaban en el comprobante.
 
 - **1.5** — El PDF de una facturación con muchos productos ya no sale troceado.
   A partir de unas 20 líneas el documento se partía en decenas de hojas con un

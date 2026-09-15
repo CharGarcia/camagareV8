@@ -28,6 +28,52 @@ let CXC_consolidado = false;
 // ¿Ya se consultó el listado al menos una vez? Al entrar al módulo NO se carga nada: el
 // usuario elige sus filtros y presiona "Aplicar"; recién ahí se consulta al servidor.
 let CXC_cargado = false;
+/* ════════════════════════════════════════════════════
+   ORDEN DE LA TABLA
+   Columnas ordenables al hacer clic en la cabecera. La clave es la misma que el
+   `data-sort` del <th> y la que manda al servidor en `orden_col`: tiene que existir
+   igual en CuentasPorCobrarRepository::ordenColumnas(), que es quien ordena el Excel
+   y el PDF. El orden por defecto (cliente A-Z) y los desempates también son los
+   mismos que allá, para que reordenar aquí y recargar den la misma lista.
+════════════════════════════════════════════════════ */
+const CXC_ORDEN = {
+    numero_factura:    { tipo: 'texto'  },
+    origen:            { tipo: 'texto'  },
+    cliente_nombre:    { tipo: 'texto'  },
+    fecha_emision:     { tipo: 'fecha'  },
+    fecha_vencimiento: { tipo: 'fecha'  },
+    total:             { tipo: 'numero' },
+    // "Cobrado" = abonos + retenciones + notas de crédito aplicadas (lo que muestra la columna)
+    cobrado:           { tipo: 'numero', valor: r => CXC_totalCobrado(r) },
+    saldo:             { tipo: 'numero' },
+    dias_vencido:      { tipo: 'numero' },
+};
+const CXC_ORDEN_DEFECTO    = ['cliente_nombre', 'ASC'];
+const CXC_ORDEN_DESEMPATES = { fecha_vencimiento: 'ASC', numero_factura: 'ASC' };
+
+/* El orden vive en los hidden del formulario de filtros: así viaja tal cual en la
+   consulta del listado y en las exportaciones. */
+function CXC_getOrden() {
+    return [
+        document.getElementById('cxc-orden-col')?.value || '',
+        (document.getElementById('cxc-orden-dir')?.value || 'ASC').toUpperCase()
+    ];
+}
+
+function CXC_setOrden(col, dir) {
+    const inpCol = document.getElementById('cxc-orden-col');
+    const inpDir = document.getElementById('cxc-orden-dir');
+    if (inpCol) inpCol.value = col;
+    if (inpDir) inpDir.value = dir;
+}
+
+/* Reordena en el navegador las filas ya cargadas (el listado no es paginado y su
+   consulta es cara: no vale la pena volver al servidor solo por reordenar). */
+function CXC_aplicarOrden(filas) {
+    if (!window.CMG_OrdenTabla) return filas;
+    const [col, dir] = CXC_getOrden();
+    return window.CMG_OrdenTabla.ordenar(filas, CXC_ORDEN, CXC_ORDEN_DEFECTO, col, dir, CXC_ORDEN_DESEMPATES);
+}
 
 /* Alcance elegido en el filtro (el select solo existe cuando la empresa activa es la matriz). */
 function CXC_getAlcance() {
@@ -60,12 +106,30 @@ async function CXC_cargarCatalogosDe(idEmpresa) {
 document.addEventListener('DOMContentLoaded', () => {
     // Al entrar NO se consulta nada: el listado se carga solo cuando el usuario
     // presiona "Aplicar" (ver CXC_cargado / CXC_recargar).
+    CXC_initOrden();
     CXC_estadoInicial();
     CXC_cargarCatalogos();
     if (CXC_TIENE_WA) CXC_cargarPlantillasWA();
     CXC_initBuscadorClientes();
     CXC_initBuscadorProductos();
 });
+
+/* Cabeceras clicables: alternan la dirección, guardan la preferencia del usuario
+   (sin recargar la página, que perdería los filtros) y repintan la tabla. */
+function CXC_initOrden() {
+    if (!window.CMG_OrdenTabla) return;
+    window.CMG_OrdenTabla.engancharCabeceras({
+        modulo:      RUTA_MODULO_CXC,
+        contenedor:  '#cxc-thead',
+        getOrden:    CXC_getOrden,
+        setOrden:    CXC_setOrden,
+        onSort:      () => {
+            CXC_datos         = CXC_aplicarOrden(CXC_datos);
+            CXC_filtradoLocal = CXC_aplicarOrden(CXC_filtradoLocal);
+            CXC_renderTabla(CXC_filtradoLocal);
+        }
+    });
+}
 
 /* ════════════════════════════════════════════════════
    CARGAR DATOS PRINCIPALES
@@ -106,6 +170,9 @@ async function CXC_cargar() {
         id_producto: CXC_getProductosSeleccionados(),
         producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
+        // El servidor devuelve las filas ya ordenadas (mismas reglas que aquí)
+        orden_col:   CXC_getOrden()[0],
+        orden_dir:   CXC_getOrden()[1],
         // Vista "Por producto": pide además las líneas de producto de cada documento
         incluir_lineas: CXC_vista === 'producto' ? '1' : '',
     });
@@ -308,22 +375,24 @@ function CXC_accionesHtml(r) {
    cliente: fecha, documento, total, NC, abonos, retenciones,
    saldo, días vencidos y asesor.
 ════════════════════════════════════════════════════ */
+/* Copia exacta del colgroup/thead de la vista (index.php): anchos y cabeceras ordenables
+   (`data-sort` = clave de CXC_ORDEN). Si se cambia allá, cambiar aquí. */
 const CXC_COLS_ESTANDAR = `
-    <col style="width:36px;"><col style="width:160px;"><col style="width:120px;"><col>
-    <col style="width:92px;"><col style="width:100px;"><col style="width:95px;">
-    <col style="width:95px;"><col style="width:95px;"><col style="width:125px;"><col style="width:162px;">`;
+    <col style="width:36px;"><col style="width:170px;"><col style="width:120px;"><col>
+    <col style="width:110px;"><col style="width:126px;"><col style="width:95px;">
+    <col style="width:100px;"><col style="width:95px;"><col style="width:125px;"><col style="width:162px;">`;
 const CXC_TH_ESTANDAR = `
     <tr>
         <th class="text-center p-1"></th>
-        <th class="ps-2">Documento</th>
-        <th class="text-center">Origen</th>
-        <th>Cliente</th>
-        <th>F.Emisión</th>
-        <th>F.Vencimiento</th>
-        <th class="text-end">Total</th>
-        <th class="text-end">Cobrado</th>
-        <th class="text-end pe-3">Saldo</th>
-        <th class="text-center">Estado</th>
+        <th class="ps-2 sortable-header" data-sort="numero_factura" role="button" title="Ordenar por documento">Documento <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-center sortable-header" data-sort="origen" role="button" title="Ordenar por origen">Origen <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="sortable-header" data-sort="cliente_nombre" role="button" title="Ordenar por cliente">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="sortable-header" data-sort="fecha_emision" role="button" title="Ordenar por fecha de emisión">F.Emisión <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="sortable-header" data-sort="fecha_vencimiento" role="button" title="Ordenar por fecha de vencimiento">F.Vencimiento <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-end sortable-header" data-sort="total" role="button" title="Ordenar por total">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-end sortable-header" data-sort="cobrado" role="button" title="Ordenar por cobrado">Cobrado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-end pe-3 sortable-header" data-sort="saldo" role="button" title="Ordenar por saldo">Saldo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-center sortable-header" data-sort="dias_vencido" role="button" title="Ordenar por días vencidos">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
         <th class="text-center">Acciones</th>
     </tr>`;
 const CXC_COLS_MAYOR = `
@@ -352,6 +421,9 @@ function CXC_renderCabecera() {
     const mayor = (CXC_vista === 'agrupado');
     cg.innerHTML = mayor ? CXC_COLS_MAYOR   : CXC_COLS_ESTANDAR;
     th.innerHTML = mayor ? CXC_TH_MAYOR     : CXC_TH_ESTANDAR;
+    // Los <th> recién creados no tienen el clic de ordenar: se vuelven a enganchar
+    // (engancharCabeceras no duplica en los que ya lo tienen y repinta las flechas).
+    CXC_initOrden();
 }
 
 /* Fila de un documento dentro de la sección de su cliente (vista "Por cliente"):
@@ -1499,6 +1571,9 @@ function CXC_exportarExcel() {
         id_producto: CXC_getProductosSeleccionados(),
         producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
+        // Mismo orden que la pantalla: el Excel y el PDF salen como se ve la tabla
+        orden_col:   CXC_getOrden()[0],
+        orden_dir:   CXC_getOrden()[1],
         // La exportación sale con la misma estructura que la vista activa: por producto, o por
         // cliente en formato mayor (sección por cliente, subtotal y total general).
         vista:       CXC_vista === 'producto' ? 'PRODUCTO' : (CXC_vista === 'agrupado' ? 'CLIENTE' : ''),
@@ -1517,6 +1592,9 @@ function CXC_exportarPDF() {
         id_producto: CXC_getProductosSeleccionados(),
         producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
+        // Mismo orden que la pantalla: el Excel y el PDF salen como se ve la tabla
+        orden_col:   CXC_getOrden()[0],
+        orden_dir:   CXC_getOrden()[1],
         // La exportación sale con la misma estructura que la vista activa: por producto, o por
         // cliente en formato mayor (sección por cliente, subtotal y total general).
         vista:       CXC_vista === 'producto' ? 'PRODUCTO' : (CXC_vista === 'agrupado' ? 'CLIENTE' : ''),

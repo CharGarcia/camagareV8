@@ -4,6 +4,9 @@
 <style>
     .cxc-scroll  { overflow-x:auto; }
     .cxc-scroll thead th { background:#f8f9fa; box-shadow:0 1px 0 #dee2e6; white-space:nowrap; }
+    /* Cabeceras ordenables: el ancho de cada columna ya contempla el ícono de la flecha */
+    .cxc-scroll thead th.sortable-header { cursor:pointer; user-select:none; overflow:hidden; }
+    .cxc-scroll thead th.sortable-header:hover { background:#eef2f5; }
     .badge-vencida  { background:rgba(220,53,69,.12);  color:#dc3545; border:1px solid rgba(220,53,69,.25); }
     .badge-vigente  { background:rgba(25,135,84,.12);  color:#198754; border:1px solid rgba(25,135,84,.25); }
     .badge-proxima  { background:rgba(255,193,7,.15);  color:#856404; border:1px solid rgba(255,193,7,.35); }
@@ -154,6 +157,12 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Orden de la tabla: lo fijan las cabeceras (clic) y viaja en las consultas
+                     y en las exportaciones, para que el Excel y el PDF salgan con el mismo
+                     orden que se ve en pantalla. Vacío = el orden por defecto (cliente A-Z). -->
+                <input type="hidden" name="orden_col" id="cxc-orden-col" value="<?= htmlspecialchars($ordenCol ?? '') ?>">
+                <input type="hidden" name="orden_dir" id="cxc-orden-dir" value="<?= htmlspecialchars($ordenDir ?? 'ASC') ?>">
             </form>
         </div>
         <div class="card-footer bg-white border-top py-2 px-3">
@@ -239,35 +248,38 @@
         </div>
         <div class="card-body p-0">
             <div class="cxc-scroll w-100">
-                <table class="table table-hover table-sm mb-0 align-middle" id="tabla-cxc" style="table-layout:fixed;min-width:1240px;">
+                <table class="table table-hover table-sm mb-0 align-middle" id="tabla-cxc" style="table-layout:fixed;min-width:1310px;">
                     <!-- Columnas de la vista Detallado / Por producto. La vista "Por cliente"
                          reemplaza colgroup y thead desde el JS (CXC_renderCabecera), porque
                          dentro de cada cliente el detalle que se necesita es otro. -->
                     <colgroup id="cxc-colgroup">
                         <col style="width:36px;">
-                        <col style="width:160px;">
-                        <col style="width:120px;">
-                        <col>
-                        <col style="width:92px;">
-                        <col style="width:100px;">
-                        <col style="width:95px;">
-                        <col style="width:95px;">
-                        <col style="width:95px;">
-                        <col style="width:125px;">
-                        <col style="width:162px;">
+                        <col style="width:170px;"><!-- Documento -->
+                        <col style="width:120px;"><!-- Origen -->
+                        <col><!-- Cliente -->
+                        <col style="width:110px;"><!-- F.Emisión -->
+                        <col style="width:126px;"><!-- F.Vencimiento -->
+                        <col style="width:95px;"><!-- Total -->
+                        <col style="width:100px;"><!-- Cobrado -->
+                        <col style="width:95px;"><!-- Saldo -->
+                        <col style="width:125px;"><!-- Estado -->
+                        <col style="width:162px;"><!-- Acciones -->
                     </colgroup>
+                    <!-- Cabeceras ordenables: `data-sort` debe existir en la lista blanca de
+                         CuentasPorCobrarRepository::ordenColumnas() y en CXC_ORDEN (el JS del
+                         módulo); si no, el clic cae al orden por defecto. -->
                     <thead class="table-light" id="cxc-thead">
                         <tr>
                             <th class="text-center p-1"></th>
-                            <th class="ps-2">Documento</th>
-                            <th class="text-center">Origen</th>
-                            <th>Cliente</th>
-                            <th>F.Emisión</th>
-                            <th>F.Vencimiento</th>
-                            <th class="text-end">Total</th>
-                            <th class="text-end">Cobrado</th>
-                            <th class="text-end pe-3">Saldo</th>
-                            <th class="text-center">Estado</th>
+                            <th class="ps-2 sortable-header" data-sort="numero_factura" role="button" title="Ordenar por documento">Documento <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-center sortable-header" data-sort="origen" role="button" title="Ordenar por origen">Origen <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" data-sort="cliente_nombre" role="button" title="Ordenar por cliente">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" data-sort="fecha_emision" role="button" title="Ordenar por fecha de emisión">F.Emisión <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" data-sort="fecha_vencimiento" role="button" title="Ordenar por fecha de vencimiento">F.Vencimiento <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-end sortable-header" data-sort="total" role="button" title="Ordenar por total">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-end sortable-header" data-sort="cobrado" role="button" title="Ordenar por cobrado">Cobrado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-end pe-3 sortable-header" data-sort="saldo" role="button" title="Ordenar por saldo">Saldo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-center sortable-header" data-sort="dias_vencido" role="button" title="Ordenar por días vencidos">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
@@ -606,4 +618,6 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 </script>
 <!-- Cédula y RUC del mismo tercero (cédula + '001') se tratan como uno solo -->
 <script src="<?php echo BASE_URL; ?>/js/components/identificacion_tercero.js?v=<?= asset_ver('/js/components/identificacion_tercero.js') ?>"></script>
+<!-- Ordenamiento de la tabla por las cabeceras (mismas reglas que App\Helpers\OrdenFilas) -->
+<script src="<?php echo BASE_URL; ?>/js/components/orden_tabla.js?v=<?= asset_ver('/js/components/orden_tabla.js') ?>"></script>
 <script src="<?php echo BASE_URL; ?>/js/modulos/cuentas_por_cobrar.js?v=<?= asset_ver('/js/modulos/cuentas_por_cobrar.js') ?>"></script>

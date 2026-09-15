@@ -20,6 +20,54 @@ let CXP_consolidado   = false;
 // ¿Ya se consultó el listado al menos una vez? Al entrar al módulo NO se carga nada: el
 // usuario elige sus filtros y presiona "Aplicar"; recién ahí se consulta al servidor.
 let CXP_cargado       = false;
+/* ════════════════════════════════════════════════════
+   ORDEN DE LA TABLA
+   Columnas ordenables al hacer clic en la cabecera. La clave es la misma que el
+   `data-sort` del <th> y la que manda al servidor en `orden_col`: tiene que existir
+   igual en CuentasPorPagarRepository::ordenColumnas(), que es quien ordena el Excel
+   y el PDF. El orden por defecto (proveedor A-Z) y los desempates también son los
+   mismos que allá, para que reordenar aquí y recargar den la misma lista.
+════════════════════════════════════════════════════ */
+const CXP_ORDEN = {
+    numero_documento:  { tipo: 'texto'  },
+    tipo_fuente:       { tipo: 'texto'  },
+    proveedor_nombre:  { tipo: 'texto'  },
+    fecha_emision:     { tipo: 'fecha'  },
+    fecha_vencimiento: { tipo: 'fecha'  },
+    total:             { tipo: 'numero' },
+    total_pagado:      { tipo: 'numero' },
+    // Columna "NC/Ret.": notas de crédito + retenciones − notas de débito
+    nc_ret:            { tipo: 'numero', valor: r =>
+        (parseFloat(r.total_nc) || 0) + (parseFloat(r.total_retenido) || 0) - (parseFloat(r.total_nd) || 0) },
+    saldo:             { tipo: 'numero' },
+    dias_vencido:      { tipo: 'numero' },
+};
+const CXP_ORDEN_DEFECTO    = ['proveedor_nombre', 'ASC'];
+const CXP_ORDEN_DESEMPATES = { fecha_vencimiento: 'ASC', numero_documento: 'ASC' };
+
+/* El orden vive en los hidden del formulario de filtros: así viaja tal cual en la
+   consulta del listado y en las exportaciones. */
+function CXP_getOrden() {
+    return [
+        document.getElementById('cxp-orden-col')?.value || '',
+        (document.getElementById('cxp-orden-dir')?.value || 'ASC').toUpperCase()
+    ];
+}
+
+function CXP_setOrden(col, dir) {
+    const inpCol = document.getElementById('cxp-orden-col');
+    const inpDir = document.getElementById('cxp-orden-dir');
+    if (inpCol) inpCol.value = col;
+    if (inpDir) inpDir.value = dir;
+}
+
+/* Reordena en el navegador las filas ya cargadas (el listado no es paginado y su
+   consulta es cara: no vale la pena volver al servidor solo por reordenar). */
+function CXP_aplicarOrden(filas) {
+    if (!window.CMG_OrdenTabla) return filas;
+    const [col, dir] = CXP_getOrden();
+    return window.CMG_OrdenTabla.ordenar(filas, CXP_ORDEN, CXP_ORDEN_DEFECTO, col, dir, CXP_ORDEN_DESEMPATES);
+}
 
 /* Alcance elegido en el filtro (el select solo existe cuando la empresa activa es la matriz). */
 function CXP_getAlcance() {
@@ -53,10 +101,28 @@ async function CXP_cargarCatalogosDe(idEmpresa) {
 document.addEventListener('DOMContentLoaded', () => {
     // Al entrar NO se consulta nada: el listado se carga solo cuando el usuario
     // presiona "Aplicar" (ver CXP_cargado / CXP_recargar).
+    CXP_initOrden();
     CXP_estadoInicial();
     CXP_cargarCatalogos();
     CXP_initBuscadorProveedores();
 });
+
+/* Cabeceras clicables: alternan la dirección, guardan la preferencia del usuario
+   (sin recargar la página, que perdería los filtros) y repintan la tabla. */
+function CXP_initOrden() {
+    if (!window.CMG_OrdenTabla) return;
+    window.CMG_OrdenTabla.engancharCabeceras({
+        modulo:     RUTA_MODULO_CXP,
+        contenedor: '#cxp-thead',
+        getOrden:   CXP_getOrden,
+        setOrden:   CXP_setOrden,
+        onSort:     () => {
+            CXP_datos         = CXP_aplicarOrden(CXP_datos);
+            CXP_filtradoLocal = CXP_aplicarOrden(CXP_filtradoLocal);
+            CXP_renderTabla(CXP_filtradoLocal);
+        }
+    });
+}
 
 /* ════════════════════════════════════════════════════
    CARGAR DATOS PRINCIPALES
@@ -93,6 +159,9 @@ async function CXP_cargar() {
         fecha_hasta: document.getElementById('cxp-fecha-hasta')?.value  || '',
         id_proveedor:CXP_getProveedoresSeleccionados(),
         alcance:     CXP_getAlcance(),
+        // El servidor devuelve las filas ya ordenadas (mismas reglas que aquí)
+        orden_col:   CXP_getOrden()[0],
+        orden_dir:   CXP_getOrden()[1],
     });
 
     try {
@@ -317,22 +386,24 @@ function CXP_accionesHtml(r) {
    fecha, documento, total, NC, abonos, retenciones, saldo
    y días vencidos.
 ════════════════════════════════════════════════════ */
+/* Copia exacta del colgroup/thead de la vista (index.php): anchos y cabeceras ordenables
+   (`data-sort` = clave de CXP_ORDEN). Si se cambia allá, cambiar aquí. */
 const CXP_COLS_ESTANDAR = `
-    <col style="width:165px;"><col style="width:120px;"><col><col style="width:92px;">
-    <col style="width:108px;"><col style="width:98px;"><col style="width:88px;">
-    <col style="width:82px;"><col style="width:102px;"><col style="width:128px;"><col style="width:80px;">`;
+    <col style="width:175px;"><col style="width:120px;"><col><col style="width:110px;">
+    <col style="width:134px;"><col style="width:98px;"><col style="width:96px;">
+    <col style="width:96px;"><col style="width:102px;"><col style="width:128px;"><col style="width:80px;">`;
 const CXP_TH_ESTANDAR = `
     <tr>
-        <th class="ps-2">Documento</th>
-        <th class="text-center">Origen</th>
-        <th>Proveedor</th>
-        <th class="text-center">F.Emisión</th>
-        <th class="text-center">F.Vencimiento</th>
-        <th class="text-end">Total</th>
-        <th class="text-end">Pagado</th>
-        <th class="text-end" title="Notas de Crédito / Retenciones">NC/Ret.</th>
-        <th class="text-end pe-2 fw-bold">Saldo</th>
-        <th class="text-center">Estado</th>
+        <th class="ps-2 sortable-header" data-sort="numero_documento" role="button" title="Ordenar por documento">Documento <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-center sortable-header" data-sort="tipo_fuente" role="button" title="Ordenar por origen">Origen <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="sortable-header" data-sort="proveedor_nombre" role="button" title="Ordenar por proveedor">Proveedor <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-center sortable-header" data-sort="fecha_emision" role="button" title="Ordenar por fecha de emisión">F.Emisión <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-center sortable-header" data-sort="fecha_vencimiento" role="button" title="Ordenar por fecha de vencimiento">F.Vencimiento <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-end sortable-header" data-sort="total" role="button" title="Ordenar por total">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-end sortable-header" data-sort="total_pagado" role="button" title="Ordenar por pagado">Pagado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-end sortable-header" data-sort="nc_ret" role="button" title="Ordenar por Notas de Crédito / Retenciones">NC/Ret. <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-end pe-2 fw-bold sortable-header" data-sort="saldo" role="button" title="Ordenar por saldo">Saldo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+        <th class="text-center sortable-header" data-sort="dias_vencido" role="button" title="Ordenar por días vencidos">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
         <th class="text-center">Acciones</th>
     </tr>`;
 const CXP_COLS_MAYOR = `
@@ -358,6 +429,9 @@ function CXP_renderCabecera() {
     if (!cg || !th) return;
     cg.innerHTML = CXP_agrupado ? CXP_COLS_MAYOR : CXP_COLS_ESTANDAR;
     th.innerHTML = CXP_agrupado ? CXP_TH_MAYOR   : CXP_TH_ESTANDAR;
+    // Los <th> recién creados no tienen el clic de ordenar: se vuelven a enganchar
+    // (engancharCabeceras no duplica en los que ya lo tienen y repinta las flechas).
+    CXP_initOrden();
 }
 
 /* Fila de un documento dentro de la sección de su proveedor (vista "Por proveedor"):
@@ -1071,6 +1145,9 @@ function CXP_exportarExcel() {
         fecha_hasta:  document.getElementById('cxp-fecha-hasta')?.value  || '',
         id_proveedor: CXP_getProveedoresSeleccionados(),
         alcance:      CXP_getAlcance(),
+        // Mismo orden que la pantalla: el Excel y el PDF salen como se ve la tabla
+        orden_col:    CXP_getOrden()[0],
+        orden_dir:    CXP_getOrden()[1],
         // La exportación sale con la misma estructura que la vista activa: por proveedor
         // en formato mayor (sección por proveedor, subtotal y total general).
         vista:        CXP_agrupado ? 'PROVEEDOR' : '',
@@ -1086,6 +1163,9 @@ function CXP_exportarPDF() {
         fecha_hasta:  document.getElementById('cxp-fecha-hasta')?.value  || '',
         id_proveedor: CXP_getProveedoresSeleccionados(),
         alcance:      CXP_getAlcance(),
+        // Mismo orden que la pantalla: el Excel y el PDF salen como se ve la tabla
+        orden_col:    CXP_getOrden()[0],
+        orden_dir:    CXP_getOrden()[1],
         // La exportación sale con la misma estructura que la vista activa: por proveedor
         // en formato mayor (sección por proveedor, subtotal y total general).
         vista:        CXP_agrupado ? 'PROVEEDOR' : '',

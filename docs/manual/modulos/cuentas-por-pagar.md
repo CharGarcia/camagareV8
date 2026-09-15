@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos
-version: 1.13
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna
+version: 1.14
 orden: 50
 estado: activo
 ---
@@ -117,6 +117,31 @@ o en la identificación, así que el RUC también sirve.
 
 Basta con escribir **dos letras** para que aparezca la lista. Al elegir un
 proveedor queda como una etiqueta y se pueden elegir varios.
+
+## Ordenar el listado
+
+Las deudas se abren **ordenadas por proveedor, de la A a la Z**. Para verlas de
+otra forma, haga clic en el título de la columna: el primer clic ordena de menor
+a mayor (A-Z, la fecha más antigua, el monto más bajo) y volver a hacer clic en
+la misma columna invierte el orden. La flecha azul del título indica por cuál
+columna está ordenada la tabla y en qué sentido.
+
+Se puede ordenar por **Documento**, **Origen**, **Proveedor**, **F.Emisión**,
+**F.Vencimiento**, **Total**, **Pagado**, **NC/Ret.**, **Saldo** y **Estado**
+(por días vencidos).
+
+- Cuando dos filas coinciden en la columna elegida, aparece primero la de
+  vencimiento más próximo.
+- Las filas sin dato en esa columna (por ejemplo, una compra sin fecha de
+  vencimiento) van siempre al final, se ordene de mayor a menor o al revés.
+- Las mayúsculas y las tildes no cambian el orden: *Álvarez* y *ALVAREZ* quedan
+  juntos.
+- El orden elegido **queda guardado para usted**: la próxima vez que entre al
+  módulo, el listado se abre así.
+- El **PDF y el Excel salen en el mismo orden** que la pantalla.
+
+En la vista *Por proveedor* los grupos siguen ordenados por saldo, de mayor a
+menor; el orden elegido acomoda los documentos dentro de cada grupo.
 
 ## Consolidado de establecimientos (solo desde la matriz)
 
@@ -273,6 +298,11 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.14** — El listado se abre **ordenado por proveedor de la A a la Z** (antes
+  salía por fecha de vencimiento) y ahora se puede **ordenar por cualquier
+  columna** haciendo clic en su título, como en el Reporte de Ventas. El orden
+  elegido queda guardado para el usuario y **el PDF y el Excel salen con ese
+  mismo orden**. Nueva sección *Ordenar el listado*.
 - **1.13** — El **detalle de cada proveedor** (vista *Por proveedor*) pasa a
   mostrar **fecha, n. de documento, total, NC, abonos, retenciones, saldo y
   días** —con NC y retenciones separadas, antes iban sumadas en una sola columna

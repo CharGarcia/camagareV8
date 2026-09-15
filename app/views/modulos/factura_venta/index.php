@@ -1472,6 +1472,7 @@ $totalPages = $totalPagesOriginal;
     // Nivel 3 (superadmin) puede eliminar una factura fuera de borrador — ver
     // FacturaVentaService::eliminar(). El backend valida esto igual, esto es solo UI.
     const ES_SUPERADMIN = <?= ((int) ($_SESSION['nivel'] ?? 1) === 3) ? 'true' : 'false' ?>;
+    const PERM_ELIMINAR = <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>;
     const DEC_PRECIO = EMPRESA_CONFIG.decimales_precio;
     const DEC_CANT = EMPRESA_CONFIG.decimales_cantidad;
 
@@ -2521,6 +2522,65 @@ $totalPages = $totalPagesOriginal;
     }
 
     /**
+     * Deja los botones del PIE del modal y el bloqueo de edición como quedarían si
+     * se acabara de abrir una factura en ese estado, SIN cerrar el modal.
+     *
+     * Tras enviar al SRI el modal se queda abierto (antes se cerraba solo al
+     * autorizar): el usuario sigue viendo el documento, la pestaña SRI y su
+     * historial, pero el documento ya no es editable. fvActualizarEstadoBotones()
+     * solo cubre la barra de acciones de arriba y los campos del formulario; el pie
+     * (Guardar / Eliminar) y el lock de edición los monta abrirModalFacturaVer(),
+     * que aquí no vuelve a pasar. Mismas reglas que allí.
+     */
+    function fvAplicarEstadoTrasSri(estadoDoc) {
+        const st         = (estadoDoc || '').toLowerCase().trim();
+        const esBorrador = st === 'borrador';
+        const esAnulado  = st === 'anulado';
+        const puedeEliminarForzado = ES_SUPERADMIN && !esBorrador && PERM_ELIMINAR;
+
+        // Guardar: en borrador "Guardar"; ya emitido, "Actualizar" (el vendedor y el
+        // asiento son lo único que admite una factura autorizada).
+        const btnGuardar = document.getElementById('btnGuardarFacturaModal');
+        if (btnGuardar) {
+            if (esBorrador) {
+                btnGuardar.classList.remove('d-none');
+                btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
+                btnGuardar.title = '';
+            } else if (!esAnulado && PERM_ACTUALIZAR) {
+                btnGuardar.classList.remove('d-none');
+                btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Actualizar';
+                btnGuardar.title = 'Actualizar datos de la factura y generar asiento si no lo tiene';
+            } else {
+                btnGuardar.classList.add('d-none');
+            }
+        }
+
+        // Eliminar: solo borrador con permiso, o superadmin en cualquier estado.
+        const btnElim = document.getElementById('btnEliminarFacturaModal');
+        if (btnElim) {
+            if ((esBorrador && PERM_ELIMINAR) || puedeEliminarForzado) {
+                btnElim.classList.remove('d-none');
+                btnElim.innerHTML = puedeEliminarForzado
+                    ? '<i class="bi bi-trash3 me-1"></i> Eliminar (superadmin)'
+                    : '<i class="bi bi-trash3 me-1"></i> Eliminar borrador';
+                btnElim.title = puedeEliminarForzado
+                    ? 'Elimina la factura aunque no esté en borrador. Solo superadmin.'
+                    : '';
+            } else {
+                btnElim.classList.add('d-none');
+            }
+        }
+
+        // Bloqueo de edición concurrente: una factura ya emitida no se edita, así que
+        // se suelta el lock que se tomó cuando era borrador. Sin esto quedaría
+        // retenido mientras el modal siga abierto y otro usuario vería la factura
+        // "en uso" sin motivo (ver bloqueo-edicion.js).
+        if (!esBorrador && typeof window.CMG_Bloqueo !== 'undefined') {
+            window.CMG_Bloqueo.detener();
+        }
+    }
+
+    /**
      * Aplica el modo lectura/edición a la pestaña de la factura.
      *   esBorrador = true  → formulario EDITABLE (borrador o factura nueva).
      *   esBorrador = false → formulario BLOQUEADO (autorizada/anulada).
@@ -2859,6 +2919,9 @@ $totalPages = $totalPagesOriginal;
             });
             // Botones y badge del header: reflejan el estado del DOCUMENTO, no el del SRI
             fvActualizarEstadoBotones(estadoDoc);
+            // Pie del modal (Guardar/Eliminar) y lock de edición: el modal ya no se
+            // cierra al autorizar, así que hay que dejarlo coherente con el estado.
+            fvAplicarEstadoTrasSri(estadoDoc);
             fvCargarHistorialSri(id);
 
             // 2. Actualizar la fila de la tabla de fondo de forma síncrona con el estado
@@ -2945,23 +3008,19 @@ $totalPages = $totalPagesOriginal;
             }
 
             if (json.ok) {
+                // El modal NO se cierra: la factura queda a la vista con su número de
+                // autorización y su pestaña SRI, solo que bloqueada para edición
+                // (fvActualizarEstadoBotones → fvAplicarSoloLectura, más el pie que
+                // ajusta fvAplicarEstadoTrasSri). La fila de la tabla de fondo ya se
+                // actualizó arriba, y el refresco que preserva el orden queda armado
+                // en hidden.bs.modal para cuando el usuario cierre el modal.
                 Swal.fire({
                     icon: 'success',
                     title: '¡Autorizado!',
-                    html: `<p>${json.mensaje}</p><code class="small">${json.numero_autorizacion || ''}</code>`,
+                    html: `<p>${json.mensaje}</p><code class="small">${json.numero_autorizacion || ''}</code>
+                           <hr class="my-2">
+                           <small class="text-muted">El documento queda bloqueado para edición.</small>`,
                     confirmButtonColor: '#0d6efd',
-                }).then(() => {
-                    // El refresco que preserva el orden ya está armado en
-                    // hidden.bs.modal (ver arriba). Solo cerramos el modal: al
-                    // terminar de cerrarse, la tabla se recarga manteniendo el
-                    // ordenamiento (sort), la dirección y la página del usuario.
-                    const modalInst = bootstrap.Modal.getInstance(_fvModalEl);
-                    if (modalInst) {
-                        modalInst.hide();
-                    } else {
-                        // Modal ya estaba cerrado — refrescar directamente
-                        refrescarPreservandoOrden();
-                    }
                 });
             } else {
                 let errHtml = `<p class="text-danger">${json.mensaje || 'Error al enviar.'}</p>`;

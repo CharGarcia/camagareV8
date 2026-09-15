@@ -65,6 +65,10 @@ class CuentasPorPagarController extends BaseModuloController
             'vistaConfig' => $prefsVista,
             'rutaModulo'  => $this->getRutaModulo(),
             'anios'       => $anios,
+            // Orden guardado por el usuario al hacer clic en las cabeceras. Si la columna
+            // no es de este módulo, el repositorio la descarta y usa su orden por defecto.
+            'ordenCol'    => (string) ($prefsVista['__ordenCol__'] ?? ''),
+            'ordenDir'    => strtoupper((string) ($prefsVista['__ordenDir__'] ?? 'ASC')) === 'DESC' ? 'DESC' : 'ASC',
             'puedeConsolidar'  => !empty($idsConsolidado),
             'establecimientos' => $establecimientos,
             'idEmpresa'        => $idEmpresa,
@@ -210,7 +214,7 @@ class CuentasPorPagarController extends BaseModuloController
         // IMPORTACION), no incluir saldos iniciales (no aplican a ese filtro).
         $tipo = $filtros['tipo_fuente'] ?? '';
         if (in_array($tipo, ['COMPRA', 'LIQUIDACION', 'IMPORTACION'], true)) {
-            return $docs;
+            return $this->repo->ordenarFilas($docs, $filtros);
         }
 
         // Saldos iniciales (todos; se filtran en PHP por el mismo estado)
@@ -261,11 +265,10 @@ class CuentasPorPagarController extends BaseModuloController
 
         $filas = array_merge($docs, $filasSI);
 
-        usort($filas, function ($a, $b) {
-            return strcmp((string)($a['fecha_vencimiento'] ?? ''), (string)($b['fecha_vencimiento'] ?? ''));
-        });
-
-        return $filas;
+        // Orden final del listado ya unificado: por defecto alfabético por proveedor (A-Z)
+        // o el que el usuario eligió en las cabeceras (`orden_col`/`orden_dir`). Al pasar
+        // por aquí la pantalla, el Excel y el PDF, los tres salen con el mismo orden.
+        return $this->repo->ordenarFilas($filas, $filtros);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1019,6 +1022,12 @@ class CuentasPorPagarController extends BaseModuloController
             // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
             // solo se honra desde la matriz — ver resolverAlcance()).
             'alcance'      => strtoupper(trim((string)($_REQUEST['alcance'] ?? ''))),
+            // Orden de la tabla: columna de la lista blanca del repositorio (la vista la
+            // manda en `data-sort` al hacer clic en una cabecera) y dirección. Viaja
+            // también en el Excel y el PDF, para que salgan como se ve en pantalla.
+            // Vacío = el orden por defecto (alfabético por proveedor).
+            'orden_col'    => trim((string)($_REQUEST['orden_col'] ?? '')),
+            'orden_dir'    => strtoupper(trim((string)($_REQUEST['orden_dir'] ?? ''))) === 'DESC' ? 'DESC' : 'ASC',
         ];
     }
 

@@ -158,8 +158,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         decimales_precio: <?= (int) ($empresa['decimales_precio'] ?? 2) ?>,
         decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>,
         id_forma_pago_sri_def: <?= (isset($empresa['id_forma_pago_sri_def']) && $empresa['id_forma_pago_sri_def'] !== null && $empresa['id_forma_pago_sri_def'] !== '') ? (int)$empresa['id_forma_pago_sri_def'] : 'null' ?>,
-        editar_descuento_factura: <?= (($empresa['editar_descuento_factura'] ?? true) === 'true' || ($empresa['editar_descuento_factura'] ?? true) === true) ? 'true' : 'false' ?>
+        editar_descuento_factura: <?= (($empresa['editar_descuento_factura'] ?? true) === 'true' || ($empresa['editar_descuento_factura'] ?? true) === true) ? 'true' : 'false' ?>,
+        mostrar_cajero_factura: <?= (($empresa['mostrar_cajero_factura'] ?? false) === 'true' || ($empresa['mostrar_cajero_factura'] ?? false) === true) ? 'true' : 'false' ?>,
+        mostrar_vendedor_factura: <?= (($empresa['mostrar_vendedor_factura'] ?? false) === 'true' || ($empresa['mostrar_vendedor_factura'] ?? false) === true) ? 'true' : 'false' ?>
     };
+    // Cajero = usuario que genera la factura (igual que en Factura de Venta).
+    window.FACCV_USUARIO_NOMBRE = '<?= htmlspecialchars($_SESSION['nombre'] ?? '', ENT_QUOTES) ?>';
 </script>
 
 <?php include __DIR__ . '/modal_facturacion.php'; ?>

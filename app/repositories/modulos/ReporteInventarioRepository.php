@@ -1014,17 +1014,25 @@ class ReporteInventarioRepository extends BaseRepository
         list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);
         $base = $this->wrapSaldoConsignacion($this->baseConsignaciones($where));
 
+        // Lote y NUP se agregan con string_agg: una consignación puede tener varias líneas con
+        // distintos lotes/NUP y el listado es a nivel de documento. Se descarta el '-' que pone
+        // baseConsignaciones() cuando el campo viene nulo, para no ensuciar la celda con guiones.
         $sql = "SELECT s.id_consignacion, MAX(s.secuencial) AS secuencial, MAX(s.fecha_emision) AS fecha_emision,
                        MAX(s.estado) AS estado, MAX(s.id_cliente) AS id_cliente,
                        MAX(s.cliente_nombre) AS cliente_nombre, MAX(s.cliente_identificacion) AS cliente_identificacion,
                        MAX(s.vendedor_nombre) AS vendedor_nombre,
                        MAX(s.responsable_traslado_nombre) AS responsable_traslado_nombre,
+                       string_agg(DISTINCT NULLIF(s.numero_lote, '-'), ', ' ORDER BY NULLIF(s.numero_lote, '-')) AS lotes,
+                       string_agg(DISTINCT NULLIF(s.nup, '-'), ', ' ORDER BY NULLIF(s.nup, '-')) AS nups,
                        -- Cuenta LÍNEAS del documento, no productos distintos: una misma
                        -- consignación suele llevar el mismo producto en varias líneas (un
                        -- lote/NUP/caducidad por línea). Con COUNT(DISTINCT id_producto) la
                        -- columna Productos anunciaba menos líneas de las que luego
                        -- aparecían al abrir el detalle.
                        COUNT(DISTINCT s.id_detalle) AS cantidad_productos,
+                       SUM(s.cantidad_consignada) AS total_productos,
+                       SUM(s.cantidad_retornada) AS total_retornado,
+                       SUM(s.cantidad_facturada) AS total_facturado,
                        SUM(s.saldo) AS saldo, SUM(s.valor_saldo) AS valor_saldo
                 FROM ({$base}) s
                 GROUP BY s.id_consignacion
@@ -1035,12 +1043,24 @@ class ReporteInventarioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** Líneas de producto de UNA consignación puntual (para el modal de detalle del listado). */
-    public function getConsignacionDetalleLineas(int $idEmpresa, int $idConsignacion): array
+    /** Filtros del reporte que actúan sobre la LÍNEA de consignación (no sobre la cabecera).
+     *  Son los únicos que el modal de detalle reaplica: los de cabecera (cliente, fecha, estado,
+     *  asesor, responsable) ya se cumplen por el solo hecho de estar viendo ese documento. */
+    public const FILTROS_LINEA_CONSIGNACION = [
+        'id_producto', 'id_bodega', 'numero_lote', 'nup',
+        'fecha_caducidad_desde', 'fecha_caducidad_hasta',
+    ];
+
+    /** Líneas de producto de UNA consignación puntual (para el modal de detalle del listado).
+     *  $filtrosLinea reaplica los filtros del listado a propósito: el total y el saldo de la fila
+     *  ya vienen filtrados, así que el modal debe sumar exactamente lo mismo. Sin esto, una
+     *  búsqueda por lote mostraba "10 unidades" en la fila y el documento entero en el modal. */
+    public function getConsignacionDetalleLineas(int $idEmpresa, int $idConsignacion, array $filtrosLinea = []): array
     {
-        $where = "cv.id_empresa = :id_empresa AND cvd.id_empresa = :id_empresa_det
-                  AND cv.eliminado = false AND cvd.eliminado = false AND cv.id = :id_consignacion";
-        $params = [':id_empresa' => $idEmpresa, ':id_empresa_det' => $idEmpresa, ':id_consignacion' => $idConsignacion];
+        $filtros = array_intersect_key($filtrosLinea, array_flip(self::FILTROS_LINEA_CONSIGNACION));
+        list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);
+        $where .= " AND cv.id = :id_consignacion";
+        $params[':id_consignacion'] = $idConsignacion;
 
         $sql = "SELECT * FROM (" . $this->wrapSaldoConsignacion($this->baseConsignaciones($where)) . ") s
                 ORDER BY s.producto_nombre ASC";
@@ -1065,17 +1085,27 @@ class ReporteInventarioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** Documentos de FACTURA que explican la cantidad "Facturado" de una línea de consignación puntual. */
+    /** Documentos de FACTURA que explican la cantidad "Facturado" de una línea de consignación puntual.
+     *  Devuelve el número de la FACTURA DE VENTA (ventas_cabecera vía cf.id_factura), no el del
+     *  documento interno de facturación de consignación: el usuario necesita el documento que
+     *  puede imprimir y buscar en Facturas de Venta. Si la factura ya no existe (o nunca se
+     *  enlazó) queda `numero_factura`, el número que guardó la facturación en su momento. */
     public function getFacturasDeLineaConsignacion(int $idEmpresa, int $idDetalleConsignacion): array
     {
-        $sql = "SELECT cf.id, cf.id_factura, cf.serie, cf.secuencial, cf.fecha_emision, cf.estado,
+        $sql = "SELECT cf.id, cf.id_factura, cf.numero_factura,
+                       cf.serie AS serie_consignacion, cf.secuencial AS secuencial_consignacion,
+                       vc.id AS id_venta, vc.establecimiento, vc.punto_emision, vc.secuencial,
+                       COALESCE(vc.fecha_emision, cf.fecha_emision) AS fecha_emision,
+                       COALESCE(vc.estado, cf.estado) AS estado,
+                       vc.eliminado AS factura_eliminada,
                        cfd.cantidad, cfd.total
                 FROM consignaciones_facturas_detalles cfd
                 INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
+                LEFT JOIN ventas_cabecera vc ON vc.id = cf.id_factura AND vc.id_empresa = cf.id_empresa
                 WHERE cfd.id_consignacion_detalle = :id_detalle
                   AND cfd.id_empresa = :id_empresa AND cfd.eliminado = false
                   AND cf.eliminado = false AND cf.estado = 'facturada'
-                ORDER BY cf.fecha_emision ASC, cf.id ASC";
+                ORDER BY COALESCE(vc.fecha_emision, cf.fecha_emision) ASC, cf.id ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_detalle' => $idDetalleConsignacion, ':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);

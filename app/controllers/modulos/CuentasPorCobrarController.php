@@ -74,6 +74,10 @@ class CuentasPorCobrarController extends BaseModuloController
             'anios'       => $anios,
             'tieneWA'     => $tieneWA,
             'vendedores'  => $vendedores,
+            // Orden guardado por el usuario al hacer clic en las cabeceras. Si la columna
+            // no es de este módulo, el repositorio la descarta y usa su orden por defecto.
+            'ordenCol'    => (string) ($prefsVista['__ordenCol__'] ?? ''),
+            'ordenDir'    => strtoupper((string) ($prefsVista['__ordenDir__'] ?? 'ASC')) === 'DESC' ? 'DESC' : 'ASC',
             'puedeConsolidar'  => !empty($idsConsolidado),
             'establecimientos' => $establecimientos,
             'idEmpresa'        => $idEmpresa,
@@ -815,14 +819,10 @@ class CuentasPorCobrarController extends BaseModuloController
 
         $filas = array_merge($facturas, $recibos, $filasSI);
 
-        // Orden por vencimiento ascendente (igual que el listado de facturas)
-        usort($filas, function ($a, $b) {
-            $va = $a['fecha_vencimiento'] ?? '';
-            $vb = $b['fecha_vencimiento'] ?? '';
-            return strcmp((string)$va, (string)$vb);
-        });
-
-        return $filas;
+        // Orden final del listado ya unificado: por defecto alfabético por cliente (A-Z)
+        // o el que el usuario eligió en las cabeceras (`orden_col`/`orden_dir`). Al pasar
+        // por aquí la pantalla, el Excel y el PDF, los tres salen con el mismo orden.
+        return $this->repo->ordenarFilas($filas, $filtros);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1565,6 +1565,28 @@ $plantillasFiltradas = [];
             if (!empty($establecimientos)) {
                 if (!empty($establecimientos[0]['logo_ruta'])) $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
                 if (!empty($establecimientos[0]['direccion'])) $empresa['direccion_establecimiento'] = $establecimientos[0]['direccion'];
+                if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) $empresa['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
+                if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
+
+                // Config del establecimiento: sin esto el PDF que se envía por
+                // correo desde aquí salía distinto al del módulo Factura de Venta
+                // (otros decimales, sin la presentación de ítems configurada y sin
+                // los interruptores de Vendedor/Cajero y propina del RIDE).
+                // Mismo bloque que FacturaVentaController::generarPdf().
+                try {
+                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                    if ($estConfig) {
+                        $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
+                        $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
+                        if (!empty($establecimientos[0]['logo_ruta'])) $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+                        if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) $estConfig['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
+                        if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) $estConfig['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
+                        $empresa = array_merge($empresa, $estConfig);
+                    }
+                } catch (\Throwable $e) {
+                    // El PDF se genera igual sin la config extendida del establecimiento.
+                }
             }
 
             $renderer  = new \App\Services\PlantillasPdfRendererService();
@@ -2030,6 +2052,12 @@ $plantillasFiltradas = [];
             // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
             // solo se honra desde la matriz — ver resolverAlcance()).
             'alcance'     => strtoupper(trim((string)($_REQUEST['alcance'] ?? ''))),
+            // Orden de la tabla: columna de la lista blanca del repositorio (la vista la
+            // manda en `data-sort` al hacer clic en una cabecera) y dirección. Viaja
+            // también en el Excel y el PDF, para que salgan como se ve en pantalla.
+            // Vacío = el orden por defecto (alfabético por cliente).
+            'orden_col'   => trim((string)($_REQUEST['orden_col'] ?? '')),
+            'orden_dir'   => strtoupper(trim((string)($_REQUEST['orden_dir'] ?? ''))) === 'DESC' ? 'DESC' : 'ASC',
         ];
     }
 

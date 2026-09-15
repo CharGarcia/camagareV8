@@ -60,6 +60,10 @@ class FacturaVentaPdfService
         // servicio que usa XmlFacturaVentaService: PDF y XML no pueden divergir.
         $detalles = (new FacturaItemsPresentacionService())->preparar($detalles, $empresa);
 
+        // Vendedor y Cajero: se derivan de la CABECERA si no vienen guardados
+        // como fila de información adicional (ver conCamposDeCabecera).
+        $infoAdicional = $this->conCamposDeCabecera($infoAdicional, $cabecera, $empresa);
+
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
         $this->pdf->SetAuthor($empresa['nombre'] ?? '');
@@ -912,8 +916,11 @@ class FacturaVentaPdfService
             }
         }
 
-        // Observaciones
-        if (!empty($cab['observaciones'])) {
+        // Observaciones. Se omite el recuadro cuando la información adicional ya
+        // trae ese mismo texto bajo el concepto "Observaciones" (las facturas de
+        // Facturación de Consignaciones lo llevan ahí porque es lo único que viaja
+        // en el XML): si no, el RIDE imprimiría dos veces lo mismo.
+        if (!empty($cab['observaciones']) && !$this->observacionesYaEnInfoAdicional($infoAdicional, (string) $cab['observaciones'])) {
             $yIzq += 1;
             $pdf->SetFont('helvetica', 'B', 7.5);
             $pdf->SetFillColor(230, 230, 230);
@@ -1014,6 +1021,75 @@ class FacturaVentaPdfService
         $pdf->SetXY($x, $y);
         $pdf->Cell($lblW, $h, $lbl, 1, 0, 'L');
         $pdf->Cell($valW, $h, number_format($val, 2), 1, 0, 'R');
+    }
+
+    /**
+     * Completa la Información Adicional con los campos que viven en la CABECERA
+     * de la factura —Vendedor y Cajero— cuando no están guardados como fila en
+     * `ventas_adicional`.
+     *
+     * Esa fila la crea únicamente el JavaScript del modal de Factura de Venta, y
+     * solo mientras el establecimiento tenga activado el interruptor
+     * correspondiente. Toda factura emitida por otra vía (consignaciones, POS,
+     * API, cargas por Excel, migración) o guardada con el interruptor apagado
+     * quedaba con el vendedor en `ventas_cabecera.id_vendedor` pero SIN salir en
+     * el RIDE. Aquí se toma del documento, que es la fuente de verdad.
+     *
+     * - No duplica: si ya existe una fila con ese nombre, manda la guardada.
+     * - Respeta la configuración del establecimiento (`mostrar_vendedor_factura`
+     *   / `mostrar_cajero_factura`). Si la clave no llega —flujo que no cargó la
+     *   config del establecimiento— se imprime, porque el dato está en la factura
+     *   y no hay una configuración que diga lo contrario.
+     */
+    /**
+     * ¿La información adicional ya trae las observaciones del documento? Compara
+     * el texto sin espacios de más ni mayúsculas, para no repetir el mismo
+     * contenido en dos recuadros del RIDE.
+     */
+    private function observacionesYaEnInfoAdicional(array $infoAdicional, string $observaciones): bool
+    {
+        $norm = static fn(string $s): string => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $s)), 'UTF-8');
+        $obs  = $norm($observaciones);
+        if ($obs === '') return false;
+
+        foreach ($infoAdicional as $ia) {
+            if (strcasecmp(trim((string) ($ia['nombre'] ?? '')), 'Observaciones') === 0
+                && $norm((string) ($ia['valor'] ?? '')) === $obs) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function conCamposDeCabecera(array $infoAdicional, array $cabecera, array $empresa): array
+    {
+        $yaEsta = static function (string $nombre) use ($infoAdicional): bool {
+            foreach ($infoAdicional as $ia) {
+                if (mb_strtolower(trim((string)($ia['nombre'] ?? '')), 'UTF-8') === $nombre) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        $activo = static function (string $flag) use ($empresa): bool {
+            if (!array_key_exists($flag, $empresa)) { return true; }
+            $v = $empresa[$flag];
+            return $v === true || in_array((string)$v, ['t', 'true', '1'], true);
+        };
+
+        $campos = [
+            ['nombre' => 'Vendedor', 'valor' => $cabecera['vendedor_nombre'] ?? '', 'flag' => 'mostrar_vendedor_factura'],
+            ['nombre' => 'Cajero',   'valor' => $cabecera['usuario_nombre']  ?? '', 'flag' => 'mostrar_cajero_factura'],
+        ];
+        foreach ($campos as $c) {
+            $valor = trim((string)$c['valor']);
+            if ($valor === '' || $yaEsta(mb_strtolower($c['nombre'], 'UTF-8')) || !$activo($c['flag'])) {
+                continue;
+            }
+            $infoAdicional[] = ['nombre' => $c['nombre'], 'valor' => $valor];
+        }
+
+        return $infoAdicional;
     }
 
     /**

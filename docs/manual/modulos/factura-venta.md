@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios
-version: 2.7
+etiquetas: factura, facturar, venta, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar
+version: 2.8
 orden: 20
 estado: activo
 ---
@@ -71,6 +71,29 @@ guardado: generar el **PDF**, ver el **XML**, descargar un **Excel** con el
 detalle y los totales, enviarlo por **correo** o por **WhatsApp** y remitirlo
 al **SRI**. Cada acción comprueba primero que la factura esté guardada.
 
+## Qué pasa con el modal después de enviar al SRI
+
+Al enviar la factura al SRI, **el modal se queda abierto** con cualquier
+resultado. La factura sigue a la vista con su número de autorización y su pestaña
+*SRI*, para revisarla, generar el PDF o enviarla por correo sin volver a abrirla.
+
+Cuando el SRI **autoriza**, el documento queda **bloqueado para edición**: los
+campos y las tablas de ítems, información adicional y formas de pago se
+deshabilitan, desaparecen los botones de agregar y eliminar líneas, y el botón
+*Enviar al SRI* se oculta. Se habilitan en su lugar *Correo*, *WhatsApp* y
+*Anular*.
+
+Lo único que sigue editable es el **vendedor**: el botón del pie pasa de
+*Guardar* a *Actualizar*, que guarda el vendedor y genera el asiento contable si
+la factura aún no lo tiene.
+
+El **listado de fondo** se actualiza al momento (estado y badge de la fila). Al
+cerrar el modal, la tabla se recarga conservando el orden, la dirección y la
+página en la que estabas.
+
+> Si el SRI **rechaza** o devuelve el comprobante, la factura sigue en *borrador*
+> y editable, para corregirla y reenviarla.
+
 ## Qué columnas y totales muestra el PDF
 
 El PDF (RIDE) imprime solo lo que la factura realmente usa, para no gastar ancho
@@ -94,6 +117,33 @@ ni líneas en campos vacíos:
   y la columna *Plazo* lleva **solo la unidad**: *Días*, *Meses* o *Años*. Un
   crédito a 15 días se lee «15» y «Días», no «15» y «15 dias». Cuando el pago es
   de contado (plazo 0), la columna *Plazo* muestra un guion.
+
+### Vendedor y Cajero en la Información Adicional
+
+El bloque *Información Adicional* del PDF imprime las filas guardadas con la
+factura y, además, **completa el Vendedor y el Cajero tomándolos de la propia
+factura** cuando no están guardados como fila.
+
+Esto importa porque la fila de texto solo la crea la pantalla de Factura de
+Venta, y solo mientras el establecimiento tenga activado su interruptor en
+*Empresa → Facturación*. Las facturas emitidas por otra vía —facturación de
+consignaciones, POS, API, cargas por Excel o migración— guardaban el vendedor en
+la factura pero **no salía en el PDF**. Ahora sale siempre.
+
+Reglas:
+
+- Si la factura **ya tiene guardada** la fila *Vendedor* (o *Cajero*), se imprime
+  **esa**, aunque después se haya cambiado el vendedor del documento: es el texto
+  que viajó en el XML autorizado, y el PDF no puede decir algo distinto del
+  comprobante que aprobó el SRI.
+- Si **no** la tiene, se toma el vendedor de la factura, siempre que el
+  establecimiento tenga activado *Mostrar vendedor en factura* (lo mismo para el
+  cajero).
+- Si el interruptor está apagado, no se imprime.
+
+> Si en una factura antigua el vendedor impreso no coincide con el que muestra la
+> pantalla, es que la fila guardada quedó desfasada al cambiar el vendedor. El PDF
+> respeta lo emitido; para corregirlo hay que actualizar la fila en la factura.
 
 Las columnas *Subsidio* y *Precio sin Subsidio* y la línea *IRBPNR* ya no se
 imprimen: el sistema no factura bienes subsidiados ni ese impuesto, así que
@@ -229,6 +279,14 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.8** — Al **enviar al SRI**, el modal ya **no se cierra** cuando la factura
+  se autoriza: se queda abierto y el documento pasa a **solo lectura** (antes
+  había que volver a abrirlo para verlo). El botón del pie cambia a *Actualizar*
+  —el vendedor y el asiento son lo único editable de una factura autorizada—, el
+  botón *Eliminar* se ajusta al estado y se libera el bloqueo de edición, que
+  antes quedaba retenido mientras el modal siguiera abierto. Al cerrar el modal la
+  tabla se recarga conservando orden y página, como antes. Ver *"Qué pasa con el
+  modal después de enviar al SRI"*.
 - **2.7** — El listado se puede **ordenar por hasta tres columnas a la vez**:
   Shift+clic en el título de la segunda columna la encadena a la primera (por
   ejemplo *Estado de pago* y, dentro, *Total*). Cada encabezado activo muestra un
@@ -243,7 +301,14 @@ la operación de inmediato.
   con servicio. En la tabla de formas de pago, la columna *Plazo* muestra ahora
   solo la unidad (*Días*, *Meses*, *Años*) en lugar de repetir el número que ya
   está en *Días Crédito* —antes se leía «15 dias»—, con la misma etiqueta para
-  todas las variantes guardadas (`dias`, `DIAS`, `anios`, `AÑOS`…). Ver
+  todas las variantes guardadas (`dias`, `DIAS`, `anios`, `AÑOS`…). Además, el
+  **Vendedor** y el **Cajero** salen ahora en la *Información Adicional* aunque
+  no estén guardados como fila: se toman de la propia factura. Antes solo
+  aparecían si los había escrito la pantalla de Factura de Venta, así que las
+  facturas hechas desde consignaciones, POS, API, carga por Excel o migración
+  salían sin vendedor. El PDF que se envía por **correo desde Cuentas por
+  Cobrar** también carga ya la configuración del establecimiento (decimales,
+  presentación de ítems, vendedor/cajero y propina), que antes no leía. Ver
   *"Qué columnas y totales muestra el PDF"*.
 - **2.5** — La columna **Vencimiento** de cada línea se limita ahora al **lote
   seleccionado** (y elegir la fecha selecciona su lote). Antes se ofrecían todas

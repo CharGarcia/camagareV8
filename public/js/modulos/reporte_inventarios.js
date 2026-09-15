@@ -604,8 +604,9 @@ window.RI_Consignaciones = {
     dibujarCabecera(modo) {
         let th = '<tr class="text-secondary">';
         if (modo === 'NINGUNO') {
-            th += `<th class="ps-3">Fecha</th><th>Cliente</th><th>Vendedor</th><th>Responsable traslado</th>
-                   <th class="text-center">Productos</th><th class="text-end">Saldo</th>
+            th += `<th class="ps-3">Fecha</th><th>Cliente</th><th>Asesor</th><th>Responsable traslado</th>
+                   <th>Lote</th><th>NUP</th>
+                   <th class="text-end">Total productos</th><th class="text-end">Saldo</th>
                    <th class="text-center pe-3">Estado</th>`;
         } else {
             th += `<th class="ps-3">Grupo</th><th class="text-center">Consignaciones</th>
@@ -615,18 +616,35 @@ window.RI_Consignaciones = {
         document.getElementById('ri-cv-thead').innerHTML = th;
     },
 
-    verDetalle(idConsignacion) {
+    /** Filtros del listado que actúan sobre la LÍNEA: el modal los reaplica para que sus totales
+     *  cuadren con el "Total productos" y el "Saldo" de la fila. */
+    _filtrosLinea() {
+        return RI_paramsFromIds({
+            id_producto: 'ri-cv-id-producto', id_bodega: 'ri-cv-bodega',
+            numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup',
+            fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
+        });
+    },
+
+    verDetalle(idConsignacion, sinFiltros = false) {
         if (!this.modalInstance) {
             this.modalInstance = new bootstrap.Modal(document.getElementById('ri-cv-modal-detalle'));
         }
         const tbody = document.getElementById('ri-cv-modal-tbody');
+        const tfoot = document.getElementById('ri-cv-modal-tfoot');
+        const aviso = document.getElementById('ri-cv-modal-aviso');
         tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        if (tfoot) tfoot.innerHTML = '';
+        if (aviso) aviso.classList.add('d-none');
         ['secuencial', 'fecha', 'cliente', 'vendedor', 'responsable', 'estado'].forEach(k => {
             document.getElementById('ri-cv-modal-' + k).textContent = '';
         });
         this.modalInstance.show();
 
-        fetch(BASE_URL + '/' + RUTA_MODULO + '/verConsignacionDetalleAjax?id=' + encodeURIComponent(idConsignacion))
+        const params = sinFiltros ? new URLSearchParams({ sin_filtros: '1' }) : this._filtrosLinea();
+        params.set('id', idConsignacion);
+
+        fetch(BASE_URL + '/' + RUTA_MODULO + '/verConsignacionDetalleAjax?' + params.toString())
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) {
@@ -641,6 +659,25 @@ window.RI_Consignaciones = {
                 document.getElementById('ri-cv-modal-responsable').textContent = c.responsable || '-';
                 document.getElementById('ri-cv-modal-estado').textContent = c.estado || '';
                 tbody.innerHTML = res.rows;
+
+                if (tfoot && res.totales) {
+                    tfoot.innerHTML = `<tr class="table-light fw-bold">
+                        <td colspan="4" class="small text-end">Totales</td>
+                        <td class="text-end small">${res.totales.consignado}</td>
+                        <td class="text-end small">${res.totales.retornado}</td>
+                        <td class="text-end small">${res.totales.facturado}</td>
+                        <td class="text-end small">${res.totales.saldo}</td>
+                    </tr>`;
+                }
+                if (aviso) {
+                    if (res.filtrado) {
+                        aviso.innerHTML = `<i class="bi bi-funnel me-1"></i>Mostrando solo las líneas que coinciden con los filtros de la búsqueda.
+                            <a href="#" class="ms-1 fw-bold" onclick="window.RI_Consignaciones.verDetalle(${idConsignacion}, true); return false;">Ver todas las líneas</a>`;
+                        aviso.classList.remove('d-none');
+                    } else {
+                        aviso.classList.add('d-none');
+                    }
+                }
             })
             .catch(err => {
                 console.error(err);
@@ -655,22 +692,27 @@ window.RI_Consignaciones = {
             this.docsModalInstance = new bootstrap.Modal(document.getElementById('ri-cv-modal-linea-docs'));
         }
         const tbody = document.getElementById('ri-cv-docs-tbody');
-        document.getElementById('ri-cv-docs-titulo').textContent = tipo === 'retorno' ? 'Retornos de esta línea' : 'Facturas de esta línea';
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        document.getElementById('ri-cv-docs-titulo').textContent = tipo === 'retorno' ? 'Retornos de esta línea' : 'Facturas de venta de esta línea';
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
         this.docsModalInstance.show();
 
         fetch(BASE_URL + '/' + RUTA_MODULO + '/verDocumentosLineaConsignacionAjax?id_detalle=' + encodeURIComponent(idDetalle) + '&tipo=' + encodeURIComponent(tipo))
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) {
-                    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-danger">${res.error || 'No se pudo cargar el detalle'}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">${res.error || 'No se pudo cargar el detalle'}</td></tr>`;
                     return;
                 }
+                // Sin permiso de lectura en el módulo dueño (Facturas de Venta / Retornos CV) el
+                // backend no emite la celda del PDF: se oculta también su cabecera para que la
+                // tabla no quede con una columna vacía.
+                const thPdf = document.getElementById('ri-cv-docs-th-pdf');
+                if (thPdf) thPdf.classList.toggle('d-none', res.puede_pdf === false);
                 tbody.innerHTML = res.rows;
             })
             .catch(err => {
                 console.error(err);
-                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-danger">Error al cargar el detalle</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">Error al cargar el detalle</td></tr>`;
             });
     },
 
@@ -689,7 +731,7 @@ window.RI_Consignaciones = {
         });
 
         const tbody = document.getElementById('ri-cv-tbody');
-        const colSpan = modo === 'NINGUNO' ? 7 : 3;
+        const colSpan = modo === 'NINGUNO' ? 9 : 3;
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('consignaciones', params, (res) => {

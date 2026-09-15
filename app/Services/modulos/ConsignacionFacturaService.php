@@ -160,6 +160,67 @@ class ConsignacionFacturaService
         return is_array($dec) ? $dec : [];
     }
 
+    /**
+     * Completa la información adicional de la factura con los datos que el
+     * documento ya tiene en su cabecera: las Observaciones y —cuando el
+     * establecimiento los muestra— el Vendedor y el Cajero.
+     *
+     * Por qué aquí: la información adicional (`ventas_adicional`) es lo único de
+     * este bloque que viaja en el XML autorizado y en el RIDE; las observaciones
+     * de `ventas_cabecera` solo se imprimen en el PDF propio del sistema. Las
+     * filas fijas de Vendedor/Cajero las escribe el JavaScript del modal de
+     * Factura de Venta, pantalla que este flujo no abre: la factura se crea
+     * entera en el servidor, así que se arman aquí.
+     *
+     * Reglas:
+     * - No duplica: si el documento ya trae una fila con ese concepto (la
+     *   escribió el usuario o viene de un documento anterior), manda la suya.
+     * - Respeta los interruptores del establecimiento (`mostrar_vendedor_factura`
+     *   / `mostrar_cajero_factura`). Clave ausente = se agrega, porque no hay
+     *   configuración que lo prohíba (mismo criterio que
+     *   FacturaVentaPdfService::conCamposDeCabecera()).
+     * - El Cajero es quien GENERA la factura ($idUsuario), no quien creó el
+     *   borrador: es el mismo usuario que queda en `ventas_cabecera.id_usuario`.
+     */
+    private function conCamposDeCabecera(array $info, array $doc, int $idUsuario, array $empresaConfig): array
+    {
+        // Por referencia: cada campo que se agrega abajo queda visible para el
+        // siguiente chequeo (sin esto el closure evaluaría siempre la copia inicial).
+        $yaEsta = static function (string $nombre) use (&$info): bool {
+            foreach ($info as $ia) {
+                if (strcasecmp(trim((string) ($ia['nombre'] ?? $ia['concepto'] ?? '')), $nombre) === 0) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        $activo = static function (string $flag) use ($empresaConfig): bool {
+            if (!array_key_exists($flag, $empresaConfig)) return true;
+            $v = $empresaConfig[$flag];
+            return $v === true || in_array((string) $v, ['t', 'true', '1'], true);
+        };
+
+        $observaciones = trim((string) ($doc['observaciones'] ?? ''));
+        if ($observaciones !== '' && !$yaEsta('Observaciones')) {
+            $info[] = ['nombre' => 'Observaciones', 'valor' => $observaciones];
+        }
+
+        $vendedor = trim((string) ($doc['vendedor_nombre'] ?? ''));
+        if ($vendedor !== '' && $activo('mostrar_vendedor_factura') && !$yaEsta('Vendedor')) {
+            $info[] = ['nombre' => 'Vendedor', 'valor' => $vendedor];
+        }
+
+        if ($activo('mostrar_cajero_factura') && !$yaEsta('Cajero')) {
+            $usuario = (new \App\models\Usuario())->getBasicoPorId($idUsuario);
+            $cajero  = trim((string) ($usuario['nombre'] ?? ''));
+            if ($cajero !== '') {
+                $info[] = ['nombre' => 'Cajero', 'valor' => $cajero];
+            }
+        }
+
+        return $info;
+    }
+
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         return $this->repository->find($id, $idEmpresa);
@@ -711,6 +772,9 @@ class ConsignacionFacturaService
         if ($consigNums) {
             $infoFactura[] = ['nombre' => 'Consignación', 'valor' => implode(', ', $consigNums)];
         }
+        // …y los campos que el documento ya tiene en su cabecera (Observaciones y,
+        // según la configuración, Vendedor y Cajero).
+        $infoFactura = $this->conCamposDeCabecera($infoFactura, $doc, $idUsuario, $empresaConfig);
 
         $payload = [
             'id_empresa'          => $idEmpresa,

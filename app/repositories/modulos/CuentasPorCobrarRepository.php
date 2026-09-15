@@ -192,6 +192,60 @@ class CuentasPorCobrarRepository extends BaseRepository
         return $fechaHasta ?: null;
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // ORDEN DE LAS FILAS
+    //
+    // El listado se arma mezclando tres consultas (facturas + recibos + saldos
+    // iniciales), así que el ORDER BY de cada una no manda: el orden final se
+    // aplica sobre el arreglo ya unido (ver el controller). Como la pantalla, el
+    // Excel y el PDF parten de ese mismo arreglo, los tres salen igual.
+    //
+    // La pantalla ordena haciendo clic en las cabeceras y manda la columna elegida
+    // en `orden_col`/`orden_dir`; la lista blanca de abajo es la que decide qué se
+    // acepta. El gemelo en el navegador es CXC_ORDEN (public/js/modulos/cuentas_por_cobrar.js).
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Orden por defecto: cartera alfabética por cliente (A-Z). */
+    public const ORDEN_DEFECTO = ['cliente_nombre', 'ASC'];
+
+    /** A igualdad de la columna elegida, el documento más próximo a vencer primero. */
+    private const ORDEN_DESEMPATES = ['fecha_vencimiento' => 'ASC', 'numero_factura' => 'ASC'];
+
+    /**
+     * Columnas por las que se puede ordenar el listado: clave (la misma que la vista
+     * manda en `data-sort`) => definición para App\Helpers\OrdenFilas.
+     */
+    private static function ordenColumnas(): array
+    {
+        return [
+            'numero_factura'    => ['tipo' => 'texto'],
+            'origen'            => ['tipo' => 'texto'],
+            'cliente_nombre'    => ['tipo' => 'texto'],
+            'fecha_emision'     => ['tipo' => 'fecha'],
+            'fecha_vencimiento' => ['tipo' => 'fecha'],
+            'total'             => ['tipo' => 'numero'],
+            // "Cobrado" = abonos + retenciones + notas de crédito aplicadas (lo mismo
+            // que suman la columna de la tabla, el Excel y el PDF).
+            'cobrado'           => ['tipo' => 'numero', 'valor' => static fn (array $f): float =>
+                (float) ($f['total_cobrado'] ?? 0) + (float) ($f['total_retenido'] ?? 0) + (float) ($f['total_nc'] ?? 0)],
+            'saldo'             => ['tipo' => 'numero'],
+            'dias_vencido'      => ['tipo' => 'numero'],
+        ];
+    }
+
+    /** Aplica a las filas ya unificadas el orden pedido en los filtros. */
+    public function ordenarFilas(array $filas, array $filtros): array
+    {
+        return \App\Helpers\OrdenFilas::aplicar(
+            $filas,
+            self::ordenColumnas(),
+            self::ORDEN_DEFECTO,
+            $filtros['orden_col'] ?? '',
+            $filtros['orden_dir'] ?? '',
+            self::ORDEN_DESEMPATES
+        );
+    }
+
     /**
      * Listado principal de cuentas por cobrar.
      */

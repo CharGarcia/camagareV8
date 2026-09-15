@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, primeras 5000 filas, listado recortado
-version: 1.9
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado
+version: 1.10
 orden: 40
 estado: activo
 ---
@@ -79,6 +79,68 @@ stock.
 ## Exportar
 
 Disponible en **PDF** y **Excel**. Para el conteo, el PDF es el más práctico.
+
+## Pestaña Consignaciones
+
+Muestra la mercadería que está **en poder de clientes**: lo entregado en
+consignación menos lo devuelto y lo facturado.
+
+### Qué muestra cada fila
+
+Cada fila es una **consignación** (un documento), con:
+
+| Columna | Qué contiene |
+|---|---|
+| Fecha | Fecha de emisión y, debajo, el secuencial del documento |
+| Cliente | Nombre y, debajo, la identificación |
+| Asesor | Vendedor asignado a la consignación |
+| Responsable traslado | Quien trasladó la mercadería |
+| Lote | Lotes de las líneas de la consignación, separados por coma |
+| NUP | NUP de las líneas, separados por coma |
+| Total productos | **Suma de las cantidades entregadas** y, debajo, cuántas líneas tiene el documento. Al pasar el mouse se ve el desglose: consignado, retornado y facturado |
+| Saldo | Entregado − devuelto − facturado: lo que sigue en poder del cliente |
+| Estado | Entregada, Emitida o Anulada |
+
+Cuando la consignación mezcla varios lotes o NUP, la celda los muestra
+separados por coma y recorta con puntos suspensivos; el valor completo aparece
+al pasar el mouse.
+
+### Búsqueda y filtros
+
+Los filtros de **Producto, Bodega, Lote, NUP y Caducidad** actúan sobre las
+líneas: si busca un lote, el "Total productos" y el "Saldo" de cada fila suman
+**solo** las líneas de ese lote, no el documento entero. Los de **Cliente,
+Asesor, Responsable, Estado, fechas y N° Consignación** actúan sobre el
+documento completo. El N° de consignación acepta tanto el secuencial solo
+(`000000113`) como el número con serie (`001-001-000000113`).
+
+### Detalle de una consignación
+
+Al hacer clic en una fila se abre el detalle con sus líneas de producto:
+producto, bodega, lote, NUP, consignado, retornado, facturado y saldo, con una
+fila de **totales** al pie.
+
+Si hay filtros de línea activos, el detalle muestra **solo las líneas que
+coinciden** — así los totales del detalle cuadran con los de la fila del
+listado — y avisa con un enlace **Ver todas las líneas** para mostrar el
+documento completo.
+
+### De dónde salen "Retornado" y "Facturado"
+
+Las cantidades **Retornado** y **Facturado** son enlaces: al hacer clic se
+abren los documentos que las explican, con su fecha, número, cantidad, total y
+un botón para **imprimir el PDF** de cada uno.
+
+- **Retornado**: los retornos de consignación emitidos (módulo Retornos CV).
+- **Facturado**: la **factura de venta** (su número real
+  `establecimiento-punto-secuencial`), no el documento interno de facturación
+  de consignación. Si la factura no está en estado *facturada*, se indica su
+  estado debajo del número.
+
+El PDF se abre en el módulo dueño del documento, así que el botón **solo
+aparece si el usuario tiene permiso de ver** sobre **Facturas de Venta** o
+**Retornos CV**, según el caso; si no lo tiene, la columna PDF no se muestra.
+Si el documento fue eliminado, en lugar del botón aparece un guion.
 
 ## Pestaña Auditoría
 
@@ -155,6 +217,20 @@ cuando haga falta.
 
 ## Historial de cambios
 
+- **1.10** — Pestaña **Consignaciones**: al buscar ya se ve en pantalla lo que se
+  buscó. El listado agrega las columnas **Lote** y **NUP**, "Productos" pasa a
+  mostrar la **suma de las cantidades entregadas** (con el desglose
+  consignado/retornado/facturado al pasar el mouse y, debajo, el número de líneas
+  del documento) y "Vendedor" se llama **Asesor**, como en el resto del sistema.
+  El detalle de una consignación ahora respeta los filtros de línea (antes la
+  fila sumaba solo el lote buscado y el detalle mostraba el documento entero, con
+  otro total) y cierra con una fila de totales; un enlace permite ver igualmente
+  todas las líneas. En Retornado/Facturado, cada documento relacionado trae un
+  botón para imprimir su PDF —visible solo para quien tenga permiso de ver el
+  módulo dueño del documento—, y en Facturado se muestra el número de la
+  **factura de venta** en lugar del documento interno de facturación de
+  consignación. El Excel y el PDF del reporte incluyen ahora Asesor, Lote, NUP,
+  Retornado y Facturado.
 - **1.9** — **El reporte tarda mucho menos en mostrar los datos.** Medido sobre
   una carga de prueba de 2.000 productos × 5 bodegas y 300.000 movimientos:
   Existencias pasó de 27 s a 1,6 s, Valorización de 30 s a 1,2 s y Auditoría
