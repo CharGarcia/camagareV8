@@ -26,8 +26,12 @@ class PedidoService {
         $this->logService = new LogSistemaService();
     }
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array {
-        $result = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+    /**
+     * @param array $ordenMulti Criterios de orden múltiple (ver App\Helpers\OrdenListado).
+     *        Vacío = se ordena por $ordenCol/$ordenDir, como siempre.
+     */
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, array $ordenMulti = []): array {
+        $result = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $ordenMulti);
         foreach ($result['rows'] as &$r) {
             if (!empty($r['fecha_pedido'])) $r['fecha_pedido'] = date('d-m-Y H:i:s', strtotime($r['fecha_pedido']));
             if (!empty($r['created_at'])) $r['created_at'] = date('d-m-Y H:i:s', strtotime($r['created_at']));

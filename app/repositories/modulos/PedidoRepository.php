@@ -25,11 +25,31 @@ class PedidoRepository {
                                           ELSE 99
                                       END";
 
-    public const COLUMNAS_ORDEN = [
-        'numero_pedido', 'establecimiento', 'punto_emision', 'secuencial', 'fecha_pedido', 'cliente_nombre',
-        'fecha_entrega', 'rango_horario', 'responsable_entrega',
-        'observaciones', 'observaciones_internas', 'estado',
-        'created_at'
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL con la que se ordena. Es la whitelist del ORDER BY —lo único
+     * que puede llegar al SQL sale de aquí— y también el mapa que necesita
+     * `OrdenListado::clausula()` para encadenar varias columnas (Shift+clic).
+     */
+    public const MAPA_ORDEN = [
+        // El número que se ve en pantalla no es una columna: se arma con las tres partes.
+        'numero_pedido'          => "p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial",
+        'establecimiento'        => 'p.establecimiento',
+        'punto_emision'          => 'p.punto_emision',
+        'secuencial'             => 'p.secuencial',
+        'fecha_pedido'           => 'p.fecha_pedido',
+        'cliente_nombre'         => 'c.nombre',
+        'fecha_entrega'          => 'p.fecha_entrega',
+        'rango_horario'          => 'p.hora_inicial_entrega',
+        'responsable_entrega'    => 'rt.nombre',
+        'observaciones'          => 'p.observaciones',
+        'observaciones_internas' => 'p.observaciones_internas',
+        // El estado NO se ordena alfabéticamente (ASC dejaría: Anulado, Facturado,
+        // Pendiente, Procesado) sino por el orden lógico del flujo del pedido:
+        // primero lo que falta atender, al final lo cerrado.
+        // ASC = Pendiente → Procesado → Facturado → Anulado; DESC lo invierte.
+        'estado'                 => self::ORDEN_ESTADO_SQL,
+        'created_at'             => 'p.created_at',
     ];
 
     public function __construct() {
@@ -43,12 +63,14 @@ class PedidoRepository {
         int $perPage,
         string $ordenCol,
         string $ordenDir,
-        ?int $idUsuarioFiltro = null
+        ?int $idUsuarioFiltro = null,
+        array $ordenMulti = []
     ): array {
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'created_at';
-        }
-        $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
+        // $ordenMulti llega cuando el llamador usa OrdenListado (permite ordenar por
+        // varias columnas); si viene vacío se arma desde $ordenCol/$ordenDir.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
 
         $whereSql = "WHERE p.id_empresa = :id_empresa AND p.eliminado = false AND p.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
         $params   = [':id_empresa' => $idEmpresa];
@@ -115,18 +137,9 @@ class PedidoRepository {
         // 2. Obtener filas
         $offset = ($page - 1) * $perPage;
         
-        $orderExpr = match($ordenCol) {
-            'numero_pedido'      => "p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial",
-            'cliente_nombre'     => 'c.nombre',
-            'responsable_entrega'=> 'rt.nombre',
-            'rango_horario'      => 'p.hora_inicial_entrega',
-            // El estado NO se ordena alfabéticamente (ASC dejaría: Anulado,
-            // Facturado, Pendiente, Procesado) sino por el orden lógico del flujo
-            // del pedido: primero lo que falta atender, al final lo cerrado.
-            // ASC = Pendiente → Procesado → Facturado → Anulado; DESC lo invierte.
-            'estado'             => self::ORDEN_ESTADO_SQL,
-            default              => "p.{$ordenCol}"
-        };
+        // Una o varias columnas, siempre validadas contra MAPA_ORDEN, con p.id como
+        // desempate para que las filas empatadas no bailen entre páginas.
+        $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'p.created_at', 'p.id DESC');
 
         $sqlRows = "SELECT p.*,
                            (p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) AS numero_pedido,
@@ -136,7 +149,7 @@ class PedidoRepository {
                     JOIN clientes c ON p.id_cliente = c.id
                     LEFT JOIN responsables_traslado rt ON p.id_responsable_entrega = rt.id
                     {$whereSql}
-                    ORDER BY $orderExpr $dir, p.id DESC";
+                    $orderBy";
                     
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;

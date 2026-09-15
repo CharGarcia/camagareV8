@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
-etiquetas: pedidos, pedido de cliente, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes
-version: 1.2
+etiquetas: pedidos, pedido de cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes
+version: 1.3
 orden: 0
 estado: activo
 ---
@@ -67,9 +67,16 @@ editar antes de enviar).
 - **Orden**: se ordena haciendo clic en cualquier encabezado y el sistema recuerda
   su elección para la próxima vez. De fábrica muestra **lo más reciente primero**
   (por fecha de emisión).
+- **Orden por varias columnas**: mantenga presionada la tecla **Shift** (⇧) y pulse
+  el título de una segunda columna para encadenarla — por ejemplo *Estado* y dentro
+  de cada estado la *Fecha de entrega*, que es la vista natural para despachar. Se
+  pueden encadenar hasta tres; el número junto a cada flecha indica cuál manda. Un
+  tercer Shift+clic sobre la misma columna la saca del orden. Detalles en *Cómo
+  ordenar los listados*.
 - **La columna Estado no se ordena alfabéticamente**, sino por el flujo del pedido:
   ascendente muestra primero lo que falta atender — Pendiente, Procesado,
-  Facturado, Anulado — y descendente lo invierte.
+  Facturado, Anulado — y descendente lo invierte. Eso se mantiene también cuando
+  el estado se combina con otras columnas.
 - **Columnas**: cada usuario puede ocultar las que no usa y ajustar su ancho.
 - **PDF y Excel** exportan lo que está en pantalla, con el mismo filtro y el mismo
   orden. El tope es de **500 filas**: si la búsqueda trae más, el sistema pide
@@ -158,6 +165,12 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
 
 ## Historial de cambios
 
+- **1.3** — El listado se puede **ordenar por hasta tres columnas a la vez**:
+  Shift+clic en el título de la segunda columna la encadena a la primera (por
+  ejemplo *Estado* y, dentro de cada estado, la *Fecha de entrega*). Cada
+  encabezado activo muestra un número con su prioridad, y el orden del estado
+  sigue siendo por flujo del pedido, no alfabético. El orden se guarda por usuario
+  y se respeta al exportar a PDF y Excel.
 - **1.2** — En el celular, la lista de productos ya no desaparece al buscar por
   código o descripción. Antes, cuando el teclado tapaba el campo del detalle —lo
   habitual, porque la tabla de productos queda en la parte baja del formulario— la

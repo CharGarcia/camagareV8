@@ -50,13 +50,15 @@ class PedidosController extends BaseModuloController {
         // Orden por defecto (solo para quien no tenga preferencia guardada): lo más
         // reciente primero. El mismo par se repite en searchAjax y en las dos
         // exportaciones para que pantalla, PDF y Excel coincidan.
-        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_pedido');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
+        // Puede ser múltiple (Shift+clic): la vista lo manda como `orden=col:DIR,col:DIR`.
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_pedido', 'DESC');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_pedido');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage  = 20;
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -111,6 +113,8 @@ class PedidosController extends BaseModuloController {
             'buscar' => $buscar,
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
+            'ordenJson' => \App\Helpers\OrdenListado::aJson($orden),
+            'ordenParam' => \App\Helpers\OrdenListado::aCadena($orden),
             'vistaConfig' => $prefsVista,
             'exportMaxFilas' => self::EXPORT_MAX_FILAS,
             'fullWidth' => true
@@ -177,15 +181,22 @@ class PedidosController extends BaseModuloController {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'fecha_pedido');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'desc'));
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; si se abre
+        // sin parámetros, se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(
+            \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo()),
+            'fecha_pedido',
+            'DESC'
+        );
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_pedido');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
         // Se piden como mucho EXPORT_MAX_FILAS + 1 filas: alcanza para saber si el
         // listado excede el tope sin traer a memoria miles de pedidos.
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, self::EXPORT_MAX_FILAS + 1, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, self::EXPORT_MAX_FILAS + 1, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         if ((int) $data['total'] > self::EXPORT_MAX_FILAS) {
             $this->bloquearExportPorVolumen((int) $data['total']);
         }
@@ -268,15 +279,22 @@ class PedidosController extends BaseModuloController {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'fecha_pedido');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'desc'));
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; si se abre
+        // sin parámetros, se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(
+            \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo()),
+            'fecha_pedido',
+            'DESC'
+        );
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_pedido');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
         // Mismo tope que el PDF: se trae una fila más que el máximo solo para saber
         // si el listado lo excede (ver EXPORT_MAX_FILAS).
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, self::EXPORT_MAX_FILAS + 1, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, self::EXPORT_MAX_FILAS + 1, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         if ((int) $data['total'] > self::EXPORT_MAX_FILAS) {
             $this->bloquearExportPorVolumen((int) $data['total']);
         }
@@ -433,14 +451,15 @@ class PedidosController extends BaseModuloController {
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $buscar    = trim($_GET['b'] ?? $_GET['q'] ?? $_POST['b'] ?? $_POST['q'] ?? '');
         $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_pedido');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
+        $orden     = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_pedido', 'DESC');
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_pedido');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage   = 20;
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -509,8 +528,8 @@ class PedidosController extends BaseModuloController {
             'pagination' => $paginationHtml,
             'info'      => "$from-$to/$total",
             'total'     => $total,
-            'pdf_url'   => BASE_URL . '/' . $this->getRutaModulo() . '/export-pdf?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
-            'excel_url' => BASE_URL . '/' . $this->getRutaModulo() . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir"
+            'pdf_url'   => BASE_URL . '/' . $this->getRutaModulo() . '/export-pdf?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden)),
+            'excel_url' => BASE_URL . '/' . $this->getRutaModulo() . '/export-excel?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden))
         ]);
         exit;
     }

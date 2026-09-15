@@ -136,12 +136,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // paginación, contador y los enlaces de PDF/Excel): recargar la página entera solo
     // repetiría la consulta. El scope se acota a la tabla del listado para no enganchar
     // encabezados de los modales incluidos al final de la vista.
+    // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+    // (ASC → DESC → fuera del orden), con la prioridad numerada en cada encabezado.
     if (window.CMG_initSort) {
-        window.CMG_initSort('pedidos', (col, dir) => {
-            window.currentSort = col;
-            window.currentDir  = dir;
+        window.CMG_initSort('pedidos', (col, dir, sorts) => {
+            window.currentSort  = col;
+            window.currentDir   = dir;
+            window.currentSorts = sorts;
             PED_fetchSearch(1);
-        }, { col: window.currentSort, dir: window.currentDir, container: '.ped-scroll', reload: false });
+        }, { sorts: window.currentSorts, multi: true, container: '.ped-scroll', reload: false });
     }
 
     // Autocomplete Clientes (Vanilla JS)
@@ -286,7 +289,8 @@ async function PED_fetchSearch(page = 1) {
     if (!tbody) return;
 
     try {
-        const uri = `${window.CMG_urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        const orden = window.CMG_ordenParam(window.currentSorts || []);
+        const uri = `${window.CMG_urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
         const resp = await fetch(uri);
         const data = await resp.json();
         

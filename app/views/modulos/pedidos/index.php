@@ -198,11 +198,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
-                <a id="btnExportPdf" href="<?= $urlBasePedidos ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportPdf" href="<?= $urlBasePedidos ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-danger" title="Exportar PDF">
                     <i class="bi bi-file-earmark-pdf"></i> PDF
                 </a>
-                <a id="btnExportExcel" href="<?= $urlBasePedidos ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportExcel" href="<?= $urlBasePedidos ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-success" title="Exportar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>
@@ -295,6 +295,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.APP_FAVORITOS = window.APP_FAVORITOS || {};
     window.currentSort = '<?= $ordenCol ?>';
     window.currentDir  = '<?= $ordenDir ?>';
+    // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que
+    // lee OrdenListado en PHP. currentSort/currentDir quedan como el principal.
+    window.currentSorts = <?= $ordenJson ?? '[]' ?>;
     window.currentPage = <?= $page ?>;
     // Tope de filas por descarga (PDF / Excel del listado) y total actual del
     // listado: si se pasa del tope, el JS pide acotar la búsqueda antes de bajar
