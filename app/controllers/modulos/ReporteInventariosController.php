@@ -29,6 +29,52 @@ class ReporteInventariosController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
+    /**
+     * Módulos dueños de la información de cada pestaña. El permiso de VER el
+     * reporte abre la página, pero cada pestaña se muestra solo si el usuario
+     * puede VER el módulo del que sale su información: Existencias, Movimientos,
+     * Valorización y Auditoría leen el kardex/stock (Inventario); Consignaciones
+     * lee las consignaciones de venta. Nivel 3 ve todo (Permisos::porRuta).
+     * Las rutas son las de getRutaModulo() de InventarioController y
+     * ConsignacionesVentasController.
+     */
+    private const RUTA_INVENTARIO     = 'modulos/inventario';
+    private const RUTA_CONSIGNACIONES = 'modulos/consignaciones-ventas';
+    private const MODULO_POR_PESTANA  = [
+        'existencias'    => self::RUTA_INVENTARIO,
+        'movimientos'    => self::RUTA_INVENTARIO,
+        'valorizacion'   => self::RUTA_INVENTARIO,
+        'consignaciones' => self::RUTA_CONSIGNACIONES,
+        'auditoria'      => self::RUTA_INVENTARIO,
+    ];
+
+    /** Pestaña pedida por la URL; cualquier valor desconocido cae en Existencias (como el dispatcher). */
+    private function normalizarPestana(?string $tab): string
+    {
+        $tab = (string) $tab;
+        return isset(self::MODULO_POR_PESTANA[$tab]) ? $tab : 'existencias';
+    }
+
+    /** @return array<string,bool> pestaña => si el usuario puede verla (en el orden de la barra). */
+    private function pestanasPermitidas(): array
+    {
+        $out = [];
+        foreach (self::MODULO_POR_PESTANA as $tab => $ruta) {
+            $out[$tab] = !empty($this->permisosModuloPorRuta($ruta)['ver']);
+        }
+        return $out;
+    }
+
+    /**
+     * Guard de cada pestaña: la misma regla que decide si se dibuja en la barra se
+     * aplica a sus datos, exportaciones y acciones, para que una URL armada a mano
+     * no sirva lo que la pantalla oculta. Responde 403 JSON en AJAX o redirige.
+     */
+    private function requirePestana(string $tab): void
+    {
+        $this->requirePermisoVerModulo(self::MODULO_POR_PESTANA[$this->normalizarPestana($tab)]);
+    }
+
     public function __construct()
     {
         parent::__construct();
@@ -57,9 +103,15 @@ class ReporteInventariosController extends BaseModuloController
         $anios         = $this->repository->getAniosMovimientos($idEmpresa);
         $responsables  = (new \App\repositories\modulos\ResponsableTrasladoRepository())->listarPorEmpresa($idEmpresa);
 
+        // Pestañas visibles y cuál arranca activa (la primera permitida, en el orden de la barra).
+        $pestanas       = $this->pestanasPermitidas();
+        $pestanaInicial = (string) (array_key_first(array_filter($pestanas)) ?? '');
+
         $this->viewWithLayout('layouts.main', 'modulos/reporte_inventarios/index', [
             'titulo'     => 'Reporte de Inventarios',
             'perm'       => $this->getPermisos(),
+            'pestanas'       => $pestanas,
+            'pestanaInicial' => $pestanaInicial,
             'vistaConfig'=> $prefsVista,
             'rutaModulo' => self::RUTA_MODULO,
             'bodegas'    => $bodegas,
@@ -196,7 +248,8 @@ class ReporteInventariosController extends BaseModuloController
 
         try {
             $idEmpresa = (int) $_SESSION['id_empresa'];
-            $tab = $_REQUEST['tab'] ?? 'existencias';
+            $tab = $this->normalizarPestana($_REQUEST['tab'] ?? 'existencias');
+            $this->requirePestana($tab);
 
             $resultado = match ($tab) {
                 'movimientos'    => $this->generarMovimientos($idEmpresa),
@@ -622,6 +675,7 @@ class ReporteInventariosController extends BaseModuloController
     public function actualizarMinMaxAjax(): void
     {
         $this->requireActualizar();
+        $this->requirePestana('existencias');
         header('Content-Type: application/json');
 
         try {
@@ -666,6 +720,7 @@ class ReporteInventariosController extends BaseModuloController
     public function actualizarCategoriaAjax(): void
     {
         $this->requireActualizar();
+        $this->requirePestana('existencias');
         header('Content-Type: application/json');
 
         try {
@@ -711,6 +766,7 @@ class ReporteInventariosController extends BaseModuloController
     public function ajustarInventarioAjax(): void
     {
         $this->requireActualizar();
+        $this->requirePestana('existencias');
         header('Content-Type: application/json');
 
         try {
@@ -751,6 +807,7 @@ class ReporteInventariosController extends BaseModuloController
     public function corregirStockAuditoriaAjax(): void
     {
         $this->requireActualizar();
+        $this->requirePestana('auditoria');
         header('Content-Type: application/json');
 
         try {
@@ -782,6 +839,7 @@ class ReporteInventariosController extends BaseModuloController
     public function corregirTodoAuditoriaAjax(): void
     {
         $this->requireActualizar();
+        $this->requirePestana('auditoria');
         header('Content-Type: application/json');
 
         try {
@@ -822,6 +880,7 @@ class ReporteInventariosController extends BaseModuloController
     public function verConsignacionDetalleAjax(): void
     {
         $this->requireLeer();
+        $this->requirePestana('consignaciones');
         header('Content-Type: application/json');
 
         try {
@@ -943,6 +1002,7 @@ class ReporteInventariosController extends BaseModuloController
     public function verDocumentosLineaConsignacionAjax(): void
     {
         $this->requireLeer();
+        $this->requirePestana('consignaciones');
         header('Content-Type: application/json');
 
         try {
@@ -1022,7 +1082,8 @@ class ReporteInventariosController extends BaseModuloController
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $tab = $_REQUEST['tab'] ?? 'existencias';
+        $tab = $this->normalizarPestana($_REQUEST['tab'] ?? 'existencias');
+        $this->requirePestana($tab);
 
         [$headers, $exportData, $titulo] = $this->datosExport($idEmpresa, $tab);
 
@@ -1042,7 +1103,8 @@ class ReporteInventariosController extends BaseModuloController
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $tab = $_REQUEST['tab'] ?? 'existencias';
+        $tab = $this->normalizarPestana($_REQUEST['tab'] ?? 'existencias');
+        $this->requirePestana($tab);
 
         [$headers, $exportData, $titulo] = $this->datosExport($idEmpresa, $tab);
 

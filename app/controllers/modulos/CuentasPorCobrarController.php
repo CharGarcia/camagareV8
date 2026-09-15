@@ -199,7 +199,11 @@ class CuentasPorCobrarController extends BaseModuloController
             $g['docs'][$keyDoc]['valor']    += $l['valor'];
             unset($g);
         }
-        usort($grupos, static fn ($a, $b) => $b['saldo'] <=> $a['saldo']);
+        // Productos en orden alfabético (sin distinguir mayúsculas ni tildes), como en pantalla.
+        usort($grupos, static fn ($a, $b) => strcmp(
+            \App\Helpers\OrdenFilas::normalizar((string)$a['nombre']),
+            \App\Helpers\OrdenFilas::normalizar((string)$b['nombre'])
+        ));
         return array_values($grupos);
     }
 
@@ -281,8 +285,8 @@ class CuentasPorCobrarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; }
-                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 7.5pt; }
+                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; } .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; } .header h3 { margin: 0 0 2px 0; font-size: 10pt; } .header p { margin: 0; font-size: 7.5pt; }
@@ -329,7 +333,8 @@ class CuentasPorCobrarController extends BaseModuloController
             </page>
             <?php
             $html     = ob_get_clean();
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('CuentasPorCobrar_Producto_' . date('Ymd_His') . '.pdf', 'D');
             exit;
@@ -343,8 +348,8 @@ class CuentasPorCobrarController extends BaseModuloController
      * (formato mayor). La clave es la identificación BASE, no el texto del RUC: el
      * contribuyente registrado dos veces —con la cédula y con el RUC, que es esa cédula +
      * '001'— cae en un solo grupo, igual que en la vista en pantalla. Dentro de cada cliente
-     * los documentos van en orden cronológico (como los movimientos de un mayor); entre
-     * clientes manda el saldo: el que más debe, primero.
+     * los documentos van en orden cronológico (como los movimientos de un mayor); los
+     * clientes salen en orden alfabético (A-Z), igual que el listado detallado.
      */
     private function agruparPorCliente(array $filas): array
     {
@@ -382,7 +387,12 @@ class CuentasPorCobrarController extends BaseModuloController
                     ?: strcmp((string)($a['numero_factura'] ?? ''), (string)($b['numero_factura'] ?? '')));
         }
         unset($g);
-        usort($grupos, static fn (array $a, array $b): int => $b['saldo'] <=> $a['saldo']);
+        // Clientes en orden alfabético (mismas reglas que el listado: sin distinguir
+        // mayúsculas ni tildes), como se ven en pantalla.
+        usort($grupos, static fn (array $a, array $b): int => strcmp(
+            \App\Helpers\OrdenFilas::normalizar($a['nombre']),
+            \App\Helpers\OrdenFilas::normalizar($b['nombre'])
+        ));
         return array_values($grupos);
     }
 
@@ -590,8 +600,8 @@ class CuentasPorCobrarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 6px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; color: #000; }
-                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; color: #000; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 7.5pt; color: #000; }
+                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; color: #000; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
@@ -655,7 +665,8 @@ class CuentasPorCobrarController extends BaseModuloController
             </page>
             <?php
             $html     = ob_get_clean();
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('CuentasPorCobrar_Cliente_' . date('Ymd_His') . '.pdf', 'D');
             exit;
@@ -857,8 +868,8 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
-        // Validar factura y saldo
-        $factura = $this->repo->getFacturaParaCobro($idVenta, $idEmpresa);
+        // Validar factura y saldo (y que sea del usuario, si no tiene acceso total)
+        $factura = $this->facturaPropiaOCortar($idVenta, $idEmpresa);
         if (!$factura) {
             $this->jsonError('Factura no encontrada.');
             return;
@@ -970,7 +981,7 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
-        $factura = $this->repo->getFacturaParaCobro($idVenta, $idEmpresa);
+        $factura = $this->facturaPropiaOCortar($idVenta, $idEmpresa);
         if (!$factura) {
             $this->jsonError('Factura no encontrada.');
             return;
@@ -994,6 +1005,7 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
+        $this->facturaPropiaOCortar($idVenta, $idEmpresa); // registros propios (§6)
         $historial = $this->repo->getHistorialCobros($idVenta, $idEmpresa);
         $this->jsonSuccess(['historial' => $historial]);
     }
@@ -1013,7 +1025,7 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
-        $recibo = $this->repo->getReciboParaCobro($idRecibo, $idEmpresa);
+        $recibo = $this->reciboPropioOCortar($idRecibo, $idEmpresa);
         if (!$recibo) {
             $this->jsonError('Recibo no encontrado.');
             return;
@@ -1033,6 +1045,7 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
+        $this->reciboPropioOCortar($idRecibo, $idEmpresa); // registros propios (§6)
         $historial = $this->repo->getHistorialCobrosRecibo($idRecibo, $idEmpresa);
         $this->jsonSuccess(['historial' => $historial]);
     }
@@ -1070,8 +1083,8 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
-        // Validar recibo y saldo
-        $recibo = $this->repo->getReciboParaCobro($idRecibo, $idEmpresa);
+        // Validar recibo y saldo (y que sea del usuario, si no tiene acceso total)
+        $recibo = $this->reciboPropioOCortar($idRecibo, $idEmpresa);
         if (!$recibo) {
             $this->jsonError('Recibo no encontrado.');
             return;
@@ -1275,9 +1288,10 @@ $plantillasFiltradas = [];
             return;
         }
 
+        // Registros propios (§6): sin acceso total solo se notifican los documentos propios
         $factura = $esRecibo
-            ? $this->repo->getReciboParaCobro($idVenta, $idEmpresa)
-            : $this->repo->getFacturaParaCobro($idVenta, $idEmpresa);
+            ? $this->reciboPropioOCortar($idVenta, $idEmpresa)
+            : $this->facturaPropiaOCortar($idVenta, $idEmpresa);
         if (!$factura) {
             $this->jsonError($esRecibo ? 'Recibo no encontrado.' : 'Factura no encontrada.');
             return;
@@ -1376,6 +1390,9 @@ $plantillasFiltradas = [];
                 ? $this->repo->getReciboParaCobro($id, $idEmpresa)
                 : $this->repo->getFacturaParaCobro($id, $idEmpresa);
             if (!$doc) { $noEncontrados++; continue; }
+            // Registros propios (§6): sin acceso total, un documento de otro usuario
+            // se omite del envío (se cuenta como no encontrado, no corta el lote).
+            if (!$this->esRegistroPropio($doc, 'id_usuario')) { $noEncontrados++; continue; }
 
             $saldo = (float)($doc['saldo'] ?? 0);
             if ($saldo <= 0.001) { $sinSaldo++; continue; }
@@ -1519,7 +1536,8 @@ $plantillasFiltradas = [];
             return;
         }
 
-        $factura = $this->repo->getFacturaParaCobro($idVenta, $idEmpresa);
+        // Registros propios (§6): sin acceso total solo se notifican las facturas propias
+        $factura = $this->facturaPropiaOCortar($idVenta, $idEmpresa);
         if (!$factura) {
             $this->jsonError('Factura no encontrada.');
             return;
@@ -1939,8 +1957,8 @@ $plantillasFiltradas = [];
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; color: #000; }
-                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; color: #000; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 7.5pt; color: #000; }
+                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; color: #000; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
@@ -2017,7 +2035,8 @@ $plantillasFiltradas = [];
             </page>
             <?php
             $html     = ob_get_clean();
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('CuentasPorCobrar_' . date('Ymd_His') . '.pdf', 'D');
             exit;
@@ -2058,7 +2077,76 @@ $plantillasFiltradas = [];
             // Vacío = el orden por defecto (alfabético por cliente).
             'orden_col'   => trim((string)($_REQUEST['orden_col'] ?? '')),
             'orden_dir'   => strtoupper(trim((string)($_REQUEST['orden_dir'] ?? ''))) === 'DESC' ? 'DESC' : 'ASC',
+            // Registros propios (§6): se resuelve del permiso, nunca de la petición.
+            // Al ir en los filtros lo heredan el listado, las tarjetas, el gráfico de
+            // antigüedad y las exportaciones, que parten de este mismo arreglo.
+            'id_usuario_filtro' => $this->idUsuarioFiltro(),
         ];
+    }
+
+    /**
+     * Registros propios (§6): el id del usuario cuando NO tiene acceso total ('t')
+     * en este módulo, o null cuando ve toda la empresa (incluido el nivel 3, que
+     * `Permisos::porRuta()` devuelve siempre con 'todo').
+     *
+     * Con filtro activo la cartera se limita a lo que él registró: facturas y
+     * recibos por `id_usuario` y saldos iniciales por `created_by` (ver
+     * CuentasPorCobrarRepository::condUsuarioPropio()).
+     */
+    private function idUsuarioFiltro(): ?int
+    {
+        $perm = $this->getPermisos();
+        return empty($perm['todo']) ? (int) ($_SESSION['id_usuario'] ?? 0) : null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // REGISTROS PROPIOS EN LAS ACCIONES POR ID
+    //
+    // El filtro del listado oculta los documentos ajenos, pero cada acción recibe
+    // un id suelto: sin este guard se llegaría por id a un documento que la tabla
+    // no muestra. requireRegistroPropio() corta con 403 y deja pasar al nivel 3 y
+    // a quien tenga acceso total.
+    //
+    // Devuelven el documento ya leído (o null si no existe, para que el llamador
+    // responda su propio "no encontrado"), así la acción no repite la consulta.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Factura de venta del cobro: creador en `id_usuario` (igual que Factura de Venta). */
+    private function facturaPropiaOCortar(int $idVenta, int $idEmpresa): ?array
+    {
+        $factura = $this->repo->getFacturaParaCobro($idVenta, $idEmpresa);
+        $this->requireRegistroPropio($factura, 'id_usuario');
+        return $factura;
+    }
+
+    /** Recibo de venta: creador en `id_usuario` (igual que Recibo de Venta). */
+    private function reciboPropioOCortar(int $idRecibo, int $idEmpresa): ?array
+    {
+        $recibo = $this->repo->getReciboParaCobro($idRecibo, $idEmpresa);
+        $this->requireRegistroPropio($recibo, 'id_usuario');
+        return $recibo;
+    }
+
+    /** Saldo inicial CxC: su tabla no tiene `id_usuario`, el creador es `created_by`. */
+    private function saldoInicialPropioOCortar(int $idSaldo, int $idEmpresa): ?array
+    {
+        $saldo = (new \App\repositories\modulos\SaldosInicialesRepository())->getCxcPorId($idSaldo, $idEmpresa);
+        $this->requireRegistroPropio($saldo, 'created_by');
+        return $saldo;
+    }
+
+    /**
+     * Variante que NO corta, para los procesos por lote (envío masivo de correos):
+     * un documento ajeno se omite y se cuenta como "no encontrado", igual que uno
+     * que ya no existe; abortar el lote entero con 403 sería peor para el usuario.
+     */
+    private function esRegistroPropio(?array $registro, string $campo): bool
+    {
+        $filtro = $this->idUsuarioFiltro();
+        if ($filtro === null || $registro === null) {
+            return true; // ve toda la empresa (o no hay registro que validar)
+        }
+        return (int) ($registro[$campo] ?? 0) === $filtro;
     }
 
     /**
@@ -2293,6 +2381,8 @@ HTML;
         $filtros = [
             'estado'     => $_GET['estado']     ?? 'TODOS',
             'id_cliente' => $_GET['id_cliente'] ?? '',
+            // Registros propios (§6): sin acceso total, solo los que él cargó
+            'id_usuario_filtro' => $this->idUsuarioFiltro(),
         ];
         $filas = $this->repo->getSaldosInicialesCxc($idEmpresa, $filtros);
         $this->jsonSuccess(['filas' => $filas]);
@@ -2321,6 +2411,12 @@ HTML;
         $punto = $this->repo->getPuntoEmisionPorId($idPunto, $idEmpresa);
         if (!$punto) {
             $this->jsonError('La serie (punto de emisión) no es válida o está inactiva.');
+            return;
+        }
+
+        // Registros propios (§6): sin acceso total solo se cobran los saldos que él cargó
+        if (!$this->saldoInicialPropioOCortar($idSaldo, $idEmpresa)) {
+            $this->jsonError('Saldo inicial no encontrado.');
             return;
         }
 
@@ -2364,6 +2460,7 @@ HTML;
             $this->jsonError('ID de saldo inválido.');
             return;
         }
+        $this->saldoInicialPropioOCortar($idSaldo, $idEmpresa); // registros propios (§6)
         $repo = new \App\repositories\modulos\SaldosInicialesRepository();
         $historial = $repo->getHistorialCobrosCxc($idSaldo, $idEmpresa);
         $this->jsonSuccess(['historial' => $historial]);

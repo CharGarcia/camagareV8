@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna
-version: 2.7
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen
+version: 2.9
 orden: 40
 estado: activo
 ---
@@ -83,6 +83,29 @@ nombre o en la identificación, así que `1716782832001` también sirve.
 Basta con escribir **dos letras** para que aparezca la lista. Al elegir un
 cliente queda como una etiqueta y se pueden elegir varios.
 
+## Quién ve qué: el permiso de Acceso total
+
+La cartera respeta el permiso **Acceso total** del módulo (*Configuración →
+Permisos por módulo*):
+
+- **Con acceso total** (o siendo superadministrador): se ve la cartera completa
+  de la empresa.
+- **Sin acceso total**: cada usuario ve **solo los documentos que él registró**
+  — las facturas y los recibos de venta que emitió y los saldos iniciales que
+  cargó. Lo que no sale en la tabla tampoco entra en las tarjetas de arriba, en
+  el gráfico de antigüedad, en las vistas *Por cliente* y *Por producto*, ni en
+  el PDF y el Excel: todo parte del mismo listado.
+- Tampoco se puede llegar a un documento ajeno por otras vías: registrar un
+  cobro, ver el historial o mandar el recordatorio por correo o WhatsApp de un
+  documento de otro usuario responde *No tiene permiso sobre este registro: lo
+  creó otro usuario*. En el **envío masivo**, los documentos ajenos que hubieran
+  quedado seleccionados simplemente se omiten.
+
+Dos advertencias sobre documentos antiguos: los que se **migraron** desde el
+sistema anterior quedaron a nombre del usuario que corrió la migración, así que
+solo él (o alguien con acceso total) los verá; y un saldo inicial cargado sin
+usuario registrado no aparece para nadie que no tenga acceso total.
+
 ## Ordenar el listado
 
 La cartera se abre **ordenada por cliente, de la A a la Z**. Para verla de otra
@@ -103,11 +126,13 @@ vencidos).
   juntos.
 - El orden elegido **queda guardado para usted**: la próxima vez que entre al
   módulo, el listado se abre así.
-- El **PDF y el Excel salen en el mismo orden** que la pantalla.
+- El **PDF y el Excel salen en el mismo orden** que la pantalla. El PDF se
+  genera en **hoja vertical** (A4 retrato), en cualquiera de las vistas.
 
-En las vistas *Por cliente* y *Por producto* los grupos siguen ordenados por
-saldo, de mayor a menor; el orden elegido acomoda los documentos dentro de cada
-grupo.
+En las vistas *Por cliente* y *Por producto* las secciones salen siempre en
+**orden alfabético** (el cliente o el producto, de la A a la Z), tanto en
+pantalla como en el PDF y el Excel; el orden que elija en las cabeceras acomoda
+los documentos dentro de cada sección.
 
 ## Filtrar por tipo de documento
 
@@ -197,8 +222,11 @@ de **SUBTOTAL**. Al final del listado va la fila **TOTAL GENERAL** con la suma d
 - El listado arranca **plegado**: de un vistazo se ve cuánto debe cada cliente.
   Un clic en su línea despliega los documentos y otro la vuelve a plegar; el
   saldo del cliente se sigue viendo en los dos estados.
+- El **saldo va junto al nombre**, en una etiqueta roja (o verde si ya no debe
+  nada), además de su columna: así se lee de inmediato sin recorrer la fila
+  hasta el final.
 - Dentro de cada cliente los documentos van en **orden cronológico** por fecha
-  de emisión; los clientes se ordenan por **saldo**, el que más debe primero.
+  de emisión; los clientes se ordenan **alfabéticamente (A-Z)**.
 - Cada documento conserva sus acciones normales (cobrar, historial, correo,
   WhatsApp).
 
@@ -459,13 +487,26 @@ Y dos casos que el reporte **no** descuenta a propósito:
   de la factura), que la NC no esté anulada y que se haya emitido desde el
   **mismo establecimiento** que la factura.
 - **No veo las facturas de otro vendedor**: sin el permiso de *acceso total*,
-  cada usuario ve solo los documentos que él creó.
+  cada usuario ve solo los documentos que él registró (ver *Quién ve qué: el
+  permiso de Acceso total*). Si faltan documentos **antiguos**, suele ser porque
+  se migraron a nombre del usuario que corrió la migración.
 - **Una serie no aparece en el modal de cobro**: está **inactiva**. Solo se
   ofrecen los puntos de emisión activos; actívela en Empresa, pestaña Puntos de
   Emisión (ver *Serie del cobro: solo puntos de emisión activos*).
 
 ## Historial de cambios
 
+- **2.9** — El módulo respeta el permiso de **Acceso total**: quien no lo tiene
+  ve solo los documentos que él registró, tanto en la tabla como en las tarjetas,
+  el gráfico de antigüedad, las vistas agrupadas y las exportaciones, y ya no
+  puede cobrar, consultar el historial ni notificar documentos de otro usuario.
+  Antes el permiso no cambiaba nada: cualquiera con permiso de ver la cartera la
+  veía completa. Nueva sección *Quién ve qué: el permiso de Acceso total*.
+- **2.8** — En la vista *Por cliente* (y en la de *Por producto*) las secciones
+  salen ahora en **orden alfabético**, no por saldo, tanto en pantalla como en
+  el PDF y el Excel. La línea de cada cliente muestra además su **saldo junto al
+  nombre**, en una etiqueta de color. El **PDF sale en hoja vertical** (antes
+  horizontal) en las tres vistas.
 - **2.7** — El listado se abre **ordenado por cliente de la A a la Z** (antes
   salía por fecha de vencimiento) y ahora se puede **ordenar por cualquier
   columna** haciendo clic en su título, como en el Reporte de Ventas. El orden

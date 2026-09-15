@@ -255,6 +255,36 @@ class CuentasPorPagarRepository extends BaseRepository
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // REGISTROS PROPIOS (§6)
+    //
+    // Si el usuario NO tiene acceso total ('t') en el módulo, la deuda se limita a
+    // los documentos que él registró. El id lo resuelve el controller desde el
+    // permiso (CuentasPorPagarController::idUsuarioFiltro()) y viaja dentro de los
+    // filtros: NUNCA llega del cliente.
+    //
+    // Cada fuente guarda al creador en la misma columna que filtra su módulo de
+    // origen: compras e importaciones en `created_by`, liquidaciones en
+    // `id_usuario`, y los saldos iniciales en `created_by`.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Devuelve " AND {alias}.{columna} = :{ph}" cuando hay filtro de registros
+     * propios, o cadena vacía si el usuario ve toda la empresa.
+     *
+     * Cada llamada usa su propio placeholder ($ph): el listado une tres consultas
+     * en un mismo SQL y PDO no admite repetir un nombre de parámetro.
+     */
+    private function condUsuarioPropio(array $filtros, string $alias, string $columna, string $ph, array &$params): string
+    {
+        $idUsuario = (int) ($filtros['id_usuario_filtro'] ?? 0);
+        if ($idUsuario <= 0) {
+            return '';
+        }
+        $params[":{$ph}"] = $idUsuario;
+        return " AND {$alias}.{$columna} = :{$ph}";
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // ORDEN DE LAS FILAS
     //
     // El listado mezcla los documentos del SQL (compras, liquidaciones e
@@ -385,6 +415,7 @@ class CuentasPorPagarRepository extends BaseRepository
                   AND c.eliminado        = false
                   AND {$esCargo} AND {$compraVigente}
                   AND {$this->condAmbiente('c', $ids)}
+                  {$this->condUsuarioPropio($filtros, 'c', 'created_by', 'prop_com', $params)}
 
                 UNION ALL
 
@@ -424,6 +455,7 @@ class CuentasPorPagarRepository extends BaseRepository
                   AND l.eliminado     = false
                   AND {$liqVigente}
                   AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l', $ids)})
+                  {$this->condUsuarioPropio($filtros, 'l', 'id_usuario', 'prop_liq', $params)}
 
                 UNION ALL
 
@@ -460,6 +492,7 @@ class CuentasPorPagarRepository extends BaseRepository
                   AND ic.eliminado    = false
                   AND ic.id_empresa   IN ({$in['i']})
                   AND {$this->condAmbiente('ic', $ids)}
+                  {$this->condUsuarioPropio($filtros, 'fe', 'created_by', 'prop_imp', $params)}
             )
             SELECT
                 d.*,
@@ -521,6 +554,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN ret      ON ret.id_compra=c.id AND ret.id_liquidacion IS NULL
                 WHERE c.id_empresa IN ({$in['c']}) AND c.eliminado=false AND {$esCargo} AND {$compraVigente}
                   AND {$this->condAmbiente('c', $ids)}
+                  {$this->condUsuarioPropio($filtros, 'c', 'created_by', 'prop_com_ag', $params)}
 
                 UNION ALL
 
@@ -538,6 +572,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE l.id_empresa IN ({$in['l']}) AND l.eliminado=false
                   AND {$liqVigente}
                   AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l', $ids)})
+                  {$this->condUsuarioPropio($filtros, 'l', 'id_usuario', 'prop_liq_ag', $params)}
 
                 UNION ALL
 
@@ -552,6 +587,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN pagado pg ON pg.tipo_documento='IMPORTACION' AND pg.id_doc=fe.id
                 WHERE ic.id_empresa IN ({$in['i']}) AND fe.eliminado=false AND ic.eliminado=false
                   AND {$this->condAmbiente('ic', $ids)}
+                  {$this->condUsuarioPropio($filtros, 'fe', 'created_by', 'prop_imp_ag', $params)}
             )
             SELECT
                 COUNT(*) AS total_docs,
@@ -621,6 +657,7 @@ class CuentasPorPagarRepository extends BaseRepository
     {
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
+        $where .= $this->condUsuarioPropio($filtros, "s", "created_by", "prop_si_stats", $params);
 
         if (!empty($filtros['id_proveedor'])) {
             $raw = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
@@ -708,6 +745,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN ret      ON ret.id_compra=c.id AND ret.id_liquidacion IS NULL
                 WHERE c.id_empresa IN ({$in['c']}) AND c.eliminado=false AND {$esCargo} AND {$compraVigente}
                   AND {$this->condAmbiente('c', $ids)}
+                  {$this->condUsuarioPropio($filtros, 'c', 'created_by', 'prop_com_ag', $params)}
 
                 UNION ALL
 
@@ -725,6 +763,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE l.id_empresa IN ({$in['l']}) AND l.eliminado=false
                   AND {$liqVigente}
                   AND (l.tipo_ambiente IS NULL OR {$this->condAmbiente('l', $ids)})
+                  {$this->condUsuarioPropio($filtros, 'l', 'id_usuario', 'prop_liq_ag', $params)}
 
                 UNION ALL
 
@@ -739,6 +778,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 LEFT JOIN pagado pg ON pg.tipo_documento='IMPORTACION' AND pg.id_doc=fe.id
                 WHERE ic.id_empresa IN ({$in['i']}) AND fe.eliminado=false AND ic.eliminado=false
                   AND {$this->condAmbiente('ic', $ids)}
+                  {$this->condUsuarioPropio($filtros, 'fe', 'created_by', 'prop_imp_ag', $params)}
             )
             SELECT
                 SUM(CASE WHEN d.saldo > 0 AND (CURRENT_DATE - d.fecha_vencimiento::date) <= 0              THEN d.saldo ELSE 0 END) AS tramo_vigente,
@@ -775,6 +815,7 @@ class CuentasPorPagarRepository extends BaseRepository
     {
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
+        $where .= $this->condUsuarioPropio($filtros, "s", "created_by", "prop_si_ant", $params);
 
         if (!empty($filtros['id_proveedor'])) {
             $raw = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
@@ -869,6 +910,9 @@ class CuentasPorPagarRepository extends BaseRepository
             $sql = "
                 SELECT l.id,
                        'LIQUIDACION' AS tipo_fuente,
+                       -- Creador del documento, con el mismo nombre en las tres fuentes:
+                       -- lo usa el guard de registros propios del controller (§6).
+                       l.id_usuario  AS creado_por,
                        l.id_proveedor,
                        p.razon_social        AS proveedor_nombre,
                        p.identificacion      AS proveedor_ruc,
@@ -908,6 +952,7 @@ class CuentasPorPagarRepository extends BaseRepository
             $sql = "
                 SELECT fe.id,
                        'IMPORTACION' AS tipo_fuente,
+                       fe.created_by AS creado_por,
                        fe.id_proveedor,
                        p.razon_social        AS proveedor_nombre,
                        p.identificacion      AS proveedor_ruc,
@@ -936,6 +981,7 @@ class CuentasPorPagarRepository extends BaseRepository
             $sql = "
                 SELECT c.id,
                        'COMPRA' AS tipo_fuente,
+                       c.created_by AS creado_por,
                        c.id_proveedor,
                        p.razon_social        AS proveedor_nombre,
                        p.identificacion      AS proveedor_ruc,
@@ -1168,6 +1214,7 @@ class CuentasPorPagarRepository extends BaseRepository
 
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($this->idsEmpresa($idsEmpresa), 'si_emp', $params)}) AND s.eliminado = false";
+        $where .= $this->condUsuarioPropio($filtros, "s", "created_by", "prop_si", $params);
 
         if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
             if ($filtros['estado'] === 'PAGADO') {

@@ -76,7 +76,8 @@ class ReporteCarteraController extends BaseModuloController
             // Si el usuario eligió a mano las dos fichas del mismo tercero (cédula y RUC),
             // se deja una sola: construirLedger() ya abarca las dos y de lo contrario
             // saldría el mismo estado de cuenta repetido.
-            return $this->unaEntidadPorTercero($idEmpresa, $filtros['tipo'], $filtros['ids']);
+            $ids = $this->unaEntidadPorTercero($idEmpresa, $filtros['tipo'], $filtros['ids']);
+            return $this->soloEntidadesPropias($idEmpresa, $filtros['tipo'], $ids);
         }
 
         $fechaHasta = $filtros['fecha_hasta'] !== '' ? $filtros['fecha_hasta'] : null;
@@ -84,7 +85,55 @@ class ReporteCarteraController extends BaseModuloController
             ? $this->repository->getProveedoresConSaldoPendiente($idEmpresa, $fechaHasta)
             : $this->repository->getClientesConSaldoPendiente($idEmpresa, $fechaHasta);
 
-        return array_map(fn($r) => (int) $r['id'], $rows);
+        return $this->soloEntidadesPropias($idEmpresa, $filtros['tipo'], array_map(fn($r) => (int) $r['id'], $rows));
+    }
+
+    /**
+     * Registros propios (§6) en este reporte: quien NO tiene acceso total ('t')
+     * solo consulta el estado de cuenta de los clientes/proveedores con los que
+     * él trabajó (los que tienen al menos un documento suyo).
+     *
+     * El estado de cuenta en sí sale COMPLETO, con todos los movimientos del
+     * tercero: es su saldo real, tiene que cuadrar con Cuentas por Cobrar/Pagar y
+     * es lo que se le envía por correo. Recortarlo a "lo que yo registré" daría un
+     * saldo que no existe. Como punto único, esto cubre la pantalla, el PDF, el
+     * Excel y el envío por correo, que parten todos de construirLedgers().
+     *
+     * @param  int[] $ids
+     * @return int[]
+     */
+    /**
+     * Lo mismo, aplicado a las filas de un buscador (clientes/proveedores): deja
+     * solo las fichas con las que el usuario trabajó, conservando el orden.
+     *
+     * @param  array<int, array<string, mixed>> $filas
+     * @return array<int, array<string, mixed>>
+     */
+    private function soloFichasPropias(int $idEmpresa, string $tipo, array $filas): array
+    {
+        if (!$filas) {
+            return $filas;
+        }
+        $permitidos = array_flip($this->soloEntidadesPropias(
+            $idEmpresa,
+            $tipo,
+            array_map(static fn ($f) => (int) ($f['id'] ?? 0), $filas)
+        ));
+        return array_values(array_filter($filas, static fn ($f) => isset($permitidos[(int) ($f['id'] ?? 0)])));
+    }
+
+    private function soloEntidadesPropias(int $idEmpresa, string $tipo, array $ids): array
+    {
+        $perm = $this->getPermisos();
+        if (!empty($perm['todo']) || !$ids) {
+            return $ids; // ve toda la empresa (incluye nivel 3)
+        }
+        return $this->repository->filtrarEntidadesConDocumentosDe(
+            $idEmpresa,
+            $tipo,
+            $ids,
+            (int) ($_SESSION['id_usuario'] ?? 0)
+        );
     }
 
     /**
@@ -434,11 +483,15 @@ class ReporteCarteraController extends BaseModuloController
         $repo = new ClienteRepository();
         $result = $repo->getListado($idEmpresa, $buscar, 1, 30, 'nombre', 'ASC');
 
+        // Registros propios (§6): sin acceso total solo se ofrecen los clientes
+        // con los que el usuario trabajó (ver soloEntidadesPropias()).
+        $filas = $this->soloFichasPropias($idEmpresa, 'CLIENTE', $result['rows'] ?? []);
+
         $data = array_map(fn($row) => [
             'id'             => $row['id'],
             'nombre'         => $row['nombre'] ?? '',
             'identificacion' => $row['identificacion'] ?? '',
-        ], $this->unaFichaPorTercero($result['rows'] ?? [], 15));
+        ], $this->unaFichaPorTercero($filas, 15));
 
         echo json_encode(['ok' => true, 'data' => $data]);
         exit;
@@ -457,11 +510,15 @@ class ReporteCarteraController extends BaseModuloController
         $repo = new ProveedorRepository();
         $result = $repo->getListado($idEmpresa, $buscar, 1, 30, 'razon_social', 'ASC');
 
+        // Registros propios (§6): sin acceso total solo se ofrecen los proveedores
+        // con los que el usuario trabajó (ver soloEntidadesPropias()).
+        $filas = $this->soloFichasPropias($idEmpresa, 'PROVEEDOR', $result['rows'] ?? []);
+
         $data = array_map(fn($row) => [
             'id'             => $row['id'],
             'nombre'         => $row['razon_social'] ?? '',
             'identificacion' => $row['identificacion'] ?? '',
-        ], $this->unaFichaPorTercero($result['rows'] ?? [], 15));
+        ], $this->unaFichaPorTercero($filas, 15));
 
         echo json_encode(['ok' => true, 'data' => $data]);
         exit;

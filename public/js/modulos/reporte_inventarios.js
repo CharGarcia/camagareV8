@@ -450,8 +450,13 @@ window.RI_Movimientos = {
      * corrido obliga a recorrer todo el histórico del kardex.
      */
     cambiarMesAnio(regenerar = true) {
-        const mes = document.getElementById('ri-mv-mes').value;
-        const anio = document.getElementById('ri-mv-anio').value;
+        // La pestaña Movimientos no está en la página cuando el usuario no puede ver
+        // Inventario (el controlador no la dibuja): no hay nada que sincronizar.
+        const selMes  = document.getElementById('ri-mv-mes');
+        const selAnio = document.getElementById('ri-mv-anio');
+        if (!selMes || !selAnio) return;
+        const mes = selMes.value;
+        const anio = selAnio.value;
         if (!mes || !anio) return;
 
         if (anio === 'TODOS') {

@@ -1,4 +1,26 @@
 <?php $idModulo = basename($rutaModulo); ?>
+<?php
+// Pestañas visibles según el permiso de VER de los módulos dueños de la información
+// (ReporteInventariosController::pestanasPermitidas): Existencias, Movimientos,
+// Valorización y Auditoría dependen de Inventario; Consignaciones, de Consignaciones
+// de Ventas. La barra solo dibuja las permitidas y arranca en la primera de ellas;
+// si no hay ninguna, se muestra un aviso en su lugar.
+$pestanas       = $pestanas ?? [];
+$pestanaInicial = $pestanaInicial ?? "";
+$pestanasDef = [
+    "existencias"    => ["icono" => "bi-box-seam",         "titulo" => "Existencias"],
+    "movimientos"    => ["icono" => "bi-arrow-left-right", "titulo" => "Movimientos (Kardex)"],
+    "valorizacion"   => ["icono" => "bi-cash-coin",        "titulo" => "Valorización"],
+    "consignaciones" => ["icono" => "bi-truck",            "titulo" => "Consignaciones"],
+    "auditoria"      => ["icono" => "bi-shield-check",     "titulo" => "Auditoría"],
+];
+$riActiva  = static fn(string $t): string => $t === $pestanaInicial ? " active" : "";
+$riShow    = static fn(string $t): string => $t === $pestanaInicial ? " show active" : "";
+$riNombres = array_map(static fn($k) => mb_strtolower($pestanasDef[$k]["titulo"]), array_keys(array_filter($pestanas)));
+$riSubtitulo = count($riNombres) > 1
+    ? implode(", ", array_slice($riNombres, 0, -1)) . " y " . end($riNombres)
+    : (string) ($riNombres[0] ?? "");
+?>
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
 <style>
@@ -42,45 +64,36 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
         <div>
             <h5 class="mb-0 fw-bold"><i class="bi bi-boxes me-2 text-primary"></i>Reporte de Inventarios</h5>
-            <small class="text-muted">Existencias, movimientos, valorización, consignaciones y auditoría</small>
+            <small class="text-muted"><?= $riSubtitulo !== "" ? ucfirst(htmlspecialchars($riSubtitulo)) : "Sin pestañas disponibles" ?></small>
         </div>
     </div>
 
     <!-- ── Pestañas ── -->
+    <?php if ($pestanaInicial !== ""): ?>
     <ul class="nav nav-tabs ri-nav-tabs mb-3" id="riTabs" role="tablist">
+        <?php foreach ($pestanasDef as $riClave => $riDef): if (empty($pestanas[$riClave])) continue; ?>
         <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="ri-tab-existencias-btn" data-bs-toggle="tab" data-bs-target="#ri-tab-existencias" type="button" role="tab">
-                <i class="bi bi-box-seam me-1"></i>Existencias
+            <button class="nav-link<?= $riActiva($riClave) ?>" id="ri-tab-<?= $riClave ?>-btn" data-bs-toggle="tab" data-bs-target="#ri-tab-<?= $riClave ?>" type="button" role="tab">
+                <i class="bi <?= $riDef["icono"] ?> me-1"></i><?= $riDef["titulo"] ?>
             </button>
         </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="ri-tab-movimientos-btn" data-bs-toggle="tab" data-bs-target="#ri-tab-movimientos" type="button" role="tab">
-                <i class="bi bi-arrow-left-right me-1"></i>Movimientos (Kardex)
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="ri-tab-valorizacion-btn" data-bs-toggle="tab" data-bs-target="#ri-tab-valorizacion" type="button" role="tab">
-                <i class="bi bi-cash-coin me-1"></i>Valorización
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="ri-tab-consignaciones-btn" data-bs-toggle="tab" data-bs-target="#ri-tab-consignaciones" type="button" role="tab">
-                <i class="bi bi-truck me-1"></i>Consignaciones
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="ri-tab-auditoria-btn" data-bs-toggle="tab" data-bs-target="#ri-tab-auditoria" type="button" role="tab">
-                <i class="bi bi-shield-check me-1"></i>Auditoría
-            </button>
-        </li>
+        <?php endforeach; ?>
     </ul>
+    <?php else: ?>
+    <div class="alert alert-warning shadow-sm rounded-3 mb-3" role="alert">
+        <i class="bi bi-lock-fill me-2"></i><strong>No tiene acceso a ninguna pestaña de este reporte.</strong>
+        <div class="small mt-1">Existencias, Movimientos, Valorización y Auditoría requieren permiso de <em>ver</em> en <strong>Inventario</strong>;
+        Consignaciones, en <strong>Consignaciones de Ventas</strong>. Pida al administrador que se lo asigne en <em>Configuración → Permisos por módulo</em>.</div>
+    </div>
+    <?php endif; ?>
 
     <div class="tab-content" id="riTabsContent">
 
         <!-- ════════════════════════════════════════════════════════ -->
         <!-- PESTAÑA 1: EXISTENCIAS -->
         <!-- ════════════════════════════════════════════════════════ -->
-        <div class="tab-pane fade show active" id="ri-tab-existencias" role="tabpanel">
+        <?php if (!empty($pestanas["existencias"])): ?>
+        <div class="tab-pane fade<?= $riShow("existencias") ?>" id="ri-tab-existencias" role="tabpanel">
             <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
                 <div class="card-header bg-white border-bottom py-2 px-3">
                     <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2 text-primary"></i>Existencias</h5>
@@ -216,11 +229,13 @@
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
         <!-- ════════════════════════════════════════════════════════ -->
         <!-- PESTAÑA 2: MOVIMIENTOS (KARDEX) -->
         <!-- ════════════════════════════════════════════════════════ -->
-        <div class="tab-pane fade" id="ri-tab-movimientos" role="tabpanel">
+        <?php if (!empty($pestanas["movimientos"])): ?>
+        <div class="tab-pane fade<?= $riShow("movimientos") ?>" id="ri-tab-movimientos" role="tabpanel">
             <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
                 <div class="card-header bg-white border-bottom py-2 px-3">
                     <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-left-right me-2 text-primary"></i>Movimientos (Kardex)</h5>
@@ -379,11 +394,13 @@
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
         <!-- ════════════════════════════════════════════════════════ -->
         <!-- PESTAÑA 3: VALORIZACIÓN -->
         <!-- ════════════════════════════════════════════════════════ -->
-        <div class="tab-pane fade" id="ri-tab-valorizacion" role="tabpanel">
+        <?php if (!empty($pestanas["valorizacion"])): ?>
+        <div class="tab-pane fade<?= $riShow("valorizacion") ?>" id="ri-tab-valorizacion" role="tabpanel">
             <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
                 <div class="card-header bg-white border-bottom py-2 px-3">
                     <h5 class="mb-0 fw-bold"><i class="bi bi-cash-coin me-2 text-primary"></i>Valorización</h5>
@@ -465,11 +482,13 @@
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
         <!-- ════════════════════════════════════════════════════════ -->
         <!-- PESTAÑA 4: CONSIGNACIONES -->
         <!-- ════════════════════════════════════════════════════════ -->
-        <div class="tab-pane fade" id="ri-tab-consignaciones" role="tabpanel">
+        <?php if (!empty($pestanas["consignaciones"])): ?>
+        <div class="tab-pane fade<?= $riShow("consignaciones") ?>" id="ri-tab-consignaciones" role="tabpanel">
             <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
                 <div class="card-header bg-white border-bottom py-2 px-3">
                     <h5 class="mb-0 fw-bold"><i class="bi bi-truck me-2 text-primary"></i>Consignaciones</h5>
@@ -599,11 +618,13 @@
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
         <!-- ════════════════════════════════════════════════════════ -->
         <!-- PESTAÑA 5: AUDITORÍA -->
         <!-- ════════════════════════════════════════════════════════ -->
-        <div class="tab-pane fade" id="ri-tab-auditoria" role="tabpanel">
+        <?php if (!empty($pestanas["auditoria"])): ?>
+        <div class="tab-pane fade<?= $riShow("auditoria") ?>" id="ri-tab-auditoria" role="tabpanel">
             <div class="alert alert-warning py-2 px-3 small mb-3">
                 <i class="bi bi-exclamation-triangle me-1"></i>
                 Muestra los productos donde el stock guardado no coincide con la suma real de entradas y salidas del Kardex.
@@ -678,6 +699,7 @@
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
     </div>
 </div>

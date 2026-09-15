@@ -517,13 +517,15 @@ function CXP_agruparPorProveedor(filas) {
         g.saldo       += parseFloat(r.saldo)          || 0;
     }
     // Dentro de cada proveedor los documentos van en orden cronológico (como los movimientos
-    // de un mayor); entre proveedores manda el saldo, al que más se le debe primero.
+    // de un mayor); los proveedores salen en orden alfabético (A-Z), igual que el listado
+    // detallado y que las exportaciones (CuentasPorPagarController::agruparPorProveedor).
     for (const g of mapa.values()) {
         g.items.sort((a, b) =>
             String(a.fecha_emision || '').localeCompare(String(b.fecha_emision || '')) ||
             String(a.numero_documento || '').localeCompare(String(b.numero_documento || '')));
     }
-    return [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+    const nom = g => window.CMG_OrdenTabla ? window.CMG_OrdenTabla.normalizar(g.nombre) : String(g.nombre || '').toUpperCase();
+    return [...mapa.values()].sort((a, b) => (nom(a) < nom(b) ? -1 : (nom(a) > nom(b) ? 1 : 0)));
 }
 
 function CXP_renderAgrupado(filas) {
@@ -557,9 +559,18 @@ function CXP_renderAgrupado(filas) {
         // línea. Al desplegarla salen sus documentos y se cierra con la fila de SUBTOTAL.
         html += `
         <tr class="cxp-mayor-grp" data-gkey="${cxpEsc(g.key)}" onclick="CXP_toggleProveedor(this)" style="cursor:pointer;" title="Clic para desplegar o plegar los documentos de este proveedor">
-            <td colspan="2" class="ps-2 fw-bold text-truncate" title="${cxpEsc(g.nombre)}${g.ruc ? ' · ' + cxpEsc(g.ruc) : ''}" style="font-size:.82rem;">
-                <i class="bi ${chev} text-primary me-1"></i>${cxpEsc(g.nombre)}
-                ${g.ruc ? `<span class="text-muted fw-normal ms-1">${cxpEsc(g.ruc)}</span>` : ''}
+            <!-- Saldo junto al nombre: con la sección plegada se lee de inmediato lo que se le
+                 debe al proveedor, sin recorrer la fila hasta la columna Saldo. El nombre se
+                 recorta si no cabe, el saldo nunca (flex:0 0 auto), y el RUC pasa a la línea
+                 de abajo para no competir por el ancho de la celda. -->
+            <td colspan="2" class="ps-2 fw-bold" title="${cxpEsc(g.nombre)}${g.ruc ? ' · ' + cxpEsc(g.ruc) : ''} · Saldo $${CXP_fmt(g.saldo > 0 ? g.saldo : 0)}" style="font-size:.82rem;overflow:hidden;">
+                <div class="d-flex align-items-center gap-1" style="min-width:0;">
+                    <i class="bi ${chev} text-primary" style="flex:0 0 auto;"></i>
+                    <span class="text-truncate">${cxpEsc(g.nombre)}</span>
+                    <span class="badge rounded-pill fw-semibold ${g.saldo > 0.001 ? 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' : 'bg-success bg-opacity-10 text-success border border-success border-opacity-25'}"
+                          style="font-size:.7rem;flex:0 0 auto;" title="Saldo pendiente con el proveedor">$${CXP_fmt(g.saldo > 0 ? g.saldo : 0)}</span>
+                </div>
+                ${g.ruc ? `<div class="text-muted fw-normal text-truncate" style="font-size:.68rem;line-height:1.1;">${cxpEsc(g.ruc)}</div>` : ''}
             </td>
             ${importes()}
             <td class="text-center" style="font-size:.72rem;">

@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna
-version: 1.14
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen
+version: 1.16
 orden: 50
 estado: activo
 ---
@@ -44,6 +44,9 @@ de **SUBTOTAL**. Al final del listado va la fila **TOTAL GENERAL**.
 - El listado arranca **plegado**: de un vistazo se ve cuánto se le debe a cada
   proveedor. Un clic en su línea despliega los documentos y otro la vuelve a
   plegar; el saldo del proveedor se sigue viendo en los dos estados.
+- El **saldo va junto al nombre**, en una etiqueta roja (o verde si ya no se le
+  debe nada), además de su columna: así se lee de inmediato sin recorrer la fila
+  hasta el final.
 
 **El detalle de cada proveedor** no repite las columnas del listado general (el
 proveedor ya es la cabecera de la sección): muestra **fecha, n. de documento,
@@ -61,8 +64,8 @@ total, NC, abonos, retenciones, saldo y días**.
 | Días | Días vencidos (en rojo); si aún no vence, muestra `—` y la fecha de vencimiento al pasar el mouse. |
 
 - Dentro de cada proveedor los documentos van en **orden cronológico** por fecha
-  de emisión; los proveedores se ordenan por **saldo**, al que más se le debe
-  primero.
+  de emisión; los proveedores se ordenan **alfabéticamente (A-Z)**, en pantalla
+  y en los archivos.
 - Cada documento conserva sus acciones normales (pagar, historial).
 - Un proveedor cargado dos veces —con la cédula y con el RUC— forma **una sola
   sección** (ver *Un mismo proveedor registrado con cédula y con RUC*).
@@ -118,6 +121,26 @@ o en la identificación, así que el RUC también sirve.
 Basta con escribir **dos letras** para que aparezca la lista. Al elegir un
 proveedor queda como una etiqueta y se pueden elegir varios.
 
+## Quién ve qué: el permiso de Acceso total
+
+El listado respeta el permiso **Acceso total** del módulo (*Configuración →
+Permisos por módulo*):
+
+- **Con acceso total** (o siendo superadministrador): se ve toda la deuda de la
+  empresa.
+- **Sin acceso total**: cada usuario ve **solo los documentos que él registró**
+  — las compras, liquidaciones e importaciones que cargó y los saldos iniciales
+  que ingresó. Lo que no sale en la tabla tampoco entra en las tarjetas de
+  arriba, en el gráfico de antigüedad, en la vista *Por proveedor*, ni en el PDF
+  y el Excel: todo parte del mismo listado.
+- Tampoco se puede llegar a un documento ajeno por otras vías: registrar un pago
+  o ver su historial responde *No tiene permiso sobre este registro: lo creó
+  otro usuario*.
+
+Aviso sobre documentos antiguos: los **migrados** desde el sistema anterior
+quedaron a nombre del usuario que corrió la migración, así que solo él (o
+alguien con acceso total) los verá.
+
 ## Ordenar el listado
 
 Las deudas se abren **ordenadas por proveedor, de la A a la Z**. Para verlas de
@@ -138,10 +161,12 @@ Se puede ordenar por **Documento**, **Origen**, **Proveedor**, **F.Emisión**,
   juntos.
 - El orden elegido **queda guardado para usted**: la próxima vez que entre al
   módulo, el listado se abre así.
-- El **PDF y el Excel salen en el mismo orden** que la pantalla.
+- El **PDF y el Excel salen en el mismo orden** que la pantalla. El PDF se
+  genera en **hoja vertical** (A4 retrato), en cualquiera de las vistas.
 
-En la vista *Por proveedor* los grupos siguen ordenados por saldo, de mayor a
-menor; el orden elegido acomoda los documentos dentro de cada grupo.
+En la vista *Por proveedor* las secciones salen siempre en **orden alfabético**
+(A-Z), tanto en pantalla como en el PDF y el Excel; el orden que elija en las
+cabeceras acomoda los documentos dentro de cada sección.
 
 ## Consolidado de establecimientos (solo desde la matriz)
 
@@ -298,6 +323,17 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.16** — El módulo respeta el permiso de **Acceso total**: quien no lo tiene
+  ve solo los documentos que él registró, tanto en la tabla como en las tarjetas,
+  el gráfico de antigüedad, la vista por proveedor y las exportaciones, y ya no
+  puede pagar ni consultar el historial de documentos de otro usuario. Antes el
+  permiso no cambiaba nada: cualquiera con permiso de ver la deuda la veía
+  completa. Nueva sección *Quién ve qué: el permiso de Acceso total*.
+- **1.15** — En la vista *Por proveedor* las secciones salen ahora en **orden
+  alfabético**, no por saldo, tanto en pantalla como en el PDF y el Excel. La
+  línea de cada proveedor muestra además su **saldo junto al nombre**, en una
+  etiqueta de color. El **PDF sale en hoja vertical** (antes horizontal) en las
+  dos vistas.
 - **1.14** — El listado se abre **ordenado por proveedor de la A a la Z** (antes
   salía por fecha de vencimiento) y ahora se puede **ordenar por cualquier
   columna** haciendo clic en su título, como en el Reporte de Ventas. El orden

@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado
-version: 1.10
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones
+version: 1.11
 orden: 40
 estado: activo
 ---
@@ -201,6 +201,17 @@ histórico del kardex, y sin acotar la fecha la consulta tarda unos segundos
 para luego mostrar un listado recortado igualmente. Se puede poner *Todos*
 cuando haga falta.
 
+## Permisos
+
+- El permiso de **ver** sobre este módulo abre la página. Qué pestañas aparecen depende del acceso a los módulos de los que sale cada información:
+  - **Existencias, Movimientos, Valorización y Auditoría** se muestran solo si el usuario puede **ver** el módulo **Inventario**.
+  - **Consignaciones** se muestra solo si puede **ver** el módulo **Consignaciones de Ventas**.
+- El reporte se abre en la primera pestaña permitida, en el orden de la barra. Si el usuario no tiene acceso a ninguna, en lugar de las pestañas ve un aviso que indica qué permiso falta.
+- La misma regla vale para los datos, el PDF y el Excel de cada pestaña y para sus acciones (editar mínimo/máximo, ajustar inventario, corregir la auditoría, ver el detalle de una consignación): una dirección escrita a mano responde *No tiene permiso para esta acción*.
+- Editar mínimo/máximo y categoría, ajustar inventario y corregir la auditoría exigen además el permiso de **actualizar** sobre este reporte.
+- El **superadministrador** (nivel 3) ve las cinco pestañas siempre.
+- Los permisos se asignan en *Configuración → Permisos por módulo*.
+
 ## Errores frecuentes
 
 - **Un producto no aparece**: no es inventariable.
@@ -217,6 +228,7 @@ cuando haga falta.
 
 ## Historial de cambios
 
+- **1.11** — Las pestañas se muestran según el acceso del usuario a otros módulos: **Existencias, Movimientos, Valorización y Auditoría** solo si puede ver **Inventario**, y **Consignaciones** solo si puede ver **Consignaciones de Ventas**. El reporte abre en la primera pestaña permitida y, sin ninguna, muestra un aviso. Nueva sección *Permisos*.
 - **1.10** — Pestaña **Consignaciones**: al buscar ya se ve en pantalla lo que se
   buscó. El listado agrega las columnas **Lote** y **NUP**, "Productos" pasa a
   mostrar la **suma de las cantidades entregadas** (con el desglose

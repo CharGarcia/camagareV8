@@ -298,6 +298,12 @@ class CuentasPorPagarController extends BaseModuloController
             $this->jsonError('Datos incompletos. Verifique serie, monto y forma de pago.');
         }
 
+        // Registros propios (§6): sin acceso total solo se pagan los documentos propios
+        if (!$this->documentoPropioOCortar($idDoc, $tipoFuente, $idEmpresa)) {
+            $this->jsonError('Documento no encontrado.');
+            return;
+        }
+
         $datosPago = [
             'id_empresa'              => $idEmpresa,
             'id_usuario'              => $idUsuario,
@@ -342,7 +348,7 @@ class CuentasPorPagarController extends BaseModuloController
             return;
         }
 
-        $doc = $this->repo->getDocumentoParaPago($idDoc, $tipoFuente, $idEmpresa);
+        $doc = $this->documentoPropioOCortar($idDoc, $tipoFuente, $idEmpresa);
         if (!$doc) {
             $this->jsonError('Documento no encontrado.');
             return;
@@ -366,6 +372,7 @@ class CuentasPorPagarController extends BaseModuloController
             $this->jsonError('ID de documento inválido.');
         }
 
+        $this->documentoPropioOCortar($idDoc, $tipoFuente, $idEmpresa); // registros propios (§6)
         $historial = $this->repo->getHistorialPagos($idDoc, $tipoFuente, $idEmpresa);
         $this->jsonSuccess(['historial' => $historial]);
     }
@@ -588,8 +595,8 @@ class CuentasPorPagarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; }
-                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 7.5pt; }
+                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
@@ -664,7 +671,8 @@ class CuentasPorPagarController extends BaseModuloController
             </page>
             <?php
             $html     = ob_get_clean();
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('CuentasPorPagar_' . date('Ymd_His') . '.pdf', 'D');
             exit;
@@ -679,7 +687,7 @@ class CuentasPorPagarController extends BaseModuloController
      * proveedor registrado dos veces —con la cédula y con el RUC, que es esa cédula +
      * '001'— cae en un solo grupo, igual que en la vista en pantalla. Dentro de cada
      * proveedor los documentos van en orden cronológico (como los movimientos de un mayor);
-     * entre proveedores manda el saldo: al que más se le debe, primero.
+     * los proveedores salen en orden alfabético (A-Z), igual que el listado detallado.
      */
     private function agruparPorProveedor(array $filas): array
     {
@@ -717,7 +725,12 @@ class CuentasPorPagarController extends BaseModuloController
                     ?: strcmp((string)($a['numero_documento'] ?? ''), (string)($b['numero_documento'] ?? '')));
         }
         unset($g);
-        usort($grupos, static fn (array $a, array $b): int => $b['saldo'] <=> $a['saldo']);
+        // Proveedores en orden alfabético (mismas reglas que el listado: sin distinguir
+        // mayúsculas ni tildes), como se ven en pantalla.
+        usort($grupos, static fn (array $a, array $b): int => strcmp(
+            \App\Helpers\OrdenFilas::normalizar($a['nombre']),
+            \App\Helpers\OrdenFilas::normalizar($b['nombre'])
+        ));
         return array_values($grupos);
     }
 
@@ -934,8 +947,8 @@ class CuentasPorPagarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 6px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; }
-                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 7.5pt; }
+                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
@@ -998,7 +1011,8 @@ class CuentasPorPagarController extends BaseModuloController
             </page>
             <?php
             $html     = ob_get_clean();
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('CuentasPorPagar_Proveedor_' . date('Ymd_His') . '.pdf', 'D');
             exit;
@@ -1028,7 +1042,55 @@ class CuentasPorPagarController extends BaseModuloController
             // Vacío = el orden por defecto (alfabético por proveedor).
             'orden_col'    => trim((string)($_REQUEST['orden_col'] ?? '')),
             'orden_dir'    => strtoupper(trim((string)($_REQUEST['orden_dir'] ?? ''))) === 'DESC' ? 'DESC' : 'ASC',
+            // Registros propios (§6): se resuelve del permiso, nunca de la petición.
+            // Al ir en los filtros lo heredan el listado, las tarjetas, el gráfico de
+            // antigüedad y las exportaciones, que parten de este mismo arreglo.
+            'id_usuario_filtro' => $this->idUsuarioFiltro(),
         ];
+    }
+
+    /**
+     * Registros propios (§6): el id del usuario cuando NO tiene acceso total ('t')
+     * en este módulo, o null cuando ve toda la empresa (incluido el nivel 3, que
+     * `Permisos::porRuta()` devuelve siempre con 'todo').
+     *
+     * Con filtro activo la deuda se limita a lo que él registró: compras e
+     * importaciones por `created_by`, liquidaciones por `id_usuario` y saldos
+     * iniciales por `created_by` (ver CuentasPorPagarRepository::condUsuarioPropio()).
+     */
+    private function idUsuarioFiltro(): ?int
+    {
+        $perm = $this->getPermisos();
+        return empty($perm['todo']) ? (int) ($_SESSION['id_usuario'] ?? 0) : null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // REGISTROS PROPIOS EN LAS ACCIONES POR ID
+    //
+    // El filtro del listado oculta los documentos ajenos, pero cada acción recibe
+    // un id suelto: sin este guard se llegaría por id a un documento que la tabla
+    // no muestra. requireRegistroPropio() corta con 403 y deja pasar al nivel 3 y
+    // a quien tenga acceso total.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Documento del pago (compra, liquidación o importación) validando que sea del
+     * usuario. Las tres consultas devuelven el creador como `creado_por`, así que
+     * el guard no necesita saber de qué fuente viene.
+     */
+    private function documentoPropioOCortar(int $idDoc, string $tipoFuente, int $idEmpresa): ?array
+    {
+        $doc = $this->repo->getDocumentoParaPago($idDoc, $tipoFuente, $idEmpresa);
+        $this->requireRegistroPropio($doc, 'creado_por');
+        return $doc;
+    }
+
+    /** Saldo inicial CxP: su tabla no tiene `id_usuario`, el creador es `created_by`. */
+    private function saldoInicialPropioOCortar(int $idSaldo, int $idEmpresa): ?array
+    {
+        $saldo = (new \App\repositories\modulos\SaldosInicialesRepository())->getCxpPorId($idSaldo, $idEmpresa);
+        $this->requireRegistroPropio($saldo, 'created_by');
+        return $saldo;
     }
 
     /**
@@ -1114,6 +1176,8 @@ class CuentasPorPagarController extends BaseModuloController
             'estado'         => $_GET['estado']         ?? 'TODOS',
             'tipo_documento' => $_GET['tipo_documento']  ?? '',
             'id_proveedor'   => $_GET['id_proveedor']   ?? '',
+            // Registros propios (§6): sin acceso total, solo los que él cargó
+            'id_usuario_filtro' => $this->idUsuarioFiltro(),
         ];
         $filas = $this->repo->getSaldosInicialesCxp($idEmpresa, $filtros);
         $this->jsonSuccess(['filas' => $filas]);
@@ -1142,6 +1206,12 @@ class CuentasPorPagarController extends BaseModuloController
         $punto = $this->repo->getPuntoEmisionPorId($idPunto, $idEmpresa);
         if (!$punto) {
             $this->jsonError('La serie (punto de emisión) no es válida o está inactiva.');
+            return;
+        }
+
+        // Registros propios (§6): sin acceso total solo se pagan los saldos que él cargó
+        if (!$this->saldoInicialPropioOCortar($idSaldo, $idEmpresa)) {
+            $this->jsonError('Saldo inicial no encontrado.');
             return;
         }
 
@@ -1185,6 +1255,7 @@ class CuentasPorPagarController extends BaseModuloController
             $this->jsonError('ID de saldo inválido.');
             return;
         }
+        $this->saldoInicialPropioOCortar($idSaldo, $idEmpresa); // registros propios (§6)
         $repo = new \App\repositories\modulos\SaldosInicialesRepository();
         $historial = $repo->getHistorialPagosCxp($idSaldo, $idEmpresa);
         $this->jsonSuccess(['historial' => $historial]);

@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
-etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
-version: 1.7
+etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador
+version: 1.8
 orden: 0
 estado: activo
 ---
@@ -66,10 +66,22 @@ qué quedó su saldo.
 
 ## Permisos
 
-Es un reporte de solo lectura: solo aplica el permiso **Ver** (`r`). No hay
-distinción de "acceso total" — cualquier usuario con permiso de lectura sobre
-el módulo puede generar el estado de cuenta de cualquier cliente o proveedor
-de la empresa activa.
+Es un reporte de solo lectura: aplica el permiso **Ver** (`r`) y, además, el de
+**Acceso total**:
+
+- **Con acceso total** (o siendo superadministrador): se puede consultar el
+  estado de cuenta de cualquier cliente o proveedor de la empresa.
+- **Sin acceso total**: solo aparecen los clientes y proveedores **con los que
+  ese usuario trabajó**, es decir, aquellos que tienen al menos un documento
+  registrado por él (factura, recibo, compra, liquidación, importación o saldo
+  inicial). Los demás no salen en el buscador ni en la opción *Todos*, ni en el
+  PDF, el Excel o el correo.
+- El estado de cuenta que se abre sale **completo**, con todos los movimientos
+  del tercero, aunque los haya registrado otra persona. Es su saldo real: debe
+  cuadrar con Cuentas por Cobrar / por Pagar y es lo que se le envía por correo.
+  Recortarlo a "lo que yo registré" mostraría un saldo que no existe.
+
+El permiso se administra en *Configuración → Permisos por módulo*.
 
 ## Reglas de negocio
 
@@ -173,6 +185,11 @@ que los tres deben coincidir.
 
 ## Historial de cambios
 
+- **1.8** — El reporte respeta el permiso de **Acceso total**: quien no lo tiene
+  solo consulta el estado de cuenta de los clientes y proveedores con los que él
+  trabajó (los que tienen al menos un documento suyo), en pantalla, en el PDF,
+  en el Excel y en el correo. El estado de cuenta en sí sigue saliendo completo,
+  con todos los movimientos del tercero. Sección *Permisos* reescrita.
 - **1.7** — Un mismo cliente o proveedor cargado **dos veces** —con la cédula y con el RUC,
   que es esa cédula + `001`— deja de salir en dos estados de cuenta con la mitad
   de los movimientos cada uno: ahora es **una sola sección** con todo su

@@ -42,6 +42,72 @@ class ReporteCarteraRepository extends BaseRepository
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // REGISTROS PROPIOS (§6)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * De los terceros recibidos, deja solo aquellos con AL MENOS UN documento
+     * registrado por $idUsuario. Es el filtro de registros propios de este
+     * reporte: quien no tiene acceso total solo consulta el estado de cuenta de
+     * los clientes/proveedores con los que él trabajó.
+     *
+     * El estado de cuenta en sí NO se filtra por creador a propósito: es el saldo
+     * del tercero y debe cuadrar con Cuentas por Cobrar/Pagar y con lo que se le
+     * envía al cliente por correo; mostrar solo "los movimientos que yo registré"
+     * daría un saldo que no existe.
+     *
+     * Cada fuente usa la columna de creador de su módulo de origen (ventas y
+     * recibos `id_usuario`; compras, importaciones y saldos iniciales `created_by`;
+     * liquidaciones `id_usuario`). Los ids van casteados a int e interpolados: sin
+     * ATTR_EMULATE_PREPARES cada ocurrencia necesitaría su propio parámetro.
+     *
+     * @param  int[] $ids
+     * @return int[] los mismos ids, en su orden, menos los ajenos
+     */
+    public function filtrarEntidadesConDocumentosDe(int $idEmpresa, string $tipo, array $ids, int $idUsuario): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids || $idUsuario <= 0) {
+            return $ids;
+        }
+        $in = implode(',', $ids);
+
+        if (strtoupper($tipo) === 'PROVEEDOR') {
+            $sql = "SELECT id_proveedor AS id FROM compras_cabecera
+                     WHERE id_empresa = :e1 AND eliminado = false AND created_by = :u1 AND id_proveedor IN ({$in})
+                     UNION
+                    SELECT id_proveedor FROM liquidaciones_cabecera
+                     WHERE id_empresa = :e2 AND eliminado = false AND id_usuario = :u2 AND id_proveedor IN ({$in})
+                     UNION
+                    SELECT fe.id_proveedor FROM importaciones_factura_exterior fe
+                      JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
+                     WHERE ic.id_empresa = :e3 AND fe.eliminado = false AND fe.created_by = :u3 AND fe.id_proveedor IN ({$in})
+                     UNION
+                    SELECT id_proveedor FROM saldos_iniciales_cxp
+                     WHERE id_empresa = :e4 AND eliminado = false AND created_by = :u4 AND id_proveedor IN ({$in})";
+            $params = [':e1' => $idEmpresa, ':e2' => $idEmpresa, ':e3' => $idEmpresa, ':e4' => $idEmpresa,
+                       ':u1' => $idUsuario, ':u2' => $idUsuario, ':u3' => $idUsuario, ':u4' => $idUsuario];
+        } else {
+            $sql = "SELECT id_cliente AS id FROM ventas_cabecera
+                     WHERE id_empresa = :e1 AND eliminado = false AND id_usuario = :u1 AND id_cliente IN ({$in})
+                     UNION
+                    SELECT id_cliente FROM recibos_venta_cabecera
+                     WHERE id_empresa = :e2 AND eliminado = false AND id_usuario = :u2 AND id_cliente IN ({$in})
+                     UNION
+                    SELECT id_cliente FROM saldos_iniciales_cxc
+                     WHERE id_empresa = :e3 AND eliminado = false AND created_by = :u3 AND id_cliente IN ({$in})";
+            $params = [':e1' => $idEmpresa, ':e2' => $idEmpresa, ':e3' => $idEmpresa,
+                       ':u1' => $idUsuario, ':u2' => $idUsuario, ':u3' => $idUsuario];
+        }
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $permitidos = array_flip(array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)));
+
+        return array_values(array_filter($ids, static fn (int $id): bool => isset($permitidos[$id])));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // DATOS DE LA ENTIDAD
     // ─────────────────────────────────────────────────────────────────────
 

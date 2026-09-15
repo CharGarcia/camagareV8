@@ -193,6 +193,37 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // REGISTROS PROPIOS (§6)
+    //
+    // Si el usuario NO tiene acceso total ('t') en el módulo, la cartera se limita
+    // a los documentos que él registró. El id lo resuelve el controller desde el
+    // permiso (CuentasPorCobrarController::idUsuarioFiltro()) y viaja dentro de los
+    // filtros: NUNCA llega del cliente.
+    //
+    // Cada fuente guarda al creador en su propia columna: las facturas y los recibos
+    // en `id_usuario` —la misma que filtran sus módulos de origen, Factura de Venta y
+    // Recibo de Venta, para que las tres pantallas coincidan— y los saldos iniciales
+    // en `created_by` (su tabla no tiene `id_usuario`).
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Devuelve " AND {alias}.{columna} = :{ph}" cuando hay filtro de registros
+     * propios, o cadena vacía si el usuario ve toda la empresa.
+     *
+     * Cada llamada usa su propio placeholder ($ph): varias consultas combinan más
+     * de un WHERE en el mismo SQL y PDO no admite repetir un nombre de parámetro.
+     */
+    private function condUsuarioPropio(array $filtros, string $alias, string $columna, string $ph, array &$params): string
+    {
+        $idUsuario = (int) ($filtros['id_usuario_filtro'] ?? 0);
+        if ($idUsuario <= 0) {
+            return '';
+        }
+        $params[":{$ph}"] = $idUsuario;
+        return " AND {$alias}.{$columna} = :{$ph}";
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // ORDEN DE LAS FILAS
     //
     // El listado se arma mezclando tres consultas (facturas + recibos + saldos
@@ -402,6 +433,7 @@ class CuentasPorCobrarRepository extends BaseRepository
     {
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
+        $where .= $this->condUsuarioPropio($filtros, "s", "created_by", "prop_si_stats", $params);
 
         if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
@@ -523,6 +555,7 @@ class CuentasPorCobrarRepository extends BaseRepository
     {
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
+        $where .= $this->condUsuarioPropio($filtros, 's', 'created_by', 'prop_si_ant', $params);
 
         if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
@@ -585,7 +618,8 @@ class CuentasPorCobrarRepository extends BaseRepository
         $where = "v.id_empresa IN ({$this->phIn($idsEmpresa, 'emp', $params)})
               AND v.eliminado  = false
               AND v.estado NOT IN ('anulado','facturado')
-              AND {$this->condAmbiente('v', $idsEmpresa)}";
+              AND {$this->condAmbiente('v', $idsEmpresa)}"
+              . $this->condUsuarioPropio($filtros, 'v', 'id_usuario', 'prop_rec', $params);
 
         $saldoExpr = "(v.importe_total - COALESCE(cb.total_cobrado, 0))";
 
@@ -1347,6 +1381,7 @@ class CuentasPorCobrarRepository extends BaseRepository
 
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($this->idsEmpresa($idsEmpresa), 'si_emp', $params)}) AND s.eliminado = false";
+        $where .= $this->condUsuarioPropio($filtros, 's', 'created_by', 'prop_si', $params);
         [$fCob, $fRet, $fNc] = $this->corteSaldoInicialCxc($filtros, $params);
 
         if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
@@ -1410,7 +1445,8 @@ class CuentasPorCobrarRepository extends BaseRepository
         $where = "v.id_empresa IN ({$this->phIn($idsEmpresa, 'emp', $params)})
               AND v.eliminado  = false
               AND v.estado    IN ('autorizado','autorizada')
-              AND {$this->condAmbiente('v', $idsEmpresa)}";
+              AND {$this->condAmbiente('v', $idsEmpresa)}"
+              . $this->condUsuarioPropio($filtros, 'v', 'id_usuario', 'prop_fac', $params);
 
         // Filtro de estado CxC
         $estado = $filtros['estado'] ?? 'PENDIENTES';

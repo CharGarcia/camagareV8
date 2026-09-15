@@ -521,13 +521,15 @@ function CXC_agruparPorCliente(filas) {
         g.saldo       += parseFloat(r.saldo)          || 0;
     }
     // Dentro de cada cliente, los documentos van en orden cronológico (como los movimientos
-    // de un mayor); entre clientes manda el saldo, el que más debe primero.
+    // de un mayor); los clientes salen en orden alfabético (A-Z), igual que el listado
+    // detallado y que las exportaciones (CuentasPorCobrarController::agruparPorCliente).
     for (const g of mapa.values()) {
         g.items.sort((a, b) =>
             String(a.fecha_emision || '').localeCompare(String(b.fecha_emision || '')) ||
             String(a.numero_factura || '').localeCompare(String(b.numero_factura || '')));
     }
-    return [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+    const nom = g => window.CMG_OrdenTabla ? window.CMG_OrdenTabla.normalizar(g.nombre) : String(g.nombre || '').toUpperCase();
+    return [...mapa.values()].sort((a, b) => (nom(a) < nom(b) ? -1 : (nom(a) > nom(b) ? 1 : 0)));
 }
 
 function CXC_renderAgrupado(filas) {
@@ -562,9 +564,17 @@ function CXC_renderAgrupado(filas) {
         html += `
         <tr class="cxc-mayor-grp" data-gkey="${esc(g.key)}" onclick="CXC_toggleCliente(this)" style="cursor:pointer;" title="Clic para desplegar o plegar los documentos de este cliente">
             <td class="text-center p-1"><i class="bi ${chev} text-success"></i></td>
-            <td colspan="2" class="fw-bold text-truncate" title="${esc(g.nombre)}${g.ruc ? ' · ' + esc(g.ruc) : ''}" style="font-size:.82rem;">
-                ${esc(g.nombre)}
-                ${g.ruc ? `<span class="text-muted fw-normal ms-1">${esc(g.ruc)}</span>` : ''}
+            <!-- Saldo junto al nombre: con la sección plegada se lee de inmediato lo que debe
+                 el cliente, sin recorrer la fila hasta la columna Saldo. El nombre se recorta
+                 si no cabe, el saldo nunca (flex:0 0 auto), y el RUC pasa a la línea de abajo
+                 para no competir por el ancho de la celda. -->
+            <td colspan="2" class="fw-bold" title="${esc(g.nombre)}${g.ruc ? ' · ' + esc(g.ruc) : ''} · Saldo $${CXC_fmt(g.saldo)}" style="font-size:.82rem;overflow:hidden;">
+                <div class="d-flex align-items-center gap-1" style="min-width:0;">
+                    <span class="text-truncate">${esc(g.nombre)}</span>
+                    <span class="badge rounded-pill fw-semibold ${g.saldo > 0.001 ? 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' : 'bg-success bg-opacity-10 text-success border border-success border-opacity-25'}"
+                          style="font-size:.7rem;flex:0 0 auto;" title="Saldo pendiente del cliente">$${CXC_fmt(g.saldo)}</span>
+                </div>
+                ${g.ruc ? `<div class="text-muted fw-normal text-truncate" style="font-size:.68rem;line-height:1.1;">${esc(g.ruc)}</div>` : ''}
             </td>
             ${importes()}
             <td class="text-center" style="font-size:.72rem;">
@@ -668,7 +678,9 @@ function CXC_renderAgrupadoProducto(filas) {
             g.saldo   += parseFloat(r.saldo) || 0;
         }
     }
-    const grupos = [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+    // Productos en orden alfabético, igual que las exportaciones (agruparPorProducto).
+    const nomProd = g => window.CMG_OrdenTabla ? window.CMG_OrdenTabla.normalizar(g.nombre) : String(g.nombre || '').toUpperCase();
+    const grupos = [...mapa.values()].sort((a, b) => (nomProd(a) < nomProd(b) ? -1 : (nomProd(a) > nomProd(b) ? 1 : 0)));
     const sinLineas = filas.filter(r => r.origen === 'SALDO_INICIAL').length;
 
     label.textContent = `${filas.length} docs · ${grupos.length} producto${grupos.length !== 1 ? 's' : ''}`;
