@@ -33,9 +33,13 @@ class IngresoService
         $this->periodosService = new PeriodosContablesService($periodosRepo, $periodosRules, $this->logService);
     }
 
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null): array
+    /**
+     * @param array $ordenMulti Criterios de orden múltiple (ver App\Helpers\OrdenListado).
+     *        Vacío = se ordena por $ordenCol/$ordenDir, como siempre.
+     */
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null, array $ordenMulti = []): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuario);
+        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuario, $ordenMulti);
     }
 
     public function getPorId(int $id, int $idEmpresa): ?array

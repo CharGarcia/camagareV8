@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios
-version: 2.6
+etiquetas: factura, facturar, venta, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios
+version: 2.7
 orden: 20
 estado: activo
 ---
@@ -147,6 +147,31 @@ documento correcto es una **nota de crédito**, no la anulación.
 Anular una factura revierte también los movimientos asociados (inventario, cobro
 y asiento contable) según la configuración de la empresa.
 
+## Ordenar el listado
+
+Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
+invertir el sentido. De fábrica el listado muestra **lo más reciente primero**.
+
+Puede **encadenar hasta tres columnas**: mantenga presionada la tecla **Shift**
+(⇧) y pulse el título de la segunda. Usos típicos en facturación:
+
+| Para ver… | Ordene así |
+|-----------|-----------|
+| Lo que falta cobrar, y dentro lo de mayor valor | *Estado de pago*, luego Shift+clic en *Total* |
+| El movimiento de cada cliente en el tiempo | *Cliente*, luego Shift+clic en *Fecha* |
+| Los borradores pendientes por antigüedad | *Estado*, luego Shift+clic en *Fecha* |
+
+El número pequeño junto a cada flecha indica qué columna manda (`1`) y cuál
+desempata (`2`). Un tercer Shift+clic sobre la misma columna la saca del orden, y
+un clic normal en cualquier encabezado vuelve a dejar una sola.
+
+Las columnas calculadas también se ordenan por su valor real: el **Estado de
+pago** va de pendiente a pagada y anulada al final (no alfabéticamente), y el
+**IVA** por el importe, no por el texto.
+
+El orden se guarda para usted y los botones de **PDF** y **Excel** exportan con
+ese mismo orden. Detalles en *Cómo ordenar los listados*.
+
 ## Errores frecuentes
 
 - **Firma caducada**: renueve el certificado y vuelva a cargarlo en la empresa.
@@ -204,6 +229,11 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.7** — El listado se puede **ordenar por hasta tres columnas a la vez**:
+  Shift+clic en el título de la segunda columna la encadena a la primera (por
+  ejemplo *Estado de pago* y, dentro, *Total*). Cada encabezado activo muestra un
+  número con su prioridad. El orden se guarda por usuario y se respeta al
+  exportar a PDF y Excel. Nueva sección *Ordenar el listado*.
 - **2.6** — **PDF de la factura**. Se quitaron las columnas *Subsidio* y *Precio
   sin Subsidio* y la línea *IRBPNR* de los totales: iban siempre en 0,00. La
   columna *Cód. Principal* se ensancha ahora según el código más largo de la

@@ -185,10 +185,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
-                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>" class="btn btn-outline-danger" title="Descargar PDF">
+                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="Descargar PDF">
                     <i class="bi bi-file-earmark-pdf"></i> PDF
                 </a>
-                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>" class="btn btn-outline-success" title="Descargar Excel">
+                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>
             </div>
@@ -2386,6 +2386,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     // Global para uso en el header/pagination
     window.currentSort = '<?= $ordenCol ?>';
     window.currentDir = '<?= $ordenDir ?>';
+    // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que lee
+    // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
+    window.currentSorts = <?= $ordenJson ?? '[]' ?>;
+    let ING_sorter = null;
 
     window.ING_cambiarPaginaAjax = function(pag) {
         window.ING_fetchSearch(pag);
@@ -2396,7 +2400,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const loader = '<tr><td colspan="7" class="text-center py-5"><span class="spinner-border text-primary"></span></td></tr>';
         document.getElementById('tbodyIngresos').innerHTML = loader;
 
-        const uri = `<?= BASE_URL ?>/<?= $rutaModulo ?>/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        const orden = window.CMG_ordenParam(window.currentSorts || []);
+        const uri = `<?= BASE_URL ?>/<?= $rutaModulo ?>/searchAjax?b=${encodeURIComponent(b)}&page=${page}&orden=${encodeURIComponent(orden)}`;
         try {
             const resp = await fetch(uri);
             const data = await resp.json();
@@ -2407,23 +2412,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // Actualizar enlaces de exportación
             const btnPdf = document.getElementById('btnExportPdf');
             const btnXls = document.getElementById('btnExportExcel');
-            if (btnPdf) btnPdf.href = `<?= BASE_URL ?>/<?= $rutaModulo ?>/export-pdf?b=${encodeURIComponent(b)}&sort=${window.currentSort}&dir=${window.currentDir}`;
-            if (btnXls) btnXls.href = `<?= BASE_URL ?>/<?= $rutaModulo ?>/export-excel?b=${encodeURIComponent(b)}&sort=${window.currentSort}&dir=${window.currentDir}`;
+            if (btnPdf) btnPdf.href = `<?= BASE_URL ?>/<?= $rutaModulo ?>/export-pdf?b=${encodeURIComponent(b)}&orden=${encodeURIComponent(orden)}`;
+            if (btnXls) btnXls.href = `<?= BASE_URL ?>/<?= $rutaModulo ?>/export-excel?b=${encodeURIComponent(b)}&orden=${encodeURIComponent(orden)}`;
 
-            // Actualizar iconos en headers
-            document.querySelectorAll('.sortable-header').forEach(th => {
-                const icon = th.querySelector('i');
-                const field = th.dataset.sort;
-                if (icon) {
-                    if (field === window.currentSort) {
-                        icon.className = (window.currentDir.toLowerCase() === 'asc') ?
-                            'bi bi-sort-alpha-down text-primary ms-1' :
-                            'bi bi-sort-alpha-up text-primary ms-1';
-                    } else {
-                        icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                    }
-                }
-            });
+            // Los íconos (incluida la prioridad 1/2/3 del orden múltiple) los repinta
+            // el motor global; aquí solo se le pide que se refresque.
+            if (ING_sorter) ING_sorter.refreshIcons();
         } catch (e) {
             console.error(e);
         }
@@ -2431,22 +2425,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     // Listener para Ordenamiento y Buscador con Debounce
     document.addEventListener('DOMContentLoaded', () => {
-        document.querySelectorAll('.sortable-header').forEach(h => {
-            h.addEventListener('click', () => {
-                const f = h.dataset.sort;
-                if (window.currentSort === f) {
-                    window.currentDir = (window.currentDir.toLowerCase() === 'asc') ? 'DESC' : 'ASC';
-                } else {
-                    window.currentSort = f;
-                    window.currentDir = 'ASC';
-                }
-                // Opcional: Guardar preferencias si helper existe
-                if (typeof window.guardarOrdenacionVista === 'function') {
-                    window.guardarOrdenacionVista('ingresos', window.currentSort, window.currentDir);
-                }
-                window.ING_fetchSearch(1);
-            });
-        });
+        // Ordenamiento: motor global (window.CMG_initSort, en public/js/favoritos.js).
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+        // (ASC → DESC → fuera del orden), con la prioridad numerada en cada encabezado.
+        // reload:false porque ING_fetchSearch repinta todo lo que depende del orden.
+        ING_sorter = window.CMG_initSort('ingresos', (col, dir, sorts) => {
+            window.currentSort  = col;
+            window.currentDir   = dir;
+            window.currentSorts = sorts;
+            window.ING_fetchSearch(1);
+        }, { sorts: window.currentSorts, multi: true, container: '.ingreso-scroll', reload: false });
 
         const inputB = document.getElementById('buscarIngreso');
         let tSearch;

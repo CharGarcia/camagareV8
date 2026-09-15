@@ -73,6 +73,23 @@ class CategoriaRepository extends BaseRepository
     }
 
     /**
+     * Lista mínima (id, nombre) para llenar un <select>. No es el listado del
+     * módulo: no cuenta el total ni calcula productos_count, que es una
+     * subconsulta correlacionada ejecutada una vez POR FILA (con 200 categorías
+     * y 25.000 productos medía ~186 ms) y que ningún combo usa.
+     */
+    public function getCombo(int $idEmpresa): array
+    {
+        $sql = "SELECT c.id, c.nombre
+                  FROM {$this->table} c
+                  " . $this->getBaseWhere($idEmpresa, 'c') . "
+                 ORDER BY c.nombre ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Verifica si existe otra categoría con el mismo nombre para la misma empresa
      */
     public function existeNombre(int $idEmpresa, string $nombre, ?int $excluirId = null): bool

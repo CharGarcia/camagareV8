@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones
-version: 1.6
+version: 1.7
 orden: 40
 estado: activo
 ---
@@ -105,6 +105,18 @@ siguen apareciendo aquí hasta que se corrigen manualmente.
 
 ## Historial de cambios
 
+- **1.7** — El módulo **abre mucho más rápido**. Al entrar, la pantalla
+  llenaba los selectores "Origen", "Usuario" y "Año" recorriendo TODOS los
+  movimientos de kardex de la empresa (tres veces), y la lista de categorías
+  contaba además cuántos productos tiene cada una, dato que ningún selector
+  muestra. Medido sobre 600.000 movimientos: entre 0,7 y 1,3 segundos de
+  espera antes de ver nada, creciendo cada mes. Ahora esos selectores se
+  resuelven por índice (1,3 ms en la misma prueba) y la página ya no descarga
+  una librería de gráficos externa que no usaba. **Requiere ejecutar**
+  `database/20260914_indices_reporte_inventarios_arranque.sql`; sin él el
+  reporte funciona igual, solo que sin la mejora de velocidad. La misma
+  corrección acelera la apertura del módulo **Inventario**, que llenaba dos
+  de esos selectores de la misma forma.
 - **1.6** — Pestaña **Consignaciones** mucho más rápida. El cálculo del saldo
   vigente repetía por cada línea la búsqueda del costo en el kardex sin ningún
   índice que la sostuviera, y además ejecutaba dos veces la consulta completa

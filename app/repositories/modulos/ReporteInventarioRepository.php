@@ -638,12 +638,41 @@ class ReporteInventarioRepository extends BaseRepository
         ];
     }
 
+    /**
+     * Años con movimientos de kardex (alimenta el <select> "Año" de la pestaña
+     * Movimientos; se ejecuta en cada carga del módulo).
+     *
+     * El "SELECT DISTINCT EXTRACT(YEAR …)" obligaba a leer todos los
+     * movimientos de la empresa y calcular la función en cada fila: ~265 ms
+     * con 600.000 filas, y creciendo cada año. Aquí se salta de año en año
+     * por el índice (loose index scan): tantos saltos como años tenga el
+     * histórico. Medido en ~0,4 ms con esas mismas 600.000 filas. Requiere
+     * idx_kardex_empresa_fecha — ver
+     * database/indices_reporte_inventarios_arranque.sql.
+     */
     public function getAniosMovimientos(int $idEmpresa): array
     {
-        $sql = "SELECT DISTINCT EXTRACT(YEAR FROM fecha_movimiento) AS anio
-                FROM inventario_kardex
-                WHERE id_empresa = :id_empresa AND eliminado = false
-                ORDER BY anio DESC";
+        $sql = "WITH RECURSIVE saltos AS (
+                    (SELECT fecha_movimiento AS f
+                       FROM inventario_kardex
+                      WHERE id_empresa = :id_empresa AND eliminado = false
+                        AND fecha_movimiento IS NOT NULL
+                      ORDER BY fecha_movimiento
+                      LIMIT 1)
+                    UNION ALL
+                    SELECT (SELECT k.fecha_movimiento
+                              FROM inventario_kardex k
+                             WHERE k.id_empresa = :id_empresa AND k.eliminado = false
+                               AND k.fecha_movimiento >= date_trunc('year', s.f) + interval '1 year'
+                             ORDER BY k.fecha_movimiento
+                             LIMIT 1)
+                      FROM saltos s
+                     WHERE s.f IS NOT NULL
+                )
+                SELECT EXTRACT(YEAR FROM f)::int AS anio
+                  FROM saltos
+                 WHERE f IS NOT NULL
+                 ORDER BY anio DESC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_COLUMN) ?: [date('Y')];

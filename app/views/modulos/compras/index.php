@@ -196,9 +196,9 @@ $to         = $to         ?? 0;
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
             </div>
         </div>
@@ -226,7 +226,9 @@ $to         = $to         ?? 0;
                         <th class="text-end sortable-header" role="button" data-sort="monto_iva" data-col="monto_iva">IVA <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header fw-bold" role="button" data-sort="importe_total" data-col="importe_total">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end fw-bold" data-col="saldo_documento" title="Saldo = Total − Retención − Notas de crédito − Pagos">Saldo</th>
-                        <th class="text-center sortable-header" role="button" data-col="estado_pago">Pago</th>
+                        <?php // Pago no es ordenable (se calcula por fila, no hay columna que ordenar):
+                              // va sin sortable-header ni role="button" para que tampoco lo parezca. ?>
+                        <th class="text-center" data-col="estado_pago">Pago</th>
                         <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
@@ -291,6 +293,9 @@ $to         = $to         ?? 0;
     window.CMG_urlBase = '<?= $urlBase ?>';
     window.CMG_currentSort = '<?= $ordenCol ?>';
     window.CMG_currentDir = '<?= $ordenDir ?>';
+    // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que lee
+    // OrdenListado en PHP. CMG_currentSort/CMG_currentDir quedan como el principal.
+    window.CMG_currentSorts = <?= $ordenJson ?? '[]' ?>;
     window.CMG_currentPage = <?= $page ?>;
     window.CMG_perm = {
         crear: <?= $perm['crear'] ? 'true' : 'false' ?>,
@@ -348,7 +353,8 @@ $to         = $to         ?? 0;
 
         window.CMG_fetchSearch = async (page = 1) => {
             const term = input ? input.value.trim() : '';
-            const uri = `${window.CMG_urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.CMG_currentSort}&dir=${window.CMG_currentDir}`;
+            const orden = window.CMG_ordenParam(window.CMG_currentSorts || []);
+            const uri = `${window.CMG_urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -361,42 +367,31 @@ $to         = $to         ?? 0;
                     document.getElementById('paginationInfo').textContent = data.info;
                     document.getElementById('btnExportPdf').href = data.pdf_url;
                     document.getElementById('btnExportExcel').href = data.excel_url;
-                    actualizarIconosOrden();
+                    // Los íconos (incluida la prioridad 1/2/3 del orden múltiple) los
+                    // repinta el motor global; aquí solo se le pide que se refresque.
+                    if (sorter) sorter.refreshIcons();
                 }
             } catch (e) {
                 console.error('Error búsqueda compras:', e);
             }
         };
 
-        function actualizarIconosOrden() {
-            document.querySelectorAll('.sortable-header').forEach(th => {
-                const icon = th.querySelector('i');
-                const field = th.dataset.sort;
-                if (field === window.CMG_currentSort) {
-                    icon.className = window.CMG_currentDir.toLowerCase() === 'asc' ?
-                        'bi bi-sort-alpha-down text-primary ms-1' :
-                        'bi bi-sort-alpha-up text-primary ms-1';
-                } else {
-                    icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                }
-            });
-        }
-
-        document.querySelectorAll('.sortable-header').forEach(h => {
-            h.addEventListener('click', () => {
-                const f = h.dataset.sort;
-                if (window.CMG_currentSort === f) {
-                    window.CMG_currentDir = window.CMG_currentDir.toLowerCase() === 'asc' ? 'DESC' : 'ASC';
-                } else {
-                    window.CMG_currentSort = f;
-                    window.CMG_currentDir = 'ASC';
-                }
-                if (typeof window.guardarOrdenacionVista === 'function') {
-                    window.guardarOrdenacionVista('compras', window.CMG_currentSort, window.CMG_currentDir);
-                }
-                CMG_fetchSearch(1);
-            });
-        });
+        // Ordenamiento: motor global (window.CMG_initSort, en public/js/favoritos.js).
+        // Antes esta vista tenía su propio binding y su propio repintado de íconos; se
+        // centralizó para heredar el orden múltiple sin duplicar la lógica. De paso, el
+        // motor solo engancha los encabezados con `data-sort`: el anterior enganchaba
+        // todos los `.sortable-header`, incluida la columna Pago —que no es ordenable y
+        // no tiene ícono—, con lo que un clic ahí ordenaba por `undefined` y el
+        // repintado reventaba al buscarle el `<i>`.
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+        // (ASC → DESC → fuera del orden), con la prioridad numerada en cada encabezado.
+        // reload:false porque CMG_fetchSearch repinta todo lo que depende del orden.
+        const sorter = window.CMG_initSort('compras', (col, dir, sorts) => {
+            window.CMG_currentSort  = col;
+            window.CMG_currentDir   = dir;
+            window.CMG_currentSorts = sorts;
+            CMG_fetchSearch(1);
+        }, { sorts: window.CMG_currentSorts, multi: true, container: '.compras-scroll', reload: false });
 
         let timerId;
         if (input) {
@@ -405,6 +400,5 @@ $to         = $to         ?? 0;
                 timerId = setTimeout(() => CMG_fetchSearch(1), 380);
             });
         }
-        actualizarIconosOrden();
     })();
 </script>

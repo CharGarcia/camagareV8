@@ -175,14 +175,16 @@ class ComprasController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? $_GET['buscar'] ?? $_POST['buscar'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+        // Orden múltiple (Shift+clic): la vista lo manda como `orden=col:DIR,col:DIR`.
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_emision', 'DESC');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage  = 20;
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $total      = $result['total'];
         $totalPages = (int) ceil($total / $perPage);
 
@@ -221,6 +223,8 @@ class ComprasController extends BaseModuloController
             'buscar'             => $buscar,
             'ordenCol'           => $ordenCol,
             'ordenDir'           => $ordenDir,
+            'ordenJson'          => \App\Helpers\OrdenListado::aJson($orden),
+            'ordenParam'         => \App\Helpers\OrdenListado::aCadena($orden),
             'vistaConfig'        => $prefsVista,
             'base'               => BASE_URL,
             'rutaModulo'         => $this->getRutaModulo(),
@@ -258,14 +262,15 @@ class ComprasController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $buscar     = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page       = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol   = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
-        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+        $orden      = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_emision', 'DESC');
+        $ordenCol   = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
+        $ordenDir   = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage    = 20;
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows       = $result['rows'];
         $total      = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -338,8 +343,8 @@ class ComprasController extends BaseModuloController
             'info'       => "$from-$to/$total",
             'total'      => $total,
             'totalPages' => $totalPages,
-            'pdf_url'    => $urlBase . '/export-pdf?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
-            'excel_url'  => $urlBase . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
+            'pdf_url'    => $urlBase . '/export-pdf?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden)),
+            'excel_url'  => $urlBase . '/export-excel?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden)),
         ]);
         exit;
     }
@@ -374,13 +379,20 @@ class ComprasController extends BaseModuloController
     {
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'fecha_emision');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'DESC'));
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; si se abre sin
+        // parámetros, se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(
+            \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo()),
+            'fecha_emision',
+            'DESC'
+        );
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        return $this->repository->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $this->repository->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
     }
 
     public function exportExcel(): void

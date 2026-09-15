@@ -45,11 +45,12 @@ class ReporteInventariosController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
 
         $bodegas    = (new BodegaRepository())->getBodegasPermitidas($idUsuario, $idEmpresa, $nivel);
-        $categorias = (new CategoriaRepository())->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC', null)['rows'];
-        $marcas     = (new MarcaRepository())->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC', null)['rows'];
+        $categorias = (new CategoriaRepository())->getCombo($idEmpresa);
+        $marcas     = (new MarcaRepository())->getCombo($idEmpresa);
         $vendedores    = (new VendedorRepository())->getVendedoresActivos($idEmpresa);
-        $usuarios      = (new InventarioRepository())->getUsuariosConMovimientos($idEmpresa);
-        $origenes      = (new InventarioRepository())->getTiposReferencia($idEmpresa);
+        $inventarioRepo = new InventarioRepository();
+        $usuarios      = $inventarioRepo->getUsuariosConMovimientos($idEmpresa);
+        $origenes      = $inventarioRepo->getTiposReferencia($idEmpresa);
         $anios         = $this->repository->getAniosMovimientos($idEmpresa);
         $responsables  = (new \App\repositories\modulos\ResponsableTrasladoRepository())->listarPorEmpresa($idEmpresa);
 

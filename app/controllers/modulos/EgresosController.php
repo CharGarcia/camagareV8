@@ -39,13 +39,15 @@ class EgresosController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+        // Orden múltiple (Shift+clic): la vista lo manda como `orden=col:DIR,col:DIR`.
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_emision', 'DESC');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage  = 20;
 
         $perm = $this->getPermisos();
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
         $totalPages = (int) ceil($result['total'] / $perPage);
 
         $empresaModel = new Empresa();
@@ -110,6 +112,8 @@ class EgresosController extends BaseModuloController
             'buscar'            => $buscar,
             'ordenCol'          => $ordenCol,
             'ordenDir'          => $ordenDir,
+            'ordenJson'         => \App\Helpers\OrdenListado::aJson($orden),
+            'ordenParam'        => \App\Helpers\OrdenListado::aCadena($orden),
             'vistaConfig'       => $prefsVista,
             'rutaModulo'        => $this->getRutaModulo(),
             'empresa'           => $empresaData,
@@ -127,10 +131,17 @@ class EgresosController extends BaseModuloController
     {
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'fecha_emision');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'DESC'));
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; si se abre sin
+        // parámetros, se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(
+            \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo()),
+            'fecha_emision',
+            'DESC'
+        );
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
 
-        return $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir);
+        return $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $orden);
     }
 
     /** Exporta a Excel el listado de Egresos (con los mismos filtros/orden del buscador). */
@@ -303,11 +314,12 @@ class EgresosController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $buscar     = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page       = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
-        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+        $orden      = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_emision', 'DESC');
+        $ordenCol   = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
+        $ordenDir   = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage    = 20;
 
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
         $rows       = $result['rows'];
         $total      = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;

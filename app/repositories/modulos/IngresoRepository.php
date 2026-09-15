@@ -34,7 +34,30 @@ class IngresoRepository extends BaseRepository
         return $st;
     }
 
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null): array
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL con la que se ordena. Es la whitelist del ORDER BY y el mapa que
+     * necesita `OrdenListado::clausula()` para encadenar varias columnas.
+     */
+    public const MAPA_ORDEN = [
+        'id'             => 'i.id',
+        'fecha_emision'  => 'i.fecha_emision',
+        'numero_ingreso' => 'i.numero_ingreso',
+        'tipo_ingreso'   => 'i.tipo_ingreso',
+        'monto_total'    => 'i.monto_total',
+        'estado'         => 'i.estado',
+        'observaciones'  => 'i.observaciones',
+        // De quién se recibe: el texto libre manda sobre el nombre del cliente, igual
+        // que en la columna del listado (un ingreso puede no tener cliente asociado).
+        'cliente_nombre' => "COALESCE(i.recibo_de, c.nombre, '—')",
+        'recibo_de'      => "COALESCE(i.recibo_de, c.nombre, '—')",
+    ];
+
+    /**
+     * @param array $ordenMulti Criterios de orden [['col'=>…,'dir'=>…], …] cuando el
+     *        llamador usa `OrdenListado`. Vacío = se ordena por $ordenCol/$ordenDir.
+     */
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null, array $ordenMulti = []): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
@@ -92,17 +115,18 @@ class IngresoRepository extends BaseRepository
         $sqlCount = "SELECT COUNT(*) FROM ingresos_cabecera i LEFT JOIN clientes c ON i.id_cliente = c.id $where";
         $total = (int) $this->query($sqlCount, $params)->fetchColumn();
 
-        $allowedCols = ['id', 'fecha_emision', 'numero_ingreso', 'tipo_ingreso', 'monto_total', 'estado', 'cliente_nombre', 'observaciones', 'recibo_de'];
-        if (!in_array($ordenCol, $allowedCols)) {
-            $ordenCol = 'fecha_emision';
-        }
-        $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
-
-        $ordenExpr = match($ordenCol) {
-            'cliente_nombre' => 'COALESCE(i.recibo_de, c.nombre, \'—\')',
-            'recibo_de'      => 'COALESCE(i.recibo_de, c.nombre, \'—\')',
-            default          => "i.$ordenCol",
-        };
+        // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
+        // MAPA_ORDEN, con i.id como desempate para que las filas empatadas no bailen
+        // entre páginas.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = \App\Helpers\OrdenListado::clausula(
+            $ordenMulti,
+            self::MAPA_ORDEN,
+            'i.fecha_emision',
+            'i.id DESC'
+        );
 
         $sql = "SELECT i.*,
                        c.nombre AS cliente_nombre,
@@ -122,7 +146,7 @@ class IngresoRepository extends BaseRepository
                 LEFT JOIN usuarios u ON i.id_usuario = u.id
                 LEFT JOIN empresa_opciones_ingreso_egreso eic ON i.id_ingreso_concepto = eic.id
                 $where
-                ORDER BY $ordenExpr $ordenDir, i.id DESC";
+                $orderBy";
 
         if ($perPage > 0) {
             $sql .= " LIMIT $perPage OFFSET $offset";

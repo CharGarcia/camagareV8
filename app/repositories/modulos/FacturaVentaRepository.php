@@ -22,7 +22,59 @@ class FacturaVentaRepository extends BaseRepository
         return $st;
     }
 
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null): array
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL con la que se ordena. Es la whitelist del ORDER BY y el mapa que
+     * necesita `OrdenListado::clausula()` para encadenar varias columnas.
+     *
+     * A diferencia de otros módulos NO es una constante de clase: `estado_pago` se
+     * ordena por una expresión que se arma en tiempo de ejecución con las subconsultas
+     * de abonos de `AbonosVentaSql`, y eso no cabe en una expresión constante.
+     */
+    private function mapaOrden(): array
+    {
+        // Suma de abonos (cobros + notas de crédito + retenciones) para ordenar por
+        // el ESTADO DE PAGO calculado. Mismas subconsultas que la columna/badge.
+        $sqlAbonosOrden =
+            "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
+            . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
+            . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
+            . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
+            . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
+            . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
+
+        return [
+            'id'                  => 'v.id',
+            'fecha_emision'       => 'v.fecha_emision',
+            'secuencial'          => 'v.secuencial',
+            'numero'              => 'v.secuencial',
+            'importe_total'       => 'v.importe_total',
+            'total_sin_impuestos' => 'v.total_sin_impuestos',
+            'total_descuento'     => 'v.total_descuento',
+            'total_ice'           => 'v.total_ice',
+            'propina'             => 'v.propina',
+            'estado'              => 'v.estado',
+            'estado_correo'       => 'v.estado_correo',
+            'observaciones'       => 'v.observaciones',
+            // Columnas que vienen de un JOIN: se prefija la tabla correcta.
+            'cliente_nombre'      => 'c.nombre',
+            'cliente_ruc'         => 'c.identificacion',
+            'vendedor_nombre'     => 'ven.nombre',
+            'usuario_nombre'      => 'u.nombre',
+            // Calculadas: el IVA no es una columna y el estado de pago se deduce de
+            // cuánto se ha abonado (1 sin cobrar, 2 parcial, 3 pagada, 4 anulada).
+            'iva'                 => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
+            'estado_pago'         => "CASE WHEN v.estado = 'anulado' THEN 4 "
+                                     . "WHEN (v.importe_total - $sqlAbonosOrden) <= 0.01 THEN 3 "
+                                     . "WHEN $sqlAbonosOrden > 0 THEN 2 ELSE 1 END",
+        ];
+    }
+
+    /**
+     * @param array $ordenMulti Criterios de orden [['col'=>…,'dir'=>…], …] cuando el
+     *        llamador usa `OrdenListado`. Vacío = se ordena por $ordenCol/$ordenDir.
+     */
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null, array $ordenMulti = []): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
@@ -145,33 +197,21 @@ class FacturaVentaRepository extends BaseRepository
                      $where";
         $total = $this->query($sqlCount, $params)->fetchColumn();
 
-        $allowedCols = ['id', 'fecha_emision', 'secuencial', 'numero', 'importe_total', 'total_sin_impuestos', 'total_descuento', 'total_ice', 'propina', 'estado', 'estado_correo', 'estado_pago', 'cliente_nombre', 'cliente_ruc', 'vendedor_nombre', 'usuario_nombre', 'observaciones', 'iva'];
-        if (!in_array($ordenCol, $allowedCols)) $ordenCol = 'fecha_emision';
-        $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
-
-        // Suma de abonos (cobros + notas de crédito + retenciones) para ordenar por
-        // el ESTADO DE PAGO calculado. Mismas subconsultas que la columna/badge.
-        $sqlAbonosOrden =
-            "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
-            . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
-            . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
-            . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
-            . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
-            . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
-
-        // Para columnas calculadas (JOIN) se prefija la tabla correcta
-        $ordenExpr = match($ordenCol) {
-            'cliente_nombre'  => 'c.nombre',
-            'cliente_ruc'     => 'c.identificacion',
-            'vendedor_nombre' => 'ven.nombre',
-            'usuario_nombre'  => 'u.nombre',
-            'iva'             => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
-            'numero'          => 'v.secuencial',
-            'estado_pago'     => "CASE WHEN v.estado = 'anulado' THEN 4 "
-                                 . "WHEN (v.importe_total - $sqlAbonosOrden) <= 0.01 THEN 3 "
-                                 . "WHEN $sqlAbonosOrden > 0 THEN 2 ELSE 1 END",
-            default           => "v.$ordenCol",
-        };
+        // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
+        // el mapa: lo único que puede llegar al ORDER BY sale de ahí.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        // El desempate por v.id sigue la dirección del criterio principal (no es fijo
+        // DESC como en otros módulos) y se omite solo si ya se ordena por id: eso lo
+        // resuelve clausula(), que no duplica una expresión que ya está en el ORDER BY.
+        $dirPrincipal = \App\Helpers\OrdenListado::primeraDir($ordenMulti, 'DESC');
+        $orderBy = \App\Helpers\OrdenListado::clausula(
+            $ordenMulti,
+            $this->mapaOrden(),
+            'v.fecha_emision',
+            'v.id ' . $dirPrincipal
+        );
 
         $sql = "SELECT v.*,
                        c.nombre        AS cliente_nombre,
@@ -187,7 +227,7 @@ class FacturaVentaRepository extends BaseRepository
                 LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
                 LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id
                 $where
-                ORDER BY $ordenExpr $ordenDir" . ($ordenCol !== 'id' ? ", v.id $ordenDir" : "") . "
+                $orderBy
                 " . ($perPage > 0 ? "LIMIT $perPage OFFSET $offset" : "");
 
         $rows = $this->query($sql, $params)->fetchAll();

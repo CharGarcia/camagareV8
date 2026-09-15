@@ -72,6 +72,21 @@ class MarcaRepository extends BaseRepository
     }
 
     /**
+     * Lista mínima (id, nombre) para llenar un <select>: una sola consulta,
+     * sin el COUNT(*) del total que un combo nunca usa.
+     */
+    public function getCombo(int $idEmpresa): array
+    {
+        $sql = "SELECT m.id, m.nombre
+                  FROM {$this->table} m
+                  " . $this->getBaseWhere($idEmpresa, 'm') . "
+                 ORDER BY m.nombre ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Verifica si existe otra marca con el mismo nombre para la misma empresa
      */
     public function existeNombre(int $idEmpresa, string $nombre, ?int $excluirId = null): bool

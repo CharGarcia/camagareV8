@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.9
+etiquetas: egresos, egreso, pago, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.10
 orden: 20
 estado: activo
 ---
@@ -236,6 +236,30 @@ Cada egreso genera su asiento automáticamente según la configuración contable
 la empresa; al anularlo, el asiento se anula. En las líneas de concepto general
 se puede elegir la cuenta contable línea por línea.
 
+## Ordenar el listado
+
+Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
+invertir el sentido. De fábrica el listado muestra **lo más reciente primero**.
+
+Puede **encadenar hasta tres columnas**: mantenga presionada la tecla **Shift**
+(⇧) y pulse el título de la segunda. Usos típicos en pagos:
+
+| Para ver… | Ordene así |
+|-----------|-----------|
+| Todo lo pagado a cada beneficiario, en orden de fecha | *Beneficiario*, luego Shift+clic en *Fecha* |
+| Los pagos más altos dentro de cada tipo | *Tipo*, luego Shift+clic en *Monto* |
+| Lo anulado y lo vigente por separado, por fecha | *Estado*, luego Shift+clic en *Fecha* |
+
+El número pequeño junto a cada flecha indica qué columna manda (`1`) y cuál
+desempata (`2`). Un tercer Shift+clic sobre la misma columna la saca del orden, y
+un clic normal en cualquier encabezado vuelve a dejar una sola.
+
+La columna **Beneficiario** se ordena por lo que se ve, sea proveedor, empleado o
+un beneficiario escrito a mano.
+
+El orden se guarda para usted y los botones de PDF y Excel del listado exportan
+con ese mismo orden. Detalles en *Cómo ordenar los listados*.
+
 ## Comprobante en PDF y Excel
 
 Al abrir un egreso ya guardado, la barra de acciones superior del modal
@@ -264,6 +288,11 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.10** — El listado se puede **ordenar por hasta tres columnas a la vez**:
+  Shift+clic en el título de la segunda columna la encadena a la primera (por
+  ejemplo *Beneficiario* y, dentro de cada uno, la *Fecha*). Cada encabezado
+  activo muestra un número con su prioridad. El orden se guarda por usuario y se
+  respeta al exportar a PDF y Excel. Nueva sección *Ordenar el listado*.
 - **1.9** — El número del documento puede numerarse **por fecha de emisión**,
   reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
   activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue

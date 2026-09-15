@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos
-version: 2.8
+etiquetas: compras, compra, factura de compra, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos
+version: 2.11
 orden: 20
 estado: activo
 ---
@@ -305,11 +305,31 @@ Desde la compra guardada se puede generar el **PDF** del documento, exportarlo a
 inicio del formulario (solo visibles si la compra es un comprobante electrónico
 con XML guardado).
 
+## Ordenar el listado
+
+Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
+invertir el sentido. De fábrica el listado muestra **lo más reciente primero**.
+
+Puede **encadenar hasta tres columnas**: mantenga presionada la tecla **Shift**
+(⇧) y pulse el título de la segunda. Usos típicos en compras:
+
+| Para ver… | Ordene así |
+|-----------|-----------|
+| Todo lo comprado a cada proveedor, en orden de fecha | *Proveedor*, luego Shift+clic en *Fecha* |
+| Las compras más altas dentro de cada tipo de comprobante | *Tipo*, luego Shift+clic en *Total* |
+| El detalle de un proveedor por número de comprobante | *Proveedor*, luego Shift+clic en *N° Comprobante* |
+
+El número pequeño junto a cada flecha indica qué columna manda (`1`) y cuál
+desempata (`2`). Un tercer Shift+clic sobre la misma columna la saca del orden, y
+un clic normal en cualquier encabezado vuelve a dejar una sola.
+
+El orden se guarda para usted. Detalles en *Cómo ordenar los listados*.
+
 ## Exportar el listado
 
 Los botones **Excel** y **PDF** de la parte superior del listado exportan las
 compras que coinciden con el buscador y el orden aplicados en ese momento (no
-solo la página visible).
+solo la página visible), incluido el orden por varias columnas.
 
 ## Pestaña Asiento contable
 
@@ -402,6 +422,13 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.11** — El listado se puede **ordenar por hasta tres columnas a la vez**:
+  Shift+clic en el título de la segunda columna la encadena a la primera (por
+  ejemplo *Proveedor* y, dentro de cada proveedor, la *Fecha*). Cada encabezado
+  activo muestra un número con su prioridad. El orden se guarda por usuario y se
+  respeta al exportar a PDF y Excel. Además, la columna **Pago** ya no responde al
+  clic: no es ordenable y al pulsarla se perdía el orden que estuviera aplicado.
+  Nueva sección *Ordenar el listado*.
 - **2.10** — Una compra **migrada FÍSICA** ya se puede editar por completo (antes
   era de solo lectura igual que una electrónica): no tiene XML que la respalde
   como fuente de verdad, así que hacía falta poder corregir datos mal traídos de

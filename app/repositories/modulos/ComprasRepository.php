@@ -61,6 +61,30 @@ class ComprasRepository extends BaseRepository
         return $this->tipoAmbienteCache[$idEmpresa];
     }
 
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL con la que se ordena. Es la whitelist del ORDER BY y el mapa que
+     * necesita `OrdenListado::clausula()` para encadenar varias columnas.
+     */
+    public const MAPA_ORDEN = [
+        'id'                  => 'c.id',
+        'fecha_emision'       => 'c.fecha_emision',
+        'fecha_registro'      => 'c.fecha_registro',
+        'secuencial_prov'     => 'c.secuencial_prov',
+        'importe_total'       => 'c.importe_total',
+        'total_sin_impuestos' => 'c.total_sin_impuestos',
+        'observaciones'       => 'c.observaciones',
+        // Columnas que vienen de un JOIN: se prefija la tabla correcta.
+        'tipo_comprobante'    => 'ca.comprobante',
+        'proveedor_nombre'    => 'p.razon_social',
+        'proveedor_ruc'       => 'p.identificacion',
+        'usuario_nombre'      => 'u.nombre',
+    ];
+
+    /**
+     * @param array $ordenMulti Criterios de orden [['col'=>…,'dir'=>…], …] cuando el
+     *        llamador usa `OrdenListado`. Vacío = se ordena por $ordenCol/$ordenDir.
+     */
     public function getListado(
         int $idEmpresa,
         string $buscar = '',
@@ -68,7 +92,8 @@ class ComprasRepository extends BaseRepository
         int $perPage = 20,
         string $ordenCol = 'fecha_emision',
         string $ordenDir = 'DESC',
-        ?int $idUsuario = null
+        ?int $idUsuario = null,
+        array $ordenMulti = []
     ): array {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
@@ -175,38 +200,26 @@ class ComprasRepository extends BaseRepository
                      $where";
         $total = $this->query($sqlCount, $params)->fetchColumn();
 
-        $allowedCols = [
-            'id',
-            'fecha_emision',
-            'fecha_registro',
-            'secuencial_prov',
-            'importe_total',
-            'total_sin_impuestos',
-            'tipo_comprobante',
-            'proveedor_nombre',
-            'proveedor_ruc',
-            'usuario_nombre',
-            'observaciones'
-        ];
-        if (!in_array($ordenCol, $allowedCols)) $ordenCol = 'fecha_emision';
-        $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
-
-        $ordenExpr = match ($ordenCol) {
-            'proveedor_nombre' => 'p.razon_social',
-            'proveedor_ruc'    => 'p.identificacion',
-            'usuario_nombre'   => 'u.nombre',
-            'tipo_comprobante' => 'ca.comprobante',
-            default            => "c.$ordenCol",
-        };
-
+        // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
+        // MAPA_ORDEN: lo único que puede llegar al ORDER BY sale de ahí.
+        //
         // Desempate OBLIGATORIO por id: ninguna de las columnas ordenables es
         // única (345 de 515 compras de una misma empresa comparten
         // fecha_emision, que es el orden por defecto), y con LIMIT/OFFSET
         // PostgreSQL no garantiza un orden estable entre filas empatadas. Sin
         // este desempate la paginación repetía una fila en dos páginas y se
         // saltaba otra por completo: al recorrer las 26 páginas del listado
-        // salían 515 filas pero solo 514 compras distintas.
-        $desempate = $ordenExpr === 'c.id' ? '' : ', c.id DESC';
+        // salían 515 filas pero solo 514 compras distintas. clausula() lo añade
+        // al final y lo omite solo si ya se está ordenando por c.id.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = \App\Helpers\OrdenListado::clausula(
+            $ordenMulti,
+            self::MAPA_ORDEN,
+            'c.fecha_emision',
+            'c.id DESC'
+        );
 
         // Columnas explícitas en lugar de "c.*" A PROPÓSITO: compras_cabecera
         // tiene la columna detalle_xml (TEXT con el XML del SRI, ~12 KB de
@@ -248,7 +261,7 @@ class ComprasRepository extends BaseRepository
                 LEFT  JOIN usuarios u            ON c.created_by = u.id
                 LEFT  JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
                 $where
-                ORDER BY $ordenExpr $ordenDir$desempate";
+                $orderBy";
 
 
         if ($perPage > 0) {

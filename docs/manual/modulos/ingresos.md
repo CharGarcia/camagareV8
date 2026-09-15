@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.8
+etiquetas: ingresos, cobro, cobrar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.9
 orden: 10
 estado: activo
 ---
@@ -160,6 +160,30 @@ la empresa. Al modificarlo, el asiento se regenera; al anularlo, se anula.
 En las líneas de concepto general se puede elegir la cuenta contable por línea,
 cuando el concepto no tiene una cuenta fija.
 
+## Ordenar el listado
+
+Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
+invertir el sentido. De fábrica el listado muestra **lo más reciente primero**.
+
+Puede **encadenar hasta tres columnas**: mantenga presionada la tecla **Shift**
+(⇧) y pulse el título de la segunda. Usos típicos en cobros:
+
+| Para ver… | Ordene así |
+|-----------|-----------|
+| Todo lo cobrado a cada persona, en orden de fecha | *Recibí de*, luego Shift+clic en *Fecha* |
+| Los cobros más altos dentro de cada tipo | *Tipo*, luego Shift+clic en *Monto* |
+| Lo anulado y lo vigente por separado, por fecha | *Estado*, luego Shift+clic en *Fecha* |
+
+El número pequeño junto a cada flecha indica qué columna manda (`1`) y cuál
+desempata (`2`). Un tercer Shift+clic sobre la misma columna la saca del orden, y
+un clic normal en cualquier encabezado vuelve a dejar una sola.
+
+La columna **Recibí de** se ordena por lo que se ve: el texto libre si lo hay y,
+si no, el nombre del cliente.
+
+El orden se guarda para usted y los botones de PDF y Excel del listado exportan
+con ese mismo orden. Detalles en *Cómo ordenar los listados*.
+
 ## Comprobante en PDF y Excel
 
 Al abrir un ingreso ya guardado, la barra de acciones superior del modal
@@ -188,6 +212,11 @@ deseable; para el contador o el administrador, active el acceso total.
 
 ## Historial de cambios
 
+- **1.9** — El listado se puede **ordenar por hasta tres columnas a la vez**:
+  Shift+clic en el título de la segunda columna la encadena a la primera (por
+  ejemplo *Recibí de* y, dentro de cada uno, la *Fecha*). Cada encabezado activo
+  muestra un número con su prioridad. El orden se guarda por usuario y se respeta
+  al exportar a PDF y Excel. Nueva sección *Ordenar el listado*.
 - **1.8** — El número del documento puede numerarse **por fecha de emisión**,
   reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
   activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue

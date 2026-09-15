@@ -44,7 +44,29 @@ class EgresoRepository extends BaseRepository
         return $st;
     }
 
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC'): array
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL con la que se ordena. Es la whitelist del ORDER BY y el mapa que
+     * necesita `OrdenListado::clausula()` para encadenar varias columnas.
+     */
+    public const MAPA_ORDEN = [
+        'id'            => 'e.id',
+        'fecha_emision' => 'e.fecha_emision',
+        'numero_egreso' => 'e.numero_egreso',
+        'tipo_egreso'   => 'e.tipo_egreso',
+        'monto_total'   => 'e.monto_total',
+        'estado'        => 'e.estado',
+        'observaciones' => 'e.observaciones',
+        // A quién se le paga: puede ser proveedor, empleado o un beneficiario suelto,
+        // igual que la columna del listado.
+        'sujeto_nombre' => "COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, 'OTRO')",
+    ];
+
+    /**
+     * @param array $ordenMulti Criterios de orden [['col'=>…,'dir'=>…], …] cuando el
+     *        llamador usa `OrdenListado`. Vacío = se ordena por $ordenCol/$ordenDir.
+     */
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', array $ordenMulti = []): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
@@ -97,16 +119,18 @@ class EgresoRepository extends BaseRepository
                      $where";
         $total = (int) $this->query($sqlCount, $params)->fetchColumn();
 
-        $allowedCols = ['id', 'fecha_emision', 'numero_egreso', 'tipo_egreso', 'monto_total', 'estado', 'sujeto_nombre', 'observaciones'];
-        if (!in_array($ordenCol, $allowedCols)) {
-            $ordenCol = 'fecha_emision';
-        }
-        $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
-
-        $ordenExpr = match($ordenCol) {
-            'sujeto_nombre' => 'COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, \'OTRO\')',
-            default         => "e.$ordenCol",
-        };
+        // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
+        // MAPA_ORDEN, con e.id como desempate para que las filas empatadas no bailen
+        // entre páginas.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = \App\Helpers\OrdenListado::clausula(
+            $ordenMulti,
+            self::MAPA_ORDEN,
+            'e.fecha_emision',
+            'e.id DESC'
+        );
 
         $sql = "SELECT e.*,
                        COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, 'N/A') AS sujeto_nombre,
@@ -125,7 +149,7 @@ class EgresoRepository extends BaseRepository
                 LEFT JOIN usuarios u ON e.created_by = u.id
                 LEFT JOIN empresa_opciones_ingreso_egreso ec ON e.id_egreso_concepto = ec.id
                 $where
-                ORDER BY $ordenExpr $ordenDir, e.id DESC";
+                $orderBy";
 
         if ($perPage > 0) {
             $sql .= " LIMIT $perPage OFFSET $offset";

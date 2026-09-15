@@ -640,23 +640,84 @@ class InventarioRepository extends BaseRepository
         return $this->registrarMovimiento($data);
     }
 
+    /**
+     * Tipos de referencia (origen del movimiento) presentes en el kardex de la
+     * empresa. Alimenta el <select> "Origen" de Inventario y del Reporte de
+     * Inventarios, así que se ejecuta en CADA carga de esas páginas.
+     *
+     * Un "SELECT DISTINCT ... WHERE id_empresa = :e" recorre TODOS los
+     * movimientos de la empresa para devolver ~10 valores: con 600.000 filas
+     * eso medía ~140 ms y crece con el histórico. Aquí se usa el patrón
+     * "loose index scan" (recursiva que salta al siguiente valor distinto
+     * usando idx_kardex_referencia): hace tantos saltos como valores distintos
+     * existen, no como filas hay. Medido en ~0,8 ms con esas mismas 600.000
+     * filas. Requiere idx_kardex_referencia (id_empresa, referencia_tipo, …)
+     * WHERE eliminado = false — ver database/indices_reporte_consignaciones.sql.
+     */
     public function getTiposReferencia(int $idEmpresa): array
     {
-        $sql = "SELECT DISTINCT referencia_tipo FROM inventario_kardex 
-                WHERE id_empresa = :e AND referencia_tipo IS NOT NULL AND eliminado = false
-                ORDER BY referencia_tipo ASC";
+        $sql = "WITH RECURSIVE tipos AS (
+                    (SELECT referencia_tipo
+                       FROM inventario_kardex
+                      WHERE id_empresa = :e AND eliminado = false
+                        AND referencia_tipo IS NOT NULL
+                      ORDER BY referencia_tipo
+                      LIMIT 1)
+                    UNION ALL
+                    SELECT (SELECT k.referencia_tipo
+                              FROM inventario_kardex k
+                             WHERE k.id_empresa = :e AND k.eliminado = false
+                               AND k.referencia_tipo > t.referencia_tipo
+                             ORDER BY k.referencia_tipo
+                             LIMIT 1)
+                      FROM tipos t
+                     WHERE t.referencia_tipo IS NOT NULL
+                )
+                SELECT referencia_tipo
+                  FROM tipos
+                 WHERE referencia_tipo IS NOT NULL
+                 ORDER BY referencia_tipo ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_COLUMN);
     }
 
+    /**
+     * Usuarios que tienen al menos un movimiento de kardex en la empresa.
+     * Alimenta el <select> "Usuario" de Inventario y del Reporte de
+     * Inventarios (se ejecuta en cada carga de esas páginas).
+     *
+     * Misma historia que getTiposReferencia(): el DISTINCT sobre el JOIN
+     * recorría el kardex completo (~157 ms con 600.000 filas) para devolver
+     * un puñado de usuarios. Se resuelve primero la lista de created_by
+     * distintos con un loose index scan (~1 ms) y recién ahí se cruza contra
+     * usuarios. Requiere idx_kardex_empresa_usuario — ver
+     * database/indices_reporte_inventarios_arranque.sql.
+     */
     public function getUsuariosConMovimientos(int $idEmpresa): array
     {
-        $sql = "SELECT DISTINCT u.id, u.nombre 
-                FROM usuarios u
-                INNER JOIN inventario_kardex k ON k.created_by = u.id
-                WHERE k.id_empresa = :e AND k.eliminado = false
-                ORDER BY u.nombre ASC";
+        $sql = "WITH RECURSIVE autores AS (
+                    (SELECT created_by
+                       FROM inventario_kardex
+                      WHERE id_empresa = :e AND eliminado = false
+                        AND created_by IS NOT NULL
+                      ORDER BY created_by
+                      LIMIT 1)
+                    UNION ALL
+                    SELECT (SELECT k.created_by
+                              FROM inventario_kardex k
+                             WHERE k.id_empresa = :e AND k.eliminado = false
+                               AND k.created_by > a.created_by
+                             ORDER BY k.created_by
+                             LIMIT 1)
+                      FROM autores a
+                     WHERE a.created_by IS NOT NULL
+                )
+                SELECT u.id, u.nombre
+                  FROM autores a
+                  JOIN usuarios u ON u.id = a.created_by
+                 WHERE a.created_by IS NOT NULL
+                 ORDER BY u.nombre ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);

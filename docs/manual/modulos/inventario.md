@@ -6,7 +6,7 @@ ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo
-version: 1.0
+version: 1.1
 orden: 20
 estado: activo
 ---
@@ -66,4 +66,9 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Historial de cambios
 
+- **1.1** — El módulo **abre más rápido**. Los selectores "Origen" y
+  "Usuario" del filtro se llenaban recorriendo todos los movimientos de
+  kardex de la empresa; ahora se resuelven por índice. **Requiere ejecutar**
+  `database/20260914_indices_reporte_inventarios_arranque.sql`; sin él el
+  módulo funciona igual, solo que sin la mejora de velocidad.
 - **1.0** — Versión inicial.

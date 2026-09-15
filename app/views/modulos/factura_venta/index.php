@@ -294,11 +294,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
-                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
                     <i class="bi bi-file-earmark-pdf"></i> PDF
                 </a>
-                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>
@@ -327,54 +327,54 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3 sortable-header" role="button" data-sort="secuencial" data-col="numero" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Nº Factura <i class="bi <?= $ordenCol === 'secuencial' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="ps-3 sortable-header" role="button" data-sort="secuencial" data-col="numero">
+                            Nº Factura <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="fecha_emision" data-col="fecha_emision" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Fecha <i class="bi <?= $ordenCol === 'fecha_emision' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header" role="button" data-sort="fecha_emision" data-col="fecha_emision">
+                            Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="cliente_nombre" data-col="cliente_nombre" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Cliente <i class="bi <?= $ordenCol === 'cliente_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header" role="button" data-sort="cliente_nombre" data-col="cliente_nombre">
+                            Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="cliente_ruc" data-col="cliente_ruc" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Identificación <i class="bi <?= $ordenCol === 'cliente_ruc' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header" role="button" data-sort="cliente_ruc" data-col="cliente_ruc">
+                            Identificación <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="total_sin_impuestos" data-col="total_sin_impuestos" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Subtotal <i class="bi <?= $ordenCol === 'total_sin_impuestos' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header text-end" role="button" data-sort="total_sin_impuestos" data-col="total_sin_impuestos">
+                            Subtotal <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="total_descuento" data-col="total_descuento" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Descuento <i class="bi <?= $ordenCol === 'total_descuento' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header text-end" role="button" data-sort="total_descuento" data-col="total_descuento">
+                            Descuento <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="iva" data-col="iva" onclick="window.FV_ordenar(this.dataset.sort)">
-                            IVA <i class="bi <?= $ordenCol === 'iva' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header text-end" role="button" data-sort="iva" data-col="iva">
+                            IVA <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="total_ice" data-col="total_ice" onclick="window.FV_ordenar(this.dataset.sort)">
-                            ICE <i class="bi <?= $ordenCol === 'total_ice' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header text-end" role="button" data-sort="total_ice" data-col="total_ice">
+                            ICE <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="propina" data-col="propina" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Propina <i class="bi <?= $ordenCol === 'propina' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header text-end" role="button" data-sort="propina" data-col="propina">
+                            Propina <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="importe_total" data-col="importe_total" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Total <i class="bi <?= $ordenCol === 'importe_total' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header text-end" role="button" data-sort="importe_total" data-col="importe_total">
+                            Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
                         <th class="text-end" data-col="saldo_pendiente">Saldo</th>
-                        <th class="sortable-header" role="button" data-sort="vendedor_nombre" data-col="vendedor_nombre" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Vendedor <i class="bi <?= $ordenCol === 'vendedor_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header" role="button" data-sort="vendedor_nombre" data-col="vendedor_nombre">
+                            Vendedor <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="observaciones" data-col="observaciones" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Observaciones <i class="bi <?= $ordenCol === 'observaciones' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header" role="button" data-sort="observaciones" data-col="observaciones">
+                            Observaciones <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="usuario_nombre" data-col="usuario_nombre" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Usuario <i class="bi <?= $ordenCol === 'usuario_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="sortable-header" role="button" data-sort="usuario_nombre" data-col="usuario_nombre">
+                            Usuario <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="text-center sortable-header" role="button" data-sort="estado_correo" data-col="estado_correo" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="text-center sortable-header" role="button" data-sort="estado_correo" data-col="estado_correo">
+                            Correo <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="text-center sortable-header" role="button" data-sort="estado_pago" data-col="estado_pago" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Pago <i class="bi <?= $ordenCol === 'estado_pago' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="text-center sortable-header" role="button" data-sort="estado_pago" data-col="estado_pago">
+                            Pago <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
-                        <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado">
+                            Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
                     </tr>
                 </thead>
@@ -1480,16 +1480,19 @@ $totalPages = $totalPagesOriginal;
     // Estado del listado AJAX (con fallbacks para asegurar ordenamiento)
     window.FV_currentSort = '<?= $ordenCol ?>' || 'fecha_emision';
     window.FV_currentDir = '<?= $ordenDir ?>' || 'DESC';
+    // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que lee
+    // OrdenListado en PHP. FV_currentSort/FV_currentDir quedan como el principal.
+    window.FV_currentSorts = <?= $ordenJson ?? '[]' ?>;
     window.FV_currentPage = <?= (int)($page ?? 1) ?>;
+    let FV_sorter = null;
 
     // ── AJAX: buscar / paginar / ordenar ─────────────────────────────────────
 
     window.FV_fetchSearch = async function(page = 1) {
         window.FV_currentPage = page;
         const buscar  = document.getElementById('buscarFactura')?.value || '';
-        const sort    = window.FV_currentSort || 'fecha_emision';
-        const dir     = window.FV_currentDir  || 'DESC';
-        const url     = `${B_URL}/${RUTA_MODULO}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}`;
+        const orden   = window.CMG_ordenParam(window.FV_currentSorts || []);
+        const url     = `${B_URL}/${RUTA_MODULO}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&orden=${encodeURIComponent(orden)}`;
         try {
             const resp = await fetch(url);
             if (!resp.ok) return;
@@ -1505,16 +1508,9 @@ $totalPages = $totalPagesOriginal;
             if (btnPdf   && data.pdf_url)   btnPdf.href   = data.pdf_url;
             const btnXlsx  = document.getElementById('btnExportExcel');
             if (btnXlsx  && data.excel_url) btnXlsx.href  = data.excel_url;
-            // Actualizar íconos de ordenamiento en encabezados
-            document.querySelectorAll('th.sortable-header[data-sort]').forEach(th => {
-                const icon = th.querySelector('i.bi');
-                if (!icon) return;
-                if (th.dataset.sort === sort) {
-                    icon.className = `bi ${dir === 'ASC' ? 'bi-sort-alpha-down' : 'bi-sort-alpha-up'} ms-1 text-primary`;
-                } else {
-                    icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                }
-            });
+            // Los íconos (incluida la prioridad 1/2/3 del orden múltiple) los repinta
+            // el motor global; aquí solo se le pide que se refresque.
+            if (FV_sorter) FV_sorter.refreshIcons();
         } catch (e) {
             console.error('FV_fetchSearch error:', e);
         }
@@ -1524,22 +1520,31 @@ $totalPages = $totalPagesOriginal;
         window.FV_fetchSearch(page);
     };
 
-    window.FV_ordenar = function(col) {
-        if (!col) return;
-        const dir = (window.FV_currentSort === col && window.FV_currentDir === 'ASC') ? 'DESC' : 'ASC';
-        window.FV_currentSort = col;
-        window.FV_currentDir  = dir;
-        // Guardar preferencia de ordenamiento (persiste entre sesiones)
-        if (typeof window.guardarOrdenacionVista === 'function') {
-            window.guardarOrdenacionVista('factura-venta', col, dir);
-        }
-        window.FV_fetchSearch(1);
+    // Ordenamiento: motor global (window.CMG_initSort, en public/js/favoritos.js).
+    // Antes esta vista tenía su propio binding (un onclick por encabezado + el repintado
+    // de íconos a mano); se centralizó para que herede el orden múltiple y la
+    // persistencia sin duplicar la lógica.
+    // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+    // (ASC → DESC → fuera del orden), con la prioridad numerada en cada encabezado.
+    // reload:false porque FV_fetchSearch repinta todo lo que depende del orden (filas,
+    // paginación, contador y los enlaces de PDF/Excel).
+    window.FV_initSort = function() {
+        if (typeof window.CMG_initSort !== 'function') return;
+        FV_sorter = window.CMG_initSort('factura-venta', (col, dir, sorts) => {
+            window.FV_currentSort  = col;
+            window.FV_currentDir   = dir;
+            window.FV_currentSorts = sorts;
+            window.FV_fetchSearch(1);
+        }, { sorts: window.FV_currentSorts, multi: true, container: '.fv-scroll', reload: false });
     };
 
     // ─────────────────────────────────────────────────────────────────────────
 
     document.addEventListener('DOMContentLoaded', function() {
         modalMain = new bootstrap.Modal(document.getElementById('modalNuevaFactura'));
+
+        // Engancha los encabezados ordenables y pinta el ícono de la columna activa.
+        window.FV_initSort();
 
         // Al mostrar el modal: cargar secuencial solo para facturas nuevas, y enfocar buscador
         document.getElementById('modalNuevaFactura').addEventListener('shown.bs.modal', function() {
@@ -2915,14 +2920,18 @@ $totalPages = $totalPagesOriginal;
             // refrescar, y armamos el refresco en el evento de cierre del modal:
             // así cubre tanto el cierre automático tras autorizar como el cierre
             // manual tras un rechazo. Se arma una sola vez por intento (once + dedupe).
-            const _fvSortPrev = window.FV_currentSort || 'fecha_emision';
-            const _fvDirPrev  = window.FV_currentDir  || 'DESC';
-            const _fvPagePrev = window.FV_currentPage || 1;
-            const _fvModalEl  = document.getElementById('modalNuevaFactura');
+            const _fvSortPrev  = window.FV_currentSort || 'fecha_emision';
+            const _fvDirPrev   = window.FV_currentDir  || 'DESC';
+            // Copia de la lista completa de criterios: si el usuario tenía el listado
+            // ordenado por varias columnas, restaurar solo la principal lo perdería.
+            const _fvSortsPrev = (window.FV_currentSorts || []).slice();
+            const _fvPagePrev  = window.FV_currentPage || 1;
+            const _fvModalEl   = document.getElementById('modalNuevaFactura');
             const refrescarPreservandoOrden = () => {
                 // Re-aplicar el orden capturado por si algún flujo lo hubiera alterado
-                window.FV_currentSort = _fvSortPrev;
-                window.FV_currentDir  = _fvDirPrev;
+                window.FV_currentSort  = _fvSortPrev;
+                window.FV_currentDir   = _fvDirPrev;
+                window.FV_currentSorts = _fvSortsPrev;
                 if (typeof window.FV_fetchSearch === 'function') {
                     window.FV_fetchSearch(_fvPagePrev);
                 }

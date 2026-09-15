@@ -182,10 +182,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
-                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>" class="btn btn-outline-danger" title="Descargar PDF">
+                <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="Descargar PDF">
                     <i class="bi bi-file-earmark-pdf"></i>
                 </a>
-                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>" class="btn btn-outline-success" title="Descargar Excel">
+                <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i>
                 </a>
             </div>
@@ -2394,13 +2394,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     // Global para orden
     window.currentSort = '<?= $ordenCol ?>';
     window.currentDir = '<?= $ordenDir ?>';
+    // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que lee
+    // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
+    window.currentSorts = <?= $ordenJson ?? '[]' ?>;
+    let EGR_sorter = null;
     window.EGR_cambiarPaginaAjax = (p) => window.EGR_fetchSearch(p);
 
     window.EGR_fetchSearch = async function(p = 1) {
         const b = document.getElementById('buscarEgreso').value.trim();
         document.getElementById('tbodyEgresos').innerHTML = '<tr><td colspan="7" class="text-center py-5"><span class="spinner-border text-primary"></span></td></tr>';
         try {
-            const res = await (await fetch(`${EGR_URL}/searchAjax?b=${encodeURIComponent(b)}&page=${p}&sort=${window.currentSort}&dir=${window.currentDir}`)).json();
+            const orden = window.CMG_ordenParam(window.currentSorts || []);
+            const res = await (await fetch(`${EGR_URL}/searchAjax?b=${encodeURIComponent(b)}&page=${p}&orden=${encodeURIComponent(orden)}`)).json();
             document.getElementById('tbodyEgresos').innerHTML = res.rows;
             document.getElementById('paginationContainer').innerHTML = res.pagination;
             document.getElementById('paginationInfo').innerText = res.info;
@@ -2408,32 +2413,27 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // Actualizar enlaces de exportación para que bajen con el filtro/orden vigente
             const btnPdf = document.getElementById('btnExportPdf');
             const btnXls = document.getElementById('btnExportExcel');
-            if (btnPdf) btnPdf.href = `${EGR_URL}/export-pdf?b=${encodeURIComponent(b)}&sort=${window.currentSort}&dir=${window.currentDir}`;
-            if (btnXls) btnXls.href = `${EGR_URL}/export-excel?b=${encodeURIComponent(b)}&sort=${window.currentSort}&dir=${window.currentDir}`;
+            if (btnPdf) btnPdf.href = `${EGR_URL}/export-pdf?b=${encodeURIComponent(b)}&orden=${encodeURIComponent(orden)}`;
+            if (btnXls) btnXls.href = `${EGR_URL}/export-excel?b=${encodeURIComponent(b)}&orden=${encodeURIComponent(orden)}`;
 
-            // Actualizar iconos visuales sort headers
-            document.querySelectorAll('.sortable-header').forEach(th => {
-                const icon = th.querySelector('i');
-                if(icon && th.dataset.sort === window.currentSort) icon.className = (window.currentDir.toLowerCase()==='asc') ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
-                else if(icon) icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-            });
+            // Los íconos (incluida la prioridad 1/2/3 del orden múltiple) los repinta
+            // el motor global; aquí solo se le pide que se refresque.
+            if (EGR_sorter) EGR_sorter.refreshIcons();
         } catch(e){ console.error(e); }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        document.querySelectorAll('.sortable-header').forEach(h => {
-            h.addEventListener('click', () => {
-                const f = h.dataset.sort;
-                window.currentDir = (window.currentSort === f && window.currentDir.toLowerCase() === 'asc') ? 'DESC' : 'ASC';
-                window.currentSort = f;
-                
-                if (typeof window.guardarOrdenacionVista === 'function') {
-                    window.guardarOrdenacionVista('egresos', f, window.currentDir);
-                }
-                
-                window.EGR_fetchSearch(1);
-            });
-        });
+        // Ordenamiento: motor global (window.CMG_initSort, en public/js/favoritos.js).
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+        // (ASC → DESC → fuera del orden), con la prioridad numerada en cada encabezado.
+        // reload:false porque EGR_fetchSearch repinta todo lo que depende del orden.
+        EGR_sorter = window.CMG_initSort('egresos', (col, dir, sorts) => {
+            window.currentSort  = col;
+            window.currentDir   = dir;
+            window.currentSorts = sorts;
+            window.EGR_fetchSearch(1);
+        }, { sorts: window.currentSorts, multi: true, container: '.egreso-scroll', reload: false });
+
         const iB = document.getElementById('buscarEgreso');
         let tSrc; if(iB) iB.addEventListener('input', () => { clearTimeout(tSrc); tSrc = setTimeout(()=>window.EGR_fetchSearch(1), 400); });
     });
