@@ -89,6 +89,15 @@
                     <form id="ri-ex-form" onsubmit="event.preventDefault(); window.RI_Existencias.generar();">
                         <div class="d-flex flex-wrap align-items-start gap-2">
                             <div>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Detalle</label>
+                                <select id="ri-ex-desglose" class="form-select form-select-sm shadow-none border" style="width:150px;" onchange="window.RI_Existencias.cambiarDesglose();" title="Hasta qué nivel se desglosa el stock de cada producto">
+                                    <option value="GENERAL">En general</option>
+                                    <option value="LOTE">Por lotes</option>
+                                    <option value="CADUCIDAD">Por caducidad</option>
+                                    <option value="LOTE_CADUCIDAD">Lote + caducidad</option>
+                                </select>
+                            </div>
+                            <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Bodega</label>
                                 <select id="ri-ex-bodega" class="form-select form-select-sm shadow-none border" style="width:150px;">
                                     <option value="">Todas</option>
@@ -139,14 +148,11 @@
                             </div>
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Agrupar por</label>
-                                <select id="ri-ex-agrupar" class="form-select form-select-sm shadow-none border" style="width:150px;">
+                                <select id="ri-ex-agrupar" class="form-select form-select-sm shadow-none border" style="width:150px;" title="Consolida las filas. Se desactiva cuando el Detalle baja a lote o caducidad, porque ese desglose ya define las filas.">
                                     <option value="NINGUNO">Detallado</option>
                                     <option value="PRODUCTO">Por Producto</option>
                                     <option value="CATEGORIA">Por Categoría</option>
                                     <option value="BODEGA">Por Bodega</option>
-                                    <option value="LOTE">Por Lote</option>
-                                    <option value="NUP">Por NUP</option>
-                                    <option value="CADUCIDAD">Por Caducidad</option>
                                 </select>
                             </div>
                             <div>
@@ -181,7 +187,10 @@
                             </div>
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
-                                <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:110px;"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm shadow-sm" title="Limpiar todos los filtros" onclick="window.RI_Existencias.limpiarFiltros();"><i class="bi bi-eraser"></i></button>
+                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:110px;"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                </div>
                             </div>
                         </div>
                     </form>
@@ -220,6 +229,14 @@
                     <form id="ri-mv-form" onsubmit="event.preventDefault(); window.RI_Movimientos.generar();">
                         <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
                             <div>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de movimiento</label>
+                                <select id="ri-mv-tipo" class="form-select form-select-sm shadow-none border" style="width:140px;">
+                                    <option value="">Todos</option>
+                                    <option value="entrada">Entrada</option><option value="salida">Salida</option>
+                                    <option value="ajuste">Ajuste</option><option value="transferencia">Transferencia</option>
+                                </select>
+                            </div>
+                            <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Año</label>
                                 <select id="ri-mv-anio" class="form-select form-select-sm shadow-none border" style="width:90px;" onchange="window.RI_Movimientos.cambiarMesAnio();">
                                     <option value="TODOS" selected>Todos</option>
@@ -251,14 +268,6 @@
                                 <select id="ri-mv-bodega" class="form-select form-select-sm shadow-none border" style="width:140px;">
                                     <option value="">Todas</option>
                                     <?php foreach (($bodegas ?? []) as $b): ?><option value="<?= (int) $b['id'] ?>"><?= htmlspecialchars($b['nombre']) ?></option><?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de movimiento</label>
-                                <select id="ri-mv-tipo" class="form-select form-select-sm shadow-none border" style="width:140px;">
-                                    <option value="">Todos</option>
-                                    <option value="entrada">Entrada</option><option value="salida">Salida</option>
-                                    <option value="ajuste">Ajuste</option><option value="transferencia">Transferencia</option>
                                 </select>
                             </div>
                             <div>
@@ -341,7 +350,10 @@
                             </div>
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
-                                <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:110px;"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm shadow-sm" title="Limpiar todos los filtros" onclick="window.RI_Movimientos.limpiarFiltros();"><i class="bi bi-eraser"></i></button>
+                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:110px;"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                </div>
                             </div>
                         </div>
                     </form>
@@ -422,7 +434,10 @@
                             </div>
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
-                                <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:110px;"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm shadow-sm" title="Limpiar todos los filtros" onclick="window.RI_Valorizacion.limpiarFiltros();"><i class="bi bi-eraser"></i></button>
+                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:110px;"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                </div>
                             </div>
                         </div>
                     </form>
@@ -462,6 +477,10 @@
                 <div class="card-body p-3">
                     <form id="ri-cv-form" onsubmit="event.preventDefault(); window.RI_Consignaciones.generar();">
                         <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
+                            <div>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">N° Consignación</label>
+                                <input type="text" id="ri-cv-secuencial" class="form-control form-control-sm shadow-none border" style="width:150px;" placeholder="Ej. 000000010">
+                            </div>
                             <div class="position-relative" style="flex:1 1 180px;">
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Cliente</label>
                                 <div class="input-group input-group-sm">
@@ -533,10 +552,6 @@
                                 <input type="text" id="ri-cv-nup" class="form-control form-control-sm shadow-none border" style="width:110px;" placeholder="NUP">
                             </div>
                             <div>
-                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">N° Consignación</label>
-                                <input type="text" id="ri-cv-secuencial" class="form-control form-control-sm shadow-none border" style="width:150px;" placeholder="Ej. 000000010">
-                            </div>
-                            <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
                                 <select id="ri-cv-estado" class="form-select form-select-sm shadow-none border" style="width:130px;">
                                     <option value="TODOS" selected>Todos</option>
@@ -555,7 +570,10 @@
                             </div>
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
-                                <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:110px;"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm shadow-sm" title="Limpiar todos los filtros" onclick="window.RI_Consignaciones.limpiarFiltros();"><i class="bi bi-eraser"></i></button>
+                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:110px;"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                </div>
                             </div>
                         </div>
                     </form>
@@ -622,7 +640,10 @@
                             </div>
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
-                                <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:110px;"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm shadow-sm" title="Limpiar todos los filtros" onclick="window.RI_Auditoria.limpiarFiltros();"><i class="bi bi-eraser"></i></button>
+                                    <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:110px;"><i class="bi bi-search me-1"></i>Mostrar</button>
+                                </div>
                             </div>
                         </div>
                     </form>

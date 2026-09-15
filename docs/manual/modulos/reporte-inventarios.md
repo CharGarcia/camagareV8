@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones
-version: 1.7
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros
+version: 1.8
 orden: 40
 estado: activo
 ---
@@ -17,12 +17,42 @@ para valorar lo que hay en almacén.
 
 ## Qué permite ver
 
-- Existencias actuales por producto y bodega.
+- Existencias actuales por producto y bodega, y —si hace falta— desglosadas
+  por lote, por caducidad o por ambos.
 - Movimientos del periodo: qué entró, qué salió y de dónde vino cada movimiento
   (columnas Entradas, Salidas y Saldo, en orden cronológico).
 - Valor del inventario según el costo registrado.
 - Consignaciones vigentes/entregadas, a nivel de cabecera con detalle por línea.
 - Auditoría: diferencias entre el stock guardado y el saldo real del kardex.
+
+## Ver el stock por lote o por caducidad (selector Detalle)
+
+En **Existencias**, el primer selector (**Detalle**) decide hasta dónde se
+desglosa el stock de cada producto. Las cuatro opciones muestran siempre el
+mismo total; lo que cambia es en cuántas filas se reparte:
+
+| Detalle | Una fila por | Para qué sirve |
+|---|---|---|
+| **En general** | producto y bodega | El stock del día a día. Es el que permite editar mínimo, máximo y categoría al hacer clic en la fila. |
+| **Por lotes** | producto, bodega y lote | Cuánto queda de cada lote. Si un lote entró con dos caducidades distintas, aquí se ven sumadas. |
+| **Por caducidad** | producto, bodega y fecha de caducidad | Qué se vence y cuándo, sin importar de qué lote venga. |
+| **Lote + caducidad** | cada combinación de lote, NUP y caducidad | El máximo detalle, para cuadrar un lote concreto. |
+
+Mientras el Detalle no esté en *En general*, el selector **Agrupar por** queda
+desactivado: el desglose ya define las filas por sí solo.
+
+La columna **Consignación** acompaña al desglose elegido: si la fila no
+distingue caducidad, lo consignado tampoco, de modo que el stock propio y lo
+que está en poder de clientes siempre se pueden comparar en la misma fila.
+
+> El desglose por lote/caducidad se calcula desde el kardex, no desde el stock
+> guardado del producto: el sistema no almacena un stock por lote.
+
+## Limpiar los filtros
+
+Cada pestaña tiene, junto al botón **Mostrar**, un botón con un icono de goma
+de borrar que devuelve todos sus filtros al valor inicial. No vuelve a consultar
+solo: deja la tabla en blanco para que elija los filtros nuevos y pulse Mostrar.
 
 ## Cómo se calcula el stock (saldo en vivo)
 
@@ -105,6 +135,20 @@ siguen apareciendo aquí hasta que se corrigen manualmente.
 
 ## Historial de cambios
 
+- **1.8** — **Existencias**: nuevo selector **Detalle** (En general / Por
+  lotes / Por caducidad / Lote + caducidad) como primer filtro. Antes, las
+  opciones *Por Lote*, *Por NUP* y *Por Caducidad* de **Agrupar por** hacían
+  las tres exactamente lo mismo (una fila por cada combinación de lote, NUP y
+  caducidad; solo cambiaba el orden), así que no había forma de ver el stock
+  de un lote completo ni de saber qué se vence un día concreto. Esas tres
+  opciones salen de *Agrupar por*, que se queda con las consolidaciones
+  (Producto, Categoría, Bodega). **Consignaciones**: la columna *Productos*
+  contaba productos distintos, así que una consignación con el mismo producto
+  en varias líneas (una por lote) anunciaba menos líneas de las que luego
+  aparecían al abrirla; ahora cuenta las líneas del documento. Además el
+  **N° de consignación** pasa a ser el primer filtro, en **Movimientos** el
+  **Tipo de movimiento** pasa a ser el primero, y las cinco pestañas tienen un
+  botón para **limpiar todos los filtros** junto a *Mostrar*.
 - **1.7** — El módulo **abre mucho más rápido**. Al entrar, la pantalla
   llenaba los selectores "Origen", "Usuario" y "Año" recorriendo TODOS los
   movimientos de kardex de la empresa (tres veces), y la lista de categorías

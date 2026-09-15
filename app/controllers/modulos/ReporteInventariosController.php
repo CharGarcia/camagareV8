@@ -21,6 +21,9 @@ class ReporteInventariosController extends BaseModuloController
     private ReporteInventarioRepository $repository;
     private const RUTA_MODULO = 'modulos/reporte_inventarios';
 
+    /** Desgloses de Existencias por debajo de producto×bodega (ver resolverDesglose()). */
+    private const DESGLOSES_EXISTENCIAS = ['LOTE', 'CADUCIDAD', 'LOTE_CADUCIDAD'];
+
     protected function getRutaModulo(): string
     {
         return self::RUTA_MODULO;
@@ -75,9 +78,34 @@ class ReporteInventariosController extends BaseModuloController
     // ────────────────────────────────────────────────────────────────
     // FILTROS POR PESTAÑA
     // ────────────────────────────────────────────────────────────────
+    /**
+     * Nivel de desglose de la pestaña Existencias: GENERAL (una fila por
+     * producto×bodega, manda el selector "Agrupar por") o uno de los tres
+     * desgloses por debajo de ese nivel (LOTE, CADUCIDAD, LOTE_CADUCIDAD),
+     * que definen las filas por sí solos.
+     *
+     * Acepta además los valores antiguos LOTE/NUP/CADUCIDAD que llegaban por
+     * `agrupar_por` (enlaces de exportación o pestañas abiertas antes del
+     * cambio): los tres hacían el desglose máximo, así que se mapean a
+     * LOTE_CADUCIDAD y siguen mostrando exactamente lo mismo.
+     */
+    private function resolverDesglose(): string
+    {
+        $desglose = strtoupper(trim((string) ($_REQUEST['desglose'] ?? '')));
+        if (in_array($desglose, self::DESGLOSES_EXISTENCIAS, true)) {
+            return $desglose;
+        }
+        $agrupar = strtoupper(trim((string) ($_REQUEST['agrupar_por'] ?? '')));
+        if (in_array($agrupar, ['LOTE', 'NUP', 'CADUCIDAD'], true)) {
+            return 'LOTE_CADUCIDAD';
+        }
+        return 'GENERAL';
+    }
+
     private function getFiltrosExistencias(): array
     {
         return [
+            'desglose'     => $this->resolverDesglose(),
             'agrupar_por'  => $_REQUEST['agrupar_por'] ?? 'NINGUNO',
             'id_bodega'    => $_REQUEST['id_bodega']    ?? '',
             'id_categoria' => $_REQUEST['id_categoria'] ?? '',
@@ -189,25 +217,26 @@ class ReporteInventariosController extends BaseModuloController
 
     private function generarExistencias(int $idEmpresa): array
     {
-        $filtros = $this->getFiltrosExistencias();
-        $modo = $filtros['agrupar_por'];
+        $filtros  = $this->getFiltrosExistencias();
+        $desglose = $filtros['desglose'];
 
-        $rows = match ($modo) {
-            'PRODUCTO'   => $this->repository->getExistenciasAgrupadoProducto($idEmpresa, $filtros),
-            'CATEGORIA'  => $this->repository->getExistenciasAgrupadoCategoria($idEmpresa, $filtros),
-            'BODEGA'     => $this->repository->getExistenciasAgrupadoBodega($idEmpresa, $filtros),
-            'LOTE'       => $this->repository->getExistenciasAgrupadoLote($idEmpresa, $filtros),
-            'NUP'        => $this->repository->getExistenciasAgrupadoNup($idEmpresa, $filtros),
-            'CADUCIDAD'  => $this->repository->getExistenciasAgrupadoCaducidad($idEmpresa, $filtros),
-            default      => $this->repository->getExistenciasDetalle($idEmpresa, $filtros),
-        };
+        // El desglose (por lote / por caducidad) define las filas por sí solo: cuando
+        // está activo, "Agrupar por" no pinta nada — la vista lo deshabilita.
+        if ($desglose !== 'GENERAL') {
+            $modo = $desglose;
+            $rows = $this->repository->getExistenciasPorDesglose($idEmpresa, $filtros, $desglose);
+        } else {
+            $modo = $filtros['agrupar_por'];
+            $rows = match ($modo) {
+                'PRODUCTO'   => $this->repository->getExistenciasAgrupadoProducto($idEmpresa, $filtros),
+                'CATEGORIA'  => $this->repository->getExistenciasAgrupadoCategoria($idEmpresa, $filtros),
+                'BODEGA'     => $this->repository->getExistenciasAgrupadoBodega($idEmpresa, $filtros),
+                default      => $this->repository->getExistenciasDetalle($idEmpresa, $filtros),
+            };
+        }
         $kpis = $this->repository->getExistenciasKpis($idEmpresa, $filtros);
 
-        $colSpan = match ($modo) {
-            'NINGUNO' => 10,
-            'LOTE', 'NUP', 'CADUCIDAD' => 10,
-            default   => 8,
-        };
+        $colSpan = self::colSpanExistencias($modo);
 
         return [
             'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $colSpan),
@@ -311,6 +340,17 @@ class ReporteInventariosController extends BaseModuloController
     // ────────────────────────────────────────────────────────────────
     // RENDER DE FILAS POR PESTAÑA
     // ────────────────────────────────────────────────────────────────
+    /** Columnas de la tabla de Existencias según el modo (para el colspan del mensaje vacío). */
+    private static function colSpanExistencias(string $modo): int
+    {
+        return match ($modo) {
+            'NINGUNO'        => 10,
+            'LOTE_CADUCIDAD' => 10,
+            'LOTE', 'CADUCIDAD' => 8,
+            default          => 8,
+        };
+    }
+
     private function filaExistencias(array $r, string $modo): string
     {
         $costo = number_format((float) ($r['costo_unitario'] ?? 0), 4);
@@ -347,14 +387,24 @@ class ReporteInventariosController extends BaseModuloController
                 . '</tr>';
         }
 
-        if (in_array($modo, ['LOTE', 'NUP', 'CADUCIDAD'], true)) {
+        // Desgloses por debajo de producto×bodega: cada uno muestra solo las columnas
+        // que su agrupación puede afirmar ("Por lotes" no tiene una caducidad única, etc.).
+        if (in_array($modo, self::DESGLOSES_EXISTENCIAS, true)) {
             $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '—';
+            $celdasClave = '';
+            if ($modo === 'LOTE' || $modo === 'LOTE_CADUCIDAD') {
+                $celdasClave .= '<td class="small">' . htmlspecialchars($r['lote'] ?? '' ?: '—') . '</td>';
+            }
+            if ($modo === 'LOTE_CADUCIDAD') {
+                $celdasClave .= '<td class="small">' . htmlspecialchars($r['nup'] ?? '' ?: '—') . '</td>';
+            }
+            if ($modo === 'CADUCIDAD' || $modo === 'LOTE_CADUCIDAD') {
+                $celdasClave .= '<td class="small">' . $cad . '</td>';
+            }
             return '<tr>'
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
-                . '<td class="small">' . htmlspecialchars($r['lote'] ?? '' ?: '—') . '</td>'
-                . '<td class="small">' . htmlspecialchars($r['nup'] ?? '' ?: '—') . '</td>'
-                . '<td class="small">' . $cad . '</td>'
+                . $celdasClave
                 . '<td class="text-end fw-bold">' . number_format((float) ($r['stock_actual'] ?? 0), 2) . '</td>'
                 . '<td class="text-end small text-info">' . number_format((float) ($r['consignado'] ?? 0), 2) . '</td>'
                 . '<td class="text-end fw-bold text-primary">' . number_format((float) ($r['stock_total'] ?? 0), 2) . '</td>'
@@ -990,17 +1040,20 @@ class ReporteInventariosController extends BaseModuloController
                 return [$headers, $data, 'Consignaciones en Poder de Clientes'];
 
             default: // existencias
-                $filtros = $this->getFiltrosExistencias();
-                $modo = $filtros['agrupar_por'];
-                $rows = match ($modo) {
-                    'PRODUCTO'  => $this->repository->getExistenciasAgrupadoProducto($idEmpresa, $filtros),
-                    'CATEGORIA' => $this->repository->getExistenciasAgrupadoCategoria($idEmpresa, $filtros),
-                    'BODEGA'    => $this->repository->getExistenciasAgrupadoBodega($idEmpresa, $filtros),
-                    'LOTE'      => $this->repository->getExistenciasAgrupadoLote($idEmpresa, $filtros),
-                    'NUP'       => $this->repository->getExistenciasAgrupadoNup($idEmpresa, $filtros),
-                    'CADUCIDAD' => $this->repository->getExistenciasAgrupadoCaducidad($idEmpresa, $filtros),
-                    default     => $this->repository->getExistenciasDetalle($idEmpresa, $filtros),
-                };
+                $filtros  = $this->getFiltrosExistencias();
+                $desglose = $filtros['desglose'];
+                if ($desglose !== 'GENERAL') {
+                    $modo = $desglose;
+                    $rows = $this->repository->getExistenciasPorDesglose($idEmpresa, $filtros, $desglose);
+                } else {
+                    $modo = $filtros['agrupar_por'];
+                    $rows = match ($modo) {
+                        'PRODUCTO'  => $this->repository->getExistenciasAgrupadoProducto($idEmpresa, $filtros),
+                        'CATEGORIA' => $this->repository->getExistenciasAgrupadoCategoria($idEmpresa, $filtros),
+                        'BODEGA'    => $this->repository->getExistenciasAgrupadoBodega($idEmpresa, $filtros),
+                        default     => $this->repository->getExistenciasDetalle($idEmpresa, $filtros),
+                    };
+                }
                 if ($modo === 'NINGUNO') {
                     $headers = ['Producto', 'Código', 'Categoría', 'Bodega', 'Consignación', 'Stock', 'Stock Total', 'Mínimo', 'Máximo', 'Costo Unit.', 'Valor total', 'Estado'];
                     $data = array_map(fn($r) => [
@@ -1008,16 +1061,30 @@ class ReporteInventariosController extends BaseModuloController
                         (float) $r['consignado'], (float) $r['stock_actual'], (float) $r['stock_total'], (float) $r['stock_minimo'], (float) $r['stock_maximo'],
                         (float) $r['costo_unitario'], (float) $r['valor_total'], $r['estado_stock'] ?? '',
                     ], $rows);
-                } elseif (in_array($modo, ['LOTE', 'NUP', 'CADUCIDAD'], true)) {
-                    $headers = ['Producto', 'Código', 'Bodega', 'Lote', 'NUP', 'Caducidad', 'Stock', 'Consignación', 'Stock Total', 'Costo Unit.', 'Valor total'];
-                    $data = array_map(function ($r) {
+                } elseif (in_array($modo, self::DESGLOSES_EXISTENCIAS, true)) {
+                    // Mismas columnas que la pantalla: solo las que el desglose puede afirmar.
+                    $conLote = $modo === 'LOTE' || $modo === 'LOTE_CADUCIDAD';
+                    $conNup  = $modo === 'LOTE_CADUCIDAD';
+                    $conCad  = $modo === 'CADUCIDAD' || $modo === 'LOTE_CADUCIDAD';
+                    $headers = array_merge(
+                        ['Producto', 'Código', 'Bodega'],
+                        $conLote ? ['Lote'] : [],
+                        $conNup  ? ['NUP'] : [],
+                        $conCad  ? ['Caducidad'] : [],
+                        ['Stock', 'Consignación', 'Stock Total', 'Costo Unit.', 'Valor total']
+                    );
+                    $data = array_map(function ($r) use ($conLote, $conNup, $conCad) {
                         $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '';
-                        return [
-                            $r['producto_nombre'] ?? '', $r['producto_codigo'] ?? '', $r['bodega_nombre'] ?? '',
-                            $r['lote'] ?? '', $r['nup'] ?? '', $cad,
-                            (float) $r['stock_actual'], (float) $r['consignado'], (float) $r['stock_total'],
-                            (float) $r['costo_unitario'], (float) $r['valor_total'],
-                        ];
+                        return array_merge(
+                            [$r['producto_nombre'] ?? '', $r['producto_codigo'] ?? '', $r['bodega_nombre'] ?? ''],
+                            $conLote ? [$r['lote'] ?? ''] : [],
+                            $conNup  ? [$r['nup'] ?? ''] : [],
+                            $conCad  ? [$cad] : [],
+                            [
+                                (float) $r['stock_actual'], (float) $r['consignado'], (float) $r['stock_total'],
+                                (float) $r['costo_unitario'], (float) $r['valor_total'],
+                            ]
+                        );
                     }, $rows);
                 } else {
                     $headers = ['Grupo', 'Productos', 'Consignación', 'Stock', 'Stock Total', 'Costo Unit.', 'Valor total'];

@@ -290,7 +290,7 @@ class ReporteInventarioRepository extends BaseRepository
         return $this->getExistenciasAgrupado($idEmpresa, $filtros, 'id_bodega', 'bodega_nombre');
     }
 
-    // ── Agrupado por Lote / NUP / Caducidad: a diferencia de Producto/Categoría/Bodega
+    // ── Desglose por Lote / Caducidad: a diferencia de Producto/Categoría/Bodega
     // (que suman el stock_actual ya calculado por producto×bodega), aquí el desglose es
     // POR DEBAJO de ese nivel — productos_bodegas no guarda el stock por lote/NUP/caducidad
     // (ver comentario en baseExistencias()), así que se agrupa directo desde inventario_kardex.
@@ -347,23 +347,67 @@ class ReporteInventarioRepository extends BaseRepository
     }
 
     /**
-     * Detalle por lote: agrupa SIEMPRE por los 3 campos juntos (lote, NUP, caducidad) —
-     * en la práctica viajan juntos en cada movimiento del kardex, así que separarlos
-     * perdería la relación entre ellos. Incluye "consignado" (cuánto de ese mismo
-     * lote/NUP/caducidad está en poder de clientes) para poder comparar, por lote,
-     * cuánto hay en bodega propia vs. cuánto está consignado. $ordenPrincipal solo
-     * cambia el criterio de orden por el que se navega (Por Lote/Por NUP/Por Caducidad),
-     * no las columnas — las 3 siempre están presentes.
+     * Desglose del stock POR DEBAJO del nivel producto×bodega. `productos_bodegas`
+     * no guarda el stock por lote/caducidad (ver el comentario de baseExistencias()),
+     * así que estas filas se agrupan directo desde inventario_kardex.
+     *
+     * El selector "Detalle" de la pestaña Existencias elige hasta dónde baja el
+     * desglose, y eso cambia tanto las filas como las columnas:
+     *
+     *   LOTE           una fila por producto×bodega×LOTE. Si un mismo lote entró con
+     *                  dos caducidades distintas, aquí se ven SUMADAS en una sola fila.
+     *                  Sin columna NUP (un lote puede tener varios).
+     *   CADUCIDAD      una fila por producto×bodega×FECHA DE CADUCIDAD, sumando todos
+     *                  los lotes que caducan ese día. Es la vista para "qué se me vence".
+     *   LOTE_CADUCIDAD una fila por cada combinación lote+NUP+caducidad — el máximo
+     *                  detalle, y lo que hacía la antigua opción "Por Lote" de
+     *                  "Agrupar por".
+     *
+     * "consignado" (cuánto de ese mismo grupo está en poder de clientes) se cruza
+     * EXACTAMENTE por las columnas que definen el grupo: si la fila no distingue
+     * caducidad, el consignado tampoco, o los números no cuadrarían entre sí.
+     *
+     * @param string $desglose LOTE | CADUCIDAD | LOTE_CADUCIDAD
      */
-    private function getExistenciasPorDetalle(int $idEmpresa, array $filtros, string $ordenPrincipal): array
+    public function getExistenciasPorDesglose(int $idEmpresa, array $filtros, string $desglose): array
     {
+        $conLote = in_array($desglose, ['LOTE', 'LOTE_CADUCIDAD'], true);
+        $conCad  = in_array($desglose, ['CADUCIDAD', 'LOTE_CADUCIDAD'], true);
+        $conNup  = $desglose === 'LOTE_CADUCIDAD';
+
         list($where, $params) = $this->buildWhereExistenciasKardex($idEmpresa, $filtros);
         $condCorteCv = !empty($filtros['fecha_corte']) ? " AND cv.fecha_emision <= :fecha_corte" : "";
+
+        // Las columnas que no forman parte del grupo viajan en NULL: la fila no puede
+        // afirmar un lote/NUP/caducidad concretos cuando está sumando varios.
+        $selLote = $conLote ? 'k.numero_lote' : 'NULL::varchar';
+        $selNup  = $conNup  ? 'k.nup'         : 'NULL::varchar';
+        $selCad  = $conCad  ? 'k.fecha_caducidad' : 'NULL::date';
+
+        $groupExtra = '';
+        $condCv     = '';
+        $ordenExtra = [];
+        if ($conLote) {
+            $groupExtra .= ', k.numero_lote';
+            $condCv     .= ' AND cvd.lote IS NOT DISTINCT FROM k.numero_lote';
+            $ordenExtra[] = 'lote ASC NULLS LAST';
+        }
+        if ($conNup) {
+            $groupExtra .= ', k.nup';
+            $condCv     .= ' AND cvd.nup IS NOT DISTINCT FROM k.nup';
+        }
+        if ($conCad) {
+            $groupExtra .= ', k.fecha_caducidad';
+            $condCv     .= ' AND cvd.fecha_caducidad IS NOT DISTINCT FROM k.fecha_caducidad';
+            $ordenExtra[] = 'fecha_caducidad ASC NULLS LAST';
+        }
+        $orden = 'producto_nombre ASC, bodega_nombre ASC' . ($ordenExtra ? ', ' . implode(', ', $ordenExtra) : '');
 
         $sql = "SELECT *, (stock_actual * costo_unitario) AS valor_total,
                        (stock_actual + consignado) AS stock_total
                 FROM (
-                    SELECT k.id_producto, k.id_bodega, k.numero_lote AS lote, k.nup, k.fecha_caducidad,
+                    SELECT k.id_producto, k.id_bodega,
+                           {$selLote} AS lote, {$selNup} AS nup, {$selCad} AS fecha_caducidad,
                            p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                            COALESCE(cat.nombre, 'Sin categoría') AS categoria_nombre,
                            COALESCE(mar.nombre, 'Sin marca') AS marca_nombre,
@@ -378,9 +422,7 @@ class ReporteInventarioRepository extends BaseRepository
                                INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
                                WHERE cvd.id_producto = k.id_producto AND cvd.id_bodega = k.id_bodega
                                  AND cvd.id_empresa = k.id_empresa AND cvd.eliminado = false AND cv.eliminado = false
-                                 AND cvd.lote IS NOT DISTINCT FROM k.numero_lote
-                                 AND cvd.nup IS NOT DISTINCT FROM k.nup
-                                 AND cvd.fecha_caducidad IS NOT DISTINCT FROM k.fecha_caducidad{$condCorteCv}
+                                 {$condCv}{$condCorteCv}
                            ), 0) AS consignado
                     FROM inventario_kardex k
                     INNER JOIN productos p ON p.id = k.id_producto AND p.id_empresa = k.id_empresa
@@ -388,29 +430,14 @@ class ReporteInventarioRepository extends BaseRepository
                     LEFT JOIN categorias cat ON cat.id = p.id_categoria
                     LEFT JOIN marcas mar ON mar.id = p.id_marca
                     WHERE {$where}
-                    GROUP BY k.id_empresa, k.id_producto, k.id_bodega, k.numero_lote, k.nup, k.fecha_caducidad,
+                    GROUP BY k.id_empresa, k.id_producto, k.id_bodega{$groupExtra},
                              p.codigo, p.nombre, cat.nombre, mar.nombre, b.nombre
                 ) t
-                ORDER BY producto_nombre ASC, bodega_nombre ASC, {$ordenPrincipal} ASC NULLS LAST";
+                ORDER BY {$orden}";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    public function getExistenciasAgrupadoLote(int $idEmpresa, array $filtros): array
-    {
-        return $this->getExistenciasPorDetalle($idEmpresa, $filtros, 'lote');
-    }
-
-    public function getExistenciasAgrupadoNup(int $idEmpresa, array $filtros): array
-    {
-        return $this->getExistenciasPorDetalle($idEmpresa, $filtros, 'nup');
-    }
-
-    public function getExistenciasAgrupadoCaducidad(int $idEmpresa, array $filtros): array
-    {
-        return $this->getExistenciasPorDetalle($idEmpresa, $filtros, 'fecha_caducidad');
     }
 
     public function getExistenciasKpis(int $idEmpresa, array $filtros): array
@@ -932,7 +959,12 @@ class ReporteInventarioRepository extends BaseRepository
                        MAX(s.cliente_nombre) AS cliente_nombre, MAX(s.cliente_identificacion) AS cliente_identificacion,
                        MAX(s.vendedor_nombre) AS vendedor_nombre,
                        MAX(s.responsable_traslado_nombre) AS responsable_traslado_nombre,
-                       COUNT(DISTINCT s.id_producto) AS cantidad_productos,
+                       -- Cuenta LÍNEAS del documento, no productos distintos: una misma
+                       -- consignación suele llevar el mismo producto en varias líneas (un
+                       -- lote/NUP/caducidad por línea). Con COUNT(DISTINCT id_producto) la
+                       -- columna Productos anunciaba menos líneas de las que luego
+                       -- aparecían al abrir el detalle.
+                       COUNT(DISTINCT s.id_detalle) AS cantidad_productos,
                        SUM(s.saldo) AS saldo, SUM(s.valor_saldo) AS valor_saldo
                 FROM ({$base}) s
                 GROUP BY s.id_consignacion

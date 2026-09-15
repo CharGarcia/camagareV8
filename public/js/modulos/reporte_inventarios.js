@@ -108,9 +108,75 @@ function RI_fetchGenerar(tab, params, onOk, onError) {
 // ════════════════════════════════════════════════════════════════════
 // PESTAÑA 1: EXISTENCIAS
 // ════════════════════════════════════════════════════════════════════
+/**
+ * Deja una pestaña como recién abierta: todos los filtros en su valor por defecto
+ * y la tabla otra vez con el mensaje inicial. NO vuelve a consultar — el botón
+ * Mostrar está justo al lado y una consulta sin ningún filtro puede ser costosa.
+ *
+ * form.reset() ya devuelve cada control al valor por defecto del HTML (incluidos
+ * los <option selected>); aparte hay que vaciar a mano los hidden de los
+ * autocompletes, su etiqueta de "seleccionado" y cerrar sus dropdowns.
+ */
+function RI_limpiarFiltros(prefijo, etiquetas, colsPorDefecto) {
+    const form = document.getElementById(prefijo + '-form');
+    if (!form) return;
+    form.reset();
+    form.querySelectorAll('input[type="hidden"]').forEach(h => { h.value = ''; });
+    form.querySelectorAll('.dropdown-predictivo').forEach(d => d.classList.add('d-none'));
+    (etiquetas || []).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+    });
+
+    const tbody = document.getElementById(prefijo + '-tbody');
+    if (tbody) {
+        const thead = document.getElementById(prefijo + '-thead');
+        const cols = (thead && thead.querySelectorAll('th').length)
+            || tbody.querySelector('td[colspan]')?.getAttribute('colspan')
+            || colsPorDefecto || 10;
+        tbody.innerHTML = `<tr><td colspan="${cols}" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>`;
+    }
+}
+
+// Desgloses de Existencias por debajo de producto×bodega. Deben coincidir con
+// ReporteInventariosController::DESGLOSES_EXISTENCIAS.
+const RI_DESGLOSES = ['LOTE', 'CADUCIDAD', 'LOTE_CADUCIDAD'];
+
 window.RI_Existencias = {
     orden: '',
     dir: 'ASC',
+
+    /**
+     * Modo con el que se pinta la tabla: manda el selector "Detalle"; solo cuando
+     * está "En general" decide el "Agrupar por". Es la misma regla que aplica
+     * ReporteInventariosController::generarExistencias().
+     */
+    modoActual() {
+        const desglose = document.getElementById('ri-ex-desglose').value;
+        return desglose !== 'GENERAL' ? desglose : document.getElementById('ri-ex-agrupar').value;
+    },
+
+    colSpan(modo) {
+        if (modo === 'NINGUNO' || modo === 'LOTE_CADUCIDAD') return 10;
+        return 8;
+    },
+
+    limpiarFiltros() {
+        RI_limpiarFiltros('ri-ex', ['ri-ex-producto-seleccionado']);
+        this.orden = '';
+        this.dir = 'ASC';
+        // El reset devuelve el Detalle a "En general", así que Agrupar por vuelve a estar activo.
+        document.getElementById('ri-ex-agrupar').disabled = false;
+    },
+
+    /** El desglose ya define las filas: con él activo, "Agrupar por" no pinta nada. */
+    cambiarDesglose() {
+        const desglose = document.getElementById('ri-ex-desglose').value;
+        const agrupar = document.getElementById('ri-ex-agrupar');
+        agrupar.disabled = desglose !== 'GENERAL';
+        if (agrupar.disabled) agrupar.value = 'NINGUNO';
+        this.generar();
+    },
 
     limpiarProducto() {
         RI_limpiarBusqueda('ri-ex-search-producto', 'ri-ex-id-producto', 'ri-ex-producto-seleccionado');
@@ -280,9 +346,14 @@ window.RI_Existencias = {
                 + th2('Máximo', 'stock_maximo', 'text-end')
                 + th2('Costo Unit.', 'costo_unitario', 'text-end')
                 + th2('Valor total', 'valor_total', 'text-end pe-3');
-        } else if (modo === 'LOTE' || modo === 'NUP' || modo === 'CADUCIDAD') {
-            th += `<th class="ps-3">Producto</th><th>Bodega</th><th>Lote</th><th>NUP</th><th>Caducidad</th>
-                   <th class="text-end">Stock</th><th class="text-end">Consignación</th><th class="text-end">Stock Total</th>
+        } else if (RI_DESGLOSES.includes(modo)) {
+            // Solo las columnas que el desglose puede afirmar: "Por lotes" suma todas las
+            // caducidades de un lote, así que no tiene una caducidad ni un NUP únicos.
+            th += '<th class="ps-3">Producto</th><th>Bodega</th>';
+            if (modo === 'LOTE' || modo === 'LOTE_CADUCIDAD') th += '<th>Lote</th>';
+            if (modo === 'LOTE_CADUCIDAD') th += '<th>NUP</th>';
+            if (modo === 'CADUCIDAD' || modo === 'LOTE_CADUCIDAD') th += '<th>Caducidad</th>';
+            th += `<th class="text-end">Stock</th><th class="text-end">Consignación</th><th class="text-end">Stock Total</th>
                    <th class="text-end">Costo Unit.</th><th class="text-end pe-3">Valor total</th>`;
         } else {
             th += `<th class="ps-3">Grupo</th><th class="text-center">Productos</th>
@@ -305,12 +376,13 @@ window.RI_Existencias = {
     },
 
     generar() {
-        const modo = document.getElementById('ri-ex-agrupar').value;
+        const modo = this.modoActual();
         this.dibujarCabecera(modo);
 
         const params = RI_paramsFromIds({
             id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
             id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', consignado: 'ri-ex-consignado', agrupar_por: 'ri-ex-agrupar',
+            desglose: 'ri-ex-desglose',
             fecha_corte: 'ri-ex-fecha-corte',
             numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
             fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
@@ -321,7 +393,7 @@ window.RI_Existencias = {
         }
 
         const tbody = document.getElementById('ri-ex-tbody');
-        const colSpan = modo === 'NINGUNO' ? 10 : (modo === 'LOTE' || modo === 'NUP' || modo === 'CADUCIDAD' ? 10 : 8);
+        const colSpan = this.colSpan(modo);
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('existencias', params, (res) => {
@@ -335,6 +407,7 @@ window.RI_Existencias = {
         const params = RI_paramsFromIds({
             id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
             id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', consignado: 'ri-ex-consignado', agrupar_por: 'ri-ex-agrupar',
+            desglose: 'ri-ex-desglose',
             fecha_corte: 'ri-ex-fecha-corte',
             numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
             fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
@@ -346,6 +419,7 @@ window.RI_Existencias = {
         const params = RI_paramsFromIds({
             id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
             id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', consignado: 'ri-ex-consignado', agrupar_por: 'ri-ex-agrupar',
+            desglose: 'ri-ex-desglose',
             fecha_corte: 'ri-ex-fecha-corte',
             numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
             fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
@@ -359,6 +433,10 @@ window.RI_Existencias = {
 // PESTAÑA 2: MOVIMIENTOS (KARDEX)
 // ════════════════════════════════════════════════════════════════════
 window.RI_Movimientos = {
+    limpiarFiltros() {
+        RI_limpiarFiltros('ri-mv', ['ri-mv-producto-seleccionado']);
+    },
+
     limpiarProducto() {
         RI_limpiarBusqueda('ri-mv-search-producto', 'ri-mv-id-producto', 'ri-mv-producto-seleccionado');
         this.generar();
@@ -453,6 +531,10 @@ window.RI_Movimientos = {
 // PESTAÑA 3: VALORIZACIÓN
 // ════════════════════════════════════════════════════════════════════
 window.RI_Valorizacion = {
+    limpiarFiltros() {
+        RI_limpiarFiltros("ri-va", ["ri-va-producto-seleccionado"], 5); // su thead es estático, sin id
+    },
+
     limpiarProducto() {
         RI_limpiarBusqueda('ri-va-search-producto', 'ri-va-id-producto', 'ri-va-producto-seleccionado');
         this.generar();
@@ -496,6 +578,10 @@ window.RI_Valorizacion = {
 // PESTAÑA 4: CONSIGNACIONES
 // ════════════════════════════════════════════════════════════════════
 window.RI_Consignaciones = {
+    limpiarFiltros() {
+        RI_limpiarFiltros('ri-cv', ['ri-cv-cliente-seleccionado', 'ri-cv-producto-seleccionado']);
+    },
+
     limpiarCliente() {
         RI_limpiarBusqueda('ri-cv-search-cliente', 'ri-cv-id-cliente', 'ri-cv-cliente-seleccionado');
         this.generar();
@@ -634,6 +720,10 @@ window.RI_Consignaciones = {
 // ════════════════════════════════════════════════════════════════════
 window.RI_Auditoria = {
     ultimoTotal: 0,
+
+    limpiarFiltros() {
+        RI_limpiarFiltros("ri-au", ["ri-au-producto-seleccionado"]);
+    },
 
     limpiarProducto() {
         RI_limpiarBusqueda('ri-au-search-producto', 'ri-au-id-producto', 'ri-au-producto-seleccionado');
