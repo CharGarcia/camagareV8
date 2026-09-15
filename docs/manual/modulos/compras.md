@@ -75,14 +75,26 @@ tipo.
 En una **factura de reembolso recibida** el sustento queda fijo en *08 - Valor
 pagado para solicitar Reembolso de Gasto (intermediario)* y no se puede cambiar.
 
-**Corregir el sustento en una compra migrada.** Una compra que viene de una
-migración es de solo lectura (no se puede editar nada más), pero el selector de
-**Sustento Tributario** queda habilitado con su propio botón de guardado (✓)
-junto al campo, porque las compras migradas llegan sin esta clasificación bien
-resuelta y el ATS/Declaración de IVA la necesitan correcta. Guardarlo no abre el
-resto del documento a edición, y sigue respetando las mismas reglas: no se puede
+**Corregir el sustento en una compra migrada ELECTRÓNICA.** Una compra
+migrada **electrónica** (respaldada por un XML del SRI) es de solo lectura
+(no se puede editar nada más, ver más abajo), pero el selector de **Sustento
+Tributario** queda habilitado con su propio botón de guardado (✓) junto al
+campo, porque las compras migradas llegan sin esta clasificación bien resuelta
+y el ATS/Declaración de IVA la necesitan correcta. Guardarlo no abre el resto
+del documento a edición, y sigue respetando las mismas reglas: no se puede
 tocar si el período contable de la compra está cerrado, y en una factura de
 reembolso recibida se sigue forzando al código 08.
+
+**Compras migradas y edición.** Una compra que viene de una migración es de
+**solo lectura** si es **electrónica** — no tiene otra forma de editarse salvo
+el Sustento Tributario de arriba. Una compra migrada **física**, en cambio,
+**sí se puede editar por completo**: a diferencia de una electrónica, no tiene
+un XML autorizado que la respalde como fuente de verdad, así que el usuario
+puede corregir datos que la migración trajo mal (proveedor, fechas, montos,
+detalle, etc.). En ambos casos, si el **período contable** de la compra está
+cerrado, sigue siendo de solo lectura sin excepción. Guardar cambios en una
+migrada física **no regenera su asiento contable**: conserva el histórico
+migrado tal cual, para no duplicar la contabilidad.
 
 ## Pestaña ATS
 
@@ -390,6 +402,13 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.10** — Una compra **migrada FÍSICA** ya se puede editar por completo (antes
+  era de solo lectura igual que una electrónica): no tiene XML que la respalde
+  como fuente de verdad, así que hacía falta poder corregir datos mal traídos de
+  la migración. Guardar cambios no regenera el asiento contable de la compra
+  (se conserva el histórico migrado, para no duplicar la contabilidad). Las
+  migradas **electrónicas** siguen de solo lectura, con la excepción del
+  Sustento Tributario (ver 2.9).
 - **2.9** — En una compra **migrada** (solo lectura) ahora se puede corregir el
   **Sustento Tributario** sin abrir el resto del documento: el selector queda
   habilitado con su propio botón de guardado. Antes, si el dato venía mal

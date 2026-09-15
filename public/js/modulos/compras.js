@@ -567,7 +567,15 @@ function mcAplicarSoloLectura(d) {
     const esV = v => (v === true || v === 't' || v === 1 || v === '1');
     const esMigrado      = esV(d.es_migrado);
     const periodoCerrado = esV(d.periodo_cerrado);
-    const bloqueado      = esMigrado || periodoCerrado;
+    const esFisica       = String(d.tipo_registro || 'fisica') === 'fisica';
+
+    // Un registro FÍSICO migrado sí se puede editar completo: a diferencia de uno
+    // electrónico, no tiene un XML autorizado que lo respalde como fuente de verdad,
+    // y el usuario necesita poder corregir datos que la migración trajo mal. El
+    // servidor (ComprasService::actualizar) aplica la misma excepción y además NO
+    // regenera el asiento contable de ninguna migrada (conserva el histórico migrado).
+    const bloqueadoPorMigracion = esMigrado && !esFisica;
+    const bloqueado             = bloqueadoPorMigracion || periodoCerrado;
 
     const aviso    = document.getElementById('mcBloqueoAviso');
     const avisoTxt = document.getElementById('mcBloqueoAvisoTexto');
@@ -578,9 +586,9 @@ function mcAplicarSoloLectura(d) {
     }
 
     let msg;
-    if (esMigrado && periodoCerrado) {
+    if (bloqueadoPorMigracion && periodoCerrado) {
         msg = 'Esta compra proviene de una migración y su período contable está cerrado: es de solo lectura.';
-    } else if (esMigrado) {
+    } else if (bloqueadoPorMigracion) {
         msg = 'Esta compra proviene de una migración: es de solo lectura, no puede editarse.';
     } else {
         msg = 'El período contable de esta compra está cerrado: es de solo lectura, no puede editarse.';
@@ -591,11 +599,13 @@ function mcAplicarSoloLectura(d) {
     const modal    = document.getElementById('modalCompra');
     const pagoForm = document.getElementById('pagoFormNuevo');
 
-    // Sustento Tributario en compra MIGRADA (no en período cerrado): se deja editable
-    // y con guardado propio (ver mcGuardarSustentoMigrado/actualizarSustentoTributarioAjax)
-    // porque las migradas llegan sin esta clasificación bien resuelta y el ATS/
-    // Declaración de IVA la necesitan correcta, sin abrir el resto del documento.
-    const permiteSustentoMigrado = esMigrado && !periodoCerrado;
+    // Sustento Tributario en compra MIGRADA electrónica (no en período cerrado): se
+    // deja editable y con guardado propio (ver mcGuardarSustentoMigrado/
+    // actualizarSustentoTributarioAjax) porque las migradas llegan sin esta
+    // clasificación bien resuelta y el ATS/Declaración de IVA la necesitan correcta,
+    // sin abrir el resto del documento. Una migrada FÍSICA no entra aquí: ya quedó
+    // completamente editable arriba (bloqueadoPorMigracion=false).
+    const permiteSustentoMigrado = bloqueadoPorMigracion && !periodoCerrado;
 
     // Deshabilita el elemento marcándolo, salvo que YA estuviera deshabilitado por
     // otra lógica (no lo tocamos para no re-habilitarlo por error después), que

@@ -1094,8 +1094,16 @@ class ComprasService
             throw new \Exception('Compra no encontrada.');
         }
 
-        // Las compras migradas son de solo lectura (no se editan).
-        if ($this->repository->esMigrado($id, $idEmpresa)) {
+        // Las compras migradas son de solo lectura, EXCEPTO los registros FÍSICOS: a
+        // diferencia de una electrónica, no tienen un XML autorizado que las respalde
+        // como fuente de verdad, y el usuario necesita poder corregir datos que la
+        // migración trajo mal (proveedor, fechas, montos, detalle...). El asiento
+        // contable NO se regenera para ninguna migrada (ver el final del método): su
+        // contabilidad es el histórico migrado, y `getAsientoPorOrigen('compra', …)` no
+        // encuentra ese asiento (vive con modulo_origen='migracion') — regenerarlo
+        // crearía uno nuevo y duplicaría la contabilidad.
+        $esMigrado = $this->repository->esMigrado($id, $idEmpresa);
+        if ($esMigrado && (string) ($cabecera['tipo_registro'] ?? 'fisica') !== 'fisica') {
             throw new \Exception('Esta compra proviene de una migración y no puede editarse.');
         }
 
@@ -1161,7 +1169,11 @@ class ComprasService
         }
 
         // Asiento contable FUERA de la transacción: un fallo no revierte la compra ya guardada.
-        $this->generarAsientoTrasGuardar($id, $data);
+        // Las migradas (ahora editables si son físicas) NO regeneran asiento: conservan
+        // el histórico migrado tal cual (ver comentario al inicio del método).
+        if (!$esMigrado) {
+            $this->generarAsientoTrasGuardar($id, $data);
+        }
         return $id;
     }
 
