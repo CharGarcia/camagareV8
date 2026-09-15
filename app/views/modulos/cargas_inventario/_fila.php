@@ -23,7 +23,11 @@ $tipoColor = match ($tipo) { 'entrada' => 'success', 'salida' => 'danger', defau
 // Una carga pendiente con líneas en error no se puede aprobar: conviene verlo
 // en el listado sin abrir el detalle.
 $conError = ($estado === 'pendiente') && (empty($r['validada']) || $r['validada'] === 'f');
-$observacion = trim((string) ($r['observacion'] ?? ''));
+
+// En las cargas migradas la observación es una línea técnica larguísima de la que
+// solo sirve la referencia; el texto completo queda en el tooltip de la celda.
+$observacionCompleta = trim((string) ($r['observacion'] ?? ''));
+$observacion = \App\Helpers\ObservacionCargaInventario::paraMostrar($observacionCompleta);
 ?>
 <tr class="carga-row" role="button" tabindex="0" onclick="CI_verDetalle(<?= (int) $r['id'] ?>)">
     <td class="ps-3 fw-bold" data-col="numero">#<?= (int) $r['numero'] ?></td>
@@ -41,5 +45,5 @@ $observacion = trim((string) ($r['observacion'] ?? ''));
     <td class="small text-muted" data-col="creado"><?= htmlspecialchars((string) ($r['creado_por_nombre'] ?? '-')) ?></td>
     <td class="small text-muted" data-col="aprobado"><?= htmlspecialchars((string) ($r['aprobado_por_nombre'] ?? '-')) ?></td>
     <td class="text-truncate pe-3" style="max-width:320px" data-col="observacion"
-        title="<?= htmlspecialchars($observacion) ?>"><?= $observacion !== '' ? htmlspecialchars($observacion) : '-' ?></td>
+        title="<?= htmlspecialchars($observacionCompleta) ?>"><?= $observacion !== '' ? htmlspecialchars($observacion) : '-' ?></td>
 </tr>

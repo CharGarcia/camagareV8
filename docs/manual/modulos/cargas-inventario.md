@@ -48,7 +48,7 @@ La pantalla principal muestra una carga por fila, con estas columnas:
 | Estado | Pendiente, Aprobada o Rechazada. El triángulo naranja avisa que hay líneas con error y que la carga no se podrá aprobar hasta corregirlas |
 | Creado por | Usuario que subió la carga |
 | Aprobado por | Usuario que la aprobó (vacío mientras esté pendiente) |
-| Observación | El comentario escrito al importar |
+| Observación | El comentario escrito al importar. En las cargas que vienen de la migración del sistema anterior muestra **solo la referencia**: el texto completo del registro migrado aparece al dejar el cursor sobre la celda, y también en el detalle de la carga |
 
 Con el botón de columnas se **oculta o muestra** cada una, y el ancho de cada
 columna se puede arrastrar; ambas cosas quedan guardadas para el usuario.
@@ -71,7 +71,7 @@ clic, y el buscador admite además filtros por campo:
 | Número | `numero:15` · `numero:10..30` |
 | Fecha | `fecha:2026-01-01..2026-03-31` |
 | Líneas | `lineas:1..50` |
-| Observación | `observacion:conteo` |
+| Observación o referencia | `observacion:conteo` · `observacion:INV-00123` |
 | Creado por | `creado:"maria perez"` |
 | Aprobado por | `aprobado:lopez` |
 
@@ -106,4 +106,4 @@ Antes esta configuración estaba en *Empresa → Inventario*.
 
 - **1.0** — Versión inicial.
 - **1.1** — La configuración de la aprobación se movió al módulo **Aprobaciones**; se agrega monto mínimo.
-- **1.2** — El listado pasa al estándar del sistema: buscador por campos con filtros rápidos, ordenamiento por encabezado (incluido el orden por varias columnas con Shift + clic), paginación sin recargar la página y nueva columna **Observación**, también en el PDF y el Excel.
+- **1.2** — El listado pasa al estándar del sistema: buscador por campos con filtros rápidos, ordenamiento por encabezado (incluido el orden por varias columnas con Shift + clic), paginación sin recargar la página y nueva columna **Observación**, también en el PDF y el Excel. En las cargas migradas esa columna muestra solo la referencia.

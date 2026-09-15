@@ -82,7 +82,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                         fields: [
                             { key: 'numero',      label: 'N° de carga',  icon: 'bi-hash',             type: 'number_range' },
                             { key: 'fecha',       label: 'Fecha',        icon: 'bi-calendar-event',   type: 'date_range' },
-                            { key: 'observacion', label: 'Observación',  icon: 'bi-chat-left-text',   type: 'text' },
+                            { key: 'observacion', label: 'Observación / Ref', icon: 'bi-chat-left-text', type: 'text' },
                             { key: 'creado',      label: 'Creado por',   icon: 'bi-person',           type: 'text' },
                             { key: 'aprobado',    label: 'Aprobado por', icon: 'bi-person-check',     type: 'text' },
                             { key: 'lineas',      label: 'Líneas',       icon: 'bi-list-ol',          type: 'number_range' },

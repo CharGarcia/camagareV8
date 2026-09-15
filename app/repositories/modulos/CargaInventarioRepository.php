@@ -21,13 +21,24 @@ class CargaInventarioRepository extends BaseRepository
      * el `data-sort` del encabezado en la vista; el valor, la única expresión SQL
      * que puede llegar al ORDER BY para esa clave.
      */
+    /**
+     * Observación tal como se ve en el listado: de las cargas migradas se muestra
+     * solo la referencia (ver App\Helpers\ObservacionCargaInventario), así que
+     * ordenar por el texto completo agruparía todas bajo el mismo "Migrado de…".
+     * Esta expresión ordena por lo que el usuario está viendo.
+     */
+    private const ORDEN_OBSERVACION =
+        "CASE WHEN c.observacion ~ 'Ref\\s*:'
+              THEN NULLIF(NULLIF(TRIM(substring(c.observacion from 'Ref\\s*:\\s*([^·]*)')), ''), '—')
+              ELSE c.observacion END";
+
     public const MAPA_ORDEN = [
         'numero'      => 'c.numero',
         'fecha'       => 'c.fecha',
         'tipo'        => 'c.tipo_movimiento',
         'lineas'      => 'c.total_lineas',
         'estado'      => 'c.estado',
-        'observacion' => 'c.observacion',
+        'observacion' => self::ORDEN_OBSERVACION,
         'creado'      => 'u.nombre',
         'aprobado'    => 'ua.nombre',
         'created_at'  => 'c.created_at',

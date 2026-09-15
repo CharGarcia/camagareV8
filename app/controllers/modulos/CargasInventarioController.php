@@ -395,7 +395,7 @@ class CargasInventarioController extends BaseModuloController
                 . '<td align="center">' . $e($this->etiquetaEstado($r['estado'] ?? '')) . '</td>'
                 . '<td>' . $e($r['creado_por_nombre'] ?? '') . '</td>'
                 . '<td>' . $e($r['aprobado_por_nombre'] ?? '') . '</td>'
-                . '<td>' . $e($r['observacion'] ?? '') . '</td>'
+                . '<td>' . $e(\App\Helpers\ObservacionCargaInventario::paraMostrar($r['observacion'] ?? null)) . '</td>'
                 . '</tr>';
         }
         if ($filas === '') {
@@ -449,7 +449,7 @@ class CargasInventarioController extends BaseModuloController
                 $this->etiquetaEstado($r['estado'] ?? ''),
                 (string) ($r['creado_por_nombre'] ?? ''),
                 (string) ($r['aprobado_por_nombre'] ?? ''),
-                (string) ($r['observacion'] ?? ''),
+                \App\Helpers\ObservacionCargaInventario::paraMostrar($r['observacion'] ?? null),
             ];
         }
 
