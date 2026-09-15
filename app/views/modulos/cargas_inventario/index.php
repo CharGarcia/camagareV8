@@ -10,6 +10,7 @@
 /** @var string $buscar */
 /** @var string $ordenCol */
 /** @var string $ordenDir */
+/** @var string $exportQs Query string ya filtrado para los enlaces de exportar */
 
 $base    = BASE_URL;
 $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
@@ -22,6 +23,7 @@ $perPage    = (int) ($perPage ?? 20);
 $buscar     = $buscar ?? '';
 $ordenCol   = $ordenCol ?? 'numero';
 $ordenDir   = $ordenDir ?? 'DESC';
+$exportQs   = $exportQs ?? '';
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
@@ -124,11 +126,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                 echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig, $rutaModulo);
                 ?>
 
-                <a id="ci-btn-pdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
+                <a id="ci-btn-pdf" href="<?= $urlBase ?>/export-pdf<?= $exportQs ?>"
                    target="_blank" class="btn btn-outline-danger" title="Descargar PDF">
                     <i class="bi bi-file-earmark-pdf"></i> PDF
                 </a>
-                <a id="ci-btn-excel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
+                <a id="ci-btn-excel" href="<?= $urlBase ?>/export-excel<?= $exportQs ?>"
                    class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>

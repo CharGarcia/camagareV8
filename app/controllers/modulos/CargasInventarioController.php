@@ -36,6 +36,22 @@ class CargasInventarioController extends BaseModuloController
         return empty($this->getPermisos()['todo']) ? (int) ($_SESSION['id_usuario'] ?? 0) : null;
     }
 
+    /**
+     * Query string de los enlaces de exportar, con SOLO los parámetros que
+     * llevan valor: sin búsqueda ni orden explícito el enlace queda limpio
+     * (`…/export-pdf`), no `…/export-pdf?b=&orden=`. Lo que falte lo resuelve
+     * `filasParaExportar()` con la preferencia guardada del usuario.
+     */
+    private function exportQs(string $buscar, array $orden): string
+    {
+        $params = array_filter([
+            'b'     => $buscar,
+            'orden' => \App\Helpers\OrdenListado::aCadena($orden),
+        ], static fn(string $v): bool => $v !== '');
+
+        return $params === [] ? '' : '?' . http_build_query($params);
+    }
+
     public function index(): void
     {
         $this->requireLeer();
@@ -68,7 +84,7 @@ class CargasInventarioController extends BaseModuloController
             'ordenCol'    => $ordenCol,
             'ordenDir'    => $ordenDir,
             'ordenJson'   => \App\Helpers\OrdenListado::aJson($orden),
-            'ordenParam'  => \App\Helpers\OrdenListado::aCadena($orden),
+            'exportQs'    => $this->exportQs($buscar, $orden),
             'esAprobador' => $esAprobador,
             'esSuperAdmin' => $nivel >= 3,
             'idUsuarioActual' => $idUsuario,
@@ -121,7 +137,7 @@ class CargasInventarioController extends BaseModuloController
             "<button type='button' class='btn btn-outline-secondary' {$prevDis} onclick='CI_buscar(" . ($page - 1) . ")'><i class='bi bi-chevron-left'></i></button>"
           . "<button type='button' class='btn btn-outline-secondary' {$nextDis} onclick='CI_buscar(" . ($page + 1) . ")'><i class='bi bi-chevron-right'></i></button>";
 
-        $qs = '?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden));
+        $qs = $this->exportQs($buscar, $orden);
         echo json_encode([
             'ok'         => true,
             'rows'       => $rowsHtml,
