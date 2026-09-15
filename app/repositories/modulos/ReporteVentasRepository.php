@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\AbonosVentaSql;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -184,13 +185,15 @@ class ReporteVentasRepository extends BaseRepository
             'retenciones'     => 'retenciones {dir}',
         ],
         'CLIENTE' => [
-            '_def'              => ['total', 'DESC'],
-            'cliente_nombre'    => 'cliente_nombre {dir}',
-            'cantidad_facturas' => 'cantidad_facturas {dir}',
-            'base_0'            => 'base_0 {dir}',
-            'base_iva'          => 'base_iva {dir}',
-            'valor_iva'         => 'valor_iva {dir}',
-            'total'             => 'total {dir}',
+            '_def'           => ['total', 'DESC'],
+            'cliente_nombre' => 'cliente_nombre {dir}',
+            // La columna "Nro Facturas" se reemplazó por el saldo por cobrar; el conteo
+            // sigue calculándose y se muestra al pasar el mouse por el nombre del cliente.
+            'saldo'          => 'saldo {dir}',
+            'base_0'         => 'base_0 {dir}',
+            'base_iva'       => 'base_iva {dir}',
+            'valor_iva'      => 'valor_iva {dir}',
+            'total'          => 'total {dir}',
         ],
         'PRODUCTO' => [
             '_def'             => ['cantidad_vendida', 'DESC'],
@@ -355,6 +358,83 @@ class ReporteVentasRepository extends BaseRepository
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':e' => $idEmpresa, ':e2' => $idEmpresa]);
         return $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [(int)date('Y')];
+    }
+
+    // ── Saldo por cobrar del cliente (agrupación por Cliente) ─────────────────
+    //
+    // La columna "Saldo x Cobrar" de esa vista es lo que queda pendiente de los
+    // documentos INCLUIDOS EN EL REPORTE (mismos filtros de período, vendedor,
+    // establecimiento…), no la cartera histórica del cliente: así la fila cuadra
+    // consigo misma y el saldo nunca supera al Gran Total.
+    //
+    // La fórmula y los enlaces son los de Cuentas por Cobrar (AbonosVentaSql), para
+    // que el mismo cliente muestre el mismo saldo en los dos módulos.
+
+    /** CTEs de abonos para el saldo, según la fuente. Cadena vacía si no aplica. */
+    private function getCtesSaldo(array $f): string
+    {
+        if ($f['cab'] === 'notas_credito_cabecera') {
+            return ''; // una NC no genera saldo por cobrar: es un abono
+        }
+        $tipoDoc = $f['cab'] === 'recibos_venta_cabecera' ? 'RECIBO' : 'FACTURA';
+        $ctes = "
+            , cobrado_sal AS (
+                SELECT idt.id_referencia_documento AS id_doc,
+                       SUM(idt.monto_cobrado)      AS total_cobrado
+                FROM ingresos_detalle idt
+                INNER JOIN ingresos_cabecera icb ON icb.id = idt.id_ingreso
+                WHERE idt.tipo_documento = '{$tipoDoc}'
+                  AND icb.estado    != 'anulado'
+                  AND icb.eliminado  = false
+                  AND icb.id_empresa IN ({$this->inEmp})
+                GROUP BY idt.id_referencia_documento
+            )";
+
+        // Los recibos de venta solo se reducen con cobros (no tienen retenciones ni notas).
+        if ($tipoDoc === 'RECIBO') {
+            return $ctes;
+        }
+
+        $empresaAny = "ANY(ARRAY[{$this->inEmp}])";
+        $ambienteNota = "AND (n.tipo_ambiente IS NULL OR n.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = n.id_empresa))";
+
+        return $ctes
+            . "\n            , retenido_sal AS (" . AbonosVentaSql::cteRetenidoPorFactura($empresaAny) . ")"
+            . "\n            , nc_sal AS (" . AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', $empresaAny, $ambienteNota, true) . ")"
+            . "\n            , nd_sal AS (" . AbonosVentaSql::cteNotasPorFactura('nota_debito_cabecera', 'total_nd', $empresaAny, $ambienteNota, true) . ")";
+    }
+
+    /** LEFT JOINs que enlazan esas CTEs con el documento `$alias`. */
+    private function getJoinsSaldo(array $f, string $alias = 'v'): string
+    {
+        if ($f['cab'] === 'notas_credito_cabecera') {
+            return '';
+        }
+        $joins = "\n            LEFT JOIN cobrado_sal cs ON cs.id_doc = {$alias}.id";
+        if ($f['cab'] === 'recibos_venta_cabecera') {
+            return $joins;
+        }
+        $num = AbonosVentaSql::numFactura($alias);
+        return $joins
+            . "\n            LEFT JOIN retenido_sal rs ON rs.id_venta = {$alias}.id"
+            . "\n            LEFT JOIN nc_sal ns ON ns.id_empresa = {$alias}.id_empresa AND ns.num_norm = {$num}"
+            . "\n            LEFT JOIN nd_sal ds ON ds.id_empresa = {$alias}.id_empresa AND ds.num_norm = {$num}";
+    }
+
+    /** Expresión SUM(...) del saldo pendiente, según la fuente. */
+    private function exprSaldo(array $f, string $alias = 'v'): string
+    {
+        if ($f['cab'] === 'notas_credito_cabecera') {
+            return '0';
+        }
+        if ($f['cab'] === 'recibos_venta_cabecera') {
+            return "SUM({$alias}.importe_total - COALESCE(cs.total_cobrado, 0))";
+        }
+        return "SUM({$alias}.importe_total
+                  + COALESCE(ds.total_nd, 0)
+                  - COALESCE(cs.total_cobrado, 0)
+                  - COALESCE(rs.total_retenido, 0)
+                  - COALESCE(ns.total_nc, 0))";
     }
 
     /**
@@ -598,8 +678,10 @@ class ReporteVentasRepository extends BaseRepository
     public function getReporteAgrupadoCliente(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
+            // `saldo` se SUMA (no se resta) al combinar: las notas de crédito aportan 0
+            // porque su descuento ya está dentro del saldo de la factura que modifican.
             return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoCliente', ['id_cliente'],
-                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_facturas']);
+                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_facturas', 'saldo']);
         }
 
         $f = $this->fuente($filtros);
@@ -608,6 +690,7 @@ class ReporteVentasRepository extends BaseRepository
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            " . $this->getCtesSaldo($f) . "
             SELECT
                 c.id as id_cliente,
                 c.identificacion as cliente_ruc,
@@ -616,10 +699,12 @@ class ReporteVentasRepository extends BaseRepository
                 SUM(COALESCE(b.base_0, 0)) as base_0,
                 SUM(COALESCE(b.base_iva, 0)) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
-                SUM(v.importe_total) as total
+                SUM(v.importe_total) as total,
+                -- Pendiente de cobro de esos mismos documentos (ver getCtesSaldo)
+                " . $this->exprSaldo($f) . " as saldo
             FROM {$f['cab']} v
             JOIN clientes c ON c.id = v.id_cliente
-            LEFT JOIN bases b ON b.id_doc = v.id
+            LEFT JOIN bases b ON b.id_doc = v.id" . $this->getJoinsSaldo($f) . "
             WHERE {$where}
             GROUP BY c.id, c.identificacion, c.nombre
             ORDER BY {$orden}

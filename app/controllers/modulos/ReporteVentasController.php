@@ -268,8 +268,14 @@ class ReporteVentasController extends BaseModuloController
         $total   = number_format((float)($r['total'] ?? 0), 2);
 
         if ($agruparPor === 'CLIENTE') {
-            $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['cliente_ruc'] ?? '')."</small></td>";
-            $html .= "<td class='text-center'>".(int)($r['cantidad_facturas'] ?? 0)."</td>";
+            // Saldo por cobrar de los documentos del reporte (reemplaza a "Nro Facturas";
+            // el conteo queda como título del nombre). En rojo mientras el cliente deba.
+            $nDocs   = (int) ($r['cantidad_facturas'] ?? 0);
+            $saldo   = (float) ($r['saldo'] ?? 0);
+            $clsSal  = $saldo > 0.001 ? 'text-danger fw-semibold' : 'text-muted';
+            $titulo  = $nDocs . ' documento' . ($nDocs !== 1 ? 's' : '') . ' en el reporte';
+            $html .= "<td title='".htmlspecialchars($titulo)."'><span class='fw-bold'>".htmlspecialchars($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['cliente_ruc'] ?? '')."</small></td>";
+            $html .= "<td class='text-end {$clsSal}'>".number_format($saldo, 2)."</td>";
             $html .= "<td class='text-end'>$base0</td>";
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
@@ -440,13 +446,15 @@ class ReporteVentasController extends BaseModuloController
             }
 
             if ($filtros['agrupar_por'] === 'CLIENTE') {
-                $headers = ['RUC/Cédula', 'Cliente', 'Nro Facturas', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                // Misma estructura que la pantalla: el saldo por cobrar ocupa el lugar
+                // que tenía "Nro Facturas".
+                $headers = ['RUC/Cédula', 'Cliente', 'Saldo x Cobrar', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = [
                         $r['cliente_ruc'],
                         $r['cliente_nombre'],
-                        $r['cantidad_facturas'],
+                        round((float)($r['saldo'] ?? 0), 2),
                         (float)$r['base_0'],
                         (float)$r['base_iva'],
                         (float)$r['valor_iva'],
@@ -602,7 +610,7 @@ class ReporteVentasController extends BaseModuloController
             <table>
                 <thead>
                     <?php if ($filtros['agrupar_por'] === 'CLIENTE'): ?>
-                        <tr><th>Cliente</th><th>Nro Facturas</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
+                        <tr><th>Cliente</th><th>Saldo x Cobrar</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
                         <tr><th>Producto</th><th>Cant.</th><th>T. IVA</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php elseif ($filtros['agrupar_por'] === 'VARIANTE'): ?>
@@ -620,7 +628,7 @@ class ReporteVentasController extends BaseModuloController
                         <tr>
                             <?php if ($filtros['agrupar_por'] === 'CLIENTE'): ?>
                                 <td><?= htmlspecialchars($r['cliente_nombre']) ?></td>
-                                <td class="text-center"><?= $r['cantidad_facturas'] ?></td>
+                                <td class="text-end"><?= number_format((float)($r['saldo'] ?? 0), 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
@@ -676,7 +684,11 @@ class ReporteVentasController extends BaseModuloController
                 </tbody>
                 <tfoot>
                     <tr style="background-color: #e9ecef;">
-                        <?php if ($filtros['agrupar_por'] === 'CLIENTE' || $filtros['agrupar_por'] === 'FECHA' || $filtros['agrupar_por'] === 'MES'): ?>
+                        <?php if ($filtros['agrupar_por'] === 'CLIENTE'): ?>
+                            <?php // La segunda columna es el saldo por cobrar: se totaliza como los demás importes ?>
+                            <th class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
+                            <th class="text-end" style="font-size: 10pt;"><?= number_format(array_sum(array_map(static fn ($r) => (float)($r['saldo'] ?? 0), $rows)), 2) ?></th>
+                        <?php elseif ($filtros['agrupar_por'] === 'FECHA' || $filtros['agrupar_por'] === 'MES'): ?>
                             <th colspan="2" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
                         <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
                             <th colspan="3" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>

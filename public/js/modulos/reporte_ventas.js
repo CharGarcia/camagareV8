@@ -429,7 +429,9 @@ const RV_COLUMNAS = {
         def: ['total', 'DESC'],
         cols: [
             ['cliente_nombre',    'Cliente',          'ps-4'],
-            ['cantidad_facturas', 'Nro Facturas',     'text-center'],
+            // Reemplaza a "Nro Facturas": lo pendiente de cobro de los documentos del
+            // reporte. El número de documentos sigue visible al pasar el mouse por el nombre.
+            ['saldo',             'Saldo x Cobrar',   'text-end'],
             ['base_0',            'Base 0% / Exento', 'text-end'],
             ['base_iva',          'Base IVA',         'text-end'],
             ['valor_iva',         'Total IVA',        'text-end'],

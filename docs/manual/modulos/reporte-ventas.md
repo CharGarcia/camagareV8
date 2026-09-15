@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas
-version: 1.4
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas
+version: 1.5
 orden: 10
 estado: activo
 ---
@@ -108,6 +108,27 @@ Los resultados se pueden agrupar (por cliente, por producto, por periodo) para
 pasar del detalle al resumen sin cambiar de pantalla. Es lo que permite ver de un
 vistazo qué cliente compra más o qué producto rota mejor.
 
+### Por cliente: la columna Saldo x Cobrar
+
+En la agrupación **Por cliente**, junto al nombre va el **Saldo x Cobrar**: lo
+que queda pendiente de los documentos incluidos en el reporte. Así, en la misma
+fila, se ve cuánto compró el cliente y cuánto de eso sigue sin cobrarse.
+
+- Es el saldo de **los documentos del reporte**, con los filtros aplicados (mes,
+  vendedor, establecimiento…), no la cartera histórica del cliente: por eso
+  cuadra con el *Gran Total* de su propia fila.
+- Se calcula igual que en **Cuentas por Cobrar** —total + notas de débito −
+  cobros − retenciones − notas de crédito—, así que el mismo cliente muestra el
+  mismo saldo en los dos módulos. Si tuvo notas de débito, el saldo puede quedar
+  algo por encima del total facturado: esa es la razón.
+- Con el tipo de documento **Notas de crédito** la columna sale en cero (una nota
+  de crédito no genera saldo por cobrar), y en **Recibos de venta** es el total
+  del recibo menos lo cobrado.
+- El **número de documentos** de cada cliente, que antes ocupaba esta columna,
+  sigue disponible: aparece al pasar el mouse por el nombre del cliente.
+- La columna ordena el reporte como cualquier otra, y sale igual en el PDF y en
+  el Excel (con su total al pie, en el PDF).
+
 ## Ordenar los resultados
 
 Los títulos de las columnas ordenan el reporte: un clic ordena de menor a mayor y
@@ -144,6 +165,11 @@ cuando se va a seguir analizando por fuera.
 
 ## Historial de cambios
 
+- **1.5** — En la agrupación **Por cliente**, la columna *Nro Facturas* se
+  reemplazó por **Saldo x Cobrar**: lo que queda pendiente de los documentos del
+  reporte, con el mismo cálculo de Cuentas por Cobrar. Aplica en pantalla, en el
+  PDF (con su total al pie) y en el Excel; el número de documentos pasó al título
+  del nombre del cliente. Nueva sección *Por cliente: la columna Saldo x Cobrar*.
 - **1.4** — Las columnas de la tabla ahora **ordenan el reporte**: un clic ordena
   de menor a mayor y otro invierte, en el detallado y en todas las agrupaciones.
   El **PDF y el Excel respetan ese orden**, y la columna elegida se guarda como
