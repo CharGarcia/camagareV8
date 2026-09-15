@@ -325,11 +325,20 @@ class ConsignacionesVentasController extends BaseModuloController
 
     public function store(): void
     {
-        $this->requireCrear();
+        // El body se lee ANTES del guard porque el permiso depende de la operación:
+        // crear un documento nuevo exige 'w', pero editar uno existente exige solo 'u'
+        // (mismo criterio que Ingresos y Facturas de Venta). Cuando esto empezaba con
+        // requireCrear() incondicional, el permiso "Actualizar" no servía por sí solo:
+        // quien tenía 'u' sin 'w' recibía 403 al guardar cualquier cambio.
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!empty($input['id'])) {
+            $this->requireActualizar();
+        } else {
+            $this->requireCrear();
+        }
         header('Content-Type: application/json');
 
         try {
-            $input = json_decode(file_get_contents('php://input'), true);
             if (!$input) {
                 throw new Exception("Datos no recibidos.");
             }
@@ -356,7 +365,6 @@ class ConsignacionesVentasController extends BaseModuloController
 
             if (!empty($input['id'])) {
                 // Actualizar
-                $this->requireActualizar();
                 $this->docPropioOCortar((int) $input['id']);
                 $this->service->actualizar((int) $input['id'], (int) $input['id_empresa'], $input);
                 $numero = $this->service->getUltimoNumeroGenerado();

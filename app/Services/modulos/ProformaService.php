@@ -53,6 +53,7 @@ class ProformaService
         // lock de obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
+        $secuencial = '';
         if ($managed) $db->beginTransaction();
         try {
             $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Proformas', $data['fecha_emision'] ?? null);
@@ -83,6 +84,16 @@ class ProformaService
             return $idProforma;
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
+            // Último cinturón: el índice único uq_proformas_numero rechazó el número. No
+            // debería ocurrir (el candado de obtenerSiguienteSecuencial serializa a los
+            // emisores del mismo punto), pero si ocurre el usuario tiene que leer qué pasó,
+            // no un volcado de PDO.
+            if ($e instanceof \PDOException && (string) $e->getCode() === '23505'
+                && stripos($e->getMessage(), 'uq_proformas_numero') !== false) {
+                throw new \RuntimeException(
+                    "El secuencial {$secuencial} acaba de ser tomado por otra proforma. Vuelva a guardar para que el sistema asigne el siguiente número."
+                );
+            }
             throw $e;
         }
     }

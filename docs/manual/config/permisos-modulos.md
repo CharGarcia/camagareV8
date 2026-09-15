@@ -6,8 +6,8 @@ ruta_modulo: config/permisos-modulos
 tipo: modulo
 visibilidad: superadmin
 requiere_permiso_modulo: no
-etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente
-version: 1.5
+etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente, pdf, imprimir, imprimir permisos, reporte de permisos, descargar permisos, acta de permisos
+version: 1.6
 orden: 10
 estado: activo
 ---
@@ -113,6 +113,32 @@ El cupo de usuarios se valida contra la **empresa elegida en el modal**, no
 contra la empresa en la que esté trabajando: un administrador puede tener una
 empresa llena y otra con espacio.
 
+## Imprimir los módulos asignados (PDF)
+
+El botón **PDF** de la barra del listado descarga los permisos del usuario que
+está en pantalla, en la empresa seleccionada. Sirve para dejar constancia de qué
+se le entregó a cada persona: firmarlo, adjuntarlo a un expediente o revisarlo
+sin entrar al sistema.
+
+Qué trae el documento:
+
+- Empresa y RUC, nombre y cédula del usuario, su nivel y la fecha de generación.
+- La lista **agrupada por módulo**, con una **X** en cada permiso concedido
+  (Ver, Crear, Actualizar, Eliminar y Ver Todo) y un guion donde no lo hay.
+- Al pie, el recordatorio de qué significa *Ver Todo*.
+
+Dos detalles a tener en cuenta:
+
+- **Solo se imprime lo asignado.** Los submódulos sin ninguna casilla marcada no
+  aparecen; el PDF es la lista de lo que el usuario puede hacer, no el catálogo
+  completo del sistema.
+- **Se imprime lo mismo que usted ve.** Un administrador obtiene solo los
+  submódulos que él administra, igual que en la pantalla. Si necesita el detalle
+  completo de un usuario, debe generarlo un superadministrador.
+
+Para un usuario de nivel 3 el PDF indica que es superadministrador y que accede
+a todo el sistema sin necesidad de asignación.
+
 ## Por qué un módulo manda al tablero
 
 Cuando un usuario entra a un módulo y el sistema lo devuelve al tablero, es
@@ -135,6 +161,10 @@ cambio se aplica en la siguiente página que abra.
 
 ## Historial de cambios
 
+- **1.6** — Nuevo botón **PDF**: descarga los módulos y submódulos asignados al
+  usuario en la empresa seleccionada, agrupados por módulo y con el detalle de
+  cada permiso. Incluye los datos del usuario y de la empresa para poder
+  archivarlo o firmarlo.
 - **1.5** — Los buscadores de empresa de esta pantalla (selección principal,
   *Copiar desde otra empresa*, *Copiar permisos a otro usuario* y *Crear usuario*)
   buscan por **nombre comercial, razón social y RUC**. Antes la razón social no se

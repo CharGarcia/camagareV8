@@ -253,21 +253,26 @@ window.cmgEmpresaTomSelect = function() {
     <div class="card" id="card-modulos">
         <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <strong><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?> - <i class="bi bi-building"></i> <?= htmlspecialchars($empresaSel['nombre_comercial'] ?? $empresaSel['ruc'] ?? '') ?></strong>
-            <?php if ((int)($usuarioSel['nivel'] ?? 0) < 3): ?>
             <div class="d-flex gap-2 flex-wrap">
-                <?php if ($nivel >= 3 && !empty($combosActivos)): ?>
-                <button type="button" class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalAplicarCombo">
-                    <i class="bi bi-box-seam"></i> Aplicar combo
-                </button>
+                <?php if ((int)($usuarioSel['nivel'] ?? 0) < 3): ?>
+                    <?php if ($nivel >= 3 && !empty($combosActivos)): ?>
+                    <button type="button" class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalAplicarCombo">
+                        <i class="bi bi-box-seam"></i> Aplicar combo
+                    </button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCopiarDesdeEmpresa">
+                        <i class="bi bi-building-gear"></i> Copiar desde otra empresa
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCopiarPermisos">
+                        <i class="bi bi-files"></i> Copiar permisos a otro usuario
+                    </button>
                 <?php endif; ?>
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCopiarDesdeEmpresa">
-                    <i class="bi bi-building-gear"></i> Copiar desde otra empresa
-                </button>
-                <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCopiarPermisos">
-                    <i class="bi bi-files"></i> Copiar permisos a otro usuario
-                </button>
+                <?php // El PDF también se ofrece para un usuario nivel 3: ahí documenta que tiene acceso total. ?>
+                <a href="<?= $base ?>/config/permisos-modulos?action=exportPdf&amp;u=<?= (int)$idUsuarioSel ?>&amp;e=<?= (int)$idEmpresaSel ?>"
+                   class="btn btn-outline-danger btn-sm" title="Descargar PDF de los módulos asignados a este usuario en esta empresa">
+                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                </a>
             </div>
-            <?php endif; ?>
         </div>
         <div class="card-body">
             <form method="POST" action="<?= $base ?>/config/permisos-modulos" id="form-permisos">

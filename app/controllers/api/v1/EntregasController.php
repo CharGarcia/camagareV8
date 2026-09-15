@@ -81,6 +81,8 @@ class EntregasController extends ApiBaseController
             $this->jsonError('ID_REQUERIDO', 'Falta id.', 422);
         }
 
+        $this->requireConsignacionDeMisResponsables($id);
+
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $detalle = $this->service->getDetalleCompleto($id, $idEmpresa);
         if (!$detalle) {
@@ -111,6 +113,8 @@ class EntregasController extends ApiBaseController
         if ($idConsignacion <= 0 || $uuid === '' || $capturadoEn === '') {
             $this->jsonError('DATOS_INCOMPLETOS', 'Faltan datos obligatorios (id_consignacion, uuid_cliente, capturado_en).', 422);
         }
+
+        $this->requireConsignacionDeMisResponsables($idConsignacion);
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
@@ -150,6 +154,33 @@ class EntregasController extends ApiBaseController
         }
 
         $this->jsonOk($resultado, [], $resultado['ya_entregada'] ? 200 : 201);
+    }
+
+    /**
+     * Corta si la consignación no es de los responsables del usuario.
+     *
+     * pendientes() ya filtra el listado, pero obtener() y registrar() reciben un id
+     * suelto: sin esto, un repartidor sin "acceso total" podía leer el detalle
+     * completo de cualquier consignación de la empresa (cliente, dirección, productos,
+     * precios) y marcarla como entregada con su firma y su GPS, solo probando ids.
+     * Responde el mismo 404 que una consignación inexistente: quien no puede verla
+     * tampoco debe poder deducir que existe.
+     */
+    private function requireConsignacionDeMisResponsables(int $idConsignacion): void
+    {
+        $idsResponsables = $this->resolverFiltroResponsables();
+        if ($idsResponsables === null) {
+            return;     // acceso total (t)
+        }
+
+        $pertenece = (new ConsignacionVentaRepository())->perteneceAResponsables(
+            $idConsignacion,
+            (int) $_SESSION['id_empresa'],
+            $idsResponsables
+        );
+        if (!$pertenece) {
+            $this->jsonError('NO_ENCONTRADO', 'Consignación no encontrada.', 404);
+        }
     }
 
     /** null = ver todas (acceso total); array (posiblemente vacío) = solo esos responsables. */

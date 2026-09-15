@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que
-version: 1.10
+etiquetas: consignacion, consignaciones, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion
+version: 1.12
 orden: 45
 estado: activo
 ---
@@ -122,9 +122,32 @@ nombre impreso**: los escribe y firma a mano quien recibe la mercadería.
 Si el contenido llega muy abajo, las firmas pasan a una página nueva en vez de
 montarse sobre la tabla.
 
+Cuando la consignación tiene **muchos productos**, el listado continúa en las
+páginas siguientes y **cada página repite la fila de encabezados** (Código,
+Descripción, Bodega, Lote, Caducidad, NUP, Cantidad, Retorno, Facturados,
+Acon.). Ninguna fila se parte entre dos hojas, y el TOTAL ÍTEMS, las
+observaciones y las firmas se mantienen completos: si no caben en lo que resta
+de página, pasan enteros a la siguiente.
+
 Si la empresa usa una **plantilla propia** (módulo *Plantillas de Documentos*),
 manda esa plantilla y no este diseño; ahí el usuario emisor es el campo
 `{cg_emitido_por}` y el total de ítems, `{total_items}`.
+
+## Qué habilita cada permiso
+
+- **Ver**: abrir el listado y los documentos, con su PDF, su Excel y el envío
+  por correo.
+- **Crear**: el botón **Nueva**.
+- **Actualizar**: guardar los cambios de un documento existente y mover su
+  **estado** (entregar / anular). **No hace falta tener además *Crear***.
+- **Eliminar**: el botón **Eliminar** del documento.
+
+El formulario muestra solo lo que el permiso permite: sin *Actualizar*, los
+campos, el botón **Guardar** y el selector de estado quedan en solo lectura; sin
+*Eliminar*, el botón no aparece.
+
+*Acceso total* no reemplaza a ninguno de los cuatro: solo amplía **qué
+documentos** se ven (ver el punto siguiente).
 
 ## Quién ve cada documento
 
@@ -197,6 +220,23 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.12** — El PDF de una consignación con muchos productos ya no sale
+  troceado. A partir de unas 18 líneas, el documento se partía en decenas de
+  hojas con un solo dato cada una (25 productos llegaban a producir 23 páginas,
+  60 productos, 338) y el total, las observaciones y las firmas quedaban sueltos
+  en hojas aparte. Ahora el listado continúa de forma normal en las páginas
+  siguientes, repitiendo los encabezados de columna, y esos tres bloques se
+  dibujan completos. De paso, las descripciones largas ya no se recortan y un
+  lote, NUP o código más ancho que su columna se ajusta dentro de la celda en
+  vez de montarse sobre la siguiente.
+
+- **1.11** — El permiso **Actualizar** ya sirve por sí solo: para guardar el
+  cambio de una consignación existente también se exigía *Crear*, así que quien
+  solo podía corregir recibía *«No tiene permiso para esta acción»*. Además, el
+  formulario respeta los permisos: sin *Actualizar* los campos, **Guardar** y el
+  selector de estado quedan en solo lectura, y **Eliminar** aparece solo con
+  permiso de eliminar (antes se mostraban siempre y el error salía al pulsarlos).
 
 - **1.10** — En el celular, la lista de productos ya no desaparece al buscar
   por código o descripción. Cuando el teclado tapa el campo del detalle —la tabla

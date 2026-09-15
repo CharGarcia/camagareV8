@@ -228,32 +228,41 @@ class ConsignacionVentaPdfService
         foreach ($cols as $i => &$c) { if ($c['w'] === 0) { $c['w'] = $flex; $descIdx = $i; } }
         unset($c);
 
-        // Encabezado
-        $pdf->SetXY($mL, $y);
-        $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->SetFillColor(60, 70, 90);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetDrawColor(60, 70, 90);
-        $pdf->SetLineWidth(0.2);
-        foreach ($cols as $c) {
-            $pdf->Cell($c['w'], 6, $c['t'], 1, 0, 'C', true);
-        }
-        $pdf->Ln();
+        // Encabezado de la tabla. Se encapsula porque hay que repetirlo al inicio de
+        // cada página cuando el detalle no cabe en una sola.
+        $dibujarCabeceraTabla = function (float $yEnc) use ($pdf, $cols, $mL): float {
+            $pdf->SetXY($mL, $yEnc);
+            $pdf->SetFont('helvetica', 'B', 7);
+            $pdf->SetFillColor(60, 70, 90);
+            $pdf->SetTextColor(255, 255, 255);
+            $pdf->SetDrawColor(60, 70, 90);
+            $pdf->SetLineWidth(0.2);
+            foreach ($cols as $c) {
+                $pdf->Cell($c['w'], 6, $c['t'], 1, 0, 'C', true);
+            }
+            $pdf->Ln();
+            // Deja el lápiz listo para las filas (la fuente también la usa getNumLines).
+            $pdf->SetFont('helvetica', '', 6.8);
+            $pdf->SetTextColor(0, 0, 0);
+            return $yEnc + 6;
+        };
+
+        $dibujarCabeceraTabla($y);
 
         // Filas
-        $pdf->SetFont('helvetica', '', 6.8);
-        $pdf->SetTextColor(0, 0, 0);
         if (empty($detalles)) {
             $pdf->SetX($mL);
             $pdf->Cell($this->contentW, 6, 'Sin productos.', 1, 1, 'C');
             return $pdf->GetY();
         }
 
+        // Alto útil de la página: por debajo de esta Y ya no cabe una fila entera.
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
+
         $alt = false;
         foreach ($detalles as $d) {
             $bg = $alt ? [245, 247, 250] : [255, 255, 255];
             $alt = !$alt;
-            $pdf->SetFillColor(...$bg);
 
             $vals = [];
             foreach ($cols as $c) {
@@ -274,19 +283,34 @@ class ConsignacionVentaPdfService
                 }
             }
 
-            // Altura según la descripción
+            // Altura según la descripción. getNumLines() da el número real de renglones
+            // con la fuente y el ancho de la celda (la estimación por GetStringWidth se
+            // quedaba corta y recortaba descripciones largas).
             $descW = $cols[$descIdx]['w'];
-            $nLin  = max(1, (int)ceil(max(1, $pdf->GetStringWidth((string)$vals[$descIdx])) / max(1, $descW - 2)));
+            $nLin  = max(1, $pdf->getNumLines((string)$vals[$descIdx], $descW));
             $h     = max(5.0, $nLin * 4.0);
 
-            $x = $mL;
             $yRow = $pdf->GetY();
+
+            // Salto de página CONTROLADO. Sin esto, al pasarse del alto útil cada
+            // SetXY() con una Y fuera de página dispara el salto automático de TCPDF y,
+            // como aquí se hace un SetXY por COLUMNA, una consignación larga acababa
+            // generando una página casi vacía por celda (25 líneas producían 23 páginas).
+            if ($yRow + $h > $limiteY) {
+                $pdf->AddPage();
+                $yRow = $dibujarCabeceraTabla($pdf->GetY());
+            }
+            $pdf->SetFillColor(...$bg);
+
+            $x = $mL;
             foreach ($cols as $i => $c) {
                 $pdf->SetXY($x, $yRow);
                 if ($i === $descIdx) {
                     $pdf->MultiCell($c['w'], $h, $vals[$i], 1, $c['a'], true, 0, '', '', true, 0, false, true, $h, 'M');
                 } else {
-                    $pdf->Cell($c['w'], $h, $vals[$i], 1, 0, $c['a'], true);
+                    // stretch = 1: un lote/NUP/código más largo que su columna se condensa
+                    // dentro de la celda en vez de desbordarse sobre la siguiente.
+                    $pdf->Cell($c['w'], $h, $vals[$i], 1, 0, $c['a'], true, '', 1);
                 }
                 $x += $c['w'];
             }
@@ -303,6 +327,10 @@ class ConsignacionVentaPdfService
             foreach ($detalles as $d) { $totalCant += (float)($d['cantidad'] ?? 0); }
 
             $yTot = $pdf->GetY();
+            if ($yTot + 6 > $limiteY) {
+                $pdf->AddPage();
+                $yTot = $dibujarCabeceraTabla($pdf->GetY());
+            }
             $pdf->SetXY($mL, $yTot);
             $pdf->SetFont('helvetica', 'B', 7);
             $pdf->SetFillColor(235, 238, 243);
@@ -336,6 +364,13 @@ class ConsignacionVentaPdfService
         $nLin = max(1, $pdf->getNumLines($obs, $w - 4 - $lblW));
         $h    = $nLin * 4.0 + 3;
 
+        // El recuadro se dibuja entero en una página: si no cabe, pasa a la siguiente
+        // (si no, el marco quedaba en una hoja y el texto en otra).
+        if ($y + $h > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
+
         $pdf->SetLineWidth(0.2);
         $pdf->SetDrawColor(120, 120, 120);
         $pdf->SetFillColor(250, 250, 250);
@@ -358,15 +393,16 @@ class ConsignacionVentaPdfService
         $mL  = $this->marginL;
         $colW = $this->contentW / 3;
 
-        // El tope deja sitio a la segunda fila de firmas (la de acondicionamiento), que va
-        // 14 mm más abajo: 258 + 14 = 272, el límite inferior útil de la página. Si el
-        // contenido llegó más abajo, las firmas pasan a una página nueva en vez de dibujarse
-        // encima de la tabla o de las observaciones.
-        $yLinea = $y + 22;
-        if ($yLinea > 258) {
+        // Alto del bloque completo: 22 mm hasta la línea de firmas, 14 más hasta la de
+        // acondicionamiento y 5 para su etiqueta. Si no cabe entero en lo que queda de
+        // página, las firmas pasan a una hoja nueva en vez de partirse o dibujarse encima
+        // de la tabla o de las observaciones.
+        $altoBloque = 22.0 + 14.0 + 5.0;
+        if ($y + $altoBloque > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
             $pdf->AddPage();
-            $yLinea = $pdf->GetY() + 22;
+            $y = $pdf->GetY();
         }
+        $yLinea = $y + 22;
 
         // "Emitido por" lleva el usuario que REGISTRÓ la consignación (no la empresa ni quien
         // imprime): es el responsable de la emisión del documento.

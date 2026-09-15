@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.12
+etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero
+version: 1.13
 orden: 15
 estado: activo
 ---
@@ -158,6 +158,26 @@ un clic normal en cualquier encabezado vuelve a dejar una sola.
 El orden se guarda para usted y las exportaciones salen con ese mismo orden.
 Detalles en *Cómo ordenar los listados*.
 
+## El PDF de la proforma
+
+El botón **PDF** de la barra de acciones del modal descarga la cotización con el
+logo y los datos de la empresa, el bloque **PROFORMA** (número, fecha y hasta
+cuándo es válida), el cliente y el detalle.
+
+La tabla del detalle trae, por cada ítem: **Código**, **Descripción**, **Cant.**,
+**P. Unit.**, **Desc.**, **IVA** y **Subtotal** — las mismas columnas que el
+Excel. El código es el del producto tal como quedó guardado en la línea. Cuando
+un texto no cabe en el ancho de su columna (un código largo, una descripción
+extensa) **se parte en varias líneas dentro de su celda**: la fila crece y nada
+se corta ni se monta sobre la columna vecina.
+
+Al pie, las **observaciones** y la **información adicional** salen a la
+**izquierda, a la misma altura que el bloque de totales**, aprovechando el
+espacio que antes quedaba vacío junto a ellos.
+
+Si la empresa tiene una **plantilla de PDF propia** configurada para proformas,
+manda esa plantilla y el diseño descrito aquí no se usa.
+
 ## Exportar a Excel
 
 Desde la proforma guardada, el botón **Excel** (junto al de PDF, en la barra de
@@ -308,6 +328,19 @@ ninguna serie disponible para proformas, el sistema **avisa apenas se abre el
 modal** y **no deja guardar** hasta configurarlo. Es el mismo comportamiento que
 en Facturas de Venta.
 
+### Dos proformas no pueden quedarse con el mismo número
+
+El número no se toma del que muestra la pantalla: al guardar, el servidor vuelve
+a pedir el siguiente disponible de esa serie y **bloquea el punto de emisión**
+hasta terminar de grabar. Por eso, si dos personas guardan una proforma de la
+misma serie en el mismo instante, cada una recibe un número distinto aunque el
+campo *Secuencial* les mostrara el mismo antes de guardar.
+
+Además, la base de datos rechaza cualquier intento de repetir número dentro de
+una serie. Si eso llega a ocurrir, el sistema avisa que **el número acaba de ser
+tomado por otra proforma**: basta con volver a pulsar *Guardar* para que le
+asigne el siguiente.
+
 ## Errores frecuentes
 
 - **"La proforma debe estar aprobada para generar una factura"**: cámbiela a
@@ -339,6 +372,15 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.13** — El **PDF de la proforma** muestra el **código** de cada ítem en la
+  primera columna, en lugar del número de línea (1, 2, 3…), igual que el Excel.
+  Las celdas del detalle **parten el texto en varias líneas** cuando no cabe en
+  su columna, así que un código o una descripción larga ya no se recorta ni pisa
+  la columna siguiente. Las **observaciones y la información adicional** pasan a
+  imprimirse **a la izquierda del bloque de totales**, a su misma altura. Nueva
+  sección *El PDF de la proforma*. En *Serie y secuencial* se explica qué impide
+  que dos proformas terminen con el mismo número.
 
 - **1.12** — El listado se puede **ordenar por hasta tres columnas a la vez**:
   Shift+clic en el título de la segunda columna la encadena a la primera (por

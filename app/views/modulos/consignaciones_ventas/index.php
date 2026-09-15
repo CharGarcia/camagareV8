@@ -49,7 +49,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="cons-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam"></i> <?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex gap-2">
-        <?php if (!empty($perm['crear']) || !empty($perm['todo'])): ?>
+        <?php if (!empty($perm['crear'])): ?>
             <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalConsignacionNueva()">
                 <i class="bi bi-plus-lg"></i> Nueva
             </button>

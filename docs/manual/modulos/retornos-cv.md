@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo
-version: 1.7
+etiquetas: retorno, retornos, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion
+version: 1.9
 orden: 46
 estado: activo
 ---
@@ -61,6 +61,12 @@ En la barra de acciones del comprobante, junto al botón **PDF**, hay un botón
 **Excel** que descarga el detalle del retorno (código, descripción, lote, NUP
 y cantidad) en una hoja de cálculo. Requiere que el retorno esté guardado.
 
+Cuando el retorno tiene **muchos productos**, el listado del PDF continúa en
+las páginas siguientes y **cada página repite la fila de encabezados**. Ninguna
+fila se parte entre dos hojas, y el motivo, las observaciones y las firmas se
+mantienen completos: si no caben en lo que resta de página, pasan enteros a la
+siguiente.
+
 Arriba del listado hay otro par de botones **PDF** y **Excel** que exportan la
 **lista completa de retornos** tal como se esté viendo: respetan el buscador,
 los filtros y el orden aplicados, y salen todas las filas que calcen, no solo
@@ -79,6 +85,9 @@ Depende del permiso **Acceso total** del módulo (se administra en
   responde *«No tiene permiso sobre este registro: lo creó otro usuario»*.
 
 El superadministrador (nivel 3) siempre ve todo.
+
+Para **guardar el cambio** de un retorno ya registrado basta el permiso
+*Actualizar*: no hace falta tener además *Crear*.
 ## Errores frecuentes
 
 - **El saldo no cuadra**: revise si falta registrar un retorno o si hay
@@ -142,6 +151,17 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.9** — El PDF de un retorno con muchos productos ya no sale troceado. Al
+  pasar de unas 45 líneas el documento se partía en decenas de hojas con un solo
+  dato cada una (60 productos llegaban a producir 74 páginas). Además, las
+  firmas ya no se dibujan encima del listado cuando este llega al pie de la
+  página: pasan completas a la hoja siguiente, igual que el motivo y las
+  observaciones.
+
+- **1.8** — El permiso **Actualizar** ya sirve por sí solo: para guardar el
+  cambio de un retorno existente también se exigía *Crear*, así que quien solo
+  podía corregir recibía *«No tiene permiso para esta acción»*.
 
 - **1.7** — El listado ya **no muestra la columna Total**: el valor del retorno se
   consulta abriendo el documento. Las columnas del listado son ahora Fecha,

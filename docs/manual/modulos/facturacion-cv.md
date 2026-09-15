@@ -6,7 +6,7 @@ ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: facturacion de consignacion, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable
-version: 1.3
+version: 1.5
 orden: 47
 estado: activo
 ---
@@ -111,7 +111,9 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 - **Ver** muestra el listado y permite abrir los documentos.
 - **Crear** habilita *Nueva* y *Crear nueva desde esta* (duplicar).
-- **Actualizar** permite editar un borrador y **Generar factura**.
+- **Actualizar** permite editar un borrador y **Generar factura**. Para guardar
+  el cambio de un documento existente basta este permiso: no hace falta tener
+  además *Crear*.
 - **Eliminar** permite borrar un borrador (nunca un documento ya facturado).
 - Sin **acceso total**, el usuario ve y edita solo los documentos que él creó;
   con acceso total, los de toda la empresa. El superadministrador ve todo.
@@ -177,6 +179,20 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   que repara el enlace de esas líneas.
 
 ## Historial de cambios
+
+- **1.5** — El PDF de una facturación con muchos productos ya no sale troceado.
+  A partir de unas 20 líneas el documento se partía en decenas de hojas con un
+  solo dato cada una (40 productos llegaban a producir 126 páginas) y los
+  totales, las observaciones y la información adicional quedaban sueltos en
+  hojas aparte. Ahora el listado continúa de forma normal en las páginas
+  siguientes, repitiendo los encabezados de columna, y esos bloques se dibujan
+  completos. Además, las descripciones largas ya no se recortan y un lote o
+  código más ancho que su columna se ajusta dentro de la celda en vez de
+  montarse sobre la siguiente.
+
+- **1.4** — El permiso **Actualizar** ya sirve por sí solo: para guardar el
+  cambio de un documento existente también se exigía *Crear*, así que quien solo
+  podía corregir recibía *«No tiene permiso para esta acción»*.
 
 - **1.3** — Los documentos que repiten un producto en varias líneas (una por NUP)
   ya muestran todos sus ítems; antes se agrupaban por línea de consignación.

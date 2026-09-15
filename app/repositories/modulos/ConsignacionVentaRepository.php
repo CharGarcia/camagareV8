@@ -190,6 +190,42 @@ class ConsignacionVentaRepository extends BaseRepository
         return ['total' => $total, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC)];
     }
 
+    /**
+     * ¿Esta consignación entra en el alcance de responsables del usuario?
+     *
+     * Mismo criterio que getPendientesEntrega(): $idsResponsables null = acceso total
+     * (t) y ve todas; array = solo las de esos responsables de traslado (array vacío =
+     * ninguna); una consignación sin responsable asignado tampoco entra. Lo usa la API
+     * móvil en las acciones que reciben un id suelto, donde el filtro del listado no
+     * protege nada.
+     */
+    public function perteneceAResponsables(int $id, int $idEmpresa, ?array $idsResponsables): bool
+    {
+        if ($idsResponsables === null) {
+            return true;
+        }
+        if (empty($idsResponsables)) {
+            return false;
+        }
+
+        $params = [':id' => $id, ':e' => $idEmpresa];
+        $marcadores = [];
+        foreach (array_values($idsResponsables) as $i => $idResp) {
+            $clave = ":r{$i}";
+            $marcadores[] = $clave;
+            $params[$clave] = (int) $idResp;
+        }
+
+        $sql = "SELECT 1
+                  FROM consignaciones_ventas
+                 WHERE id = :id AND id_empresa = :e AND eliminado = false
+                   AND id_responsable_traslado IN (" . implode(',', $marcadores) . ")
+                 LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return (bool) $st->fetchColumn();
+    }
+
     public function getDetalles(int $idConsignacion, int $idEmpresa): array
     {
         $sql = "

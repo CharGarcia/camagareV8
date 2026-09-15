@@ -6,7 +6,7 @@ ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: entregas, entrega, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas
-version: 1.1
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -87,6 +87,11 @@ Ese alcance vale para todo lo que sirve el módulo, **incluida la imagen de la
 firma** de una entrega: si la entrega no es de uno de sus responsables, la
 firma no se muestra aunque se pida por su enlace directo.
 
+El mismo alcance rige en la **app móvil**: sin acceso total, el repartidor solo
+puede abrir y registrar la entrega de las consignaciones de sus responsables.
+Una consignación fuera de su alcance responde *«Consignación no encontrada»*,
+igual que una que no existe.
+
 ## Reglas de negocio
 
 - No se puede crear, editar ni eliminar nada desde aquí: la fuente de verdad es
@@ -114,6 +119,12 @@ firma no se muestra aunque se pida por su enlace directo.
   entregas registradas manualmente desde la web nunca tienen firma).
 
 ## Historial de cambios
+
+- **1.2** — En la **app móvil**, abrir una consignación y registrar su entrega
+  respetan el alcance por responsable de traslado, igual que el listado: antes,
+  un repartidor sin acceso total podía abrir cualquier consignación de la
+  empresa —y marcarla como entregada con su firma— si llegaba a ella por su
+  número interno.
 
 - **1.1** — La imagen de la **firma** de una entrega respeta el mismo alcance
   que el listado: sin acceso total solo se ve la de los responsables de

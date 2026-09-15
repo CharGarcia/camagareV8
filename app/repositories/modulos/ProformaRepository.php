@@ -226,12 +226,29 @@ class ProformaRepository extends BaseRepository
         );
     }
 
+    /**
+     * ¿La serie ya tiene ese número? Compara por texto Y por valor numérico: el motor de
+     * secuenciales razona con números (CAST a BIGINT) mientras esta tabla guarda texto, así
+     * que un '16' heredado de una migración y el '000000016' que calcula el sistema son el
+     * MISMO número en cadenas distintas — comparando solo texto, ese choque pasaba
+     * desapercibido aquí (y también en el índice único uq_proformas_numero).
+     */
     public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial, ?int $excluirId = null): bool
     {
+        $mismoNumero = 'secuencial = ?';
+        $params      = [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial];
+        if (preg_match('/^[0-9]+$/', trim($secuencial))) {
+            // CASE (no AND) para fijar el orden de evaluación: sin él PostgreSQL puede
+            // intentar el CAST sobre un secuencial no numérico y abortar la consulta.
+            $mismoNumero .= " OR CASE WHEN TRIM(secuencial) ~ '^[0-9]+$'
+                                      THEN CAST(TRIM(secuencial) AS BIGINT) = CAST(? AS BIGINT)
+                                      ELSE FALSE END";
+            $params[] = $secuencial;
+        }
+
         $sql = "SELECT COUNT(*) FROM proformas_cabecera
                 WHERE id_empresa = ? AND id_establecimiento = ? AND id_punto_emision = ?
-                  AND secuencial = ? AND eliminado = FALSE";
-        $params = [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial];
+                  AND ({$mismoNumero}) AND eliminado = FALSE";
         if ($excluirId !== null) {
             $sql .= " AND id <> ?";
             $params[] = $excluirId;

@@ -521,6 +521,196 @@ class PermisosModulosController extends Controller
     }
 
     /**
+     * PDF con los módulos y submódulos asignados al usuario en la empresa
+     * seleccionada. Imprime exactamente lo que la pantalla muestra marcado: el
+     * catálogo visible para quien administra cruzado con los permisos del usuario
+     * destino, de modo que un administrador nunca imprima submódulos fuera de su
+     * alcance. Los submódulos sin ninguna casilla marcada no se listan.
+     */
+    public function exportPdf(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        $idUsuario = (int) ($_GET['u'] ?? 0);
+        $idEmpresa = (int) ($_GET['e'] ?? 0);
+        $idActual  = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
+
+        if ($idUsuario <= 0 || $idEmpresa <= 0) {
+            $_SESSION['permisos_msg'] = ['danger', 'Seleccione un usuario y una empresa antes de imprimir.'];
+            $this->redirect(BASE_URL . self::BASE_PATH . '?v=1');
+            return;
+        }
+        if (!$this->puedeGestionarUsuario($idActual, $nivel, $idUsuario)) {
+            $_SESSION['permisos_msg'] = ['danger', 'Sin permiso para gestionar este usuario.'];
+            $this->redirect(BASE_URL . self::BASE_PATH . '?v=1');
+            return;
+        }
+
+        $usuarioSel = $this->modelEmpresa->getUsuarioPorId($idUsuario);
+        if (!$usuarioSel) {
+            $_SESSION['permisos_msg'] = ['danger', 'El usuario no existe o está inactivo.'];
+            $this->redirect(BASE_URL . self::BASE_PATH . '?v=1');
+            return;
+        }
+        $empresaSel = $this->resolverEmpresaSel($idUsuario, $idActual, $nivel, $idEmpresa);
+
+        $rows     = $this->modelPermiso->getModulosConSubmodulosParaPermisos($idActual, $idEmpresa, $nivel);
+        $permisos = $this->modelPermiso->getPermisosDeUsuario($idUsuario, $idEmpresa);
+        $modulos  = $this->agruparPorModuloOrdenado($rows, $permisos, $idUsuario, $idEmpresa);
+
+        $asignados = [];
+        $totalSub  = 0;
+        foreach ($modulos as $mod) {
+            $subs = [];
+            foreach ($mod['submodulos'] as $s) {
+                if (($s['ver'] ?? 0) || ($s['crear'] ?? 0) || ($s['actualizar'] ?? 0) || ($s['eliminar'] ?? 0) || ($s['t'] ?? 0)) {
+                    $subs[] = $s;
+                }
+            }
+            if (!empty($subs)) {
+                $asignados[] = ['nombre_modulo' => (string) ($mod['nombre_modulo'] ?? ''), 'submodulos' => $subs];
+                $totalSub += count($subs);
+            }
+        }
+
+        // Un superadministrador no tiene filas en modulos_asignados: accede a todo
+        // sin restricción, así que el PDF lo dice en vez de mostrar una tabla vacía.
+        $esSuperDestino = (int) ($usuarioSel['nivel'] ?? 0) >= 3;
+        $nombreNivel = match ((int) ($usuarioSel['nivel'] ?? 0)) {
+            3 => 'Superadministrador',
+            2 => 'Administrador',
+            default => 'Usuario',
+        };
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $e = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+            // TCPDF no garantiza el glifo del check (U+2713) en las fuentes core:
+            // una X y un guion se imprimen igual en cualquier equipo. La celda entera
+            // sale del helper para no meter un <span> dentro del <td>.
+            $marca = fn($v) => ((int) $v === 1)
+                ? '<td class="text-center si" style="width:12%;">X</td>'
+                : '<td class="text-center no" style="width:12%;">-</td>';
+
+            $nombreEmpresa = trim((string) ($empresaSel['nombre_comercial'] ?? ''));
+            if ($nombreEmpresa === '') $nombreEmpresa = trim((string) ($empresaSel['razon_social'] ?? ''));
+            if ($nombreEmpresa === '') $nombreEmpresa = 'Empresa #' . $idEmpresa;
+            $rucEmpresa = trim((string) ($empresaSel['ruc'] ?? ''));
+
+            ob_start();
+?>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
+                table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; }
+                <?php // vertical-align:top: un nombre de submódulo largo envuelve a dos líneas y,
+                      // con el centrado por defecto, sus marcas quedaban 4pt más abajo que el nombre. ?>
+                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; vertical-align: top; overflow: hidden; word-wrap: break-word; }
+                .text-center { text-align: center; }
+                .si { color: #198754; font-weight: bold; }
+                .no { color: #adb5bd; }
+                .header { text-align: center; margin-bottom: 10px; }
+                .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
+                .header h3 { margin: 0 0 2px 0; font-size: 10pt; }
+                .header p { margin: 0; font-size: 7.5pt; color: #555; }
+                table.datos { margin-bottom: 8px; border: 1px solid #ccc; background: #f8f9fa; }
+                table.datos td { border: none; padding: 2px 5px; font-size: 7.5pt; }
+                table.datos td.lbl { width: 15%; font-weight: bold; color: #555; }
+                table.datos td.val { width: 35%; }
+                tr.mod td { background: #dee2e6; font-weight: bold; font-size: 8pt; }
+                .nota { font-size: 7pt; color: #555; margin-top: 8px; }
+            </style>
+            <page backtop="10mm" backbottom="12mm" backleft="10mm" backright="10mm" footer="page">
+                <div class="header">
+                    <h2><?= $e($nombreEmpresa) ?><?= $rucEmpresa !== '' ? ' (' . $e($rucEmpresa) . ')' : '' ?></h2>
+                    <h3>Módulos asignados al usuario</h3>
+                    <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
+                </div>
+                <table class="datos">
+                    <tr>
+                        <td class="lbl">Usuario:</td>
+                        <td class="val"><?= $e($usuarioSel['nombre'] ?? '') ?></td>
+                        <td class="lbl">Cédula:</td>
+                        <td class="val"><?= $e($usuarioSel['cedula'] ?? '') ?></td>
+                    </tr>
+                    <tr>
+                        <td class="lbl">Nivel:</td>
+                        <td class="val"><?= $e($nombreNivel) ?></td>
+                        <td class="lbl">Asignados:</td>
+                        <td class="val"><?= (int) $totalSub ?> submódulo<?= $totalSub === 1 ? '' : 's' ?> en <?= count($asignados) ?> módulo<?= count($asignados) === 1 ? '' : 's' ?></td>
+                    </tr>
+                </table>
+                <?php if ($esSuperDestino): ?>
+                    <p style="border:1px solid #ccc;background:#f8f9fa;padding:5px;font-size:8pt;">
+                        Este usuario es <strong>Superadministrador</strong>: accede a todos los módulos,
+                        empresas y configuraciones del sistema sin necesidad de asignación individual.
+                    </p>
+                <?php endif; ?>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:40%;">Módulo / Submódulo</th>
+                            <th style="width:12%;">Ver</th>
+                            <th style="width:12%;">Crear</th>
+                            <th style="width:12%;">Actualizar</th>
+                            <th style="width:12%;">Eliminar</th>
+                            <th style="width:12%;">Ver Todo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($asignados)): ?>
+                            <tr>
+                                <td colspan="6" class="text-center" style="width:100%;">Este usuario no tiene módulos asignados en esta empresa.</td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($asignados as $mod): ?>
+                                <tr class="mod">
+                                    <td colspan="6" style="width:100%;"><?= $e($mod['nombre_modulo']) ?></td>
+                                </tr>
+                                <?php foreach ($mod['submodulos'] as $sub): ?>
+                                    <tr>
+                                        <td style="width:40%;padding-left:12px;"><?= $e($sub['nombre_submodulo'] ?? '') ?></td>
+                                        <?= $marca($sub['ver'] ?? 0) ?>
+                                        <?= $marca($sub['crear'] ?? 0) ?>
+                                        <?= $marca($sub['actualizar'] ?? 0) ?>
+                                        <?= $marca($sub['eliminar'] ?? 0) ?>
+                                        <?= $marca($sub['t'] ?? 0) ?>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+                <p class="nota">
+                    <strong>Ver Todo</strong>: con esta marca el usuario ve los registros de toda la empresa;
+                    sin ella solo ve y gestiona los que él mismo creó.
+                </p>
+            </page>
+<?php
+            $html = ob_get_clean();
+
+            $cedula = preg_replace('/[^A-Za-z0-9]/', '', (string) ($usuarioSel['cedula'] ?? ''));
+            $nombreArchivo = 'Permisos_' . ($cedula !== '' ? $cedula . '_' : '') . date('Ymd_His') . '.pdf';
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $html2pdf->writeHTML($html);
+            $html2pdf->output($nombreArchivo, 'D');
+            exit;
+        } catch (\Throwable $ex) {
+            if (ob_get_level() > 0) ob_end_clean();
+            header('Content-Type: text/html; charset=utf-8');
+            echo 'Error al generar PDF: ' . htmlspecialchars($ex->getMessage(), ENT_QUOTES, 'UTF-8');
+            exit;
+        }
+    }
+
+    /**
      * Opcion para los selectores de empresa. Cuando la consulta trae la marca
      * "asignada" (solo el superadministrador), se agrupa en el desplegable para
      * distinguir las empresas que el usuario ya tiene de las que aún no.

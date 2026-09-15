@@ -386,6 +386,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     }
     let CONS_BLOQUEAR_SECUENCIAL = false;
 
+    // Permisos del usuario en este módulo: los MISMOS que valida el backend en cada
+    // endpoint (store / cambiarEstadoAjax / eliminar). Sin esto el modal decidía solo
+    // por el estado del documento, así que alguien con permiso de solo lectura veía
+    // los campos editables, Guardar, Eliminar y el selector de estado, y recibía
+    // "No tiene permiso para esta acción" al usarlos. No se mezcla 'todo' (t) aquí:
+    // ese flag amplía QUÉ registros se ven, no lo que se puede hacer con ellos.
+    const CONS_PERM = {
+        crear:      <?= !empty($perm['crear']) ? 'true' : 'false' ?>,
+        actualizar: <?= !empty($perm['actualizar']) ? 'true' : 'false' ?>,
+        eliminar:   <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>
+    };
+
     // Clave de borrador local por empresa + usuario (igual que en Facturas de Venta).
     const CONS_STORAGE_KEY = 'cons_borrador_<?= (int)($_SESSION['id_empresa'] ?? 0) ?>_<?= (int)($_SESSION['id_usuario'] ?? 0) ?>';
 
@@ -426,7 +438,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         document.getElementById('cons_estado_badge').className = 'badge bg-secondary bg-opacity-10 text-secondary ms-2 d-none';
         
         const btnGuardar = document.getElementById('btnGuardarConsignacion');
-        btnGuardar.classList.remove('d-none');
+        btnGuardar.classList.toggle('d-none', !CONS_PERM.crear);
         btnGuardar.innerHTML = '<i class="bi bi-save me-1"></i> Guardar';
         btnGuardar.disabled = false;
         
@@ -576,8 +588,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             // migración, sin efecto real en inventario/contabilidad) sí permiten corregir el estado.
             if (selEstado) {
                 const conFactura = !!window._CONS_TIENE_FACTURA && !window._CONS_ES_MIGRADA;
-                selEstado.disabled = conFactura;
-                selEstado.title = conFactura ? 'La consignación tiene una factura asociada: no se puede cambiar el estado.' : '';
+                // Cambiar el estado (entregar / anular) es una actualización: sin permiso
+                // 'u' el selector queda en solo lectura, igual que lo rechaza el endpoint.
+                selEstado.disabled = conFactura || !CONS_PERM.actualizar;
+                selEstado.title = conFactura
+                    ? 'La consignación tiene una factura asociada: no se puede cambiar el estado.'
+                    : (!CONS_PERM.actualizar ? 'No tiene permiso para actualizar consignaciones.' : '');
             }
 
             // Modo edición/lectura y visibilidad de botones según el estado (editable solo en Borrador).
@@ -1594,7 +1610,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     window.consAplicarEditable = function(estado) {
         // Con factura asociada la consignación queda de solo lectura (no se edita ni se elimina).
         const conFactura = !!window._CONS_TIENE_FACTURA;
-        const editable = consEsEditable(estado) && !conFactura;
+        const editable = consEsEditable(estado) && !conFactura && CONS_PERM.actualizar;
         consSetFormEditable(editable);
 
         const btnGuardar = document.getElementById('btnGuardarConsignacion');
@@ -1605,7 +1621,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }
         const btnEliminar = document.getElementById('btnEliminarConsignacion');
         if (btnEliminar) {
-            const puedeEliminar = (estado === 'Borrador' || estado === 'Emitida' || estado === 'Nueva') && !conFactura;
+            const puedeEliminar = (estado === 'Borrador' || estado === 'Emitida' || estado === 'Nueva') && !conFactura && CONS_PERM.eliminar;
             btnEliminar.classList.toggle('d-none', !puedeEliminar);
         }
     };

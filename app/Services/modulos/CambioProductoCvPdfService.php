@@ -165,6 +165,13 @@ class CambioProductoCvPdfService
         $pdf = $this->pdf;
         $mL  = $this->marginL;
 
+        // El título de la tabla no se queda solo al pie de una página: necesita sitio
+        // para él, la fila de encabezados y al menos una línea de producto.
+        if ($y + 16 > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
+
         $pdf->SetXY($mL, $y);
         $pdf->SetFont('helvetica', 'B', 8.5);
         $pdf->SetTextColor(40, 40, 40);
@@ -187,30 +194,40 @@ class CambioProductoCvPdfService
         unset($c);
         $descIdx = 1;
 
-        $pdf->SetXY($mL, $y);
-        $pdf->SetFont('helvetica', 'B', 7.5);
-        $pdf->SetFillColor(60, 70, 90);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetDrawColor(60, 70, 90);
-        $pdf->SetLineWidth(0.2);
-        foreach ($cols as $c) {
-            $pdf->Cell($c['w'], 6, $c['t'], 1, 0, 'C', true);
-        }
-        $pdf->Ln();
+        // Encabezado de la tabla. Se encapsula porque hay que repetirlo al inicio de
+        // cada página cuando el detalle no cabe en una sola.
+        $dibujarCabeceraTabla = function (float $yEnc) use ($pdf, $cols, $mL): float {
+            $pdf->SetXY($mL, $yEnc);
+            $pdf->SetFont('helvetica', 'B', 7.5);
+            $pdf->SetFillColor(60, 70, 90);
+            $pdf->SetTextColor(255, 255, 255);
+            $pdf->SetDrawColor(60, 70, 90);
+            $pdf->SetLineWidth(0.2);
+            foreach ($cols as $c) {
+                $pdf->Cell($c['w'], 6, $c['t'], 1, 0, 'C', true);
+            }
+            $pdf->Ln();
+            // Deja el lápiz listo para las filas (la fuente también la usa getNumLines).
+            $pdf->SetFont('helvetica', '', 7.5);
+            $pdf->SetTextColor(0, 0, 0);
+            return $yEnc + 6;
+        };
 
-        $pdf->SetFont('helvetica', '', 7.5);
-        $pdf->SetTextColor(0, 0, 0);
+        $dibujarCabeceraTabla($y);
+
         if (empty($detalles)) {
             $pdf->SetX($mL);
             $pdf->Cell($this->contentW, 6, 'Sin productos.', 1, 1, 'C');
             return $pdf->GetY();
         }
 
+        // Alto útil de la página: por debajo de esta Y ya no cabe una fila entera.
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
+
         $alt = false;
         foreach ($detalles as $d) {
             $bg = $alt ? [245, 247, 250] : [255, 255, 255];
             $alt = !$alt;
-            $pdf->SetFillColor(...$bg);
 
             $vals = [];
             foreach ($cols as $c) {
@@ -224,18 +241,35 @@ class CambioProductoCvPdfService
                 }
             }
 
+            // Altura según la descripción. getNumLines() da el número real de renglones
+            // con la fuente y el ancho de la celda (la estimación por GetStringWidth se
+            // quedaba corta y recortaba descripciones largas).
             $descW = $cols[$descIdx]['w'];
-            $nLin  = max(1, (int)ceil(max(1, $pdf->GetStringWidth((string)$vals[$descIdx])) / max(1, $descW - 2)));
+            $nLin  = max(1, $pdf->getNumLines((string)$vals[$descIdx], $descW));
             $h     = max(5.0, $nLin * 4.2);
 
-            $x = $mL;
             $yRow = $pdf->GetY();
+
+            // Salto de página CONTROLADO. Sin esto, al pasarse del alto útil cada
+            // SetXY() con una Y fuera de página dispara el salto automático de TCPDF y,
+            // como aquí se hace un SetXY por COLUMNA, un cambio con muchas líneas
+            // acababa generando una página casi vacía por celda (20 devueltas + 20
+            // entregadas producían 12 páginas).
+            if ($yRow + $h > $limiteY) {
+                $pdf->AddPage();
+                $yRow = $dibujarCabeceraTabla($pdf->GetY());
+            }
+            $pdf->SetFillColor(...$bg);
+
+            $x = $mL;
             foreach ($cols as $i => $c) {
                 $pdf->SetXY($x, $yRow);
                 if ($i === $descIdx) {
                     $pdf->MultiCell($c['w'], $h, $vals[$i], 1, $c['a'], true, 0, '', '', true, 0, false, true, $h, 'M');
                 } else {
-                    $pdf->Cell($c['w'], $h, $vals[$i], 1, 0, $c['a'], true);
+                    // stretch = 1: un lote o código más largo que su columna se condensa
+                    // dentro de la celda en vez de desbordarse sobre la siguiente.
+                    $pdf->Cell($c['w'], $h, $vals[$i], 1, 0, $c['a'], true, '', 1);
                 }
                 $x += $c['w'];
             }
@@ -265,6 +299,12 @@ class CambioProductoCvPdfService
             $pdf->Cell($boxW - 30, 5, $lbl, 0, 0, 'R');
             $pdf->Cell(30, 5, number_format($val, 2), 0, 1, 'R');
         };
+        // Las tres filas del resumen se dibujan juntas o pasan juntas de página.
+        if ($y + 15 > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
+
         $pdf->SetXY($x, $y);
         $fila('Total devuelto:', $dev);
         $fila('Total entregado:', $ent);
@@ -281,6 +321,16 @@ class CambioProductoCvPdfService
 
         $motivo = trim((string)($c['motivo'] ?? ''));
         $obs    = trim((string)($c['observaciones'] ?? ''));
+
+        // Motivo y observaciones van juntos: si no caben en lo que queda de página,
+        // el bloque entero pasa a la siguiente.
+        $pdf->SetFont('helvetica', '', 8.5);
+        $hBloque = (max(1, $pdf->getNumLines($motivo !== '' ? $motivo : '—', $w - 24))
+                 +  max(1, $pdf->getNumLines($obs !== '' ? $obs : '—', $w - 24))) * 5;
+        if ($y + $hBloque > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
 
         $pdf->SetXY($mL, $y);
         $pdf->SetFont('helvetica', 'B', 8);
@@ -304,8 +354,14 @@ class CambioProductoCvPdfService
         $mL  = $this->marginL;
         $colW = $this->contentW / 2;
 
+        // Alto del bloque: 20 mm hasta la línea de firma más el nombre debajo. Si no
+        // cabe entero, las firmas pasan a una hoja nueva; antes se clavaban en 272 mm
+        // y terminaban dibujándose encima del listado.
+        if ($y + 30 > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
         $yLinea = $y + 20;
-        if ($yLinea > 272) { $yLinea = 272; }
 
         $firmas = [
             ['Realizado por', trim((string)($c['usuario_nombre'] ?? ''))],

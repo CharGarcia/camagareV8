@@ -52,6 +52,7 @@ class ConfigController extends Controller
             'empresasJson' => 'empresasJson',
             'asignarEmpresa' => 'asignarEmpresa',
             'empresasAsignablesJson' => 'empresasAsignablesJson',
+            'exportPdf' => 'exportPdf',
             default => 'index',
         };
         if (method_exists($c, $method)) {

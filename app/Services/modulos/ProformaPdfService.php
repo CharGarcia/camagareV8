@@ -18,6 +18,9 @@ class ProformaPdfService
     private array $grisLinea = [210, 214, 220];
     private array $grisTexto = [110, 116, 124];
 
+    /** Ancho de la caja de totales; el bloque de observaciones ocupa lo que queda a su izquierda. */
+    private const TOTALES_W = 76;
+
     /** Decimales configurados por la empresa/establecimiento (igual que el RIDE de factura). */
     private int $decCantidad = 2;
     private int $decPrecio   = 2;
@@ -45,8 +48,8 @@ class ProformaPdfService
         $this->encabezado($pdf, $cabecera, $empresa, $numero);
         $this->cajaCliente($pdf, $cabecera);
         $this->tablaDetalle($pdf, $detalles, $empresa);
-        $this->totales($pdf, $cabecera, $detalles);
-        $this->pieAdicional($pdf, $cabecera, $adicional);
+        $posTotales = $this->totales($pdf, $cabecera, $detalles);
+        $this->pieAdicional($pdf, $cabecera, $adicional, $posTotales);
         $this->pieDocumento($pdf, $empresa);
 
         return (string) $pdf->Output('Proforma_' . $numero . '.pdf', $outputDest);
@@ -179,16 +182,16 @@ class ProformaPdfService
     private function tablaDetalle(TCPDF $pdf, array $detalles, array $empresa): void
     {
         $mL = 14; $w = 182;
-        // Anchos: #, Descripción, Cant, P.Unit, Desc, IVA%, Subtotal
-        $cols = [10, 74, 16, 24, 18, 16, 24];
+        // Anchos: Código, Descripción, Cant, P.Unit, Desc, IVA%, Subtotal
+        $cols = [26, 64, 15, 22, 17, 14, 24];
 
         // Encabezado
         $pdf->SetFillColor(...$this->accent);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetFont('helvetica', 'B', 8);
         $pdf->SetX($mL);
-        $headers = ['#', 'DESCRIPCIÓN', 'CANT.', 'P. UNIT.', 'DESC.', 'IVA', 'SUBTOTAL'];
-        $aligns  = ['C', 'L', 'C', 'R', 'R', 'C', 'R'];
+        $headers = ['CÓDIGO', 'DESCRIPCIÓN', 'CANT.', 'P. UNIT.', 'DESC.', 'IVA', 'SUBTOTAL'];
+        $aligns  = ['L', 'L', 'C', 'R', 'R', 'C', 'R'];
         foreach ($headers as $i => $htxt) {
             $pdf->Cell($cols[$i], 7, $htxt, 0, ($i === count($headers) - 1 ? 1 : 0), $aligns[$i], true);
         }
@@ -202,7 +205,7 @@ class ProformaPdfService
             // recalcula, igual que hace el RIDE de Facturas de Venta.
             $ivaPct = $this->tarifaIva($d);
             $rowData = [
-                (string) ($i + 1),
+                $this->codigoLinea($d),
                 (string) ($d['descripcion'] ?? ''),
                 number_format((float) ($d['cantidad'] ?? 0), $this->decCantidad, '.', ','),
                 '$' . number_format((float) ($d['precio_unitario'] ?? 0), $this->decPrecio, '.', ','),
@@ -211,9 +214,14 @@ class ProformaPdfService
                 '$' . $this->num($this->baseLinea($d)),
             ];
 
-            // Alto dinámico según la descripción
-            $descLines = $pdf->getNumLines($rowData[1], $cols[1]);
-            $rowH = max(6, 4.6 * max(1, $descLines));
+            // Alto dinámico: la fila crece con la columna que más líneas necesite.
+            // Se mide cada celda (no solo la descripción) para que ninguna quede
+            // recortada cuando su texto no cabe en el ancho de su columna.
+            $lineas = 1;
+            foreach ($rowData as $ci => $txt) {
+                $lineas = max($lineas, (int) $pdf->getNumLines($txt, $cols[$ci]));
+            }
+            $rowH = max(6, 4.6 * $lineas);
 
             // Salto de página si no cabe
             if ($pdf->GetY() + $rowH > $pdf->getPageHeight() - 40) {
@@ -235,16 +243,12 @@ class ProformaPdfService
             }
             $pdf->SetTextColor(45, 49, 57);
 
-            // #
-            $pdf->SetXY($x0, $y0); $pdf->Cell($cols[0], $rowH, $rowData[0], 0, 0, 'C');
-            $x0 += $cols[0];
-            // Descripción (multilínea, centrada vertical)
-            $pdf->SetXY($x0, $y0);
-            $pdf->MultiCell($cols[1], $rowH, $rowData[1], 0, 'L', false, 0, '', '', true, 0, false, true, $rowH, 'M');
-            $x0 += $cols[1];
-            foreach ([2, 3, 4, 5, 6] as $ci) {
+            // Todas las celdas con MultiCell: el texto que no cabe en el ancho de su
+            // columna se parte en varias líneas (código, descripción) en vez de
+            // desbordarse sobre la columna vecina, y queda centrado en vertical.
+            foreach ($rowData as $ci => $txt) {
                 $pdf->SetXY($x0, $y0);
-                $pdf->Cell($cols[$ci], $rowH, $rowData[$ci], 0, 0, $aligns[$ci]);
+                $pdf->MultiCell($cols[$ci], $rowH, $txt, 0, $aligns[$ci], false, 0, '', '', true, 0, false, true, $rowH, 'M');
                 $x0 += $cols[$ci];
             }
             $pdf->SetY($y0 + $rowH);
@@ -270,10 +274,10 @@ class ProformaPdfService
      * por la empresa (línea por línea o al subtotal)—, igual que hace el RIDE de Facturas
      * de Venta. Así el PDF no puede divergir de la proforma.
      */
-    private function totales(TCPDF $pdf, array $cabecera, array $detalles = []): void
+    private function totales(TCPDF $pdf, array $cabecera, array $detalles = []): array
     {
         $mL = 14; $w = 182;
-        $boxW = 76;
+        $boxW = self::TOTALES_W;
         $x = $mL + $w - $boxW;
 
         $des   = \App\Helpers\ProformaTotales::desglosar($cabecera, $detalles);
@@ -284,7 +288,7 @@ class ProformaPdfService
         if ($pdf->GetY() + $altoCaja > $pdf->getPageHeight() - 20) {
             $pdf->AddPage();
         }
-        $y = $pdf->GetY();
+        $y = $yIni = $pdf->GetY();
 
         $pdf->SetFont('helvetica', '', 9);
         foreach ($filas as $f) {
@@ -306,10 +310,14 @@ class ProformaPdfService
         $pdf->Cell($boxW * 0.5 - 2, 9, '$' . $this->num($total), 0, 1, 'R');
 
         $pdf->SetY($y + 14);
+
+        // Dónde quedó la caja: lo necesita pieAdicional() para escribir las
+        // observaciones a su izquierda, a la misma altura.
+        return ['pagina' => $pdf->getPage(), 'y' => $yIni, 'yFin' => $pdf->GetY()];
     }
 
     // ── Observaciones + info adicional ──────────────────────────────────────────
-    private function pieAdicional(TCPDF $pdf, array $cabecera, array $adicional): void
+    private function pieAdicional(TCPDF $pdf, array $cabecera, array $adicional, array $posTotales): void
     {
         $mL = 14; $w = 182;
         $obs = trim((string) ($cabecera['observaciones'] ?? ''));
@@ -323,21 +331,33 @@ class ProformaPdfService
 
         if ($obs === '' && empty($extra)) return;
 
-        $pdf->SetY($pdf->GetY() + 2);
+        // Va a la IZQUIERDA de la caja de totales y a su misma altura: se vuelve a la
+        // página y a la Y donde arrancó esa caja, y se escribe en la franja libre que
+        // queda a su izquierda (así no se desperdicia el espacio bajo la tabla).
+        $anchoIzq = $w - self::TOTALES_W - 6;
+        $pdf->setPage((int) $posTotales['pagina']);
+        $pdf->SetXY($mL, (float) $posTotales['y']);
+
         $pdf->SetTextColor(...$this->accent);
         $pdf->SetFont('helvetica', 'B', 8);
-        $pdf->SetX($mL);
-        $pdf->Cell($w, 5, 'OBSERVACIONES', 0, 1, 'L');
+        $pdf->MultiCell($anchoIzq, 5, 'OBSERVACIONES', 0, 'L', false, 1);
 
         $pdf->SetTextColor(...$this->grisTexto);
         $pdf->SetFont('helvetica', '', 8);
         if ($obs !== '') {
             $pdf->SetX($mL);
-            $pdf->MultiCell($w, 4.4, $obs, 0, 'L', false, 1);
+            $pdf->MultiCell($anchoIzq, 4.4, $obs, 0, 'L', false, 1);
         }
         foreach ($extra as $line) {
             $pdf->SetX($mL);
-            $pdf->MultiCell($w, 4.4, '· ' . $line, 0, 'L', false, 1);
+            $pdf->MultiCell($anchoIzq, 4.4, '· ' . $line, 0, 'L', false, 1);
+        }
+
+        // El cursor queda debajo del más bajo de los dos bloques (totales a la derecha,
+        // observaciones a la izquierda). Si las observaciones saltaron de página, ya
+        // están por debajo de todo y no hay nada que comparar.
+        if ($pdf->getPage() === (int) $posTotales['pagina']) {
+            $pdf->SetY(max((float) $posTotales['yFin'], $pdf->GetY()));
         }
     }
 
@@ -372,6 +392,16 @@ class ProformaPdfService
     private function pct(float $v): string
     {
         return \App\Helpers\ProformaTotales::pct($v);
+    }
+
+    /** Código del ítem: el guardado en la línea y, si viene vacío, el del producto. */
+    private function codigoLinea(array $d): string
+    {
+        foreach (['codigo_principal', 'producto_codigo', 'codigo_auxiliar'] as $k) {
+            $v = trim((string) ($d[$k] ?? ''));
+            if ($v !== '') return $v;
+        }
+        return '';
     }
 
     /** Tarifa de IVA de una línea (código de impuesto 2); 0 si la línea no la tiene. */

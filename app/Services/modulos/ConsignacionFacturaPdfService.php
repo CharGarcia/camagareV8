@@ -173,30 +173,40 @@ class ConsignacionFacturaPdfService
         unset($c);
         $descIdx = 1;
 
-        $pdf->SetXY($mL, $y);
-        $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->SetFillColor(60, 70, 90);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetDrawColor(60, 70, 90);
-        $pdf->SetLineWidth(0.2);
-        foreach ($cols as $c) {
-            $pdf->Cell($c['w'], 6, $c['t'], 1, 0, 'C', true);
-        }
-        $pdf->Ln();
+        // Encabezado de la tabla. Se encapsula porque hay que repetirlo al inicio de
+        // cada página cuando el detalle no cabe en una sola.
+        $dibujarCabeceraTabla = function (float $yEnc) use ($pdf, $cols, $mL): float {
+            $pdf->SetXY($mL, $yEnc);
+            $pdf->SetFont('helvetica', 'B', 7);
+            $pdf->SetFillColor(60, 70, 90);
+            $pdf->SetTextColor(255, 255, 255);
+            $pdf->SetDrawColor(60, 70, 90);
+            $pdf->SetLineWidth(0.2);
+            foreach ($cols as $c) {
+                $pdf->Cell($c['w'], 6, $c['t'], 1, 0, 'C', true);
+            }
+            $pdf->Ln();
+            // Deja el lápiz listo para las filas (la fuente también la usa getNumLines).
+            $pdf->SetFont('helvetica', '', 7);
+            $pdf->SetTextColor(0, 0, 0);
+            return $yEnc + 6;
+        };
 
-        $pdf->SetFont('helvetica', '', 7);
-        $pdf->SetTextColor(0, 0, 0);
+        $dibujarCabeceraTabla($y);
+
         if (empty($detalles)) {
             $pdf->SetX($mL);
             $pdf->Cell($this->contentW, 6, 'Sin productos.', 1, 1, 'C');
             return $pdf->GetY();
         }
 
+        // Alto útil de la página: por debajo de esta Y ya no cabe una fila entera.
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
+
         $alt = false;
         foreach ($detalles as $d) {
             $bg = $alt ? [245, 247, 250] : [255, 255, 255];
             $alt = !$alt;
-            $pdf->SetFillColor(...$bg);
 
             $vals = [];
             foreach ($cols as $c) {
@@ -211,18 +221,34 @@ class ConsignacionFacturaPdfService
                 }
             }
 
+            // Altura según la descripción. getNumLines() da el número real de renglones
+            // con la fuente y el ancho de la celda (la estimación por GetStringWidth se
+            // quedaba corta y recortaba descripciones largas).
             $descW = $cols[$descIdx]['w'];
-            $nLin  = max(1, (int)ceil(max(1, $pdf->GetStringWidth((string)$vals[$descIdx])) / max(1, $descW - 2)));
+            $nLin  = max(1, $pdf->getNumLines((string)$vals[$descIdx], $descW));
             $h     = max(5.0, $nLin * 4.2);
 
-            $x = $mL;
             $yRow = $pdf->GetY();
+
+            // Salto de página CONTROLADO. Sin esto, al pasarse del alto útil cada
+            // SetXY() con una Y fuera de página dispara el salto automático de TCPDF y,
+            // como aquí se hace un SetXY por COLUMNA, un documento largo acababa
+            // generando una página casi vacía por celda (40 líneas producían 126 páginas).
+            if ($yRow + $h > $limiteY) {
+                $pdf->AddPage();
+                $yRow = $dibujarCabeceraTabla($pdf->GetY());
+            }
+            $pdf->SetFillColor(...$bg);
+
+            $x = $mL;
             foreach ($cols as $i => $c) {
                 $pdf->SetXY($x, $yRow);
                 if ($i === $descIdx) {
                     $pdf->MultiCell($c['w'], $h, $vals[$i], 1, $c['a'], true, 0, '', '', true, 0, false, true, $h, 'M');
                 } else {
-                    $pdf->Cell($c['w'], $h, $vals[$i], 1, 0, $c['a'], true);
+                    // stretch = 1: un lote o código más largo que su columna se condensa
+                    // dentro de la celda en vez de desbordarse sobre la siguiente.
+                    $pdf->Cell($c['w'], $h, $vals[$i], 1, 0, $c['a'], true, '', 1);
                 }
                 $x += $c['w'];
             }
@@ -254,6 +280,13 @@ class ConsignacionFacturaPdfService
             ['IVA:',       (float)($c['impuesto'] ?? 0)],
             ['TOTAL:',     (float)($c['total'] ?? 0)],
         ];
+        // El recuadro de totales se dibuja con una Y absoluta por fila: si no cabe
+        // entero en lo que queda de página, pasa completo a la siguiente.
+        if ($y + count($rows) * 5 > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
+
         $yy = $y;
         foreach ($rows as $i => $r) {
             $bold = ($i === count($rows) - 1);
@@ -274,6 +307,14 @@ class ConsignacionFacturaPdfService
         $w   = $this->contentW;
         $obs = trim((string)($c['observaciones'] ?? ''));
         if ($obs === '') return $y;
+
+        // Etiqueta y texto van juntos: si no caben, el bloque entero pasa de página.
+        $pdf->SetFont('helvetica', '', 8.5);
+        $hObs = max(1, $pdf->getNumLines($obs, $w - 28)) * 5;
+        if ($y + $hObs > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
 
         $pdf->SetXY($mL, $y);
         $pdf->SetFont('helvetica', 'B', 8);
@@ -296,6 +337,13 @@ class ConsignacionFacturaPdfService
         $pdf = $this->pdf;
         $mL  = $this->marginL;
         $w   = $this->contentW;
+
+        // El título no se queda solo al pie de una página: si no caben él y su primera
+        // línea, el bloque arranca en la página siguiente.
+        if ($y + 10 > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
 
         $pdf->SetXY($mL, $y);
         $pdf->SetFont('helvetica', 'B', 8);
