@@ -66,10 +66,18 @@
 
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Año</label>
+                        <?php
+                        // El reporte abre en el mes en curso: año y mes actuales seleccionados y
+                        // las fechas del 1 al último día del mes (lo mismo que calcula el selector).
+                        $anioActual = date('Y');
+                        $mesActual  = date('m');
+                        $listaAnios = array_map('strval', $anios ?? []);
+                        if (!in_array($anioActual, $listaAnios, true)) { array_unshift($listaAnios, $anioActual); }
+                        ?>
                         <select id="rvv-anio" class="form-select form-select-sm shadow-none border" style="width:90px;">
-                            <option value="TODOS" selected>Todos</option>
-                            <?php foreach (($anios ?? [date('Y')]) as $a): ?>
-                                <option value="<?= htmlspecialchars($a) ?>"><?= htmlspecialchars($a) ?></option>
+                            <option value="TODOS">Todos</option>
+                            <?php foreach ($listaAnios as $a): ?>
+                                <option value="<?= htmlspecialchars($a) ?>"<?= $a === $anioActual ? ' selected' : '' ?>><?= htmlspecialchars($a) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -77,28 +85,28 @@
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mes</label>
                         <select id="rvv-mes" class="form-select form-select-sm shadow-none border" style="width:110px;">
                             <option value="TODOS">Todos</option>
-                            <option value="01">Enero</option>
-                            <option value="02">Febrero</option>
-                            <option value="03">Marzo</option>
-                            <option value="04">Abril</option>
-                            <option value="05">Mayo</option>
-                            <option value="06">Junio</option>
-                            <option value="07">Julio</option>
-                            <option value="08">Agosto</option>
-                            <option value="09">Septiembre</option>
-                            <option value="10">Octubre</option>
-                            <option value="11">Noviembre</option>
-                            <option value="12">Diciembre</option>
+                            <option value="01"<?= $mesActual === '01' ? ' selected' : '' ?>>Enero</option>
+                            <option value="02"<?= $mesActual === '02' ? ' selected' : '' ?>>Febrero</option>
+                            <option value="03"<?= $mesActual === '03' ? ' selected' : '' ?>>Marzo</option>
+                            <option value="04"<?= $mesActual === '04' ? ' selected' : '' ?>>Abril</option>
+                            <option value="05"<?= $mesActual === '05' ? ' selected' : '' ?>>Mayo</option>
+                            <option value="06"<?= $mesActual === '06' ? ' selected' : '' ?>>Junio</option>
+                            <option value="07"<?= $mesActual === '07' ? ' selected' : '' ?>>Julio</option>
+                            <option value="08"<?= $mesActual === '08' ? ' selected' : '' ?>>Agosto</option>
+                            <option value="09"<?= $mesActual === '09' ? ' selected' : '' ?>>Septiembre</option>
+                            <option value="10"<?= $mesActual === '10' ? ' selected' : '' ?>>Octubre</option>
+                            <option value="11"<?= $mesActual === '11' ? ' selected' : '' ?>>Noviembre</option>
+                            <option value="12"<?= $mesActual === '12' ? ' selected' : '' ?>>Diciembre</option>
                         </select>
                     </div>
 
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
-                        <input type="date" name="fecha_desde" id="rvv-fecha-desde" class="form-control form-control-sm shadow-none border" style="width:115px;">
+                        <input type="date" name="fecha_desde" id="rvv-fecha-desde" class="form-control form-control-sm shadow-none border" style="width:115px;" value="<?= date('Y-m-01') ?>">
                     </div>
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
-                        <input type="date" name="fecha_hasta" id="rvv-fecha-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;">
+                        <input type="date" name="fecha_hasta" id="rvv-fecha-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;" value="<?= date('Y-m-t') ?>">
                     </div>
 
                     <div style="flex:1 1 170px;">

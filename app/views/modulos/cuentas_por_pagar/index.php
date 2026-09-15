@@ -23,16 +23,14 @@
     .badge-liquid   { background: rgba(102,16,242,.1);  color: #6610f2; border: 1px solid rgba(102,16,242,.2); font-size:.6rem; }
     .badge-compra   { background: rgba(13,110,253,.08); color: #0d6efd; border: 1px solid rgba(13,110,253,.2);  font-size:.6rem; }
     .badge-importacion { background: rgba(255,140,0,.1); color: #d2691e; border: 1px solid rgba(255,140,0,.25); font-size:.6rem; }
-    /* Vista "Por proveedor": arranca plegada (una línea por proveedor con sus totales) y, al
-       desplegar, se lee como el mayor de una cuenta: documentos, SUBTOTAL de la sección y
-       TOTAL GENERAL al final del listado. */
+    /* Vista "Por proveedor": arranca plegada (una línea por proveedor con sus totales y su
+       saldo) y, al desplegar, se lee como el mayor de una cuenta: los documentos del
+       proveedor y, al final del listado, el TOTAL GENERAL. */
     .cxp-mayor-grp   > td { background:#eaf1fb; border-top:1px solid rgba(13,110,253,.45); }
-    .cxp-mayor-sub   > td { background:rgba(13,110,253,.06); font-weight:700; border-top:1px solid #0d6efd; }
     .cxp-mayor-total > td { background:#f8f9fa; font-weight:800; border-top:2px solid #343a40; }
     .cxp-mayor-gap   > td { height:10px; padding:0; border:0; background:transparent; }
     /* Las filas de sección no son documentos: el hover de Bootstrap las apagaría. */
     .table-hover > tbody > tr.cxp-mayor-grp:hover > td,
-    .table-hover > tbody > tr.cxp-mayor-sub:hover > td,
     .table-hover > tbody > tr.cxp-mayor-total:hover > td,
     .table-hover > tbody > tr.cxp-mayor-gap:hover > td { --bs-table-accent-bg:transparent; }
     /* Columna saldo */

@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ventas_vendedor
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, subtotal sin impuestos, subtotal nc, total documentos por asesor, cuantas facturas hizo cada vendedor, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor, solo mis ventas, cada asesor ve lo suyo, el vendedor no debe ver las ventas de otros, mis comisiones
-version: 1.4
+version: 1.5
 orden: 0
 estado: activo
 ---
@@ -45,7 +45,9 @@ incluye Recibos de Venta.
    Producto, por Marca, por Categoría, por Mes, o Detallado (documento por
    documento).
 3. Acotar el período con Mes/Año (calculan automáticamente el rango de
-   fechas) o escribiendo directamente Fecha Desde/Hasta.
+   fechas) o escribiendo directamente Fecha Desde/Hasta. Al abrir, el reporte
+   ya viene con el **mes en curso** (del 1 al último día del mes); elija *Todos*
+   en Año o Mes para ver todo el histórico.
 4. Opcionalmente filtrar por Vendedor (uno específico o "Todos"), Marca,
    Categoría o Producto (buscador con autocompletado). A los usuarios de
    **nivel 1 (asesor)** el filtro Vendedor les llega fijo en su propio nombre:
@@ -228,6 +230,9 @@ sistema* (o corregirle la identificación para que sea su cédula).
 
 ## Historial de cambios
 
+- **1.5** — El reporte abre con el **mes actual** precargado: Año y Mes en
+  curso seleccionados y Fecha Desde/Hasta del 1 al último día del mes. Antes
+  abría con *Todos* y sin fechas, cargando todo el histórico.
 - **1.4** — La ficha del vendedor gana el campo **Usuario del sistema**
   (`modulos/vendedores`), que declara a mano qué cuenta es ese asesor y tiene
   prioridad sobre el cruce por cédula. Pensado para los asesores cuya

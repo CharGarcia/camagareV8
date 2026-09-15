@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen
-version: 2.9
+version: 2.11
 orden: 40
 estado: activo
 ---
@@ -216,8 +216,8 @@ El botón **Por cliente** resume la cartera en **una línea por cliente**: su
 identificación, cuántos documentos tiene y sus totales —total, NC, abonos,
 retenciones y, sobre todo, el **saldo por cobrar** de ese cliente, en rojo
 mientras deba algo—. Al desplegar una línea se lee como el **mayor de una
-cuenta contable**: los documentos del cliente y, cerrando la sección, una fila
-de **SUBTOTAL**. Al final del listado va la fila **TOTAL GENERAL** con la suma de todos.
+cuenta contable**: debajo aparecen los documentos de ese cliente. Al final del
+listado va la fila **TOTAL GENERAL** con la suma de todos.
 
 - El listado arranca **plegado**: de un vistazo se ve cuánto debe cada cliente.
   Un clic en su línea despliega los documentos y otro la vuelve a plegar; el
@@ -256,16 +256,18 @@ esa misma estructura, no como lista plana. A diferencia de la pantalla, en el
 archivo **todas las secciones salen desplegadas** (con su detalle), esté como
 esté el listado en ese momento:
 
-- **PDF**: cabecera con la identificación y el nombre del cliente, la tabla de
+- **PDF**: cabecera con la identificación, el nombre y el **saldo** del cliente
+  (`1715920656001 - ALVAREZ RAZO FABRICIO GABRIEL · saldo: 1,234.56`), la tabla de
   sus documentos con **las mismas columnas de la pantalla** (fecha, n. de
-  documento, total, NC, abonos, retenciones, saldo, días y asesor), la fila
-  **SUBTOTAL** del cliente y, al cierre del reporte, el **TOTAL GENERAL**.
-  Arriba se mantienen los filtros aplicados y las tarjetas de resumen.
+  documento, total, NC, abonos, retenciones, saldo, días y asesor) y, al cierre
+  del reporte, el **TOTAL GENERAL**. Cada cliente no lleva fila de subtotal: su
+  saldo ya está en la cabecera de la sección. Arriba se mantienen los filtros
+  aplicados y las tarjetas de resumen.
 - **Excel**: una **sección por cliente** (título con su identificación, nombre y
-  número de documentos), sus documentos con esas mismas columnas —más *Origen* y
-  *Estado*, que en una hoja de cálculo no estorban—, la fila **SUBTOTAL** y el
-  **TOTAL GENERAL** al final de la hoja. El cliente no va como columna: es el
-  título de la sección, igual que la cuenta en el mayor.
+  saldo, en el mismo formato del PDF), sus documentos con esas mismas columnas —más *Origen* y
+  *Estado*, que en una hoja de cálculo no estorban— y el **TOTAL GENERAL** al
+  final de la hoja. El cliente no va como columna: es el título de la sección,
+  igual que la cuenta en el mayor.
 - En **consolidado por RUC** ambos archivos agregan la columna **Estab.** con el
   establecimiento dueño de cada documento.
 - Para la lista plana de siempre (una fila por documento, con cliente y
@@ -496,6 +498,12 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
+- **2.11** — Se quitó la fila **SUBTOTAL** de cada cliente en la vista *Por
+  cliente*: su saldo ya aparece en la línea del cliente y en la cabecera de la
+  sección del PDF y el Excel. El **TOTAL GENERAL** del listado se mantiene.
+- **2.10** — En el PDF y el Excel de la vista *Por cliente*, la cabecera de cada
+  sección muestra el **saldo** en lugar del número de documentos:
+  `1715920656001 - ALVAREZ RAZO FABRICIO GABRIEL · saldo: 1,234.56`.
 - **2.9** — El módulo respeta el permiso de **Acceso total**: quien no lo tiene
   ve solo los documentos que él registró, tanto en la tabla como en las tarjetas,
   el gráfico de antigüedad, las vistas agrupadas y las exportaciones, y ya no

@@ -584,14 +584,11 @@ function CXC_renderAgrupado(filas) {
         </tr>`;
 
         if (abierto) {
+            // Sin fila de SUBTOTAL: la cabecera del cliente ya trae sus totales y el saldo,
+            // así que repetirlos al cerrar la sección solo alarga la lista. El separador
+            // mantiene la sección visualmente cerrada.
             for (const r of g.items) html += CXC_filaMayorHtml(r);
-            html += `
-        <tr class="cxc-mayor-sub">
-            <td colspan="3" class="text-end" style="font-size:.78rem;">SUBTOTAL ${esc(g.nombre)}</td>
-            ${importes()}
-            <td colspan="3"></td>
-        </tr>
-        <tr class="cxc-mayor-gap"><td colspan="11"></td></tr>`;
+            html += `<tr class="cxc-mayor-gap"><td colspan="11"></td></tr>`;
         }
     }
 

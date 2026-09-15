@@ -193,7 +193,7 @@
                 <table class="table table-sm table-hover table-striped mb-0" style="font-size:0.82rem;">
                     <thead class="table-light">
                         <tr id="rie-head-detalle">
-                            <th class="ps-3">Flujo</th><th>Número</th><th>Fecha</th><th>Tercero</th>
+                            <th class="ps-3">Flujo</th><th>Número</th><th>Fecha</th><th>Tercero</th><th>Asesor</th>
                             <th>Documento</th><th>Descripción</th><th>Concepto</th><th class="text-center">Estado</th>
                             <th class="text-end pe-3">Monto</th>
                         </tr>
@@ -215,7 +215,7 @@
                         </tr>
                     </thead>
                     <tbody id="rie-tbody">
-                        <tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-funnel fs-3 d-block mb-2"></i>Ajuste los filtros y presione <strong>Buscar</strong>.</td></tr>
+                        <tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-funnel fs-3 d-block mb-2"></i>Ajuste los filtros y presione <strong>Buscar</strong>.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -267,7 +267,7 @@
             const params = new URLSearchParams(f);
             const res = await fetch(`${BASE}/${RUTA}/generarAjax?${params.toString()}`);
             const json = await res.json();
-            if (!json.ok) { tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-4">${json.mensaje || 'Error'}</td></tr>`; return; }
+            if (!json.ok) { tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">${json.mensaje || 'Error'}</td></tr>`; return; }
 
             tbody.innerHTML = json.rows;
             $('rie-kpi-ing').textContent  = money(json.stats.total_ingresos);
@@ -283,7 +283,7 @@
             $('rieBtnPdf').onclick   = () => window.open(json.pdf_url, '_blank');
             $('rieBtnExcel').onclick = () => window.open(json.excel_url, '_blank');
         } catch (e) {
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-4">Error de comunicación.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">Error de comunicación.</td></tr>`;
         }
     }
 

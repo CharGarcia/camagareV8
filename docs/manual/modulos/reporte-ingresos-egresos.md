@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ingresos y egresos, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, exportar, excel detallado
-version: 1.3
+etiquetas: reporte de ingresos y egresos, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, exportar, excel detallado
+version: 1.4
 orden: 30
 estado: activo
 ---
@@ -21,7 +21,7 @@ salió, de quién y por qué concepto.
 |--------|----------|
 | Fechas | El periodo |
 | Tercero | Un cliente, proveedor o empleado concreto |
-| Vendedor | Los cobros de las facturas y recibos de venta de un vendedor |
+| Vendedor | Los cobros de las facturas y recibos de venta de un vendedor, y los ingresos por otros conceptos de sus clientes |
 | Forma de pago | Efectivo, banco, tarjeta… |
 | Operación bancaria | Transferencia, cheque, depósito |
 | Concepto | El motivo del ingreso o egreso |
@@ -39,21 +39,32 @@ se cobró**, no el vendedor asignado al cliente. Es el mismo criterio de Cuentas
 por Cobrar y del Reporte de Ventas por Vendedor, así que los valores cuadran entre
 esas pantallas.
 
+La excepción son los **ingresos por otros conceptos** (líneas de tipo *Otro*, que
+no cobran ningún documento: anticipos, otros ingresos): como no hay factura de la
+cual tomar el vendedor, se usa el **vendedor asignado al cliente** del ingreso. Si
+el ingreso no tiene cliente, o el cliente no tiene vendedor, la línea queda sin
+asesor.
+
+Ese vendedor se ve en la columna **Asesor** de la vista Documento, en el PDF y en
+las hojas del Excel.
+
 - Al elegir un vendedor, el reporte muestra **solo ingresos**: los egresos no
   tienen vendedor. Si además elige *Solo egresos*, el resultado queda vacío.
 - Un ingreso que cobra facturas de varios vendedores se reparte: cada línea
   aparece con el vendedor de su propia factura.
 - **No entran** los cobros que no cancelan una factura o un recibo con vendedor:
-  saldos iniciales, facturas de reembolso, ingresos por otros conceptos y cobros
-  de facturas sin vendedor asignado. Tampoco los cobros migrados del sistema
-  anterior cuya factura no se migró.
+  saldos iniciales, facturas de reembolso y cobros de facturas sin vendedor
+  asignado. Tampoco los cobros migrados del sistema anterior cuya factura no se
+  migró. Los ingresos por otros conceptos sí entran cuando el cliente tiene ese
+  vendedor asignado.
 - En la vista **Forma de cobro/pago** el valor es el del cobro completo: si un
   mismo ingreso cobra facturas de dos vendedores, su forma de pago aparece entera
   para cada uno.
 
 ## Formas de ver
 
-- **Documento (detalle)**: cada línea de cada comprobante. Es la vista de auditoría.
+- **Documento (detalle)**: cada línea de cada comprobante, con su asesor. Es la
+  vista de auditoría.
 - **Tercero (resumen)**: agrupado por cliente, proveedor o empleado, para saber
   cuánto se movió con cada uno.
 - **Forma de cobro/pago**: cuánto entró y salió por cada forma (efectivo, cada
@@ -62,16 +73,23 @@ esas pantallas.
 
 ## Exportar a Excel y PDF
 
-El **Excel** sale con todo el detalle disponible, en varias hojas:
+El **Excel** sale en varias hojas:
 
-- **Primera hoja**: lo que está viendo en pantalla. Arriba lleva los filtros
-  aplicados (periodo, vendedor, tercero…) y los totales de ingresos, egresos y neto.
-- **Detalle**: una fila por cada línea de cada comprobante, con número, fecha,
-  estado, concepto, tercero e identificación, vendedor, documento cobrado o pagado
-  (tipo, número, fecha, valor, saldo anterior y saldo actual), ingreso o egreso en
-  columnas separadas, total del comprobante, formas de cobro/pago (con operación
-  bancaria, número de cheque y referencia), cuenta contable, observaciones, usuario
-  que lo registró y fecha de registro. En la vista Documento esta es la primera hoja.
+- **Ingresos y Egresos** (primera hoja): una fila por cada ingreso o egreso, con
+  **Tipo** (ingreso o egreso), **número**, **fecha**, **cliente / proveedor /
+  empleado**, **valor**, **detalle** (el cuerpo del comprobante: cada línea en un
+  renglón, con el documento cobrado o pagado, su descripción y su valor),
+  **observaciones** y **asesor**. Arriba lleva los filtros aplicados (periodo,
+  vendedor, tercero…) y los totales de ingresos, egresos y neto. El valor de cada
+  fila es la suma de sus líneas que cumplen los filtros, así cuadra con los totales.
+- **Por tercero / Por forma de pago / Por día / Por mes**: solo cuando en pantalla
+  está esa forma de ver; es el mismo resumen que se ve.
+- **Detalle completo**: una fila por cada línea de cada comprobante, con número,
+  fecha, estado, concepto, tercero e identificación, vendedor, documento cobrado o
+  pagado (tipo, número, fecha, valor, saldo anterior y saldo actual), ingreso o
+  egreso en columnas separadas, total del comprobante, formas de cobro/pago (con
+  operación bancaria, número de cheque y referencia), cuenta contable,
+  observaciones, usuario que lo registró y fecha de registro.
 - **Cobros y pagos**: una fila por cada forma de cobro o pago de los comprobantes,
   con la operación bancaria, número de cheque, referencia, fecha de cobro,
   beneficiario del cheque y los documentos que cancela.
@@ -97,9 +115,19 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
   tienen vendedor.
 - **Falta un cobro de un vendedor**: revise que la factura cobrada tenga ese
   vendedor asignado. El reporte toma el vendedor de la factura, no el del cliente.
+- **Un ingreso por otros conceptos sale sin asesor**: el ingreso no tiene cliente
+  o el cliente no tiene vendedor asignado. Asigne el vendedor en la ficha del
+  cliente; el reporte lo toma de ahí al instante.
 
 ## Historial de cambios
 
+- **1.4** — Los **ingresos por otros conceptos** (líneas *Otro*) toman como asesor
+  el vendedor asignado al cliente, tanto en el filtro por vendedor como en la
+  columna **Asesor**, que ahora también se ve en la vista Documento y en el PDF.
+  El **Excel** abre con una hoja nueva, *Ingresos y Egresos*, con una fila por
+  comprobante: tipo, número, fecha, cliente/proveedor/empleado, valor, detalle
+  (el cuerpo del comprobante), observaciones y asesor; la hoja de todas las
+  columnas pasa a llamarse *Detalle completo*.
 - **1.3** — Nuevo filtro **Vendedor**: muestra los cobros de las facturas y recibos
   de venta de ese vendedor. El **Excel** ahora sale con todo el detalle: filtros y
   totales arriba, hoja *Detalle* con todas las columnas (vendedor, documento

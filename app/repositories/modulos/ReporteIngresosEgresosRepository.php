@@ -48,12 +48,14 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     }
 
     /**
-     * Condición "la línea de ingresos_detalle ($d) cobra un documento del vendedor
-     * :id_vendedor". El vendedor es el del documento cobrado —factura o recibo de
-     * venta—, igual que en Cuentas por Cobrar, Ventas por Vendedor y la columna
-     * "Asesor" del reporte anterior. Las líneas sin un documento con vendedor (saldo
-     * inicial, factura de reembolso, otros conceptos, cobros migrados cuya factura no
-     * se migró) no cumplen el filtro.
+     * Condición "la línea de ingresos_detalle ($d) es del vendedor :id_vendedor".
+     * El vendedor es el del documento cobrado —factura o recibo de venta—, igual que
+     * en Cuentas por Cobrar, Ventas por Vendedor y la columna "Asesor" del reporte
+     * anterior. Las líneas de otros conceptos (tipo OTRO, sin documento) toman el
+     * vendedor asignado al cliente del comprobante (alias c = ingresos_cabecera, que
+     * debe estar en el FROM del llamador). Las demás líneas sin documento con vendedor
+     * (saldo inicial, factura de reembolso, cobros migrados cuya factura no se migró)
+     * no cumplen el filtro.
      */
     private static function condVendedor(string $d): string
     {
@@ -62,7 +64,21 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                             AND vfx.id_vendedor = :id_vendedor)
                  OR EXISTS (SELECT 1 FROM recibos_venta_cabecera vrx
                           WHERE $d.tipo_documento = 'RECIBO' AND vrx.id = $d.id_referencia_documento
-                            AND vrx.id_vendedor = :id_vendedor))";
+                            AND vrx.id_vendedor = :id_vendedor)
+                 OR ($d.tipo_documento = 'OTRO' AND EXISTS (SELECT 1 FROM clientes cvx
+                          WHERE cvx.id = COALESCE(c.id_cliente, c.id_recibo_cliente)
+                            AND cvx.id_vendedor = :id_vendedor)))";
+    }
+
+    /**
+     * Vendedor de una línea de ingreso: el del documento cobrado (factura $xf o
+     * recibo $xr) y, en las líneas de otros conceptos (tipo OTRO), el asignado al
+     * cliente del comprobante ($cli). Mismo criterio que condVendedor().
+     */
+    private static function idVendedorLinea(string $d, string $xf, string $xr, string $cli): string
+    {
+        return "CASE WHEN $d.tipo_documento = 'OTRO' THEN $cli.id_vendedor
+                     ELSE COALESCE($xf.id_vendedor, $xr.id_vendedor) END";
     }
 
     // ── WHERE por flujo ───────────────────────────────────────────────────────
@@ -169,7 +185,6 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     {
         if ($flujo === 'INGRESO') {
             $extraCols = !$completo ? '' : ",
-                           ven.nombre        AS vendedor,
                            COALESCE(xf.fecha_emision, xr.fecha_emision, xfr.fecha_emision, xsi.fecha_emision) AS fecha_documento,
                            d.monto_documento AS monto_documento,
                            d.saldo_anterior  AS saldo_anterior,
@@ -180,11 +195,8 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                            usr.nombre        AS registrado_por,
                            c.created_at      AS registrado_el";
             $extraJoins = !$completo ? '' : "
-                    LEFT  JOIN ventas_cabecera            xf  ON d.tipo_documento = 'FACTURA'           AND xf.id  = d.id_referencia_documento
-                    LEFT  JOIN recibos_venta_cabecera     xr  ON d.tipo_documento = 'RECIBO'            AND xr.id  = d.id_referencia_documento
                     LEFT  JOIN factura_reembolso_cabecera xfr ON d.tipo_documento = 'FACTURA_REEMBOLSO' AND xfr.id = d.id_referencia_documento
                     LEFT  JOIN saldos_iniciales_cxc       xsi ON d.tipo_documento = 'SALDO_INICIAL'     AND xsi.id = d.id_referencia_documento
-                    LEFT  JOIN vendedores   ven ON ven.id = COALESCE(xf.id_vendedor, xr.id_vendedor)
                     LEFT  JOIN plan_cuentas cta ON cta.id = d.id_cuenta_contable
                     LEFT  JOIN usuarios     usr ON usr.id = COALESCE(c.created_by, c.id_usuario)
                     LEFT  JOIN (" . self::formasPorComprobante('INGRESO') . ") fpg ON fpg.id_comprobante = c.id";
@@ -202,14 +214,18 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                            d.numero_documento AS numero_documento,
                            d.descripcion    AS descripcion,
                            d.monto_cobrado  AS monto,
-                           c.observaciones  AS observaciones$extraCols
+                           c.observaciones  AS observaciones,
+                           d.id             AS id_detalle,
+                           ven.nombre       AS vendedor$extraCols
                     FROM ingresos_cabecera c
                     INNER JOIN ingresos_detalle d ON d.id_ingreso = c.id
                     LEFT  JOIN clientes cli ON cli.id = COALESCE(c.id_cliente, c.id_recibo_cliente)
-                    LEFT  JOIN empresa_opciones_ingreso_egreso oc ON oc.id = c.id_ingreso_concepto$extraJoins";
+                    LEFT  JOIN empresa_opciones_ingreso_egreso oc ON oc.id = c.id_ingreso_concepto
+                    LEFT  JOIN ventas_cabecera        xf ON d.tipo_documento = 'FACTURA' AND xf.id = d.id_referencia_documento
+                    LEFT  JOIN recibos_venta_cabecera xr ON d.tipo_documento = 'RECIBO'  AND xr.id = d.id_referencia_documento
+                    LEFT  JOIN vendedores ven ON ven.id = " . self::idVendedorLinea('d', 'xf', 'xr', 'cli') . "$extraJoins";
         }
         $extraCols = !$completo ? '' : ",
-                       NULL::varchar     AS vendedor,
                        COALESCE(xc.fecha_emision, xl.fecha_emision, xsp.fecha_emision) AS fecha_documento,
                        d.monto_documento AS monto_documento,
                        d.saldo_anterior  AS saldo_anterior,
@@ -240,7 +256,9 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                        d.numero_documento AS numero_documento,
                        d.descripcion    AS descripcion,
                        d.monto_pagado   AS monto,
-                       c.observaciones  AS observaciones$extraCols
+                       c.observaciones  AS observaciones,
+                       d.id             AS id_detalle,
+                       NULL::varchar    AS vendedor$extraCols
                 FROM egresos_cabecera c
                 INNER JOIN egresos_detalle d ON d.id_egreso = c.id
                 LEFT  JOIN proveedores pr  ON pr.id  = c.id_proveedor
@@ -367,9 +385,10 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                            string_agg(DISTINCT dv.nombre, ', ' ORDER BY dv.nombre) AS vendedores
                     FROM ingresos_detalle dd
                     INNER JOIN ingresos_cabecera ddc ON ddc.id = dd.id_ingreso AND ddc.id_empresa = :id_empresa
+                    LEFT  JOIN clientes               dcl ON dcl.id = COALESCE(ddc.id_cliente, ddc.id_recibo_cliente)
                     LEFT  JOIN ventas_cabecera        ddf ON dd.tipo_documento = 'FACTURA' AND ddf.id = dd.id_referencia_documento
                     LEFT  JOIN recibos_venta_cabecera ddr ON dd.tipo_documento = 'RECIBO'  AND ddr.id = dd.id_referencia_documento
-                    LEFT  JOIN vendedores dv ON dv.id = COALESCE(ddf.id_vendedor, ddr.id_vendedor)
+                    LEFT  JOIN vendedores dv ON dv.id = " . self::idVendedorLinea('dd', 'ddf', 'ddr', 'dcl') . "
                     GROUP BY dd.id_ingreso";
         }
         return "SELECT dd.id_egreso AS id_comprobante,
@@ -474,6 +493,32 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         $textoWhere = $this->filtroTexto($f, $params);
         $sql = "SELECT * FROM ( $union ) r WHERE 1=1 $textoWhere
                 ORDER BY fecha DESC, numero DESC, tipo_documento";
+        return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Una fila por comprobante para la primera hoja del Excel: número, fecha, tercero,
+     * valor, el cuerpo del comprobante (sus líneas, una por renglón), observaciones y
+     * asesor. Parte de las mismas líneas que getReporteDetallado() (mismos filtros, sin
+     * tope), así el valor de cada comprobante es la suma de las líneas que cumplen el
+     * filtro y cuadra con los totales de arriba.
+     */
+    public function getResumenExport(int $idEmpresa, array $f): array
+    {
+        [$union, $params] = $this->armarUnion($idEmpresa, $f);
+        $textoWhere = $this->filtroTexto($f, $params);
+        $linea = "CASE WHEN tipo_documento = 'OTRO' THEN COALESCE(NULLIF(descripcion, ''), 'Otros conceptos')
+                       ELSE tipo_documento || COALESCE(' ' || NULLIF(numero_documento, ''), '')
+                            || COALESCE(' · ' || NULLIF(descripcion, ''), '') END
+                  || ' \$' || to_char(monto, 'FM999999990.00')";
+        $sql = "SELECT tipo_flujo, id_comprobante, numero, fecha, tercero_tipo, tercero_nombre, tercero_ident,
+                       SUM(monto) AS valor,
+                       string_agg($linea, E'\\n' ORDER BY id_detalle) AS detalle,
+                       MAX(observaciones) AS observaciones,
+                       string_agg(DISTINCT vendedor, ', ' ORDER BY vendedor) AS asesor
+                FROM ( $union ) r WHERE 1=1 $textoWhere
+                GROUP BY tipo_flujo, id_comprobante, numero, fecha, tercero_tipo, tercero_nombre, tercero_ident
+                ORDER BY fecha DESC, numero DESC, tipo_flujo";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 

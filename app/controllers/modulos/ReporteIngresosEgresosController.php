@@ -148,7 +148,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
     private function renderDetalle(array $rows): string
     {
         if (empty($rows)) {
-            return '<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-search fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
+            return '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-search fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
         }
         $h = '';
         foreach ($rows as $r) {
@@ -163,6 +163,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 . '<td><code class="text-secondary">' . htmlspecialchars($r['numero'] ?? '') . '</code></td>'
                 . '<td>' . $fecha . '</td>'
                 . '<td class="text-truncate" style="max-width:200px" title="' . htmlspecialchars($r['tercero_nombre'] ?? '') . '">' . htmlspecialchars($r['tercero_nombre'] ?? '—') . '</td>'
+                . '<td class="text-truncate" style="max-width:140px" title="' . htmlspecialchars($r['vendedor'] ?? '') . '">' . htmlspecialchars($r['vendedor'] ?? '') . '</td>'
                 . '<td><span class="badge bg-light text-dark border">' . htmlspecialchars($r['tipo_documento'] ?? '') . '</span> ' . htmlspecialchars($r['numero_documento'] ?? '') . '</td>'
                 . '<td class="text-truncate text-muted" style="max-width:220px" title="' . htmlspecialchars($r['descripcion'] ?? '') . '">' . htmlspecialchars($r['descripcion'] ?? '') . '</td>'
                 . '<td>' . htmlspecialchars($r['concepto'] ?? '') . '</td>'
@@ -244,10 +245,13 @@ class ReporteIngresosEgresosController extends BaseModuloController
     // ── Exportaciones ─────────────────────────────────────────────────────────
 
     /**
-     * Excel detallado. La primera hoja es lo que se ve en pantalla —en la vista
-     * Documento, el detalle completo; en las de resumen, el resumen, seguido del
-     * detalle completo en la hoja "Detalle"— con los filtros y totales arriba. La
-     * última, "Cobros y pagos", tiene una fila por cada forma de cobro/pago.
+     * Excel. La primera hoja, "Ingresos y Egresos", es el reporte tal como lo pide
+     * el usuario: una fila por comprobante con tipo, número, fecha, tercero, valor,
+     * detalle (el cuerpo del comprobante), observaciones y asesor, con los filtros y
+     * totales arriba. Si en pantalla hay una vista de resumen (por tercero, forma,
+     * día o mes), esa va en la segunda hoja. Luego "Detalle completo" (una fila por
+     * línea con todas las columnas) y "Cobros y pagos" (una fila por forma de
+     * cobro/pago).
      */
     public function exportExcel(): void
     {
@@ -267,19 +271,34 @@ class ReporteIngresosEgresosController extends BaseModuloController
                     $dinero($stats['neto'] ?? 0)),
                 'Generado' => date('d-m-Y H:i:s'),
             ];
-            $detalle = $this->hojaDetalle($idEmpresa, $f);
+
+            $resumen = $this->hojaResumen($idEmpresa, $f);
+            $libro   = $svc->construirSpreadsheet($resumen['headers'], $resumen['data'], 'Ingresos y Egresos', $nombreEmpresa, $info, $resumen['formatos']);
+            // Detalle y Observaciones son textos largos (el detalle trae una línea por
+            // renglón): ancho fijo con ajuste de texto en lugar del ancho automático,
+            // solo sobre las filas de datos (las últimas count(data) filas de la hoja).
+            $hoja   = $libro->getActiveSheet();
+            $ultima = $hoja->getHighestRow();
+            $primera = $ultima - count($resumen['data']) + 1;
+            foreach ($resumen['ajustar'] as $col => $ancho) {
+                $letra = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+                $hoja->getColumnDimension($letra)->setAutoSize(false)->setWidth($ancho);
+                if ($resumen['data']) {
+                    $hoja->getStyle("$letra$primera:$letra$ultima")->getAlignment()
+                         ->setWrapText(true)->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP);
+                }
+            }
 
             $modo = in_array($f['ver_por'], ['TERCERO', 'FORMA', 'FECHA', 'MES'], true) ? $f['ver_por'] : 'DETALLE';
-            if ($modo === 'DETALLE') {
-                $libro = $svc->construirSpreadsheet($detalle['headers'], $detalle['data'], 'Detalle', $nombreEmpresa, $info, $detalle['formatos']);
-            } else {
+            if ($modo !== 'DETALLE') {
                 $exp = $this->datosExport($idEmpresa, $f);
                 $formatos = [];
                 foreach ($exp['money'] as $i) { $formatos[$i + 1] = self::XL_DINERO; }
-                $hoja = match ($modo) { 'TERCERO' => 'Por tercero', 'FORMA' => 'Por forma de pago', 'FECHA' => 'Por día', default => 'Por mes' };
-                $libro = $svc->construirSpreadsheet($exp['headers'], $exp['data'], $hoja, $nombreEmpresa, $info, $formatos);
-                $svc->agregarHoja($libro, $detalle['headers'], $detalle['data'], 'Detalle', $detalle['formatos']);
+                $hojaModo = match ($modo) { 'TERCERO' => 'Por tercero', 'FORMA' => 'Por forma de pago', 'FECHA' => 'Por día', default => 'Por mes' };
+                $svc->agregarHoja($libro, $exp['headers'], $exp['data'], $hojaModo, $formatos);
             }
+            $detalle = $this->hojaDetalle($idEmpresa, $f);
+            $svc->agregarHoja($libro, $detalle['headers'], $detalle['data'], 'Detalle completo', $detalle['formatos']);
             $pagos = $this->hojaPagos($idEmpresa, $f);
             $svc->agregarHoja($libro, $pagos['headers'], $pagos['data'], 'Cobros y pagos', $pagos['formatos']);
             $svc->descargarSpreadsheet($libro, 'Ingresos y Egresos');
@@ -288,6 +307,37 @@ class ReporteIngresosEgresosController extends BaseModuloController
             echo 'Error al generar Excel: ' . $e->getMessage();
         }
         exit;
+    }
+
+    /**
+     * Hoja "Ingresos y Egresos": una fila por comprobante (los mismos de la vista
+     * Documento, sin tope). Tipo, número, fecha, cliente/proveedor/empleado, valor,
+     * detalle (las líneas del cuerpo del comprobante, una por renglón), observaciones
+     * y asesor. El asesor es el vendedor de los documentos cobrados o, en las líneas
+     * de otros conceptos, el vendedor asignado al cliente.
+     */
+    private function hojaResumen(int $idEmpresa, array $f): array
+    {
+        $headers = ['Tipo', 'N° Ingreso/Egreso', 'Fecha', 'Cliente / Proveedor / Empleado', 'Valor', 'Detalle', 'Observaciones', 'Asesor'];
+        $data = [];
+        foreach ($this->repository->getResumenExport($idEmpresa, $f) as $r) {
+            $data[] = [
+                $r['tipo_flujo'] === 'INGRESO' ? 'Ingreso' : 'Egreso',
+                $r['numero'],
+                self::xlFecha($r['fecha']),
+                $r['tercero_nombre'],
+                (float) $r['valor'],
+                $r['detalle'],
+                $r['observaciones'],
+                $r['asesor'],
+            ];
+        }
+        return [
+            'headers'  => $headers,
+            'data'     => $data,
+            'formatos' => [3 => self::XL_FECHA, 5 => self::XL_DINERO],
+            'ajustar'  => [6 => 60, 7 => 40], // columna (1-based) => ancho
+        ];
     }
 
     /**
@@ -496,12 +546,12 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 return ['headers' => $headers, 'data' => $data, 'right' => [1,2,3,4,5], 'money' => [1,3,5]];
             default:
                 $rows = $this->repository->getReporteDetallado($idEmpresa, $f, 0);
-                $headers = ['Flujo', 'Número', 'Fecha', 'Tercero', 'Tipo Doc.', 'N° Documento', 'Descripción', 'Concepto', 'Estado', 'Monto'];
+                $headers = ['Flujo', 'Número', 'Fecha', 'Tercero', 'Asesor', 'Tipo Doc.', 'N° Documento', 'Descripción', 'Concepto', 'Estado', 'Monto'];
                 $data = array_map(fn($r) => [$fl($r['tipo_flujo']), $r['numero'],
                     !empty($r['fecha']) ? date('d-m-Y', strtotime($r['fecha'])) : '',
-                    $r['tercero_nombre'], $r['tipo_documento'], $r['numero_documento'],
+                    $r['tercero_nombre'], $r['vendedor'], $r['tipo_documento'], $r['numero_documento'],
                     $r['descripcion'], $r['concepto'], ucfirst(strtolower($r['estado'] ?? '')), (float)$r['monto']], $rows);
-                return ['headers' => $headers, 'data' => $data, 'right' => [9], 'money' => [9]];
+                return ['headers' => $headers, 'data' => $data, 'right' => [10], 'money' => [10]];
         }
     }
 

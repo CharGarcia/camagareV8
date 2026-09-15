@@ -455,19 +455,15 @@ class CuentasPorCobrarController extends BaseModuloController
                     ];
                 }
 
-                $nDocs  = count($g['items']);
+                // Título de la sección: "RUC - NOMBRE · saldo: 1,234.56", igual que en el PDF.
                 $titulo = trim(($g['ruc'] !== '' ? $g['ruc'] . ' - ' : '') . $g['nombre'])
-                        . ' (' . $nDocs . ' doc' . ($nDocs !== 1 ? 's' : '') . ')';
+                        . ' · saldo: ' . number_format($g['saldo'], 2);
 
+                // Sin fila de SUBTOTAL por cliente: el saldo ya va en el título de la
+                // sección y el resumen de toda la cartera queda en el TOTAL GENERAL.
                 $secciones[] = [
-                    'titulo'  => $titulo,
-                    'filas'   => $filasSec,
-                    'resumen' => [
-                        ...array_fill(0, $huecos, ''),
-                        'SUBTOTAL ' . $g['nombre'],
-                        round($g['total'], 2), round($g['nc'], 2), round($g['abonos'], 2),
-                        round($g['retenciones'], 2), round($g['saldo'], 2), '', '', '',
-                    ],
+                    'titulo' => $titulo,
+                    'filas'  => $filasSec,
                 ];
             }
 
@@ -518,8 +514,7 @@ class CuentasPorCobrarController extends BaseModuloController
             // establecimiento solo aparece en consolidado y le resta ancho al asesor.
             $wEst   = $consolidado ? 6 : 0;
             $wAse   = 20 - $wEst;
-            $wEtq   = 26 + $wEst;                // Fecha + N. Documento (+ Estab.)
-            $colEtq = $consolidado ? 3 : 2;      // columnas de texto que une la fila de SUBTOTAL
+            $wEtq   = 26 + $wEst;                // Fecha + N. Documento (+ Estab.): etiqueta del TOTAL GENERAL
 
             $totTotal  = 0.0;
             $totNc     = 0.0;
@@ -535,12 +530,13 @@ class CuentasPorCobrarController extends BaseModuloController
                 $totRet    += $g['retenciones'];
                 $totSaldo  += $g['saldo'];
 
-                $nDocs  = count($g['items']);
+                // Cabecera de la sección: "RUC - NOMBRE · saldo: 1,234.56". Lo que interesa
+                // del cliente es cuánto debe, no cuántos documentos tiene.
                 $titulo = trim(($g['ruc'] !== '' ? $g['ruc'] . ' - ' : '') . $g['nombre']);
                 // La cabecera del cliente va en su propia tabla: un colspan en la primera fila
                 // hace que el motor ignore los anchos de las columnas de la tabla de abajo.
                 $cuerpo .= "<table class='grp'><tr><td style='width:100%;'>"
-                    . $e($titulo) . " &nbsp;&middot;&nbsp; {$nDocs} documento" . ($nDocs !== 1 ? 's' : '')
+                    . $e($titulo) . " &nbsp;&middot;&nbsp; saldo: " . number_format($g['saldo'], 2)
                     . "</td></tr></table>";
 
                 $cuerpo .= "<table><thead><tr>"
@@ -584,15 +580,9 @@ class CuentasPorCobrarController extends BaseModuloController
                         . "</tr>";
                 }
 
-                $cuerpo .= "<tr class='sub'>"
-                    . "<td colspan='{$colEtq}' class='text-end' style='width:{$wEtq}%;'>SUBTOTAL " . $e($g['nombre']) . "</td>"
-                    . "<td class='text-end' style='width:10%;'>$" . number_format($g['total'], 2) . "</td>"
-                    . "<td class='text-end' style='width:9%;'>$" . number_format($g['nc'], 2) . "</td>"
-                    . "<td class='text-end' style='width:10%;'>$" . number_format($g['abonos'], 2) . "</td>"
-                    . "<td class='text-end' style='width:10%;'>$" . number_format($g['retenciones'], 2) . "</td>"
-                    . "<td class='text-end' style='width:10%;'>$" . number_format($g['saldo'], 2) . "</td>"
-                    . "<td colspan='2' style='width:" . (5 + $wAse) . "%;'></td>"
-                    . "</tr></tbody></table>";
+                // Sin fila de SUBTOTAL por cliente: el saldo ya va en la cabecera de la
+                // sección y el resumen de toda la cartera queda en el TOTAL GENERAL.
+                $cuerpo .= "</tbody></table>";
             }
 
             ob_start();
@@ -610,7 +600,6 @@ class CuentasPorCobrarController extends BaseModuloController
                 .header p  { margin: 0; font-size: 7.5pt; }
                 table.grp { margin-bottom: 0; }
                 table.grp td { background: #eafaf1; border: 1px solid #ccc; font-weight: bold; font-size: 8.5pt; padding: 4px 5px; }
-                tr.sub td { background: #f1f8f4; font-weight: bold; }
                 table.tot td { background: #343a40; color: #fff; font-weight: bold; font-size: 8.5pt; border: 1px solid #343a40; }
                 table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }
                 .stat-lbl  { font-size: 7.5pt; }

@@ -11,16 +11,14 @@
     .badge-vigente  { background:rgba(25,135,84,.12);  color:#198754; border:1px solid rgba(25,135,84,.25); }
     .badge-proxima  { background:rgba(255,193,7,.15);  color:#856404; border:1px solid rgba(255,193,7,.35); }
     .badge-pagada   { background:rgba(108,117,125,.12);color:#6c757d; border:1px solid rgba(108,117,125,.25); }
-    /* Vista "Por cliente": arranca plegada (una línea por cliente con sus totales) y, al
-       desplegar, se lee como el mayor de una cuenta: documentos, SUBTOTAL de la sección y
-       TOTAL GENERAL al final del listado. */
+    /* Vista "Por cliente": arranca plegada (una línea por cliente con sus totales y su
+       saldo) y, al desplegar, se lee como el mayor de una cuenta: los documentos del
+       cliente y, al final del listado, el TOTAL GENERAL. */
     .cxc-mayor-grp   > td { background:#eafaf1; border-top:1px solid rgba(25,135,84,.45); }
-    .cxc-mayor-sub   > td { background:rgba(25,135,84,.06); font-weight:700; border-top:1px solid #198754; }
     .cxc-mayor-total > td { background:#f8f9fa; font-weight:800; border-top:2px solid #343a40; }
     .cxc-mayor-gap   > td { height:10px; padding:0; border:0; background:transparent; }
     /* Las filas de sección no son documentos: el hover de Bootstrap las apagaría. */
     .table-hover > tbody > tr.cxc-mayor-grp:hover > td,
-    .table-hover > tbody > tr.cxc-mayor-sub:hover > td,
     .table-hover > tbody > tr.cxc-mayor-total:hover > td,
     .table-hover > tbody > tr.cxc-mayor-gap:hover > td { --bs-table-accent-bg:transparent; }
     /* Evita que el contenedor de chips (vacío hasta que se elige un cliente) desalinee la fila de filtros */

@@ -580,14 +580,11 @@ function CXP_renderAgrupado(filas) {
         </tr>`;
 
         if (abierto) {
+            // Sin fila de SUBTOTAL: la cabecera del proveedor ya trae sus totales y el saldo,
+            // así que repetirlos al cerrar la sección solo alarga la lista. El separador
+            // mantiene la sección visualmente cerrada.
             for (const r of g.items) html += CXP_filaMayorHtml(r);
-            html += `
-        <tr class="cxp-mayor-sub">
-            <td colspan="2" class="text-end" style="font-size:.78rem;">SUBTOTAL ${cxpEsc(g.nombre)}</td>
-            ${importes()}
-            <td colspan="2"></td>
-        </tr>
-        <tr class="cxp-mayor-gap"><td colspan="9"></td></tr>`;
+            html += `<tr class="cxp-mayor-gap"><td colspan="9"></td></tr>`;
         }
     }
 

@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen
-version: 1.16
+version: 1.18
 orden: 50
 estado: activo
 ---
@@ -38,8 +38,8 @@ El botón **Por proveedor** resume la deuda en **una línea por proveedor**: su
 identificación, cuántos documentos tiene y sus totales —total, NC, abonos,
 retenciones y, sobre todo, el **saldo por pagar** de ese proveedor, en rojo
 mientras se le deba algo—. Al desplegar una línea se lee como el **mayor de una
-cuenta contable**: los documentos del proveedor y, cerrando la sección, una fila
-de **SUBTOTAL**. Al final del listado va la fila **TOTAL GENERAL**.
+cuenta contable**: debajo aparecen los documentos de ese proveedor. Al final del
+listado va la fila **TOTAL GENERAL**.
 
 - El listado arranca **plegado**: de un vistazo se ve cuánto se le debe a cada
   proveedor. Un clic en su línea despliega los documentos y otro la vuelve a
@@ -77,16 +77,18 @@ esa misma estructura, no como lista plana. A diferencia de la pantalla, en el
 archivo **todas las secciones salen desplegadas** (con su detalle), esté como
 esté el listado en ese momento:
 
-- **PDF**: cabecera con la identificación y el nombre del proveedor, la tabla de
+- **PDF**: cabecera con la identificación, el nombre y el **saldo** del proveedor
+  (`1791234567001 - DISTRIBUIDORA EJEMPLO S.A. · saldo: 1,234.56`), la tabla de
   sus documentos con **las mismas columnas de la pantalla** (fecha, n. de
-  documento, total, NC, abonos, retenciones, saldo y días), la fila **SUBTOTAL**
-  del proveedor y, al cierre del reporte, el **TOTAL GENERAL**. Arriba se
-  mantienen los filtros aplicados y las tarjetas de resumen.
+  documento, total, NC, abonos, retenciones, saldo y días) y, al cierre del
+  reporte, el **TOTAL GENERAL**. Cada proveedor no lleva fila de subtotal: su
+  saldo ya está en la cabecera de la sección. Arriba se mantienen los filtros
+  aplicados y las tarjetas de resumen.
 - **Excel**: una **sección por proveedor** (título con su identificación, nombre
-  y número de documentos), sus documentos con esas mismas columnas —más *Tipo* y
-  *Estado*, que en una hoja de cálculo no estorban—, la fila **SUBTOTAL** y el
-  **TOTAL GENERAL** al final de la hoja. El proveedor no va como columna: es el
-  título de la sección, igual que la cuenta en el mayor.
+  y saldo, en el mismo formato del PDF), sus documentos con esas mismas columnas —más *Tipo* y
+  *Estado*, que en una hoja de cálculo no estorban— y el **TOTAL GENERAL** al
+  final de la hoja. El proveedor no va como columna: es el título de la sección,
+  igual que la cuenta en el mayor.
 - En **consolidado por RUC** ambos archivos agregan la columna **Estab.** con el
   establecimiento dueño de cada documento.
 - Para la lista plana de siempre (una fila por documento, con proveedor y RUC
@@ -323,6 +325,12 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.18** — Se quitó la fila **SUBTOTAL** de cada proveedor en la vista *Por
+  proveedor*: su saldo ya aparece en la línea del proveedor y en la cabecera de
+  la sección del PDF y el Excel. El **TOTAL GENERAL** del listado se mantiene.
+- **1.17** — En el PDF y el Excel de la vista *Por proveedor*, la cabecera de cada
+  sección muestra el **saldo** en lugar del número de documentos:
+  `1791234567001 - DISTRIBUIDORA EJEMPLO S.A. · saldo: 1,234.56`.
 - **1.16** — El módulo respeta el permiso de **Acceso total**: quien no lo tiene
   ve solo los documentos que él registró, tanto en la tabla como en las tarjetas,
   el gráfico de antigüedad, la vista por proveedor y las exportaciones, y ya no
