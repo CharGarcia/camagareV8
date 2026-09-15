@@ -1,20 +1,25 @@
 -- ============================================================================
 --  20260914_indices_reporte_inventarios_arranque.sql
---  Dos índices para que la PANTALLA INICIAL de Reporte de Inventarios
---  (modulos/reporte_inventarios) y de Inventario (modulos/inventario) dejen de
---  recorrer el kardex completo solo para llenar tres <select> de filtros.
+--  Tres índices para el Reporte de Inventarios (modulos/reporte_inventarios) y el
+--  módulo Inventario (modulos/inventario): dos para que la PANTALLA INICIAL deje de
+--  recorrer el kardex entero solo para llenar tres <select> de filtros, y uno para
+--  las consultas de stock por producto y bodega (Existencias, Valorización y
+--  Auditoría), que agregan el kardex de la empresa en cada Mostrar.
 -- ----------------------------------------------------------------------------
---  QUÉ HACE:        crea 2 índices. NO modifica ni borra ni un solo dato.
+--  QUÉ HACE:        crea 3 índices. NO modifica ni borra ni un solo dato.
 --  TOCA DATOS:      no.
 --  REVERSIBLE:      sí, al 100% — ver el bloque "REVERSIÓN" al final.
---  IMPACTO:         ~22 MB de disco por cada 600.000 movimientos de kardex
---                   (medido: 4 MB el de usuario + 18 MB el de fecha) y un poco
+--  IMPACTO:         ~40 MB de disco por cada 600.000 movimientos de kardex
+--                   (medido: 4 MB el de usuario, 18 MB el de fecha, ~18 MB el de
+--                   stock por bodega) y un poco
 --                   más de coste en cada INSERT al kardex; a cambio, tres
 --                   consultas que hoy escanean la tabla entera pasan a
 --                   resolverse por índice.
---  VALIDADO:        14-09-2026 contra la base local (PostgreSQL 18.3) sobre una
---                   copia temporal de inventario_kardex con 600.000 filas,
---                   comprobando resultado idéntico al de las consultas viejas.
+--  VALIDADO:        15-09-2026 contra la base local (PostgreSQL 18.3): los tres
+--                   creados dentro de una transacción con ROLLBACK, y medidos
+--                   sobre una carga sembrada de 2.000 productos × 5 bodegas y
+--                   300.000 movimientos, comprobando que los números del reporte
+--                   son idénticos a un cálculo independiente en SQL elemental.
 --
 --  VA DE LA MANO CON EL CÓDIGO: sin los índices, las consultas reescritas de
 --                   InventarioRepository::getTiposReferencia() /
@@ -42,7 +47,7 @@
 --  Esto NO se arregla con "Auto commit ON": es comportamiento del servidor.
 --
 --  En el Query Tool hay que enviar UNA sentencia a la vez: seleccionar con el
---  ratón solo esa línea y pulsar F5. Son 2 veces.
+--  ratón solo esa línea y pulsar F5. Son 3 veces.
 --
 --  ¿Por qué CONCURRENTLY? Porque un CREATE INDEX normal BLOQUEA los INSERT /
 --  UPDATE / DELETE de inventario_kardex mientras construye el índice, y el
@@ -90,7 +95,7 @@ ORDER BY c.relname;
 
 -- ============================================================================
 -- PASO 2 - CREAR LOS ÍNDICES
---          UNA SENTENCIA A LA VEZ: seleccionar la línea y F5. Dos veces.
+--          UNA SENTENCIA A LA VEZ: seleccionar la línea y F5. Tres veces.
 --          Van ordenadas de la más rápida a la más lenta.
 -- ============================================================================
 
@@ -111,6 +116,15 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kardex_empresa_usuario ON public.inv
 --    fechas (la pestaña Movimientos entera).
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kardex_empresa_fecha ON public.inventario_kardex (id_empresa, fecha_movimiento) WHERE eliminado = false;
 
+-- 3) Stock por producto y bodega. Lo usan las pestañas Existencias, Valorización
+--    y Auditoría: las tres agregan el kardex completo de la empresa
+--    (SUM(cantidad) y último costo, agrupados por id_producto + id_bodega) en cada
+--    Mostrar. El idx_kardex_empresa_producto que ya existe se queda a medias: no
+--    lleva id_bodega, así que obliga a reordenar todo el resultado.
+--    Las columnas del INCLUDE evitan bajar a la tabla (index-only scan).
+--    Medido: Auditoría 4,9 s -> 1,3 s. Es el más grande de los tres.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kardex_stock_por_bodega ON public.inventario_kardex (id_empresa, id_producto, id_bodega) INCLUDE (cantidad, costo_unitario, fecha_movimiento, id) WHERE eliminado = false;
+
 
 -- ============================================================================
 -- PASO 3 - VERIFICAR QUE NINGUNO QUEDÓ INVÁLIDO  <- NO SALTARSE ESTE PASO
@@ -120,7 +134,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kardex_empresa_fecha ON public.inven
 -- ocupa disco, encarece las escrituras... y el planificador NO lo usa. Y no
 -- avisa de nada.
 --
--- Resultado esperado: 2 filas, ambas con valido = true.
+-- Resultado esperado: 3 filas, todas con valido = true.
 -- Si alguna sale con valido = false, borrarla y volver a crearla:
 --     DROP INDEX CONCURRENTLY IF EXISTS <nombre_del_indice>;
 --     (y repetir su CREATE del PASO 2)
@@ -129,7 +143,8 @@ SELECT c.relname AS indice, i.indisvalid AS valido
 FROM pg_index i
 JOIN pg_class c ON c.oid = i.indexrelid
 WHERE c.relname IN ('idx_kardex_empresa_usuario',
-                    'idx_kardex_empresa_fecha')
+                    'idx_kardex_empresa_fecha',
+                    'idx_kardex_stock_por_bodega')
 ORDER BY c.relname;
 
 
@@ -166,6 +181,7 @@ ANALYZE public.inventario_kardex;
 -- ============================================================================
 -- DROP INDEX CONCURRENTLY IF EXISTS public.idx_kardex_empresa_usuario;
 -- DROP INDEX CONCURRENTLY IF EXISTS public.idx_kardex_empresa_fecha;
+-- DROP INDEX CONCURRENTLY IF EXISTS public.idx_kardex_stock_por_bodega;
 
 
 -- ============================================================================
@@ -175,4 +191,5 @@ ANALYZE public.inventario_kardex;
 -- ============================================================================
 -- CREATE INDEX IF NOT EXISTS idx_kardex_empresa_usuario ON public.inventario_kardex (id_empresa, created_by) WHERE eliminado = false;
 -- CREATE INDEX IF NOT EXISTS idx_kardex_empresa_fecha   ON public.inventario_kardex (id_empresa, fecha_movimiento) WHERE eliminado = false;
+-- CREATE INDEX IF NOT EXISTS idx_kardex_stock_por_bodega ON public.inventario_kardex (id_empresa, id_producto, id_bodega) INCLUDE (cantidad, costo_unitario, fecha_movimiento, id) WHERE eliminado = false;
 -- ANALYZE public.inventario_kardex;

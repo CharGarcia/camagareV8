@@ -435,6 +435,7 @@ window.RI_Existencias = {
 window.RI_Movimientos = {
     limpiarFiltros() {
         RI_limpiarFiltros('ri-mv', ['ri-mv-producto-seleccionado']);
+        this.cambiarMesAnio(false);   // el reset deja el año por defecto: hay que rehacer las fechas
     },
 
     limpiarProducto() {
@@ -442,7 +443,13 @@ window.RI_Movimientos = {
         this.generar();
     },
 
-    cambiarMesAnio() {
+    /**
+     * Traduce Año/Mes a las fechas desde/hasta, que son el filtro real. Con
+     * regenerar=false solo sincroniza los campos (carga inicial y tras limpiar):
+     * la pestaña arranca con un año elegido porque sin acotar la fecha el saldo
+     * corrido obliga a recorrer todo el histórico del kardex.
+     */
+    cambiarMesAnio(regenerar = true) {
         const mes = document.getElementById('ri-mv-mes').value;
         const anio = document.getElementById('ri-mv-anio').value;
         if (!mes || !anio) return;
@@ -458,7 +465,7 @@ window.RI_Movimientos = {
             document.getElementById('ri-mv-fecha-desde').value = `${anio}-${mes}-01`;
             document.getElementById('ri-mv-fecha-hasta').value = `${anio}-${mes}-${String(ultimoDia).padStart(2, '0')}`;
         }
-        this.generar();
+        if (regenerar) this.generar();
     },
 
     dibujarCabecera(modo) {
@@ -886,4 +893,8 @@ document.addEventListener('DOMContentLoaded', function () {
     RI_setupAutocomplete('ri-cv-search-producto', 'ri-cv-dropdown-producto', 'ri-cv-id-producto', 'ri-cv-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Consignaciones.generar());
     RI_setupAutocomplete('ri-cv-search-cliente', 'ri-cv-dropdown-cliente', 'ri-cv-id-cliente', 'ri-cv-cliente-seleccionado', '/getClientesAjax?q=', () => window.RI_Consignaciones.generar());
     RI_setupAutocomplete('ri-au-search-producto', 'ri-au-dropdown-producto', 'ri-au-id-producto', 'ri-au-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Auditoria.generar());
+
+    // El selector Año de Movimientos viene con un año elegido; las fechas (el filtro
+    // real) hay que derivarlas al cargar, sin lanzar todavía ninguna consulta.
+    window.RI_Movimientos.cambiarMesAnio(false);
 });

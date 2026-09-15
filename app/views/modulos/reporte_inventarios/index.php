@@ -238,10 +238,10 @@
                             </div>
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Año</label>
-                                <select id="ri-mv-anio" class="form-select form-select-sm shadow-none border" style="width:90px;" onchange="window.RI_Movimientos.cambiarMesAnio();">
-                                    <option value="TODOS" selected>Todos</option>
-                                    <?php foreach (($anios ?? [date('Y')]) as $a): ?>
-                                        <option value="<?= htmlspecialchars((string) $a) ?>"><?= htmlspecialchars((string) $a) ?></option>
+                                <select id="ri-mv-anio" class="form-select form-select-sm shadow-none border" style="width:90px;" onchange="window.RI_Movimientos.cambiarMesAnio();" title="Arranca en el año más reciente con movimientos: sin acotar la fecha, el saldo corrido obliga a recorrer todo el histórico.">
+                                    <option value="TODOS">Todos</option>
+                                    <?php foreach (($anios ?? [date('Y')]) as $__i => $a): ?>
+                                        <option value="<?= htmlspecialchars((string) $a) ?>"<?= $__i === 0 ? ' selected' : '' ?>><?= htmlspecialchars((string) $a) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>

@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros
-version: 1.8
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, primeras 5000 filas, listado recortado
+version: 1.9
 orden: 40
 estado: activo
 ---
@@ -119,6 +119,26 @@ compras, consignaciones, retornos, cambios de producto y ajustes manuales).
 Los productos con discrepancias que ya existían antes de esta corrección
 siguen apareciendo aquí hasta que se corrigen manualmente.
 
+## Cuántas filas se muestran
+
+En pantalla, cada pestaña muestra **como máximo 5.000 filas**. Si el resultado
+llega a ese tope, la tabla lo dice en su última fila: no es un error, es que
+el filtro es demasiado amplio para leerlo en pantalla. Dos salidas:
+
+- Afinar los filtros (una bodega, una categoría, un rango de fechas).
+- Descargar el **Excel** o el **PDF**, que llegan hasta 50.000 filas y también
+  avisan en su última línea si hubiera que recortar.
+
+El desglose *Por lotes* y *Lote + caducidad* es el que más filas genera: cada
+producto se multiplica por sus lotes en cada bodega. Conviene usarlo con un
+producto o una bodega ya elegidos.
+
+En **Movimientos**, el selector Año arranca en el año más reciente con
+movimientos en vez de *Todos*: el saldo corrido obliga a recorrer todo el
+histórico del kardex, y sin acotar la fecha la consulta tarda unos segundos
+para luego mostrar un listado recortado igualmente. Se puede poner *Todos*
+cuando haga falta.
+
 ## Errores frecuentes
 
 - **Un producto no aparece**: no es inventariable.
@@ -135,6 +155,20 @@ siguen apareciendo aquí hasta que se corrigen manualmente.
 
 ## Historial de cambios
 
+- **1.9** — **El reporte tarda mucho menos en mostrar los datos.** Medido sobre
+  una carga de prueba de 2.000 productos × 5 bodegas y 300.000 movimientos:
+  Existencias pasó de 27 s a 1,6 s, Valorización de 30 s a 1,2 s y Auditoría
+  de 4,9 s a 0,4 s. Tres motivos: (1) cada *Mostrar* calculaba además unos
+  indicadores que la pantalla no enseña, repitiendo entera la consulta que
+  acababa de hacer — ya no se calculan; (2) el stock, el costo y lo consignado
+  se consultaban de nuevo para cada línea del listado, y ahora se calculan una
+  sola vez para toda la empresa; (3) hay un tope de filas en pantalla, porque
+  el desglose por lote podía generar cientos de miles de filas y dejar el
+  navegador colgado (ver *Cuántas filas se muestran*). Además, **Movimientos**
+  arranca con un año seleccionado en vez de *Todos*. **Requiere ejecutar**
+  `database/20260914_indices_reporte_inventarios_arranque.sql`, que ahora trae
+  un tercer índice (el del stock por producto y bodega); sin él el reporte da
+  los mismos números, pero más despacio.
 - **1.8** — **Existencias**: nuevo selector **Detalle** (En general / Por
   lotes / Por caducidad / Lote + caducidad) como primer filtro. Antes, las
   opciones *Por Lote*, *Por NUP* y *Por Caducidad* de **Agrupar por** hacían

@@ -222,27 +222,37 @@ class ReporteInventariosController extends BaseModuloController
 
         // El desglose (por lote / por caducidad) define las filas por sí solo: cuando
         // está activo, "Agrupar por" no pinta nada — la vista lo deshabilita.
+        $limite = ReporteInventarioRepository::LIMITE_FILAS_PANTALLA;
         if ($desglose !== 'GENERAL') {
             $modo = $desglose;
-            $rows = $this->repository->getExistenciasPorDesglose($idEmpresa, $filtros, $desglose);
+            $rows = $this->repository->getExistenciasPorDesglose($idEmpresa, $filtros, $desglose, $limite);
         } else {
             $modo = $filtros['agrupar_por'];
             $rows = match ($modo) {
                 'PRODUCTO'   => $this->repository->getExistenciasAgrupadoProducto($idEmpresa, $filtros),
                 'CATEGORIA'  => $this->repository->getExistenciasAgrupadoCategoria($idEmpresa, $filtros),
                 'BODEGA'     => $this->repository->getExistenciasAgrupadoBodega($idEmpresa, $filtros),
-                default      => $this->repository->getExistenciasDetalle($idEmpresa, $filtros),
+                default      => $this->repository->getExistenciasDetalle($idEmpresa, $filtros, $limite),
             };
         }
-        $kpis = $this->repository->getExistenciasKpis($idEmpresa, $filtros);
+        // El repositorio pide una fila de más para poder distinguir "justo el tope" de
+        // "hay más": si llegó, se recorta y la tabla lo dice en su última fila.
+        $hayMas = count($rows) > $limite;
+        if ($hayMas) {
+            $rows = array_slice($rows, 0, $limite);
+        }
+        // Sin KPIs: la pantalla no muestra ninguno en esta pestaña y calcularlos obligaba
+        // a repetir la consulta completa en cada Mostrar (medido: 14,5 s con 10.000 pares producto×bodega). El único
+        // indicador que sí se usa, el de Auditoría, se cuenta en PHP sobre las filas ya traídas.
 
         $colSpan = self::colSpanExistencias($modo);
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $colSpan),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $colSpan)
+                            . ($hayMas ? self::filaTopeAlcanzado($limite, $colSpan) : ''),
             'rawData'    => $rows,
-            'kpis'       => $kpis,
             'agrupacion' => $modo,
+            'tope'       => $hayMas ? $limite : null,
         ];
     }
 
@@ -250,6 +260,7 @@ class ReporteInventariosController extends BaseModuloController
     {
         $filtros = $this->getFiltrosMovimientos();
         $modo = $filtros['agrupar_por'];
+        $limite = ReporteInventarioRepository::LIMITE_FILAS_PANTALLA;
 
         $rows = match ($modo) {
             'PRODUCTO' => $this->repository->getMovimientosAgrupadoProducto($idEmpresa, $filtros),
@@ -258,15 +269,24 @@ class ReporteInventariosController extends BaseModuloController
             'ORIGEN'   => $this->repository->getMovimientosAgrupadoOrigen($idEmpresa, $filtros),
             'FECHA'    => $this->repository->getMovimientosAgrupadoFecha($idEmpresa, $filtros),
             'MES'      => $this->repository->getMovimientosAgrupadoMes($idEmpresa, $filtros),
-            default    => $this->repository->getMovimientosDetalle($idEmpresa, $filtros),
+            default    => $this->repository->getMovimientosDetalle($idEmpresa, $filtros, $limite),
         };
-        $kpis = $this->repository->getMovimientosKpis($idEmpresa, $filtros);
+        $hayMas = count($rows) > $limite;
+        if ($hayMas) {
+            $rows = array_slice($rows, 0, $limite);
+        }
+        // Sin KPIs: la pantalla no muestra ninguno en esta pestaña y calcularlos obligaba
+        // a repetir la consulta completa en cada Mostrar (medido: una segunda pasada completa sobre el kardex). El único
+        // indicador que sí se usa, el de Auditoría, se cuenta en PHP sobre las filas ya traídas.
+
+        $colSpan = $modo === 'NINGUNO' ? 12 : 6;
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaMovimientos($r, $modo), $modo === 'NINGUNO' ? 12 : 6),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaMovimientos($r, $modo), $colSpan)
+                            . ($hayMas ? self::filaTopeAlcanzado($limite, $colSpan) : ''),
             'rawData'    => $rows,
-            'kpis'       => $kpis,
             'agrupacion' => $modo,
+            'tope'       => $hayMas ? $limite : null,
         ];
     }
 
@@ -281,12 +301,13 @@ class ReporteInventariosController extends BaseModuloController
             'MARCA'     => $this->repository->getValorizacionAgrupadoMarca($idEmpresa, $filtros),
             default     => $this->repository->getValorizacionAgrupadoProducto($idEmpresa, $filtros),
         };
-        $kpis = $this->repository->getValorizacionKpis($idEmpresa, $filtros);
+        // Sin KPIs: la pantalla no muestra ninguno en esta pestaña y calcularlos obligaba
+        // a repetir la consulta completa en cada Mostrar (medido: otros 15 s, sobre la misma base que ya se acaba de consultar). El único
+        // indicador que sí se usa, el de Auditoría, se cuenta en PHP sobre las filas ya traídas.
 
         return [
             'rows'       => $this->renderRows($rows, fn($r) => $this->filaValorizacion($r), 5),
             'rawData'    => $rows,
-            'kpis'       => $kpis,
             'agrupacion' => $modo,
         ];
     }
@@ -314,14 +335,36 @@ class ReporteInventariosController extends BaseModuloController
     private function generarAuditoria(int $idEmpresaSesion): array
     {
         $filtros = $this->getFiltrosAuditoria();
-        $rows = $this->repository->getAuditoriaStock($idEmpresaSesion, $filtros);
+        $limite  = ReporteInventarioRepository::LIMITE_FILAS_PANTALLA;
+        $rows    = $this->repository->getAuditoriaStock($idEmpresaSesion, $filtros, $limite);
+        $hayMas  = count($rows) > $limite;
+        if ($hayMas) {
+            $rows = array_slice($rows, 0, $limite);
+        }
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaAuditoria($r), 6),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaAuditoria($r), 6)
+                            . ($hayMas ? self::filaTopeAlcanzado($limite, 6) : ''),
             'rawData'    => $rows,
+            // Este sí lo lee la pantalla (el contador de discrepancias), y no cuesta una
+            // consulta aparte: sale de las filas ya traídas. Con tope, es "al menos N".
             'kpis'       => ['total_discrepancias' => count($rows)],
             'agrupacion' => 'NINGUNO',
+            'tope'       => $hayMas ? $limite : null,
         ];
+    }
+
+    /**
+     * Última fila de la tabla cuando el resultado llegó al tope de pantalla. No es un
+     * error: el dato completo sigue disponible en el Excel y el PDF, que no llevan tope.
+     */
+    private static function filaTopeAlcanzado(int $limite, int $colSpan): string
+    {
+        return '<tr class="table-warning"><td colspan="' . $colSpan . '" class="text-center small py-2">'
+            . '<i class="bi bi-exclamation-triangle me-1"></i>Se muestran las primeras '
+            . number_format($limite) . ' filas. Afina los filtros para ver menos, o descarga el '
+            . 'Excel/PDF, que sí traen el listado completo.'
+            . '</td></tr>';
     }
 
     private function renderRows(array $rows, callable $render, int $colSpanVacio): string
@@ -960,6 +1003,25 @@ class ReporteInventariosController extends BaseModuloController
         }
     }
 
+    /**
+     * Si la exportación llegó al tope, lo dice en una última fila del propio archivo:
+     * un Excel recortado en silencio es peor que uno que avisa de que falta algo.
+     */
+    private static function recortarExport(array $rows, int $nColumnas): array
+    {
+        $tope = ReporteInventarioRepository::LIMITE_FILAS_EXPORT;
+        if (count($rows) <= $tope) {
+            return $rows;
+        }
+        $rows = array_slice($rows, 0, $tope);
+        $rows[] = array_pad(
+            ['*** Listado recortado en ' . number_format($tope) . ' filas. Afina los filtros para exportarlo completo. ***'],
+            $nColumnas,
+            ''
+        );
+        return $rows;
+    }
+
     /** @return array{0: array, 1: array, 2: string} [headers, filas, título] */
     private function datosExport(int $idEmpresa, string $tab): array
     {
@@ -974,7 +1036,7 @@ class ReporteInventariosController extends BaseModuloController
                     'ORIGEN'   => $this->repository->getMovimientosAgrupadoOrigen($idEmpresa, $filtros),
                     'FECHA'    => $this->repository->getMovimientosAgrupadoFecha($idEmpresa, $filtros),
                     'MES'      => $this->repository->getMovimientosAgrupadoMes($idEmpresa, $filtros),
-                    default    => $this->repository->getMovimientosDetalle($idEmpresa, $filtros),
+                    default    => $this->repository->getMovimientosDetalle($idEmpresa, $filtros, ReporteInventarioRepository::LIMITE_FILAS_EXPORT),
                 };
                 if ($modo === 'NINGUNO') {
                     $headers = ['Fecha', 'Producto', 'Código', 'Bodega', 'Tipo', 'Origen', 'Entradas', 'Salidas', 'Saldo', 'Costo Unit.', 'Lote', 'Observaciones'];
@@ -996,7 +1058,7 @@ class ReporteInventariosController extends BaseModuloController
                         (float) $r['saldo_neto'], (float) $r['costo_total'],
                     ], $rows);
                 }
-                return [$headers, $data, 'Movimientos de Inventario'];
+                return [$headers, self::recortarExport($data, count($headers)), 'Movimientos de Inventario'];
 
             case 'valorizacion':
                 $filtros = $this->getFiltrosValorizacion();
@@ -1042,16 +1104,17 @@ class ReporteInventariosController extends BaseModuloController
             default: // existencias
                 $filtros  = $this->getFiltrosExistencias();
                 $desglose = $filtros['desglose'];
+                $topeExport = ReporteInventarioRepository::LIMITE_FILAS_EXPORT;
                 if ($desglose !== 'GENERAL') {
                     $modo = $desglose;
-                    $rows = $this->repository->getExistenciasPorDesglose($idEmpresa, $filtros, $desglose);
+                    $rows = $this->repository->getExistenciasPorDesglose($idEmpresa, $filtros, $desglose, $topeExport);
                 } else {
                     $modo = $filtros['agrupar_por'];
                     $rows = match ($modo) {
                         'PRODUCTO'  => $this->repository->getExistenciasAgrupadoProducto($idEmpresa, $filtros),
                         'CATEGORIA' => $this->repository->getExistenciasAgrupadoCategoria($idEmpresa, $filtros),
                         'BODEGA'    => $this->repository->getExistenciasAgrupadoBodega($idEmpresa, $filtros),
-                        default     => $this->repository->getExistenciasDetalle($idEmpresa, $filtros),
+                        default     => $this->repository->getExistenciasDetalle($idEmpresa, $filtros, $topeExport),
                     };
                 }
                 if ($modo === 'NINGUNO') {
@@ -1093,7 +1156,7 @@ class ReporteInventariosController extends BaseModuloController
                         (float) $r['consignado'], (float) $r['stock_actual'], (float) $r['stock_total'], (float) $r['costo_unitario'], (float) $r['valor_total'],
                     ], $rows);
                 }
-                return [$headers, $data, 'Existencias de Inventario'];
+                return [$headers, self::recortarExport($data, count($headers)), 'Existencias de Inventario'];
         }
     }
 }

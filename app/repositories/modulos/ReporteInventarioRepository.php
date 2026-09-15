@@ -37,6 +37,24 @@ class ReporteInventarioRepository extends BaseRepository
         'migracion'                      => 'Migración histórica',
     ];
 
+    /**
+     * Tope de filas que se envían A LA PANTALLA en las consultas que pueden devolver
+     * un resultado sin cota. El desglose por lote/caducidad de Existencias llegó a
+     * 288.000 filas en la prueba de carga (2.000 productos × 5 bodegas × 400 lotes):
+     * son minutos de HTML y un navegador colgado, por un listado que nadie puede leer.
+     * Las EXPORTACIONES no lo aplican (pasan limite = null): un Excel sí puede con
+     * todas las filas, y ahí el usuario sí quiere el dato completo.
+     */
+    public const LIMITE_FILAS_PANTALLA = 5000;
+
+    /**
+     * Tope para Excel y PDF. Muy por encima del de pantalla (un archivo sí puede con
+     * decenas de miles de filas), pero no ilimitado: sin tope, exportar el kardex de una
+     * empresa con 300.000 movimientos agota la memoria de PHP antes de escribir nada.
+     * Si se alcanza, la exportación lo dice en su última fila en vez de callarlo.
+     */
+    public const LIMITE_FILAS_EXPORT = 50000;
+
     public function __construct()
     {
         parent::__construct('inventario_kardex');
@@ -127,22 +145,50 @@ class ReporteInventarioRepository extends BaseRepository
     /**
      * Base: una fila por producto×bodega, con costo unitario (último movimiento) y estado
      * calculado. El universo de pares producto×bodega sale de UNION(productos_bodegas activos,
-     * pares distintos con movimiento real en inventario_kardex) — no solo de productos_bodegas —
-     * para que un producto con historial de kardex nunca desaparezca de Existencias (con saldo
-     * cero o negativo incluido) aunque su fila en productos_bodegas esté ausente o eliminada
-     * (caché desincronizado; ver docs/manual/modulos/reporte-inventarios.md, pestaña Auditoría).
+     * pares con movimiento real en inventario_kardex) — no solo de productos_bodegas — para que
+     * un producto con historial de kardex nunca desaparezca de Existencias (con saldo cero o
+     * negativo incluido) aunque su fila en productos_bodegas esté ausente o eliminada (caché
+     * desincronizado; ver docs/manual/modulos/reporte-inventarios.md, pestaña Auditoría).
      * productos_bodegas (pb) queda como LEFT JOIN solo para leer stock_minimo/stock_maximo.
+     *
+     * RENDIMIENTO — por qué CTEs agregados y no subconsultas en el SELECT:
+     * stock, costo y consignado se calculaban con tres subconsultas correlacionadas, una
+     * por cada uno de esos tres datos y POR CADA FILA del resultado. Con 2.000 productos ×
+     * 5 bodegas son 10.000 filas → 30.000 subconsultas, cada una entrando otra vez al
+     * kardex: 12,5 s para el listado (y 15 s para Valorización, que usa esta misma base).
+     * Aquí se agrega UNA vez todo el kardex de la empresa (y una vez las consignaciones) y
+     * el resultado se cruza por LEFT JOIN. Los CTE van MATERIALIZED a propósito: kardex_agg
+     * se usa dos veces (para el universo de pares y para el stock) y sin materializar
+     * PostgreSQL lo calcularía dos veces.
      *
      * $fechaCorte (opcional): si viene, el saldo/costo/consignado se calculan "a esa fecha"
      * (solo movimientos/consignaciones hasta ese día), en vez del saldo corriente de hoy.
      */
     private function baseExistencias(string $where, bool $conFechaCorte = false): string
     {
-        $condCorteKardex = $conFechaCorte ? " AND k.fecha_movimiento <= :fecha_corte" : "";
-        $condCorteUnion  = $conFechaCorte ? " AND fecha_movimiento <= :fecha_corte" : "";
+        $condCorteKardex = $conFechaCorte ? " AND fecha_movimiento <= :fecha_corte" : "";
         $condCorteCv     = $conFechaCorte ? " AND cv.fecha_emision <= :fecha_corte" : "";
 
         return "
+            WITH kardex_agg AS MATERIALIZED (
+                SELECT id_empresa, id_producto, id_bodega,
+                       SUM(cantidad) AS stock_actual,
+                       (ARRAY_AGG(costo_unitario ORDER BY fecha_movimiento DESC, id DESC))[1] AS costo_unitario
+                FROM inventario_kardex
+                WHERE id_empresa = :id_empresa AND eliminado = false{$condCorteKardex}
+                GROUP BY id_empresa, id_producto, id_bodega
+            ),
+            consignado_agg AS (
+                SELECT cvd.id_empresa, cvd.id_producto, cvd.id_bodega,
+                       SUM(cvd.cantidad
+                           - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
+                           - COALESCE((" . $this->sqlFacturadoCv() . "), 0)) AS consignado
+                FROM consignaciones_ventas_detalles cvd
+                INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+                WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
+                  AND cv.eliminado = false{$condCorteCv}
+                GROUP BY cvd.id_empresa, cvd.id_producto, cvd.id_bodega
+            )
             SELECT * FROM (
                 SELECT u.id_producto, u.id_bodega, COALESCE(pb.stock_minimo, 0) AS stock_minimo,
                        COALESCE(pb.stock_maximo, 0) AS stock_maximo,
@@ -150,35 +196,17 @@ class ReporteInventarioRepository extends BaseRepository
                        p.id_categoria, COALESCE(cat.nombre, 'Sin categoría') AS categoria_nombre,
                        p.id_marca, COALESCE(mar.nombre, 'Sin marca') AS marca_nombre,
                        b.nombre AS bodega_nombre,
-                       -- Stock en vivo: suma corrida del kardex, no el pb.stock_actual cacheado
-                       -- (puede desincronizarse si algo externo toca productos_bodegas sin pasar
-                       -- por el kardex — mismo motivo que el Saldo de Movimientos).
-                       COALESCE((
-                           SELECT SUM(k.cantidad) FROM inventario_kardex k
-                           WHERE k.id_producto = u.id_producto AND k.id_bodega = u.id_bodega
-                             AND k.id_empresa = u.id_empresa AND k.eliminado = false{$condCorteKardex}
-                       ), 0) AS stock_actual,
-                       COALESCE((
-                           SELECT k.costo_unitario FROM inventario_kardex k
-                           WHERE k.id_producto = u.id_producto AND k.id_bodega = u.id_bodega
-                             AND k.id_empresa = u.id_empresa AND k.eliminado = false{$condCorteKardex}
-                           ORDER BY k.fecha_movimiento DESC, k.id DESC LIMIT 1
-                       ), 0) AS costo_unitario,
-                       COALESCE((
-                           SELECT SUM(cvd.cantidad
-                                      - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
-                                      - COALESCE((" . $this->sqlFacturadoCv() . "), 0))
-                           FROM consignaciones_ventas_detalles cvd
-                           INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
-                           WHERE cvd.id_producto = u.id_producto AND cvd.id_bodega = u.id_bodega
-                             AND cvd.id_empresa = u.id_empresa AND cvd.eliminado = false AND cv.eliminado = false{$condCorteCv}
-                       ), 0) AS consignado
+                       -- Stock en vivo (suma del kardex), no el pb.stock_actual cacheado: ese
+                       -- puede desincronizarse si algo toca productos_bodegas sin pasar por el
+                       -- kardex — mismo motivo que el Saldo de Movimientos.
+                       COALESCE(ka.stock_actual, 0) AS stock_actual,
+                       COALESCE(ka.costo_unitario, 0) AS costo_unitario,
+                       COALESCE(ca.consignado, 0) AS consignado
                 FROM (
                     SELECT id_empresa, id_producto, id_bodega FROM productos_bodegas
                     WHERE id_empresa = :id_empresa AND eliminado = false
                     UNION
-                    SELECT id_empresa, id_producto, id_bodega FROM inventario_kardex
-                    WHERE id_empresa = :id_empresa AND eliminado = false{$condCorteUnion}
+                    SELECT id_empresa, id_producto, id_bodega FROM kardex_agg
                 ) u
                 INNER JOIN productos p ON p.id = u.id_producto AND p.id_empresa = u.id_empresa
                 INNER JOIN bodegas b ON b.id = u.id_bodega
@@ -186,6 +214,10 @@ class ReporteInventarioRepository extends BaseRepository
                     AND pb.id_bodega = u.id_bodega AND pb.id_empresa = u.id_empresa AND pb.eliminado = false
                 LEFT JOIN categorias cat ON cat.id = p.id_categoria
                 LEFT JOIN marcas mar ON mar.id = p.id_marca
+                LEFT JOIN kardex_agg ka ON ka.id_producto = u.id_producto
+                    AND ka.id_bodega = u.id_bodega AND ka.id_empresa = u.id_empresa
+                LEFT JOIN consignado_agg ca ON ca.id_producto = u.id_producto
+                    AND ca.id_bodega = u.id_bodega AND ca.id_empresa = u.id_empresa
                 WHERE {$where}
             ) base
         ";
@@ -212,7 +244,8 @@ class ReporteInventarioRepository extends BaseRepository
         'stock_actual', 'consignado', 'stock_total', 'stock_minimo', 'stock_maximo', 'costo_unitario', 'valor_total',
     ];
 
-    public function getExistenciasDetalle(int $idEmpresa, array $filtros): array
+    /** @param int|null $limite tope de filas para pantalla; null = sin tope (exportaciones). */
+    public function getExistenciasDetalle(int $idEmpresa, array $filtros, ?int $limite = null): array
     {
         list($where, $params) = $this->buildWhereExistencias($idEmpresa, $filtros);
         $conFechaCorte = !empty($filtros['fecha_corte']);
@@ -233,6 +266,10 @@ class ReporteInventarioRepository extends BaseRepository
         $orden = in_array($filtros['orden'] ?? '', self::SORT_COLUMNAS_EXISTENCIAS, true) ? $filtros['orden'] : 'producto_nombre';
         $dir = strtoupper($filtros['dir'] ?? '') === 'DESC' ? 'DESC' : 'ASC';
         $sql .= " ORDER BY e.{$orden} {$dir}, e.producto_nombre ASC, e.bodega_nombre ASC";
+        if ($limite !== null) {
+            // +1 fila: así el llamador sabe que hay más y puede avisar, sin un COUNT(*) aparte.
+            $sql .= ' LIMIT ' . ((int) $limite + 1);
+        }
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -367,9 +404,10 @@ class ReporteInventarioRepository extends BaseRepository
      * EXACTAMENTE por las columnas que definen el grupo: si la fila no distingue
      * caducidad, el consignado tampoco, o los números no cuadrarían entre sí.
      *
-     * @param string $desglose LOTE | CADUCIDAD | LOTE_CADUCIDAD
+     * @param string   $desglose LOTE | CADUCIDAD | LOTE_CADUCIDAD
+     * @param int|null $limite   tope de filas para pantalla; null = sin tope (exportaciones).
      */
-    public function getExistenciasPorDesglose(int $idEmpresa, array $filtros, string $desglose): array
+    public function getExistenciasPorDesglose(int $idEmpresa, array $filtros, string $desglose, ?int $limite = null): array
     {
         $conLote = in_array($desglose, ['LOTE', 'LOTE_CADUCIDAD'], true);
         $conCad  = in_array($desglose, ['CADUCIDAD', 'LOTE_CADUCIDAD'], true);
@@ -384,26 +422,43 @@ class ReporteInventarioRepository extends BaseRepository
         $selNup  = $conNup  ? 'k.nup'         : 'NULL::varchar';
         $selCad  = $conCad  ? 'k.fecha_caducidad' : 'NULL::date';
 
+        // El consignado se cruza EXACTAMENTE por las columnas que definen el grupo: si la
+        // fila no distingue caducidad, el consignado tampoco, o los números no cuadrarían.
         $groupExtra = '';
-        $condCv     = '';
+        $selCvGroup = '';
+        $joinCv     = '';
         $ordenExtra = [];
         if ($conLote) {
             $groupExtra .= ', k.numero_lote';
-            $condCv     .= ' AND cvd.lote IS NOT DISTINCT FROM k.numero_lote';
+            $selCvGroup .= ', cvd.lote';
+            $joinCv     .= ' AND ca.lote IS NOT DISTINCT FROM k.numero_lote';
             $ordenExtra[] = 'lote ASC NULLS LAST';
         }
         if ($conNup) {
             $groupExtra .= ', k.nup';
-            $condCv     .= ' AND cvd.nup IS NOT DISTINCT FROM k.nup';
+            $selCvGroup .= ', cvd.nup';
+            $joinCv     .= ' AND ca.nup IS NOT DISTINCT FROM k.nup';
         }
         if ($conCad) {
             $groupExtra .= ', k.fecha_caducidad';
-            $condCv     .= ' AND cvd.fecha_caducidad IS NOT DISTINCT FROM k.fecha_caducidad';
+            $selCvGroup .= ', cvd.fecha_caducidad';
+            $joinCv     .= ' AND ca.fecha_caducidad IS NOT DISTINCT FROM k.fecha_caducidad';
             $ordenExtra[] = 'fecha_caducidad ASC NULLS LAST';
         }
         $orden = 'producto_nombre ASC, bodega_nombre ASC' . ($ordenExtra ? ', ' . implode(', ', $ordenExtra) : '');
 
-        $sql = "SELECT *, (stock_actual * costo_unitario) AS valor_total,
+        $sql = "WITH consignado_desglose AS (
+                    SELECT cvd.id_empresa, cvd.id_producto, cvd.id_bodega{$selCvGroup},
+                           SUM(cvd.cantidad
+                               - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
+                               - COALESCE((" . $this->sqlFacturadoCv() . "), 0)) AS consignado
+                    FROM consignaciones_ventas_detalles cvd
+                    INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+                    WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
+                      AND cv.eliminado = false{$condCorteCv}
+                    GROUP BY cvd.id_empresa, cvd.id_producto, cvd.id_bodega{$selCvGroup}
+                )
+                SELECT *, (stock_actual * costo_unitario) AS valor_total,
                        (stock_actual + consignado) AS stock_total
                 FROM (
                     SELECT k.id_producto, k.id_bodega,
@@ -414,26 +469,22 @@ class ReporteInventarioRepository extends BaseRepository
                            b.nombre AS bodega_nombre,
                            SUM(k.cantidad) AS stock_actual,
                            (ARRAY_AGG(k.costo_unitario ORDER BY k.fecha_movimiento DESC, k.id DESC))[1] AS costo_unitario,
-                           COALESCE((
-                               SELECT SUM(cvd.cantidad
-                                          - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
-                                          - COALESCE((" . $this->sqlFacturadoCv() . "), 0))
-                               FROM consignaciones_ventas_detalles cvd
-                               INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
-                               WHERE cvd.id_producto = k.id_producto AND cvd.id_bodega = k.id_bodega
-                                 AND cvd.id_empresa = k.id_empresa AND cvd.eliminado = false AND cv.eliminado = false
-                                 {$condCv}{$condCorteCv}
-                           ), 0) AS consignado
+                           COALESCE(MAX(ca.consignado), 0) AS consignado
                     FROM inventario_kardex k
                     INNER JOIN productos p ON p.id = k.id_producto AND p.id_empresa = k.id_empresa
                     INNER JOIN bodegas b ON b.id = k.id_bodega
                     LEFT JOIN categorias cat ON cat.id = p.id_categoria
                     LEFT JOIN marcas mar ON mar.id = p.id_marca
+                    LEFT JOIN consignado_desglose ca ON ca.id_empresa = k.id_empresa
+                        AND ca.id_producto = k.id_producto AND ca.id_bodega = k.id_bodega{$joinCv}
                     WHERE {$where}
                     GROUP BY k.id_empresa, k.id_producto, k.id_bodega{$groupExtra},
                              p.codigo, p.nombre, cat.nombre, mar.nombre, b.nombre
                 ) t
                 ORDER BY {$orden}";
+        if ($limite !== null) {
+            $sql .= ' LIMIT ' . ((int) $limite + 1);
+        }
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -555,7 +606,16 @@ class ReporteInventarioRepository extends BaseRepository
                  WHERE {$where}";
     }
 
-    public function getMovimientosDetalle(int $idEmpresa, array $filtros): array
+    /**
+     * @param int|null $limite tope de filas para pantalla; null = sin tope (exportaciones).
+     *
+     * OJO con el coste: el saldo corrido es una función de ventana sobre TODAS las filas
+     * que cumplen el filtro, así que se calcula entero antes de aplicar el LIMIT — el tope
+     * recorta lo que se envía, no lo que se lee. Lo que de verdad abarata esta consulta es
+     * el filtro de fechas (medido: 2,6 s sin filtro vs 0,12 s acotando a un mes), y por eso
+     * la pestaña arranca con un año seleccionado en vez de "Todos".
+     */
+    public function getMovimientosDetalle(int $idEmpresa, array $filtros, ?int $limite = null): array
     {
         list($where, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
         // El "Saldo" NO se lee de k.stock_posterior (es un valor cacheado en cada fila que
@@ -577,8 +637,8 @@ class ReporteInventarioRepository extends BaseRepository
                        b.nombre AS bodega_nombre, u.nombre AS usuario_nombre,
                        um.abreviatura AS medida_abreviatura
                 " . $this->fromMovimientos($where) . "
-                ORDER BY p.nombre ASC, b.nombre ASC, k.fecha_movimiento ASC, k.id ASC
-                LIMIT 3000";
+                ORDER BY p.nombre ASC, b.nombre ASC, k.fecha_movimiento ASC, k.id ASC"
+                . ($limite !== null ? ' LIMIT ' . ((int) $limite + 1) : '');
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -1080,7 +1140,17 @@ class ReporteInventarioRepository extends BaseRepository
     // ════════════════════════════════════════════════════════════════════
 
     /** Producto×bodega donde productos_bodegas.stock_actual no coincide con la suma real del kardex. */
-    public function getAuditoriaStock(int $idEmpresa, array $filtros): array
+    /**
+     * Discrepancias entre el stock guardado (productos_bodegas.stock_actual) y el saldo
+     * real del kardex.
+     *
+     * El saldo real se agrega UNA vez para toda la empresa y se cruza por LEFT JOIN, en
+     * lugar de una subconsulta al kardex por cada fila de productos_bodegas: con 10.000
+     * pares producto×bodega eran 10.000 entradas al kardex (4,9 s medidos).
+     *
+     * @param int|null $limite tope de filas para pantalla; null = sin tope (exportaciones).
+     */
+    public function getAuditoriaStock(int $idEmpresa, array $filtros, ?int $limite = null): array
     {
         $where = "pb.id_empresa = :id_empresa AND pb.eliminado = false AND p.eliminado = false AND p.inventariable = true AND b.eliminado = false";
         $params = [':id_empresa' => $idEmpresa];
@@ -1098,23 +1168,29 @@ class ReporteInventarioRepository extends BaseRepository
             $params[':buscar'] = '%' . $filtros['buscar'] . '%';
         }
 
-        $sql = "SELECT * FROM (
+        $sql = "WITH kardex_agg AS (
+                    SELECT id_producto, id_bodega, SUM(cantidad) AS real_kardex
+                    FROM inventario_kardex
+                    WHERE id_empresa = :id_empresa AND eliminado = false
+                    GROUP BY id_producto, id_bodega
+                )
+                SELECT * FROM (
                     SELECT pb.id_empresa, pb.id_producto, pb.id_bodega,
                            p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                            b.nombre AS bodega_nombre,
                            pb.stock_actual AS cacheado,
-                           COALESCE((
-                               SELECT SUM(k.cantidad) FROM inventario_kardex k
-                               WHERE k.id_producto = pb.id_producto AND k.id_bodega = pb.id_bodega
-                                 AND k.id_empresa = pb.id_empresa AND k.eliminado = false
-                           ), 0) AS real_kardex
+                           COALESCE(ka.real_kardex, 0) AS real_kardex
                     FROM productos_bodegas pb
                     INNER JOIN productos p ON p.id = pb.id_producto AND p.id_empresa = pb.id_empresa
                     INNER JOIN bodegas b ON b.id = pb.id_bodega
+                    LEFT JOIN kardex_agg ka ON ka.id_producto = pb.id_producto AND ka.id_bodega = pb.id_bodega
                     WHERE {$where}
                 ) t
                 WHERE cacheado <> real_kardex
                 ORDER BY ABS(cacheado - real_kardex) DESC";
+        if ($limite !== null) {
+            $sql .= ' LIMIT ' . ((int) $limite + 1);
+        }
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
