@@ -11,11 +11,28 @@ class ClienteRepository extends BaseRepository
     use \App\Traits\LineasDocumentoTrait;
     use \App\Traits\ExpansionTerceroTrait;
 
-    public const COLUMNAS_ORDEN = [
-        'identificacion', 'nombre_tipo_id', 'nombre', 'email', 'telefono', 'direccion',
-        'plazo', 'nombre_provincia', 'nombre_ciudad', 'nombre_vendedor',
-        'id_cuenta_cobrar', 'id_cuenta_ingreso', 'status',
-        'frecuencia_visita', 'orden_visita'
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL con la que se ordena. Es la whitelist del ORDER BY —lo único
+     * que puede llegar al SQL sale de aquí— y también el mapa que necesita
+     * `OrdenListado::clausula()` para encadenar varias columnas.
+     */
+    public const MAPA_ORDEN = [
+        'identificacion'    => 'c.identificacion',
+        'nombre_tipo_id'    => 'icv.nombre',
+        'nombre'            => 'c.nombre',
+        'email'             => 'c.email',
+        'telefono'          => 'c.telefono',
+        'direccion'         => 'c.direccion',
+        'plazo'             => 'c.plazo',
+        'nombre_provincia'  => 'p.nombre',
+        'nombre_ciudad'     => 'ciu.nombre',
+        'nombre_vendedor'   => 'v.nombre',
+        'id_cuenta_cobrar'  => 'c.id_cuenta_cobrar',
+        'id_cuenta_ingreso' => 'c.id_cuenta_ingreso',
+        'status'            => 'c.status',
+        'frecuencia_visita' => 'c.frecuencia_visita',
+        'orden_visita'      => 'c.orden_visita',
     ];
 
     /**
@@ -158,14 +175,18 @@ class ClienteRepository extends BaseRepository
 
     /**
      * Obtiene el listado de clientes con filtros, paginación y joins.
+     *
+     * @param array $ordenMulti Criterios de orden [['col'=>…,'dir'=>…], …] cuando el
+     *        llamador usa `OrdenListado` (permite ordenar por varias columnas). Si
+     *        viene vacío se arma desde $ordenCol/$ordenDir, que es como siguen
+     *        llamando el resto de flujos (API, replicación entre empresas).
      */
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, bool $soloActivos = false): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, bool $soloActivos = false, array $ordenMulti = []): array
     {
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre';
-        }
-        $ordenDir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
-        
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+
         $where = $this->getBaseWhere($idEmpresa, 'c', $idUsuarioFiltro);
         $params = [':id_empresa' => $idEmpresa];
         if ($idUsuarioFiltro !== null) {
@@ -263,13 +284,9 @@ class ClienteRepository extends BaseRepository
                 $offset = ($page - 1) * $perPage;
                 $limitOffset = " LIMIT $perPage OFFSET $offset";
             }
-            $orderExpr = match($ordenCol) {
-                'nombre_vendedor'  => 'v.nombre',
-                'nombre_tipo_id'   => 'icv.nombre',
-                'nombre_provincia' => 'p.nombre',
-                'nombre_ciudad'    => 'ciu.nombre',
-                default            => "c.\"{$ordenCol}\""
-            };
+            // Una o varias columnas, siempre validadas contra MAPA_ORDEN, con c.id
+            // como desempate para que las filas empatadas no bailen entre páginas.
+            $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'c.nombre', 'c.id DESC');
             $sql = "SELECT c.*, v.nombre AS nombre_vendedor,
                            icv.nombre AS nombre_tipo_id,
                            p.nombre AS nombre_provincia,
@@ -277,7 +294,7 @@ class ClienteRepository extends BaseRepository
                     FROM {$this->table} c
                     $joins
                     $where
-                    ORDER BY $orderExpr $ordenDir, c.id DESC
+                    $orderBy
                     $limitOffset";
             $st = $this->db->prepare($sql);
             $st->execute($params);

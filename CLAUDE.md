@@ -229,6 +229,17 @@ eliminado (boolean), deleted_at, deleted_by
   3. `FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], $mapas);` con el mapa de campos por tipo: `texto` (ILIKE), `exacto` (=/IN), `fecha` (rangos y fechas parciales), `numerico` (=/>/</BETWEEN).
 - Las claves no incluidas en el mapa del módulo se ignoran de forma silenciosa.
 
+**Ordenamiento de listados (una o varias columnas)**
+- El `ORDER BY` es el único SQL que no se puede parametrizar con PDO: la columna y la dirección se interpolan. **Nunca** construirlo a mano en el repository; usar `App\Helpers\OrdenListado`, que centraliza los tres patrones que convivían (`in_array` + whitelist, `match($ordenCol)`, mapa `$cols[$ordenCol]`) y además admite **varios criterios**.
+- **Repository**: declarar `public const MAPA_ORDEN = ['clave_data_sort' => 'expresión SQL', …]` — es la whitelist *y* el mapa; lo único que puede llegar al SQL sale de ahí. Luego:
+  `$orderBy = OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'c.nombre', 'c.id DESC');` e interpolar `$orderBy` en la consulta. El **desempate** final (`c.id DESC`) es obligatorio: sin él, dos filas empatadas bailan entre páginas con `LIMIT/OFFSET`.
+- **Controller**: `$orden = OrdenListado::leer($prefsVista, 'columna_por_defecto');` y pasar al service `OrdenListado::primeraCol($orden, 'defecto')`, `primeraDir($orden)` y `$orden`. A la vista van `aJson($orden)` (estado inicial del motor JS) y `aCadena($orden)` (para los enlaces de PDF/Excel, que viajan como `?orden=col:DIR,col:DIR`).
+- **Vista/JS**: `CMG_initSort(modulo, (col, dir, sorts) => {…}, { sorts: window.currentSorts, multi: true })`. Con `multi` el usuario encadena columnas con **Shift+clic** (ASC → DESC → fuera del orden), y cada encabezado activo muestra su prioridad. Tope: 3 columnas (`OrdenListado::MAX_CRITERIOS`).
+- **`multi` es opt-in a propósito**: sin el repository migrado a `MAPA_ORDEN`, la UI mostraría dos criterios y el listado aplicaría uno solo. Activarlo únicamente cuando las dos puntas estén hechas. Los módulos sin `multi` se comportan exactamente como siempre.
+- **En modo `multi` el motor NO recarga la página** (encadenar columnas dispararía una recarga por clic): el callback del módulo debe repintar filas, paginación, contador y los enlaces de exportación. Fuera de `multi` sigue recargando, como siempre.
+- La preferencia se guarda en `__ordenMulti__` y, **a la vez**, en `__ordenCol__`/`__ordenDir__` con el criterio principal: así los módulos que aún leen solo esas dos claves no se enteran del cambio.
+- Referencia canónica: `ClienteRepository::MAPA_ORDEN` + `ClientesController::index()` + `app/views/modulos/clientes/index.php`.
+
 **Preferencias de usuario (favoritos, columnas, pestañas)**
 - Pieza central: `UsuarioPreferenciaService` (`guardarPreferencia` / `obtenerPreferencias`, por `idUsuario` + `idEmpresa` + `modulo` + `campo`) y `App\Helpers\PreferenciasHelper` (render). Persisten en la tabla `usuarios_preferencias` con `valor` en **JSON**. Endpoints en `PreferenciasController`.
 - **Empresa favorita** (global del usuario, no por empresa): estrella del navbar → `/Preferencias/guardarEmpresaFavoritaAjax` → `Usuario::setEmpresaFavorita()` (columna en `usuarios`); en sesión `$_SESSION['id_empresa_favorita']`.

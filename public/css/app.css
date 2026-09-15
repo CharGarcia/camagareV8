@@ -590,6 +590,22 @@ th[data-col] {
 .cmg-resizer:hover, .cmg-resizer.resizing {
   border-right: 2px solid var(--bs-primary, #0d6efd);
 }
+
+/* Ordenamiento por varias columnas (Shift+clic): prioridad de cada criterio.
+   Lo inyecta CMG_initSort en public/js/favoritos.js y solo aparece cuando hay
+   más de una columna en el orden. */
+.cmg-sort-prio {
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 1px;
+  user-select: none;
+}
+/* El encabezado ordenable no debe seleccionarse al hacer Shift+clic: el
+   navegador interpreta Shift como "extender selección" y pinta media tabla. */
+.sortable-header {
+  user-select: none;
+}
 .cmg-btn-table {
   padding: 2px 6px !important;
   font-size: 0.75rem !important;

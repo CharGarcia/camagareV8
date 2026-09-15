@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
-etiquetas: clientes, cliente, cartera, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
-version: 1.9
+etiquetas: clientes, cliente, cartera, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
+version: 2.0
 orden: 10
 estado: activo
 ---
@@ -63,6 +63,21 @@ para los martes.
 El listado permite además ordenar por cualquier columna, mostrar u ocultar
 columnas, ajustar su ancho y exportar a PDF y Excel. Esas preferencias se
 guardan por usuario.
+
+## Ordenar por varias columnas
+
+Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
+invertir el sentido, como en el resto del sistema. En este listado puede además
+**encadenar hasta tres columnas**: mantenga presionada la tecla **Shift** (⇧) y
+pulse el título de la segunda columna.
+
+Así, para ver la cartera **agrupada por ciudad** y, dentro de cada ciudad, por
+razón social: pulse *Ciudad* y después Shift+clic en *Razón Social*. El número
+pequeño junto a cada flecha indica qué columna manda (`1`) y cuál desempata
+(`2`). Un tercer Shift+clic sobre la misma columna la saca del orden.
+
+El orden queda guardado para usted y los botones de **PDF** y **Excel** exportan
+con ese mismo orden. Los detalles están en *Cómo ordenar los listados*.
 
 ## Días de visita del vendedor (pestaña Visitas)
 
@@ -347,6 +362,12 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **2.0** — El listado se puede **ordenar por hasta tres columnas a la vez**:
+  Shift+clic en el título de la segunda columna la encadena a la primera (por
+  ejemplo, agrupar por *Ciudad* y dentro ordenar por *Razón Social*). Cada
+  encabezado activo muestra un número con su prioridad. El orden se guarda por
+  usuario y se respeta al exportar a PDF y Excel. Nueva sección *Ordenar por
+  varias columnas* y artículo *Cómo ordenar los listados*.
 - **1.9** — Si el mismo contribuyente está cargado **dos veces** —una ficha con la cédula y
   otra con el RUC, que es esa cédula + `001`—, el **Resumen comercial**, las
   **Transacciones** y el **Estado de cuenta** de la ficha muestran el total del

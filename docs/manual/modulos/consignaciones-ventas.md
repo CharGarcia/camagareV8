@@ -200,8 +200,9 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 - **1.10** — En el celular, la lista de productos ya no desaparece al buscar
   por código o descripción. Cuando el teclado tapa el campo del detalle —la tabla
-  de productos queda en la parte baja del formulario— la lista se muestra
-  igualmente: a lo ancho de la pantalla, justo encima del teclado.
+  de productos queda en la parte baja del formulario— el formulario sube el campo
+  por encima del teclado y la lista aparece pegada a él, justo debajo (o justo
+  encima, si abajo no queda sitio).
 - **1.9** — Cambios en el PDF: la firma **Entregado por** pasó a llamarse
   **Emitido por** y muestra el nombre del usuario que registró la consignación
   (antes salía el nombre de la empresa); se agregó una cuarta firma,

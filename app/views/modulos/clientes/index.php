@@ -108,8 +108,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                <a id="btnExportPdf" href="<?= $urlBaseClientes ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a id="btnExportExcel" href="<?= $urlBaseClientes ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <a id="btnExportPdf" href="<?= $urlBaseClientes ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+                <a id="btnExportExcel" href="<?= $urlBaseClientes ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
                 <a href="<?= $urlBaseClientes ?>/mapa" class="btn btn-outline-secondary" title="Mapa de clientes"><i class="bi bi-map"></i> Mapa</a>
                 <?php if ($perm['crear']): ?>
                     <button type="button" class="btn btn-outline-primary d-none" id="btnCopiarClientesEmpresa" title="Copiar todos los clientes a otra empresa" onclick="abrirModalCopiarClientesEmpresa()">
@@ -214,7 +214,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const inputBuscar = document.getElementById('buscarCliente');
         window.currentSort = '<?= $ordenCol ?>';
         window.currentDir = '<?= $ordenDir ?>';
+        // Orden múltiple (Shift+clic): lista completa de criterios, en el formato
+        // que lee OrdenListado en PHP. currentSort/currentDir quedan como el principal.
+        window.currentSorts = <?= $ordenJson ?? '[]' ?>;
         window.currentPage = <?= $page ?>;
+        let sorter = null;
         let timerId;
 
         const debounce = (func, delay = 350) => (...args) => {
@@ -226,7 +230,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         window.fetchSearch = async (page = 1) => {
             const term = inputBuscar ? inputBuscar.value.trim() : '';
-            const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+            const orden = window.CMG_ordenParam(window.currentSorts);
+            const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -238,25 +243,23 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     document.getElementById('btnExportPdf').href = data.pdf_url;
                     document.getElementById('btnExportExcel').href = data.excel_url;
 
-                    document.querySelectorAll('.sortable-header').forEach(th => {
-                        const icon = th.querySelector('i');
-                        const field = th.dataset.sort;
-                        if (field === window.currentSort) {
-                            icon.className = (window.currentDir.toLowerCase() === 'asc') ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
-                        } else {
-                            icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                        }
-                    });
+                    // Los íconos (incluida la prioridad 1/2/3 del orden múltiple) los
+                    // repinta el motor global; aquí solo se le pide que se refresque.
+                    if (sorter) sorter.refreshIcons();
                 }
             } catch (e) { console.error(e); }
         };
 
-        // Ordenamiento (motor global: persiste __ordenCol__/__ordenDir__ y pinta el ícono activo)
-        window.CMG_initSort('clientes', (col, dir) => {
+        // Ordenamiento (motor global: persiste la preferencia y pinta los íconos).
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+        // (ASC → DESC → fuera). No recarga la página: fetchSearch repinta filas,
+        // paginación, contador y los enlaces de PDF/Excel.
+        sorter = window.CMG_initSort('clientes', (col, dir, sorts) => {
             window.currentSort = col;
             window.currentDir = dir;
+            window.currentSorts = sorts;
             fetchSearch(1);
-        }, { col: window.currentSort, dir: window.currentDir });
+        }, { sorts: window.currentSorts, multi: true });
 
         if (inputBuscar) inputBuscar.addEventListener('input', debounce(() => fetchSearch(1), 400));
     })();

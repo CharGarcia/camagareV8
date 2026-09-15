@@ -275,8 +275,9 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 - **1.12** — En el celular, la lista de productos ya no desaparece al buscar
   por código o descripción. Cuando el teclado tapa el campo del detalle —la tabla
-  de productos queda en la parte baja del formulario— la lista se muestra
-  igualmente: a lo ancho de la pantalla, justo encima del teclado.
+  de productos queda en la parte baja del formulario— el formulario sube el campo
+  por encima del teclado y la lista aparece pegada a él, justo debajo (o justo
+  encima, si abajo no queda sitio).
 - **1.11** — El número del documento puede numerarse **por fecha de emisión**,
   reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
   activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue

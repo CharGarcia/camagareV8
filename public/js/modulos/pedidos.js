@@ -641,15 +641,16 @@ function agregarFilaProducto(prod = null) {
         // el campo el teclado lo tapa y se escribe a ciegas. El navegador intenta
         // subirlo, pero el `modal-body` ya suele estar al final de su scroll. Se le
         // insiste una vez cuando el teclado ya redujo la pantalla (de ahí el
-        // retardo): centrarlo mueve también el scroll de la tabla de detalle.
+        // retardo), dejando además sitio para la lista debajo del campo.
         inputEl.addEventListener('focus', () => {
             if (window.innerWidth > 767) return;
             setTimeout(() => {
                 if (document.activeElement !== inputEl) return;
-                inputEl.scrollIntoView({ block: 'center' });
-                // Reanclar, no abrir: si la lista no estaba visible debe seguir
-                // oculta (enfocar un campo no es buscar).
-                if (typeof window.CMG_reanclarDropdown === 'function') window.CMG_reanclarDropdown();
+                if (typeof window.CMG_asegurarInputVisible === 'function') {
+                    window.CMG_asegurarInputVisible(inputEl, 250);
+                } else {
+                    inputEl.scrollIntoView({ block: 'center' });
+                }
             }, 300);
         });
 

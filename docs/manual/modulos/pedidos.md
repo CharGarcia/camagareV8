@@ -48,9 +48,9 @@ Los pedidos son por empresa: solo se ven los de la empresa activa.
 4. Elija el **responsable de entrega**.
 5. Agregue los **productos** con su cantidad. No se piden precios. Escriba dos o más
    caracteres en **Código** o en **Descripción** y aparece la lista de coincidencias
-   del catálogo; toque o haga clic en una para cargarla en la línea. En el celular,
-   si el teclado tapa el campo, la lista se muestra igualmente: aparece a lo ancho de
-   la pantalla, justo encima del teclado.
+   del catálogo, justo debajo del campo (o encima, si abajo no cabe); toque o haga
+   clic en una para cargarla en la línea. En el celular, si el teclado tapa el campo, el
+   formulario lo sube solo para dejar sitio y la lista sale igualmente pegada a él.
 6. Guarde. El pedido nace en estado **Pendiente**.
 7. Para modificarlo, haga clic en la fila del listado.
 
@@ -161,9 +161,9 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
 - **1.2** — En el celular, la lista de productos ya no desaparece al buscar por
   código o descripción. Antes, cuando el teclado tapaba el campo del detalle —lo
   habitual, porque la tabla de productos queda en la parte baja del formulario— la
-  lista se ocultaba y se escribía sin ver ningún resultado. Ahora se muestra a lo
-  ancho de la pantalla, justo encima del teclado, y al tocar el campo el formulario
-  lo sube para que se vea lo que se escribe.
+  lista se ocultaba y se escribía sin ver ningún resultado. Ahora el formulario sube
+  el campo por encima del teclado y la lista aparece pegada a él, justo debajo (o
+  justo encima, si abajo no queda sitio).
 - **1.1** — El listado abre ordenado por fecha de emisión, del más reciente al más
   antiguo (antes, por número de pedido ascendente). La columna por la que se está
   ordenando ahora se distingue con su flecha desde que se abre la pantalla, y

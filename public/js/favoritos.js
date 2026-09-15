@@ -224,24 +224,63 @@ function guardarPreferenciaVista(modulo, key, valor, msg) {
     }, 500);
 }
 
+/** Tope de columnas simultáneas en el orden múltiple (igual que OrdenListado::MAX_CRITERIOS). */
+const CMG_SORT_MAX = 3;
+
+/** Deja la lista de criterios en forma canónica: sin vacíos, sin repetidas, con tope. */
+function _cmgNormalizarSorts(lista, max) {
+    const out = [];
+    const vistas = {};
+    (lista || []).forEach(s => {
+        if (!s) return;
+        const col = (typeof s === 'string' ? s : (s.col || '')).toString().trim();
+        if (!col || vistas[col]) return;
+        vistas[col] = true;
+        const dir = ((s.dir || 'ASC').toString().toUpperCase() === 'DESC') ? 'DESC' : 'ASC';
+        if (out.length < Math.max(1, max || CMG_SORT_MAX)) out.push({ col: col, dir: dir });
+    });
+    return out;
+}
+
+/** Serializa los criterios al formato que entiende OrdenListado::parsear() en PHP. */
+window.CMG_ordenParam = function(sorts) {
+    return (sorts || []).map(s => s.col + ':' + s.dir).join(',');
+};
+
 /**
  * Motor global de ordenamiento de tablas.
  *
  * Engancha todos los `.sortable-header[data-sort]` de un contenedor, alterna la
  * dirección al hacer clic, actualiza los íconos, PERSISTE la preferencia
- * (`__ordenCol__`/`__ordenDir__` vía guardarOrdenacionVista) y llama al callback
- * de recarga del módulo. Reemplaza la lógica inline duplicada en cada vista.
+ * (`__ordenCol__`/`__ordenDir__` y, en modo múltiple, `__ordenMulti__`) y llama
+ * al callback de recarga del módulo. Reemplaza la lógica inline duplicada en
+ * cada vista.
+ *
+ * ORDEN MÚLTIPLE (`multi: true`, opcional): con Shift+clic el usuario encadena
+ * columnas — ordenar por ciudad y, dentro de cada ciudad, por nombre. El ícono
+ * de cada columna activa lleva un superíndice con su prioridad.
+ *   - clic normal   → deja SOLO esa columna (alterna ASC/DESC si ya era la única).
+ *   - Shift+clic    → ASC → DESC → la saca del orden (ciclo de tres estados).
+ * Es opt-in a propósito: sin el backend preparado (OrdenListado::clausula en el
+ * repositorio) la UI mostraría dos criterios y el listado aplicaría uno solo.
  *
  * @param {string} modulo Nombre del módulo para persistir (ej: 'marcas').
- * @param {function(string,string)} onSort Callback (col, dir) que recarga la tabla.
- * @param {object} [opts] { col, dir, container, reload }.
- *        - col/dir: estado inicial (para pintar el ícono activo al cargar).
+ * @param {function(string,string,Array)} onSort Callback (col, dir, sorts) que recarga
+ *        la tabla. Los dos primeros argumentos son el criterio principal, así que
+ *        los callbacks de una sola columna siguen funcionando sin cambios.
+ * @param {object} [opts] { col, dir, sorts, multi, maxCols, container, reload }.
+ *        - col/dir: estado inicial de una columna (para pintar el ícono al cargar).
+ *        - sorts: estado inicial múltiple [{col,dir},…]; tiene prioridad sobre col/dir.
+ *        - multi: true habilita Shift+clic. Por defecto false (comportamiento clásico).
+ *        - maxCols: tope de columnas encadenadas (def. 3).
  *        - container: selector o elemento donde buscar los encabezados (def: document).
  *        - reload: false cuando el callback ya repinta TODO lo que depende del
  *          orden (filas, paginación, contador, enlaces de exportación). Por
  *          defecto guardar la preferencia recarga la página entera, lo que en un
  *          módulo que recarga por AJAX significa listar dos veces lo mismo.
- * @returns {{getSort:function, getDir:function, refreshIcons:function}|null}
+ *          En modo múltiple el defecto es NO recargar: encadenar columnas con
+ *          Shift dispararía una recarga por clic.
+ * @returns {{getSort:function, getDir:function, getSorts:function, getOrdenParam:function, refreshIcons:function}|null}
  */
 window.CMG_initSort = function(modulo, onSort, opts) {
     opts = opts || {};
@@ -250,21 +289,48 @@ window.CMG_initSort = function(modulo, onSort, opts) {
         : document;
     if (!scope) return null;
 
-    const state = {
-        col: opts.col || '',
-        dir: (opts.dir || 'ASC').toString().toUpperCase()
-    };
+    const multi = opts.multi === true;
+    const maxCols = Math.max(1, opts.maxCols || CMG_SORT_MAX);
+    // En modo múltiple no se recarga salvo que el módulo lo pida explícitamente.
+    const reload = (opts.reload === undefined) ? !multi : (opts.reload !== false);
+
+    let sorts = _cmgNormalizarSorts(
+        (opts.sorts && opts.sorts.length) ? opts.sorts : (opts.col ? [{ col: opts.col, dir: opts.dir }] : []),
+        maxCols
+    );
+
+    const indiceDe = (col) => sorts.findIndex(s => s.col === col);
+
+    /** Superíndice con la prioridad (1, 2, 3). Solo se pinta si hay más de un criterio. */
+    function pintarPrioridad(th, n) {
+        let sup = th.querySelector('.cmg-sort-prio');
+        if (!n) {
+            if (sup) sup.remove();
+            return;
+        }
+        if (!sup) {
+            sup = document.createElement('sup');
+            sup.className = 'cmg-sort-prio text-primary';
+            const icon = th.querySelector('i');
+            if (icon) icon.insertAdjacentElement('afterend', sup);
+            else th.appendChild(sup);
+        }
+        sup.textContent = String(n);
+    }
 
     function refreshIcons() {
         scope.querySelectorAll('.sortable-header[data-sort]').forEach(th => {
             const icon = th.querySelector('i');
             if (!icon) return;
-            if (th.dataset.sort === state.col) {
-                icon.className = (state.dir === 'ASC')
+            const i = indiceDe(th.dataset.sort);
+            if (i === -1) {
+                icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
+                pintarPrioridad(th, 0);
+            } else {
+                icon.className = (sorts[i].dir === 'ASC')
                     ? 'bi bi-sort-alpha-down text-primary ms-1'
                     : 'bi bi-sort-alpha-up text-primary ms-1';
-            } else {
-                icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
+                pintarPrioridad(th, sorts.length > 1 ? (i + 1) : 0);
             }
         });
     }
@@ -273,21 +339,40 @@ window.CMG_initSort = function(modulo, onSort, opts) {
         if (th.dataset.sortBound === '1') return; // evitar doble binding
         th.dataset.sortBound = '1';
         if (!th.getAttribute('role')) th.setAttribute('role', 'button');
+        // Sin pista visible nadie descubre el Shift+clic.
+        if (multi && !th.getAttribute('title')) {
+            th.setAttribute('title', 'Clic para ordenar · Shift+clic para ordenar por varias columnas');
+        }
 
-        th.addEventListener('click', () => {
+        th.addEventListener('click', (ev) => {
             const f = th.dataset.sort;
-            if (state.col === f) {
-                state.dir = state.dir === 'ASC' ? 'DESC' : 'ASC';
+            const i = indiceDe(f);
+
+            if (multi && ev && ev.shiftKey) {
+                if (i === -1) {
+                    if (sorts.length >= maxCols) {
+                        showToast('Máximo ' + maxCols + ' columnas de ordenamiento', 'info');
+                        return;
+                    }
+                    sorts.push({ col: f, dir: 'ASC' });
+                } else if (sorts[i].dir === 'ASC') {
+                    sorts[i].dir = 'DESC';
+                } else {
+                    sorts.splice(i, 1); // tercer Shift+clic: la saca del orden
+                }
+            } else if (i === 0 && sorts.length === 1) {
+                sorts = [{ col: f, dir: sorts[0].dir === 'ASC' ? 'DESC' : 'ASC' }];
             } else {
-                state.col = f;
-                state.dir = 'ASC';
+                sorts = [{ col: f, dir: 'ASC' }];
             }
+
             refreshIcons();
-            if (typeof window.guardarOrdenacionVista === 'function') {
-                window.guardarOrdenacionVista(modulo, state.col, state.dir, { reload: opts.reload });
+            if (typeof window.CMG_guardarOrden === 'function') {
+                window.CMG_guardarOrden(modulo, sorts, { reload: reload });
             }
             try {
-                onSort(state.col, state.dir);
+                const principal = sorts[0] || { col: '', dir: 'ASC' };
+                onSort(principal.col, principal.dir, sorts.slice());
             } catch (e) {
                 console.error('Error en callback de ordenamiento:', e);
             }
@@ -297,8 +382,10 @@ window.CMG_initSort = function(modulo, onSort, opts) {
     refreshIcons();
 
     return {
-        getSort: () => state.col,
-        getDir: () => state.dir,
+        getSort: () => (sorts[0] ? sorts[0].col : ''),
+        getDir: () => (sorts[0] ? sorts[0].dir : 'ASC'),
+        getSorts: () => sorts.slice(),
+        getOrdenParam: () => window.CMG_ordenParam(sorts),
         refreshIcons: refreshIcons
     };
 };
@@ -327,49 +414,62 @@ window.CMG_guardarVista = function(modulo, payload, opts) {
         .catch(err => console.error('Error guardando vista:', err));
 };
 
+let _timerOrdenVista = {};
 /**
- * Guarda el ordenamiento de columnas de una vista.
+ * Persiste el ordenamiento de una vista (una o varias columnas).
+ *
+ * Guarda `__ordenMulti__` con la lista completa y, ADEMÁS, `__ordenCol__` /
+ * `__ordenDir__` con el criterio principal: así los módulos y controladores que
+ * todavía leen solo esas dos claves siguen viendo exactamente lo de siempre.
+ *
+ * El POST va con debounce porque encadenar columnas con Shift+clic genera varios
+ * cambios seguidos y no tiene sentido guardar en cada uno.
+ *
  * @param {string} modulo Nombre del módulo (ej: factura-venta)
- * @param {string} col Nombre de la columna (data-sort)
- * @param {string} dir Dirección (ASC/DESC)
+ * @param {Array} sorts Lista [{col, dir}, …] en orden de prioridad.
  * @param {object} [opts] { reload }. reload:false evita recargar la página al
  *        guardar; es para módulos que ya repintan el listado por AJAX con el
  *        nuevo orden (recargar solo repetiría la consulta). Por omisión recarga.
  */
-window.guardarOrdenacionVista = function(modulo, col, dir, opts) {
-    // Normalizar nombre del módulo
+window.CMG_guardarOrden = function(modulo, sorts, opts) {
     const moduloLimpio = modulo.split('/').pop().replace(/-/g, '_');
     const recargar = !(opts && opts.reload === false);
+    const lista = _cmgNormalizarSorts(sorts, CMG_SORT_MAX);
+    const principal = lista[0] || null;
 
-    if (typeof guardarPreferenciaVista === 'function') {
+    clearTimeout(_timerOrdenVista[moduloLimpio]);
+    _timerOrdenVista[moduloLimpio] = setTimeout(() => {
         const payload = {
-            '__ordenCol__': col,
-            '__ordenDir__': dir
+            '__ordenMulti__': lista,
+            // null y no '' : así el `?? 'defecto'` de los controladores sigue funcionando
+            // cuando el usuario deja la tabla sin ningún criterio propio.
+            '__ordenCol__': principal ? principal.col : null,
+            '__ordenDir__': principal ? principal.dir : null
         };
-        // Usamos una versión simplificada o llamamos directamente a guardarPreferenciaVista
-        // para persistir ambos valores en una sola llamada si fuera posible, 
-        // pero guardarPreferenciaVista está diseñada para llaves individuales por ahora.
-        // Optamos por dos llamadas o una personalizada.
-        
-        // Mejoramos guardarPreferenciaVista para que acepte un objeto completo si es necesario, 
-        // pero para mantener compatibilidad, llamamos dos veces o implementamos el fetch aquí.
-        
-        // Versión optimizada para ordenación:
         const fd = new FormData();
         fd.append('modulo', moduloLimpio);
         fd.append('vistaPayload', JSON.stringify(payload));
         const url = typeof APP_VISTAS_URL !== 'undefined' ? APP_VISTAS_URL : '/Preferencias/guardarVistaAjax';
-        
+
         fetch(url, { method: 'POST', body: fd })
             .then(res => res.json())
             .then(json => {
-                if (json.ok) {
-                    console.log(`Ordenación guardada para ${modulo}: ${col} ${dir}`);
-                    if (recargar) _cmgReloadPagina();
-                }
+                if (json && json.ok && recargar) _cmgReloadPagina();
             })
             .catch(err => console.error('Error guardando ordenación:', err));
-    }
+    }, 350);
+};
+
+/**
+ * Guarda el ordenamiento de UNA columna. Se mantiene por compatibilidad con los
+ * módulos que la llaman directamente; delega en CMG_guardarOrden.
+ * @param {string} modulo Nombre del módulo (ej: factura-venta)
+ * @param {string} col Nombre de la columna (data-sort)
+ * @param {string} dir Dirección (ASC/DESC)
+ * @param {object} [opts] { reload }
+ */
+window.guardarOrdenacionVista = function(modulo, col, dir, opts) {
+    window.CMG_guardarOrden(modulo, col ? [{ col: col, dir: dir }] : [], opts);
 };
 
 function showToast(msg, icon) {
