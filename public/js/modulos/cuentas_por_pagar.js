@@ -13,10 +13,13 @@ let CXP_filtradoLocal = [];   // filas tras filtro local de texto
 let CXP_catalogos     = { puntos: [], conceptos: [], formas: [] };
 let CXP_catalogosCargados = false;
 let CXP_agrupado      = false;          // vista agrupada por proveedor
-const CXP_gruposAbiertos = new Set();   // claves de grupos expandidos
 // Consolidado por RUC (fase 1, solo lectura): lo confirma el servidor en cada carga.
 // Las filas de OTRO establecimiento (r.es_hermana) no se pagan desde aquí.
 let CXP_consolidado   = false;
+
+// ¿Ya se consultó el listado al menos una vez? Al entrar al módulo NO se carga nada: el
+// usuario elige sus filtros y presiona "Aplicar"; recién ahí se consulta al servidor.
+let CXP_cargado       = false;
 
 /* Alcance elegido en el filtro (el select solo existe cuando la empresa activa es la matriz). */
 function CXP_getAlcance() {
@@ -48,7 +51,9 @@ async function CXP_cargarCatalogosDe(idEmpresa) {
    INICIALIZACIÓN
 ════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-    CXP_cargar();
+    // Al entrar NO se consulta nada: el listado se carga solo cuando el usuario
+    // presiona "Aplicar" (ver CXP_cargado / CXP_recargar).
+    CXP_estadoInicial();
     CXP_cargarCatalogos();
     CXP_initBuscadorProveedores();
 });
@@ -56,7 +61,27 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ════════════════════════════════════════════════════
    CARGAR DATOS PRINCIPALES
 ════════════════════════════════════════════════════ */
+/* Mensaje de la tabla mientras no se haya aplicado ningún filtro (al entrar al módulo). */
+function CXP_estadoInicial() {
+    const tbody = document.getElementById('cxp-tbody');
+    if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
+            <i class="bi bi-funnel fs-3 d-block mb-2 text-primary opacity-50"></i>
+            Elija los filtros y presione <span class="fw-semibold text-primary">Aplicar Filtros</span> para ver las cuentas por pagar.
+        </td></tr>`;
+    }
+    const label = document.getElementById('cxp-count-label');
+    if (label) label.textContent = '';
+}
+
+/* Recarga el listado SOLO si ya se aplicó una vez. Antes del primer "Aplicar" no se consulta
+   nada al servidor: cambiar un filtro no dispara la carga. */
+function CXP_recargar() {
+    if (CXP_cargado) CXP_cargar();
+}
+
 async function CXP_cargar() {
+    CXP_cargado = true;
     const tbody = document.getElementById('cxp-tbody');
     tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Cargando…</td></tr>`;
 
@@ -118,6 +143,9 @@ function CXP_actualizarStats(s) {
 function CXP_renderTabla(filas) {
     const tbody = document.getElementById('cxp-tbody');
     const label = document.getElementById('cxp-count-label');
+
+    // Todavía sin aplicar: la tabla muestra la invitación a filtrar, no "sin resultados".
+    if (!CXP_cargado) { CXP_estadoInicial(); return; }
 
     if (!filas.length) {
         label.textContent = '0 registros';
@@ -270,18 +298,23 @@ function CXP_filaHtml(r) {
 }
 
 /* ════════════════════════════════════════════════════
-   VISTA AGRUPADA POR PROVEEDOR
+   VISTA AGRUPADA POR PROVEEDOR — formato "mayor"
+   Se lee como el mayor de una cuenta contable: una sección
+   por proveedor (cabecera con su nombre e identificación),
+   sus documentos desplegados debajo, una fila de SUBTOTAL al
+   cerrar cada sección y un TOTAL GENERAL al final. El PDF y
+   el Excel de esta vista reproducen la misma estructura.
 ════════════════════════════════════════════════════ */
-function CXP_renderAgrupado(filas) {
-    const tbody = document.getElementById('cxp-tbody');
-    const label = document.getElementById('cxp-count-label');
+/* Secciones PLEGADAS de la vista por proveedor: un mayor se lee desplegado, así que
+   todas arrancan abiertas y el set recuerda solo las que el usuario pliega. */
+const CXP_proveedoresCerrados = new Set();
 
-    // Agrupar por proveedor (RUC como clave; si falta, por nombre)
+/* Agrupa las filas por proveedor. La clave es la identificación BASE, no el texto del RUC:
+   el proveedor registrado dos veces —con la cédula y con el RUC, que es esa cédula + '001'—
+   cae en un solo grupo con su saldo sumado. Sin identificación se agrupa por nombre. */
+function CXP_agruparPorProveedor(filas) {
     const mapa = new Map();
     for (const r of filas) {
-        // Clave por identificación BASE, no por el texto del RUC: el proveedor registrado
-        // dos veces —con la cédula y con el RUC, que es esa cédula + '001'— cae en un solo
-        // grupo con su saldo sumado. Sin identificación se agrupa por nombre.
         const key = IdentificacionTercero.claveGrupo(r.proveedor_ruc, r.proveedor_nombre || 'Sin proveedor');
         let g = mapa.get(key);
         if (!g) {
@@ -297,38 +330,76 @@ function CXP_renderAgrupado(filas) {
         g.ncret  += (nc + ret - nd);
         g.saldo  += parseFloat(r.saldo)        || 0;
     }
-    const grupos = [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+    // Dentro de cada proveedor los documentos van en orden cronológico (como los movimientos
+    // de un mayor); entre proveedores manda el saldo, al que más se le debe primero.
+    for (const g of mapa.values()) {
+        g.items.sort((a, b) =>
+            String(a.fecha_emision || '').localeCompare(String(b.fecha_emision || '')) ||
+            String(a.numero_documento || '').localeCompare(String(b.numero_documento || '')));
+    }
+    return [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+}
+
+function CXP_renderAgrupado(filas) {
+    const tbody  = document.getElementById('cxp-tbody');
+    const label  = document.getElementById('cxp-count-label');
+    const grupos = CXP_agruparPorProveedor(filas);
 
     label.textContent = `${filas.length} docs · ${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''}`;
 
+    let tTotal = 0, tPagado = 0, tNcret = 0, tSaldo = 0;
     let html = '';
     for (const g of grupos) {
-        const abierto = CXP_gruposAbiertos.has(g.key);
-        const chev = abierto ? 'bi-chevron-down' : 'bi-chevron-right';
+        tTotal  += g.total;
+        tPagado += g.pagado;
+        tNcret  += g.ncret;
+        tSaldo  += g.saldo;
+
+        const cerrado = CXP_proveedoresCerrados.has(g.key);
+        const chev    = cerrado ? 'bi-chevron-right' : 'bi-chevron-down';
         html += `
-        <tr class="cxp-grp-row" data-gkey="${cxpEsc(g.key)}" onclick="CXP_toggleGrupo(this)" style="cursor:pointer;background:#eaf1fb;">
-            <td colspan="5" class="ps-2 fw-bold" style="font-size:.82rem;">
-                <i class="bi ${chev} text-primary me-1"></i>
-                ${cxpEsc(g.nombre)}
+        <tr class="cxp-mayor-grp" data-gkey="${cxpEsc(g.key)}" onclick="CXP_toggleProveedor(this)" style="cursor:pointer;" title="Clic para plegar o desplegar este proveedor">
+            <td colspan="11" class="ps-2 fw-bold" style="font-size:.82rem;">
+                <i class="bi ${chev} text-primary me-1"></i>${cxpEsc(g.nombre)}
+                ${g.ruc ? `<span class="text-muted fw-normal ms-1">${cxpEsc(g.ruc)}</span>` : ''}
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2 fw-normal">${g.items.length} doc${g.items.length !== 1 ? 's' : ''}</span>
             </td>
-            <td class="text-end fw-semibold" style="font-size:.8rem;">$${CXP_fmt(g.total)}</td>
-            <td class="text-end fw-semibold text-success" style="font-size:.8rem;">${g.pagado > 0 ? '$' + CXP_fmt(g.pagado) : '<span class="text-muted">—</span>'}</td>
-            <td class="text-end" style="font-size:.78rem;">${g.ncret > 0.001 ? '$' + CXP_fmt(g.ncret) : '<span class="text-muted">—</span>'}</td>
-            <td class="text-end pe-2 fw-bold" style="font-size:.82rem;color:${g.saldo > 0.001 ? '#dc3545' : '#198754'};">$${CXP_fmt(g.saldo > 0 ? g.saldo : 0)}</td>
-            <td colspan="2"></td>
         </tr>`;
-        if (abierto) {
+
+        if (!cerrado) {
             for (const r of g.items) html += CXP_filaHtml(r);
         }
+
+        html += `
+        <tr class="cxp-mayor-sub">
+            <td colspan="5" class="text-end" style="font-size:.78rem;">SUBTOTAL ${cxpEsc(g.nombre)}</td>
+            <td class="text-end" style="font-size:.8rem;">$${CXP_fmt(g.total)}</td>
+            <td class="text-end text-success" style="font-size:.8rem;">${g.pagado > 0 ? '$' + CXP_fmt(g.pagado) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end" style="font-size:.78rem;">${g.ncret > 0.001 ? '$' + CXP_fmt(g.ncret) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end pe-2" style="font-size:.82rem;color:${g.saldo > 0.001 ? '#dc3545' : '#198754'};">$${CXP_fmt(g.saldo > 0 ? g.saldo : 0)}</td>
+            <td colspan="2"></td>
+        </tr>
+        <tr class="cxp-mayor-gap"><td colspan="11"></td></tr>`;
     }
+
+    html += `
+        <tr class="cxp-mayor-total">
+            <td colspan="5" class="text-end" style="font-size:.8rem;">TOTAL GENERAL (${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''})</td>
+            <td class="text-end" style="font-size:.82rem;">$${CXP_fmt(tTotal)}</td>
+            <td class="text-end text-success" style="font-size:.82rem;">${tPagado > 0 ? '$' + CXP_fmt(tPagado) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end" style="font-size:.8rem;">${tNcret > 0.001 ? '$' + CXP_fmt(tNcret) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end pe-2" style="font-size:.85rem;color:${tSaldo > 0.001 ? '#dc3545' : '#198754'};">$${CXP_fmt(tSaldo > 0 ? tSaldo : 0)}</td>
+            <td colspan="2"></td>
+        </tr>`;
+
     tbody.innerHTML = html;
 }
 
-function CXP_toggleGrupo(el) {
+/* Pliega/despliega la sección de un proveedor (el set guarda las cerradas). */
+function CXP_toggleProveedor(el) {
     const k = el.getAttribute('data-gkey');
-    if (CXP_gruposAbiertos.has(k)) CXP_gruposAbiertos.delete(k);
-    else CXP_gruposAbiertos.add(k);
+    if (CXP_proveedoresCerrados.has(k)) CXP_proveedoresCerrados.delete(k);
+    else CXP_proveedoresCerrados.add(k);
     CXP_renderTabla(CXP_filtradoLocal);
 }
 
@@ -817,7 +888,7 @@ function CXP_seleccionarProveedor(id, nombre) {
     CXP_renderChipsProveedores();
     document.getElementById('cxp-search-proveedor').value = '';
     document.getElementById('cxp-dropdown-proveedores').classList.add('d-none');
-    CXP_cargar();
+    CXP_recargar();
 }
 
 function CXP_renderChipsProveedores() {
@@ -833,7 +904,7 @@ function CXP_renderChipsProveedores() {
 function CXP_quitarProveedor(id) {
     delete CXP_proveedoresSeleccionados[id];
     CXP_renderChipsProveedores();
-    CXP_cargar();
+    CXP_recargar();
 }
 
 function CXP_getProveedoresSeleccionados() {
@@ -861,7 +932,7 @@ function CXP_limpiarFiltros() {
     const buscador = document.getElementById('cxp-buscador');
     if (buscador) buscador.value = '';
 
-    CXP_cargar();
+    CXP_recargar();
 }
 
 /* ════════════════════════════════════════════════════
@@ -875,6 +946,9 @@ function CXP_exportarExcel() {
         fecha_hasta:  document.getElementById('cxp-fecha-hasta')?.value  || '',
         id_proveedor: CXP_getProveedoresSeleccionados(),
         alcance:      CXP_getAlcance(),
+        // La exportación sale con la misma estructura que la vista activa: por proveedor
+        // en formato mayor (sección por proveedor, subtotal y total general).
+        vista:        CXP_agrupado ? 'PROVEEDOR' : '',
     });
     window.location.href = `${BASE_URL}/${RUTA_MODULO_CXP}/exportExcel?${params}`;
 }
@@ -887,6 +961,9 @@ function CXP_exportarPDF() {
         fecha_hasta:  document.getElementById('cxp-fecha-hasta')?.value  || '',
         id_proveedor: CXP_getProveedoresSeleccionados(),
         alcance:      CXP_getAlcance(),
+        // La exportación sale con la misma estructura que la vista activa: por proveedor
+        // en formato mayor (sección por proveedor, subtotal y total general).
+        vista:        CXP_agrupado ? 'PROVEEDOR' : '',
     });
     window.location.href = `${BASE_URL}/${RUTA_MODULO_CXP}/exportPdf?${params}`;
 }

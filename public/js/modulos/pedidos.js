@@ -108,7 +108,10 @@ function pedBloquearExportSiExcede(e) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    PED_fetchSearch(window.currentPage);
+    // Sin listado inicial por AJAX a propósito: el controlador ya renderizó las filas,
+    // la paginación, el contador y los enlaces de exportación con el mismo orden y el
+    // mismo HTML que devuelve searchAjax. Pedirlo otra vez al cargar duplicaba la
+    // consulta en cada entrada al módulo (y en cada recarga tras guardar preferencias).
 
     ['btnExportPdf', 'btnExportExcel'].forEach(id => {
         document.getElementById(id)?.addEventListener('click', pedBloquearExportSiExcede);
@@ -125,22 +128,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Sortable Headers
-    document.querySelectorAll('.sortable-header').forEach(h => {
-        h.addEventListener('click', () => {
-            const f = h.dataset.sort;
-            if (window.currentSort === f) {
-                window.currentDir = (window.currentDir.toLowerCase() === 'asc') ? 'DESC' : 'ASC';
-            } else {
-                window.currentSort = f;
-                window.currentDir = 'ASC';
-            }
-            if (typeof window.guardarOrdenacionVista === 'function') {
-                window.guardarOrdenacionVista('pedidos', window.currentSort, window.currentDir);
-            }
+    // ── Ordenamiento: motor global (window.CMG_initSort, en public/js/favoritos.js) ──
+    // Antes esta vista tenía su propio binding inline, el mismo patrón duplicado que se
+    // centralizó en el motor. El motor además pinta el ícono de la columna activa al
+    // inicializar, así que el distintivo del orden ya no depende de que corra un fetch.
+    // reload:false porque PED_fetchSearch repinta todo lo que depende del orden (filas,
+    // paginación, contador y los enlaces de PDF/Excel): recargar la página entera solo
+    // repetiría la consulta. El scope se acota a la tabla del listado para no enganchar
+    // encabezados de los modales incluidos al final de la vista.
+    if (window.CMG_initSort) {
+        window.CMG_initSort('pedidos', (col, dir) => {
+            window.currentSort = col;
+            window.currentDir  = dir;
             PED_fetchSearch(1);
-        });
-    });
+        }, { col: window.currentSort, dir: window.currentDir, container: '.ped-scroll', reload: false });
+    }
 
     // Autocomplete Clientes (Vanilla JS)
     initAutocomplete('buscar-cliente', 'lista-clientes-sugerencias', (item) => {
@@ -296,16 +298,8 @@ async function PED_fetchSearch(page = 1) {
             infoPag.textContent = data.info;
             document.getElementById('btnExportPdf').href = data.pdf_url;
             document.getElementById('btnExportExcel').href = data.excel_url;
-
-            document.querySelectorAll('.sortable-header').forEach(th => {
-                const icon = th.querySelector('i');
-                const field = th.dataset.sort;
-                if (field === window.currentSort) {
-                    icon.className = (window.currentDir.toLowerCase() === 'asc') ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
-                } else {
-                    icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                }
-            });
+            // Los íconos de los encabezados los mantiene CMG_initSort (solo se
+            // reemplaza el <tbody>, el <thead> no se vuelve a renderizar aquí).
         }
     } catch (err) {
         console.error('Error al listar pedidos:', err);

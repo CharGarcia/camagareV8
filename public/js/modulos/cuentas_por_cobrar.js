@@ -20,10 +20,14 @@ let CXC_cobroOrigen = 'FACTURA'; // origen del documento en el modal de cobro
 let CXC_agrupado    = false;           // vista agrupada por cliente
 let CXC_vista       = 'detalle';       // 'detalle' | 'agrupado' (por cliente) | 'producto'
 let CXC_lineas      = null;            // líneas de producto de los documentos (solo vista 'producto'; null = no cargadas)
-const CXC_gruposAbiertos = new Set();  // claves de grupos expandidos
+const CXC_gruposAbiertos = new Set();  // claves de grupos expandidos (vista por producto)
 // Consolidado por RUC (fase 1, solo lectura): lo confirma el servidor en cada carga.
 // Las filas de OTRO establecimiento (r.es_hermana) no se cobran ni se notifican desde aquí.
 let CXC_consolidado = false;
+
+// ¿Ya se consultó el listado al menos una vez? Al entrar al módulo NO se carga nada: el
+// usuario elige sus filtros y presiona "Aplicar"; recién ahí se consulta al servidor.
+let CXC_cargado = false;
 
 /* Alcance elegido en el filtro (el select solo existe cuando la empresa activa es la matriz). */
 function CXC_getAlcance() {
@@ -54,7 +58,9 @@ async function CXC_cargarCatalogosDe(idEmpresa) {
    INICIALIZACIÓN
 ════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-    CXC_cargar();
+    // Al entrar NO se consulta nada: el listado se carga solo cuando el usuario
+    // presiona "Aplicar" (ver CXC_cargado / CXC_recargar).
+    CXC_estadoInicial();
     CXC_cargarCatalogos();
     if (CXC_TIENE_WA) CXC_cargarPlantillasWA();
     CXC_initBuscadorClientes();
@@ -64,7 +70,27 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ════════════════════════════════════════════════════
    CARGAR DATOS PRINCIPALES
 ════════════════════════════════════════════════════ */
+/* Mensaje de la tabla mientras no se haya aplicado ningún filtro (al entrar al módulo). */
+function CXC_estadoInicial() {
+    const tbody = document.getElementById('cxc-tbody');
+    if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
+            <i class="bi bi-funnel fs-3 d-block mb-2 text-success opacity-50"></i>
+            Elija los filtros y presione <span class="fw-semibold text-success">Aplicar</span> para ver las cuentas por cobrar.
+        </td></tr>`;
+    }
+    const label = document.getElementById('cxc-count-label');
+    if (label) label.textContent = '';
+}
+
+/* Recarga el listado SOLO si ya se aplicó una vez. Antes del primer "Aplicar" no se consulta
+   nada al servidor: cambiar un filtro no dispara la carga. */
+function CXC_recargar() {
+    if (CXC_cargado) CXC_cargar();
+}
+
 async function CXC_cargar() {
+    CXC_cargado = true;
     const tbody = document.getElementById('cxc-tbody');
     tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4"><div class="spinner-border spinner-border-sm text-success me-2"></div>Cargando…</td></tr>`;
     CXC_seleccionados.clear();
@@ -135,6 +161,9 @@ function CXC_actualizarStats(s) {
 function CXC_renderTabla(filas) {
     const tbody = document.getElementById('cxc-tbody');
     const label = document.getElementById('cxc-count-label');
+
+    // Todavía sin aplicar: la tabla muestra la invitación a filtrar, no "sin resultados".
+    if (!CXC_cargado) { CXC_estadoInicial(); return; }
 
     if (!filas.length) {
         label.textContent = '0 registros';
@@ -258,15 +287,22 @@ function CXC_filaHtml(r) {
 }
 
 /* ════════════════════════════════════════════════════
-   VISTA AGRUPADA POR CLIENTE
+   VISTA AGRUPADA POR CLIENTE — formato "mayor"
+   Se lee como el mayor de una cuenta contable: una sección
+   por cliente (cabecera con su nombre e identificación), sus
+   documentos desplegados debajo, una fila de SUBTOTAL al
+   cerrar cada sección y un TOTAL GENERAL al final. El PDF y
+   el Excel de esta vista reproducen la misma estructura.
 ════════════════════════════════════════════════════ */
-function CXC_renderAgrupado(filas) {
-    const tbody = document.getElementById('cxc-tbody');
-    const label = document.getElementById('cxc-count-label');
+/* Secciones PLEGADAS de la vista por cliente. Al revés que la vista por producto
+   (CXC_gruposAbiertos guarda las abiertas): un mayor se lee desplegado, así que
+   todas arrancan abiertas y el set recuerda solo las que el usuario pliega. */
+const CXC_clientesCerrados = new Set();
 
-    // Agrupar por cliente. La clave es la identificación BASE, no el texto del RUC: así
-    // el cliente registrado dos veces —con la cédula y con el RUC, que es esa cédula + '001'—
-    // cae en un solo grupo con su saldo sumado. Sin identificación se agrupa por nombre.
+/* Agrupa las filas por cliente. La clave es la identificación BASE, no el texto del RUC: así
+   el cliente registrado dos veces —con la cédula y con el RUC, que es esa cédula + '001'—
+   cae en un solo grupo con su saldo sumado. Sin identificación se agrupa por nombre. */
+function CXC_agruparPorCliente(filas) {
     const mapa = new Map();
     for (const r of filas) {
         const key = IdentificacionTercero.claveGrupo(r.cliente_ruc, r.cliente_nombre || 'Sin cliente');
@@ -280,33 +316,78 @@ function CXC_renderAgrupado(filas) {
         g.cobrado += CXC_totalCobrado(r);
         g.saldo   += parseFloat(r.saldo)         || 0;
     }
-    const grupos = [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+    // Dentro de cada cliente, los documentos van en orden cronológico (como los movimientos
+    // de un mayor); entre clientes manda el saldo, el que más debe primero.
+    for (const g of mapa.values()) {
+        g.items.sort((a, b) =>
+            String(a.fecha_emision || '').localeCompare(String(b.fecha_emision || '')) ||
+            String(a.numero_factura || '').localeCompare(String(b.numero_factura || '')));
+    }
+    return [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+}
+
+function CXC_renderAgrupado(filas) {
+    const tbody  = document.getElementById('cxc-tbody');
+    const label  = document.getElementById('cxc-count-label');
+    const grupos = CXC_agruparPorCliente(filas);
 
     label.textContent = `${filas.length} docs · ${grupos.length} cliente${grupos.length !== 1 ? 's' : ''}`;
 
+    let tTotal = 0, tCobrado = 0, tSaldo = 0;
     let html = '';
     for (const g of grupos) {
-        const abierto = CXC_gruposAbiertos.has(g.key);
-        const chev = abierto ? 'bi-chevron-down' : 'bi-chevron-right';
+        tTotal   += g.total;
+        tCobrado += g.cobrado;
+        tSaldo   += g.saldo;
+
+        const cerrado = CXC_clientesCerrados.has(g.key);
+        const chev    = cerrado ? 'bi-chevron-right' : 'bi-chevron-down';
         html += `
-        <tr class="cxc-grp-row" data-gkey="${esc(g.key)}" onclick="CXC_toggleGrupo(this)" style="cursor:pointer;background:#eafaf1;">
+        <tr class="cxc-mayor-grp" data-gkey="${esc(g.key)}" onclick="CXC_toggleCliente(this)" style="cursor:pointer;" title="Clic para plegar o desplegar este cliente">
             <td class="text-center p-1"><i class="bi ${chev} text-success"></i></td>
-            <td colspan="5" class="fw-bold" style="font-size:.82rem;">
-                ${esc(g.nombre)}
+            <td colspan="10" class="fw-bold" style="font-size:.82rem;">
+                <i class="bi bi-person-lines-fill me-1 text-success"></i>${esc(g.nombre)}
+                ${g.ruc ? `<span class="text-muted fw-normal ms-1">${esc(g.ruc)}</span>` : ''}
                 <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 fw-normal">${g.items.length} doc${g.items.length !== 1 ? 's' : ''}</span>
             </td>
-            <td class="text-end fw-semibold" style="font-size:.8rem;">$${CXC_fmt(g.total)}</td>
-            <td class="text-end fw-semibold text-success" style="font-size:.8rem;">$${CXC_fmt(g.cobrado)}</td>
-            <td class="text-end fw-bold pe-3" style="font-size:.82rem;color:${g.saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(g.saldo)}</td>
-            <td colspan="2"></td>
         </tr>`;
-        if (abierto) {
+
+        if (!cerrado) {
             for (const r of g.items) html += CXC_filaHtml(r);
         }
+
+        html += `
+        <tr class="cxc-mayor-sub">
+            <td colspan="6" class="text-end" style="font-size:.78rem;">SUBTOTAL ${esc(g.nombre)}</td>
+            <td class="text-end" style="font-size:.8rem;">$${CXC_fmt(g.total)}</td>
+            <td class="text-end text-success" style="font-size:.8rem;">$${CXC_fmt(g.cobrado)}</td>
+            <td class="text-end pe-3" style="font-size:.82rem;color:${g.saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(g.saldo)}</td>
+            <td colspan="2"></td>
+        </tr>
+        <tr class="cxc-mayor-gap"><td colspan="11"></td></tr>`;
     }
+
+    html += `
+        <tr class="cxc-mayor-total">
+            <td colspan="6" class="text-end" style="font-size:.8rem;">TOTAL GENERAL (${grupos.length} cliente${grupos.length !== 1 ? 's' : ''})</td>
+            <td class="text-end" style="font-size:.82rem;">$${CXC_fmt(tTotal)}</td>
+            <td class="text-end text-success" style="font-size:.82rem;">$${CXC_fmt(tCobrado)}</td>
+            <td class="text-end pe-3" style="font-size:.85rem;color:${tSaldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(tSaldo)}</td>
+            <td colspan="2"></td>
+        </tr>`;
+
     tbody.innerHTML = html;
 }
 
+/* Pliega/despliega la sección de un cliente (el set guarda las cerradas: ver CXC_clientesCerrados). */
+function CXC_toggleCliente(el) {
+    const k = el.getAttribute('data-gkey');
+    if (CXC_clientesCerrados.has(k)) CXC_clientesCerrados.delete(k);
+    else CXC_clientesCerrados.add(k);
+    CXC_renderTabla(CXC_filtradoLocal);
+}
+
+/* Pliega/despliega un grupo de la vista por producto (aquí el set guarda los abiertos). */
 function CXC_toggleGrupo(el) {
     const k = el.getAttribute('data-gkey');
     if (CXC_gruposAbiertos.has(k)) CXC_gruposAbiertos.delete(k);
@@ -327,7 +408,7 @@ function CXC_setVista(modo) {
     }
     // La vista por producto necesita las líneas de cada documento: si aún no se cargaron
     // (la carga normal no las trae), se vuelve a consultar el listado pidiéndolas.
-    if (CXC_vista === 'producto' && CXC_lineas === null) {
+    if (CXC_vista === 'producto' && CXC_lineas === null && CXC_cargado) {
         CXC_cargar();
         return;
     }
@@ -1162,7 +1243,7 @@ function CXC_initBuscadorProductos() {
     });
     // Enter sin elegir de la lista: filtra por el texto escrito (nombre o código de la línea)
     input.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); drop.classList.add('d-none'); CXC_cargar(); }
+        if (e.key === 'Enter') { e.preventDefault(); drop.classList.add('d-none'); CXC_recargar(); }
     });
     document.addEventListener('click', e => {
         if (!e.target.closest('#cxc-search-producto') && !e.target.closest('#cxc-dropdown-productos')) {
@@ -1201,7 +1282,7 @@ function CXC_agregarProducto(id, codigo, nombre) {
     document.getElementById('cxc-search-producto').value = '';
     drop.classList.add('d-none');
     CXC_renderChipsProductos();
-    CXC_cargar();
+    CXC_recargar();
 }
 
 function CXC_renderChipsProductos() {
@@ -1218,7 +1299,7 @@ function CXC_renderChipsProductos() {
 function CXC_quitarProducto(id) {
     CXC_productosSeleccionados = CXC_productosSeleccionados.filter(p => p.id !== id);
     CXC_renderChipsProductos();
-    CXC_cargar();
+    CXC_recargar();
 }
 
 function CXC_getProductosSeleccionados() {
@@ -1253,7 +1334,7 @@ function CXC_limpiarFiltros() {
     const buscador = document.getElementById('cxc-buscador');
     if (buscador) buscador.value = '';
 
-    CXC_cargar();
+    CXC_recargar();
 }
 
 /* ════════════════════════════════════════════════════
@@ -1270,7 +1351,9 @@ function CXC_exportarExcel() {
         id_producto: CXC_getProductosSeleccionados(),
         producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
-        vista:       CXC_vista === 'producto' ? 'PRODUCTO' : '',
+        // La exportación sale con la misma estructura que la vista activa: por producto, o por
+        // cliente en formato mayor (sección por cliente, subtotal y total general).
+        vista:       CXC_vista === 'producto' ? 'PRODUCTO' : (CXC_vista === 'agrupado' ? 'CLIENTE' : ''),
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportExcel?${params}`, '_blank');
 }
@@ -1286,7 +1369,9 @@ function CXC_exportarPDF() {
         id_producto: CXC_getProductosSeleccionados(),
         producto:    (document.getElementById('cxc-search-producto')?.value || '').trim(),
         alcance:     CXC_getAlcance(),
-        vista:       CXC_vista === 'producto' ? 'PRODUCTO' : '',
+        // La exportación sale con la misma estructura que la vista activa: por producto, o por
+        // cliente en formato mayor (sección por cliente, subtotal y total general).
+        vista:       CXC_vista === 'producto' ? 'PRODUCTO' : (CXC_vista === 'agrupado' ? 'CLIENTE' : ''),
     });
     window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportPdf?${params}`, '_blank');
 }

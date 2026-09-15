@@ -335,6 +335,318 @@ class CuentasPorCobrarController extends BaseModuloController
     }
 
     /**
+     * Agrupa el listado por cliente para las exportaciones de la vista "Por cliente"
+     * (formato mayor). La clave es la identificación BASE, no el texto del RUC: el
+     * contribuyente registrado dos veces —con la cédula y con el RUC, que es esa cédula +
+     * '001'— cae en un solo grupo, igual que en la vista en pantalla. Dentro de cada cliente
+     * los documentos van en orden cronológico (como los movimientos de un mayor); entre
+     * clientes manda el saldo: el que más debe, primero.
+     */
+    private function agruparPorCliente(array $filas): array
+    {
+        $grupos = [];
+        foreach ($filas as $r) {
+            $nombre = trim((string)($r['cliente_nombre'] ?? ''));
+            if ($nombre === '') {
+                $nombre = 'Sin cliente';
+            }
+            $key = IdentificacionTercero::claveGrupo($r['cliente_ruc'] ?? null, $nombre);
+            if (!isset($grupos[$key])) {
+                $grupos[$key] = [
+                    'nombre' => $nombre, 'ruc' => (string)($r['cliente_ruc'] ?? ''), 'items' => [],
+                    'total' => 0.0, 'abonos' => 0.0, 'nc' => 0.0, 'retenciones' => 0.0,
+                    'cobrado' => 0.0, 'saldo' => 0.0,
+                ];
+            }
+            $abonos = (float)($r['total_cobrado'] ?? 0);
+            $nc     = (float)($r['total_nc'] ?? 0);
+            $ret    = (float)($r['total_retenido'] ?? 0);
+
+            $g = &$grupos[$key];
+            $g['items'][]     = $r;
+            $g['total']       += (float)($r['total'] ?? 0);
+            $g['abonos']      += $abonos;
+            $g['nc']          += $nc;
+            $g['retenciones'] += $ret;
+            $g['cobrado']     += $abonos + $nc + $ret;
+            $g['saldo']       += (float)($r['saldo'] ?? 0);
+            unset($g);
+        }
+        foreach ($grupos as &$g) {
+            usort($g['items'], static fn (array $a, array $b): int =>
+                strcmp((string)($a['fecha_emision'] ?? ''), (string)($b['fecha_emision'] ?? ''))
+                    ?: strcmp((string)($a['numero_factura'] ?? ''), (string)($b['numero_factura'] ?? '')));
+        }
+        unset($g);
+        usort($grupos, static fn (array $a, array $b): int => $b['saldo'] <=> $a['saldo']);
+        return array_values($grupos);
+    }
+
+    /**
+     * Excel de la vista "Por cliente": misma estructura que el mayor de una cuenta contable —
+     * una sección por cliente (subtítulo con su identificación y nombre, más los encabezados
+     * repetidos), sus documentos, una fila de SUBTOTAL al cerrar la sección y un TOTAL GENERAL
+     * al final de la hoja. El cliente no va como columna: es el título de la sección.
+     */
+    private function exportExcelPorCliente(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
+    {
+        $grupos = $this->agruparPorCliente($filas);
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            $filtrosTxt    = ['Vista' => 'Por cliente (formato mayor)'] + $this->describirFiltros($idsEmpresa, $filtros);
+
+            $headers = ['Documento', 'Origen', 'Vendedor', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos',
+                        'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
+            if ($consolidado) {
+                array_unshift($headers, 'Estab.');
+            }
+            // La etiqueta de SUBTOTAL/TOTAL va en la última columna de texto antes de los
+            // importes (igual que en el mayor): a su izquierda quedan celdas vacías.
+            $huecos = $consolidado ? 6 : 5;
+
+            $secciones  = [];
+            $totTotal   = 0.0;
+            $totAbonos  = 0.0;
+            $totNc      = 0.0;
+            $totRet     = 0.0;
+            $totCobrado = 0.0;
+            $totSaldo   = 0.0;
+
+            foreach ($grupos as $g) {
+                $totTotal   += $g['total'];
+                $totAbonos  += $g['abonos'];
+                $totNc      += $g['nc'];
+                $totRet     += $g['retenciones'];
+                $totCobrado += $g['cobrado'];
+                $totSaldo   += $g['saldo'];
+
+                $filasSec = [];
+                foreach ($g['items'] as $r) {
+                    $dias   = (int)($r['dias_vencido'] ?? 0);
+                    $abonos = (float)($r['total_cobrado'] ?? 0);
+                    $nc     = (float)($r['total_nc'] ?? 0);
+                    $ret    = (float)($r['total_retenido'] ?? 0);
+                    $filasSec[] = [
+                        ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
+                        (string)($r['numero_factura'] ?? ''),
+                        $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
+                        (string)($r['vendedor_nombre'] ?? ''),
+                        $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                        $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
+                        $dias > 0 ? $dias : 0,
+                        round((float)$r['total'], 2),
+                        round($abonos, 2),
+                        round($nc, 2),
+                        round($ret, 2),
+                        round($abonos + $nc + $ret, 2),
+                        round((float)$r['saldo'], 2),
+                        $dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE',
+                    ];
+                }
+
+                $nDocs  = count($g['items']);
+                $titulo = trim(($g['ruc'] !== '' ? $g['ruc'] . ' - ' : '') . $g['nombre'])
+                        . ' (' . $nDocs . ' doc' . ($nDocs !== 1 ? 's' : '') . ')';
+
+                $secciones[] = [
+                    'titulo'  => $titulo,
+                    'filas'   => $filasSec,
+                    'resumen' => [
+                        ...array_fill(0, $huecos, ''),
+                        'SUBTOTAL ' . $g['nombre'],
+                        round($g['total'], 2), round($g['abonos'], 2), round($g['nc'], 2),
+                        round($g['retenciones'], 2), round($g['cobrado'], 2), round($g['saldo'], 2), '',
+                    ],
+                ];
+            }
+
+            $filaFinal = [
+                ...array_fill(0, $huecos, ''),
+                'TOTAL GENERAL (' . count($grupos) . ' cliente' . (count($grupos) !== 1 ? 's' : '') . ')',
+                round($totTotal, 2), round($totAbonos, 2), round($totNc, 2),
+                round($totRet, 2), round($totCobrado, 2), round($totSaldo, 2), '',
+            ];
+
+            (new \App\Services\ReportService())->exportToExcelSeccionado(
+                'cuentas_por_cobrar_cliente',
+                $headers,
+                $secciones,
+                'CxC por Cliente',
+                $nombreEmpresa . ' - Cuentas por Cobrar por Cliente',
+                $filaFinal,
+                $filtrosTxt
+            );
+            exit;
+        } catch (\Throwable $e) {
+            if (!headers_sent()) {
+                $_SESSION['cuentas_por_cobrar_msg'] = ['danger', 'Error al generar Excel: ' . $e->getMessage()];
+                $this->redirect(BASE_URL . '/' . $this->getRutaModulo());
+            }
+            exit;
+        }
+    }
+
+    /**
+     * PDF de la vista "Por cliente": el listado sale como el mayor de una cuenta contable —
+     * una sección por cliente (cabecera con su identificación y nombre), la tabla de sus
+     * documentos en orden cronológico, una fila de SUBTOTAL al cerrar la sección y, al final,
+     * el TOTAL GENERAL de la cartera. El cliente no va como columna: es la cabecera.
+     */
+    private function exportPdfPorCliente(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
+    {
+        $grupos = $this->agruparPorCliente($filas);
+        $stats  = $this->repo->getEstadisticas($idsEmpresa, $filtros);
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            $filtrosTxt    = ['Vista' => 'Por cliente (formato mayor)'] + $this->describirFiltros($idsEmpresa, $filtros);
+            $e = static fn ($v): string => htmlspecialchars((string)$v);
+
+            // Anchos por columna (table-layout: fixed, deben sumar 100%). La columna del
+            // establecimiento solo aparece en consolidado y le resta ancho al vendedor.
+            $wEst   = $consolidado ? 6 : 0;
+            $wVen   = 16 - $wEst;
+            $wEtq   = 66;                        // ancho del texto que une la fila de SUBTOTAL/TOTAL
+            $colEtq = $consolidado ? 6 : 5;      // columnas de texto que abarca esa fila
+
+            $totTotal   = 0.0;
+            $totCobrado = 0.0;
+            $totSaldo   = 0.0;
+            $cuerpo     = '';
+
+            foreach ($grupos as $g) {
+                $totTotal   += $g['total'];
+                $totCobrado += $g['cobrado'];
+                $totSaldo   += $g['saldo'];
+
+                $nDocs  = count($g['items']);
+                $titulo = trim(($g['ruc'] !== '' ? $g['ruc'] . ' - ' : '') . $g['nombre']);
+                // La cabecera del cliente va en su propia tabla: un colspan en la primera fila
+                // hace que el motor ignore los anchos de las columnas de la tabla de abajo.
+                $cuerpo .= "<table class='grp'><tr><td style='width:100%;'>"
+                    . $e($titulo) . " &nbsp;&middot;&nbsp; {$nDocs} documento" . ($nDocs !== 1 ? 's' : '')
+                    . "</td></tr></table>";
+
+                $cuerpo .= "<table><thead><tr>"
+                    . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
+                    . "<th style='width:14%;'>Documento</th>"
+                    . "<th style='width:9%;'>Origen</th>"
+                    . "<th style='width:{$wVen}%;'>Vendedor</th>"
+                    . "<th style='width:10%;'>F. Emisión</th>"
+                    . "<th style='width:17%;'>F. Vencimiento</th>"
+                    . "<th style='width:11%;'>Total</th>"
+                    . "<th style='width:11%;'>Cobrado</th>"
+                    . "<th style='width:12%;'>Saldo</th>"
+                    . "</tr></thead><tbody>";
+
+                foreach ($g['items'] as $r) {
+                    $dias  = (int)($r['dias_vencido'] ?? 0);
+                    $ts    = (float)($r['total'] ?? 0);
+                    // "Cobrado" = abonos + retenciones + notas de crédito aplicadas
+                    $tc    = (float)($r['total_cobrado'] ?? 0) + (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
+                    $tsal  = (float)($r['saldo'] ?? 0);
+                    $badge = $dias > 0 ? "<small style='font-weight:bold;'> ({$dias}d vencida)</small>" : "<small>Vigente</small>";
+                    $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
+                    $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
+                    $cuerpo .= "<tr>"
+                        . ($consolidado ? "<td class='text-center' style='width:{$wEst}%;'>" . $e($r['establecimiento'] ?? '') . "</td>" : '')
+                        . "<td style='width:14%;'>" . $e($r['numero_factura'] ?? '') . "</td>"
+                        . "<td class='text-center' style='width:9%;'>" . $this->getOrigenLabel($r['origen'] ?? 'FACTURA') . "</td>"
+                        . "<td style='width:{$wVen}%;'>" . $e($r['vendedor_nombre'] ?? '') . "</td>"
+                        . "<td class='text-center' style='width:10%;'>{$fEmis}</td>"
+                        . "<td class='text-center' style='width:17%;'>{$fVenc} {$badge}</td>"
+                        . "<td class='text-end' style='width:11%;'>$" . number_format($ts, 2) . "</td>"
+                        . "<td class='text-end' style='width:11%;'>$" . number_format($tc, 2) . "</td>"
+                        . "<td class='text-end' style='width:12%;font-weight:bold;'>$" . number_format($tsal, 2) . "</td>"
+                        . "</tr>";
+                }
+
+                $cuerpo .= "<tr class='sub'>"
+                    . "<td colspan='{$colEtq}' class='text-end' style='width:{$wEtq}%;'>SUBTOTAL " . $e($g['nombre']) . "</td>"
+                    . "<td class='text-end' style='width:11%;'>$" . number_format($g['total'], 2) . "</td>"
+                    . "<td class='text-end' style='width:11%;'>$" . number_format($g['cobrado'], 2) . "</td>"
+                    . "<td class='text-end' style='width:12%;'>$" . number_format($g['saldo'], 2) . "</td>"
+                    . "</tr></tbody></table>";
+            }
+
+            ob_start();
+            ?>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 6px; table-layout: fixed; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; color: #000; }
+                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; color: #000; }
+                .text-end { text-align: right; }
+                .text-center { text-align: center; }
+                .header { text-align: center; margin-bottom: 10px; }
+                .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
+                .header h3 { margin: 0 0 2px 0; font-size: 10pt; }
+                .header p  { margin: 0; font-size: 7.5pt; }
+                table.grp { margin-bottom: 0; }
+                table.grp td { background: #eafaf1; border: 1px solid #ccc; font-weight: bold; font-size: 8.5pt; padding: 4px 5px; }
+                tr.sub td { background: #f1f8f4; font-weight: bold; }
+                table.tot td { background: #343a40; color: #fff; font-weight: bold; font-size: 8.5pt; border: 1px solid #343a40; }
+                table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }
+                .stat-lbl  { font-size: 7.5pt; }
+                .stat-val  { font-size: 11pt; font-weight: bold; }
+                table.filtros td { border: none; padding: 1px 4px; font-size: 7.5pt; }
+                table.filtros td.filtro-lbl { width: 12%; font-weight: bold; color: #555; }
+                table.filtros td.filtro-val { width: 88%; }
+            </style>
+            <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
+            <div class="header">
+                <h2><?= $e($nombreEmpresa) ?></h2>
+                <h3>Cuentas por Cobrar por Cliente</h3>
+                <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
+            </div>
+            <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
+                <?php foreach ($filtrosTxt as $lbl => $val): ?>
+                <tr><td class="filtro-lbl"><?= $e($lbl) ?>:</td><td class="filtro-val"><?= $e($val) ?></td></tr>
+                <?php endforeach; ?>
+            </table>
+            <table class="stats">
+                <tr>
+                    <td class="stats-box" style="width:25%;">
+                        <span class="stat-lbl">Facturas</span><br/>
+                        <span class="stat-val"><?= $stats['total_facturas'] ?></span>
+                    </td>
+                    <td class="stats-box" style="width:25%;">
+                        <span class="stat-lbl">Saldo Total</span><br/>
+                        <span class="stat-val">$<?= number_format($stats['total_saldo'], 2) ?></span>
+                    </td>
+                    <td class="stats-box" style="width:25%;">
+                        <span class="stat-lbl">Vencido</span><br/>
+                        <span class="stat-val">$<?= number_format($stats['total_vencido'], 2) ?></span>
+                    </td>
+                    <td class="stats-box" style="width:25%;">
+                        <span class="stat-lbl">Al Día</span><br/>
+                        <span class="stat-val">$<?= number_format($stats['total_al_dia'], 2) ?></span>
+                    </td>
+                </tr>
+            </table>
+            <?= $cuerpo ?: "<table><tr><td class='text-center' style='width:100%;'>No se encontraron cuentas por cobrar con los filtros aplicados.</td></tr></table>" ?>
+            <table class="tot">
+                <tr>
+                    <td class="text-end" style="width:<?= $wEtq ?>%;">TOTAL GENERAL (<?= count($grupos) ?> cliente<?= count($grupos) !== 1 ? 's' : '' ?>)</td>
+                    <td class="text-end" style="width:11%;">$<?= number_format($totTotal, 2) ?></td>
+                    <td class="text-end" style="width:11%;">$<?= number_format($totCobrado, 2) ?></td>
+                    <td class="text-end" style="width:12%;">$<?= number_format($totSaldo, 2) ?></td>
+                </tr>
+            </table>
+            </page>
+            <?php
+            $html     = ob_get_clean();
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($html);
+            $html2pdf->output('CuentasPorCobrar_Cliente_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $ex) {
+            echo 'Error al generar PDF: ' . $ex->getMessage();
+        }
+    }
+
+    /**
      * Alcance del listado (fase 1 del consolidado por RUC: SOLO LECTURA desde la matriz).
      * Devuelve [idsEmpresa, consolidado]. El valor `alcance=CONSOLIDADO` que manda la vista
      * solo se honra si la empresa activa es la matriz del grupo RUC y hay hermanas accesibles
@@ -1450,9 +1762,16 @@ $plantillasFiltradas = [];
 
         $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
 
-        // Vista "Por producto": mismo listado, agrupado por producto (una fila por producto y documento)
-        if (strtoupper(trim((string)($_REQUEST['vista'] ?? ''))) === 'PRODUCTO') {
+        // El archivo sale con la misma estructura que la vista activa en pantalla
+        $vista = strtoupper(trim((string)($_REQUEST['vista'] ?? '')));
+        // "Por producto": mismo listado, agrupado por producto (una fila por producto y documento)
+        if ($vista === 'PRODUCTO') {
             $this->exportExcelPorProducto($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
+            return;
+        }
+        // "Por cliente": una sección por cliente con sus documentos, SUBTOTAL y TOTAL GENERAL (formato mayor)
+        if ($vista === 'CLIENTE') {
+            $this->exportExcelPorCliente($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
             return;
         }
 
@@ -1522,9 +1841,16 @@ $plantillasFiltradas = [];
 
         $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
 
-        // Vista "Por producto": cabecera por producto y debajo sus documentos
-        if (strtoupper(trim((string)($_REQUEST['vista'] ?? ''))) === 'PRODUCTO') {
+        // El archivo sale con la misma estructura que la vista activa en pantalla
+        $vista = strtoupper(trim((string)($_REQUEST['vista'] ?? '')));
+        // "Por producto": cabecera por producto y debajo sus documentos
+        if ($vista === 'PRODUCTO') {
             $this->exportPdfPorProducto($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
+            return;
+        }
+        // "Por cliente": cabecera por cliente, sus documentos, SUBTOTAL y TOTAL GENERAL (formato mayor)
+        if ($vista === 'CLIENTE') {
+            $this->exportPdfPorCliente($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
             return;
         }
 

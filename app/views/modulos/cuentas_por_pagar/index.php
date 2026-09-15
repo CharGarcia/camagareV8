@@ -20,6 +20,17 @@
     .badge-liquid   { background: rgba(102,16,242,.1);  color: #6610f2; border: 1px solid rgba(102,16,242,.2); font-size:.6rem; }
     .badge-compra   { background: rgba(13,110,253,.08); color: #0d6efd; border: 1px solid rgba(13,110,253,.2);  font-size:.6rem; }
     .badge-importacion { background: rgba(255,140,0,.1); color: #d2691e; border: 1px solid rgba(255,140,0,.25); font-size:.6rem; }
+    /* Vista "Por proveedor": se presenta como el mayor de una cuenta contable — cabecera de
+       sección por proveedor, sus documentos, fila de SUBTOTAL y TOTAL GENERAL al final. */
+    .cxp-mayor-grp   > td { background:#eaf1fb; border-top:2px solid #0d6efd; }
+    .cxp-mayor-sub   > td { background:rgba(13,110,253,.06); font-weight:700; border-top:1px solid #0d6efd; }
+    .cxp-mayor-total > td { background:#f8f9fa; font-weight:800; border-top:2px solid #343a40; }
+    .cxp-mayor-gap   > td { height:10px; padding:0; border:0; background:transparent; }
+    /* Las filas de sección no son documentos: el hover de Bootstrap las apagaría. */
+    .table-hover > tbody > tr.cxp-mayor-grp:hover > td,
+    .table-hover > tbody > tr.cxp-mayor-sub:hover > td,
+    .table-hover > tbody > tr.cxp-mayor-total:hover > td,
+    .table-hover > tbody > tr.cxp-mayor-gap:hover > td { --bs-table-accent-bg:transparent; }
     /* Columna saldo */
     .cxp-saldo-vencido { color: #dc3545 !important; }
     .cxp-saldo-vigente { color: #198754 !important; }
@@ -52,7 +63,7 @@
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
                     <select id="cxp-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:130px;"
-                            onchange="CXP_cargar()">
+                            onchange="CXP_recargar()">
                         <option value="PENDIENTES" selected>Saldo Pendiente</option>
                         <option value="VENCIDAS">Vencidas</option>
                         <option value="AL_DIA">Al Día</option>
@@ -65,7 +76,7 @@
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo</label>
                     <select id="cxp-tipo" name="tipo_fuente" class="form-select form-select-sm shadow-none border" style="width:130px;"
-                            onchange="CXP_cargar()">
+                            onchange="CXP_recargar()">
                         <option value="">Todos</option>
                         <option value="COMPRA">Solo Facturas</option>
                         <option value="LIQUIDACION">Solo Liquidaciones</option>
@@ -78,7 +89,7 @@
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos</label>
                     <select id="cxp-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:180px;"
-                            onchange="CXP_cargar()"
+                            onchange="CXP_recargar()"
                             title="Consolidado por RUC: <?php echo htmlspecialchars(implode(' · ', $establecimientos ?? [])); ?>">
                         <option value="ESTABLECIMIENTO" selected>Solo este (matriz)</option>
                         <option value="CONSOLIDADO">Consolidado (<?php echo count($establecimientos ?? []); ?> establec.)</option>

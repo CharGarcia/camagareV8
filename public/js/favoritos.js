@@ -234,9 +234,13 @@ function guardarPreferenciaVista(modulo, key, valor, msg) {
  *
  * @param {string} modulo Nombre del módulo para persistir (ej: 'marcas').
  * @param {function(string,string)} onSort Callback (col, dir) que recarga la tabla.
- * @param {object} [opts] { col, dir, container }.
+ * @param {object} [opts] { col, dir, container, reload }.
  *        - col/dir: estado inicial (para pintar el ícono activo al cargar).
  *        - container: selector o elemento donde buscar los encabezados (def: document).
+ *        - reload: false cuando el callback ya repinta TODO lo que depende del
+ *          orden (filas, paginación, contador, enlaces de exportación). Por
+ *          defecto guardar la preferencia recarga la página entera, lo que en un
+ *          módulo que recarga por AJAX significa listar dos veces lo mismo.
  * @returns {{getSort:function, getDir:function, refreshIcons:function}|null}
  */
 window.CMG_initSort = function(modulo, onSort, opts) {
@@ -280,7 +284,7 @@ window.CMG_initSort = function(modulo, onSort, opts) {
             }
             refreshIcons();
             if (typeof window.guardarOrdenacionVista === 'function') {
-                window.guardarOrdenacionVista(modulo, state.col, state.dir);
+                window.guardarOrdenacionVista(modulo, state.col, state.dir, { reload: opts.reload });
             }
             try {
                 onSort(state.col, state.dir);
@@ -328,10 +332,14 @@ window.CMG_guardarVista = function(modulo, payload, opts) {
  * @param {string} modulo Nombre del módulo (ej: factura-venta)
  * @param {string} col Nombre de la columna (data-sort)
  * @param {string} dir Dirección (ASC/DESC)
+ * @param {object} [opts] { reload }. reload:false evita recargar la página al
+ *        guardar; es para módulos que ya repintan el listado por AJAX con el
+ *        nuevo orden (recargar solo repetiría la consulta). Por omisión recarga.
  */
-window.guardarOrdenacionVista = function(modulo, col, dir) {
+window.guardarOrdenacionVista = function(modulo, col, dir, opts) {
     // Normalizar nombre del módulo
     const moduloLimpio = modulo.split('/').pop().replace(/-/g, '_');
+    const recargar = !(opts && opts.reload === false);
 
     if (typeof guardarPreferenciaVista === 'function') {
         const payload = {
@@ -357,7 +365,7 @@ window.guardarOrdenacionVista = function(modulo, col, dir) {
             .then(json => {
                 if (json.ok) {
                     console.log(`Ordenación guardada para ${modulo}: ${col} ${dir}`);
-                    _cmgReloadPagina();
+                    if (recargar) _cmgReloadPagina();
                 }
             })
             .catch(err => console.error('Error guardando ordenación:', err));

@@ -1691,8 +1691,12 @@ class MigracionMysqlService
         $done   = $this->idsMigrados($pg, $idEmpresa, $modo);
         $insMap = $this->stmtMap($pg, $modo);
 
-        $insCab = $pg->prepare("INSERT INTO rol_cabecera (id_empresa, tipo_rol, periodo_anio, periodo_mes, numero_periodo, descripcion, estado, total_ingresos, total_egresos, total_neto, total_aporte_patronal, created_by)
-                                VALUES (:e, :tr, :pa, :pm, :np, :desc, :est, :ti, :teg, :tn, :tap, :cb) RETURNING id");
+        // Ambiente de la empresa: SIN esto el rol migrado queda en el ambiente por defecto ('1') y el
+        // listado de Roles de Pago (que filtra por tipo_ambiente) NO lo muestra cuando la empresa está en
+        // producción ('2'). Mismo gotcha que pedidos/kardex/facturas migrados.
+        $amb = $this->ambienteEmpresa($pg, $idEmpresa);
+        $insCab = $pg->prepare("INSERT INTO rol_cabecera (id_empresa, tipo_rol, periodo_anio, periodo_mes, numero_periodo, descripcion, estado, total_ingresos, total_egresos, total_neto, total_aporte_patronal, tipo_ambiente, created_by)
+                                VALUES (:e, :tr, :pa, :pm, :np, :desc, :est, :ti, :teg, :tn, :tap, :amb, :cb) RETURNING id");
         $insDet = $pg->prepare("INSERT INTO rol_detalle (id_rol, id_empresa, id_empleado, dias_trabajados, sueldo_base, total_ingresos, total_egresos, aporte_iess, aporte_patronal, neto)
                                 VALUES (:r, :e, :emp, :dias, :sb, :ti, :teg, :ai, :ap, :neto) RETURNING id");
         $insRub = $pg->prepare("INSERT INTO rol_detalle_rubro (id_detalle, id_empresa, tipo, concepto, codigo, origen, valor, aporta_iess, id_novedad)
@@ -1729,7 +1733,7 @@ class MigracionMysqlService
                 $pg->beginTransaction();
                 $descripcion = ($esQuincena ? 'Quincena ' : 'Rol ') . $mes . '/' . $anio . ' (migrado)';
                 $insCab->execute([':e' => $idEmpresa, ':tr' => $tipoRol, ':pa' => $anio, ':pm' => $mes, ':np' => $numPeriodo,
-                    ':desc' => $descripcion, ':est' => $estado, ':ti' => 0, ':teg' => 0, ':tn' => 0, ':tap' => 0, ':cb' => $idUsuario]);
+                    ':desc' => $descripcion, ':est' => $estado, ':ti' => 0, ':teg' => 0, ':tn' => 0, ':tap' => 0, ':amb' => $amb, ':cb' => $idUsuario]);
                 $idRol = (int) $insCab->fetchColumn();
                 $tot = ['ti' => 0.0, 'teg' => 0.0, 'tn' => 0.0, 'tap' => 0.0];
                 foreach ($lineas as $ln) {

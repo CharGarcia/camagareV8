@@ -20,8 +20,11 @@ $total      = $total ?? 0;
 $page       = $page ?? 1;
 $totalPages = $totalPages ?? 1;
 $perPage    = $perPage ?? 20;
-$ordenCol   = $ordenCol ?? 'numero_pedido';
-$ordenDir   = $ordenDir ?? 'asc';
+// Orden por defecto: lo más reciente primero. fecha_pedido es timestamp, pero el
+// formulario solo manda la fecha (input type="date"), así que los pedidos del mismo
+// día quedan empatados y los desempata el p.id DESC que agrega el repository.
+$ordenCol   = $ordenCol ?? 'fecha_pedido';
+$ordenDir   = $ordenDir ?? 'DESC';
 $buscar     = $buscar ?? '';
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
@@ -210,17 +213,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         <div class="d-flex align-items-center gap-3">
             <span id="info-paginacion" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
             <div id="paginacion-pedidos" class="btn-group btn-group-sm">
-                <?php if ($page <= 1): ?>
-                    <button type="button" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-left"></i></button>
-                <?php else: ?>
-                    <button type="button" class="btn btn-outline-secondary" onclick="PED_cambiarPaginaAjax(<?= $page - 1 ?>)"><i class="bi bi-chevron-left"></i></button>
-                <?php endif; ?>
-
-                <?php if ($page >= $totalPages): ?>
-                    <button type="button" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-right"></i></button>
-                <?php else: ?>
-                    <button type="button" class="btn btn-outline-secondary" onclick="PED_cambiarPaginaAjax(<?= $page + 1 ?>)"><i class="bi bi-chevron-right"></i></button>
-                <?php endif; ?>
+                <!-- Mismo markup que devuelve searchAjax (PedidosController::searchAjax):
+                     la primera carga la pinta PHP y las siguientes páginas la reemplazan
+                     por AJAX, así que ambas versiones deben verse idénticas. -->
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-outline-secondary border-end-0 rounded-end-0" <?= $page <= 1 ? 'disabled' : '' ?> onclick="PED_cambiarPaginaAjax(<?= $page - 1 ?>)"><i class="bi bi-chevron-left"></i></button>
+                    <button type="button" class="btn btn-outline-secondary rounded-start-0" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="PED_cambiarPaginaAjax(<?= $page + 1 ?>)"><i class="bi bi-chevron-right"></i></button>
+                </div>
             </div>
         </div>
     </div>
@@ -239,7 +238,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header" role="button" data-sort="responsable_entrega" data-col="responsable_entrega">Resp. Entrega <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-sort="observaciones" data-col="observaciones">Observaciones <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-sort="observaciones_internas" data-col="observaciones_internas">Obs. Internas <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" role="button" data-sort="estado" data-col="estado"
+                            title="Ordena por el flujo del pedido, no alfabéticamente: Pendiente → Procesado → Facturado → Anulado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="lista-pedidos">
@@ -310,9 +310,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <?php include __DIR__ . '/modal_pedido.php'; ?>
 
 <?php
-// Copia de seguridad de la ruta y permisos del módulo de pedidos
+// Copia de seguridad del estado del módulo de pedidos. Se respalda TODO lo que el
+// modal de clientes pisa más abajo (no solo ruta y permisos): si algo que se agregue
+// al final de la vista leyera $ordenCol/$page, vería los valores del modal.
 $rutaModuloOriginal = $rutaModulo ?? 'modulos/pedidos';
-$permOriginal = $perm;
+$permOriginal       = $perm;
+$ordenColOriginal   = $ordenCol;
+$ordenDirOriginal   = $ordenDir;
+$pageOriginal       = $page;
+$totalPagesOriginal = $totalPages;
 
 // Variables requeridas por el modal de clientes para evitar errores de PHP durante la inclusión
 $urlBaseClientes = BASE_URL . '/modulos/clientes';
@@ -335,7 +341,11 @@ include dirname(__DIR__) . '/clientes/modal_cliente.php';
 
 // RESTAURAR variables originales para pedidos
 $rutaModulo = $rutaModuloOriginal;
-$perm = $permOriginal;
+$perm       = $permOriginal;
+$ordenCol   = $ordenColOriginal;
+$ordenDir   = $ordenDirOriginal;
+$page       = $pageOriginal;
+$totalPages = $totalPagesOriginal;
 ?>
 
 <script src="<?= $base ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>"></script>

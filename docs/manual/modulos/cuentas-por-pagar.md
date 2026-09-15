@@ -5,14 +5,69 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras
-version: 1.11
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar
+version: 1.12
 orden: 50
 estado: activo
 ---
 
 **Cuentas por pagar** es el espejo de las cuentas por cobrar: qué facturas de
 compra siguen sin pagarse, de qué proveedor y cuándo vencen.
+
+## El listado se consulta al presionar Aplicar Filtros
+
+Al entrar al módulo **no se consulta nada**: la tabla muestra la invitación
+*«Elija los filtros y presione Aplicar Filtros»* y las tarjetas de arriba quedan
+en cero. Primero se arman los filtros (tipo de documento, estado, fechas,
+proveedor, establecimientos) y recién al presionar **Aplicar Filtros** el sistema
+va a buscar la deuda.
+
+- Así se evita la consulta pesada de "toda la cartera de proveedores" cada vez
+  que alguien abre el módulo de paso, y se pueden elegir varios filtros sin que
+  la pantalla se recargue en cada cambio.
+- **Antes del primer Aplicar** ningún filtro dispara la consulta: cambiar el
+  estado o agregar un proveedor solo prepara la búsqueda.
+- **Después del primer Aplicar** el módulo se comporta como siempre: cambiar un
+  filtro vuelve a consultar de inmediato.
+- El botón **Limpiar** deja los filtros en sus valores por defecto; si todavía
+  no se aplicó nada, tampoco consulta.
+
+## Vista "Por proveedor": la deuda como el mayor de una cuenta
+
+El botón **Por proveedor** presenta la deuda con la misma forma que el **mayor de
+una cuenta contable**: una sección por proveedor, con su identificación y su
+nombre en la cabecera, debajo **todos sus documentos** y, al cerrar la sección,
+una fila de **SUBTOTAL** con el total, lo pagado, las NC/retenciones y el saldo
+de ese proveedor. Al final del listado va la fila **TOTAL GENERAL**.
+
+- Las secciones aparecen **desplegadas**, como se lee un mayor. Si un proveedor
+  estorba, se pliega con un clic en su cabecera (su subtotal sigue a la vista).
+- Dentro de cada proveedor los documentos van en **orden cronológico** por fecha
+  de emisión; los proveedores se ordenan por **saldo**, al que más se le debe
+  primero.
+- Cada documento conserva sus acciones normales (pagar, historial) y su estado
+  (vigente, vencida o pagada).
+- Un proveedor cargado dos veces —con la cédula y con el RUC— forma **una sola
+  sección** (ver *Un mismo proveedor registrado con cédula y con RUC*).
+
+### PDF y Excel de esta vista
+
+Con la vista **Por proveedor** activa, los botones **PDF** y **Excel** salen con
+esa misma estructura, no como lista plana:
+
+- **PDF**: cabecera con la identificación y el nombre del proveedor, la tabla de
+  sus documentos (documento y tipo, emisión, vencimiento, total, pagado/ret/NC y
+  saldo), la fila **SUBTOTAL** del proveedor y, al cierre del reporte, el **TOTAL
+  GENERAL**. Arriba se mantienen los filtros aplicados y las tarjetas de resumen.
+- **Excel**: una **sección por proveedor** (título con su identificación, nombre
+  y número de documentos), sus documentos con el desglose completo —abonos, notas
+  de crédito, retenciones, pagado y saldo—, la fila **SUBTOTAL** y el **TOTAL
+  GENERAL** al final de la hoja. El proveedor no va como columna: es el título de
+  la sección, igual que la cuenta en el mayor.
+- En **consolidado por RUC** ambos archivos agregan la columna **Estab.** con el
+  establecimiento dueño de cada documento.
+- Para la lista plana de siempre (una fila por documento, con proveedor y RUC
+  como columnas) se exporta desde la vista **Detallado**.
 
 ## De dónde sale el saldo
 
@@ -198,6 +253,14 @@ el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.12** — La vista **Por proveedor** ahora se presenta como el **mayor de una
+  cuenta**: secciones desplegadas por proveedor, fila de **SUBTOTAL** al cerrar
+  cada una y **TOTAL GENERAL** al final; el **PDF** y el **Excel** de esa vista
+  salen con la misma estructura (antes salían siempre como lista plana). Además,
+  al entrar al módulo **ya no se carga nada**: el listado se consulta al
+  presionar **Aplicar Filtros**. Nuevas secciones *El listado se consulta al
+  presionar Aplicar Filtros* y *Vista "Por proveedor": la deuda como el mayor de
+  una cuenta*. Mismo cambio que en Cuentas por Cobrar.
 - **1.11** — El buscador de **Proveedor** ya no distingue tildes ni eñe
   —`ORDONEZ` encuentra a *OCHOA ORDOÑEZ*, `Electrica` a *Eléctrica*— y busca por
   palabras sueltas en cualquier orden, igual que el resto de buscadores del

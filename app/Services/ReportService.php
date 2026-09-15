@@ -237,13 +237,15 @@ class ReportService
      *                          'resumen' => array opcional, fila de subtotal con el mismo
      *                          número de columnas que $headers]
      * @param array|null $filaFinal Fila suelta en negrita al final de todo (ej: total general)
+     * @param array $infoLineas Líneas "etiqueta => valor" (p. ej. filtros aplicados) entre el
+     *                          título y la primera sección, igual que en exportToExcel()
      */
-    public function exportToExcelSeccionado(string $filename, array $headers, array $secciones, string $sheetTitle = 'Reporte', ?string $mainTitle = null, ?array $filaFinal = null): void
+    public function exportToExcelSeccionado(string $filename, array $headers, array $secciones, string $sheetTitle = 'Reporte', ?string $mainTitle = null, ?array $filaFinal = null, array $infoLineas = []): void
     {
         try {
             if (ob_get_length()) ob_end_clean();
 
-            $spreadsheet = $this->construirSpreadsheetSeccionado($headers, $secciones, $sheetTitle, $mainTitle, $filaFinal);
+            $spreadsheet = $this->construirSpreadsheetSeccionado($headers, $secciones, $sheetTitle, $mainTitle, $filaFinal, $infoLineas);
 
             $fullFilename = $filename . '_' . date('Ymd_His') . '.xlsx';
             header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -263,13 +265,13 @@ class ReportService
      * Igual que exportToExcelSeccionado(), pero guarda el archivo en disco en
      * vez de descargarlo (para adjuntarlo a un correo, por ejemplo).
      */
-    public function guardarExcelSeccionadoEnArchivo(array $headers, array $secciones, string $sheetTitle, ?string $mainTitle, string $path, ?array $filaFinal = null): void
+    public function guardarExcelSeccionadoEnArchivo(array $headers, array $secciones, string $sheetTitle, ?string $mainTitle, string $path, ?array $filaFinal = null, array $infoLineas = []): void
     {
-        $spreadsheet = $this->construirSpreadsheetSeccionado($headers, $secciones, $sheetTitle, $mainTitle, $filaFinal);
+        $spreadsheet = $this->construirSpreadsheetSeccionado($headers, $secciones, $sheetTitle, $mainTitle, $filaFinal, $infoLineas);
         (new Xlsx($spreadsheet))->save($path);
     }
 
-    private function construirSpreadsheetSeccionado(array $headers, array $secciones, string $sheetTitle, ?string $mainTitle, ?array $filaFinal): Spreadsheet
+    private function construirSpreadsheetSeccionado(array $headers, array $secciones, string $sheetTitle, ?string $mainTitle, ?array $filaFinal, array $infoLineas = []): Spreadsheet
     {
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
@@ -285,7 +287,22 @@ class ReportService
                 $sheet->mergeCells("A{$rowNum}:{$lastColLetter}{$rowNum}");
                 $sheet->getStyle("A{$rowNum}")->getFont()->setBold(true)->setSize(14);
                 $sheet->getStyle("A{$rowNum}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                $rowNum += 2; // deja una fila en blanco antes de la primera sección
+                $rowNum += 2; // deja una fila en blanco antes de lo que siga
+            }
+
+            // Líneas de información (p. ej. filtros aplicados), igual que en construirSpreadsheet():
+            // etiqueta en negrita en la columna A y valor en B combinado hasta la última columna.
+            if ($infoLineas) {
+                foreach ($infoLineas as $lbl => $val) {
+                    $sheet->setCellValueExplicit("A{$rowNum}", (string)$lbl . ':', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->getStyle("A{$rowNum}")->getFont()->setBold(true);
+                    $sheet->setCellValueExplicit("B{$rowNum}", (string)$val, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    if ($numCols > 2) {
+                        $sheet->mergeCells("B{$rowNum}:{$lastColLetter}{$rowNum}");
+                    }
+                    $rowNum++;
+                }
+                $rowNum++; // fila en blanco antes de la primera sección
             }
 
             $headerStyle = [

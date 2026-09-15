@@ -8,6 +8,17 @@
     .badge-vigente  { background:rgba(25,135,84,.12);  color:#198754; border:1px solid rgba(25,135,84,.25); }
     .badge-proxima  { background:rgba(255,193,7,.15);  color:#856404; border:1px solid rgba(255,193,7,.35); }
     .badge-pagada   { background:rgba(108,117,125,.12);color:#6c757d; border:1px solid rgba(108,117,125,.25); }
+    /* Vista "Por cliente": se presenta como el mayor de una cuenta contable — cabecera de
+       sección por cliente, sus documentos, fila de SUBTOTAL y TOTAL GENERAL al final. */
+    .cxc-mayor-grp   > td { background:#eafaf1; border-top:2px solid #198754; }
+    .cxc-mayor-sub   > td { background:rgba(25,135,84,.06); font-weight:700; border-top:1px solid #198754; }
+    .cxc-mayor-total > td { background:#f8f9fa; font-weight:800; border-top:2px solid #343a40; }
+    .cxc-mayor-gap   > td { height:10px; padding:0; border:0; background:transparent; }
+    /* Las filas de sección no son documentos: el hover de Bootstrap las apagaría. */
+    .table-hover > tbody > tr.cxc-mayor-grp:hover > td,
+    .table-hover > tbody > tr.cxc-mayor-sub:hover > td,
+    .table-hover > tbody > tr.cxc-mayor-total:hover > td,
+    .table-hover > tbody > tr.cxc-mayor-gap:hover > td { --bs-table-accent-bg:transparent; }
     /* Evita que el contenedor de chips (vacío hasta que se elige un cliente) desalinee la fila de filtros */
     #cxc-chips-cliente:empty,
     #cxc-chips-producto:empty { margin-top:0; }
@@ -37,7 +48,7 @@
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Documento</label>
                     <select id="cxc-tipo-doc" name="tipo_doc" class="form-select form-select-sm shadow-none border" style="width:128px;"
-                            onchange="CXC_cargar()">
+                            onchange="CXC_recargar()">
                         <option value="TODOS" selected>Todos</option>
                         <option value="FACTURA">Facturas de venta</option>
                         <option value="RECIBO">Recibos de venta</option>
@@ -49,7 +60,7 @@
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
                     <select id="cxc-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:120px;"
-                            onchange="CXC_cargar()">
+                            onchange="CXC_recargar()">
                         <option value="PENDIENTES" selected>Saldo Pendiente</option>
                         <option value="VENCIDAS">Vencidas</option>
                         <option value="AL_DIA">Al Día</option>
@@ -62,7 +73,7 @@
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor</label>
                     <select id="cxc-vendedor" name="id_vendedor" class="form-select form-select-sm shadow-none border" style="width:135px;"
-                            onchange="CXC_cargar()">
+                            onchange="CXC_recargar()">
                         <option value="" selected>Todos</option>
                         <?php foreach (($vendedores ?? []) as $v): ?>
                             <option value="<?php echo (int)$v['id']; ?>"><?php echo htmlspecialchars($v['nombre']); ?></option>
@@ -75,7 +86,7 @@
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos</label>
                     <select id="cxc-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:150px;"
-                            onchange="CXC_cargar()"
+                            onchange="CXC_recargar()"
                             title="Consolidado por RUC: <?php echo htmlspecialchars(implode(' · ', $establecimientos ?? [])); ?>">
                         <option value="ESTABLECIMIENTO" selected>Solo este (matriz)</option>
                         <option value="CONSOLIDADO">Consolidado (<?php echo count($establecimientos ?? []); ?>)</option>

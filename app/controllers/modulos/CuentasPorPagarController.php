@@ -440,6 +440,13 @@ class CuentasPorPagarController extends BaseModuloController
 
         $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
 
+        // El archivo sale con la misma estructura que la vista activa en pantalla:
+        // "Por proveedor" es una sección por proveedor con SUBTOTAL y TOTAL GENERAL (formato mayor)
+        if (strtoupper(trim((string)($_REQUEST['vista'] ?? ''))) === 'PROVEEDOR') {
+            $this->exportExcelPorProveedor($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
+            return;
+        }
+
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
@@ -510,6 +517,14 @@ class CuentasPorPagarController extends BaseModuloController
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
         $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
+
+        // El archivo sale con la misma estructura que la vista activa en pantalla:
+        // "Por proveedor" es una cabecera por proveedor con SUBTOTAL y TOTAL GENERAL (formato mayor)
+        if (strtoupper(trim((string)($_REQUEST['vista'] ?? ''))) === 'PROVEEDOR') {
+            $this->exportPdfPorProveedor($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
+            return;
+        }
+
         $stats = $this->repo->getEstadisticas($idsEmpresa, $filtros);
 
         try {
@@ -652,6 +667,331 @@ class CuentasPorPagarController extends BaseModuloController
             exit;
         } catch (\Throwable $e) {
             echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Agrupa el listado por proveedor para las exportaciones de la vista "Por proveedor"
+     * (formato mayor). La clave es la identificación BASE, no el texto del RUC: el
+     * proveedor registrado dos veces —con la cédula y con el RUC, que es esa cédula +
+     * '001'— cae en un solo grupo, igual que en la vista en pantalla. Dentro de cada
+     * proveedor los documentos van en orden cronológico (como los movimientos de un mayor);
+     * entre proveedores manda el saldo: al que más se le debe, primero.
+     */
+    private function agruparPorProveedor(array $filas): array
+    {
+        $grupos = [];
+        foreach ($filas as $r) {
+            $nombre = trim((string)($r['proveedor_nombre'] ?? ''));
+            if ($nombre === '') {
+                $nombre = 'Sin proveedor';
+            }
+            $key = IdentificacionTercero::claveGrupo($r['proveedor_ruc'] ?? null, $nombre);
+            if (!isset($grupos[$key])) {
+                $grupos[$key] = [
+                    'nombre' => $nombre, 'ruc' => (string)($r['proveedor_ruc'] ?? ''), 'items' => [],
+                    'total' => 0.0, 'abonos' => 0.0, 'nc' => 0.0, 'retenciones' => 0.0,
+                    'pagado' => 0.0, 'saldo' => 0.0,
+                ];
+            }
+            $abonos = (float)($r['total_pagado'] ?? 0);
+            $nc     = (float)($r['total_nc'] ?? 0);
+            $ret    = (float)($r['total_retenido'] ?? 0);
+
+            $g = &$grupos[$key];
+            $g['items'][]     = $r;
+            $g['total']       += (float)($r['total'] ?? 0);
+            $g['abonos']      += $abonos;
+            $g['nc']          += $nc;
+            $g['retenciones'] += $ret;
+            $g['pagado']      += $abonos + $nc + $ret;
+            $g['saldo']       += (float)($r['saldo'] ?? 0);
+            unset($g);
+        }
+        foreach ($grupos as &$g) {
+            usort($g['items'], static fn (array $a, array $b): int =>
+                strcmp((string)($a['fecha_emision'] ?? ''), (string)($b['fecha_emision'] ?? ''))
+                    ?: strcmp((string)($a['numero_documento'] ?? ''), (string)($b['numero_documento'] ?? '')));
+        }
+        unset($g);
+        usort($grupos, static fn (array $a, array $b): int => $b['saldo'] <=> $a['saldo']);
+        return array_values($grupos);
+    }
+
+    /** Etiqueta del tipo de documento del listado unificado (factura, liquidación, etc.). */
+    private function getTipoLabel(string $tipoFuente, bool $corto = false): string
+    {
+        return match ($tipoFuente) {
+            'SALDO_INICIAL' => $corto ? 'Saldo ini.' : 'Saldo inicial',
+            'LIQUIDACION'   => $corto ? 'Liq.'       : 'Liquidación',
+            'IMPORTACION'   => $corto ? 'Imp.'       : 'Importación',
+            default         => $corto ? 'Fac.'       : 'Factura',
+        };
+    }
+
+    /**
+     * Excel de la vista "Por proveedor": misma estructura que el mayor de una cuenta
+     * contable — una sección por proveedor (subtítulo con su identificación y nombre, más
+     * los encabezados repetidos), sus documentos, una fila de SUBTOTAL al cerrar la sección
+     * y un TOTAL GENERAL al final de la hoja. El proveedor no va como columna: es el título
+     * de la sección.
+     */
+    private function exportExcelPorProveedor(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
+    {
+        $grupos = $this->agruparPorProveedor($filas);
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
+            $filtrosTxt    = ['Vista' => 'Por proveedor (formato mayor)'] + $this->describirFiltros($idsEmpresa, $filtros);
+
+            $headers = ['Tipo', 'Documento', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos',
+                        'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Pagado', 'Saldo', 'Estado'];
+            if ($consolidado) {
+                array_unshift($headers, 'Estab.');
+            }
+            // La etiqueta de SUBTOTAL/TOTAL va en la última columna de texto antes de los
+            // importes (igual que en el mayor): a su izquierda quedan celdas vacías.
+            $huecos = $consolidado ? 5 : 4;
+
+            $secciones = [];
+            $totTotal  = 0.0;
+            $totAbonos = 0.0;
+            $totNc     = 0.0;
+            $totRet    = 0.0;
+            $totPagado = 0.0;
+            $totSaldo  = 0.0;
+
+            foreach ($grupos as $g) {
+                $totTotal  += $g['total'];
+                $totAbonos += $g['abonos'];
+                $totNc     += $g['nc'];
+                $totRet    += $g['retenciones'];
+                $totPagado += $g['pagado'];
+                $totSaldo  += $g['saldo'];
+
+                $filasSec = [];
+                foreach ($g['items'] as $r) {
+                    $dias   = (int)($r['dias_vencido'] ?? 0);
+                    $saldo  = (float)($r['saldo'] ?? 0);
+                    $abonos = (float)($r['total_pagado'] ?? 0);
+                    $nc     = (float)($r['total_nc'] ?? 0);
+                    $ret    = (float)($r['total_retenido'] ?? 0);
+                    $filasSec[] = [
+                        ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
+                        $this->getTipoLabel((string)($r['tipo_fuente'] ?? '')),
+                        (string)($r['numero_documento'] ?? ''),
+                        $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                        $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
+                        $dias > 0 ? $dias : 0,
+                        round((float)($r['total'] ?? 0), 2),
+                        round($abonos, 2),
+                        round($nc, 2),
+                        round($ret, 2),
+                        round($abonos + $nc + $ret, 2),
+                        round($saldo, 2),
+                        $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE'),
+                    ];
+                }
+
+                $nDocs  = count($g['items']);
+                $titulo = trim(($g['ruc'] !== '' ? $g['ruc'] . ' - ' : '') . $g['nombre'])
+                        . ' (' . $nDocs . ' doc' . ($nDocs !== 1 ? 's' : '') . ')';
+
+                $secciones[] = [
+                    'titulo'  => $titulo,
+                    'filas'   => $filasSec,
+                    'resumen' => [
+                        ...array_fill(0, $huecos, ''),
+                        'SUBTOTAL ' . $g['nombre'],
+                        round($g['total'], 2), round($g['abonos'], 2), round($g['nc'], 2),
+                        round($g['retenciones'], 2), round($g['pagado'], 2), round($g['saldo'], 2), '',
+                    ],
+                ];
+            }
+
+            $filaFinal = [
+                ...array_fill(0, $huecos, ''),
+                'TOTAL GENERAL (' . count($grupos) . ' proveedor' . (count($grupos) !== 1 ? 'es' : '') . ')',
+                round($totTotal, 2), round($totAbonos, 2), round($totNc, 2),
+                round($totRet, 2), round($totPagado, 2), round($totSaldo, 2), '',
+            ];
+
+            (new \App\Services\ReportService())->exportToExcelSeccionado(
+                'cuentas_por_pagar_proveedor',
+                $headers,
+                $secciones,
+                'CxP por Proveedor',
+                $nombreEmpresa . ' - Cuentas por Pagar por Proveedor',
+                $filaFinal,
+                $filtrosTxt
+            );
+            exit;
+        } catch (\Throwable $e) {
+            if (!headers_sent()) {
+                $_SESSION['cuentas_por_pagar_msg'] = ['danger', 'Error al generar Excel: ' . $e->getMessage()];
+                $this->redirect(BASE_URL . '/' . $this->getRutaModulo());
+            }
+            exit;
+        }
+    }
+
+    /**
+     * PDF de la vista "Por proveedor": el listado sale como el mayor de una cuenta contable —
+     * una sección por proveedor (cabecera con su identificación y nombre), la tabla de sus
+     * documentos en orden cronológico, una fila de SUBTOTAL al cerrar la sección y, al final,
+     * el TOTAL GENERAL de la cartera. El proveedor no va como columna: es la cabecera.
+     */
+    private function exportPdfPorProveedor(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
+    {
+        $grupos = $this->agruparPorProveedor($filas);
+        $stats  = $this->repo->getEstadisticas($idsEmpresa, $filtros);
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
+            $filtrosTxt    = ['Vista' => 'Por proveedor (formato mayor)'] + $this->describirFiltros($idsEmpresa, $filtros);
+            $e = static fn ($v): string => htmlspecialchars((string)$v);
+
+            // Anchos por columna (table-layout: fixed, deben sumar 100%). La columna del
+            // establecimiento solo aparece en consolidado y le resta ancho al documento.
+            $wEst   = $consolidado ? 6 : 0;
+            $wDoc   = 26 - $wEst;
+            $wEtq   = 60;                        // ancho del texto que une la fila de SUBTOTAL/TOTAL
+            $colEtq = $consolidado ? 4 : 3;      // columnas de texto que abarca esa fila
+
+            $totTotal  = 0.0;
+            $totPagado = 0.0;
+            $totSaldo  = 0.0;
+            $cuerpo    = '';
+
+            foreach ($grupos as $g) {
+                $totTotal  += $g['total'];
+                $totPagado += $g['pagado'];
+                $totSaldo  += $g['saldo'];
+
+                $nDocs  = count($g['items']);
+                $titulo = trim(($g['ruc'] !== '' ? $g['ruc'] . ' - ' : '') . $g['nombre']);
+                // La cabecera del proveedor va en su propia tabla: un colspan en la primera
+                // fila hace que el motor ignore los anchos de las columnas de la tabla de abajo.
+                $cuerpo .= "<table class='grp'><tr><td style='width:100%;'>"
+                    . $e($titulo) . " &nbsp;&middot;&nbsp; {$nDocs} documento" . ($nDocs !== 1 ? 's' : '')
+                    . "</td></tr></table>";
+
+                $cuerpo .= "<table><thead><tr>"
+                    . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
+                    . "<th style='width:{$wDoc}%;'>Documento</th>"
+                    . "<th style='width:14%;'>F. Emisión</th>"
+                    . "<th style='width:20%;'>F. Vencimiento</th>"
+                    . "<th style='width:13%;'>Total</th>"
+                    . "<th style='width:13%;'>Pagado/Ret/NC</th>"
+                    . "<th style='width:14%;'>Saldo</th>"
+                    . "</tr></thead><tbody>";
+
+                foreach ($g['items'] as $r) {
+                    $dias  = (int)($r['dias_vencido'] ?? 0);
+                    $ts    = (float)($r['total'] ?? 0);
+                    $tp    = (float)($r['total_pagado'] ?? 0);
+                    $tsal  = (float)($r['saldo'] ?? 0);
+                    $tret  = (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
+                    $color = $dias > 0 && $tsal > 0 ? 'color:#dc3545;' : '';
+                    $badge = $tsal <= 0
+                        ? "<small style='color:#6c757d;'>Pagada</small>"
+                        : ($dias > 0
+                            ? "<small style='color:#dc3545;font-weight:bold;'>{$dias}d vencida</small>"
+                            : "<small style='color:#198754;'>Vigente</small>");
+                    $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
+                    $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
+                    $tipo  = $this->getTipoLabel((string)($r['tipo_fuente'] ?? ''), true);
+                    $cuerpo .= "<tr style='{$color}'>"
+                        . ($consolidado ? "<td class='text-center' style='width:{$wEst}%;'>" . $e($r['establecimiento'] ?? '') . "</td>" : '')
+                        . "<td style='width:{$wDoc}%;'><small style='color:#6c757d;'>{$tipo}</small><br>" . $e($r['numero_documento'] ?? '') . "</td>"
+                        . "<td class='text-center' style='width:14%;'>{$fEmis}</td>"
+                        . "<td class='text-center' style='width:20%;'>{$fVenc}<br>{$badge}</td>"
+                        . "<td class='text-end' style='width:13%;'>$" . number_format($ts, 2) . "</td>"
+                        . "<td class='text-end' style='width:13%;color:#198754;'>$" . number_format($tp + $tret, 2) . "</td>"
+                        . "<td class='text-end' style='width:14%;{$color}font-weight:bold;'>$" . number_format($tsal, 2) . "</td>"
+                        . "</tr>";
+                }
+
+                $cuerpo .= "<tr class='sub'>"
+                    . "<td colspan='{$colEtq}' class='text-end' style='width:{$wEtq}%;'>SUBTOTAL " . $e($g['nombre']) . "</td>"
+                    . "<td class='text-end' style='width:13%;'>$" . number_format($g['total'], 2) . "</td>"
+                    . "<td class='text-end' style='width:13%;color:#198754;'>$" . number_format($g['pagado'], 2) . "</td>"
+                    . "<td class='text-end' style='width:14%;'>$" . number_format($g['saldo'], 2) . "</td>"
+                    . "</tr></tbody></table>";
+            }
+
+            ob_start();
+            ?>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 8pt; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 6px; table-layout: fixed; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; }
+                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; }
+                .text-end { text-align: right; }
+                .text-center { text-align: center; }
+                .header { text-align: center; margin-bottom: 10px; }
+                .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
+                .header h3 { margin: 0 0 2px 0; font-size: 10pt; color: #555; }
+                .header p  { margin: 0; font-size: 7.5pt; color: #777; }
+                table.grp { margin-bottom: 0; }
+                table.grp td { background: #eaf1fb; border: 1px solid #ccc; font-weight: bold; font-size: 8.5pt; padding: 4px 5px; }
+                tr.sub td { background: #f2f6fd; font-weight: bold; }
+                table.tot td { background: #343a40; color: #fff; font-weight: bold; font-size: 8.5pt; border: 1px solid #343a40; }
+                .stats-box { text-align: center; padding: 5px; }
+                .stat-val  { font-size: 11pt; font-weight: bold; }
+                table.filtros td { border: none; padding: 1px 4px; font-size: 7.5pt; }
+                table.filtros td.filtro-lbl { width: 12%; font-weight: bold; color: #555; }
+                table.filtros td.filtro-val { width: 88%; }
+            </style>
+            <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
+            <div class="header">
+                <h2><?= $e($nombreEmpresa) ?></h2>
+                <h3>Cuentas por Pagar por Proveedor</h3>
+                <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
+            </div>
+            <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
+                <?php foreach ($filtrosTxt as $lbl => $val): ?>
+                <tr><td class="filtro-lbl"><?= $e($lbl) ?>:</td><td class="filtro-val"><?= $e($val) ?></td></tr>
+                <?php endforeach; ?>
+            </table>
+            <table class="stats">
+                <tr>
+                    <td class="stats-box" style="width:25%;">
+                        <div>Documentos</div>
+                        <div class="stat-val"><?= $stats['total_docs'] ?></div>
+                    </td>
+                    <td class="stats-box" style="width:25%;">
+                        <div>Saldo Total</div>
+                        <div class="stat-val">$<?= number_format($stats['total_saldo'], 2) ?></div>
+                    </td>
+                    <td class="stats-box" style="width:25%;color:#dc3545;">
+                        <div>Vencido</div>
+                        <div class="stat-val">$<?= number_format($stats['total_vencido'], 2) ?></div>
+                    </td>
+                    <td class="stats-box" style="width:25%;color:#198754;">
+                        <div>Al Día</div>
+                        <div class="stat-val">$<?= number_format($stats['total_al_dia'], 2) ?></div>
+                    </td>
+                </tr>
+            </table>
+            <?= $cuerpo ?: "<table><tr><td class='text-center' style='width:100%;'>No se encontraron cuentas por pagar con los filtros aplicados.</td></tr></table>" ?>
+            <table class="tot">
+                <tr>
+                    <td class="text-end" style="width:<?= $wEtq ?>%;">TOTAL GENERAL (<?= count($grupos) ?> proveedor<?= count($grupos) !== 1 ? 'es' : '' ?>)</td>
+                    <td class="text-end" style="width:13%;">$<?= number_format($totTotal, 2) ?></td>
+                    <td class="text-end" style="width:13%;">$<?= number_format($totPagado, 2) ?></td>
+                    <td class="text-end" style="width:14%;">$<?= number_format($totSaldo, 2) ?></td>
+                </tr>
+            </table>
+            </page>
+            <?php
+            $html     = ob_get_clean();
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($html);
+            $html2pdf->output('CuentasPorPagar_Proveedor_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $ex) {
+            echo 'Error al generar PDF: ' . $ex->getMessage();
         }
     }
 
