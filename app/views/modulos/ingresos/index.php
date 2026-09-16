@@ -211,6 +211,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             onOpen: (row, fm) => { fm.hide(); setTimeout(() => abrirModalIngresoVer(row.id_ingreso), 350); },
                         },
                         fields: <?= json_encode($filtrosIngresos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyIngresos',   // se atenúa mientras se busca
                         onApply: () => window.ING_fetchSearch && window.ING_fetchSearch(1),
                     }).init();
                 });
@@ -2515,8 +2516,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     window.ING_fetchSearch = async function(page = 1) {
         const b = document.getElementById('buscarIngreso').value.trim();
-        const loader = '<tr><td colspan="7" class="text-center py-5"><span class="spinner-border text-primary"></span></td></tr>';
-        document.getElementById('tbodyIngresos').innerHTML = loader;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+        // vaciarse, así no salta de alto. Se aplica aquí también para que paginar y
+        // ordenar (que llaman a esta función directo) muestren que se está cargando.
+        const tbody = document.getElementById('tbodyIngresos');
+        if (tbody) tbody.classList.add('fm-cargando-target');
 
         const orden = window.CMG_ordenParam(window.currentSorts || []);
         const uri = `<?= BASE_URL ?>/<?= $rutaModulo ?>/searchAjax?b=${encodeURIComponent(b)}&page=${page}&orden=${encodeURIComponent(orden)}`;
@@ -2538,6 +2542,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (ING_sorter) ING_sorter.refreshIcons();
         } catch (e) {
             console.error(e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     }
 

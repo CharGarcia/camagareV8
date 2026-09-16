@@ -116,10 +116,16 @@
                 // Búsqueda libre dentro de los registros, en una pestaña (ver doc arriba).
                 busquedaDetalle: null, // { tab, url, label, placeholder, hint, minChars, max, columns:[{key,label,align}], onSelect(row, fm), onOpen(row, fm) }
                 fields: [],
+                // Debe devolver la promesa de la búsqueda (p. ej. una función async):
+                // el indicador de carga se apaga cuando esa promesa termina.
                 onApply: () => {},
                 debounceMs: 400,
+                // Opcional: selector CSS de lo que se atenúa mientras se busca (p. ej. el
+                // tbody del listado). Sin él, solo se muestra el spinner de la caja.
+                loadingTarget: null,
             }, opts || {});
             this.state = { filters: [], inputText: '' };
+            this.applySeq = 0;
             this.uid = 'fm' + (++seq);
         }
 
@@ -140,6 +146,7 @@
                     <div class="form-control fm-box" style="--fm-w:${parseInt(this.opts.inputWidth, 10) || 320}px" tabindex="-1">
                         <div class="fm-chips"></div>
                         <input type="text" class="fm-typer" placeholder="${escapeHtml(this.opts.placeholder)}" autocomplete="off">
+                        <span class="fm-spin d-none" role="status" title="Buscando..."><span class="spinner-border text-primary"></span><span class="visually-hidden">Buscando...</span></span>
                     </div>
                 </div>
             `;
@@ -148,6 +155,7 @@
             this.elBadge  = container.querySelector('.fm-badge');
             this.elBox    = container.querySelector('.fm-box');
             this.elInput  = container.querySelector('.fm-typer');
+            this.elSpin   = container.querySelector('.fm-spin');
             this.elChips  = container.querySelector('.fm-chips');
             this.elHidden = document.getElementById(this.opts.hiddenInputId);
 
@@ -508,6 +516,10 @@
             this.elInput.addEventListener('input', () => {
                 this.state.inputText = this.elInput.value;
                 clearTimeout(debounce);
+                // El spinner se enciende al teclear (búsqueda en espera), no recién
+                // cuando sale la petición: así no hay un hueco en que parezca que no
+                // pasa nada.
+                this.setLoading(true);
                 debounce = setTimeout(() => this.apply(), this.opts.debounceMs);
             });
             this.elInput.addEventListener('keydown', e => {
@@ -517,6 +529,7 @@
                     this.state.inputText = this.elInput.value;
                     this.apply();
                 } else if (e.key === 'Escape') {
+                    clearTimeout(debounce);
                     this.elInput.value = '';
                     this.state.inputText = '';
                     this.apply();
@@ -598,7 +611,39 @@
 
         apply() {
             if (this.elHidden) this.elHidden.value = this.serialize();
-            try { this.opts.onApply(); } catch (e) { console.error('onApply error:', e); }
+
+            // Cada búsqueda lleva un número: si el usuario lanza otra antes de que
+            // termine la anterior, solo la ÚLTIMA apaga el indicador (una respuesta
+            // vieja que llega tarde no lo apaga mientras la nueva sigue en curso).
+            const mySeq  = ++this.applySeq;
+            const inicio = Date.now();
+            this.setLoading(true);
+
+            let resultado;
+            try { resultado = this.opts.onApply(); } catch (e) { console.error('onApply error:', e); }
+
+            Promise.resolve(resultado)
+                .catch(e => console.error('onApply error:', e))
+                .finally(() => {
+                    if (mySeq !== this.applySeq) return;
+                    // Mínimo visible de 250 ms: una respuesta instantánea no debe
+                    // parpadear, pero sí dejar claro que la búsqueda se hizo.
+                    const resto = Math.max(0, 250 - (Date.now() - inicio));
+                    setTimeout(() => { if (mySeq === this.applySeq) this.setLoading(false); }, resto);
+                });
+        }
+
+        /** Enciende/apaga el spinner de la caja y la atenuación de `loadingTarget`. */
+        setLoading(on) {
+            if (this.elSpin) this.elSpin.classList.toggle('d-none', !on);
+            if (this.elBox) {
+                this.elBox.classList.toggle('fm-cargando', !!on);
+                this.elBox.setAttribute('aria-busy', on ? 'true' : 'false');
+            }
+            if (this.opts.loadingTarget) {
+                document.querySelectorAll(this.opts.loadingTarget)
+                    .forEach(el => el.classList.toggle('fm-cargando-target', !!on));
+            }
         }
 
         /** Valor serializado actual (por si un módulo lo necesita sin leer el hidden). */

@@ -57,6 +57,27 @@
 }
 .fm-search .fm-typer:focus { outline: 0; box-shadow: none; }
 
+/* Indicador de carga: spinner al final de la caja mientras se busca (desde que se
+ * teclea hasta que la tabla termina de cargar). */
+.fm-search .fm-spin {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    margin-left: 2px;
+}
+.fm-search .fm-spin.d-none { display: none !important; }
+.fm-search .fm-spin .spinner-border {
+    width: .9rem;
+    height: .9rem;
+    border-width: .15em;
+}
+/* Lo que el módulo indica en `loadingTarget` (normalmente el tbody) se atenúa. */
+.fm-cargando-target {
+    opacity: .5;
+    transition: opacity .15s ease-in-out;
+    pointer-events: none;
+}
+
 /* Botones del módulo anexados al grupo (extraId), dentro de <span class="fm-extra">.
  * No son hijos directos del input-group (y el dropdown de columnas además viene
  * envuelto en <div class="dropdown">), así que Bootstrap no los une: se pegan a mano

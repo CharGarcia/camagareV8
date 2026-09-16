@@ -151,30 +151,26 @@ class IngresoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            // Texto libre: TODAS las columnas del listado y sus relacionadas (el
-            // buscador de la vista ya no sugiere campos; lo que se escribe se busca en
-            // todo). Los documentos cobrados viven en el detalle: se agregan como una
-            // sola cadena por ingreso.
+            // Texto libre: las columnas del listado y sus relacionadas (el buscador de
+            // la vista no sugiere campos; lo que se escribe se busca en todo). Los
+            // documentos cobrados viven en el detalle: se agregan como una sola cadena
+            // por ingreso.
+            // Decisión del usuario: las columnas Tipo (tipo de ingreso, tipo de los
+            // documentos cobrados y nombre del concepto) y Estado NO entran en el
+            // texto libre; se filtran solo desde el modal de filtros.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    'i.numero_ingreso',
+                    'i.numero_ingreso',                                   // Nº Ingreso
                     'i.secuencial',
-                    "CONCAT(i.establecimiento,'-',i.punto_emision)",
-                    'i.fecha_emision::text',
-                    'i.tipo_ingreso',
-                    'eic.nombre',
-                    'i.recibo_de',
+                    "CONCAT(i.establecimiento,'-',i.punto_emision)",      // Serie
+                    'i.fecha_emision::text',                              // Fecha
+                    'i.recibo_de',                                        // Recibo de
                     'c.nombre',
                     'c.identificacion',
                     'rc.nombre',
-                    'i.observaciones',
-                    'i.monto_total::text',
-                    'i.estado',
-                    'u.nombre',
-                    // Columna "Tipo" del listado: se arma con el tipo_documento del
-                    // detalle (o el concepto, ya incluido arriba), así que escribir
-                    // "factura" o "recibo" encuentra lo que se ve en esa columna.
-                    "(SELECT STRING_AGG(DISTINCT d.tipo_documento, ' ') FROM ingresos_detalle d WHERE d.id_ingreso = i.id)",
+                    'i.observaciones',                                    // Observaciones
+                    'i.monto_total::text',                                // Monto
+                    'u.nombre',                                           // Usuario que registró
                     "(SELECT STRING_AGG(d.numero_documento, ' ') FROM ingresos_detalle d WHERE d.id_ingreso = i.id)",
                 ],
                 $parsed['texto_libre'],

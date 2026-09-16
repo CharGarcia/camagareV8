@@ -203,16 +203,16 @@ Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
 búsqueda y los botones de columnas, PDF y Excel.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
-solo, sin menús ni sugerencias. Busca en **todas las columnas** de la factura y
+solo, sin menús ni sugerencias. Busca en las columnas de la factura y
 en sus datos relacionados: número, secuencial, fecha, cliente, RUC o cédula,
 subtotal, descuento, IVA, ICE, propina, total, **saldo**, vendedor,
-observaciones, usuario, estado de correo, **estado de pago** y estado. Las
-columnas calculadas también cuentan: escribir *pagada*, *abonada* o *pendiente*
-filtra por lo que muestra el badge, aunque no sea un dato guardado. Además
+observaciones y usuario. Las columnas **Estado**, **Estado correo** y **Estado
+pago** no entran en la búsqueda libre: para filtrar por ellas use la ventana de
+filtros (botón del embudo). Además
 busca en la clave de acceso, la guía de remisión, la placa y los **códigos y
 descripciones de los productos vendidos**. Puede escribir varias palabras en
 cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el
-texto o pulse Escape en el cuadro.
+texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro; cuando desaparece, el listado ya muestra el resultado. Mientras tanto la tabla se ve atenuada.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica

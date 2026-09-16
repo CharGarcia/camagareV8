@@ -196,14 +196,14 @@ cuando el concepto no tiene una cuenta fija.
 Arriba de la tabla hay dos piezas: el botón **Filtros** y el cuadro de búsqueda.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
-solo, sin menús ni sugerencias. Busca en **todas las columnas** del ingreso y en
-sus datos relacionados: número, serie, secuencial, fecha, tipo, concepto,
-"Recibo de", cliente, RUC o cédula, observaciones, monto, estado, usuario que
-lo registró y los **números de las facturas o recibos cobrados**. La columna
-*Tipo* cuenta aunque sea calculada: escribir *factura* o *recibo* trae los
-ingresos que cobran ese tipo de documento. Puede escribir
+solo, sin menús ni sugerencias. Busca en las columnas del ingreso y en sus
+datos relacionados: número, serie, secuencial, fecha, "Recibo de", cliente, RUC
+o cédula, observaciones, monto, usuario que lo registró y los **números de las
+facturas o recibos cobrados**. Las columnas **Tipo** y **Estado** no entran en
+la búsqueda libre: para filtrar por ellas use la ventana de filtros. Puede escribir
 varias palabras en cualquier orden (`perez mayo`) y no importan mayúsculas ni
 tildes. Para limpiar, borre el texto o pulse Escape en el cuadro.
+Mientras busca, aparece un **círculo girando** al final del cuadro; cuando desaparece, el listado ya muestra el resultado. Mientras tanto la tabla se ve atenuada, también al cambiar de página o de orden.
 
 **Filtros.** Pulse **Filtros** para abrir la ventana con todos los criterios,
 repartidos en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada

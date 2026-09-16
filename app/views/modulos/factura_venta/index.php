@@ -317,6 +317,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             },
                         },
                         fields: <?= json_encode($filtrosFacturas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyFacturas',   // se atenúa mientras se busca
                         onApply: () => window.FV_fetchSearch && window.FV_fetchSearch(1),
                     }).init();
                 });

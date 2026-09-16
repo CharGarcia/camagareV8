@@ -98,19 +98,15 @@ class FacturaVentaRepository extends BaseRepository
             . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
             . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
         $saldo = "(v.importe_total - $sqlAbonos)";
-        // Estado de pago como TEXTO, para que el texto libre encuentre "pagada",
-        // "abonada" o "pendiente" igual que se lee el badge del listado.
-        $estadoPagoTexto = "CASE WHEN v.estado = 'anulado' THEN 'anulado'
-                                 WHEN $saldo <= 0.01 THEN 'pagada'
-                                 WHEN $sqlAbonos > 0 THEN 'abonada'
-                                 ELSE 'pendiente' END";
         // IVA: no es columna, se deduce de los totales (misma fórmula que la vista).
         $ivaCalc = '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))';
 
-        // Texto libre: TODAS las columnas del listado (incluidas las calculadas: IVA,
-        // Saldo y Estado de pago) y sus relacionadas. El buscador de la vista no
-        // sugiere campos; lo escrito se busca en todo. Los productos vendidos viven
-        // en el detalle: se agregan como una sola cadena por factura.
+        // Texto libre: las columnas del listado (incluidas las calculadas IVA y Saldo)
+        // y sus relacionadas. El buscador de la vista no sugiere campos; lo escrito se
+        // busca en todo. Los productos vendidos viven en el detalle: se agregan como
+        // una sola cadena por factura.
+        // Decisión del usuario: las columnas Estado, Estado correo y Estado pago NO
+        // entran en el texto libre (se filtran solo desde el modal de filtros).
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
@@ -129,9 +125,6 @@ class FacturaVentaRepository extends BaseRepository
                     'ven.nombre',                                                     // Vendedor
                     'v.observaciones',                                                // Observaciones
                     'u.nombre',                                                       // Usuario
-                    'v.estado_correo',                                                // Estado correo
-                    $estadoPagoTexto,                                                 // Estado pago
-                    'v.estado',                                                       // Estado
                     // Fuera del listado, pero identifican la factura:
                     'v.clave_acceso',
                     'v.guia_remision',
