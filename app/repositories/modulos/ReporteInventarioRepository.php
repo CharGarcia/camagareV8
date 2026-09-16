@@ -1125,51 +1125,6 @@ class ReporteInventarioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** Todos los RETORNOS (Emitida) de una consignación, línea por línea y con el producto, para el
-     *  PDF completo del detalle. Misma regla que getRetornosDeLineaConsignacion(): así el PDF suma
-     *  exactamente lo que el modal muestra en "Retornado". */
-    public function getRetornosDeConsignacion(int $idEmpresa, int $idConsignacion): array
-    {
-        $sql = "SELECT rc.id, rc.serie, rc.secuencial, rc.fecha_retorno, rc.estado, rc.motivo,
-                       rcd.id_consignacion_detalle, rcd.cantidad, rcd.total, rcd.lote, rcd.nup,
-                       p.nombre AS producto_nombre, p.codigo AS producto_codigo
-                FROM retornos_cv_detalles rcd
-                INNER JOIN retornos_cv rc ON rc.id = rcd.id_retorno
-                INNER JOIN consignaciones_ventas_detalles cvd ON cvd.id = rcd.id_consignacion_detalle
-                LEFT JOIN productos p ON p.id = rcd.id_producto
-                WHERE cvd.id_consignacion = :id_consignacion
-                  AND rcd.id_empresa = :id_empresa AND rcd.eliminado = false
-                  AND rc.eliminado = false AND rc.estado = 'Emitida'
-                ORDER BY rc.fecha_retorno ASC, rc.id ASC, rcd.id ASC";
-        $st = $this->db->prepare($sql);
-        $st->execute([':id_consignacion' => $idConsignacion, ':id_empresa' => $idEmpresa]);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /** Todas las FACTURAS de una consignación, línea por línea y con el producto, para el PDF
-     *  completo del detalle. Misma regla y mismo número (el de la factura de venta) que
-     *  getFacturasDeLineaConsignacion(). */
-    public function getFacturasDeConsignacion(int $idEmpresa, int $idConsignacion): array
-    {
-        $sql = "SELECT cf.id, cf.id_factura, cf.numero_factura,
-                       vc.id AS id_venta, vc.establecimiento, vc.punto_emision, vc.secuencial,
-                       COALESCE(vc.fecha_emision, cf.fecha_emision) AS fecha_emision,
-                       COALESCE(vc.estado, cf.estado) AS estado,
-                       cfd.id_consignacion_detalle, cfd.cantidad, cfd.total, cfd.lote, cfd.nup,
-                       p.nombre AS producto_nombre, p.codigo AS producto_codigo
-                FROM consignaciones_facturas_detalles cfd
-                INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
-                LEFT JOIN productos p ON p.id = cfd.id_producto
-                LEFT JOIN ventas_cabecera vc ON vc.id = cf.id_factura AND vc.id_empresa = cf.id_empresa
-                WHERE cfd.id_consignacion = :id_consignacion
-                  AND cfd.id_empresa = :id_empresa AND cfd.eliminado = false
-                  AND cf.eliminado = false AND cf.estado = 'facturada'
-                ORDER BY COALESCE(vc.fecha_emision, cf.fecha_emision) ASC, cf.id ASC, cfd.id ASC";
-        $st = $this->db->prepare($sql);
-        $st->execute([':id_consignacion' => $idConsignacion, ':id_empresa' => $idEmpresa]);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
-    }
-
     private function getConsignacionesAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabel): array
     {
         list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);

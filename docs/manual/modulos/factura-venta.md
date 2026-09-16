@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar
-version: 2.8
+etiquetas: factura, facturar, venta, buscar factura, buscador, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar
+version: 2.9
 orden: 20
 estado: activo
 ---
@@ -197,6 +197,54 @@ documento correcto es una **nota de crédito**, no la anulación.
 Anular una factura revierte también los movimientos asociados (inventario, cobro
 y asiento contable) según la configuración de la empresa.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en **todas las columnas** de la factura y
+en sus datos relacionados: número, secuencial, fecha, cliente, RUC o cédula,
+vendedor, usuario, observaciones, subtotal, descuento, IVA, ICE, propina,
+total, estado, estado de correo, clave de acceso, guía de remisión, placa y los
+**códigos y descripciones de los productos vendidos**. Puede escribir varias
+palabras en cualquier orden y no importan mayúsculas ni tildes. Para limpiar,
+borre el texto o pulse Escape en el cuadro.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana no se cierra con un clic fuera ni con Escape,
+solo con la X, Cancelar, Aplicar o Limpiar filtros.
+
+**Pestaña Factura** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado, estado de pago (pendiente / abonada / pagada), correo, serie, Nº de factura, secuencial, fecha de autorización, origen (directa, desde proforma, desde pedido, POS / caja, cotización de publicidad), con o sin asiento contable, ambiente, días de crédito |
+| Valores | Total, saldo pendiente, subtotal, descuento, IVA, ICE, propina (cada uno con mínimo y máximo) |
+| Tercero | Cliente, RUC / cédula, vendedor, usuario que registró, observaciones, placa, guía de remisión, clave de acceso |
+
+El *estado de pago* y el *saldo pendiente* se calculan con la misma regla que
+la columna Saldo: cobros de Ingresos, notas de crédito y retenciones.
+
+**Pestaña Detalles** (lo que hay dentro de la factura). Es un único cuadro,
+**Buscar libremente dentro de las facturas**: escriba un producto, un código,
+un lote, un NUP, una forma de pago, un plazo o un dato de la información
+adicional, y aparece la lista de **cada línea que coincide** con la factura a
+la que pertenece (número, fecha, cliente y estado). Un clic en la fila deja el
+listado mostrando solo esa factura; el ícono de la derecha la abre
+directamente. Por ejemplo, *aceite* lista todas las facturas donde se vendió
+ese producto, y *transferencia* las que se pagaron así.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**, delante del texto que escribe. La **×** de la etiqueta quita solo
+ese filtro, y con el cuadro vacío la tecla **Retroceso** quita el último. Pulsar
+la etiqueta vuelve a abrir la ventana para ajustarla. El embudo muestra cuántos
+hay activos, y el botón **Limpiar filtros** de la ventana los borra todos.
+
+La búsqueda libre y los filtros se combinan entre sí, y los botones **PDF** y
+**Excel** del listado exportan exactamente lo que se ve.
+
 ## Ordenar el listado
 
 Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
@@ -279,6 +327,18 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.9** — Nuevo buscador del listado: el cuadro de búsqueda ya no despliega
+  sugerencias; lo que se escribe se busca **en todas las columnas** (incluidos
+  los productos vendidos, el vendedor, el usuario, la clave de acceso, la guía
+  y la placa). Los filtros pasan a una **ventana propia** (botón del embudo, se
+  aplican con *Aplicar*) con dos pestañas: **Factura** (filtros por campo, con
+  criterios nuevos: fecha de autorización, origen, con/sin asiento, ambiente,
+  días de crédito, saldo pendiente, vendedor y usuario como lista, placa, guía
+  de remisión y clave de acceso) y **Detalles**, un cuadro de **búsqueda libre
+  dentro de las facturas** (productos, formas de pago e información adicional)
+  que lista cada coincidencia y dice a qué factura pertenece. Los filtros
+  activos se ven como etiquetas dentro del cuadro. Nueva sección *Buscar y
+  filtrar el listado*.
 - **2.8** — Al **enviar al SRI**, el modal ya **no se cierra** cuando la factura
   se autoriza: se queda abierto y el documento pasa a **solo lectura** (antes
   había que volver a abrirlo para verlo). El botón del pie cambia a *Actualizar*

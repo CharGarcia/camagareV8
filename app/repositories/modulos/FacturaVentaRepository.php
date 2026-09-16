@@ -86,10 +86,32 @@ class FacturaVentaRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
-        // Texto libre: busca en número, nombre cliente, RUC, observaciones
+        // Texto libre: TODAS las columnas del listado y sus relacionadas (el buscador
+        // de la vista no sugiere campos; lo escrito se busca en todo). Los productos
+        // vendidos viven en el detalle: se agregan como una sola cadena por factura.
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ["CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)", 'c.nombre', 'c.identificacion', 'v.observaciones'],
+                [
+                    "CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)",
+                    'v.secuencial',
+                    'v.fecha_emision::text',
+                    'c.nombre',
+                    'c.identificacion',
+                    'ven.nombre',
+                    'u.nombre',
+                    'v.observaciones',
+                    'v.total_sin_impuestos::text',
+                    'v.total_descuento::text',
+                    'v.total_ice::text',
+                    'v.propina::text',
+                    'v.importe_total::text',
+                    'v.estado',
+                    'v.estado_correo',
+                    'v.clave_acceso',
+                    'v.guia_remision',
+                    'v.placa',
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', vd.codigo_principal, vd.codigo_auxiliar, vd.descripcion), ' ') FROM ventas_detalle vd WHERE vd.id_venta = v.id)",
+                ],
                 $textoLibre,
                 $params,
                 'tl'
@@ -99,24 +121,26 @@ class FacturaVentaRepository extends BaseRepository
             }
         }
 
+        // Abonos (cobros + notas de crédito + retenciones) y saldo, con la regla
+        // compartida de AbonosVentaSql (enlace por dígitos; retención repartida por
+        // línea si sustenta varias facturas). Los usan el filtro "estado de pago" y
+        // el filtro numérico "saldo".
+        $sqlAbonos =
+            "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
+            . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
+            . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
+            . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
+            . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
+            . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
+        $saldo = "(v.importe_total - $sqlAbonos)";
+
         // ── Filtro especial: estado de pago (campo CALCULADO, no es columna) ──────
         // Sintaxis: pago:pendiente | pago:abonada | pago:pagada (acepta sinónimos
         // y lista, p. ej. pago:pendiente,abonada). Se resuelve con las mismas
-        // sumatorias (cobros + notas de crédito + retenciones) que la columna.
+        // sumatorias que la columna.
         $pagoFiltro = $filtros['estado_pago'] ?? $filtros['pago'] ?? null;
         unset($filtros['estado_pago'], $filtros['pago']);
         if ($pagoFiltro !== null) {
-            // NC y retenciones con la regla compartida de AbonosVentaSql (enlace por
-            // dígitos; retención repartida por línea si sustenta varias facturas).
-            $sqlAbonos =
-                "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
-                . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
-                . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
-                . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
-                . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
-                . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
-            $saldo = "(v.importe_total - $sqlAbonos)";
-
             $valores = is_array($pagoFiltro['valor']) ? $pagoFiltro['valor'] : [$pagoFiltro['valor']];
             $conds = [];
             foreach ($valores as $val) {
@@ -152,6 +176,9 @@ class FacturaVentaRepository extends BaseRepository
                 'autorizacion'   => 'v.numero_autorizacion',
                 'clave'          => 'v.clave_acceso',
                 'clave_acceso'   => 'v.clave_acceso',
+                'placa'          => 'v.placa',
+                'guia'           => 'v.guia_remision',
+                'guia_remision'  => 'v.guia_remision',
             ],
             'exacto' => [
                 'estado'         => 'v.estado',
@@ -164,10 +191,26 @@ class FacturaVentaRepository extends BaseRepository
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del modal de factura.
                 'serie'          => "CONCAT(v.establecimiento,'-',v.punto_emision)",
+                'id_vendedor'    => 'v.id_vendedor',
+                'id_usuario'     => 'v.id_usuario',
+                // ambiente:1 (pruebas) / ambiente:2 (producción). El listado ya se
+                // acota al ambiente actual de la empresa; el filtro sirve para la
+                // exportación y para quien lo escriba en el enlace.
+                'ambiente'       => 'v.tipo_ambiente',
+                // asiento:si / asiento:no
+                'asiento'        => "CASE WHEN v.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
+                // origen:proforma / pos / publicidad / pedido / directa
+                'origen'         => "CASE WHEN v.id_proforma IS NOT NULL THEN 'proforma'
+                                          WHEN v.id_caja_sesion IS NOT NULL THEN 'pos'
+                                          WHEN v.id_cotizacion_publicidad IS NOT NULL THEN 'publicidad'
+                                          WHEN EXISTS (SELECT 1 FROM ventas_detalle vdo WHERE vdo.id_venta = v.id AND vdo.id_pedido_detalle IS NOT NULL) THEN 'pedido'
+                                          ELSE 'directa' END",
             ],
             'fecha' => [
-                'fecha'         => 'v.fecha_emision',
-                'fecha_emision' => 'v.fecha_emision',
+                'fecha'              => 'v.fecha_emision',
+                'fecha_emision'      => 'v.fecha_emision',
+                'fecha_autorizacion' => 'v.fecha_autorizacion',
+                'autorizada'         => 'v.fecha_autorizacion',
             ],
             'numerico' => [
                 'monto'     => 'v.importe_total',
@@ -177,6 +220,8 @@ class FacturaVentaRepository extends BaseRepository
                 'ice'       => 'COALESCE(v.total_ice,0)',
                 'propina'   => 'COALESCE(v.propina,0)',
                 'iva'       => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
+                'saldo'     => $saldo,
+                'dias_credito' => 'COALESCE(v.dias_credito,0)',
                 // Comparación numérica: "298" encuentra "000000298" sin que el
                 // usuario tenga que escribir los ceros a la izquierda, y sigue
                 // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
@@ -253,6 +298,118 @@ class FacturaVentaRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return $st->fetchAll();
+    }
+
+    /** Vendedores con alguna factura en la empresa (select "Vendedor" del modal de filtros). */
+    public function getVendedoresConVentas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT ven.id, ven.nombre
+                FROM ventas_cabecera v
+                JOIN vendedores ven ON ven.id = v.id_vendedor
+                WHERE v.id_empresa = :id_empresa AND v.eliminado = false
+                ORDER BY ven.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que han registrado alguna factura en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConVentas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM ventas_cabecera v
+                JOIN usuarios u ON u.id = v.id_usuario
+                WHERE v.id_empresa = :id_empresa AND v.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las facturas (pestaña "Detalles" del modal de filtros):
+     * devuelve cada producto vendido, forma de pago o campo de información adicional
+     * que coincide con el texto, junto con la factura a la que pertenece. Mismo
+     * alcance que el listado (empresa, no eliminadas, ambiente, registros propios).
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "v.id_empresa = :id_empresa AND v.eliminado = false
+                      AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND v.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.codigo_principal', 'd.codigo_auxiliar', 'd.descripcion', 'd.cantidad::text', 'd.precio_unitario::text',
+             'd.precio_total_sin_impuesto::text', 'd.numero_lote', 'd.nup', 'd.info_adicional'],
+            $q, $params, 'dt'
+        );
+        $condPago = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['fp.nombre', 'p.forma_pago', 'p.total::text', 'p.plazo::text', 'p.unidad_tiempo'],
+            $q, $params, 'pg'
+        );
+        $condAdic = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['a.nombre', 'a.valor'],
+            $q, $params, 'ad'
+        );
+        if ($condDet === '' || $condPago === '' || $condAdic === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT v.id, CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero,
+                           v.fecha_emision, v.estado, c.nombre AS cliente
+                    FROM ventas_cabecera v
+                    INNER JOIN clientes c ON c.id = v.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen,
+                           COALESCE(NULLIF(d.codigo_principal,''), d.codigo_auxiliar) AS tipo,
+                           d.descripcion,
+                           d.cantidad,
+                           d.precio_total_sin_impuesto AS monto,
+                           NULLIF(CONCAT_WS(' ', NULLIF(d.numero_lote,''), NULLIF(d.nup,'')), '') AS extra,
+                           b.id AS id_venta, b.numero, b.fecha_emision, b.estado, b.cliente
+                    FROM ventas_detalle d
+                    JOIN base b ON b.id = d.id_venta
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'PAGO' AS origen,
+                           COALESCE(fp.nombre, p.forma_pago) AS tipo,
+                           NULLIF(CONCAT_WS(' ', p.plazo::text, p.unidad_tiempo), '') AS descripcion,
+                           NULL AS cantidad,
+                           p.total AS monto,
+                           p.forma_pago AS extra,
+                           b.id AS id_venta, b.numero, b.fecha_emision, b.estado, b.cliente
+                    FROM ventas_pagos p
+                    JOIN base b ON b.id = p.id_venta
+                    LEFT JOIN formas_pago_sri fp ON fp.codigo = p.forma_pago
+                    WHERE $condPago
+                    UNION ALL
+                    SELECT 'ADICIONAL' AS origen,
+                           a.nombre AS tipo,
+                           a.valor AS descripcion,
+                           NULL AS cantidad,
+                           NULL AS monto,
+                           NULL AS extra,
+                           b.id AS id_venta, b.numero, b.fecha_emision, b.estado, b.cliente
+                    FROM ventas_adicional a
+                    JOIN base b ON b.id = a.id_venta
+                    WHERE $condAdic
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id_venta DESC, x.origen
+                LIMIT $limit";
+
+        return $this->query($sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     /**

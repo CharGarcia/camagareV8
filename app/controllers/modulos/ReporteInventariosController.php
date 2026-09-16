@@ -1047,12 +1047,12 @@ class ReporteInventariosController extends BaseModuloController
     /**
      * PDF del ESTADO completo de una consignación (botón del modal de detalle): el mismo
      * diseño del comprobante de Consignaciones de Ventas, pero con las cantidades
-     * retornadas/facturadas/a cambio, el saldo por línea, los documentos que las explican
-     * (retornos y facturas de venta) y el resumen del saldo en poder del cliente.
+     * retornadas/facturadas/a cambio, el saldo por línea y el resumen del saldo en poder
+     * del cliente.
      * Siempre es el documento COMPLETO (no reaplica los filtros de línea del listado):
      * es un estado del documento, no de la búsqueda. Usa el modelo general aunque la
-     * empresa tenga una plantilla de diseño activa: la plantilla no conoce los bloques
-     * de documentos relacionados ni el resumen del saldo.
+     * empresa tenga una plantilla de diseño activa: la plantilla no conoce la columna de
+     * saldo ni el resumen final.
      */
     public function consignacionPdf(): void
     {
@@ -1102,11 +1102,7 @@ class ReporteInventariosController extends BaseModuloController
                 $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
             }
 
-            (new \App\Services\modulos\ConsignacionVentaPdfService())->generar($cons, $detalles, $empresa, 'D', [
-                'completo' => true,
-                'retornos' => $this->repository->getRetornosDeConsignacion($idEmpresa, $idConsignacion),
-                'facturas' => $this->repository->getFacturasDeConsignacion($idEmpresa, $idConsignacion),
-            ]);
+            (new \App\Services\modulos\ConsignacionVentaPdfService())->generar($cons, $detalles, $empresa, 'D', ['completo' => true]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);

@@ -123,9 +123,7 @@ fila de **totales** al pie.
 La barra superior del detalle tiene un botón **PDF** que descarga el **estado
 completo de la consignación**: el mismo diseño del comprobante de Consignaciones
 de Ventas, pero con las columnas *Retorno*, *Facturados*, *Cambio* y **Saldo**
-llenas por cada línea, una fila de totales, debajo la lista de **devoluciones
-(retornos)** y de **facturas de venta** que explican esas cantidades (fecha,
-número, producto, lote, NUP, cantidad y total) y, al cierre, el resumen:
+llenas por cada línea, una fila de totales y, al cierre, el resumen:
 consignado, devuelto, facturado, entregado a cambio y **saldo en poder del
 cliente**. Ese PDF es siempre el documento **entero**, aunque el detalle esté
 filtrado por lote, producto o bodega, y usa el modelo general del sistema aunque
@@ -248,8 +246,8 @@ cuando haga falta.
 - **1.13** — Pestaña **Consignaciones**: el detalle de una consignación trae un
   botón **PDF** que descarga el estado completo del documento (mismo diseño del
   comprobante de Consignaciones de Ventas) con lo retornado, lo facturado, lo
-  entregado a cambio y el saldo por línea, la lista de retornos y facturas de
-  venta relacionados y el resumen del saldo en poder del cliente.
+  entregado a cambio y el saldo por línea, y el resumen del saldo en poder del
+  cliente.
 - **1.12** — Pestaña **Consignaciones**: el saldo descuenta también lo entregado
   **a cambio** (Cambios de productos); nueva columna *A cambio* en el detalle,
   los totales y el Excel. El consignado que resta la pestaña Existencias aplica
