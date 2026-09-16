@@ -54,25 +54,60 @@ class ReciboVentaRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
+        // Abonos (cobros de tipo RECIBO no anulados) y saldo: la misma regla que la
+        // columna "Estado de pago" del listado (ReciboVentaController::renderFilaHtml).
+        // Los usan el filtro "estado de pago" y el numérico "saldo".
+        $sqlAbonos =
+            "(SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
+            . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
+            . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'RECIBO' "
+            . "AND inc.estado != 'anulado' AND inc.eliminado = false)";
+        $saldo = "(v.importe_total - $sqlAbonos)";
+        // IVA: no es columna, se deduce de los totales (misma fórmula que la vista).
+        $ivaCalc = '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))';
+        // Nº de la factura generada desde el recibo (documento relacionado).
+        $numFacturaOrigen = "(SELECT CONCAT(fo.establecimiento,'-',fo.punto_emision,'-',fo.secuencial) FROM ventas_cabecera fo WHERE fo.id = v.id_factura_origen)";
+
+        // Texto libre: las columnas del listado (incluida la calculada IVA) y campos
+        // que identifican el recibo aunque no sean columnas. El buscador de la vista no
+        // sugiere campos; lo escrito se busca en todo (todas las palabras, sin tildes).
+        // Decisión del usuario: Estado, Estado de pago e Impuestos (con/sin, es una
+        // clasificación) NO entran en el texto libre: se filtran solo desde el modal.
         if ($textoLibre !== '') {
-            $where .= " AND (CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) ILIKE :buscar
-                          OR c.nombre ILIKE :buscar
-                          OR c.identificacion ILIKE :buscar
-                          OR v.observaciones ILIKE :buscar)";
-            $params[':buscar'] = "%$textoLibre%";
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    "CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)", // Número
+                    'v.secuencial',
+                    'v.fecha_emision::text',                                          // Fecha
+                    'c.nombre',                                                       // Cliente
+                    'c.identificacion',                                               // Identificación
+                    'v.total_sin_impuestos::text',                                    // Subtotal
+                    'v.total_descuento::text',                                        // Descuento
+                    "$ivaCalc::text",                                                 // IVA
+                    'v.total_ice::text',                                              // ICE
+                    'v.propina::text',                                                // Propina
+                    'v.importe_total::text',                                          // Total
+                    'ven.nombre',                                                     // Vendedor
+                    'v.observaciones',                                                // Observaciones
+                    'u.nombre',                                                       // Usuario
+                    // Fuera del listado, pero identifican el recibo:
+                    'v.recibo_numero',
+                    $numFacturaOrigen,                                                // factura generada
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', rd.codigo_principal, rd.codigo_auxiliar, rd.descripcion), ' ') FROM recibos_venta_detalle rd WHERE rd.id_recibo = v.id)",
+                ],
+                $textoLibre,
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         // Filtro especial: estado de pago (campo calculado con cobros de tipo RECIBO)
         $pagoFiltro = $filtros['estado_pago'] ?? $filtros['pago'] ?? null;
         unset($filtros['estado_pago'], $filtros['pago']);
         if ($pagoFiltro !== null) {
-            $sqlAbonos =
-                "(SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
-                . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
-                . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'RECIBO' "
-                . "AND inc.estado != 'anulado' AND inc.eliminado = false)";
-            $saldo = "(v.importe_total - $sqlAbonos)";
-
             $valores = is_array($pagoFiltro['valor']) ? $pagoFiltro['valor'] : [$pagoFiltro['valor']];
             $conds = [];
             foreach ($valores as $val) {
@@ -104,6 +139,8 @@ class ReciboVentaRepository extends BaseRepository
                 'usuario'        => 'u.nombre',
                 'obs'            => 'v.observaciones',
                 'observacion'    => 'v.observaciones',
+                // Nº de la factura de venta generada desde el recibo.
+                'factura'        => $numFacturaOrigen,
             ],
             'exacto' => [
                 'estado'          => 'v.estado',
@@ -115,6 +152,14 @@ class ReciboVentaRepository extends BaseRepository
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del modal de recibo.
                 'serie'           => "CONCAT(v.establecimiento,'-',v.punto_emision)",
+                'id_vendedor'     => 'v.id_vendedor',
+                'id_usuario'      => 'v.id_usuario',
+                // asiento:si / asiento:no
+                'asiento'         => "CASE WHEN v.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
+                // origen:pos (cobrado en caja) / factura (generado desde una factura) / directa
+                'origen'          => "CASE WHEN v.id_caja_sesion IS NOT NULL THEN 'pos'
+                                           WHEN v.id_factura_origen IS NOT NULL THEN 'factura'
+                                           ELSE 'directa' END",
             ],
             'fecha' => [
                 'fecha'         => 'v.fecha_emision',
@@ -128,6 +173,8 @@ class ReciboVentaRepository extends BaseRepository
                 'ice'       => 'COALESCE(v.total_ice,0)',
                 'propina'   => 'COALESCE(v.propina,0)',
                 'iva'       => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
+                'saldo'     => $saldo,
+                'dias_credito' => 'COALESCE(v.dias_credito,0)',
                 // Comparación numérica: "298" encuentra "000000298" sin que el
                 // usuario tenga que escribir los ceros a la izquierda, y sigue
                 // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
@@ -179,6 +226,122 @@ class ReciboVentaRepository extends BaseRepository
         $rows = $this->query($sql, $params)->fetchAll();
 
         return ['rows' => $rows, 'total' => (int) $total];
+    }
+
+    /** Vendedores con algún recibo en la empresa (select "Vendedor" del modal de filtros). */
+    public function getVendedoresConRecibos(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT ven.id, ven.nombre
+                FROM recibos_venta_cabecera v
+                JOIN vendedores ven ON ven.id = v.id_vendedor
+                WHERE v.id_empresa = :id_empresa AND v.eliminado = false
+                ORDER BY ven.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que han registrado algún recibo en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConRecibos(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM recibos_venta_cabecera v
+                JOIN usuarios u ON u.id = v.id_usuario
+                WHERE v.id_empresa = :id_empresa AND v.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de los recibos (pestaña "Detalles" del modal de filtros):
+     * devuelve cada producto, forma de pago o campo de información adicional que
+     * coincide con el texto, junto con el recibo al que pertenece. Mismo alcance que
+     * el listado (empresa, no eliminados, ambiente, registros propios por id_usuario).
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "v.id_empresa = :id_empresa AND v.eliminado = false
+                      AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND v.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.codigo_principal', 'd.codigo_auxiliar', 'd.descripcion', 'd.cantidad::text', 'd.precio_unitario::text',
+             'd.precio_total_sin_impuesto::text', 'd.numero_lote', 'd.nup', 'd.info_adicional'],
+            $q, $params, 'dt'
+        );
+        $condPago = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['fp.nombre', 'p.forma_pago', 'p.total::text', 'p.plazo::text', 'p.unidad_tiempo'],
+            $q, $params, 'pg'
+        );
+        $condAdic = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['a.nombre', 'a.valor'],
+            $q, $params, 'ad'
+        );
+        if ($condDet === '' || $condPago === '' || $condAdic === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT v.id, CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero,
+                           v.establecimiento, v.punto_emision, v.secuencial,
+                           v.fecha_emision, v.estado, c.nombre AS cliente, c.identificacion AS cliente_ruc
+                    FROM recibos_venta_cabecera v
+                    INNER JOIN clientes c ON c.id = v.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen,
+                           COALESCE(NULLIF(d.codigo_principal,''), d.codigo_auxiliar) AS tipo,
+                           d.descripcion,
+                           d.cantidad,
+                           d.precio_total_sin_impuesto AS monto,
+                           NULLIF(CONCAT_WS(' ', NULLIF(d.numero_lote,''), NULLIF(d.nup,'')), '') AS extra,
+                           b.id AS id_recibo, b.numero, b.establecimiento, b.punto_emision, b.secuencial,
+                           b.fecha_emision, b.estado, b.cliente, b.cliente_ruc
+                    FROM recibos_venta_detalle d
+                    JOIN base b ON b.id = d.id_recibo
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'PAGO' AS origen,
+                           COALESCE(fp.nombre, p.forma_pago) AS tipo,
+                           NULLIF(CONCAT_WS(' ', p.plazo::text, p.unidad_tiempo), '') AS descripcion,
+                           NULL AS cantidad,
+                           p.total AS monto,
+                           p.forma_pago AS extra,
+                           b.id AS id_recibo, b.numero, b.establecimiento, b.punto_emision, b.secuencial,
+                           b.fecha_emision, b.estado, b.cliente, b.cliente_ruc
+                    FROM recibos_venta_pagos p
+                    JOIN base b ON b.id = p.id_recibo
+                    LEFT JOIN formas_pago_sri fp ON fp.codigo = p.forma_pago
+                    WHERE $condPago
+                    UNION ALL
+                    SELECT 'ADICIONAL' AS origen,
+                           a.nombre AS tipo,
+                           a.valor AS descripcion,
+                           NULL AS cantidad,
+                           NULL AS monto,
+                           NULL AS extra,
+                           b.id AS id_recibo, b.numero, b.establecimiento, b.punto_emision, b.secuencial,
+                           b.fecha_emision, b.estado, b.cliente, b.cliente_ruc
+                    FROM recibos_venta_adicional a
+                    JOIN base b ON b.id = a.id_recibo
+                    WHERE $condAdic
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id_recibo DESC, x.origen
+                LIMIT $limit";
+
+        return $this->query($sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     public function getPorId(int $id): ?array

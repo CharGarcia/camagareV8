@@ -5,8 +5,8 @@ categoria: Asistencia
 ruta_modulo: modulos/jornadas
 tipo: modulo
 visibilidad: todos
-etiquetas: jornadas, horas trabajadas, atrasos, faltas, horas extra, suplementarias, asistencia diaria, resumen del dia, recalcular, jornada incompleta, requieren revision, sin salida, generar novedades, rol de pagos, exportar, pdf, excel
-version: 2.0
+etiquetas: jornadas, horas trabajadas, atrasos, faltas, horas extra, suplementarias, asistencia diaria, resumen del dia, recalcular, jornada incompleta, requieren revision, sin salida, generar novedades, rol de pagos, exportar, pdf, excel, buscar jornadas, buscador, filtros, filtrar jornadas, jornadas por punto, jornadas sin salida, chips
+version: 2.1
 orden: 40
 estado: activo
 ---
@@ -123,21 +123,45 @@ columnas, y el ancho de cada una se guarda para la próxima visita.
 Al pasar el ratón sobre el estado de una jornada incompleta se ve el motivo
 exacto en un aviso emergente.
 
-> El buscador ofrece además el estado *Permiso*, reservado para ausencias
+> La ventana de filtros ofrece además el estado *Permiso*, reservado para ausencias
 > justificadas. El cálculo automático no lo asigna: hoy solo produce los tres
 > estados de la tabla.
 
-## Búsqueda
+## Buscar y filtrar el listado
 
-El buscador combina texto libre (nombre o cédula del empleado) con filtros:
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
 
-- `empleado:` nombre del empleado.
-- `estado:` `completa`, `incompleta`, `falta` o `permiso`.
-- `fecha:` una fecha o un rango, por ejemplo `fecha:2026-09-01..2026-09-30`.
-- `atraso:` minutos de atraso, con rangos y comparadores (`atraso:>0`).
-- `extra:` minutos extra, igual que el anterior.
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la jornada: empleado
+(nombre o identificación), fecha (tal como se ve, por ejemplo *25-07-2026*),
+entrada, salida, horas, atraso y extra (por ejemplo *15 min*). Además busca en
+la observación de la jornada (el motivo por el que quedó incompleta), el punto
+de servicio y el horario aplicado. La columna **Estado** no entra en la
+búsqueda libre: para filtrar por ella use la ventana de filtros o el botón
+**Requieren revisión**. Puede escribir varias palabras en cualquier orden y no
+importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en
+el cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y
+la tabla se ve atenuada.
 
-Hay tres accesos rápidos: **Requieren revisión**, **Faltas** y **Con atraso**.
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
+Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento. La
+ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
+
+| Bloque | Filtros |
+|--------|---------|
+| Jornada | Fecha (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (completa, incompleta, falta, permiso), con o sin novedad generada, punto de servicio y horario |
+| Marcaciones | Hora de entrada, hora de salida y si tiene la salida registrada |
+| Valores | Horas trabajadas, minutos de atraso y minutos extra (cada uno con mínimo y máximo; *Atraso* desde 1 equivale al antiguo acceso *Con atraso*) |
+| Empleado | Empleado, identificación, observación y usuario que calculó la jornada |
+
+Los selectores *Punto de servicio*, *Horario* y *Usuario que calculó* listan
+solo lo que la empresa ya usó en sus jornadas.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último. El botón **Requieren revisión** pone el filtro
+*Estado: Incompleta* como etiqueta; pulsarlo otra vez lo quita.
 
 ## Exportar a PDF y Excel
 
@@ -236,6 +260,13 @@ ese período ya está pagado, esas novedades se omiten y el resumen final lo dic
 
 ## Historial de cambios
 
+- **2.1** — Nuevo buscador del listado: búsqueda libre en todas las columnas
+  (sin Estado), observación, punto y horario; botón embudo con la ventana de
+  filtros (se suman novedad generada, punto de servicio, horario, horas de
+  entrada y salida, salida registrada, horas trabajadas, identificación,
+  observación y usuario). Los accesos rápidos *Faltas* y *Con atraso* pasan a
+  ser opciones de la ventana; *Requieren revisión* se mantiene como botón de la
+  cabecera y se ve como chip.
 - **2.0** — Artículo reescrito: describía la asignación de horarios (que hoy
   vive en la ficha del empleado) en vez del consolidado diario que es realmente
   este módulo. Se documentan el cálculo de horas, atrasos y faltas, el cierre

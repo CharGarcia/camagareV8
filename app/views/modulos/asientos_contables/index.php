@@ -55,57 +55,102 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorASIENTOS" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) +
+            // botón embudo que abre el modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de AsientoContableRepository::getListado().
+            $opcionesFiltro = $opcionesFiltro ?? [];
+            // Etiquetas legibles de los valores guardados; lo desconocido se muestra tal cual.
+            $etiquetasTipo = [
+                'apertura' => 'Apertura', 'cierre' => 'Cierre', 'compras' => 'Compras',
+                'compras_servicios' => 'Compras de servicios', 'consignacion' => 'Consignación',
+                'diario' => 'Diario', 'egresos' => 'Egresos', 'ingresos' => 'Ingresos', 'nomina' => 'Nómina',
+                'retenciones_compras' => 'Retenciones compras', 'retenciones_ventas' => 'Retenciones ventas',
+                'retorno_consignacion' => 'Retorno consignación', 'ventas' => 'Ventas',
+            ];
+            $etiquetaLegible = fn(string $v, array $mapa) => $mapa[$v] ?? ucfirst(str_replace('_', ' ', mb_strtolower($v)));
+            $opcionesTipo    = array_map(fn($t) => ['v' => (string) $t, 'l' => $etiquetaLegible((string) $t, $etiquetasTipo)], $opcionesFiltro['tipos'] ?? []);
+            $opcionesModulo  = array_map(fn($m) => ['v' => (string) $m, 'l' => $etiquetaLegible((string) $m, [])], $opcionesFiltro['modulos'] ?? []);
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $opcionesFiltro['usuarios'] ?? []);
+            // Dos pestañas: "Asiento" (filtros por campo) y "Detalles" (solo la búsqueda
+            // libre dentro de las líneas, ver `busquedaDetalle`).
+            $tA = 'Asiento';
+            // Filas de 12 columnas:
+            //   Documento: [Fecha 6][Estado 3][Tipo 3]
+            //              [N° comprobante 4][Origen 4][Usuario que registró 4]
+            //              [Total 4][Cuadrado 4][Editado a mano 4]
+            //              [Fecha de registro 4][Concepto 4][Observaciones 4]
+            //   Líneas:    [Cuenta contable 6][Referencia / documento 6]  (el asiento entra si ALGUNA línea coincide)
+            $filtrosAsientos = [
+                ['tab' => $tA, 'key' => 'fecha',         'label' => 'Fecha del asiento',     'icon' => 'bi-calendar-event',     'type' => 'date_range',   'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tA, 'key' => 'estado',        'label' => 'Estado',                'icon' => 'bi-flag',               'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'contabilizado', 'l' => 'Contabilizado'],
+                    ['v' => 'borrador',      'l' => 'Borrador'],
+                    ['v' => 'anulado',       'l' => 'Anulado'],
+                ]],
+                ['tab' => $tA, 'key' => 'tipo',          'label' => 'Tipo',                  'icon' => 'bi-journal',            'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesTipo],
+                ['tab' => $tA, 'key' => 'numero',        'label' => 'N° comprobante',        'icon' => 'bi-hash',               'type' => 'text',         'grupo' => 'Documento', 'col' => 4, 'placeholder' => 'VE-000059'],
+                ['tab' => $tA, 'key' => 'modulo',        'label' => 'Origen',                'icon' => 'bi-box-arrow-in-right', 'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesModulo],
+                ['tab' => $tA, 'key' => 'usuario',       'label' => 'Usuario que registró',  'icon' => 'bi-person-badge',       'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesUsuario],
+                ['tab' => $tA, 'key' => 'total',         'label' => 'Total',                 'icon' => 'bi-currency-dollar',    'type' => 'number_range', 'grupo' => 'Documento', 'col' => 4],
+                ['tab' => $tA, 'key' => 'cuadrado',      'label' => 'Debe = Haber',          'icon' => 'bi-check2-square',      'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Cuadrado'],
+                    ['v' => 'no', 'l' => 'Descuadrado'],
+                ]],
+                ['tab' => $tA, 'key' => 'editado',       'label' => 'Editado a mano',        'icon' => 'bi-pencil-square',      'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Sí'],
+                    ['v' => 'no', 'l' => 'No'],
+                ]],
+                ['tab' => $tA, 'key' => 'registro',      'label' => 'Fecha de registro',     'icon' => 'bi-clock-history',      'type' => 'date_range',   'grupo' => 'Documento', 'col' => 4],
+                ['tab' => $tA, 'key' => 'concepto',      'label' => 'Concepto',              'icon' => 'bi-chat-left-text',     'type' => 'text',         'grupo' => 'Documento', 'col' => 4],
+                ['tab' => $tA, 'key' => 'observaciones', 'label' => 'Observaciones',         'icon' => 'bi-card-text',          'type' => 'text',         'grupo' => 'Documento', 'col' => 4],
+                ['tab' => $tA, 'key' => 'cuenta',        'label' => 'Cuenta contable',       'icon' => 'bi-diagram-3',          'type' => 'text',         'grupo' => 'Líneas',    'col' => 6, 'placeholder' => 'Código o nombre'],
+                ['tab' => $tA, 'key' => 'referencia',    'label' => 'Referencia / documento','icon' => 'bi-link-45deg',         'type' => 'text',         'grupo' => 'Líneas',    'col' => 6],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorASIENTOS"></div>
             <input type="hidden" id="buscarAsiento" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorASIENTOS',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorASIENTOS',
                         hiddenInputId: 'buscarAsiento',
-                        placeholder: 'Buscar asiento...',
-                        fields: [
-                            { key: 'concepto', label: 'Concepto',        icon: 'bi-chat-left-text', type: 'text' },
-                            { key: 'numero',   label: 'N° Comprobante',  icon: 'bi-hash',           type: 'text' },
-                            { key: 'tipo',     label: 'Tipo',            icon: 'bi-journal',        type: 'select',
-                              options: [
-                                { v: 'apertura',             l: 'Apertura' },
-                                { v: 'cierre',               l: 'Cierre' },
-                                { v: 'compras',              l: 'Compras' },
-                                { v: 'consignacion',         l: 'Consignación' },
-                                { v: 'diario',               l: 'Diario' },
-                                { v: 'egresos',              l: 'Egresos' },
-                                { v: 'ingresos',             l: 'Ingresos' },
-                                { v: 'nomina',               l: 'Nómina' },
-                                { v: 'retenciones_compras',  l: 'Retenciones Compras' },
-                                { v: 'retenciones_ventas',   l: 'Retenciones Ventas' },
-                                { v: 'retorno_consignacion', l: 'Retorno Consignación' },
-                                { v: 'ventas',               l: 'Ventas' },
-                              ]
-                            },
-                            { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select',
-                              options: [
-                                { v: 'contabilizado', l: 'Contabilizado' },
-                                { v: 'anulado',       l: 'Anulado' },
-                              ]
-                            },
-                            { key: 'fecha',  label: 'Fecha',  icon: 'bi-calendar-range', type: 'date_range' },
-                            { key: 'origen', label: 'Origen', icon: 'bi-box-arrow-in-right', type: 'text' },
-                            { key: 'total',  label: 'Total',  icon: 'bi-currency-dollar', type: 'number_range' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_contabilizado', label: 'Contabilizados', mk: () => ({ key: 'estado', op: '=', value: 'contabilizado', display: 'Contabilizado' }) },
-                            { id: 'qf_anulado',       label: 'Anulados',       mk: () => ({ key: 'estado', op: '=', value: 'anulado',       display: 'Anulado' }) },
-                            { id: 'qf_este_mes',      label: 'Este mes',       mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de asientos contables',
+                        inputWidth: 420,
+                        extraId: 'fmExtraASIENTOS',   // columnas, pegadas al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las líneas de los asientos.
+                        // Cada coincidencia dice a qué asiento pertenece.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= $urlBaseModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de los asientos',
+                            placeholder: 'Cuenta (código o nombre), referencia, documento, tercero, centro de costo, valor...',
+                            columns: [
+                                { key: 'cuenta',     label: 'Cuenta' },
+                                { key: 'referencia', label: 'Referencia' },
+                                { key: 'tercero',    label: 'Tercero' },
+                                { key: 'debe',       label: 'Debe',  align: 'end' },
+                                { key: 'haber',      label: 'Haber', align: 'end' },
+                                { key: 'numero',     label: 'Asiento', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',      label: 'Fecha' },
+                                { key: 'estado',     label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => { fm.hide(); setTimeout(() => ASIENTO_abrirModal(row.id_asiento), 350); },
+                        },
+                        fields: <?= json_encode($filtrosAsientos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyAsientos',   // se atenúa mientras se busca
                         onApply: () => window.fetchSearch && window.fetchSearch(1),
                     }).init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraASIENTOS" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero_comprobante' => 'Comprobante',
@@ -217,6 +262,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         window.fetchSearch = async function(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+            // vaciarse. Aquí también para paginar y ordenar, que llaman a esta función directo.
+            const tbody = document.getElementById('tbodyAsientos');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -229,7 +278,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     // (ver abajo), y esta recarga solo reemplaza el tbody y la paginación,
                     // nunca el thead.
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         };
 
         // Alias para compatibilidad con llamadas existentes (guardar, anular, etc.)

@@ -78,6 +78,8 @@ class CarWashController extends BaseModuloController
         // Series usadas realmente en órdenes existentes (para el filtro del listado, distinto
         // de $puntos que es "en qué serie se puede emitir un documento nuevo").
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+        // Usuarios que registraron órdenes (select "Usuario" del modal de filtros).
+        $usuariosFiltro = $this->repository->getUsuariosConOrdenes($idEmpresa);
         $formasPago = $this->repository->getFormasPago();
         $bodegaRepo = new \App\repositories\modulos\BodegaRepository();
         $bodegas = $bodegaRepo->getBodegasPermitidas((int) $_SESSION['id_usuario'], $idEmpresa, (int) ($_SESSION['nivel'] ?? 1));
@@ -91,6 +93,7 @@ class CarWashController extends BaseModuloController
             'empresa'     => $empresaData,
             'puntos'      => $puntos,
             'seriesFiltro' => $seriesFiltro,
+            'usuariosFiltro' => $usuariosFiltro,
             'formasPago'  => $formasPago,
             'bodegas'     => $bodegas,
             'tarifasIva'  => $tarifasIva,
@@ -160,6 +163,45 @@ class CarWashController extends BaseModuloController
             'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
         ]);
         exit;
+    }
+
+    /**
+     * Pestaña "Detalles" del buscador (FiltrosModal): búsqueda libre dentro de las
+     * órdenes (servicios/productos y novedades). Aplica registros propios (§6).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $esLinea = ($r['origen'] === 'LINEA');
+            $rows[] = [
+                'origen'       => $esLinea ? ($r['tipo'] === 'producto' ? 'Producto' : 'Servicio') : 'Novedad',
+                'referencia'   => $esLinea ? ($r['referencia'] ?? '') : ucfirst((string) ($r['tipo'] ?? '')),
+                'descripcion'  => $r['descripcion'] ?? '',
+                'cantidad'     => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 2, '.', ''), '0'), '.') : '',
+                'monto'        => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'id_orden'     => (int) $r['id_orden'],
+                'numero_orden' => $r['numero_orden'] ?? '',
+                'fecha'        => !empty($r['fecha_ingreso']) ? date('d-m-Y', strtotime($r['fecha_ingreso'])) : '',
+                'placa'        => $r['placa'] ?? '',
+                'cliente'      => $r['cliente'] ?? '',
+                'estado'       => ucfirst((string) ($r['estado'] ?? 'borrador')),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     /** Refresca las tarjetas del tablero operativo. */

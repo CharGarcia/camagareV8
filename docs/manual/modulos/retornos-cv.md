@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion
-version: 1.10
+etiquetas: retorno, retornos, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion
+version: 1.11
 orden: 46
 estado: activo
 ---
@@ -75,6 +75,49 @@ Arriba del listado hay otro par de botones **PDF** y **Excel** que exportan la
 **lista completa de retornos** tal como se esté viendo: respetan el buscador,
 los filtros y el orden aplicados, y salen todas las filas que calcen, no solo
 la página en pantalla.
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del retorno: fecha,
+número (serie y secuencial), cliente, RUC o cédula y motivo. Además busca en las
+observaciones, el responsable de traslado, los puntos de partida y llegada, el
+total, el usuario que lo registró, los **productos retornados** (código, nombre,
+lote y NUP) y el número de las **consignaciones de origen**. La columna
+**Estado** no entra en la búsqueda libre: para filtrar por ella use la ventana
+de filtros. Puede escribir varias palabras en cualquier orden y no importan
+mayúsculas ni tildes. Mientras busca, aparece un **círculo girando** al final
+del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Retorno** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha del retorno (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (borrador, emitida, anulada), serie, Nº retorno, secuencial, consignación de origen, con o sin asiento contable, responsable de traslado, usuario que registró |
+| Valores | Total, subtotal e IVA (cada uno con mínimo y máximo) |
+| Cliente | Cliente, RUC / cédula, motivo, observaciones |
+
+Los selectores *Serie*, *Responsable de traslado* y *Usuario que registró*
+listan solo lo que la empresa ya usó en sus retornos.
+
+**Pestaña Detalles** (lo que hay dentro del retorno). Es un único cuadro,
+**Buscar libremente dentro de los retornos**: escriba un producto, un código, un
+lote, un NUP, una fecha de caducidad, una bodega o el número de la consignación
+de origen, y aparece la lista de **cada línea que coincide** con el retorno al
+que pertenece (número, fecha, cliente y estado). Un clic en la fila deja el
+listado mostrando solo ese retorno; el ícono de la derecha lo abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Quién ve cada documento
 
@@ -156,6 +199,17 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.11** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca por palabras (en cualquier orden y sin importar
+  tildes) en las columnas del retorno y además en los productos retornados
+  (código, nombre, lote, NUP), las consignaciones de origen, el responsable y el
+  usuario; la columna Estado ya no entra en la búsqueda libre. Los filtros pasan
+  a una **ventana propia** (botón del embudo, se aplican con *Aplicar*) con dos
+  pestañas: **Retorno** (filtros por campo, con criterios nuevos: fecha, Nº
+  retorno, consignación de origen, con/sin asiento, responsable y usuario como
+  listas, total, subtotal, IVA, RUC y observaciones) y **Detalles**, un cuadro de
+  **búsqueda libre dentro de los retornos** que dice a qué retorno pertenece cada
+  línea. Nueva sección *Buscar y filtrar el listado*.
 - **1.10** — El saldo pendiente de retornar descuenta también lo que el cliente
   recibió **a cambio** desde la consignación (módulo Cambios de productos):
   esas unidades ya no se ofrecen en el buscador ni en la grilla.

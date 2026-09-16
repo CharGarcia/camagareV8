@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
-etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco
-version: 1.11
+etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips
+version: 1.12
 orden: 60
 estado: activo
 ---
@@ -137,6 +137,47 @@ Si el período ya fue marcado como conciliado, primero hay que reabrirlo desde e
 historial de conciliaciones; mientras esté cerrado, sus movimientos no se
 editan.
 
+## Buscar y filtrar el listado
+
+La **tarjeta de filtros de arriba** (cuenta bancaria, flujo, tipo, cheques, año,
+mes y fechas) define **qué cuenta y qué período** se revisan, y con eso se calculan
+el saldo inicial, los créditos, los débitos y el saldo final. El buscador de la
+tabla afina **dentro** de esos movimientos, sin cambiar los saldos de las tarjetas.
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel (los de **Conciliación** quedan
+aparte, a la derecha).
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del movimiento: fecha,
+fecha banco, comprobante, número y fecha del cheque, beneficiario / cliente,
+documento de referencia, tercero, glosa (o el concepto del asiento), debe, haber y
+**saldo**, y además en la observación registrada al clasificarlo. La columna
+**Tipo** y la dirección del cheque (recibido / emitido) no entran en la búsqueda
+libre: para filtrar por ellas use la ventana de filtros o el selector *Tipo* de la
+tarjeta. Puede escribir varias palabras en cualquier orden y no importan
+mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el cuadro.
+Mientras busca, aparece un **círculo girando** al final del cuadro y la tabla se ve
+atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con los criterios. Llene los
+que necesite y pulse **Aplicar**; nada se aplica hasta ese momento. La ventana solo
+se cierra con la X, Cancelar, Aplicar o Limpiar filtros. No tiene pestaña
+*Detalles*: un movimiento bancario no tiene líneas internas.
+
+| Bloque | Filtros |
+|--------|---------|
+| Movimiento | Fecha del movimiento (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), fecha banco, fecha del cheque, tipo (depósito, transferencia, cheque, débito, nota de débito, nota de crédito, tarjeta, Payphone, otro), dirección del cheque (recibido / emitido), comprobante, N° de cheque, documento de referencia, con o sin clasificación manual |
+| Valores | Debe, haber y saldo (cada uno con mínimo y máximo) |
+| Tercero | Tercero, beneficiario / cliente, concepto, glosa, observación |
+
+Las fechas de la ventana recortan **dentro** del período de la tarjeta: si elige un
+rango fuera de ese período, la tabla queda vacía.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
 ## Para qué sirve conciliar
 
 Un movimiento en el banco que no está en el sistema significa que falta registrar
@@ -230,6 +271,15 @@ mayor contable, sin ninguna acción adicional.
 
 ## Historial de cambios
 
+- **1.12** — Nuevo buscador de la tabla: el cuadro ya no despliega sugerencias; lo que
+  se escribe se busca en todas las columnas del movimiento (incluidos fechas, debe,
+  haber, saldo y beneficiario) y en la observación, salvo Tipo y dirección del cheque.
+  Los filtros pasan a una **ventana propia** (botón del embudo, se aplican con
+  *Aplicar*) con criterios nuevos: fecha del movimiento con atajos, fecha del cheque,
+  comprobante, beneficiario / cliente, con/sin clasificación manual, saldo, glosa y
+  observación; el tipo lista también débito, tarjeta y Payphone, y elegir *Débito* ya no
+  trae las notas de débito. Los filtros activos se ven como etiquetas dentro del cuadro
+  y la tabla se atenúa mientras carga, en lugar de vaciarse.
 - **1.11** — La columna **Beneficiario** pasa a llamarse **Beneficiario /
   Cliente** y se llena en todos los movimientos, no solo en los cheques: en un
   ingreso muestra el cliente que pagó (o el "Recibí de"), en un egreso el

@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior
-version: 1.14
+etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado
+version: 1.16
 orden: 20
 estado: activo
 ---
@@ -236,6 +236,52 @@ el tope aplicado. Lo que hay que revisar es el documento: que el subtotal, el IV
 de las líneas y el importe total sean consistentes. Al volver a guardar la compra
 el sistema recalcula los totales desde las líneas.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y el botón de columnas.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del asiento: comprobante,
+fecha (como *31-07-2026* o *2026-07-31*), concepto y total. Además busca en las
+observaciones, el usuario que lo registró y los **documentos y referencias de
+sus líneas** (por ejemplo *Egreso 001-101-000000003* o *pago planilla*). Las
+columnas **Tipo**, **Origen** y **Estado** no entran en la búsqueda libre: para
+filtrar por ellas use la ventana de filtros. Las cuentas contables tampoco (casi
+todo asiento usa Caja o Bancos): búsquelas en la pestaña *Detalles* o con el
+filtro *Cuenta contable*. Puede escribir varias palabras en cualquier orden y no
+importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el
+cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y la
+tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Asiento**:
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha del asiento (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (contabilizado, borrador, anulado), tipo, N° comprobante, origen, usuario que registró, total (mínimo y máximo), cuadrado o descuadrado (Debe = Haber), editado a mano, fecha de registro, concepto, observaciones |
+| Líneas | Cuenta contable (código o nombre) y referencia / documento: el asiento aparece si **alguna** de sus líneas coincide |
+
+Los selectores *Tipo*, *Origen* y *Usuario que registró* listan solo lo que la
+empresa ya tiene en sus asientos.
+
+**Pestaña Detalles** (lo que hay dentro del asiento). Es un único cuadro,
+**Buscar libremente dentro de los asientos**: escriba una cuenta (código o
+nombre), una referencia, un documento, un cliente, proveedor o empleado, un
+centro de costo, un proyecto o un valor del Debe o Haber, y aparece la lista de
+**cada línea que coincide** con el asiento al que pertenece (número, fecha y
+estado). Un clic en la fila deja el listado mostrando solo ese asiento; el
+ícono de la derecha lo abre directamente. Si usted no tiene acceso total al
+módulo, solo ve líneas de los asientos que registró.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
 ## Imprimir en PDF o Excel
 
 Al abrir un asiento ya guardado aparece, debajo del título del modal, una barra
@@ -283,6 +329,18 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.16** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas del asiento (salvo Tipo, Origen y
+  Estado) y en observaciones, usuario y documentos/referencias de las líneas.
+  Los filtros pasan a una **ventana propia** (botón del embudo, se aplican con
+  *Aplicar*) con dos pestañas: **Asiento** (criterios nuevos: estado borrador,
+  tipo y origen como listas de lo usado, usuario, cuadrado/descuadrado, editado
+  a mano, fecha de registro, observaciones, cuenta contable y referencia de las
+  líneas) y **Detalles**, un cuadro de **búsqueda libre dentro de las líneas**
+  (cuenta, referencia, tercero, centro de costo, proyecto, valores) que dice a
+  qué asiento pertenece cada coincidencia. El filtro por tipo ya no distingue
+  mayúsculas (*VENTAS* y *ventas* son el mismo tipo). Nueva sección *Buscar y
+  filtrar el listado*.
 - **1.15** — Un documento que ya está enlazado a su asiento migrado del sistema anterior no vuelve a recibir asiento automático por ninguna vía (generación en masa, apertura del módulo, guardado del documento, Regenerar en Asientos o Auditoría). Antes solo se protegían los documentos que la migración había insertado; los que ya existían y solo se enlazaron (p. ej. facturas descargadas del SRI) recibían un segundo asiento y quedaban duplicados.
 - **1.14** — Los documentos migrados ya no se revisan: se retiran el aviso azul de "migrados sin asiento" y el botón **Generar asientos a los migrados**. Lo que vino de la migración sin asiento queda así; solo se revisan los documentos creados en este sistema.
 - **1.13** — El aviso al abrir el módulo indica el módulo y los números de los documentos migrados sin asiento, no solo la cantidad.

@@ -33,8 +33,21 @@ class MarcacionRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre: las columnas del listado + lo que identifica la marcación.
+            // Decisión del usuario: las columnas Tipo y Estado (y el método, que es una
+            // clasificación) NO entran en el texto libre; se filtran desde el modal.
             $condicion = FiltrosBusqueda::condicionTexto(
-                ['e.nombres_apellidos', 'e.identificacion', 'p.nombre'],
+                [
+                    'e.nombres_apellidos',                                   // Empleado
+                    'e.identificacion',
+                    'p.nombre',                                              // Punto
+                    "TO_CHAR(m.fecha_hora, 'DD-MM-YYYY HH24:MI:SS')",        // Fecha/Hora (como se muestra)
+                    'm.fecha_hora::text',
+                    "CASE WHEN m.distancia_m IS NOT NULL THEN CONCAT(m.distancia_m, ' m') END", // Distancia
+                    'm.observacion',
+                    'm.dispositivo_id',
+                    'u.nombre',                                              // Usuario que la registró (manual)
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -43,10 +56,28 @@ class MarcacionRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (FiltrosModal en la vista). Las viejas se conservan.
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'texto'  => ['empleado' => 'e.nombres_apellidos', 'punto' => 'p.nombre'],
-            'exacto' => ['tipo' => 'm.tipo', 'metodo' => 'm.metodo', 'estado' => 'm.estado'],
-            'fecha'  => ['fecha' => 'm.fecha_hora'],
+            'texto'    => [
+                'empleado'       => 'e.nombres_apellidos',
+                'punto'          => 'p.nombre',
+                'identificacion' => 'e.identificacion',
+                'observacion'    => 'm.observacion',
+                'dispositivo'    => 'm.dispositivo_id',
+            ],
+            'exacto'   => [
+                'tipo'     => 'm.tipo',
+                'metodo'   => 'm.metodo',
+                'estado'   => 'm.estado',
+                'id_punto' => 'm.id_punto',
+                'usuario'  => 'm.created_by',
+                // fuera_radio:si / no — mismo criterio que el aviso de la columna Distancia
+                'fuera_radio' => "CASE WHEN m.distancia_m IS NOT NULL AND COALESCE(p.radio_m, 0) > 0 AND m.distancia_m > p.radio_m THEN 'si' ELSE 'no' END",
+                // con_gps:si / no — el dispositivo envió su ubicación al marcar
+                'con_gps'     => "CASE WHEN m.latitud IS NOT NULL AND m.longitud IS NOT NULL THEN 'si' ELSE 'no' END",
+            ],
+            'fecha'    => ['fecha' => 'm.fecha_hora'],
+            'numerico' => ['distancia' => 'm.distancia_m'],
         ]);
 
         $orderExpr = match ($ordenCol) {
@@ -58,6 +89,7 @@ class MarcacionRepository extends BaseRepository
         $from = "FROM {$this->table} m
                  JOIN empleados e ON e.id = m.id_empleado
                  LEFT JOIN asistencia_puntos p ON p.id = m.id_punto
+                 LEFT JOIN usuarios u ON u.id = m.created_by
                  {$where}";
 
         $stTotal = $this->db->prepare("SELECT COUNT(*) {$from}");
@@ -77,6 +109,29 @@ class MarcacionRepository extends BaseRepository
         $st->execute($params);
 
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /**
+     * Valores realmente usados en las marcaciones de la empresa, para los selects del
+     * modal de filtros: puntos de servicio y usuarios que registraron marcaciones manuales.
+     *
+     * @return array{puntos: array, usuarios: array}
+     */
+    public function getOpcionesFiltro(int $idEmpresa): array
+    {
+        $consultas = [
+            'puntos'   => "SELECT DISTINCT p.id, p.nombre FROM {$this->table} m JOIN asistencia_puntos p ON p.id = m.id_punto
+                           WHERE m.id_empresa = :id_empresa AND m.eliminado = false ORDER BY p.nombre",
+            'usuarios' => "SELECT DISTINCT u.id, u.nombre FROM {$this->table} m JOIN usuarios u ON u.id = m.created_by
+                           WHERE m.id_empresa = :id_empresa AND m.eliminado = false ORDER BY u.nombre",
+        ];
+        $out = [];
+        foreach ($consultas as $clave => $sql) {
+            $st = $this->db->prepare($sql);
+            $st->execute([':id_empresa' => $idEmpresa]);
+            $out[$clave] = $st->fetchAll(PDO::FETCH_ASSOC);
+        }
+        return $out;
     }
 
     public function create(array $d): int

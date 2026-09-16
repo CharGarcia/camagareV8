@@ -90,9 +90,56 @@ class LiquidacionCompraController extends BaseModuloController
             'sustentos'           => $this->repository->getSustentosTributarios(),
             'puntos'              => $puntos,
             'seriesFiltro'        => $seriesFiltro,
+            // Selects del modal de filtros: solo valores usados por la empresa.
+            'usuariosFiltro'      => $this->repository->getUsuariosConLiquidaciones($idEmpresa),
+            'sustentosFiltro'     => $this->repository->getSustentosUsados($idEmpresa),
             'fullWidth'           => true,
             'sucursal_principal'  => !empty($establecimientos) ? $establecimientos[0] : null
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las
+     * liquidaciones (productos/servicios, formas de pago e información adicional).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $origenes = [
+            'PRODUCTO'  => 'Producto / servicio',
+            'PAGO'      => 'Forma de pago',
+            'ADICIONAL' => 'Info. adicional',
+        ];
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
+            $rows[] = [
+                'origen'      => $origenes[$r['origen']] ?? $r['origen'],
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                'cantidad'    => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 4, '.', ''), '0'), '.') : '',
+                'monto'       => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                // abrirModalLiquidacionVer() solo necesita el id (lo lee del data-row).
+                'id'          => (int) $r['id'],
+                'numero'      => $numero,
+                'fecha'       => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'proveedor'   => $r['proveedor'] ?? '',
+                'estado'      => ucfirst((string) ($r['estado'] ?? '')),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function searchAjax(): void

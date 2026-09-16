@@ -101,6 +101,8 @@ class ProveedoresController extends BaseModuloController
             'ordenParam' => \App\Helpers\OrdenListado::aCadena($orden),
             'vistaConfig'=> $prefsVista,
             'fullWidth'  => true,
+            // Selects del modal de filtros: solo valores que la empresa usa en sus proveedores.
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
         ]);
     }
 

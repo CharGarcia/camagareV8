@@ -110,53 +110,110 @@ $pestanas = [
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
 
         <!-- Buscador y exportación -->
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= $base ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= $base ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorADI" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            $opcionesUsuario     = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $opcionesTipoInf     = [];
+            foreach (($catalogo['tipo_informante'] ?? []) as $cod => $nom) { $opcionesTipoInf[] = ['v' => (string) $cod, 'l' => $cod . ' - ' . $nom]; }
+            $opcionesTipoBenef   = [];
+            foreach (($catalogo['tipo_beneficiario'] ?? []) as $cod => $nom) { $opcionesTipoBenef[] = ['v' => (string) $cod, 'l' => $cod . ' - ' . $nom]; }
+            $opcionesTipoDiv     = [];
+            foreach (($catalogo['tipo_dividendo'] ?? []) as $cod => $def) { $opcionesTipoDiv[] = ['v' => (string) $cod, 'l' => $cod . ' - ' . (is_array($def) ? $def[0] : $def)]; }
+            $tA = 'Anexo';
+            // Filas de 12 columnas:
+            //   Anexo:      [Fecha de registro contable 6][Año informado 6]
+            //               [Estado 4][Tipo de informante 4][Con beneficiarios 4]
+            //               [Usuario 6][Observaciones 6]
+            //   Valores:    [Distribuido 4][Ingreso gravado 4][Retención 4]
+            //               [Nº de beneficiarios 6][Utilidad del ejercicio 6]
+            //   Informante: [Informante 6][Identificación 6]
+            //   Distribución: [Tipo de beneficiario 6][Tipo de dividendo 6]
+            // No hay fecha en la cabecera: la fecha principal es la de registro contable
+            // de las líneas de la distribución (filtro EXISTS en el repository).
+            $filtrosAdi = [
+                ['tab' => $tA, 'key' => 'fecha_registro',  'label' => 'Fecha de registro contable del dividendo', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Anexo', 'col' => 6, 'atajos' => true],
+                ['tab' => $tA, 'key' => 'anio',            'label' => 'Año informado',     'icon' => 'bi-calendar3',      'type' => 'number_range', 'grupo' => 'Anexo', 'col' => 6],
+                ['tab' => $tA, 'key' => 'estado',          'label' => 'Estado',            'icon' => 'bi-flag',           'type' => 'select', 'grupo' => 'Anexo', 'col' => 4, 'options' => [
+                    ['v' => 'borrador',   'l' => 'Borrador'],
+                    ['v' => 'generado',   'l' => 'Generado'],
+                    ['v' => 'presentado', 'l' => 'Presentado'],
+                ]],
+                ['tab' => $tA, 'key' => 'tipo_informante', 'label' => 'Tipo de informante', 'icon' => 'bi-people',        'type' => 'select', 'grupo' => 'Anexo', 'col' => 4, 'options' => $opcionesTipoInf],
+                ['tab' => $tA, 'key' => 'con_beneficiarios', 'label' => 'Beneficiarios',   'icon' => 'bi-person-lines-fill', 'type' => 'select', 'grupo' => 'Anexo', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con beneficiarios'],
+                    ['v' => 'no', 'l' => 'Sin beneficiarios'],
+                ]],
+                ['tab' => $tA, 'key' => 'id_usuario',      'label' => 'Usuario que lo creó', 'icon' => 'bi-person-gear',  'type' => 'select', 'grupo' => 'Anexo', 'col' => 6, 'options' => $opcionesUsuario],
+                ['tab' => $tA, 'key' => 'observaciones',   'label' => 'Observaciones',     'icon' => 'bi-chat-left-text', 'type' => 'text',   'grupo' => 'Anexo', 'col' => 6],
+                // Valores
+                ['tab' => $tA, 'key' => 'distribuido',     'label' => 'Dividendo distribuido', 'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tA, 'key' => 'gravado',         'label' => 'Ingreso gravado',   'icon' => 'bi-receipt',        'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tA, 'key' => 'retencion',       'label' => 'Retención',         'icon' => 'bi-percent',        'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tA, 'key' => 'beneficiarios',   'label' => 'Número de beneficiarios', 'icon' => 'bi-123',      'type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
+                ['tab' => $tA, 'key' => 'utilidad',        'label' => 'Utilidad del ejercicio', 'icon' => 'bi-graph-up',  'type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
+                // Informante
+                ['tab' => $tA, 'key' => 'informante',      'label' => 'Informante',        'icon' => 'bi-building',       'type' => 'text',   'grupo' => 'Informante', 'col' => 6],
+                ['tab' => $tA, 'key' => 'ruc',             'label' => 'Identificación',    'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Informante', 'col' => 6],
+                // Distribución (líneas del anexo)
+                ['tab' => $tA, 'key' => 'tipo_beneficiario', 'label' => 'Tipo de beneficiario', 'icon' => 'bi-person-badge', 'type' => 'select', 'grupo' => 'Distribución', 'col' => 6, 'options' => $opcionesTipoBenef],
+                ['tab' => $tA, 'key' => 'tipo_dividendo',  'label' => 'Tipo de dividendo', 'icon' => 'bi-cash-stack',     'type' => 'select', 'grupo' => 'Distribución', 'col' => 6, 'options' => $opcionesTipoDiv],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= $base ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= $base ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorADI"></div>
             <input type="hidden" id="buscarAdi" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorADI',
+                    if (!window.FiltrosModal) return;
+                    window.ADI_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorADI',
                         hiddenInputId: 'buscarAdi',
-                        fields: [
-                            { key: 'anio',           label: 'Año informado',   icon: 'bi-calendar3',  type: 'number_range' },
-                            { key: 'informante',     label: 'Informante',      icon: 'bi-building',   type: 'text' },
-                            { key: 'ruc',            label: 'Identificación',  icon: 'bi-card-text',  type: 'text' },
-                            { key: 'observaciones',  label: 'Observaciones',   icon: 'bi-chat-left-text', type: 'text' },
-                            { key: 'estado',         label: 'Estado',          icon: 'bi-flag',       type: 'select', options: [
-                                { v: 'borrador',   l: 'Borrador' },
-                                { v: 'generado',   l: 'Generado' },
-                                { v: 'presentado', l: 'Presentado' },
-                            ]},
-                            { key: 'tipo_informante', label: 'Tipo de informante', icon: 'bi-people', type: 'select', options: [
-                                <?php foreach ($catalogo['tipo_informante'] as $cod => $nom): ?>
-                                { v: '<?= $cod ?>', l: '<?= htmlspecialchars($nom, ENT_QUOTES) ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_borrador',  label: 'Borradores', mk: () => ({ key: 'estado', op: '=', value: 'borrador', display: 'Borrador' }) },
-                            { id: 'qf_generado',  label: 'Generados',  mk: () => ({ key: 'estado', op: '=', value: 'generado', display: 'Generado' }) },
-                            { id: 'qf_anio_ant',  label: 'Año anterior', mk: () => ({ key: 'anio', op: '=', value: String(new Date().getFullYear() - 1), display: String(new Date().getFullYear() - 1) }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros del anexo de dividendos',
+                        inputWidth: 420,
+                        extraId: 'fmExtraADI',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de los beneficiarios y la distribución.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= $urlBaseAdi ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de los anexos',
+                            placeholder: 'Identificación o nombre del beneficiario, año de la utilidad, fecha, monto...',
+                            columns: [
+                                { key: 'origen',      label: 'Tipo' },
+                                { key: 'tipo',        label: 'Identificación' },
+                                { key: 'descripcion', label: 'Beneficiario' },
+                                { key: 'clase',       label: 'Tipo de beneficiario / dividendo' },
+                                { key: 'fecha_linea', label: 'Fecha contable' },
+                                { key: 'monto',       label: 'Distribuido', align: 'end' },
+                                { key: 'anio',        label: 'Año', class: 'fw-semibold' },
+                                { key: 'estado',      label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'anio', op: '=', value: String(row.anio) }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                setTimeout(() => window.ADI_abrir(row.id), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosAdi, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyAdi',   // se atenúa mientras se busca
                         onApply: () => window.fetchSearch && window.fetchSearch(1),
-                    }).init();
+                    });
+                    window.ADI_filtros.init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraADI" class="btn-group btn-group-sm">
                 <?= PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
                 <a id="btnExportPdfAdi" class="btn btn-outline-danger" title="Descargar PDF"
                    href="<?= $urlBaseAdi ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcelAdi" class="btn btn-outline-success" title="Descargar Excel"
                    href="<?= $urlBaseAdi ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>

@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess
-version: 1.3
+etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips
+version: 1.4
 orden: 30
 estado: activo
 ---
@@ -87,6 +87,54 @@ dentro de *Descuentos aplicados en quincenas/semanas del mes*).
 Cambiar la configuración no modifica los asientos ya generados: las cuentas
 nuevas se usan en los roles que se contabilicen desde ese momento.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y el botón de columnas.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la corrida: período
+(por ejemplo *Julio 2026* o *Julio 2026 #2*), número de empleados y neto.
+Además busca en la descripción, la fecha de pago, el usuario que creó la
+corrida y en el **nombre e identificación de los empleados incluidos** en el
+rol. Las columnas **Tipo** y **Estado** no entran en la búsqueda libre: para
+filtrar por ellas use la ventana de filtros. Puede escribir varias palabras en
+cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el
+texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo
+girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Rol** (datos de la corrida):
+
+| Bloque | Filtros |
+|--------|---------|
+| Corrida | Fecha de pago (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), mes y año del período, tipo de rol (mensual, quincena o semanal), estado (borrador, generado, pagado, contabilizado, anulado), con o sin asiento contable, corrida (tipo y período, por ejemplo *Rol Mensual Julio 2026*), descripción y usuario que registró |
+| Valores | Neto, número de empleados, total de ingresos, total de egresos y aporte patronal (cada uno con mínimo y máximo) |
+| Empleado | Empleado incluido e identificación: muestra las corridas donde aparece ese empleado |
+
+Los selectores *Año del período* y *Usuario que registró* listan solo lo que la
+empresa ya usó.
+
+**Pestaña Detalles** (lo que hay dentro de cada corrida). Es un único cuadro,
+**Buscar libremente dentro de los roles de pago**: escriba un empleado, una
+identificación, un cargo, un rubro (*Sueldo*, *Horas suplementarias*, *IESS*,
+*Transporte*…), un valor o la observación de la novedad que originó un rubro, y
+aparece la lista de **cada línea de empleado o rubro que coincide** con la
+corrida a la que pertenece (tipo y período, fecha de pago y estado). Un clic en
+la fila deja el listado mostrando solo esa corrida; el ícono de la derecha la
+abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
+> Quien no tenga **acceso total** solo ve las corridas que creó él mismo, también
+> en la pestaña Detalles.
+
 ## Errores frecuentes
 
 - **"La quincena debe ser 1 o 2"** / **"La semana debe estar entre 1 y 5"**:
@@ -101,6 +149,7 @@ nuevas se usan en los roles que se contabilicen desde ese momento.
 
 ## Historial de cambios
 
+- **1.4** — Nuevo buscador del listado: búsqueda libre en todas las columnas (sin Tipo ni Estado) y en los empleados incluidos, botón embudo con la ventana de filtros (se suman asiento, corrida, descripción, usuario, totales, número de empleados y empleado incluido) y pestaña Detalles para buscar dentro de las líneas de empleado y los rubros. Los filtros activos se ven como chips dentro del cuadro.
 - **1.3** — El asiento del rol mensual lleva las cuotas de préstamo quirografario, hipotecario y empresa a su propia cuenta cuando está configurada en Configuración Contable → Nómina.
 - **1.2** — El desglose de ingresos/egresos del empleado (modal, PDF individual y Excel) muestra la observación de la novedad que originó cada rubro.
 - **1.1** — Botón para exportar a Excel la ficha individual del empleado, junto al de PDF.

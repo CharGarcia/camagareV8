@@ -28,6 +28,18 @@ class NovedadService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Años de período usados por la empresa (modal de filtros del listado). */
+    public function getAniosUsados(int $idEmpresa): array
+    {
+        return $this->repository->getAniosUsados($idEmpresa);
+    }
+
+    /** Usuarios que registraron novedades en la empresa (modal de filtros del listado). */
+    public function getUsuariosConNovedades(int $idEmpresa): array
+    {
+        return $this->repository->getUsuariosConNovedades($idEmpresa);
+    }
+
     public function getDetalle(int $id, int $idEmpresa): ?array
     {
         $data = $this->repository->getDetalle($id, $idEmpresa);

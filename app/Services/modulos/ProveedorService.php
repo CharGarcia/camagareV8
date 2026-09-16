@@ -376,6 +376,12 @@ class ProveedorService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $ordenMulti);
     }
 
+    /** Opciones de los selects del modal de filtros del listado (valores usados por la empresa). */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        return $this->repository->getOpcionesFiltroListado($idEmpresa);
+    }
+
     // ─── PESTAÑAS DE CONSULTA DEL MODAL (solo lectura) ───────────────────────
 
     /**

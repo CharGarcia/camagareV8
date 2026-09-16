@@ -97,6 +97,10 @@ class RetencionesComprasController extends BaseModuloController
             'establecimientos' => $establecimientos,
             'puntos'           => $puntos,
             'seriesFiltro'     => $seriesFiltro,
+            // Selects del modal de filtros: solo valores usados por la empresa.
+            'usuariosFiltro'   => $this->repository->getUsuariosConRetenciones($idEmpresa),
+            'tiposDocFiltro'   => $this->repository->getTiposDocSustentoUsados($idEmpresa),
+            'sustentosFiltro'  => $this->repository->getSustentosUsados($idEmpresa),
             'sustentos'        => $this->repository->getSustentosTributarios(),
             'fullWidth'        => true,
         ]);
@@ -105,6 +109,45 @@ class RetencionesComprasController extends BaseModuloController
     // ─────────────────────────────────────────────────────────────────────────
     // AJAX — búsqueda / paginación
     // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las líneas
+     * de las retenciones (código, concepto, impuesto, base, porcentaje, valor).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                'base'        => $r['base_imponible'] !== null ? number_format((float) $r['base_imponible'], 2) : '',
+                'porcentaje'  => $r['porcentaje_retener'] !== null ? rtrim(rtrim(number_format((float) $r['porcentaje_retener'], 2, '.', ''), '0'), '.') . '%' : '',
+                'monto'       => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                // RET_abrirModal() solo necesita el id (lo lee del data-row).
+                'id'          => (int) $r['id'],
+                'numero'      => ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? ''),
+                'secuencial'  => (string) ($r['secuencial'] ?? ''),
+                'fecha'       => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'proveedor'   => $r['proveedor'] ?? '',
+                'estado'      => ucfirst(str_replace('_', ' ', (string) ($r['estado'] ?? ''))),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
+    }
 
     public function searchAjax(): void
     {

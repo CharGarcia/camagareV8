@@ -156,46 +156,106 @@ $pestanasConfigLiq = array_merge(
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorLC" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            $opcionesSerie    = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesUsuario  = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $opcionesSustento = array_map(fn($s) => ['v' => (string) $s['id'], 'l' => $s['codigo'] . ' - ' . $s['nombre']], $sustentosFiltro ?? []);
+            $siNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $tL = 'Liquidación';
+            // Filas de 12 columnas:
+            //   Documento: [Fecha de emisión 6][Serie 3][Secuencial 3]
+            //              [Estado 4][Estado de pago 4][Estado de correo 4]
+            //              [Nº liquidación 4][Nº autorización / clave 8]
+            //              [Sustento 6][Asiento 3][Retención 3]
+            //   Valores:   [Total 4][Subtotal 4][Descuento 4]
+            //              [Saldo pendiente 6][Valor retenido 6]
+            //   Proveedor: [Proveedor 4][Identificación 4][Usuario 4]
+            //              [Observaciones 12]
+            $filtrosLiquidacion = [
+                ['tab' => $tL, 'key' => 'fecha',         'label' => 'Fecha de emisión',   'icon' => 'bi-calendar-event',  'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tL, 'key' => 'serie',         'label' => 'Serie',              'icon' => 'bi-upc-scan',        'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tL, 'key' => 'secuencial',    'label' => 'Secuencial',         'icon' => 'bi-123',             'type' => 'text',       'grupo' => 'Documento', 'col' => 3, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tL, 'key' => 'estado',        'label' => 'Estado',             'icon' => 'bi-flag',            'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'borrador',   'l' => 'Borrador'],
+                    ['v' => 'autorizado', 'l' => 'Autorizado'],
+                    ['v' => 'anulado',    'l' => 'Anulado'],
+                ]],
+                ['tab' => $tL, 'key' => 'pago',          'label' => 'Estado de pago',     'icon' => 'bi-wallet2',         'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                    ['v' => 'abonada',   'l' => 'Abonada'],
+                    ['v' => 'pagada',    'l' => 'Pagada'],
+                ]],
+                ['tab' => $tL, 'key' => 'estado_correo', 'label' => 'Estado de correo',   'icon' => 'bi-envelope',        'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                    ['v' => 'enviado',   'l' => 'Enviado'],
+                ]],
+                ['tab' => $tL, 'key' => 'numero',        'label' => 'Nº liquidación',     'icon' => 'bi-hash',            'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tL, 'key' => 'autorizacion',  'label' => 'Nº autorización / clave de acceso', 'icon' => 'bi-shield-check', 'type' => 'text', 'grupo' => 'Documento', 'col' => 8],
+                ['tab' => $tL, 'key' => 'id_sustento',   'label' => 'Sustento tributario','icon' => 'bi-file-earmark-text','type' => 'select',    'grupo' => 'Documento', 'col' => 6, 'options' => $opcionesSustento],
+                ['tab' => $tL, 'key' => 'asiento',       'label' => 'Asiento contable',   'icon' => 'bi-journal-check',   'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $siNo('Con asiento', 'Sin asiento')],
+                ['tab' => $tL, 'key' => 'retencion',     'label' => 'Retención',          'icon' => 'bi-percent',         'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $siNo('Con retención', 'Sin retención')],
+                // Valores
+                ['tab' => $tL, 'key' => 'monto',     'label' => 'Total',           'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tL, 'key' => 'subtotal',  'label' => 'Subtotal',        'icon' => 'bi-receipt',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tL, 'key' => 'descuento', 'label' => 'Descuento',       'icon' => 'bi-tag',             'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tL, 'key' => 'saldo',     'label' => 'Saldo pendiente', 'icon' => 'bi-wallet',          'type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
+                ['tab' => $tL, 'key' => 'retenido',  'label' => 'Valor retenido',  'icon' => 'bi-scissors',        'type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
+                // Proveedor
+                ['tab' => $tL, 'key' => 'proveedor',  'label' => 'Proveedor',      'icon' => 'bi-building',       'type' => 'text',   'grupo' => 'Proveedor', 'col' => 4],
+                ['tab' => $tL, 'key' => 'ruc',        'label' => 'Identificación', 'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Proveedor', 'col' => 4],
+                ['tab' => $tL, 'key' => 'id_usuario', 'label' => 'Usuario',        'icon' => 'bi-person-gear',    'type' => 'select', 'grupo' => 'Proveedor', 'col' => 4, 'options' => $opcionesUsuario],
+                ['tab' => $tL, 'key' => 'obs',        'label' => 'Observaciones',  'icon' => 'bi-chat-left-text', 'type' => 'text',   'grupo' => 'Proveedor', 'col' => 12],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorLC"></div>
             <input type="hidden" id="buscar" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorLC',
+                    if (!window.FiltrosModal) return;
+                    window.LC_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorLC',
                         hiddenInputId: 'buscar',
-                        fields: [
-                            { key: 'proveedor', label: 'Proveedor',    icon: 'bi-building',        type: 'text' },
-                            { key: 'ruc',       label: 'RUC',          icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',    label: 'Nº liquidación', icon: 'bi-hash',          type: 'text' },
-                            { key: 'fecha',     label: 'Fecha emisión', icon: 'bi-calendar-event', type: 'date_range' },
-                            { key: 'monto',     label: 'Monto total',  icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'estado',    label: 'Estado',       icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'borrador',   l: 'Borrador' },
-                                { v: 'autorizado', l: 'Autorizado' },
-                                { v: 'anulado',    l: 'Anulado' },
-                            ]},
-                            { key: 'serie',     label: 'Serie',       icon: 'bi-upc-scan', type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',      type: 'text' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_borrador', label: 'Borrador',    mk: () => ({ key: 'estado', op: '=', value: 'borrador', display: 'Borrador' }) },
-                            { id: 'qf_mes',      label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_anio',     label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de liquidaciones de compra',
+                        inputWidth: 420,
+                        extraId: 'fmExtraLC',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las liquidaciones.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de las liquidaciones',
+                            placeholder: 'Producto o servicio, código, forma de pago, plazo, información adicional...',
+                            columns: [
+                                { key: 'origen',      label: 'Tipo' },
+                                { key: 'tipo',        label: 'Código / Forma' },
+                                { key: 'descripcion', label: 'Descripción' },
+                                { key: 'cantidad',    label: 'Cant.', align: 'end' },
+                                { key: 'monto',       label: 'Valor', align: 'end' },
+                                { key: 'numero',      label: 'Liquidación', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',       label: 'Fecha' },
+                                { key: 'proveedor',   label: 'Proveedor' },
+                                { key: 'estado',      label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                // abrirModalLiquidacionVer lee el id del data-row de la fila.
+                                setTimeout(() => window.abrirModalLiquidacionVer({ dataset: { row: JSON.stringify({ id: row.id }) } }), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosLiquidacion, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyLiquidaciones',   // se atenúa mientras se busca
                         onApply: () => window.LC_fetchSearch && window.LC_fetchSearch(1),
-                    }).init();
+                    });
+                    window.LC_filtros.init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraLC" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'secuencial'          => 'Nº Liquidación',
@@ -213,10 +273,10 @@ $pestanasConfigLiq = array_merge(
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
                 <button class="btn btn-outline-danger" onclick="exportarPdfListado()" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </button>
                 <button class="btn btn-outline-success" onclick="exportarExcelListado()" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </button>
             </div>
         </div>

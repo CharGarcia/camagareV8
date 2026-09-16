@@ -81,9 +81,26 @@ class OrdenCompraRepository extends BaseRepository
         }
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        // Texto libre: las columnas del listado y lo que identifica la orden. Decisión
+        // del usuario (igual que Compras/Ingresos/Egresos): la columna Estado NO entra
+        // en el texto libre; se filtra solo desde el modal de filtros. Los datos de otras
+        // tablas van en subconsultas para no cambiar los JOIN del COUNT.
         if ($parsed['texto_libre'] !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['oc.numero_orden', 'p.razon_social', 'p.identificacion', 'oc.observaciones'],
+                [
+                    'oc.numero_orden',                 // N° Orden
+                    'oc.secuencial',
+                    'oc.fecha_orden::text',            // Fecha Orden
+                    'p.razon_social',                  // Proveedor
+                    'p.identificacion',                // Identificación
+                    'oc.fecha_recepcion::text',        // Fecha Recepción
+                    'oc.observaciones',                // Observaciones
+                    // Fuera del listado, pero identifican la orden:
+                    'oc.aprobado_por',
+                    '(SELECT ux.nombre FROM usuarios ux WHERE ux.id = oc.created_by)',
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', px.codigo, dx.descripcion, dx.notas), ' ') FROM ordenes_compra_detalle dx LEFT JOIN productos px ON px.id = dx.id_producto WHERE dx.id_orden = oc.id)",
+                    "(SELECT STRING_AGG(CONCAT(cx.establecimiento_prov,'-',cx.punto_emision_prov,'-',cx.secuencial_prov), ' ') FROM compras_cabecera cx WHERE cx.id_orden_compra = oc.id AND cx.id_empresa = oc.id_empresa AND cx.eliminado = false)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -100,14 +117,24 @@ class OrdenCompraRepository extends BaseRepository
                 'numero'         => 'oc.numero_orden',
                 'nro'            => 'oc.numero_orden',
                 'obs'            => 'oc.observaciones',
+                // Claves nuevas del modal de filtros.
+                'aprobado_por'   => 'oc.aprobado_por',
             ],
             'exacto'   => [
                 'estado' => 'oc.estado',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), igual patrón
                 // que FacturaVentaRepository::getListado().
                 'serie'  => "CONCAT(oc.establecimiento,'-',oc.punto_emision)",
+                'id_usuario' => 'oc.created_by',
+                // compra:si → al menos una compra (no eliminada) vinculada a la orden.
+                'compra'     => "CASE WHEN EXISTS (SELECT 1 FROM compras_cabecera cy WHERE cy.id_orden_compra = oc.id AND cy.id_empresa = oc.id_empresa AND cy.eliminado = false) THEN 'si' ELSE 'no' END",
             ],
-            'fecha'    => [ 'fecha' => 'oc.fecha_orden', 'fecha_orden' => 'oc.fecha_orden' ],
+            'fecha'    => [
+                'fecha' => 'oc.fecha_orden', 'fecha_orden' => 'oc.fecha_orden',
+                'fecha_recepcion'  => 'oc.fecha_recepcion',
+                'fecha_envio'      => 'oc.fecha_envio',
+                'fecha_aprobacion' => 'oc.fecha_aprobacion',
+            ],
             'numerico' => [
                 // La cabecera no guarda el total: se calcula desde el detalle (con IVA).
                 'monto' => self::SQL_TOTAL_ORDEN,
@@ -115,6 +142,7 @@ class OrdenCompraRepository extends BaseRepository
                 // Comparación numérica exacta: "298" encuentra "000000298" sin ceros
                 // a la izquierda, pero nunca hace substring (ver FacturaVentaRepository).
                 'secuencial' => 'oc.secuencial::numeric',
+                'items'      => '(SELECT COUNT(*) FROM ordenes_compra_detalle dz WHERE dz.id_orden = oc.id)',
             ],
         ]);
 
@@ -160,6 +188,94 @@ class OrdenCompraRepository extends BaseRepository
         $rows = $stRows->fetchAll(PDO::FETCH_ASSOC);
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /** Usuarios que han creado alguna orden de compra en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConOrdenes(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM ordenes_compra oc
+                JOIN usuarios u ON u.id = oc.created_by
+                WHERE oc.id_empresa = :id_empresa AND oc.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las órdenes de compra (pestaña "Detalles" del modal de
+     * filtros): cada ítem pedido (código/nombre del producto, descripción, notas,
+     * cantidad, precio) y cada compra vinculada (número del comprobante) que coincide
+     * con el texto, con la orden a la que pertenece. Mismo alcance que el listado
+     * (empresa, no eliminadas, ambiente, registros propios por created_by). Devuelve
+     * también la cabecera completa (oc.* + proveedor) porque ocAbrirEditar() la lee
+     * del data-row. ordenes_compra_detalle no tiene columna `eliminado`.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa, ':id_empresa_amb' => $idEmpresa];
+        $whereBase = "oc.id_empresa = :id_empresa AND oc.eliminado = false
+                      AND oc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_amb)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND oc.created_by = :id_usuario_filtro";
+            $params[':id_usuario_filtro'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['pr.codigo', 'pr.nombre', 'd.descripcion', 'd.notas', 'd.cantidad::text', 'd.precio_unitario::text'],
+            $q, $params, 'dt'
+        );
+        $condCom = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ["CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)", 'c.secuencial_prov', 'c.numero_autorizacion', 'c.importe_total::text'],
+            $q, $params, 'cm'
+        );
+        if ($condDet === '' || $condCom === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT oc.*,
+                           p.razon_social   AS proveedor_nombre,
+                           p.identificacion AS proveedor_identificacion,
+                           p.email          AS proveedor_email
+                    FROM ordenes_compra oc
+                    LEFT JOIN proveedores p ON p.id = oc.id_proveedor
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen,
+                           COALESCE(NULLIF(pr.codigo, ''), '') AS det_tipo,
+                           COALESCE(NULLIF(d.descripcion, ''), pr.nombre) AS det_descripcion,
+                           d.cantidad AS det_cantidad,
+                           ROUND(d.cantidad * d.precio_unitario, 2) AS det_monto,
+                           b.*
+                    FROM ordenes_compra_detalle d
+                    JOIN base b ON b.id = d.id_orden
+                    LEFT JOIN productos pr ON pr.id = d.id_producto
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'COMPRA' AS origen,
+                           CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov) AS det_tipo,
+                           TO_CHAR(c.fecha_emision, 'DD-MM-YYYY') AS det_descripcion,
+                           NULL AS det_cantidad,
+                           c.importe_total AS det_monto,
+                           b.*
+                    FROM compras_cabecera c
+                    JOIN base b ON b.id = c.id_orden_compra
+                    WHERE c.id_empresa = b.id_empresa AND c.eliminado = false AND $condCom
+                ) x
+                ORDER BY x.fecha_orden DESC, x.id DESC, x.origen
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** Mismo chequeo anti-duplicado que FacturaVentaRepository::existeSecuencial(). */

@@ -41,6 +41,12 @@ class JornadaService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Puntos, horarios y usuarios usados en las jornadas (selects del modal de filtros). */
+    public function getOpcionesFiltro(int $idEmpresa): array
+    {
+        return $this->repository->getOpcionesFiltro($idEmpresa);
+    }
+
     /**
      * Recalcula (crea/actualiza) la jornada de un empleado en un día.
      * Devuelve el arreglo de la jornada calculada, o null si no aplica

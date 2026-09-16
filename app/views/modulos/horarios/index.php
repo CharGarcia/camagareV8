@@ -35,31 +35,69 @@ $nombreDias = function (string $csv) use ($diasLbl) {
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorHOR" style="width: 420px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // embudo que abre el modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de AsistenciaHorarioRepository::getListado().
+            // Catálogo simple (sin tablas hijas propias): una sola pestaña, sin "Detalles".
+            $opcionesDiaHor = [];
+            $diasCompletos = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado', 7 => 'Domingo'];
+            foreach ($diasCompletos as $numDia => $nomDia) {
+                $opcionesDiaHor[] = ['v' => (string) $numDia, 'l' => $nomDia];
+            }
+            $opcionesUsuarioHor = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $tH = 'Turno';
+            // Orden pensado en filas de 12 columnas:
+            //   Turno:      [Nombre 6][Estado 3][Turno nocturno 3]
+            //               [Hora de entrada 3][Hora de salida 3][Día laborable 6]
+            //   Valores:    [Horas de jornada 4][Tolerancia 4][Nº de días laborables 4]
+            //   Asignación: [Empleado asignado 6][Usuario que registró 6]
+            $filtrosHorarios = [
+                // ── Turno ──
+                ['tab' => $tH, 'key' => 'nombre',   'label' => 'Nombre',          'icon' => 'bi-clock',       'type' => 'text',   'grupo' => 'Turno', 'col' => 6],
+                ['tab' => $tH, 'key' => 'estado',   'label' => 'Estado',          'icon' => 'bi-flag',        'type' => 'select', 'grupo' => 'Turno', 'col' => 3, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                ['tab' => $tH, 'key' => 'nocturno', 'label' => 'Turno nocturno',  'icon' => 'bi-moon-stars',  'type' => 'select', 'grupo' => 'Turno', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Sí (sale al día siguiente)'],
+                    ['v' => 'no', 'l' => 'No'],
+                ]],
+                ['tab' => $tH, 'key' => 'entrada',  'label' => 'Hora de entrada', 'icon' => 'bi-box-arrow-in-right', 'type' => 'text', 'grupo' => 'Turno', 'col' => 3, 'placeholder' => '08:00'],
+                ['tab' => $tH, 'key' => 'salida',   'label' => 'Hora de salida',  'icon' => 'bi-box-arrow-right',    'type' => 'text', 'grupo' => 'Turno', 'col' => 3, 'placeholder' => '17:00'],
+                ['tab' => $tH, 'key' => 'dia',      'label' => 'Incluye el día',  'icon' => 'bi-calendar-week', 'type' => 'select', 'grupo' => 'Turno', 'col' => 6, 'options' => $opcionesDiaHor],
+                // ── Valores ──
+                ['tab' => $tH, 'key' => 'horas',      'label' => 'Horas de jornada',      'icon' => 'bi-hourglass-split', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tH, 'key' => 'tolerancia', 'label' => 'Tolerancia (minutos)',  'icon' => 'bi-stopwatch',       'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tH, 'key' => 'num_dias',   'label' => 'Nº de días laborables', 'icon' => 'bi-123',             'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // ── Asignación ──
+                ['tab' => $tH, 'key' => 'empleado', 'label' => 'Empleado asignado',    'icon' => 'bi-person',      'type' => 'text',   'grupo' => 'Asignación', 'col' => 6],
+                ['tab' => $tH, 'key' => 'usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear', 'type' => 'select', 'grupo' => 'Asignación', 'col' => 6, 'options' => $opcionesUsuarioHor],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorHOR"></div>
             <input type="hidden" id="buscarHor" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorHOR',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorHOR',
                         hiddenInputId: 'buscarHor',
-                        fields: [
-                            { key: 'nombre', label: 'Nombre', icon: 'bi-clock', type: 'text' },
-                            { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select', options: [
-                                { v: 'activo', l: 'Activo' }, { v: 'inactivo', l: 'Inactivo' }
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_act', label: 'Activos', mk: () => ({ key: 'estado', op: '=', value: 'activo', display: 'Activo' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de horarios y turnos',
+                        inputWidth: 420,
+                        extraId: 'fmExtraHOR',   // columnas, pegado al final del grupo
+                        fields: <?= json_encode($filtrosHorarios, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyHorarios',   // se atenúa mientras se busca
                         onApply: () => window.cambiarPaginaAjax && window.cambiarPaginaAjax(1),
                     }).init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraHOR" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = ['nombre' => 'Nombre', 'horario' => 'Horario', 'tolerancia' => 'Tolerancia', 'horas' => 'Horas', 'dias' => 'Días', 'estado' => 'Estado'];
                 ?>
@@ -156,6 +194,10 @@ $nombreDias = function (string $csv) use ($diasLbl) {
     async function cargarListado(page = 1) {
         const b = inputB ? inputB.value.trim() : '';
         const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga, también al paginar u ordenar (que llaman a esta función directo).
+        const tbody = document.getElementById('tbodyHorarios');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const resp = await fetch(uri); const data = await resp.json();
             if (data.ok) {
@@ -169,7 +211,11 @@ $nombreDias = function (string $csv) use ($diasLbl) {
                     else icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
                 });
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error(e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
+        }
     }
 
     window.abrirModalHorario = function (tr) {

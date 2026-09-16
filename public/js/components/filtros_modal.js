@@ -382,14 +382,57 @@
         }
 
         /** Fija un filtro (reemplaza el de la misma clave), repinta chips y aplica. */
-        aplicarFiltro(f, cerrar = true) {
+        /**
+         * Fija un filtro (reemplaza el de la misma clave) y repinta los chips.
+         * @param {boolean} cerrar  cierra el modal después (por defecto sí)
+         * @param {boolean} aplicar lanza la búsqueda (por defecto sí); con false se pueden
+         *                          encadenar varios cambios y aplicar solo el último
+         */
+        aplicarFiltro(f, cerrar = true, aplicar = true) {
             if (!f || !f.key) return;
             f.op = f.op || (Array.isArray(f.value) ? 'BETWEEN' : 'ILIKE');
             const idx = this.state.filters.findIndex(x => x.key === f.key && !x.neg);
             if (idx >= 0) this.state.filters[idx] = f; else this.state.filters.push(f);
             this.renderChips();
-            this.apply();
+            if (aplicar) this.apply();
             if (cerrar) this.hide();
+        }
+
+        /** ¿Hay un filtro activo (no negado) con esta clave y, si se indica, este valor? */
+        tieneFiltro(key, value) {
+            return this.state.filters.some(x => x.key === key && !x.neg
+                && (value === undefined || JSON.stringify(x.value) === JSON.stringify(value)));
+        }
+
+        /** Copia del filtro activo (no negado) con esta clave, o null. Solo lectura. */
+        getFiltro(key) {
+            const f = this.state.filters.find(x => x.key === key && !x.neg);
+            return f ? JSON.parse(JSON.stringify(f)) : null;
+        }
+
+        /**
+         * Quita los filtros (no negados) con esta clave y, si se indica, este valor;
+         * repinta chips y (por defecto) aplica. Pensado para accesos directos de la vista
+         * que encienden/apagan un filtro sin tocar el estado interno del componente.
+         * No hace nada si no había ese filtro.
+         */
+        quitarFiltro(key, value, aplicar = true) {
+            const antes = this.state.filters.length;
+            this.state.filters = this.state.filters.filter(x => !(x.key === key && !x.neg
+                && (value === undefined || JSON.stringify(x.value) === JSON.stringify(value))));
+            if (this.state.filters.length === antes) return;
+            this.renderChips();
+            if (aplicar) this.apply();
+        }
+
+        /** Vacía texto libre y filtros (incluidos los negados). Con aplicar=false solo repinta. */
+        limpiar(aplicar = true) {
+            this.state.filters = [];
+            this.state.inputText = '';
+            if (this.elInput) this.elInput.value = '';
+            if (this.elHidden) this.elHidden.value = '';
+            this.renderChips();
+            if (aplicar) this.apply();
         }
 
         /** Cuántos filtros activos hay en cada pestaña (badge del nav). */

@@ -83,10 +83,54 @@ class PedidoRepository {
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
+        // Documentos que consumieron el pedido (Consignaciones de Venta y, si ya está
+        // la migración de ventas_detalle.id_pedido_detalle, Facturas de Venta): su
+        // número entra en el texto libre y en el filtro "documentos".
+        $sqlDocsRelacionados = "(SELECT STRING_AGG(DISTINCT (cv.establecimiento || '-' || cv.punto_emision || '-' || cv.secuencial), ' ')
+                                   FROM pedidos_detalle pdr
+                                   JOIN consignaciones_ventas_detalles cvd ON cvd.id_pedido_detalle = pdr.id AND cvd.eliminado = false
+                                   JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion AND cv.eliminado = false
+                                  WHERE pdr.id_pedido = p.id)";
+        $existeDocs = "EXISTS (SELECT 1 FROM pedidos_detalle pde
+                                 JOIN consignaciones_ventas_detalles cvd2 ON cvd2.id_pedido_detalle = pde.id AND cvd2.eliminado = false
+                                 JOIN consignaciones_ventas cv2 ON cv2.id = cvd2.id_consignacion AND cv2.eliminado = false
+                                WHERE pde.id_pedido = p.id)";
+        if ($this->columnaVentasDetalleExiste()) {
+            $sqlDocsRelacionados = "CONCAT_WS(' ', {$sqlDocsRelacionados},
+                                     (SELECT STRING_AGG(DISTINCT (v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ' ')
+                                        FROM pedidos_detalle pdf
+                                        JOIN ventas_detalle vd ON vd.id_pedido_detalle = pdf.id
+                                        JOIN ventas_cabecera v ON v.id = vd.id_venta AND v.eliminado = false
+                                       WHERE pdf.id_pedido = p.id))";
+            $existeDocs = "({$existeDocs} OR EXISTS (SELECT 1 FROM pedidos_detalle pdf2
+                                 JOIN ventas_detalle vd2 ON vd2.id_pedido_detalle = pdf2.id
+                                 JOIN ventas_cabecera v2 ON v2.id = vd2.id_venta AND v2.eliminado = false
+                                WHERE pdf2.id_pedido = p.id))";
+        }
+        // Total del pedido: no es columna de la cabecera, sale de sus líneas.
+        $sqlTotal = "(SELECT COALESCE(SUM(pdt.total), 0) FROM pedidos_detalle pdt WHERE pdt.id_pedido = p.id AND pdt.eliminado = false)";
+
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        // Texto libre: las columnas del listado y campos que identifican el pedido
+        // aunque no sean columnas. Decisión del usuario: la columna Estado NO entra en
+        // el texto libre (se filtra solo desde el modal de filtros).
         if ($parsed['texto_libre'] !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ["(p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial)", 'c.nombre', 'rt.nombre', 'p.observaciones', 'p.observaciones_internas'],
+                [
+                    "(p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial)", // Nro. Pedido
+                    "TO_CHAR(p.fecha_pedido, 'YYYY-MM-DD')",                                // Fecha Emisión
+                    'p.fecha_entrega::text',                                                // Fecha Entrega
+                    "CONCAT_WS(' - ', TO_CHAR(p.hora_inicial_entrega, 'HH24:MI'), TO_CHAR(p.hora_maxima_entrega, 'HH24:MI'))", // Rango Horario
+                    'c.nombre',                                                             // Cliente
+                    'rt.nombre',                                                            // Resp. Entrega
+                    'p.observaciones',                                                      // Observaciones
+                    'p.observaciones_internas',                                             // Obs. Internas
+                    // Fuera del listado, pero identifican el pedido:
+                    'c.identificacion',
+                    '(SELECT uc.nombre FROM usuarios uc WHERE uc.id = p.created_by)',     // usuario que registró
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', pr.codigo, pr.nombre), ' ') FROM pedidos_detalle pdp JOIN productos pr ON pr.id = pdp.id_producto WHERE pdp.id_pedido = p.id AND pdp.eliminado = false)",
+                    $sqlDocsRelacionados,                                                   // consignaciones / facturas
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'b'
@@ -103,12 +147,19 @@ class PedidoRepository {
                 'observaciones' => 'p.observaciones',
                 'obs'           => 'p.observaciones',
                 'obs_internas'  => 'p.observaciones_internas',
+                'numero'        => "(p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial)",
+                'ruc'           => 'c.identificacion',
+                'identificacion' => 'c.identificacion',
             ],
             'exacto' => [
                 'estado' => 'p.estado',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del buscador.
                 'serie'  => "CONCAT(p.establecimiento,'-',p.punto_emision)",
+                'id_responsable' => 'p.id_responsable_entrega',
+                'id_usuario'     => 'p.created_by',
+                // documentos:si → el pedido ya se consumió en alguna consignación o factura.
+                'documentos'     => "CASE WHEN {$existeDocs} THEN 'si' ELSE 'no' END",
             ],
             'fecha' => [
                 'fecha'         => 'p.fecha_pedido',
@@ -121,6 +172,8 @@ class PedidoRepository {
                 // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
                 // en '=', nunca hace substring).
                 'secuencial' => 'p.secuencial::numeric',
+                'total'      => $sqlTotal,
+                'monto'      => $sqlTotal,
             ],
         ]);
 
@@ -174,6 +227,134 @@ class PedidoRepository {
                 ORDER BY establecimiento, punto_emision";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Responsables de entrega usados en algún pedido de la empresa (select del modal de filtros). */
+    public function getResponsablesConPedidos(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT rt.id, rt.nombre
+                FROM pedidos_cabecera p
+                JOIN responsables_traslado rt ON rt.id = p.id_responsable_entrega
+                WHERE p.id_empresa = :id_empresa AND p.eliminado = false
+                ORDER BY rt.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que han registrado algún pedido en la empresa (select "Usuario que registró"). */
+    public function getUsuariosConPedidos(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM pedidos_cabecera p
+                JOIN usuarios u ON u.id = p.created_by
+                WHERE p.id_empresa = :id_empresa AND p.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de los pedidos (pestaña "Detalles" del modal de filtros):
+     * devuelve cada producto pedido y cada documento que consumió el pedido
+     * (consignación de venta / factura de venta) que coincide con el texto, junto con
+     * el pedido al que pertenece. Mismo alcance que el listado (empresa, no
+     * eliminados, ambiente y registros propios por created_by).
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "p.id_empresa = :id_empresa AND p.eliminado = false
+                      AND p.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND p.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['pr.codigo', 'pr.nombre', 'd.cantidad::text', 'd.precio_unitario::text', 'd.total::text'],
+            $q, $params, 'dt'
+        );
+        $condCons = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ["(cv.establecimiento || '-' || cv.punto_emision || '-' || cv.secuencial)", 'pr.codigo', 'pr.nombre', 'cvd.cantidad::text'],
+            $q, $params, 'cs'
+        );
+        if ($condDet === '' || $condCons === '') {
+            return [];
+        }
+        $ramaFactura = '';
+        if ($this->columnaVentasDetalleExiste()) {
+            $condFac = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ["(v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial)", 'pr.codigo', 'pr.nombre', 'vd.cantidad::text'],
+                $q, $params, 'fc'
+            );
+            if ($condFac === '') {
+                return [];
+            }
+            $ramaFactura = "
+                    UNION ALL
+                    SELECT 'FACTURA' AS origen,
+                           (v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial) AS tipo,
+                           CONCAT_WS(' ', NULLIF(pr.codigo,''), pr.nombre) AS descripcion,
+                           vd.cantidad,
+                           v.fecha_emision::text AS fecha_doc,
+                           v.estado AS estado_doc,
+                           b.id AS id_pedido, b.numero, b.fecha_pedido, b.estado, b.cliente
+                    FROM pedidos_detalle d
+                    JOIN base b ON b.id = d.id_pedido
+                    JOIN ventas_detalle vd ON vd.id_pedido_detalle = d.id
+                    JOIN ventas_cabecera v ON v.id = vd.id_venta AND v.eliminado = false
+                    LEFT JOIN productos pr ON pr.id = d.id_producto
+                    WHERE $condFac";
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT p.id, (p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) AS numero,
+                           p.fecha_pedido, p.estado, c.nombre AS cliente
+                    FROM pedidos_cabecera p
+                    JOIN clientes c ON c.id = p.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen,
+                           pr.codigo AS tipo,
+                           pr.nombre AS descripcion,
+                           d.cantidad,
+                           NULL AS fecha_doc,
+                           NULL AS estado_doc,
+                           b.id AS id_pedido, b.numero, b.fecha_pedido, b.estado, b.cliente
+                    FROM pedidos_detalle d
+                    JOIN base b ON b.id = d.id_pedido
+                    LEFT JOIN productos pr ON pr.id = d.id_producto
+                    WHERE d.eliminado = false AND $condDet
+                    UNION ALL
+                    SELECT 'CONSIGNACION' AS origen,
+                           (cv.establecimiento || '-' || cv.punto_emision || '-' || cv.secuencial) AS tipo,
+                           CONCAT_WS(' ', NULLIF(pr.codigo,''), pr.nombre) AS descripcion,
+                           cvd.cantidad,
+                           cv.fecha_emision::text AS fecha_doc,
+                           cv.estado AS estado_doc,
+                           b.id AS id_pedido, b.numero, b.fecha_pedido, b.estado, b.cliente
+                    FROM pedidos_detalle d
+                    JOIN base b ON b.id = d.id_pedido
+                    JOIN consignaciones_ventas_detalles cvd ON cvd.id_pedido_detalle = d.id AND cvd.eliminado = false
+                    JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion AND cv.eliminado = false
+                    LEFT JOIN productos pr ON pr.id = d.id_producto
+                    WHERE $condCons
+                    $ramaFactura
+                ) x
+                ORDER BY x.fecha_pedido DESC, x.id_pedido DESC, x.origen
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

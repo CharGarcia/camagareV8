@@ -57,6 +57,10 @@
         const sort   = window.currentSort || 'fecha_emision';
         const dir    = window.currentDir  || 'DESC';
         const url = `${BASE_URL}/modulos/notas_credito/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga (también al paginar y ordenar, que llaman a esta función directo).
+        const tbody = document.getElementById('nc-table-body');
+        if (tbody) tbody.classList.add('fm-cargando-target');
 
         try {
             const resp = await fetch(url);
@@ -64,7 +68,6 @@
             const data = await resp.json();
             if (!data.ok) return;
 
-            const tbody = document.getElementById('nc-table-body');
             if (tbody) tbody.innerHTML = data.rows ?? '';
             const pg = document.getElementById('nc-pagination');
             if (pg) pg.innerHTML = data.pagination ?? '';
@@ -79,6 +82,8 @@
             NC_actualizarIconosOrden(sort, dir);
         } catch (e) {
             console.error('Error al buscar NC:', e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     };
 

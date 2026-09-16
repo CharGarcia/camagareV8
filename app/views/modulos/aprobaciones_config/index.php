@@ -80,38 +80,67 @@ $puedeAbrir = !empty($perm['actualizar']) || !empty($perm['eliminar']);
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y Exportación -->
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorAPR" style="width: 420px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) +
+            // botón embudo que abre el modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de AprobacionesRepository::getListado().
+            // Una sola pestaña, sin "Detalles": la configuración no tiene tablas hijas.
+            $opcionesFiltro   = $opcionesFiltro ?? [];
+            // Varias rutas comparten nombre de módulo (p. ej. "Inventario"): la etiqueta
+            // lleva también la ruta humanizada para distinguirlas.
+            $opcionesModulo   = array_map(
+                static function ($ruta) {
+                    $nombre = AprobacionesConfigController::infoModulo((string) $ruta)['nombre'];
+                    $slug   = ucfirst(str_replace(['-', '_'], ' ', preg_replace('#^modulos/#', '', (string) $ruta)));
+                    return ['v' => (string) $ruta, 'l' => mb_strtolower($nombre) === mb_strtolower($slug) ? $nombre : "{$nombre} · {$slug}"];
+                },
+                $opcionesFiltro['modulos'] ?? []
+            );
+            $opcionesAprobador = array_map(static fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $opcionesFiltro['aprobadores'] ?? []);
+            // Filas de 12 columnas:
+            //   Aprobación: [Proceso 6][Módulo 3][Estado 3]
+            //               [Aprobador 6][Monto mínimo 6]
+            //               [Con monto mínimo 6][Última modificación 6]
+            $filtrosAprobaciones = [
+                ['key' => 'proceso',      'label' => 'Proceso',             'icon' => 'bi-diagram-3',     'type' => 'text',         'grupo' => 'Aprobación', 'col' => 6],
+                ['key' => 'modulo_ruta',  'label' => 'Módulo',              'icon' => 'bi-grid',          'type' => 'select',       'grupo' => 'Aprobación', 'col' => 3, 'options' => $opcionesModulo],
+                ['key' => 'estado',       'label' => 'Estado',              'icon' => 'bi-flag',          'type' => 'select',       'grupo' => 'Aprobación', 'col' => 3, 'options' => [
+                    ['v' => 'activa',   'l' => 'Activa'],
+                    ['v' => 'inactiva', 'l' => 'Inactiva'],
+                ]],
+                ['key' => 'aprobador_id', 'label' => 'Aprobador',           'icon' => 'bi-person-check',  'type' => 'select',       'grupo' => 'Aprobación', 'col' => 6, 'options' => $opcionesAprobador],
+                ['key' => 'monto',        'label' => 'Monto mínimo',        'icon' => 'bi-cash',          'type' => 'number_range', 'grupo' => 'Aprobación', 'col' => 6],
+                ['key' => 'con_monto',    'label' => 'Con monto mínimo',    'icon' => 'bi-cash-stack',    'type' => 'select',       'grupo' => 'Aprobación', 'col' => 6, 'options' => [
+                    ['v' => 'si', 'l' => 'Con monto mínimo'],
+                    ['v' => 'no', 'l' => 'Siempre (sin mínimo)'],
+                ]],
+                ['key' => 'actualizado',  'label' => 'Última modificación', 'icon' => 'bi-clock-history', 'type' => 'date_range',   'grupo' => 'Aprobación', 'col' => 6, 'atajos' => true],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorAPR"></div>
             <input type="hidden" id="buscarAprobacion" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorAPR',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorAPR',
                         hiddenInputId: 'buscarAprobacion',
-                        fields: [
-                            { key: 'proceso',   label: 'Proceso',    icon: 'bi-diagram-3', type: 'text' },
-                            { key: 'modulo',    label: 'Módulo',     icon: 'bi-grid',      type: 'text' },
-                            { key: 'aprobador', label: 'Aprobador',  icon: 'bi-person-check', type: 'text' },
-                            { key: 'monto',     label: 'Monto mínimo', icon: 'bi-cash',    type: 'number_range' },
-                            { key: 'estado',    label: 'Estado',     icon: 'bi-flag',      type: 'select', options: [
-                                { v: 'activa',   l: 'Activa' },
-                                { v: 'inactiva', l: 'Inactiva' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_activa',    label: 'Activas',      mk: () => ({ key: 'estado', op: '=', value: 'activa',   display: 'Activa' }) },
-                            { id: 'qf_inactiva',  label: 'Inactivas',    mk: () => ({ key: 'estado', op: '=', value: 'inactiva', display: 'Inactiva' }) },
-                            { id: 'qf_con_monto', label: 'Con monto mínimo', mk: () => ({ key: 'monto', op: '>', value: '0', display: '> 0' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de aprobaciones',
+                        inputWidth: 420,
+                        extraId: 'fmExtraAPR',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosAprobaciones, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyAprobaciones',   // se atenúa mientras se busca
                         onApply: () => window.APR_fetchSearch && window.APR_fetchSearch(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraAPR" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'modulo'      => 'Módulo',
@@ -125,11 +154,11 @@ $puedeAbrir = !empty($perm['actualizar']) || !empty($perm['eliminar']);
 
                 <a id="btnExportPdf" href="<?= $urlBaseApr ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBaseApr ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -292,6 +321,10 @@ $puedeAbrir = !empty($perm['actualizar']) || !empty($perm['eliminar']);
         window.APR_fetchSearch = async (page = 1) => {
             const term = inputBuscar ? inputBuscar.value.trim() : '';
             const uri = `${APR_URL}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+            // vaciarse. Aquí también para paginar y ordenar, que llaman a esta función directo.
+            const tbody = document.getElementById('tbodyAprobaciones');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -320,6 +353,8 @@ $puedeAbrir = !empty($perm['actualizar']) || !empty($perm['eliminar']);
                 });
             } catch (e) {
                 console.error('Error en búsqueda de aprobaciones:', e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
             }
         };
 

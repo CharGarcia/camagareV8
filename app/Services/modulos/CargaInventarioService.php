@@ -64,6 +64,18 @@ class CargaInventarioService
         return $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $ordenMulti);
     }
 
+    /** Opciones de los selects del modal de filtros del listado (valores usados por la empresa). */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        return $this->repo->getOpcionesFiltroListado($idEmpresa);
+    }
+
+    /** Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las líneas de las cargas. */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        return $this->repo->buscarEnDetalles($idEmpresa, $q, $idUsuario, $limit);
+    }
+
     public function getDetalleCompleto(int $idCarga, int $idEmpresa): ?array
     {
         $cab = $this->repo->getById($idCarga, $idEmpresa);

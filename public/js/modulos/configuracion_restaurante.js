@@ -34,6 +34,10 @@
     async function fetchSearch(page = 1) {
         const buscar = document.getElementById('buscarEstacion')?.value || '';
         const params = new URLSearchParams({ b: buscar, page, sort: CR_ORDEN.col, dir: CR_ORDEN.dir });
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga; también al paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('tbodyEstaciones');
+        if (tbody) tbody.classList.add('fm-cargando-target');
 
         try {
             const r = await fetch(`${CR_URL}/searchAjax?${params}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
@@ -50,6 +54,7 @@
             if (pdf) pdf.href = d.pdf_url;
             if (xls) xls.href = d.excel_url;
         } catch (e) { /* se mantiene lo último bueno en pantalla */ }
+        finally { if (tbody) tbody.classList.remove('fm-cargando-target'); }
     }
 
     window.fetchSearch = fetchSearch;

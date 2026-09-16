@@ -12,9 +12,9 @@ $rutaModulo  = $rutaModulo  ?? 'modulos/citas-agenda';
 ?>
 <!-- FullCalendar (solo en esta vista) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.css">
-<!-- FiltrosBusqueda -->
-<link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
+<!-- FiltrosModal (buscador del listado) -->
+<link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig) ?>
 
@@ -65,8 +65,10 @@ const URL_AGENDA = '<?= $urlBase ?>';
     </div>
 </div>
 
-<!-- ─── FILTROS COMPARTIDOS (estado, tipo, recurso + extras lista) ────────────── -->
-<div class="card border-0 shadow-sm mb-3">
+<!-- ─── FILTROS DEL CALENDARIO (estado, tipo, recurso) ────────────────────────────
+     Solo se ven en la vista Calendario. La vista Lista filtra con su propio buscador
+     (FiltrosModal: embudo + texto libre), que incluye estos mismos criterios. -->
+<div class="card border-0 shadow-sm mb-3" id="filtrosCalendario">
     <div class="card-body py-2 px-3">
         <div class="row g-2 align-items-end">
             <div class="col-sm-3">
@@ -99,15 +101,6 @@ const URL_AGENDA = '<?= $urlBase ?>';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <!-- Filtros fecha: solo en vista lista -->
-            <div class="col-auto d-none lista-extra">
-                <label class="form-label small mb-1">Desde</label>
-                <input type="date" id="flt-desde" class="form-control form-control-sm" onchange="citasListaCargar()">
-            </div>
-            <div class="col-auto d-none lista-extra">
-                <label class="form-label small mb-1">Hasta</label>
-                <input type="date" id="flt-hasta" class="form-control form-control-sm" onchange="citasListaCargar()">
-            </div>
         </div>
     </div>
 </div>
@@ -124,11 +117,72 @@ const URL_AGENDA = '<?= $urlBase ?>';
     <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
         <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
 
-            <!-- Izquierda: FiltrosBusqueda + columnas + exportación -->
+            <!-- Izquierda: buscador (FiltrosModal) + columnas + exportación -->
             <div class="d-flex align-items-center gap-2 flex-wrap">
-                <!-- Contenedor FiltrosBusqueda (lazy init en cambiarVista) -->
-                <div id="fbBuscadorCitas" style="width:460px;"></div>
+                <?php
+                // Buscador: texto libre sobre las columnas del listado (sin sugerencias) +
+                // botón embudo que abre el modal con todos los filtros + chips de los activos.
+                // Las claves (key) deben existir en los mapas de CitaAgendaRepository::getListado().
+                $opcionesFiltro  = $opcionesFiltro ?? [];
+                $opcionesTipo    = array_map(fn($t) => ['v' => (string) $t['id'], 'l' => $t['nombre']], $opcionesFiltro['tipos'] ?? []);
+                $opcionesRecurso = array_map(fn($r) => ['v' => (string) $r['id'], 'l' => $r['nombre']], $opcionesFiltro['recursos'] ?? []);
+                $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $opcionesFiltro['usuarios'] ?? []);
+                // Una sola pestaña, sin "Detalles": los pagos de la cita tienen su propio
+                // módulo (Pagos de citas) y su referencia ya entra en el texto libre.
+                // Filas de 12 columnas:
+                //   Cita:    [Fecha de inicio 6][Estado 3][Origen 3]
+                //            [Tipo de cita 4][Recurso 4][Pago registrado 4]
+                //            [Fecha de fin 6][Fecha de registro 6]
+                //   Cliente: [Cliente 4][Identificación 4][Usuario que registró 4]
+                //            [Título 6][Notas 6]
+                $filtrosCitas = [
+                    ['key' => 'fecha',          'label' => 'Fecha de inicio',      'icon' => 'bi-calendar-event',     'type' => 'date_range', 'grupo' => 'Cita', 'col' => 6, 'atajos' => true],
+                    ['key' => 'estado',         'label' => 'Estado',               'icon' => 'bi-flag',               'type' => 'select',     'grupo' => 'Cita', 'col' => 3, 'options' => [
+                        ['v' => 'pendiente',  'l' => 'Pendiente'],
+                        ['v' => 'confirmada', 'l' => 'Confirmada'],
+                        ['v' => 'en_curso',   'l' => 'En curso'],
+                        ['v' => 'completada', 'l' => 'Completada'],
+                        ['v' => 'cancelada',  'l' => 'Cancelada'],
+                        ['v' => 'no_asistio', 'l' => 'No asistió'],
+                    ]],
+                    ['key' => 'origen',         'label' => 'Origen',               'icon' => 'bi-box-arrow-in-right', 'type' => 'select',     'grupo' => 'Cita', 'col' => 3, 'options' => [
+                        ['v' => 'interno', 'l' => 'Interno'],
+                        // Los únicos que escribe el código: CitasAgendaController (interno) y CitaPortalService (portal).
+                        ['v' => 'portal',  'l' => 'Portal'],
+                    ]],
+                    ['key' => 'id_tipo_cita',   'label' => 'Tipo de cita',         'icon' => 'bi-bookmark',           'type' => 'select',     'grupo' => 'Cita', 'col' => 4, 'options' => $opcionesTipo],
+                    ['key' => 'id_recurso',     'label' => 'Recurso',              'icon' => 'bi-person-gear',        'type' => 'select',     'grupo' => 'Cita', 'col' => 4, 'options' => $opcionesRecurso],
+                    ['key' => 'pago',           'label' => 'Pago registrado',      'icon' => 'bi-cash-coin',          'type' => 'select',     'grupo' => 'Cita', 'col' => 4, 'options' => [
+                        ['v' => 'si', 'l' => 'Con pago'],
+                        ['v' => 'no', 'l' => 'Sin pago'],
+                    ]],
+                    ['key' => 'fecha_fin',      'label' => 'Fecha de fin',         'icon' => 'bi-calendar-check',     'type' => 'date_range', 'grupo' => 'Cita', 'col' => 6],
+                    ['key' => 'registro',       'label' => 'Fecha de registro',    'icon' => 'bi-clock-history',      'type' => 'date_range', 'grupo' => 'Cita', 'col' => 6],
+                    ['key' => 'cliente',        'label' => 'Cliente',              'icon' => 'bi-person',             'type' => 'text',       'grupo' => 'Cliente', 'col' => 4],
+                    ['key' => 'identificacion', 'label' => 'Identificación',       'icon' => 'bi-card-text',          'type' => 'text',       'grupo' => 'Cliente', 'col' => 4],
+                    ['key' => 'usuario',        'label' => 'Usuario que registró', 'icon' => 'bi-person-badge',       'type' => 'select',     'grupo' => 'Cliente', 'col' => 4, 'options' => $opcionesUsuario],
+                    ['key' => 'titulo',         'label' => 'Título',               'icon' => 'bi-tag',                'type' => 'text',       'grupo' => 'Cliente', 'col' => 6],
+                    ['key' => 'notas',          'label' => 'Notas',                'icon' => 'bi-chat-left-text',     'type' => 'text',       'grupo' => 'Cliente', 'col' => 6],
+                ];
+                ?>
+                <div id="fmBuscadorCITAS"></div>
                 <input type="hidden" id="buscarCitas" value="">
+                <script>
+                    document.addEventListener('DOMContentLoaded', () => {
+                        if (!window.FiltrosModal) return;
+                        new FiltrosModal({
+                            containerId: 'fmBuscadorCITAS',
+                            hiddenInputId: 'buscarCitas',
+                            placeholder: 'Buscar en todas las columnas...',
+                            titulo: 'Filtros de citas',
+                            inputWidth: 420,
+                            extraId: 'fmExtraCITAS',   // columnas + PDF + Excel, pegados al final del grupo
+                            fields: <?= json_encode($filtrosCitas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                            loadingTarget: '#tbodyCitas',   // se atenúa mientras se busca
+                            onApply: () => { _listaPagina = 1; return citasListaCargar(); },
+                        }).init();
+                    });
+                </script>
 
                 <?php
                 $columnasTabla = [
@@ -141,15 +195,16 @@ const URL_AGENDA = '<?= $urlBase ?>';
                     'origen'         => 'Origen',
                 ];
                 ?>
-                <div class="btn-group btn-group-sm">
+                <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+                <div id="fmExtraCITAS" class="btn-group btn-group-sm">
                     <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig, $rutaModulo) ?>
                     <a id="btnExportPdfCitas" href="<?= $urlBase ?>/export-pdf"
                        class="btn btn-outline-danger" title="Exportar PDF">
-                        <i class="bi bi-file-earmark-pdf"></i> PDF
+                        <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                     </a>
                     <a id="btnExportExcelCitas" href="<?= $urlBase ?>/export-excel"
                        class="btn btn-outline-success" title="Exportar Excel">
-                        <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                        <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                     </a>
                 </div>
             </div>
@@ -242,8 +297,6 @@ let _listaTotalPags   = 1;
 let _listaSort        = '<?= htmlspecialchars($vistaConfig['__ordenCol__'] ?? 'fecha_inicio') ?>';
 let _listaSortDir     = '<?= htmlspecialchars(strtoupper($vistaConfig['__ordenDir__'] ?? 'DESC')) ?>';
 let _debounceTimer    = null;
-let _fbCitas          = null;   // instancia de FiltrosBusqueda
-let _fbIniciado       = false;
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
@@ -272,37 +325,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Marcar icono de orden inicial
     actualizarIconosOrden();
 });
-
-// ─── INICIALIZAR FiltrosBusqueda (lazy, al mostrar lista) ─────────────────────
-
-function initFiltrosBusqueda() {
-    if (_fbIniciado || !window.FiltrosBusqueda) return;
-    _fbIniciado = true;
-
-    _fbCitas = new FiltrosBusqueda({
-        containerId:   'fbBuscadorCitas',
-        hiddenInputId: 'buscarCitas',
-        placeholder:   'Buscar citas...',
-        fields: [
-            { key: 'q',       label: 'General',    icon: 'bi-search',      type: 'text' },
-            { key: 'cliente', label: 'Cliente',    icon: 'bi-person',       type: 'text' },
-            { key: 'titulo',  label: 'Título',     icon: 'bi-tag',          type: 'text' },
-            { key: 'tipo',    label: 'Tipo cita',  icon: 'bi-bookmark',     type: 'text' },
-            { key: 'recurso', label: 'Recurso',    icon: 'bi-person-gear',  type: 'text' },
-            { key: 'fecha',   label: 'Fecha',      icon: 'bi-calendar',     type: 'date_range' },
-        ],
-        quickFilters: [
-            { id: 'qf_hoy',        label: 'Hoy',          mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-            { id: 'qf_mes',        label: 'Este mes',     mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-            { id: 'qf_anterior',   label: 'Mes anterior', mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
-            { id: 'qf_pendiente',  label: 'Pendientes',   mk: () => ({ key: 'estado', op: '=', value: 'pendiente',  display: 'Pendiente'  }) },
-            { id: 'qf_confirmada', label: 'Confirmadas',  mk: () => ({ key: 'estado', op: '=', value: 'confirmada', display: 'Confirmada' }) },
-            { id: 'qf_portal',     label: 'Del portal',   mk: () => ({ key: 'origen', op: '=', value: 'portal',     display: 'Portal'     }) },
-        ],
-        onApply: () => { _listaPagina = 1; citasListaCargar(); },
-    });
-    _fbCitas.init();
-}
 
 // ─── CALENDARIO ───────────────────────────────────────────────────────────────
 
@@ -390,12 +412,10 @@ function cambiarVista(vista) {
         ? 'btn btn-primary btn-sm active'
         : 'btn btn-outline-primary btn-sm';
 
-    // Mostrar/ocultar filtros de rango de fechas (solo en lista)
-    document.querySelectorAll('.lista-extra').forEach(el => el.classList.toggle('d-none', esCal));
+    // Los filtros de arriba son del calendario; la lista usa su buscador (FiltrosModal)
+    document.getElementById('filtrosCalendario').classList.toggle('d-none', !esCal);
 
     if (!esCal) {
-        // Iniciar FiltrosBusqueda la primera vez que se muestra la lista
-        initFiltrosBusqueda();
         _listaPagina = 1;
         citasListaCargar();
     } else if (_calendarioCitas) {
@@ -411,27 +431,23 @@ function cambiarPaginaCitas(n) {
     citasListaCargar();
 }
 
+// Devuelve la promesa: FiltrosModal apaga su indicador de carga cuando termina.
 function citasListaCargar() {
+    // Todos los filtros de la lista viajan en `q` (string serializado del buscador).
     const params = new URLSearchParams({
         q:            document.getElementById('buscarCitas')?.value ?? '',
-        estado:       document.getElementById('flt-estado').value,
-        id_tipo_cita: document.getElementById('flt-tipo').value,
-        id_recurso:   document.getElementById('flt-recurso').value,
-        fecha_desde:  document.getElementById('flt-desde')?.value ?? '',
-        fecha_hasta:  document.getElementById('flt-hasta')?.value ?? '',
         page:         _listaPagina,
         per_page:     20,
         sort:         _listaSort,
         dir:          _listaSortDir,
     });
 
+    // Mismo indicador que el buscador: la tabla se atenúa en vez de vaciarse. Se
+    // aplica aquí también para paginar y ordenar, que llaman a esta función directo.
     const tbody = document.getElementById('tbodyCitas');
-    if (tbody) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">'
-            + '<span class="spinner-border spinner-border-sm me-2"></span>Cargando...</td></tr>';
-    }
+    if (tbody) tbody.classList.add('fm-cargando-target');
 
-    fetch(`${URL_AGENDA}/search-ajax?${params}`)
+    return fetch(`${URL_AGENDA}/search-ajax?${params}`)
         .then(r => r.json())
         .then(res => {
             if (!res.ok) return;
@@ -450,7 +466,9 @@ function citasListaCargar() {
             _listaTotalPags = Math.max(1, Math.ceil(total / perPage));
             document.getElementById('btnPrevCitas').disabled = _listaPagina <= 1;
             document.getElementById('btnNextCitas').disabled = _listaPagina >= _listaTotalPags;
-        });
+        })
+        .catch(e => console.error(e))
+        .finally(() => { if (tbody) tbody.classList.remove('fm-cargando-target'); });
 }
 
 // ─── RENDER FILAS ─────────────────────────────────────────────────────────────

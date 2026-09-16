@@ -92,30 +92,39 @@ class AnexoDividendosRepository extends BaseRepository
             (SELECT COALESCE(SUM(d.monto_retencion), 0) FROM anexo_dividendos_detalle d
               WHERE d.id_anexo = a.id AND d.eliminado = false) AS total_retencion";
 
+        // Las mismas sumas de las columnas calculadas, como expresiones para el WHERE
+        // (el texto libre y los filtros numéricos no pueden usar los alias del SELECT).
+        $sqlBenef       = "(SELECT COUNT(*) FROM anexo_dividendos_beneficiario bx WHERE bx.id_anexo = a.id AND bx.eliminado = false)";
+        $sqlDistribuido = "(SELECT COALESCE(SUM(dx.monto_dividendo_distribuido), 0) FROM anexo_dividendos_detalle dx WHERE dx.id_anexo = a.id AND dx.eliminado = false)";
+        $sqlGravado     = "(SELECT COALESCE(SUM(dx.ingreso_gravado), 0) FROM anexo_dividendos_detalle dx WHERE dx.id_anexo = a.id AND dx.eliminado = false)";
+        $sqlRetencion   = "(SELECT COALESCE(SUM(dx.monto_retencion), 0) FROM anexo_dividendos_detalle dx WHERE dx.id_anexo = a.id AND dx.eliminado = false)";
+
         $parsed = FiltrosBusqueda::parsear($buscar);
+        // Texto libre: las columnas del listado (incluidos los totales calculados) y lo
+        // que identifica el anexo. Decisión del usuario (igual que Compras/Ingresos/
+        // Egresos): Estado y Tipo informante NO entran en el texto libre; se filtran
+        // solo desde el modal de filtros. (Antes se aceptaba escribir la etiqueta exacta
+        // del estado; eso ahora es el filtro "Estado" del modal.)
         if ($parsed['texto_libre'] !== '') {
             $condicion = FiltrosBusqueda::condicionTexto(
-                ['a.razon_social', 'a.id_informante', 'a.anio::text', 'a.observaciones'],
+                [
+                    'a.anio::text',                     // Año
+                    'a.id_informante',                  // Identificación
+                    'a.razon_social',                   // Informante
+                    "{$sqlBenef}::text",                // Beneficiarios
+                    "{$sqlDistribuido}::text",          // Distribuido
+                    "{$sqlGravado}::text",              // Ingreso gravado
+                    "{$sqlRetencion}::text",            // Retención
+                    // Fuera del listado, pero identifican el anexo:
+                    'a.observaciones',
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', bz.numero_id_perceptor, bz.nombre_beneficiario, bz.numero_id_beneficiario_efectivo), ' ') FROM anexo_dividendos_beneficiario bz WHERE bz.id_anexo = a.id AND bz.eliminado = false)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'adi_b'
             );
-
-            // El estado se ve en la tabla como una etiqueta, no como su código:
-            // se acepta escribirla, pero solo la palabra exacta (con un ILIKE
-            // parcial, "gen" traería medio listado).
-            $etiqueta = mb_strtolower(trim($parsed['texto_libre']), 'UTF-8');
-            $extra = match ($etiqueta) {
-                'borrador'   => "a.estado = 'borrador'",
-                'generado'   => "a.estado = 'generado'",
-                'presentado' => "a.estado = 'presentado'",
-                default      => null,
-            };
-
             if ($condicion !== '') {
-                $where .= ' AND (' . $condicion . ($extra !== null ? ' OR ' . $extra : '') . ')';
-            } elseif ($extra !== null) {
-                $where .= ' AND ' . $extra;
+                $where .= ' AND ' . $condicion;
             }
         }
 
@@ -130,8 +139,36 @@ class AnexoDividendosRepository extends BaseRepository
             'exacto'   => [
                 'estado'          => 'a.estado',
                 'tipo_informante' => 'a.tipo_informante',
+                // Claves nuevas del modal de filtros.
+                'id_usuario'      => 'a.created_by',
+                'con_beneficiarios' => "CASE WHEN {$sqlBenef} > 0 THEN 'si' ELSE 'no' END",
             ],
-            'numerico' => ['anio' => 'a.anio'],
+            'numerico' => [
+                'anio'          => 'a.anio',
+                'beneficiarios' => $sqlBenef,
+                'distribuido'   => $sqlDistribuido,
+                'gravado'       => $sqlGravado,
+                'retencion'     => $sqlRetencion,
+                'utilidad'      => 'COALESCE(a.utilidad_ejercicio, 0)',
+            ],
+            // Filtros sobre las líneas de la distribución (tabla hija).
+            'existe'   => [
+                'fecha_registro' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM anexo_dividendos_detalle de WHERE de.id_anexo = a.id AND de.eliminado = false AND {cond})',
+                    'col'  => 'de.fecha_registro_contable',
+                    'tipo' => 'fecha',
+                ],
+                'tipo_dividendo' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM anexo_dividendos_detalle de WHERE de.id_anexo = a.id AND de.eliminado = false AND {cond})',
+                    'col'  => 'de.tipo_dividendo',
+                    'tipo' => 'exacto',
+                ],
+                'tipo_beneficiario' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM anexo_dividendos_beneficiario be WHERE be.id_anexo = a.id AND be.eliminado = false AND {cond})',
+                    'col'  => 'be.tipo_beneficiario',
+                    'tipo' => 'exacto',
+                ],
+            ],
         ]);
 
         $sqlCount = "SELECT COUNT(*) FROM anexo_dividendos a {$where}";
@@ -155,6 +192,90 @@ class AnexoDividendosRepository extends BaseRepository
             'total' => $total,
             'rows'  => $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC),
         ];
+    }
+
+    /** Usuarios que han creado algún anexo en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConAnexos(int $idEmpresa): array
+    {
+        return $this->query(
+            "SELECT DISTINCT u.id, u.nombre
+             FROM anexo_dividendos a
+             JOIN usuarios u ON u.id = a.created_by
+             WHERE a.id_empresa = :id_empresa AND a.eliminado = false
+             ORDER BY u.nombre",
+            [':id_empresa' => $idEmpresa]
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de los anexos (pestaña "Detalles" del modal de filtros):
+     * cada beneficiario (identificación, nombre, beneficiario efectivo) y cada línea
+     * de la distribución (beneficiario, año que generó la utilidad, fecha contable,
+     * montos) que coincide con el texto, con el anexo al que pertenece. Mismo alcance
+     * que el listado: empresa, no eliminados y registros propios por created_by (el
+     * listado no filtra por tipo_ambiente, así que aquí tampoco). Las tablas hijas se
+     * filtran por eliminado = false.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = 'a.id_empresa = :id_empresa AND a.eliminado = false';
+        if ($idUsuario !== null) {
+            $whereBase .= ' AND a.created_by = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = $idUsuario;
+        }
+
+        $condBen = FiltrosBusqueda::condicionTexto(
+            ['b.numero_id_perceptor', 'b.nombre_beneficiario', 'b.numero_id_beneficiario_efectivo', 'b.pais_residencia'],
+            $q, $params, 'bn'
+        );
+        $condDet = FiltrosBusqueda::condicionTexto(
+            ['bd.numero_id_perceptor', 'bd.nombre_beneficiario', 'd.anio_genera_utilidad::text', 'd.fecha_registro_contable::text',
+             'd.monto_dividendo_distribuido::text', 'd.ingreso_gravado::text', 'd.monto_retencion::text'],
+            $q, $params, 'dt'
+        );
+        if ($condBen === '' || $condDet === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT a.id, a.anio, a.razon_social, a.estado
+                    FROM anexo_dividendos a
+                    WHERE {$whereBase}
+                )
+                SELECT * FROM (
+                    SELECT 'BENEFICIARIO' AS origen,
+                           b.numero_id_perceptor AS tipo,
+                           b.nombre_beneficiario AS descripcion,
+                           b.tipo_beneficiario AS codigo,
+                           NULL::date AS fecha_linea,
+                           NULL::numeric AS monto,
+                           x.*
+                    FROM anexo_dividendos_beneficiario b
+                    JOIN base x ON x.id = b.id_anexo
+                    WHERE b.eliminado = false AND {$condBen}
+                    UNION ALL
+                    SELECT 'DIVIDENDO' AS origen,
+                           bd.numero_id_perceptor AS tipo,
+                           bd.nombre_beneficiario AS descripcion,
+                           d.tipo_dividendo AS codigo,
+                           d.fecha_registro_contable AS fecha_linea,
+                           d.monto_dividendo_distribuido AS monto,
+                           x.*
+                    FROM anexo_dividendos_detalle d
+                    JOIN base x ON x.id = d.id_anexo
+                    LEFT JOIN anexo_dividendos_beneficiario bd ON bd.id = d.id_beneficiario
+                    WHERE d.eliminado = false AND {$condDet}
+                ) r
+                ORDER BY r.anio DESC, r.id DESC, r.origen
+                LIMIT {$limit}";
+
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function getPorId(int $id, int $idEmpresa): ?array

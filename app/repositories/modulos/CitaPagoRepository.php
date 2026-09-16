@@ -34,6 +34,8 @@ class CitaPagoRepository extends BaseRepository
             LEFT JOIN citas_tipos    ct ON ct.id = c.id_tipo_cita
             LEFT JOIN citas_recursos cr ON cr.id = c.id_recurso
             LEFT JOIN clientes       cl ON cl.id = c.id_cliente AND cl.id_empresa = c.id_empresa AND cl.eliminado = false
+            LEFT JOIN citas_clientes_externos ce ON ce.id = c.id_cliente_externo AND ce.id_empresa = c.id_empresa
+            LEFT JOIN usuarios       u  ON u.id = cp.created_by
         ";
 
         $where  = "WHERE cp.id_empresa = :id_empresa AND cp.eliminado = false";
@@ -41,8 +43,24 @@ class CitaPagoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre: columnas del listado y lo que identifica el pago aunque no
+            // sea columna. Decisión del usuario: Tipo cita, Tipo pago, Método y Estado
+            // NO entran en el texto libre; se filtran solo desde el modal. datos_gateway
+            // (respuesta de la pasarela) tampoco: puede traer datos sensibles.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['cl.nombre', 'cp.referencia_externa', 'ct.nombre', 'c.titulo'],
+                [
+                    "TO_CHAR(cp.created_at, 'DD-MM-YYYY HH24:MI')",   // Fecha registro
+                    "TO_CHAR(c.fecha_inicio, 'DD-MM-YYYY HH24:MI')",  // Fecha cita
+                    'cl.nombre',                                      // Cliente
+                    'c.titulo',                                       // Cliente (sin cliente, se muestra el título de la cita)
+                    'cl.identificacion',
+                    "CONCAT_WS(' ', ce.nombres, ce.apellidos)",       // Cliente que reservó por el portal
+                    'ce.identificacion',
+                    'cr.nombre',                                      // Recurso de la cita
+                    'cp.referencia_externa',                          // Referencia
+                    'cp.monto::text',                                 // Monto
+                    'u.nombre',                                       // Usuario que registró
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -51,16 +69,23 @@ class CitaPagoRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (las viejas se conservan: viajan en los enlaces
+        // de PDF/Excel).
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'    => [
-                'cliente'    => 'cl.nombre',
-                'referencia' => 'cp.referencia_externa',
-                'tipo_cita'  => 'ct.nombre',
+                'cliente'        => "CONCAT_WS(' ', cl.nombre, ce.nombres, ce.apellidos)",
+                'identificacion' => "CONCAT_WS(' ', cl.identificacion, ce.identificacion)",
+                'referencia'     => 'cp.referencia_externa',
+                'tipo_cita'      => 'ct.nombre',
+                'titulo'         => 'c.titulo',
             ],
             'exacto'   => [
-                'estado'     => 'cp.estado',
-                'gateway'    => 'cp.gateway',
-                'tipo_pago'  => 'cp.tipo_pago',
+                'estado'       => 'cp.estado',
+                'gateway'      => 'cp.gateway',
+                'tipo_pago'    => 'cp.tipo_pago',
+                'id_tipo_cita' => 'c.id_tipo_cita',
+                'id_recurso'   => 'c.id_recurso',
+                'usuario'      => 'cp.created_by',
             ],
             'fecha'    => [
                 'fecha'      => 'cp.created_at',
@@ -139,6 +164,49 @@ class CitaPagoRepository extends BaseRepository
         }
         $stmt->execute();
         return ['rows' => $stmt->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros: solo tipos de cita, recursos y
+     * usuarios que aparecen en algún pago de la empresa.
+     *
+     * @return array{tipos: array<int, array{id:int, nombre:string}>, recursos: array<int, array{id:int, nombre:string}>, usuarios: array<int, array{id:int, nombre:string}>}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $tipos = $this->db->prepare("
+            SELECT DISTINCT ct.id, ct.nombre
+            FROM citas_pagos cp
+            JOIN citas c        ON c.id  = cp.id_cita
+            JOIN citas_tipos ct ON ct.id = c.id_tipo_cita
+            WHERE cp.id_empresa = :id_empresa AND cp.eliminado = false
+            ORDER BY ct.nombre
+        ");
+        $tipos->execute($params);
+        $recursos = $this->db->prepare("
+            SELECT DISTINCT cr.id, cr.nombre
+            FROM citas_pagos cp
+            JOIN citas c           ON c.id  = cp.id_cita
+            JOIN citas_recursos cr ON cr.id = c.id_recurso
+            WHERE cp.id_empresa = :id_empresa AND cp.eliminado = false
+            ORDER BY cr.nombre
+        ");
+        $recursos->execute($params);
+        $usuarios = $this->db->prepare("
+            SELECT DISTINCT u.id, u.nombre
+            FROM citas_pagos cp
+            JOIN usuarios u ON u.id = cp.created_by
+            WHERE cp.id_empresa = :id_empresa AND cp.eliminado = false
+            ORDER BY u.nombre
+        ");
+        $usuarios->execute($params);
+
+        return [
+            'tipos'    => $tipos->fetchAll(PDO::FETCH_ASSOC),
+            'recursos' => $recursos->fetchAll(PDO::FETCH_ASSOC),
+            'usuarios' => $usuarios->fetchAll(PDO::FETCH_ASSOC),
+        ];
     }
 
     // ─── RESUMEN / STATS ──────────────────────────────────────────────────────

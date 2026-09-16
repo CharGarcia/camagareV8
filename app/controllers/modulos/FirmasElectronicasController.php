@@ -88,6 +88,8 @@ class FirmasElectronicasController extends BaseModuloController
             'vistaConfig' => $prefsVista,
             'provincias'  => $provincias,
             'tiposFirma'  => $tiposFirma,
+            // Selects del modal de filtros (solo lo usado; mismo alcance de registros propios)
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa, $idUsuarioFiltro),
             'fullWidth'   => true,
         ]);
     }

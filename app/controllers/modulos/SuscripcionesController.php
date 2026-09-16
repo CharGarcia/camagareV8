@@ -102,6 +102,8 @@ class SuscripcionesController extends BaseModuloController
             'ordenDir'       => $ordenDir,
             'vistaConfig'    => $prefsVista,
             'periodicidades' => $periodicidades,
+            // Selects del modal de filtros (solo valores usados por la empresa).
+            'opcionesFiltro' => $this->service->getOpcionesFiltro($idEmpresa),
             'tarifasIva'     => $tarifasIva,
             'puntos'         => $puntos,
             'decimalesPrecio'   => $decimalesPrecio,
@@ -290,6 +292,44 @@ class SuscripcionesController extends BaseModuloController
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Pestaña "Detalles" del buscador (FiltrosModal): búsqueda libre dentro de las
+     * suscripciones (ítems, cobros e información adicional). Aplica registros propios (§6).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $origenes = ['ITEM' => 'Producto / servicio', 'COBRO' => 'Cobro', 'INFO' => 'Información adicional'];
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'origen'         => $origenes[$r['origen']] ?? $r['origen'],
+                'referencia'     => $r['referencia'] ?? '',
+                'descripcion'    => $r['descripcion'] ?? '',
+                'fecha'          => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '',
+                'monto'          => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'id_suscripcion' => (int) $r['id_suscripcion'],
+                'cliente'        => $r['cliente'] ?? '',
+                'identificacion' => $r['identificacion'] ?? '',
+                'proximo_cobro'  => !empty($r['proximo_cobro']) ? date('d-m-Y', strtotime((string) $r['proximo_cobro'])) : '',
+                'estado'         => ucfirst((string) ($r['estado'] ?? '')),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function getDetalleAjax(): void

@@ -98,52 +98,98 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y Exportación -->
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorFIRMAS" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) +
+            // botón embudo que abre el modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de FirmaElectronicaRepository::getListado().
+            // Una sola pestaña, sin "Detalles": los adjuntos son archivos (no se buscan
+            // rutas ni nombres de archivo) y el formulario enviado vive en su propio panel.
+            // Ningún filtro expone datos sensibles (código dactilar, nacimiento, dirección).
+            $opcionesFiltro  = $opcionesFiltro ?? [];
+            $opcionesProducto = array_map(static fn($p) => ['v' => (string) $p['id'], 'l' => (string) $p['nombre']], $opcionesFiltro['productos'] ?? []);
+            $opcionesUsuario  = array_map(static fn($u) => ['v' => (string) $u['id'], 'l' => (string) $u['nombre']], $opcionesFiltro['usuarios'] ?? []);
+            // Filas de 12 columnas:
+            //   Firma:   [Fecha de registro 6][Estado 3][Pago 3]
+            //            [Factura 4][Tipo de firma 4][Usuario que registró 4]
+            //            [Caducidad 6][Vigencia 6]
+            //   Titular: [Nombres 4][Apellidos 4][Identificación 4]
+            //            [Tipo de identificación 4][Tipo de persona 4][Con RUC 4]
+            //            [Teléfono 4][Correo 4][Empresa (RUC / razón social) 4]
+            $filtrosFirmas = [
+                ['key' => 'fecha',               'label' => 'Fecha de registro',      'icon' => 'bi-calendar-event',      'type' => 'date_range', 'grupo' => 'Firma',   'col' => 6, 'atajos' => true],
+                ['key' => 'estado',              'label' => 'Estado del trámite',     'icon' => 'bi-flag',                'type' => 'select',     'grupo' => 'Firma',   'col' => 3, 'options' => [
+                    ['v' => 'pendiente',  'l' => 'Pendiente'],
+                    ['v' => 'en_proceso', 'l' => 'En proceso'],
+                    ['v' => 'emitida',    'l' => 'Emitida'],
+                    ['v' => 'cancelada',  'l' => 'Cancelada'],
+                ]],
+                ['key' => 'estado_pago',         'label' => 'Estado del pago',        'icon' => 'bi-credit-card-2-front', 'type' => 'select',     'grupo' => 'Firma',   'col' => 3, 'options' => [
+                    ['v' => 'pendiente',  'l' => 'Pendiente'],
+                    ['v' => 'confirmado', 'l' => 'Confirmado'],
+                    ['v' => 'rechazado',  'l' => 'Rechazado'],
+                ]],
+                ['key' => 'factura',             'label' => 'Factura',                'icon' => 'bi-receipt',             'type' => 'select',     'grupo' => 'Firma',   'col' => 4, 'options' => [
+                    // Estados reales de ventas_cabecera (autorizado/anulado, en masculino)
+                    ['v' => 'por_facturar', 'l' => 'Por facturar'],
+                    ['v' => 'borrador',     'l' => 'Borrador'],
+                    ['v' => 'autorizado',   'l' => 'Facturado (autorizado)'],
+                    ['v' => 'anulado',      'l' => 'Anulado'],
+                ]],
+                ['key' => 'id_producto',         'label' => 'Tipo de firma',          'icon' => 'bi-pen',                 'type' => 'select',     'grupo' => 'Firma',   'col' => 4, 'options' => $opcionesProducto],
+                ['key' => 'usuario',             'label' => 'Usuario que registró',   'icon' => 'bi-person-badge',        'type' => 'select',     'grupo' => 'Firma',   'col' => 4, 'options' => $opcionesUsuario],
+                ['key' => 'caducidad',           'label' => 'Fecha de caducidad',     'icon' => 'bi-calendar-x',          'type' => 'date_range', 'grupo' => 'Firma',   'col' => 6],
+                ['key' => 'vigencia',            'label' => 'Vigencia',               'icon' => 'bi-hourglass-split',     'type' => 'select',     'grupo' => 'Firma',   'col' => 6, 'options' => [
+                    ['v' => 'vigente',    'l' => 'Vigente (más de 30 días)'],
+                    ['v' => 'por_vencer', 'l' => 'Por vencer (30 días o menos)'],
+                    ['v' => 'vencida',    'l' => 'Vencida'],
+                    ['v' => 'sin_fecha',  'l' => 'Sin fecha de caducidad'],
+                ]],
+                ['key' => 'nombres',             'label' => 'Nombres',                'icon' => 'bi-person',              'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
+                ['key' => 'apellidos',           'label' => 'Apellidos',              'icon' => 'bi-person',              'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
+                ['key' => 'identificacion',      'label' => 'Identificación',         'icon' => 'bi-card-text',           'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
+                ['key' => 'tipo_identificacion', 'label' => 'Tipo de identificación', 'icon' => 'bi-credit-card',         'type' => 'select',     'grupo' => 'Titular', 'col' => 4, 'options' => [
+                    ['v' => 'cedula',    'l' => 'Cédula'],
+                    ['v' => 'pasaporte', 'l' => 'Pasaporte'],
+                ]],
+                ['key' => 'tipo_persona',        'label' => 'Tipo de persona',        'icon' => 'bi-people',              'type' => 'select',     'grupo' => 'Titular', 'col' => 4, 'options' => [
+                    ['v' => 'natural',  'l' => 'Natural'],
+                    ['v' => 'juridica', 'l' => 'Jurídica'],
+                ]],
+                ['key' => 'con_ruc',             'label' => 'Con RUC',                'icon' => 'bi-building',            'type' => 'select',     'grupo' => 'Titular', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Sí'],
+                    ['v' => 'no', 'l' => 'No'],
+                ]],
+                ['key' => 'telefono',            'label' => 'Teléfono',               'icon' => 'bi-telephone',           'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
+                ['key' => 'correo',              'label' => 'Correo',                 'icon' => 'bi-envelope',            'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
+                ['key' => 'empresa',             'label' => 'Empresa (RUC o nombre)', 'icon' => 'bi-briefcase',           'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorFIRMAS"></div>
             <input type="hidden" id="buscarFirma" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorFIRMAS',
+                    if (!window.FiltrosModal) return;
+                    // Instancia global: abrirFirmaPorNombre() limpia la búsqueda a través de ella.
+                    window.FIRMAS_fm = new FiltrosModal({
+                        containerId: 'fmBuscadorFIRMAS',
                         hiddenInputId: 'buscarFirma',
-                        fields: [
-                            { key: 'nombres',        label: 'Nombres',          icon: 'bi-person',         type: 'text' },
-                            { key: 'apellidos',      label: 'Apellidos',        icon: 'bi-person',         type: 'text' },
-                            { key: 'identificacion', label: 'Identificación',   icon: 'bi-card-text',      type: 'text' },
-                            { key: 'telefono',       label: 'Teléfono',         icon: 'bi-telephone',      type: 'text' },
-                            { key: 'correo',         label: 'Correo',           icon: 'bi-envelope',       type: 'text' },
-                            { key: 'tipo_firma',     label: 'Tipo Firma',       icon: 'bi-pen',            type: 'text' },
-                            { key: 'tipo_identificacion', label: 'Tipo Identificación', icon: 'bi-credit-card', type: 'select', options: [
-                                { v: 'cedula',    l: 'Cédula' },
-                                { v: 'pasaporte', l: 'Pasaporte' },
-                            ]},
-                            { key: 'estado', label: 'Estado Trámite', icon: 'bi-flag', type: 'select', options: [
-                                { v: 'pendiente',   l: 'Pendiente' },
-                                { v: 'en_proceso',  l: 'En Proceso' },
-                                { v: 'emitida',     l: 'Emitida' },
-                                { v: 'cancelada',   l: 'Cancelada' },
-                            ]},
-                            { key: 'estado_pago', label: 'Estado Pago', icon: 'bi-credit-card-2-front', type: 'select', options: [
-                                { v: 'pendiente',   l: 'Pendiente' },
-                                { v: 'confirmado',  l: 'Confirmado' },
-                                { v: 'rechazado',   l: 'Rechazado' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_pendiente',  label: 'Pendientes',   mk: () => ({ key: 'estado', op: '=', value: 'pendiente',  display: 'Pendiente' }) },
-                            { id: 'qf_en_proceso', label: 'En Proceso',   mk: () => ({ key: 'estado', op: '=', value: 'en_proceso', display: 'En Proceso' }) },
-                            { id: 'qf_emitida',    label: 'Emitidas',     mk: () => ({ key: 'estado', op: '=', value: 'emitida',    display: 'Emitida' }) },
-                            { id: 'qf_pago_conf',  label: 'Pago confirmado', mk: () => ({ key: 'estado_pago', op: '=', value: 'confirmado', display: 'Confirmado' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de firmas electrónicas',
+                        inputWidth: 420,
+                        extraId: 'fmExtraFIRMAS',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosFirmas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyFirmas',   // se atenúa mientras se busca
                         onApply: () => window.fetchSearch && window.fetchSearch(1),
-                    }).init();
+                    });
+                    window.FIRMAS_fm.init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraFIRMAS" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'nombres'               => 'Nombres',
@@ -160,9 +206,9 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo);
                 ?>
                 <a id="btnFirmaPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
-                   class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+                   class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
                 <a id="btnFirmaExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
-                   class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                   class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
             </div>
         </div>
 
@@ -316,6 +362,10 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
     window.fetchSearch = async (page = 1) => {
         const term = inputBuscar ? inputBuscar.value.trim() : '';
         const uri  = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+        // vaciarse. Aquí también para paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('tbodyFirmas');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const resp = await fetch(uri);
             const data = await resp.json();
@@ -341,6 +391,8 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             }
         } catch (e) {
             console.error('Error en búsqueda de firmas:', e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     };
 
@@ -471,6 +523,9 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             } catch {}
         }
         document.getElementById('buscarFirma').value = '';
+        // Deja el buscador (FiltrosModal) coherente con la búsqueda vaciada: sin texto ni chips.
+        // Sin aplicar: la búsqueda la lanza fetchSearch justo debajo.
+        if (window.FIRMAS_fm) window.FIRMAS_fm.limpiar(false);
         window.fetchSearch(1).then(() => {
             document.querySelectorAll('#tbodyFirmas tr[data-row]').forEach(row => {
                 try {

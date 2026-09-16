@@ -677,6 +677,12 @@ class InventarioService
         return $this->repo->getStockResumen($idEmpresa, $filtros, $page, $perPage);
     }
 
+    /** Categorías con movimientos (select del modal de filtros de Movimientos de Inventario). */
+    public function getCategoriasConMovimientos(int $idEmpresa): array
+    {
+        return $this->repo->getCategoriasConMovimientos($idEmpresa);
+    }
+
     public function getResumenEstadistico(int $idEmpresa): array
     {
         return $this->repo->getResumenEstadistico($idEmpresa);

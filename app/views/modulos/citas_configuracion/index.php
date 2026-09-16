@@ -48,9 +48,70 @@ $colsRecursos = [
 ];
 ?>
 
-<!-- FiltrosBusqueda -->
-<link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
+<?php
+// ─── Buscadores (FiltrosModal) de las pestañas Tipos de Cita y Recursos ──────────
+// Ambos listados llegan completos desde el servidor (hasta 500 filas) y se filtran
+// en el navegador (filtrarTiposDOM / filtrarRecursosDOM, abajo): el string que arma
+// el componente (`clave:valor ... texto libre`) se interpreta aquí mismo con las
+// mismas reglas que FiltrosBusqueda en PHP (todas las palabras, sin tildes, rangos
+// `a..b`, `>=`, `<=`, listas `a,b`, negación `-clave:`).
+// Selects "Recurso asignado" / "Tipo de cita": solo recursos/tipos que ya tienen
+// una asignación (citas_tipos_recursos).
+$recursosAsignados = [];
+foreach ($tiposRows ?? [] as $t) {
+    foreach ($t['recursos_ids'] ?? [] as $idRec) {
+        $recursosAsignados[(int) $idRec] = true;
+    }
+}
+$opcionesRecursoAsignado = [];
+foreach ($recursosRows ?? [] as $r) {
+    if (isset($recursosAsignados[(int) $r['id']])) {
+        $opcionesRecursoAsignado[] = ['v' => (string) $r['id'], 'l' => $r['nombre']];
+    }
+}
+$opcionesTipoAsignado = [];
+foreach ($tiposRows ?? [] as $t) {
+    if (!empty($t['recursos_ids'])) {
+        $opcionesTipoAsignado[] = ['v' => (string) $t['id'], 'l' => $t['nombre']];
+    }
+}
+$opcionesEstadoCfg = [
+    ['v' => 'activo',   'l' => 'Activo'],
+    ['v' => 'inactivo', 'l' => 'Inactivo'],
+];
+// Tipos de cita — filas de 12: [Nombre 4][Tipo de pago 4][Estado 4]
+//                              [Precio 6][Duración 6]
+//                              [Recurso asignado 6][Descripción 6]
+$filtrosTiposCita = [
+    ['key' => 'nombre',      'label' => 'Nombre',            'icon' => 'bi-tags',            'type' => 'text',         'grupo' => 'Tipo de cita', 'col' => 4],
+    ['key' => 'tipo_pago',   'label' => 'Tipo de pago',      'icon' => 'bi-credit-card',     'type' => 'select',       'grupo' => 'Tipo de cita', 'col' => 4, 'options' => [
+        ['v' => 'sin_pago', 'l' => 'Sin pago'],
+        ['v' => 'total',    'l' => 'Pago total'],
+        ['v' => 'anticipo', 'l' => 'Anticipo'],
+    ]],
+    ['key' => 'estado',      'label' => 'Estado',            'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Tipo de cita', 'col' => 4, 'options' => $opcionesEstadoCfg],
+    ['key' => 'precio',      'label' => 'Precio',            'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores',      'col' => 6],
+    ['key' => 'duracion',    'label' => 'Duración (minutos)','icon' => 'bi-hourglass-split', 'type' => 'number_range', 'grupo' => 'Valores',      'col' => 6],
+    ['key' => 'recurso',     'label' => 'Recurso asignado',  'icon' => 'bi-person-gear',     'type' => 'select',       'grupo' => 'Otros',        'col' => 6, 'options' => $opcionesRecursoAsignado],
+    ['key' => 'descripcion', 'label' => 'Descripción',       'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Otros',        'col' => 6],
+];
+// Recursos — filas de 12: [Nombre 4][Tipo 4][Estado 4]
+//                         [Tipo de cita asignado 6][Descripción 6]
+$filtrosRecursosCita = [
+    ['key' => 'nombre',      'label' => 'Nombre',                'icon' => 'bi-person-gear', 'type' => 'text',   'grupo' => 'Recurso', 'col' => 4],
+    ['key' => 'tipo',        'label' => 'Tipo',                  'icon' => 'bi-tag',         'type' => 'select', 'grupo' => 'Recurso', 'col' => 4, 'options' => [
+        ['v' => 'persona', 'l' => 'Persona'],
+        ['v' => 'sala',    'l' => 'Sala'],
+        ['v' => 'equipo',  'l' => 'Equipo'],
+    ]],
+    ['key' => 'estado',      'label' => 'Estado',                'icon' => 'bi-flag',        'type' => 'select', 'grupo' => 'Recurso', 'col' => 4, 'options' => $opcionesEstadoCfg],
+    ['key' => 'tipo_cita',   'label' => 'Tipo de cita asignado', 'icon' => 'bi-tags',        'type' => 'select', 'grupo' => 'Otros',   'col' => 6, 'options' => $opcionesTipoAsignado],
+    ['key' => 'descripcion', 'label' => 'Descripción',           'icon' => 'bi-card-text',   'type' => 'text',   'grupo' => 'Otros',   'col' => 6],
+];
+?>
+<!-- FiltrosModal -->
+<link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfigTipos,    'estiloVistaTipos') ?>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfigRecursos, 'estiloVistaRecursos') ?>
@@ -114,9 +175,10 @@ $colsRecursos = [
         <div class="d-flex justify-content-between align-items-center p-3 border-bottom flex-wrap gap-2">
             <!-- Buscador + columnas -->
             <div class="d-flex align-items-center gap-2 flex-wrap">
-                <div id="fbBuscadorTipos" style="width:420px;"></div>
+                <div id="fmBuscadorTIPOS"></div>
                 <input type="hidden" id="buscarTiposHidden" value="">
-                <div class="btn-group btn-group-sm">
+                <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+                <div id="fmExtraTIPOS" class="btn-group btn-group-sm">
                     <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($colsTipos, $vistaConfigTipos, $rutaModulo . '-tipos') ?>
                 </div>
             </div>
@@ -200,9 +262,10 @@ $colsRecursos = [
         <div class="d-flex justify-content-between align-items-center p-3 border-bottom flex-wrap gap-2">
             <!-- Buscador + columnas -->
             <div class="d-flex align-items-center gap-2 flex-wrap">
-                <div id="fbBuscadorRecursos" style="width:420px;"></div>
+                <div id="fmBuscadorRECURSOS"></div>
                 <input type="hidden" id="buscarRecursosHidden" value="">
-                <div class="btn-group btn-group-sm">
+                <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+                <div id="fmExtraRECURSOS" class="btn-group btn-group-sm">
                     <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($colsRecursos, $vistaConfigRecursos, $rutaModulo . '-recursos') ?>
                 </div>
             </div>
@@ -422,7 +485,11 @@ const _cfgSort = {
     tbodyRecursos: { col: '<?= htmlspecialchars($recSortCol)   ?>', dir: '<?= strtolower($recSortDir)   ?>' },
 };
 
-// ─── Parser simplificado de FiltrosBusqueda (para filtrado DOM local) ─────────
+// ─── Filtrado local (DOM) con el string del buscador FiltrosModal ─────────────
+// Mismo formato y reglas que App\Helpers\FiltrosBusqueda en PHP: `clave:valor`,
+// `clave:"con espacios"`, rangos `a..b`, `>=`/`<=`/`>`/`<`, listas `a,b`, negación
+// `-clave:valor`; el texto libre exige TODAS las palabras, en cualquier orden, sin
+// distinguir mayúsculas ni tildes.
 function parseFB(raw) {
     const filtros = {};
     let texto = (raw || '').trim();
@@ -435,64 +502,119 @@ function parseFB(raw) {
     return { texto: texto.replace(/\s+/g, ' ').trim(), filtros };
 }
 
+function normFB(s) {
+    return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+/** Todas las palabras de `texto` aparecen en alguno de los `valores`. */
+function cumpleTextoFB(valores, texto) {
+    const hay = normFB(valores.join(' '));
+    return normFB(texto).split(/\s+/).filter(Boolean).every(p => hay.includes(p));
+}
+
+/** Coincidencia exacta con uno de los valores de la lista `a,b,c`. */
+function cumpleExactoFB(valor, val) {
+    const lista = String(val).split(',').map(v => v.trim()).filter(Boolean);
+    return (Array.isArray(valor) ? valor : [valor]).some(v => lista.includes(String(v)));
+}
+
+/** Rango numérico `a..b`, `>=a`, `<=b`, `>a`, `<b`, `=a` o valor exacto. */
+function cumpleNumeroFB(valor, val) {
+    const n = parseFloat(valor);
+    if (isNaN(n)) return false;
+    let m = String(val).match(/^(.+?)\.\.(.+)$/);
+    if (m) return n >= parseFloat(m[1]) && n <= parseFloat(m[2]);
+    m = String(val).match(/^(>=|<=|>|<|=)(.+)$/);
+    const x = parseFloat(m ? m[2] : val);
+    switch (m ? m[1] : '=') {
+        case '>=': return n >= x;
+        case '<=': return n <= x;
+        case '>':  return n > x;
+        case '<':  return n < x;
+        default:   return Math.abs(n - x) < 0.005;
+    }
+}
+
+/** Aplica un filtro (con su negación) si viene en el string; sin él, pasa. */
+function aplicaFB(filtros, clave, fn) {
+    const f = filtros[clave];
+    if (!f) return true;
+    const r = fn(f.val);
+    return f.neg ? !r : r;
+}
+
 function rowData(tr) {
     try { return JSON.parse(tr.dataset.row || '{}'); } catch { return {}; }
 }
 
+function estadoFB(d) {
+    return (parseInt(d.status ?? 1) === 1) ? 'activo' : 'inactivo';
+}
+
 // ─── Filtrado DOM: tipos ──────────────────────────────────────────────────────
 function filtrarTiposDOM() {
-    const raw = document.getElementById('buscarTiposHidden')?.value || '';
-    const { texto, filtros } = parseFB(raw);
-    document.querySelectorAll('#tbodyTipos tr[data-row]').forEach(tr => {
-        const d = rowData(tr);
-        let ok = true;
-        if (texto) {
-            const txt = Array.from(tr.cells).map(td => td.textContent).join(' ').toLowerCase();
-            ok = ok && txt.includes(texto.toLowerCase());
-        }
-        if (filtros.nombre) {
-            const match = (d.nombre || '').toLowerCase().includes(filtros.nombre.val.toLowerCase());
-            ok = ok && (filtros.nombre.neg ? !match : match);
-        }
-        if (filtros.tipo_pago) {
-            const match = (d.tipo_pago ?? 'sin_pago') === filtros.tipo_pago.val;
-            ok = ok && (filtros.tipo_pago.neg ? !match : match);
-        }
-        if (filtros.estado) {
-            const activo = (parseInt(d.status ?? 1) === 1) ? 'activo' : 'inactivo';
-            const match  = activo === filtros.estado.val;
-            ok = ok && (filtros.estado.neg ? !match : match);
-        }
-        tr.style.display = ok ? '' : 'none';
-    });
+    const tbody = document.getElementById('tbodyTipos');
+    if (tbody) tbody.classList.add('fm-cargando-target');
+    try {
+        const raw = document.getElementById('buscarTiposHidden')?.value || '';
+        const { texto, filtros } = parseFB(raw);
+        document.querySelectorAll('#tbodyTipos tr[data-row]').forEach(tr => {
+            const d = rowData(tr);
+            const precio = parseFloat(d.precio ?? 0) || 0;
+            // Texto libre: Nombre, Duración, Precio y la descripción. Tipo de pago y
+            // Estado NO entran (decisión del usuario): se filtran desde el modal.
+            let ok = !texto || cumpleTextoFB([
+                d.nombre,                                        // Nombre
+                `${parseInt(d.duracion_minutos ?? 30)} min`,     // Duración
+                precio.toFixed(2), `$${precio.toFixed(2)}`,      // Precio
+                d.descripcion,
+            ], texto);
+            ok = ok
+                && aplicaFB(filtros, 'nombre',      v => cumpleTextoFB([d.nombre], v))
+                && aplicaFB(filtros, 'descripcion', v => cumpleTextoFB([d.descripcion], v))
+                && aplicaFB(filtros, 'tipo_pago',   v => cumpleExactoFB(d.tipo_pago ?? 'sin_pago', v))
+                && aplicaFB(filtros, 'estado',      v => cumpleExactoFB(estadoFB(d), v))
+                && aplicaFB(filtros, 'precio',      v => cumpleNumeroFB(precio, v))
+                && aplicaFB(filtros, 'duracion',    v => cumpleNumeroFB(d.duracion_minutos ?? 30, v))
+                && aplicaFB(filtros, 'recurso',     v => cumpleExactoFB((d.recursos_ids || []).map(String), v));
+            tr.style.display = ok ? '' : 'none';
+        });
+    } finally {
+        if (tbody) tbody.classList.remove('fm-cargando-target');
+    }
 }
 
 // ─── Filtrado DOM: recursos ────────────────────────────────────────────────────
 function filtrarRecursosDOM() {
-    const raw = document.getElementById('buscarRecursosHidden')?.value || '';
-    const { texto, filtros } = parseFB(raw);
-    document.querySelectorAll('#tbodyRecursos tr[data-row]').forEach(tr => {
-        const d = rowData(tr);
-        let ok = true;
-        if (texto) {
-            const txt = Array.from(tr.cells).map(td => td.textContent).join(' ').toLowerCase();
-            ok = ok && txt.includes(texto.toLowerCase());
-        }
-        if (filtros.nombre) {
-            const match = (d.nombre || '').toLowerCase().includes(filtros.nombre.val.toLowerCase());
-            ok = ok && (filtros.nombre.neg ? !match : match);
-        }
-        if (filtros.tipo) {
-            const match = (d.tipo ?? '') === filtros.tipo.val;
-            ok = ok && (filtros.tipo.neg ? !match : match);
-        }
-        if (filtros.estado) {
-            const activo = (parseInt(d.status ?? 1) === 1) ? 'activo' : 'inactivo';
-            const match  = activo === filtros.estado.val;
-            ok = ok && (filtros.estado.neg ? !match : match);
-        }
-        tr.style.display = ok ? '' : 'none';
-    });
+    const tbody = document.getElementById('tbodyRecursos');
+    if (tbody) tbody.classList.add('fm-cargando-target');
+    try {
+        const raw = document.getElementById('buscarRecursosHidden')?.value || '';
+        const { texto, filtros } = parseFB(raw);
+        // Tipos de cita asignados a cada recurso (la relación vive en los tipos)
+        const tiposPorRecurso = {};
+        document.querySelectorAll('#tbodyTipos tr[data-row]').forEach(tr => {
+            const t = rowData(tr);
+            (t.recursos_ids || []).forEach(idRec => {
+                (tiposPorRecurso[idRec] = tiposPorRecurso[idRec] || []).push(String(t.id));
+            });
+        });
+        document.querySelectorAll('#tbodyRecursos tr[data-row]').forEach(tr => {
+            const d = rowData(tr);
+            // Texto libre: Nombre y Descripción. Tipo y Estado NO entran (decisión
+            // del usuario): se filtran desde el modal.
+            let ok = !texto || cumpleTextoFB([d.nombre, d.descripcion], texto);
+            ok = ok
+                && aplicaFB(filtros, 'nombre',      v => cumpleTextoFB([d.nombre], v))
+                && aplicaFB(filtros, 'descripcion', v => cumpleTextoFB([d.descripcion], v))
+                && aplicaFB(filtros, 'tipo',        v => cumpleExactoFB(d.tipo ?? '', v))
+                && aplicaFB(filtros, 'estado',      v => cumpleExactoFB(estadoFB(d), v))
+                && aplicaFB(filtros, 'tipo_cita',   v => cumpleExactoFB(tiposPorRecurso[d.id] || [], v));
+            tr.style.display = ok ? '' : 'none';
+        });
+    } finally {
+        if (tbody) tbody.classList.remove('fm-cargando-target');
+    }
 }
 
 // ─── Ordenar tabla + persistencia ─────────────────────────────────────────────
@@ -558,60 +680,34 @@ function autoSortInit(tbodyId, sortCol, sortDir, colMap) {
 // ─── INIT ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
 
-    // ── FiltrosBusqueda: Tipos ───────────────────────────────────────────────
-    if (window.FiltrosBusqueda && document.getElementById('fbBuscadorTipos')) {
-        new FiltrosBusqueda({
-            containerId:   'fbBuscadorTipos',
+    // ── Buscador (FiltrosModal): Tipos de cita ───────────────────────────────
+    // Sin pestaña "Detalles": son catálogos sin líneas propias.
+    if (window.FiltrosModal && document.getElementById('fmBuscadorTIPOS')) {
+        new FiltrosModal({
+            containerId:   'fmBuscadorTIPOS',
             hiddenInputId: 'buscarTiposHidden',
-            placeholder:   'Buscar tipos de cita...',
-            fields: [
-                { key: 'nombre',    label: 'Nombre',     icon: 'bi-tags',         type: 'text' },
-                { key: 'tipo_pago', label: 'Tipo pago',  icon: 'bi-credit-card',  type: 'select', options: [
-                    { v: 'sin_pago',  l: 'Sin pago'    },
-                    { v: 'total',     l: 'Pago total'  },
-                    { v: 'anticipo',  l: 'Anticipo'    },
-                ]},
-                { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select', options: [
-                    { v: 'activo',   l: 'Activo'   },
-                    { v: 'inactivo', l: 'Inactivo' },
-                ]},
-            ],
-            quickFilters: [
-                { id: 'qf_activo',   label: 'Activos',     mk: () => ({ key: 'estado',    op: '=', value: 'activo',   display: 'Activo'    }) },
-                { id: 'qf_inactivo', label: 'Inactivos',   mk: () => ({ key: 'estado',    op: '=', value: 'inactivo', display: 'Inactivo'  }) },
-                { id: 'qf_sinpago',  label: 'Sin pago',    mk: () => ({ key: 'tipo_pago', op: '=', value: 'sin_pago', display: 'Sin pago'  }) },
-                { id: 'qf_total',    label: 'Pago total',  mk: () => ({ key: 'tipo_pago', op: '=', value: 'total',    display: 'Pago total'}) },
-            ],
-            onApply: () => filtrarTiposDOM(),
+            placeholder:   'Buscar en todas las columnas...',
+            titulo:        'Filtros de tipos de cita',
+            inputWidth:    420,
+            extraId:       'fmExtraTIPOS',
+            fields: <?= json_encode($filtrosTiposCita, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+            loadingTarget: '#tbodyTipos',
+            onApply: () => Promise.resolve(filtrarTiposDOM()),
         }).init();
     }
 
-    // ── FiltrosBusqueda: Recursos ────────────────────────────────────────────
-    if (window.FiltrosBusqueda && document.getElementById('fbBuscadorRecursos')) {
-        new FiltrosBusqueda({
-            containerId:   'fbBuscadorRecursos',
+    // ── Buscador (FiltrosModal): Recursos ────────────────────────────────────
+    if (window.FiltrosModal && document.getElementById('fmBuscadorRECURSOS')) {
+        new FiltrosModal({
+            containerId:   'fmBuscadorRECURSOS',
             hiddenInputId: 'buscarRecursosHidden',
-            placeholder:   'Buscar recursos...',
-            fields: [
-                { key: 'nombre', label: 'Nombre', icon: 'bi-person-gear', type: 'text' },
-                { key: 'tipo',   label: 'Tipo',   icon: 'bi-tag',         type: 'select', options: [
-                    { v: 'persona', l: 'Persona' },
-                    { v: 'sala',    l: 'Sala'    },
-                    { v: 'equipo',  l: 'Equipo'  },
-                ]},
-                { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select', options: [
-                    { v: 'activo',   l: 'Activo'   },
-                    { v: 'inactivo', l: 'Inactivo' },
-                ]},
-            ],
-            quickFilters: [
-                { id: 'qf_activo',   label: 'Activos',   mk: () => ({ key: 'estado', op: '=', value: 'activo',   display: 'Activo'   }) },
-                { id: 'qf_inactivo', label: 'Inactivos', mk: () => ({ key: 'estado', op: '=', value: 'inactivo', display: 'Inactivo' }) },
-                { id: 'qf_persona',  label: 'Personas',  mk: () => ({ key: 'tipo',   op: '=', value: 'persona',  display: 'Persona'  }) },
-                { id: 'qf_sala',     label: 'Salas',     mk: () => ({ key: 'tipo',   op: '=', value: 'sala',     display: 'Sala'     }) },
-                { id: 'qf_equipo',   label: 'Equipos',   mk: () => ({ key: 'tipo',   op: '=', value: 'equipo',   display: 'Equipo'   }) },
-            ],
-            onApply: () => filtrarRecursosDOM(),
+            placeholder:   'Buscar en todas las columnas...',
+            titulo:        'Filtros de recursos',
+            inputWidth:    420,
+            extraId:       'fmExtraRECURSOS',
+            fields: <?= json_encode($filtrosRecursosCita, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+            loadingTarget: '#tbodyRecursos',
+            onApply: () => Promise.resolve(filtrarRecursosDOM()),
         }).init();
     }
 

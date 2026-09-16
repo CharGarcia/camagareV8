@@ -71,7 +71,7 @@ class ClientesController extends BaseModuloController
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden, true);
         $rows = $result['rows'];
         $total = $result['total'];
 
@@ -106,6 +106,8 @@ class ClientesController extends BaseModuloController
             'ordenParam' => \App\Helpers\OrdenListado::aCadena($orden),
             'vistaConfig'=> $prefsVista,
             'fullWidth'  => true,
+            // Selects del modal de filtros: solo valores que la empresa usa en sus clientes.
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
         ]);
     }
 
@@ -126,7 +128,7 @@ class ClientesController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden, true);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -1010,7 +1012,7 @@ class ClientesController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden, true);
         $rows = $data['rows'];
 
         try {
@@ -1136,7 +1138,7 @@ class ClientesController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden, true);
         $rows = $data['rows'];
 
         try {

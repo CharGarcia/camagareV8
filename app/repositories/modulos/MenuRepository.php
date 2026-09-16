@@ -32,8 +32,21 @@ class MenuRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre (buscador FiltrosModal, sin sugerencias): columnas del listado +
+            // la descripción del ítem. Decisión del usuario: Destacado y Disponible (estados
+            // sí/no) NO entran en el texto libre; se filtran solo desde el modal.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['m.nombre', 'c.nombre', 'p.nombre'],
+                [
+                    'm.nombre',                                                        // Nombre
+                    'm.descripcion',
+                    'c.nombre',                                                        // Categoría (catálogo de la empresa)
+                    'm.precio::text',                                                  // Precio
+                    "CASE WHEN ti.porcentaje_iva > 0 THEN CONCAT(ti.porcentaje_iva, '%') END",       // IVA (como se muestra, p. ej. 15%; sin IVA = —)
+                    'ROUND(m.precio * (1 + COALESCE(ti.porcentaje_iva, 0)::numeric / 100), 2)::text', // Precio c/IVA
+                    'p.nombre',                                                        // Producto
+                    'p.codigo',
+                    'e.nombre',                                                        // Preparar en
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -42,15 +55,37 @@ class MenuRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (vista menu/index.php). Nunca quitar claves:
+        // viajan también en los enlaces de PDF/Excel y en URLs guardadas.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'texto'    => ['nombre' => 'm.nombre', 'categoria' => 'c.nombre', 'producto' => 'p.nombre'],
-            'exacto'   => ['disponible' => 'm.disponible', 'destacado' => 'm.destacado'],
-            'numerico' => ['precio' => 'm.precio'],
+            'texto'    => [
+                'nombre' => 'm.nombre', 'categoria' => 'c.nombre', 'producto' => 'p.nombre',
+                'descripcion'     => 'm.descripcion',
+                'codigo_producto' => 'p.codigo',
+            ],
+            'exacto'   => [
+                // true / false (columnas booleanas; valores que ya usaba el buscador anterior)
+                'disponible' => 'm.disponible', 'destacado' => 'm.destacado',
+                'id_categoria' => 'm.id_categoria',
+                'estacion'     => 'm.id_estacion_impresion',
+                'iva'          => 'm.id_tarifa_iva',
+                'usuario'      => 'm.created_by',
+                // con_producto:si / con_producto:no (vinculado a un producto del inventario)
+                'con_producto' => "CASE WHEN m.id_producto IS NULL THEN 'no' ELSE 'si' END",
+            ],
+            'fecha'    => ['registro' => 'm.created_at'],
+            'numerico' => [
+                'precio'         => 'm.precio',
+                'precio_con_iva' => 'ROUND(m.precio * (1 + COALESCE(ti.porcentaje_iva, 0)::numeric / 100), 2)',
+            ],
         ]);
 
+        // Mismos JOIN (1 a 1) que el SELECT: el texto libre y los filtros usan e.* y ti.*.
         $sqlCount = "SELECT COUNT(*) FROM menu_items m
                      LEFT JOIN productos p ON p.id = m.id_producto
                      LEFT JOIN categorias c ON c.id = m.id_categoria AND c.id_empresa = m.id_empresa
+                     LEFT JOIN estaciones_impresion e ON e.id = m.id_estacion_impresion
+                     LEFT JOIN tarifa_iva ti ON ti.id = m.id_tarifa_iva
                      {$where}";
         $stCount  = $this->db->prepare($sqlCount);
         $stCount->execute($params);
@@ -88,6 +123,34 @@ class MenuRepository extends BaseRepository
         $rows = array_map([$this, 'aplicarImagenEfectiva'], $st->fetchAll(PDO::FETCH_ASSOC));
 
         return ['total' => $total, 'rows' => $rows];
+    }
+
+    /**
+     * Valores realmente usados por los ítems del menú de la empresa, para los selects
+     * del modal de filtros: categorías, estaciones ("Preparar en"), tarifas de IVA y
+     * usuarios que registraron.
+     */
+    public function getOpcionesFiltro(int $idEmpresa): array
+    {
+        $q = function (string $sql) use ($idEmpresa): array {
+            $st = $this->db->prepare($sql);
+            $st->execute([':e' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        };
+        return [
+            'categorias' => $q("SELECT DISTINCT c.id, c.nombre FROM menu_items m
+                                JOIN categorias c ON c.id = m.id_categoria AND c.id_empresa = m.id_empresa
+                                WHERE m.id_empresa = :e AND m.eliminado = false ORDER BY c.nombre"),
+            'estaciones' => $q("SELECT DISTINCT e.id, e.nombre FROM menu_items m
+                                JOIN estaciones_impresion e ON e.id = m.id_estacion_impresion
+                                WHERE m.id_empresa = :e AND m.eliminado = false ORDER BY e.nombre"),
+            'tarifas'    => $q("SELECT DISTINCT ti.id, ti.tarifa, ti.porcentaje_iva FROM menu_items m
+                                JOIN tarifa_iva ti ON ti.id = m.id_tarifa_iva
+                                WHERE m.id_empresa = :e AND m.eliminado = false ORDER BY ti.porcentaje_iva, ti.id"),
+            'usuarios'   => $q("SELECT DISTINCT u.id, u.nombre FROM menu_items m
+                                JOIN usuarios u ON u.id = m.created_by
+                                WHERE m.id_empresa = :e AND m.eliminado = false ORDER BY u.nombre"),
+        ];
     }
 
     /**

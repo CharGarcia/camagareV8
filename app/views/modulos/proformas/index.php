@@ -47,48 +47,115 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y exportación -->
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            <link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim($base, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorPF" style="width:480px;"></div>
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // "Filtros" que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de ProformaRepository::getListado().
+            $opcionesSerie    = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesVendedor = array_map(fn($v) => ['v' => (string) $v['id'], 'l' => $v['nombre']], $vendedoresFiltro ?? []);
+            $opcionesUsuario  = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            // Estado: los del flujo de la proforma + cualquier otro que la empresa tenga
+            // guardado (p. ej. "emitida" en proformas migradas).
+            $etiquetasEstado = ['borrador' => 'Borrador', 'aprobada' => 'Aprobada', 'rechazada' => 'Rechazada', 'convertida' => 'Convertida', 'anulada' => 'Anulada'];
+            foreach ($estadosFiltro ?? [] as $est) {
+                if (!isset($etiquetasEstado[$est])) {
+                    $etiquetasEstado[$est] = ucfirst($est);
+                }
+            }
+            $opcionesEstado = [];
+            foreach ($etiquetasEstado as $v => $l) {
+                $opcionesEstado[] = ['v' => (string) $v, 'l' => $l];
+            }
+            // Dos pestañas: "Proforma" (filtros por campo de la cabecera) y "Detalles" (solo
+            // la búsqueda libre dentro de las proformas, ver `busquedaDetalle` abajo).
+            $tP = 'Proforma';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento: [Fecha de emisión 6][Estado 3][Correo 3]
+            //              [Serie 3][Número 4][Secuencial 2][Días de vigencia 3]
+            //              [Vigencia 3][Facturada 3][Aprobada por el cliente 3][Usuario 3]
+            //   Valores:   [Total 4][Subtotal 4][Descuento 4]
+            //   Cliente:   [Cliente 3][RUC 3][Vendedor 3][Observaciones 3]
+            $filtrosProformas = [
+                // ── Documento ──
+                ['tab' => $tP, 'key' => 'fecha',      'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tP, 'key' => 'estado',     'label' => 'Estado',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesEstado],
+                ['tab' => $tP, 'key' => 'correo',     'label' => 'Correo',           'icon' => 'bi-envelope',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'enviado',   'l' => 'Enviado'],
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                ]],
+                ['tab' => $tP, 'key' => 'serie',      'label' => 'Serie',            'icon' => 'bi-upc-scan',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tP, 'key' => 'numero',     'label' => 'Número',           'icon' => 'bi-hash',           'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tP, 'key' => 'secuencial', 'label' => 'Secuencial',       'icon' => 'bi-123',            'type' => 'text',       'grupo' => 'Documento', 'col' => 2, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tP, 'key' => 'dias_vigencia', 'label' => 'Días de vigencia', 'icon' => 'bi-hourglass-split', 'type' => 'number_range', 'grupo' => 'Documento', 'col' => 3],
+                ['tab' => $tP, 'key' => 'vigencia',   'label' => 'Vigencia',         'icon' => 'bi-calendar-check', 'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'vigente', 'l' => 'Vigente'],
+                    ['v' => 'vencida', 'l' => 'Vencida'],
+                ]],
+                ['tab' => $tP, 'key' => 'facturada',  'label' => 'Facturada',        'icon' => 'bi-receipt',        'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Facturada'],
+                    ['v' => 'no', 'l' => 'Sin facturar'],
+                ]],
+                ['tab' => $tP, 'key' => 'aprobacion_cliente', 'label' => 'Aprobada por el cliente', 'icon' => 'bi-hand-thumbs-up', 'type' => 'select', 'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Sí (desde el correo)'],
+                    ['v' => 'no', 'l' => 'No'],
+                ]],
+                ['tab' => $tP, 'key' => 'id_usuario', 'label' => 'Usuario que registró', 'icon' => 'bi-person-gear', 'type' => 'select',  'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesUsuario],
+                // ── Valores ──
+                ['tab' => $tP, 'key' => 'total',     'label' => 'Total',     'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tP, 'key' => 'subtotal',  'label' => 'Subtotal',  'icon' => 'bi-receipt',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tP, 'key' => 'descuento', 'label' => 'Descuento', 'icon' => 'bi-tag',             'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // ── Cliente ──
+                ['tab' => $tP, 'key' => 'cliente',     'label' => 'Cliente',       'icon' => 'bi-person',         'type' => 'text',   'grupo' => 'Cliente', 'col' => 3],
+                ['tab' => $tP, 'key' => 'ruc',         'label' => 'RUC / Cédula',  'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Cliente', 'col' => 3],
+                ['tab' => $tP, 'key' => 'id_vendedor', 'label' => 'Vendedor',      'icon' => 'bi-person-badge',   'type' => 'select', 'grupo' => 'Cliente', 'col' => 3, 'options' => $opcionesVendedor],
+                ['tab' => $tP, 'key' => 'obs',         'label' => 'Observaciones', 'icon' => 'bi-chat-left-text', 'type' => 'text',   'grupo' => 'Cliente', 'col' => 3],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim($base, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorPF"></div>
             <input type="hidden" id="buscarProforma" value="<?= htmlspecialchars($buscar) ?>">
             <script>
             document.addEventListener('DOMContentLoaded', () => {
-                if (!window.FiltrosBusqueda) return;
-                new FiltrosBusqueda({
-                    containerId:   'fbBuscadorPF',
+                if (!window.FiltrosModal) return;
+                new FiltrosModal({
+                    containerId:   'fmBuscadorPF',
                     hiddenInputId: 'buscarProforma',
-                    fields: [
-                        { key: 'cliente',    label: 'Cliente',      icon: 'bi-person',          type: 'text' },
-                        { key: 'ruc',        label: 'RUC / CI',     icon: 'bi-card-text',       type: 'text' },
-                        { key: 'numero',     label: 'Número',       icon: 'bi-hash',            type: 'text' },
-                        { key: 'obs',        label: 'Observaciones',icon: 'bi-chat-left-text',  type: 'text' },
-                        { key: 'fecha',      label: 'Fecha',        icon: 'bi-calendar',        type: 'date_range' },
-                        { key: 'total',      label: 'Total',        icon: 'bi-currency-dollar', type: 'number_range' },
-                        { key: 'estado',     label: 'Estado',       icon: 'bi-flag',            type: 'select', options: [
-                            { v: 'borrador',   l: 'Borrador' },
-                            { v: 'aprobada',   l: 'Aprobada' },
-                            { v: 'rechazada',  l: 'Rechazada' },
-                            { v: 'convertida', l: 'Convertida' },
-                            { v: 'anulada',    l: 'Anulada' },
-                        ]},
-                        { key: 'serie',      label: 'Serie',        icon: 'bi-upc-scan',        type: 'select', options: [
-                            <?php foreach ($seriesFiltro as $s): ?>
-                            { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                            <?php endforeach; ?>
-                        ]},
-                        { key: 'secuencial', label: 'Secuencial',   icon: 'bi-123',             type: 'text' },
-                    ],
-                    quickFilters: [
-                        { id: 'qf_borrador',   label: 'Borrador',   mk: () => ({ key: 'estado', op: '=', value: 'borrador',   display: 'Borrador' }) },
-                        { id: 'qf_aprobada',   label: 'Aprobadas',  mk: () => ({ key: 'estado', op: '=', value: 'aprobada',   display: 'Aprobada' }) },
-                        { id: 'qf_convertida', label: 'Convertidas',mk: () => ({ key: 'estado', op: '=', value: 'convertida', display: 'Convertida' }) },
-                    ],
+                    placeholder:   'Buscar en todas las columnas...',
+                    titulo:        'Filtros de proformas',
+                    inputWidth:    420,
+                    extraId:       'fmExtraPF',   // columnas + PDF + Excel, pegados al final del grupo
+                    // Pestaña Detalles: búsqueda libre dentro de las proformas (productos
+                    // cotizados e información adicional). Cada coincidencia dice a qué
+                    // proforma pertenece.
+                    busquedaDetalle: {
+                        tab: 'Detalles',
+                        url: `<?= $urlBase ?>/buscarDetallesAjax`,
+                        label: 'Buscar libremente dentro de las proformas',
+                        placeholder: 'Producto, código, descripción, cantidad, valor, información adicional...',
+                        columns: [
+                            { key: 'origen',      label: 'Tipo' },
+                            { key: 'tipo',        label: 'Código / Campo' },
+                            { key: 'descripcion', label: 'Descripción' },
+                            { key: 'cantidad',    label: 'Cant.', align: 'end' },
+                            { key: 'monto',       label: 'Valor', align: 'end' },
+                            { key: 'numero',      label: 'Proforma', class: 'font-monospace fw-semibold' },
+                            { key: 'fecha',       label: 'Fecha' },
+                            { key: 'cliente',     label: 'Cliente' },
+                            { key: 'estado',      label: 'Estado' },
+                        ],
+                        onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                        onOpen: (row, fm) => { fm.hide(); setTimeout(() => PF.verDetalle(row.id_proforma), 350); },
+                    },
+                    fields: <?= json_encode($filtrosProformas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                    loadingTarget: '#tbodyProformas',   // se atenúa mientras se busca
                     onApply: () => window.fetchSearch && window.fetchSearch(1),
                 }).init();
             });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraPF" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero'         => 'Número',
@@ -106,11 +173,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-danger" title="Exportar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-success" title="Exportar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -240,6 +307,10 @@ window.PF_CONFIG  = {
         const b = inputBusc ? inputBusc.value.trim() : '';
         const orden = window.CMG_ordenParam(window.currentSorts || []);
         const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga (también al paginar y ordenar, que llaman a esta función directo).
+        const tbody = document.getElementById('tbodyProformas');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const data = await (await fetch(uri)).json();
             if (!data.ok) return;
@@ -253,7 +324,11 @@ window.PF_CONFIG  = {
             // Los íconos (incluida la prioridad 1/2/3 del orden múltiple) los repinta
             // el motor global; aquí solo se le pide que se refresque.
             if (sorter) sorter.refreshIcons();
-        } catch (e) { console.error('Error búsqueda proformas:', e); }
+        } catch (e) {
+            console.error('Error búsqueda proformas:', e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
+        }
     };
 
     // Ordenamiento: motor global (window.CMG_initSort, en public/js/favoritos.js).

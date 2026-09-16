@@ -77,6 +77,8 @@ class ServicioExternoController extends BaseModuloController
         // Series usadas realmente en órdenes existentes (para el filtro del listado, distinto
         // de $puntos que es "en qué serie se puede emitir un documento nuevo").
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+        // Usuarios que registraron órdenes (select "Usuario" del modal de filtros).
+        $usuariosFiltro = $this->repository->getUsuariosConOrdenes($idEmpresa);
         $formasPago = $this->repository->getFormasPago();
         $bodegaRepo = new \App\repositories\modulos\BodegaRepository();
         $bodegas = $bodegaRepo->getBodegasPermitidas((int) $_SESSION['id_usuario'], $idEmpresa, (int) ($_SESSION['nivel'] ?? 1));
@@ -90,6 +92,7 @@ class ServicioExternoController extends BaseModuloController
             'empresa'     => $empresaData,
             'puntos'      => $puntos,
             'seriesFiltro' => $seriesFiltro,
+            'usuariosFiltro' => $usuariosFiltro,
             'formasPago'  => $formasPago,
             'bodegas'     => $bodegas,
             'tarifasIva'  => $tarifasIva,
@@ -159,6 +162,44 @@ class ServicioExternoController extends BaseModuloController
             'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
         ]);
         exit;
+    }
+
+    /**
+     * Pestaña "Detalles" del buscador (FiltrosModal): búsqueda libre dentro de las
+     * órdenes (servicios/productos). Aplica registros propios (§6).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'origen'       => ($r['tipo'] ?? '') === 'producto' ? 'Producto' : 'Servicio',
+                'referencia'   => $r['referencia'] ?? '',
+                'descripcion'  => $r['descripcion'] ?? '',
+                'cantidad'     => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 2, '.', ''), '0'), '.') : '',
+                'monto'        => number_format((float) ($r['monto'] ?? 0), 2),
+                'id_orden'     => (int) $r['id_orden'],
+                'numero_orden' => $r['numero_orden'] ?? '',
+                'fecha'        => !empty($r['fecha_servicio']) ? date('d-m-Y', strtotime((string) $r['fecha_servicio'])) : '',
+                'equipo'       => $r['equipo_descripcion'] ?? '',
+                'cliente'      => $r['cliente'] ?? '',
+                'estado'       => ucfirst((string) ($r['estado'] ?? 'borrador')),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     // ─── Crear / actualizar ───────────────────────────────────────────────────

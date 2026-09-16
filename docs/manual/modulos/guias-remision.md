@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
-etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos
-version: 1.8
+etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips
+version: 1.9
 orden: 55
 estado: activo
 ---
@@ -83,8 +83,9 @@ Para reenviarla en cualquier momento, en la barra superior del modal está el
 botón **Enviar por correo** (ícono de sobre), disponible solo en guías
 autorizadas. Propone esos mismos correos y permite editarlos antes de enviar.
 
-El listado muestra la columna **Correo** (Pendiente / Enviado) y el buscador
-admite el filtro `correo:pendiente` o `correo:enviado`.
+El listado muestra la columna **Correo** (Pendiente / Enviado); para ver solo
+las pendientes o las enviadas use el filtro **Correo** de la ventana de filtros
+(ver *Buscar y filtrar el listado*).
 
 ## Documento de sustento
 
@@ -173,6 +174,53 @@ de inicio/fin de transporte, seguido del detalle de productos y cantidades
 transportadas, y la información adicional si la guía la tiene. Ambos botones
 solo aparecen en una guía ya guardada.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la guía: número,
+secuencial, fecha de emisión, destinatario, RUC / cédula, transportista, placa,
+motivo, fecha de inicio y usuario. Además busca en la identificación del
+transportista, la clave de acceso, el número de autorización, el documento de
+sustento, las direcciones de partida y destino, la ruta, las observaciones y
+los **códigos y descripciones de los productos** transportados. Las columnas
+**Estado** y **Correo** no entran en la búsqueda libre: para filtrar por ellas
+use la ventana de filtros. Puede escribir varias palabras en cualquier orden y
+no importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape
+en el cuadro. Mientras busca, aparece un **círculo girando** al final del
+cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Guía** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (borrador, autorizado, anulado), correo (enviado o pendiente), serie, N° guía, secuencial, usuario que registró, fecha de autorización, clave de acceso |
+| Traslado | Fecha de inicio y de fin del transporte, transportista, placa, motivo, dirección de partida, dirección de destino, ruta |
+| Documento sustento | N° del documento de sustento y su fecha |
+| Destinatario | Destinatario, RUC / cédula |
+
+Los selectores *Usuario que registró* y *Transportista* listan solo a quienes
+ya aparecen en guías de la empresa, y *Serie* solo las series con guías
+guardadas.
+
+**Pestaña Detalles** (lo que hay dentro de la guía). Es un único cuadro,
+**Buscar libremente dentro de las guías**: escriba un producto, un código, una
+cantidad o un dato de la información adicional, y aparece la lista de **cada
+línea que coincide** con la guía a la que pertenece (número, fecha,
+destinatario, transportista y estado). Un clic en la fila deja el listado
+mostrando solo esa guía; el ícono de la derecha la abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
 ## La guía no mueve inventario
 
 Emitir una guía **no descuenta stock**: solo ampara el traslado. El movimiento de
@@ -205,6 +253,18 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
+- **1.9** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas de la guía (y en direcciones,
+  ruta, documento de sustento, clave de acceso y productos), salvo Estado y
+  Correo. Los filtros pasan a una **ventana propia** (botón del embudo, se
+  aplican con *Aplicar*) con dos pestañas: **Guía** (filtros por campo, con
+  criterios nuevos: N° guía, usuario y transportista como lista, fecha de
+  autorización, clave de acceso, fin del transporte, direcciones, ruta,
+  documento de sustento y RUC del destinatario) y **Detalles** (búsqueda dentro
+  de los productos y la información adicional). El filtro de estado ya no
+  ofrece *No autorizado* ni *Devuelta*, que las guías nunca toman. Los filtros
+  activos se ven como etiquetas dentro del cuadro y la tabla se atenúa mientras
+  carga.
 - **1.8** — Al elegir el transportista, debajo de su nombre se muestra ahora su
   **correo** junto a la identificación y la placa; el RIDE imprime el correo
   debajo del nombre del transportista (varios correos, uno por línea) y las

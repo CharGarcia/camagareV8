@@ -52,6 +52,21 @@ class RetornoCvService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Búsqueda libre dentro de los retornos (líneas retornadas): pestaña Detalles del buscador. */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuarioFiltro = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, $limit);
+    }
+
+    /** Listas de los selects del modal de filtros: solo los valores que la empresa ya usó. */
+    public function getOpcionesFiltros(int $idEmpresa): array
+    {
+        return [
+            'responsables' => $this->repository->getResponsablesUsados($idEmpresa),
+            'usuarios'     => $this->repository->getUsuariosUsados($idEmpresa),
+        ];
+    }
+
     public function getLineasPendientesPorCliente(int $idEmpresa, int $idCliente): array
     {
         return $this->repository->getLineasPendientesPorCliente($idEmpresa, $idCliente);

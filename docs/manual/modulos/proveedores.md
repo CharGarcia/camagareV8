@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
-etiquetas: proveedores, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
-version: 2.2
+etiquetas: proveedores, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
+version: 2.3
 orden: 10
 estado: activo
 ---
@@ -261,6 +261,53 @@ Estos valores son **propuestas**, no imposiciones: al registrar la compra o la
 retención se pueden cambiar. Configurarlos bien evita el error más común, que es
 retener con el porcentaje equivocado por descuido.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF, Excel y Mapa.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del listado:
+identificación, razón social, nombre comercial, correo, teléfono, dirección,
+plazo, banco, provincia y ciudad, y además en el **número de cuenta bancaria**
+del proveedor. Las columnas **Tipo Id.**, **Tipo Empresa**, **Rela. SRI** y
+**Estado** no entran en la búsqueda libre: para filtrar por ellas use la ventana
+de filtros (escribir `activo`, `si` o `no` ya no filtra esas columnas). Busca por
+**palabras sueltas** en cualquier orden y **sin distinguir tildes ni
+mayúsculas**: escribir `comercial andina` encuentra *COMERCIAL SANTA ANDINA
+S.A.* aunque las palabras no estén juntas. Para limpiar, borre el texto o pulse
+Escape en el cuadro. Mientras busca, aparece un **círculo girando** al final del
+cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
+Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento.
+La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
+
+| Bloque | Filtros |
+|--------|---------|
+| Identificación | Tipo de identificación, RUC / identificación, razón social, nombre comercial |
+| Clasificación | Tipo de empresa, relacionado SRI (sí / no), estado (activo / inactivo) |
+| Contacto | Correo, con o sin correo registrado, teléfono, dirección |
+| Ubicación | Provincia, ciudad, con o sin ubicación en el mapa |
+| Pago | Banco, plazo en días (mínimo y máximo), con o sin pago automático |
+| Tributario | Retención de renta, retención de IVA y sustento tributario predeterminados |
+| Registro | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), usuario que registró |
+
+Los selectores de tipo de empresa, banco, provincia, ciudad, retenciones,
+sustento y usuario listan solo lo que la empresa ya usa en sus proveedores.
+*Con pago automático* son los proveedores que tienen una forma de pago
+predeterminada (ver *Pago automático de las compras*). En *Relacionado SRI*, los
+proveedores sin ese dato cuentan como **No**, igual que en la tabla.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
+Quien ya conoce la sintaxis `clave:valor` puede seguir escribiéndola en el
+cuadro (`ciudad:quito`, `plazo:30..60`, `estado:inactivo`, `-relacionado:si`);
+los enlaces guardados con esos filtros siguen funcionando. Los botones de **PDF**
+y **Excel** exportan con la misma búsqueda y filtros que haya en pantalla.
+
 ## Ordenar el listado
 
 Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
@@ -281,24 +328,6 @@ un clic normal en cualquier encabezado vuelve a dejar una sola.
 
 El orden se guarda para usted y las exportaciones salen con ese mismo orden.
 Detalles en *Cómo ordenar los listados*.
-
-## Buscar en el listado
-
-El buscador revisa **todas las columnas del listado**: identificación, tipo de
-identificación, razón social, nombre comercial, correo, teléfono, dirección,
-plazo, banco, tipo de empresa, provincia y ciudad. Busca por **palabras sueltas**
-en cualquier orden y **sin distinguir tildes ni mayúsculas**: escribir
-`comercial andina` encuentra *COMERCIAL SANTA ANDINA S.A.* aunque las palabras no
-estén juntas.
-
-Escribir exactamente `activo`, `inactivo`, `si` o `no` también filtra por las
-columnas *Estado* y *Rela. SRI*.
-
-Además acepta filtros por campo con la sintaxis `clave:valor` (o el desplegable
-del buscador): `nombre`, `comercial`, `ruc`, `email`, `telefono`, `direccion`,
-`ciudad`, `provincia`, `tipo_empresa`, `banco`, `tipo_id`, `plazo`, `tipo`,
-`estado` y `relacionado`. Ejemplos: `ciudad:quito`, `plazo:30..60`,
-`estado:inactivo`, `-relacionado:si`.
 
 ## Copiar proveedores a otra empresa
 
@@ -383,6 +412,17 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.3** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas del listado y en el número de
+  cuenta bancaria, salvo Tipo Id., Tipo Empresa, Rela. SRI y Estado (escribir
+  `activo`, `si` o `no` ya no filtra esas columnas). Los filtros pasan a una
+  **ventana propia** (botón del embudo, se aplican con *Aplicar*) con criterios
+  nuevos: tipo de empresa, banco, provincia y ciudad como lista, con/sin correo,
+  con/sin ubicación en el mapa, con/sin pago automático, retenciones y sustento
+  predeterminados, fecha de registro y usuario que registró. *Relacionado SRI =
+  No* ahora incluye a los proveedores sin ese dato (se ven como "No" en la
+  tabla). Los filtros activos se ven como etiquetas dentro del cuadro y la tabla
+  se atenúa mientras busca.
 - **2.2** — El listado se puede **ordenar por hasta tres columnas a la vez**:
   Shift+clic en el título de la segunda columna la encadena a la primera (por
   ejemplo *Ciudad* y, dentro de cada una, la *Razón Social*). Cada encabezado

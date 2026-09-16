@@ -65,57 +65,91 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y Exportación -->
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorPROV" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal): texto libre sobre las columnas del listado
+            // (sin sugerencias) + botón embudo que abre un modal con todos los filtros +
+            // chips de los activos. Las claves (key) deben existir en los mapas de
+            // ProveedorRepository::getListado(). Sin pestaña Detalles: el proveedor no
+            // tiene tablas hijas que buscar.
+            $opcFiltro = $opcionesFiltro ?? [];
+            $opcIdNombre = fn(string $k) => array_map(fn($x) => ['v' => (string) $x['id'], 'l' => (string) $x['nombre']], $opcFiltro[$k] ?? []);
+            $opcionesProvincia = array_map(fn($p) => ['v' => (string) $p['codigo'], 'l' => (string) $p['nombre']], $opcFiltro['provincias'] ?? []);
+            $opcionesCiudad    = array_map(fn($c) => ['v' => (string) $c['codigo'], 'l' => $c['nombre'] . (!empty($c['provincia']) ? ' (' . $c['provincia'] . ')' : '')], $opcFiltro['ciudades'] ?? []);
+            $opcionesSiNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $tP = 'Proveedor';
+            // Filas de 12 columnas:
+            //   Identificación: [Tipo 3][RUC 3][Razón social 3][Nombre comercial 3]
+            //   Clasificación:  [Tipo de empresa 4][Relacionado SRI 4][Estado 4]
+            //   Contacto:       [Correo 3][Con correo 3][Teléfono 3][Dirección 3]
+            //   Ubicación:      [Provincia 4][Ciudad 4][Ubicación en mapa 4]
+            //   Pago:           [Banco 4][Plazo 4][Pago automático 4]
+            //   Tributario:     [Retención renta 4][Retención IVA 4][Sustento 4]
+            //   Registro:       [Fecha de registro 6][Usuario 6]
+            $filtrosProveedores = [
+                // ── Identificación ──
+                ['tab' => $tP, 'key' => 'tipo',      'label' => 'Tipo identificación', 'icon' => 'bi-credit-card', 'type' => 'select', 'grupo' => 'Identificación', 'col' => 3, 'options' => [
+                    ['v' => '04', 'l' => 'RUC'],
+                    ['v' => '05', 'l' => 'Cédula'],
+                    ['v' => '06', 'l' => 'Pasaporte'],
+                    ['v' => '07', 'l' => 'Consumidor final'],
+                    ['v' => '08', 'l' => 'Identificación del exterior'],
+                ]],
+                ['tab' => $tP, 'key' => 'ruc',       'label' => 'RUC / Identificación', 'icon' => 'bi-card-text',  'type' => 'text', 'grupo' => 'Identificación', 'col' => 3],
+                ['tab' => $tP, 'key' => 'nombre',    'label' => 'Razón social',        'icon' => 'bi-building',    'type' => 'text', 'grupo' => 'Identificación', 'col' => 3],
+                ['tab' => $tP, 'key' => 'comercial', 'label' => 'Nombre comercial',    'icon' => 'bi-shop',        'type' => 'text', 'grupo' => 'Identificación', 'col' => 3],
+                // ── Clasificación ──
+                ['tab' => $tP, 'key' => 'id_tipo_empresa', 'label' => 'Tipo de empresa', 'icon' => 'bi-briefcase', 'type' => 'select', 'grupo' => 'Clasificación', 'col' => 4, 'options' => $opcIdNombre('tipos_empresa')],
+                ['tab' => $tP, 'key' => 'relacionado', 'label' => 'Relacionado SRI',   'icon' => 'bi-link-45deg',  'type' => 'select', 'grupo' => 'Clasificación', 'col' => 4, 'options' => $opcionesSiNo('Sí', 'No')],
+                ['tab' => $tP, 'key' => 'estado',      'label' => 'Estado',            'icon' => 'bi-flag',        'type' => 'select', 'grupo' => 'Clasificación', 'col' => 4, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                // ── Contacto ──
+                ['tab' => $tP, 'key' => 'email',     'label' => 'Correo',              'icon' => 'bi-envelope',       'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                ['tab' => $tP, 'key' => 'con_email', 'label' => 'Correo registrado',   'icon' => 'bi-envelope-check', 'type' => 'select', 'grupo' => 'Contacto', 'col' => 3, 'options' => $opcionesSiNo('Con correo', 'Sin correo')],
+                ['tab' => $tP, 'key' => 'telefono',  'label' => 'Teléfono',            'icon' => 'bi-telephone',      'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                ['tab' => $tP, 'key' => 'direccion', 'label' => 'Dirección',           'icon' => 'bi-geo',            'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                // ── Ubicación ──
+                ['tab' => $tP, 'key' => 'cod_provincia', 'label' => 'Provincia',       'icon' => 'bi-map',     'type' => 'select', 'grupo' => 'Ubicación', 'col' => 4, 'options' => $opcionesProvincia],
+                ['tab' => $tP, 'key' => 'cod_ciudad',    'label' => 'Ciudad',          'icon' => 'bi-geo-alt', 'type' => 'select', 'grupo' => 'Ubicación', 'col' => 4, 'options' => $opcionesCiudad],
+                ['tab' => $tP, 'key' => 'ubicacion',     'label' => 'Ubicación en el mapa', 'icon' => 'bi-pin-map', 'type' => 'select', 'grupo' => 'Ubicación', 'col' => 4, 'options' => $opcionesSiNo('Con ubicación', 'Sin ubicación')],
+                // ── Pago ──
+                ['tab' => $tP, 'key' => 'id_banco',  'label' => 'Banco',               'icon' => 'bi-bank',           'type' => 'select',       'grupo' => 'Pago', 'col' => 4, 'options' => $opcIdNombre('bancos')],
+                ['tab' => $tP, 'key' => 'plazo',     'label' => 'Plazo (días)',        'icon' => 'bi-calendar-range', 'type' => 'number_range', 'grupo' => 'Pago', 'col' => 4],
+                ['tab' => $tP, 'key' => 'pago_auto', 'label' => 'Pago automático',     'icon' => 'bi-cash-coin',      'type' => 'select',       'grupo' => 'Pago', 'col' => 4, 'options' => $opcionesSiNo('Con pago automático', 'Sin pago automático')],
+                // ── Tributario ──
+                ['tab' => $tP, 'key' => 'id_retencion_renta', 'label' => 'Retención de renta', 'icon' => 'bi-percent',      'type' => 'select', 'grupo' => 'Tributario', 'col' => 4, 'options' => $opcIdNombre('retenciones_renta')],
+                ['tab' => $tP, 'key' => 'id_retencion_iva',   'label' => 'Retención de IVA',   'icon' => 'bi-percent',      'type' => 'select', 'grupo' => 'Tributario', 'col' => 4, 'options' => $opcIdNombre('retenciones_iva')],
+                ['tab' => $tP, 'key' => 'id_sustento',        'label' => 'Sustento tributario','icon' => 'bi-journal-text', 'type' => 'select', 'grupo' => 'Tributario', 'col' => 4, 'options' => $opcIdNombre('sustentos')],
+                // ── Registro ──
+                ['tab' => $tP, 'key' => 'registro', 'label' => 'Fecha de registro',    'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tP, 'key' => 'usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcIdNombre('usuarios')],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorPROV"></div>
             <input type="hidden" id="buscarProveedor" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorPROV',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorPROV',
                         hiddenInputId: 'buscarProveedor',
-                        fields: [
-                            { key: 'nombre',      label: 'Razón social',       icon: 'bi-building',       type: 'text' },
-                            { key: 'comercial',   label: 'Nombre comercial',   icon: 'bi-shop',           type: 'text' },
-                            { key: 'ruc',         label: 'RUC / Identificación', icon: 'bi-card-text',    type: 'text' },
-                            { key: 'email',       label: 'Email',              icon: 'bi-envelope',       type: 'text' },
-                            { key: 'telefono',    label: 'Teléfono',           icon: 'bi-telephone',      type: 'text' },
-                            { key: 'direccion',   label: 'Dirección',          icon: 'bi-geo',            type: 'text' },
-                            { key: 'ciudad',      label: 'Ciudad',             icon: 'bi-geo-alt',        type: 'text' },
-                            { key: 'provincia',   label: 'Provincia',          icon: 'bi-map',            type: 'text' },
-                            { key: 'tipo_empresa', label: 'Tipo empresa',      icon: 'bi-briefcase',      type: 'text' },
-                            { key: 'banco',       label: 'Banco',              icon: 'bi-bank',           type: 'text' },
-                            { key: 'plazo',       label: 'Plazo (días)',       icon: 'bi-calendar-range', type: 'number_range' },
-                            { key: 'tipo',        label: 'Tipo identificación', icon: 'bi-credit-card',   type: 'select', options: [
-                                { v: '04', l: 'RUC' },
-                                { v: '05', l: 'Cédula' },
-                                { v: '06', l: 'Pasaporte' },
-                                { v: '07', l: 'Consumidor Final' },
-                                { v: '08', l: 'Identificación Exterior' },
-                            ]},
-                            { key: 'relacionado', label: 'Relacionado SRI',    icon: 'bi-link-45deg',     type: 'select', options: [
-                                { v: 'true',  l: 'Sí' },
-                                { v: 'false', l: 'No' },
-                            ]},
-                            { key: 'estado',      label: 'Estado',             icon: 'bi-flag',           type: 'select', options: [
-                                { v: 'activo',   l: 'Activo' },
-                                { v: 'inactivo', l: 'Inactivo' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_activo',      label: 'Activos',          mk: () => ({ key: 'estado',      op: '=',  value: 'activo', display: 'Activo' }) },
-                            { id: 'qf_inactivo',    label: 'Inactivos',        mk: () => ({ key: 'estado',      op: '=',  value: 'inactivo', display: 'Inactivo' }) },
-                            { id: 'qf_relacionado', label: 'Relacionados SRI', mk: () => ({ key: 'relacionado', op: '=',  value: 'true', display: 'Sí' }) },
-                            { id: 'qf_con_plazo',   label: 'Con plazo',        mk: () => ({ key: 'plazo',       op: '>',  value: '0', display: '> 0 días' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de proveedores',
+                        inputWidth: 420,
+                        extraId: 'fmExtraPROV',   // columnas + PDF + Excel + Mapa, pegados al final del grupo
+                        fields: <?= json_encode($filtrosProveedores, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyProveedores',   // se atenúa mientras se busca
                         onApply: () => window.fetchSearch && window.fetchSearch(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraPROV" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'identificacion' => 'Identificación',
@@ -138,14 +172,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 <a id="btnExportPdf" href="<?= $urlBaseProv ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBaseProv ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
                 <a href="<?= $urlBaseProv ?>/mapa" class="btn btn-outline-secondary" title="Mapa de proveedores">
-                    <i class="bi bi-map"></i> Mapa
+                    <i class="bi bi-map"></i><span class="d-none d-md-inline"> Mapa</span>
                 </a>
                 <?php if ($perm['crear']): ?>
                     <button type="button" class="btn btn-outline-primary d-none" id="btnCopiarProveedoresEmpresa" title="Copiar todos los proveedores a otra empresa" onclick="abrirModalCopiarProveedoresEmpresa()">
@@ -294,6 +328,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const term = inputBuscar ? inputBuscar.value.trim() : '';
             const orden = window.CMG_ordenParam(window.currentSorts || []);
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar (que llaman a esta función directo).
+            const tbody = document.getElementById('tbodyProveedores');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -311,6 +349,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 }
             } catch (e) {
                 console.error('Error en búsqueda de proveedores:', e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
             }
         };
 

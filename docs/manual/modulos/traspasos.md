@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/traspasos
 tipo: modulo
 visibilidad: todos
-etiquetas: traspaso, traspasos, transferencia interna, caja a banco, deposito, mover dinero, saldo, formas de pago, excel, exportar, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.2
+etiquetas: traspaso, traspasos, transferencia interna, caja a banco, deposito, mover dinero, saldo, formas de pago, excel, exportar, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar traspaso, buscador, filtros, filtrar traspasos, chips
+version: 1.3
 orden: 30
 estado: activo
 ---
@@ -35,6 +35,37 @@ cambia de sitio. Por eso no afecta a cuentas por cobrar ni por pagar.
 - **El secuencial no se repite**: si el número ya existe, hay que usar otro.
 - **El periodo contable manda**: no se registra ni se anula un traspaso en un
   periodo cerrado.
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y el botón de columnas.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del traspaso: N° traspaso,
+secuencial, fecha, origen, destino y monto, y además en la observación y el usuario
+que lo registró. La columna **Estado** no entra en la búsqueda libre: para filtrar
+por ella use la ventana de filtros. Puede escribir varias palabras en cualquier
+orden y no importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse
+Escape en el cuadro. Mientras busca, aparece un **círculo girando** al final del
+cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con los criterios. Llene los
+que necesite y pulse **Aplicar**; nada se aplica hasta ese momento. La ventana solo
+se cierra con la X, Cancelar, Aplicar o Limpiar filtros. No tiene pestaña
+*Detalles*: un traspaso no tiene líneas internas.
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (registrado / anulado), con o sin asiento contable, serie, secuencial, N° traspaso, usuario que lo registró, monto (mínimo y máximo) |
+| Cuentas | Forma de pago de origen, forma de pago de destino, observación |
+
+Los selectores *Serie*, *Origen*, *Destino* y *Usuario* listan solo lo que la
+empresa ya usó en sus traspasos.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Anular
 
@@ -83,6 +114,12 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.3** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias; lo que
+  se escribe se busca en las columnas del traspaso (incluidos fecha y monto), la
+  observación y el usuario, salvo Estado. Los filtros pasan a una **ventana propia**
+  (botón del embudo, se aplican con *Aplicar*) con criterios nuevos: con/sin asiento,
+  usuario, y origen y destino como listas de las formas de pago usadas. Los filtros
+  activos se ven como etiquetas dentro del cuadro y la tabla se atenúa mientras busca.
 - **1.2** — El número del documento puede numerarse **por fecha de emisión**,
   reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se
   activa por punto de emisión en **Empresa → Secuenciales**; por defecto sigue

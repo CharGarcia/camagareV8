@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/menu
 tipo: modulo
 visibilidad: todos
-etiquetas: menu, carta, platos, bebidas, restaurante, precio, iva, tarifa iva, producto vinculado, categoria, categorias, estacion, cocina, barra, preparar en, enviar a, receta, comanda, impresora, imprimir ordenes, impresora de cocina, ancho de papel, copias, 58mm, 80mm
-version: 1.8
+etiquetas: menu, carta, platos, bebidas, restaurante, precio, iva, tarifa iva, producto vinculado, categoria, categorias, estacion, cocina, barra, preparar en, enviar a, receta, comanda, impresora, imprimir ordenes, impresora de cocina, ancho de papel, copias, 58mm, 80mm, buscar plato, buscar item del menu, buscador, filtros, filtrar menu, items sin producto, chips
+version: 1.9
 orden: 30
 estado: activo
 ---
@@ -116,6 +116,43 @@ que tiene el producto.
 
 Solo cuando el ítem **no** tiene tarifa propia se usa la del producto vinculado.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la carta: nombre,
+categoría, precio, IVA (por ejemplo *15%*), **precio con IVA**, producto
+vinculado (nombre y código) y estación donde se prepara. Además busca en la
+descripción del ítem. Las columnas **Destacado** y **Disponible** no entran en
+la búsqueda libre: para filtrar por ellas use la ventana de filtros. Puede
+escribir varias palabras en cualquier orden y no importan mayúsculas ni tildes.
+Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca,
+aparece un **círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
+Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento.
+La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
+
+| Bloque | Filtros |
+|--------|---------|
+| Ítem | Nombre, descripción, categoría, preparar en, disponible (sí o no), destacado (sí o no), producto vinculado, código del producto y vínculo con producto (vinculado o sin producto) |
+| Precio | Precio, IVA y precio con IVA (los precios con mínimo y máximo) |
+| Registro | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*) y usuario que registró |
+
+Los selectores *Categoría*, *Preparar en*, *IVA* y *Usuario que registró* listan
+solo lo que ya usan los ítems de la carta. El filtro *Vínculo con producto* →
+*Sin producto* sirve para encontrar ítems antiguos que no se pueden cobrar (ver
+*Todo ítem va vinculado a un producto*).
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
+Si no tiene **acceso total** al módulo, el listado muestra solo los ítems que
+usted registró.
+
 ## Errores frecuentes
 
 - **"Selecciona el producto vinculado"**: es obligatorio. Si el plato no existe
@@ -134,6 +171,16 @@ Solo cuando el ítem **no** tiene tarifa propia se usa la del producto vinculado
 - **"El precio no puede ser negativo"**: revise el valor.
 
 ## Historial de cambios
+
+- **1.9** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas de la carta (incluidos IVA, precio
+  con IVA, código del producto y estación) y en la descripción, salvo Destacado
+  y Disponible. Los filtros pasan a una **ventana propia** (botón del embudo, se
+  aplican con *Aplicar*) con criterios nuevos: descripción, categoría, estación
+  e IVA como listas, código del producto, vínculo con producto, precio con IVA,
+  fecha de registro y usuario. Los accesos *Disponibles*, *No disponibles* y
+  *Destacados* pasan a ser opciones de sus filtros. Nueva sección *Buscar y
+  filtrar el listado*.
 
 - **1.8** — La pestaña *Estaciones* sale de este modal: el catálogo se administra
   en el módulo **Configuración Restaurante**. Aquí queda el selector *Preparar en*.

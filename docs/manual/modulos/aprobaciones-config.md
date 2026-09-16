@@ -5,8 +5,8 @@ categoria: Configuración
 ruta_modulo: modulos/aprobaciones-config
 tipo: modulo
 visibilidad: todos
-etiquetas: aprobaciones, aprobar, autorizar, autorizacion, permisos de aprobacion, quien aprueba, aprobadores, visto bueno, revision, control interno, monto minimo, doble firma
-version: 1.0
+etiquetas: aprobaciones, aprobar, autorizar, autorizacion, permisos de aprobacion, quien aprueba, aprobadores, visto bueno, revision, control interno, monto minimo, doble firma, buscar aprobacion, buscador, filtros, filtrar aprobaciones, que aprueba, chips
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -62,19 +62,38 @@ elige.
 Para cambiar los aprobadores o el monto de una aprobación existente, **haga clic
 en su fila**. Para quitarla del todo, use **Eliminar** dentro de ese mismo modal.
 
-### Buscar en el listado
+## Buscar y filtrar el listado
 
-El buscador acepta texto libre —que busca por proceso, módulo y **también por
-nombre de aprobador**, para responder "¿qué aprueba fulano?"— y filtros
-`clave:valor`:
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
 
-| Filtro | Ejemplo | Qué hace |
-|--------|---------|----------|
-| `proceso:` | `proceso:cargas` | Por nombre del proceso |
-| `modulo:` | `modulo:transferencias` | Por módulo dueño |
-| `aprobador:` | `aprobador:"Ana Pérez"` | Aprobaciones donde esa persona autoriza |
-| `estado:` | `estado:activa` | Activas o inactivas |
-| `monto:` | `monto:>1000` | Por monto mínimo configurado |
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la aprobación: módulo
+(por su ruta, p. ej. *compras*, *transferencias*, *cargas inventario*), proceso
+y su descripción, monto mínimo y **también por nombre de aprobador**, para
+responder "¿qué aprueba fulano?". La columna **Estado** no entra en la búsqueda
+libre: para filtrar por ella use la ventana de filtros. Puede escribir varias
+palabras en cualquier orden y no importan mayúsculas ni tildes. Para limpiar,
+borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un
+**círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
+Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento.
+La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
+
+| Bloque | Filtros |
+|--------|---------|
+| Aprobación | Proceso, módulo, estado (activa o inactiva), aprobador, monto mínimo (mínimo y máximo), con monto mínimo o *siempre*, fecha de la última modificación (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*) |
+
+Los selectores *Módulo* y *Aprobador* listan solo lo que ya aparece en las
+aprobaciones configuradas de la empresa.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
+Los filtros escritos a mano siguen funcionando igual que antes (por ejemplo
+`aprobador:"Ana Pérez"`, `modulo:transferencias` o `monto:>1000`).
 
 El listado se ordena pulsando el encabezado de cada columna, y se exporta a
 **PDF** y **Excel** respetando la búsqueda y el orden aplicados.
@@ -161,6 +180,14 @@ emergencia para cuando el aprobador configurado no está disponible.
 
 ## Historial de cambios
 
+- **1.1** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en todas las columnas (salvo Estado), con todas las
+  palabras en cualquier orden y sin importar tildes. Los filtros pasan a una
+  **ventana propia** (botón del embudo, se aplican con *Aplicar*) con criterios
+  nuevos: módulo y aprobador como listas de lo configurado, con/sin monto mínimo
+  y fecha de última modificación. Los filtros activos se ven como etiquetas
+  dentro del cuadro. La sección *Buscar en el listado* pasa a *Buscar y filtrar
+  el listado*.
 - **1.0** — Versión inicial. Se centraliza aquí la configuración de aprobaciones
   que antes vivía repartida en *Empresa → Inventario* (cargas de inventario) y
   *Empresa → Pagos al Banco* (lotes de transferencia). Se separan Cargas de

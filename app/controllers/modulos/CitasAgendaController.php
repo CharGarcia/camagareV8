@@ -42,6 +42,8 @@ class CitasAgendaController extends BaseModuloController
             'rutaModulo'  => self::RUTA_MODULO,
             'tipos'       => $catalogos['tipos'],
             'recursos'    => $catalogos['recursos'],
+            // Selects del modal de filtros del listado (solo lo que la empresa ya usó)
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
             'vistaConfig' => $prefsVista,
             'fullWidth'   => true,
         ]);
@@ -121,28 +123,14 @@ class CitasAgendaController extends BaseModuloController
         $ordenCol  = trim($_GET['sort']  ?? 'fecha_inicio');
         $ordenDir  = trim($_GET['dir']   ?? 'DESC');
 
-        // Parsear string de búsqueda del componente FiltrosBusqueda
-        $rawQ   = trim($_GET['q'] ?? '');
-        $parsed = \App\Helpers\FiltrosBusqueda::parsear($rawQ);
+        // String serializado del buscador (FiltrosModal): `clave:valor ... texto libre`.
+        // Lo interpreta el repository con FiltrosBusqueda (texto libre + claves).
+        $buscar = trim($_GET['q'] ?? '');
 
-        // Texto libre: combinar texto general + valores de campos de texto específicos
-        $textos = array_filter([
-            $parsed['texto_libre'],
-            (string) ($parsed['filtros']['q']['valor']       ?? ''),
-            (string) ($parsed['filtros']['cliente']['valor'] ?? ''),
-            (string) ($parsed['filtros']['titulo']['valor']  ?? ''),
-            (string) ($parsed['filtros']['tipo']['valor']    ?? ''),
-            (string) ($parsed['filtros']['recurso']['valor'] ?? ''),
-        ]);
-        $buscar = implode(' ', $textos);
-
-        // Filtros estándar (GET tiene prioridad; si no, usar los del componente)
-        $estadoGet  = trim($_GET['estado'] ?? '');
-        $origenGet  = trim($_GET['origen'] ?? '');
+        // Filtros sueltos por GET (compatibilidad con enlaces viejos; la vista ya
+        // manda todo dentro de `q`).
         $filtros   = [
-            'estado'       => $estadoGet !== ''
-                ? $estadoGet
-                : (string) ($parsed['filtros']['estado']['valor'] ?? ''),
+            'estado'       => trim($_GET['estado'] ?? ''),
             'id_recurso'   => (int) ($_GET['id_recurso']   ?? 0) ?: null,
             'id_tipo_cita' => (int) ($_GET['id_tipo_cita'] ?? 0) ?: null,
             'fecha_desde'  => trim($_GET['fecha_desde']  ?? ''),

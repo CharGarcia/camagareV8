@@ -52,37 +52,71 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorVEN" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal): texto libre sobre las columnas del listado
+            // (sin sugerencias) + botón embudo que abre un modal con todos los filtros +
+            // chips de los activos. Las claves (key) deben existir en los mapas de
+            // VendedorRepository::getListado(). Sin pestaña Detalles: el vendedor no tiene
+            // tablas hijas que buscar.
+            $opcFiltro = $opcionesFiltro ?? [];
+            $opcIdNombre = fn(string $k) => array_map(fn($x) => ['v' => (string) $x['id'], 'l' => (string) $x['nombre']], $opcFiltro[$k] ?? []);
+            $opcionesSiNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $tV = 'Vendedor';
+            // Filas de 12 columnas:
+            //   Vendedor:        [Nombre 3][Identificación 3][Estado 3][Clientes asignados 3]
+            //   Contacto:        [Correo 3][Con correo 3][Teléfono 3][Dirección 3]
+            //   Usuario sistema: [Usuario del sistema 6][Vinculado 6]  (solo si existe la columna id_usuario_vinculado)
+            //   Registro:        [Fecha de registro 6][Usuario que registró 6]
+            $filtrosVendedores = [
+                // ── Vendedor ──
+                ['tab' => $tV, 'key' => 'nombre',         'label' => 'Nombre',         'icon' => 'bi-person-badge', 'type' => 'text',   'grupo' => 'Vendedor', 'col' => 3],
+                ['tab' => $tV, 'key' => 'identificacion', 'label' => 'Identificación', 'icon' => 'bi-card-text',    'type' => 'text',   'grupo' => 'Vendedor', 'col' => 3],
+                ['tab' => $tV, 'key' => 'estado',         'label' => 'Estado',         'icon' => 'bi-flag',         'type' => 'select', 'grupo' => 'Vendedor', 'col' => 3, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                ['tab' => $tV, 'key' => 'con_clientes',   'label' => 'Clientes asignados', 'icon' => 'bi-people',   'type' => 'select', 'grupo' => 'Vendedor', 'col' => 3, 'options' => $opcionesSiNo('Con clientes', 'Sin clientes')],
+                // ── Contacto ──
+                ['tab' => $tV, 'key' => 'email',     'label' => 'Correo',            'icon' => 'bi-envelope',       'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                ['tab' => $tV, 'key' => 'con_email', 'label' => 'Correo registrado', 'icon' => 'bi-envelope-check', 'type' => 'select', 'grupo' => 'Contacto', 'col' => 3, 'options' => $opcionesSiNo('Con correo', 'Sin correo')],
+                ['tab' => $tV, 'key' => 'telefono',  'label' => 'Teléfono',          'icon' => 'bi-telephone',      'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                ['tab' => $tV, 'key' => 'direccion', 'label' => 'Dirección',         'icon' => 'bi-geo',            'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+            ];
+            if (!empty($opcFiltro['con_vinculo'])) {
+                // ── Usuario del sistema (la columna id_usuario_vinculado existe) ──
+                $filtrosVendedores[] = ['tab' => $tV, 'key' => 'usuario_vinculado', 'label' => 'Usuario del sistema',    'icon' => 'bi-person-check', 'type' => 'select', 'grupo' => 'Usuario del sistema', 'col' => 6, 'options' => $opcIdNombre('vinculados')];
+                $filtrosVendedores[] = ['tab' => $tV, 'key' => 'con_usuario',       'label' => 'Vinculado a un usuario', 'icon' => 'bi-link-45deg',   'type' => 'select', 'grupo' => 'Usuario del sistema', 'col' => 6, 'options' => $opcionesSiNo('Con usuario del sistema', 'Sin usuario del sistema')];
+            }
+            // ── Registro ──
+            $filtrosVendedores[] = ['tab' => $tV, 'key' => 'registro', 'label' => 'Fecha de registro',    'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true];
+            $filtrosVendedores[] = ['tab' => $tV, 'key' => 'usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcIdNombre('usuarios')];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorVEN"></div>
             <input type="hidden" id="buscarVendedor" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorVEN',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorVEN',
                         hiddenInputId: 'buscarVendedor',
-                        fields: [
-                            { key: 'nombre',         label: 'Nombre',         icon: 'bi-person-badge', type: 'text' },
-                            { key: 'identificacion', label: 'Identificación', icon: 'bi-card-text',    type: 'text' },
-                            { key: 'email',          label: 'Email',          icon: 'bi-envelope',     type: 'text' },
-                            { key: 'telefono',       label: 'Teléfono',       icon: 'bi-telephone',    type: 'text' },
-                            { key: 'direccion',      label: 'Dirección',      icon: 'bi-geo',          type: 'text' },
-                            { key: 'estado',         label: 'Estado',         icon: 'bi-flag',         type: 'select', options: [
-                                { v: 'activo',   l: 'Activo' },
-                                { v: 'inactivo', l: 'Inactivo' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_activo',   label: 'Activos',   mk: () => ({ key: 'estado', op: '=', value: 'activo',   display: 'Activo' }) },
-                            { id: 'qf_inactivo', label: 'Inactivos', mk: () => ({ key: 'estado', op: '=', value: 'inactivo', display: 'Inactivo' }) },
-                        ],
-                        onApply: () => window.fetchSearch && window.fetchSearch(1),
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de vendedores',
+                        inputWidth: 420,
+                        extraId: 'fmExtraVEN',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosVendedores, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyVendedores',   // se atenúa mientras se busca
+                        // La función de búsqueda de este listado es cargarListado (antes se
+                        // llamaba a un window.fetchSearch que no existe y los filtros no
+                        // refrescaban la tabla).
+                        onApply: () => window.cargarListado && window.cargarListado(1),
                     }).init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraVEN" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'nombre'          => 'Nombre',
@@ -93,8 +127,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ];
                 echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo);
                 ?>
-                <a id="btnExportPdf" href="<?= $urlBaseVendedores ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a id="btnExportExcel" href="<?= $urlBaseVendedores ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <a id="btnExportPdf" href="<?= $urlBaseVendedores ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a id="btnExportExcel" href="<?= $urlBaseVendedores ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
             </div>
         </div>
 
@@ -127,11 +161,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php else: ?>
                         <?php foreach ($rows as $row): ?>
                             <tr class="vendedor-row" onclick="abrirModalVendedorEditar(this)" data-row='<?= htmlspecialchars(json_encode($row), ENT_QUOTES) ?>'>
-                                <td class="ps-3 fw-bold"><?= htmlspecialchars((string)($row['nombre'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars((string)($row['identificacion'] ?? '-')) ?></td>
-                                <td class="small text-muted"><?= htmlspecialchars((string)($row['correo'] ?? '-')) ?></td>
-                                <td><?= htmlspecialchars((string)($row['telefono'] ?? '-')) ?></td>
-                                <td class="text-center">
+                                <td class="ps-3 fw-bold" data-col="nombre"><?= htmlspecialchars((string)($row['nombre'] ?? '')) ?></td>
+                                <td data-col="identificacion"><?= htmlspecialchars((string)($row['identificacion'] ?? '-')) ?></td>
+                                <td class="small text-muted" data-col="correo"><?= htmlspecialchars((string)($row['correo'] ?? '-')) ?></td>
+                                <td data-col="telefono"><?= htmlspecialchars((string)($row['telefono'] ?? '-')) ?></td>
+                                <td class="text-center" data-col="status">
                                     <span class="badge bg-<?= ($row['status'] ?? 1) == 1 ? 'success' : 'danger' ?> bg-opacity-10 text-<?= ($row['status'] ?? 1) == 1 ? 'success' : 'danger' ?> border border-<?= ($row['status'] ?? 1) == 1 ? 'success' : 'danger' ?> border-opacity-10">
                                         <?= ($row['status'] ?? 1) == 1 ? 'Activo' : 'Inactivo' ?>
                                     </span>
@@ -164,6 +198,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar (que llaman a esta función directo).
+            const tbody = document.getElementById('tbodyVendedores');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -182,7 +220,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         } else icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
                     });
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         }
         window.cargarListado = cargarListado;
 

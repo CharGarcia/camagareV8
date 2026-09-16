@@ -144,7 +144,12 @@
         if (sort) url.searchParams.append('sort', sort);
         if (dir) url.searchParams.append('dir', dir);
 
-        fetch(url)
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga, también al paginar y ordenar. Se devuelve la promesa para que el
+        // componente apague su spinner cuando termine.
+        const tbodyCarga = document.getElementById('tbodyLiquidaciones');
+        if (tbodyCarga) tbodyCarga.classList.add('fm-cargando-target');
+        return fetch(url)
             .then(r => r.json())
             .then(res => {
                 const tbody = document.getElementById('tbodyLiquidaciones');
@@ -155,7 +160,10 @@
                     updatePaginationUI(page, res.totalPages);
                 }
             })
-            .catch(err => console.error("Error LC_fetchSearch:", err));
+            .catch(err => console.error("Error LC_fetchSearch:", err))
+            .finally(() => {
+                if (tbodyCarga) tbodyCarga.classList.remove('fm-cargando-target');
+            });
     }
 
     function updatePaginationUI(currentPage, totalPages) {

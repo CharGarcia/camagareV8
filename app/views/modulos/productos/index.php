@@ -66,56 +66,119 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorPROD" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal): texto libre sobre las columnas del listado
+            // (sin sugerencias) + botón embudo que abre un modal con todos los filtros +
+            // chips de los activos. Las claves (key) deben existir en los mapas de
+            // ProductoRepository::getListado().
+            // Dos pestañas: "Producto" (filtros por campo) y "Detalles" (búsqueda libre
+            // dentro de variantes, componentes, precios adicionales y códigos de proveedor;
+            // ver `busquedaDetalle` abajo, sin filtros por campo).
+            $opcFiltro = $opcionesFiltro ?? [];
+            $opcIdNombre = fn(string $k) => array_map(fn($x) => ['v' => (string) $x['id'], 'l' => (string) $x['nombre']], $opcFiltro[$k] ?? []);
+            $opcionesSiNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $tPr = 'Producto';
+            // Filas de 12 columnas:
+            //   Producto:       [Código 3][Cód. auxiliar 3][Barras 3][Descripción 3]
+            //   Clasificación:  [Tipo 3][Categoría 3][Marca 3][Estado 3]
+            //   Inventario:     [Inventariable 4][Medida 4][Ubicación 4]
+            //                   [Saldo 4][Stock mínimo 4][Stock máximo 4]
+            //                   [Bajo el mínimo 6][Kit 6]
+            //   Precios:        [Precio base 4][PVP final 4][Tipo IVA 4]
+            //                   [Con ICE 3][Para venta 3][Para compra 3][Precios adicionales 3]
+            //   Registro:       [Fecha de registro 6][Usuario 6]
+            $filtrosProductos = [
+                // ── Producto ──
+                ['tab' => $tPr, 'key' => 'codigo',     'label' => 'Código',           'icon' => 'bi-hash',    'type' => 'text', 'grupo' => 'Producto', 'col' => 3],
+                ['tab' => $tPr, 'key' => 'codigo_aux', 'label' => 'Código auxiliar',  'icon' => 'bi-tag',     'type' => 'text', 'grupo' => 'Producto', 'col' => 3],
+                ['tab' => $tPr, 'key' => 'barras',     'label' => 'Código de barras', 'icon' => 'bi-upc-scan','type' => 'text', 'grupo' => 'Producto', 'col' => 3],
+                ['tab' => $tPr, 'key' => 'nombre',     'label' => 'Descripción',      'icon' => 'bi-box',     'type' => 'text', 'grupo' => 'Producto', 'col' => 3],
+                // ── Clasificación ──
+                ['tab' => $tPr, 'key' => 'tipo',         'label' => 'Tipo',      'icon' => 'bi-grid',        'type' => 'select', 'grupo' => 'Clasificación', 'col' => 3, 'options' => [
+                    ['v' => 'bien',     'l' => 'Bien'],
+                    ['v' => 'servicio', 'l' => 'Servicio'],
+                ]],
+                ['tab' => $tPr, 'key' => 'id_categoria', 'label' => 'Categoría', 'icon' => 'bi-folder',      'type' => 'select', 'grupo' => 'Clasificación', 'col' => 3, 'options' => $opcIdNombre('categorias')],
+                ['tab' => $tPr, 'key' => 'id_marca',     'label' => 'Marca',     'icon' => 'bi-patch-check', 'type' => 'select', 'grupo' => 'Clasificación', 'col' => 3, 'options' => $opcIdNombre('marcas')],
+                ['tab' => $tPr, 'key' => 'estado',       'label' => 'Estado',    'icon' => 'bi-flag',        'type' => 'select', 'grupo' => 'Clasificación', 'col' => 3, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                // ── Inventario ──
+                ['tab' => $tPr, 'key' => 'inventariable', 'label' => 'Inventariable',    'icon' => 'bi-clipboard-check', 'type' => 'select', 'grupo' => 'Inventario', 'col' => 4, 'options' => [
+                    ['v' => 'true',  'l' => 'Sí'],
+                    ['v' => 'false', 'l' => 'No'],
+                ]],
+                ['tab' => $tPr, 'key' => 'id_medida',     'label' => 'Unidad de medida', 'icon' => 'bi-rulers',          'type' => 'select',       'grupo' => 'Inventario', 'col' => 4, 'options' => $opcIdNombre('medidas')],
+                ['tab' => $tPr, 'key' => 'ubicacion',     'label' => 'Ubicación',        'icon' => 'bi-geo-alt',         'type' => 'text',         'grupo' => 'Inventario', 'col' => 4],
+                ['tab' => $tPr, 'key' => 'stock',         'label' => 'Saldo (todas las bodegas)', 'icon' => 'bi-boxes', 'type' => 'number_range', 'grupo' => 'Inventario', 'col' => 4],
+                ['tab' => $tPr, 'key' => 'stock_min',     'label' => 'Stock mínimo',     'icon' => 'bi-arrow-down-circle','type' => 'number_range', 'grupo' => 'Inventario', 'col' => 4],
+                ['tab' => $tPr, 'key' => 'stock_max',     'label' => 'Stock máximo',     'icon' => 'bi-arrow-up-circle', 'type' => 'number_range', 'grupo' => 'Inventario', 'col' => 4],
+                ['tab' => $tPr, 'key' => 'bajo_minimo',   'label' => 'Saldo bajo el stock mínimo', 'icon' => 'bi-exclamation-triangle', 'type' => 'select', 'grupo' => 'Inventario', 'col' => 6, 'options' => $opcionesSiNo('Bajo el mínimo', 'No está bajo el mínimo')],
+                ['tab' => $tPr, 'key' => 'kit',           'label' => 'Kit (con componentes)', 'icon' => 'bi-diagram-3',   'type' => 'select', 'grupo' => 'Inventario', 'col' => 6, 'options' => $opcionesSiNo('Con componentes', 'Sin componentes')],
+                // ── Precios e impuestos ──
+                ['tab' => $tPr, 'key' => 'precio',        'label' => 'Precio base',      'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Precios e impuestos', 'col' => 4],
+                ['tab' => $tPr, 'key' => 'pvp',           'label' => 'PVP final',        'icon' => 'bi-cash',            'type' => 'number_range', 'grupo' => 'Precios e impuestos', 'col' => 4],
+                ['tab' => $tPr, 'key' => 'id_tarifa_iva', 'label' => 'Tipo de IVA',      'icon' => 'bi-percent',         'type' => 'select',       'grupo' => 'Precios e impuestos', 'col' => 4, 'options' => $opcIdNombre('tarifas_iva')],
+                ['tab' => $tPr, 'key' => 'con_ice',       'label' => 'ICE',              'icon' => 'bi-droplet',         'type' => 'select', 'grupo' => 'Precios e impuestos', 'col' => 3, 'options' => $opcionesSiNo('Con ICE', 'Sin ICE')],
+                ['tab' => $tPr, 'key' => 'para_venta',    'label' => 'Se vende',         'icon' => 'bi-cart',            'type' => 'select', 'grupo' => 'Precios e impuestos', 'col' => 3, 'options' => $opcionesSiNo('Sí', 'No')],
+                ['tab' => $tPr, 'key' => 'para_compra',   'label' => 'Se compra',        'icon' => 'bi-bag',             'type' => 'select', 'grupo' => 'Precios e impuestos', 'col' => 3, 'options' => $opcionesSiNo('Sí', 'No')],
+                ['tab' => $tPr, 'key' => 'con_precios',   'label' => 'Precios adicionales', 'icon' => 'bi-tags',         'type' => 'select', 'grupo' => 'Precios e impuestos', 'col' => 3, 'options' => $opcionesSiNo('Con precios adicionales', 'Sin precios adicionales')],
+                // ── Registro ──
+                ['tab' => $tPr, 'key' => 'registro', 'label' => 'Fecha de registro',    'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tPr, 'key' => 'usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcIdNombre('usuarios')],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorPROD"></div>
             <input type="hidden" id="buscarProducto" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorPROD',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorPROD',
                         hiddenInputId: 'buscarProducto',
-                        fields: [
-                            { key: 'nombre',       label: 'Nombre',           icon: 'bi-box',             type: 'text' },
-                            { key: 'codigo',       label: 'Código',           icon: 'bi-hash',            type: 'text' },
-                            { key: 'codigo_aux',   label: 'Código auxiliar',  icon: 'bi-tag',             type: 'text' },
-                            { key: 'barras',       label: 'Código barras',    icon: 'bi-upc-scan',        type: 'text' },
-                            { key: 'categoria',    label: 'Categoría',        icon: 'bi-folder',          type: 'text' },
-                            { key: 'marca',        label: 'Marca',            icon: 'bi-patch-check',     type: 'text' },
-                            { key: 'medida',       label: 'Unidad de medida', icon: 'bi-rulers',          type: 'text' },
-                            { key: 'ubicacion',    label: 'Ubicación',        icon: 'bi-geo-alt',         type: 'text' },
-                            { key: 'precio',       label: 'Precio base',      icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'stock',        label: 'Stock',            icon: 'bi-boxes',           type: 'number_range' },
-                            { key: 'stock_min',    label: 'Stock mínimo',     icon: 'bi-arrow-down-circle', type: 'number_range' },
-                            { key: 'stock_max',    label: 'Stock máximo',     icon: 'bi-arrow-up-circle', type: 'number_range' },
-                            { key: 'tipo',         label: 'Tipo',             icon: 'bi-grid',            type: 'select', options: [
-                                { v: 'bien',     l: 'Bien' },
-                                { v: 'servicio', l: 'Servicio' },
-                            ]},
-                            { key: 'inventariable', label: 'Inventariable',   icon: 'bi-clipboard-check', type: 'select', options: [
-                                { v: 'true',  l: 'Sí' },
-                                { v: 'false', l: 'No' },
-                            ]},
-                            { key: 'estado',       label: 'Estado',           icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'activo',   l: 'Activo' },
-                                { v: 'inactivo', l: 'Inactivo' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_activo',         label: 'Activos',         mk: () => ({ key: 'estado',        op: '=',  value: 'activo',   display: 'Activo' }) },
-                            { id: 'qf_inactivo',       label: 'Inactivos',       mk: () => ({ key: 'estado',        op: '=',  value: 'inactivo', display: 'Inactivo' }) },
-                            { id: 'qf_sin_stock',      label: 'Sin stock',       mk: () => ({ key: 'stock',         op: '<=', value: '0',        display: '≤ 0' }) },
-                            { id: 'qf_inventariable',  label: 'Inventariables',  mk: () => ({ key: 'inventariable', op: '=',  value: 'true',     display: 'Sí' }) },
-                            { id: 'qf_no_inventariable', label: 'No inventariables', mk: () => ({ key: 'inventariable', op: '=', value: 'false', display: 'No' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de productos',
+                        inputWidth: 420,
+                        extraId: 'fmExtraPROD',   // columnas + PDF + Excel + acciones, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de los productos (variantes,
+                        // componentes de kits, precios adicionales y códigos de proveedor).
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de los productos',
+                            placeholder: 'Variante (talla, color...), componente de un kit, lista de precios, código o proveedor...',
+                            columns: [
+                                { key: 'origen',  label: 'Tipo' },
+                                { key: 'detalle', label: 'Detalle' },
+                                { key: 'valor',   label: 'Valor / Código' },
+                                { key: 'monto',   label: 'Precio', align: 'end' },
+                                { key: 'codigo',  label: 'Código', class: 'font-monospace fw-semibold' },
+                                { key: 'nombre',  label: 'Producto' },
+                                { key: 'estado',  label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'codigo', value: row.codigo }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                if (row.fila && typeof window.abrirModalProductoEditar === 'function') {
+                                    setTimeout(() => window.abrirModalProductoEditar(row.fila), 350);
+                                } else {
+                                    fm.aplicarFiltro({ key: 'codigo', value: row.codigo });
+                                }
+                            },
+                        },
+                        fields: <?= json_encode($filtrosProductos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyProductos',   // se atenúa mientras se busca
                         onApply: () => window.fetchSearch && window.fetchSearch(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraPROD" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'codigo' => 'Código',
@@ -140,8 +203,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                <a id="btnExportPdf" href="<?= $urlBaseProd ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a id="btnExportExcel" href="<?= $urlBaseProd ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <a id="btnExportPdf" href="<?= $urlBaseProd ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a id="btnExportExcel" href="<?= $urlBaseProd ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
                 <?php if (!empty($perm['actualizar'])): ?>
                     <button type="button" class="btn btn-outline-primary" onclick="actualizarCostosMasivo()" title="Recalcula el costo de todos los productos inventariables desde el Kardex">
                         <i class="bi bi-arrow-repeat"></i> Actualizar Costos
@@ -316,6 +379,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const term = inputBuscar ? inputBuscar.value.trim() : '';
             const orden = window.CMG_ordenParam(window.currentSorts || []);
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar (que llaman a esta función directo).
+            const tbody = document.getElementById('tbodyProductos');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -333,6 +400,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 }
             } catch (e) {
                 console.error(e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
             }
         };
 

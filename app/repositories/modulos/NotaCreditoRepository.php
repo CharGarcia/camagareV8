@@ -43,9 +43,30 @@ class NotaCreditoRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
+        // Texto libre: las columnas del listado y lo que identifica la nota aunque no
+        // sea columna. El buscador de la vista no sugiere campos; lo escrito se busca
+        // en todo. Decisión del usuario: las columnas Correo y Estado NO entran en el
+        // texto libre (se filtran solo desde el modal de filtros).
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['nc.secuencial', 'c.nombre', 'c.identificacion', 'nc.num_doc_modificado', 'nc.motivo'],
+                [
+                    "CONCAT(nc.establecimiento,'-',nc.punto_emision,'-',nc.secuencial)", // Nº Nota
+                    'nc.secuencial',
+                    'nc.fecha_emision::text',                                             // Fecha
+                    'c.nombre',                                                           // Cliente
+                    'c.identificacion',                                                   // Identificación
+                    'nc.num_doc_modificado',                                              // Doc. Modificado
+                    'nc.total_sin_impuestos::text',                                       // Subtotal
+                    'nc.total_descuento::text',                                           // Descuento
+                    'nc.importe_total::text',                                             // Total
+                    'nc.motivo',                                                          // Motivo
+                    'u.nombre',                                                           // Usuario
+                    // Fuera del listado, pero identifican la nota:
+                    'nc.numero_autorizacion',
+                    'nc.clave_acceso',
+                    'nc.observaciones',
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', ncd.codigo_principal, ncd.codigo_auxiliar, ncd.descripcion), ' ') FROM notas_credito_detalle ncd WHERE ncd.id_nota_credito = nc.id)",
+                ],
                 $textoLibre,
                 $params,
                 'tl'
@@ -61,26 +82,44 @@ class NotaCreditoRepository extends BaseRepository
                 'ruc'            => 'c.identificacion',
                 'ci'             => 'c.identificacion',
                 'identificacion' => 'c.identificacion',
-                'numero'         => 'nc.secuencial',
-                'nro'            => 'nc.secuencial',
+                // Nº completo (001-001-000000123): también encuentra solo el secuencial,
+                // como antes, porque es una coincidencia parcial (ILIKE).
+                'numero'         => "CONCAT(nc.establecimiento,'-',nc.punto_emision,'-',nc.secuencial)",
+                'nro'            => "CONCAT(nc.establecimiento,'-',nc.punto_emision,'-',nc.secuencial)",
                 'doc_modificado' => 'nc.num_doc_modificado',
                 'motivo'         => 'nc.motivo',
                 'usuario'        => 'u.nombre',
+                'obs'            => 'nc.observaciones',
+                'observacion'    => 'nc.observaciones',
+                'autorizacion'   => 'nc.numero_autorizacion',
+                'clave'          => 'nc.clave_acceso',
+                'clave_acceso'   => 'nc.clave_acceso',
             ],
             'exacto' => [
                 'estado' => 'nc.estado',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del modal de nota de crédito.
                 'serie'  => "CONCAT(nc.establecimiento,'-',nc.punto_emision)",
+                'estado_correo' => "COALESCE(NULLIF(nc.estado_correo,''),'pendiente')",
+                'correo'        => "COALESCE(NULLIF(nc.estado_correo,''),'pendiente')",
+                'id_usuario'    => 'nc.id_usuario',
+                // asiento:si / asiento:no
+                'asiento'       => "CASE WHEN nc.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
+                // ambiente:1 (pruebas) / ambiente:2 (producción)
+                'ambiente'      => 'nc.tipo_ambiente',
             ],
             'fecha' => [
                 'fecha'         => 'nc.fecha_emision',
                 'fecha_emision' => 'nc.fecha_emision',
+                'fecha_autorizacion' => 'nc.fecha_autorizacion',
+                'autorizada'         => 'nc.fecha_autorizacion',
+                'fecha_sustento'     => 'nc.fecha_emision_docs_sustento',
             ],
             'numerico' => [
                 'monto'    => 'nc.importe_total',
                 'total'    => 'nc.importe_total',
                 'subtotal' => 'nc.total_sin_impuestos',
+                'descuento' => 'nc.total_descuento',
                 // Comparación numérica: "298" encuentra "000000298" sin que el
                 // usuario tenga que escribir los ceros a la izquierda, y sigue
                 // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
@@ -136,6 +175,89 @@ class NotaCreditoRepository extends BaseRepository
             'total' => $total,
             'rows'  => $rows
         ];
+    }
+
+    /** Usuarios que han registrado alguna nota de crédito en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConNotas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM notas_credito_cabecera nc
+                JOIN usuarios u ON u.id = nc.id_usuario
+                WHERE nc.id_empresa = :id_empresa AND nc.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las notas de crédito (pestaña "Detalles" del modal de
+     * filtros): devuelve cada línea (producto/servicio) o campo de información adicional
+     * que coincide con el texto, junto con la nota a la que pertenece. Mismo alcance que
+     * el listado (empresa, no eliminadas, ambiente, registros propios por id_usuario).
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "nc.id_empresa = :id_empresa AND nc.eliminado = false
+                      AND nc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND nc.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.codigo_principal', 'd.codigo_auxiliar', 'd.descripcion', 'd.cantidad::text',
+             'd.precio_unitario::text', 'd.precio_total_sin_impuesto::text'],
+            $q, $params, 'dt'
+        );
+        $condAdic = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['a.nombre', 'a.valor'],
+            $q, $params, 'ad'
+        );
+        if ($condDet === '' || $condAdic === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT nc.id, CONCAT(nc.establecimiento,'-',nc.punto_emision,'-',nc.secuencial) AS numero,
+                           nc.fecha_emision, nc.estado, nc.num_doc_modificado, c.nombre AS cliente
+                    FROM notas_credito_cabecera nc
+                    LEFT JOIN clientes c ON c.id = nc.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen,
+                           COALESCE(NULLIF(d.codigo_principal,''), d.codigo_auxiliar) AS tipo,
+                           d.descripcion,
+                           d.cantidad,
+                           d.precio_total_sin_impuesto AS monto,
+                           b.id AS id_nota, b.numero, b.fecha_emision, b.estado, b.num_doc_modificado, b.cliente
+                    FROM notas_credito_detalle d
+                    JOIN base b ON b.id = d.id_nota_credito
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'ADICIONAL' AS origen,
+                           a.nombre AS tipo,
+                           a.valor AS descripcion,
+                           NULL AS cantidad,
+                           NULL AS monto,
+                           b.id AS id_nota, b.numero, b.fecha_emision, b.estado, b.num_doc_modificado, b.cliente
+                    FROM notas_credito_adicional a
+                    JOIN base b ON b.id = a.id_nota_credito
+                    WHERE $condAdic
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id_nota DESC, x.origen
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

@@ -113,8 +113,24 @@ class AsistenciaJornadaRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre: las columnas del listado + lo que identifica la jornada.
+            // Decisión del usuario: la columna Estado NO entra en el texto libre; se
+            // filtra desde el modal.
             $condicion = FiltrosBusqueda::condicionTexto(
-                ['e.nombres_apellidos', 'e.identificacion'],
+                [
+                    'e.nombres_apellidos',                                  // Empleado
+                    'e.identificacion',
+                    "TO_CHAR(j.fecha, 'DD-MM-YYYY')",                       // Fecha (como se muestra)
+                    'j.fecha::text',
+                    "TO_CHAR(j.primera_entrada, 'HH24:MI')",                // Entrada
+                    "TO_CHAR(j.ultima_salida, 'HH24:MI')",                  // Salida
+                    'j.horas_trabajadas::text',                             // Horas
+                    "CASE WHEN j.atraso_min > 0 THEN CONCAT(j.atraso_min, ' min') END", // Atraso
+                    "CASE WHEN j.extra_min > 0 THEN CONCAT(j.extra_min, ' min') END",   // Extra
+                    'j.observacion',
+                    'p.nombre',                                             // Punto de servicio
+                    'h.nombre',                                             // Horario/turno aplicado
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -123,9 +139,25 @@ class AsistenciaJornadaRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (FiltrosModal en la vista). Las viejas se conservan.
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'texto'    => ['empleado' => 'e.nombres_apellidos'],
-            'exacto'   => ['estado' => 'j.estado'],
+            'texto'    => [
+                'empleado'       => 'e.nombres_apellidos',
+                'identificacion' => 'e.identificacion',
+                'observacion'    => 'j.observacion',
+                'entrada'        => "TO_CHAR(j.primera_entrada, 'HH24:MI')",
+                'salida'         => "TO_CHAR(j.ultima_salida, 'HH24:MI')",
+            ],
+            'exacto'   => [
+                'estado'     => 'j.estado',
+                'id_punto'   => 'j.id_punto',
+                'id_horario' => 'j.id_horario',
+                'usuario'    => 'j.created_by',
+                // novedad:si / novedad:no (ya se generó la novedad para el rol)
+                'novedad'    => "CASE WHEN j.id_novedad IS NULL THEN 'no' ELSE 'si' END",
+                // con_salida:si / con_salida:no (tiene registrada la salida del día)
+                'con_salida' => "CASE WHEN j.ultima_salida IS NULL THEN 'no' ELSE 'si' END",
+            ],
             'fecha'    => ['fecha' => 'j.fecha'],
             'numerico' => ['atraso' => 'j.atraso_min', 'extra' => 'j.extra_min', 'horas' => 'j.horas_trabajadas'],
         ]);
@@ -135,6 +167,7 @@ class AsistenciaJornadaRepository extends BaseRepository
         $from = "FROM {$this->table} j
                  JOIN empleados e ON e.id = j.id_empleado
                  LEFT JOIN asistencia_puntos p ON p.id = j.id_punto
+                 LEFT JOIN asistencia_horarios h ON h.id = j.id_horario
                  {$where}";
 
         $stTotal = $this->db->prepare("SELECT COUNT(*) {$from}");
@@ -153,6 +186,31 @@ class AsistenciaJornadaRepository extends BaseRepository
         $st->execute($params);
 
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /**
+     * Valores realmente usados en las jornadas de la empresa, para los selects del
+     * modal de filtros: puntos de servicio, horarios y usuarios que las calcularon.
+     *
+     * @return array{puntos: array, horarios: array, usuarios: array}
+     */
+    public function getOpcionesFiltro(int $idEmpresa): array
+    {
+        $consultas = [
+            'puntos'   => "SELECT DISTINCT p.id, p.nombre FROM {$this->table} j JOIN asistencia_puntos p ON p.id = j.id_punto
+                           WHERE j.id_empresa = :id_empresa AND j.eliminado = false ORDER BY p.nombre",
+            'horarios' => "SELECT DISTINCT h.id, h.nombre FROM {$this->table} j JOIN asistencia_horarios h ON h.id = j.id_horario
+                           WHERE j.id_empresa = :id_empresa AND j.eliminado = false ORDER BY h.nombre",
+            'usuarios' => "SELECT DISTINCT u.id, u.nombre FROM {$this->table} j JOIN usuarios u ON u.id = j.created_by
+                           WHERE j.id_empresa = :id_empresa AND j.eliminado = false ORDER BY u.nombre",
+        ];
+        $out = [];
+        foreach ($consultas as $clave => $sql) {
+            $st = $this->db->prepare($sql);
+            $st->execute([':id_empresa' => $idEmpresa]);
+            $out[$clave] = $st->fetchAll(PDO::FETCH_ASSOC);
+        }
+        return $out;
     }
 
     /** Cuenta las jornadas incompletas (requieren revisión) en un rango. */

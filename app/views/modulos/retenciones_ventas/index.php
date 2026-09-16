@@ -55,55 +55,102 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorRetV" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // "Filtros" que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de RetencionVentaRepository::getListado().
+            $opcionesSerie   = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            // Dos pestañas: "Retención" (filtros por campo) y "Detalles" (solo la búsqueda
+            // libre dentro de las líneas retenidas, ver `busquedaDetalle` abajo).
+            $tR = 'Retención';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento:          [Fecha de emisión 6][Origen 3][Serie 3]
+            //                       [Nº retención 4][Secuencial 2][Período fiscal 3][Asiento 3]
+            //                       [Clave de acceso 6][Usuario que registró 6]
+            //   Documento sustento: [Nº documento 4][Fecha del documento 5][Código de retención 3]
+            //   Valores:            [Total retenido 3][Renta 3][IVA 3][ISD 3]
+            //   Cliente:            [Cliente 6][RUC 6]
+            $filtrosRetencionesVentas = [
+                // ── Documento ──
+                ['tab' => $tR, 'key' => 'fecha',      'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tR, 'key' => 'origen',     'label' => 'Origen',           'icon' => 'bi-tag',            'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'manual',      'l' => 'Manual'],
+                    ['v' => 'electronico', 'l' => 'Electrónico'],
+                ]],
+                ['tab' => $tR, 'key' => 'serie',      'label' => 'Serie',            'icon' => 'bi-upc-scan',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tR, 'key' => 'numero',     'label' => 'Nº retención',     'icon' => 'bi-hash',           'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tR, 'key' => 'secuencial', 'label' => 'Secuencial',       'icon' => 'bi-123',            'type' => 'text',       'grupo' => 'Documento', 'col' => 2, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tR, 'key' => 'periodo',    'label' => 'Período fiscal',   'icon' => 'bi-calendar3',      'type' => 'text',       'grupo' => 'Documento', 'col' => 3, 'placeholder' => 'MM/AAAA'],
+                ['tab' => $tR, 'key' => 'asiento',    'label' => 'Asiento contable', 'icon' => 'bi-journal-check',  'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Con asiento'],
+                    ['v' => 'no', 'l' => 'Sin asiento'],
+                ]],
+                ['tab' => $tR, 'key' => 'clave_acceso', 'label' => 'Clave de acceso',    'icon' => 'bi-key',         'type' => 'text',   'grupo' => 'Documento', 'col' => 6],
+                ['tab' => $tR, 'key' => 'id_usuario',   'label' => 'Usuario que registró', 'icon' => 'bi-person-gear', 'type' => 'select', 'grupo' => 'Documento', 'col' => 6, 'options' => $opcionesUsuario],
+                // ── Documento sustento (líneas de la retención) ──
+                ['tab' => $tR, 'key' => 'doc_sustento',     'label' => 'Nº documento sustento', 'icon' => 'bi-receipt',   'type' => 'text',       'grupo' => 'Documento sustento', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tR, 'key' => 'fecha_sustento',   'label' => 'Fecha del documento',   'icon' => 'bi-calendar',  'type' => 'date_range', 'grupo' => 'Documento sustento', 'col' => 5],
+                ['tab' => $tR, 'key' => 'codigo_retencion', 'label' => 'Código de retención',   'icon' => 'bi-upc',       'type' => 'text',       'grupo' => 'Documento sustento', 'col' => 3, 'placeholder' => '312'],
+                // ── Valores ──
+                ['tab' => $tR, 'key' => 'total', 'label' => 'Total retenido', 'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 3],
+                ['tab' => $tR, 'key' => 'renta', 'label' => 'Total Renta',    'icon' => 'bi-percent',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 3],
+                ['tab' => $tR, 'key' => 'iva',   'label' => 'Total IVA',      'icon' => 'bi-receipt',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 3],
+                ['tab' => $tR, 'key' => 'isd',   'label' => 'Total ISD',      'icon' => 'bi-bank',            'type' => 'number_range', 'grupo' => 'Valores', 'col' => 3],
+                // ── Cliente ──
+                ['tab' => $tR, 'key' => 'cliente', 'label' => 'Cliente',      'icon' => 'bi-person',    'type' => 'text', 'grupo' => 'Cliente', 'col' => 6],
+                ['tab' => $tR, 'key' => 'ruc',     'label' => 'RUC / Cédula', 'icon' => 'bi-card-text', 'type' => 'text', 'grupo' => 'Cliente', 'col' => 6],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorRetV"></div>
             <input type="hidden" id="buscarRetV" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorRetV',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorRetV',
                         hiddenInputId: 'buscarRetV',
-                        placeholder: 'Buscar...',
-                        fields: [
-                            { key: 'cliente',     label: 'Cliente',        icon: 'bi-person',          type: 'text' },
-                            { key: 'ruc',         label: 'RUC / Cédula',   icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',      label: 'Nº Retención',   icon: 'bi-hash',            type: 'text' },
-                            { key: 'serie',       label: 'Serie',          icon: 'bi-upc-scan',        type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial',  label: 'Secuencial',     icon: 'bi-123',             type: 'text' },
-                            { key: 'periodo',     label: 'Período fiscal', icon: 'bi-calendar3',       type: 'text' },
-                            { key: 'clave_acceso', label: 'Clave acceso', icon: 'bi-key',             type: 'text' },
-                            { key: 'usuario',     label: 'Usuario',        icon: 'bi-person-circle',   type: 'text' },
-                            { key: 'fecha',       label: 'Fecha emisión',  icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'origen',      label: 'Origen',         icon: 'bi-tag',             type: 'select', options: [
-                                { v: 'manual',     l: 'Manual' },
-                                { v: 'automatica', l: 'Automática' },
-                            ]},
-                            { key: 'total',       label: 'Total retenido', icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'renta',       label: 'Total Renta',    icon: 'bi-percent',         type: 'number_range' },
-                            { key: 'iva',         label: 'Total IVA',      icon: 'bi-receipt',         type: 'number_range' },
-                            { key: 'isd',         label: 'Total ISD',      icon: 'bi-bank',            type: 'number_range' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_manual',     label: 'Manuales',    mk: () => ({ key: 'origen', op: '=', value: 'manual',     display: 'Manual' }) },
-                            { id: 'qf_automatica', label: 'Automáticas', mk: () => ({ key: 'origen', op: '=', value: 'automatica', display: 'Automática' }) },
-                            { id: 'qf_hoy',        label: 'Hoy',         mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                            { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_mes_pasado', label: 'Mes pasado',  mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
-                            { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de retenciones en ventas',
+                        inputWidth: 420,
+                        extraId: 'fmExtraRetV',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las líneas retenidas (documento
+                        // sustento, impuesto, código, base, porcentaje y valor).
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de las retenciones',
+                            placeholder: 'Nº de factura sustento, código de retención, base, porcentaje, valor...',
+                            columns: [
+                                { key: 'impuesto',     label: 'Impuesto' },
+                                { key: 'codigo',       label: 'Código', class: 'font-monospace' },
+                                { key: 'doc_sustento', label: 'Doc. sustento', class: 'font-monospace' },
+                                { key: 'base',         label: 'Base', align: 'end' },
+                                { key: 'porcentaje',   label: '%', align: 'end' },
+                                { key: 'valor',        label: 'Retenido', align: 'end' },
+                                { key: 'numero',       label: 'Retención', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',        label: 'Fecha' },
+                                { key: 'cliente',      label: 'Cliente' },
+                                { key: 'origen',       label: 'Origen' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                setTimeout(() => window.RETV_abrirModal({ dataset: { row: JSON.stringify({ id: row.id_retencion }) } }), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosRetencionesVentas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#retv-table-body',   // se atenúa mientras se busca
                         onApply: () => window.RETV_fetchSearch && window.RETV_fetchSearch(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraRetV" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero'         => 'Nº Retención',
@@ -122,11 +169,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-danger px-2" title="Exportar PDF">
-                    <i class="fa-regular fa-file-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-success px-2" title="Exportar Excel">
-                    <i class="fa-regular fa-file-excel"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>

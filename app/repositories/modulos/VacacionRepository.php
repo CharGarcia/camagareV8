@@ -28,18 +28,57 @@ class VacacionRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (e.nombres_apellidos ILIKE :b OR e.identificacion ILIKE :b OR v.observacion ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            // Texto libre: las columnas del listado + lo que identifica la vacación.
+            // Decisión del usuario: la columna Estado NO entra en el texto libre; se
+            // filtra desde el modal.
+            $casosMes = '';
+            foreach (\App\models\CatalogoNovedades::MESES as $num => $nombre) {
+                $casosMes .= ' WHEN ' . (int) $num . " THEN '" . str_replace("'", "''", $nombre) . "'";
+            }
+            $condicion = FiltrosBusqueda::condicionTexto(
+                [
+                    'e.nombres_apellidos',                                  // Empleado
+                    'e.identificacion',                                     // Identificación
+                    "TO_CHAR(v.fecha_desde, 'DD-MM-YYYY')",                 // Desde (como se muestra)
+                    'v.fecha_desde::text',
+                    "TO_CHAR(v.fecha_hasta, 'DD-MM-YYYY')",                 // Hasta
+                    'v.fecha_hasta::text',
+                    'v.dias_gozados::text',                                 // Días
+                    'v.valor::text',                                        // Valor
+                    'v.observacion',
+                    "CONCAT(CASE v.periodo_mes{$casosMes} END, ' ', v.periodo_anio)", // Mes del rol ("Julio 2026")
+                    'u.nombre',                                             // Usuario que registró
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
+        // Claves del modal de filtros (FiltrosModal en la vista). Las viejas se conservan.
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'texto'    => ['empleado' => 'e.nombres_apellidos', 'observacion' => 'v.observacion'],
-            'exacto'   => ['estado' => 'v.estado', 'mes' => 'v.periodo_mes', 'anio' => 'v.periodo_anio'],
+            'texto'    => [
+                'empleado'       => 'e.nombres_apellidos',
+                'observacion'    => 'v.observacion',
+                'identificacion' => 'e.identificacion',
+            ],
+            'exacto'   => [
+                'estado'     => 'v.estado',
+                'mes'        => 'v.periodo_mes',
+                'anio'       => 'v.periodo_anio',
+                'usuario'    => 'v.created_by',
+                // afecta_rol:si / afecta_rol:no
+                'afecta_rol' => "CASE WHEN COALESCE(v.afecta_rol, false) THEN 'si' ELSE 'no' END",
+            ],
             'fecha'    => ['desde' => 'v.fecha_desde', 'hasta' => 'v.fecha_hasta'],
-            'numerico' => ['dias' => 'v.dias_gozados', 'valor' => 'v.valor'],
+            'numerico' => ['dias' => 'v.dias_gozados', 'valor' => 'v.valor', 'dias_derecho' => 'v.dias_derecho'],
         ]);
 
         $orderExpr = $ordenCol === 'empleado' ? 'e.nombres_apellidos' : "v.{$ordenCol}";
-        $from = "FROM {$this->table} v JOIN empleados e ON e.id = v.id_empleado {$where}";
+        $from = "FROM {$this->table} v JOIN empleados e ON e.id = v.id_empleado
+                 LEFT JOIN usuarios u ON u.id = v.created_by {$where}";
 
         $stTotal = $this->db->prepare("SELECT COUNT(*) {$from}");
         $stTotal->execute($params);
@@ -51,6 +90,28 @@ class VacacionRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /** Años del mes del rol usados por la empresa (select "Año" del modal de filtros). */
+    public function getAniosUsados(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT DISTINCT periodo_anio FROM {$this->table}
+                                  WHERE id_empresa = :id_empresa AND eliminado = false AND periodo_anio IS NOT NULL
+                                  ORDER BY periodo_anio DESC");
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** Usuarios que registraron alguna vacación en la empresa (select "Usuario que registró"). */
+    public function getUsuariosConVacaciones(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT DISTINCT u.id, u.nombre
+                                  FROM {$this->table} v
+                                  JOIN usuarios u ON u.id = v.created_by
+                                  WHERE v.id_empresa = :id_empresa AND v.eliminado = false
+                                  ORDER BY u.nombre");
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function create(array $d): int

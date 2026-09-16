@@ -77,51 +77,114 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorFR" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // "Filtros" que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de FacturaReembolsoRepository::getListado().
+            $opcionesSerie   = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            // Dos pestañas: "Factura de reembolso" (filtros por campo) y "Detalles" (solo la
+            // búsqueda libre dentro de las facturas, ver `busquedaDetalle` abajo).
+            $tF = 'Factura de reembolso';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento: [Fecha de emisión 6][Estado 3][Correo 3]
+            //              [Serie 3][Número 4][Secuencial 2][Asiento 3]
+            //              [Fecha de autorización 6][Usuario que registró 6]
+            //   Valores:   [Total 4][Reembolsado 4][Base reembolso 4]
+            //              [Subtotal 4][Descuento 4][Comprobantes de terceros 4]
+            //   Terceros:  [Proveedor 6][RUC proveedor 6]
+            //              [Nº comprobante 6][Fecha del comprobante 6]
+            //   Cliente:   [Cliente 4][RUC 4][Observaciones 4]
+            //              [Nº autorización 6][Clave de acceso 6]
+            $filtrosFacturasReembolso = [
+                // ── Documento ──
+                ['tab' => $tF, 'key' => 'fecha',      'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tF, 'key' => 'estado',     'label' => 'Estado',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'borrador',   'l' => 'Borrador'],
+                    ['v' => 'autorizado', 'l' => 'Autorizado'],
+                    ['v' => 'anulado',    'l' => 'Anulado'],
+                ]],
+                ['tab' => $tF, 'key' => 'correo',     'label' => 'Correo',           'icon' => 'bi-envelope',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'enviado',   'l' => 'Enviado'],
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                ]],
+                ['tab' => $tF, 'key' => 'serie',      'label' => 'Serie',            'icon' => 'bi-upc-scan',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tF, 'key' => 'numero',     'label' => 'Número',           'icon' => 'bi-hash',           'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tF, 'key' => 'secuencial', 'label' => 'Secuencial',       'icon' => 'bi-123',            'type' => 'text',       'grupo' => 'Documento', 'col' => 2, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tF, 'key' => 'asiento',    'label' => 'Asiento contable', 'icon' => 'bi-journal-check',  'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Con asiento'],
+                    ['v' => 'no', 'l' => 'Sin asiento'],
+                ]],
+                ['tab' => $tF, 'key' => 'fecha_autorizacion', 'label' => 'Fecha de autorización', 'icon' => 'bi-patch-check', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6],
+                ['tab' => $tF, 'key' => 'id_usuario', 'label' => 'Usuario que registró', 'icon' => 'bi-person-gear', 'type' => 'select',  'grupo' => 'Documento', 'col' => 6, 'options' => $opcionesUsuario],
+                // ── Valores ──
+                ['tab' => $tF, 'key' => 'monto',       'label' => 'Total',                    'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tF, 'key' => 'reembolsado', 'label' => 'Reembolsado (base + IVA)', 'icon' => 'bi-arrow-repeat',    'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tF, 'key' => 'reembolso',   'label' => 'Base reembolso',           'icon' => 'bi-arrow-repeat',    'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tF, 'key' => 'subtotal',    'label' => 'Subtotal',                 'icon' => 'bi-receipt',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tF, 'key' => 'descuento',   'label' => 'Descuento',                'icon' => 'bi-tag',             'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tF, 'key' => 'terceros',    'label' => 'Comprobantes de terceros', 'icon' => 'bi-people',          'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // ── Terceros reembolsados (basta con que un comprobante coincida) ──
+                ['tab' => $tF, 'key' => 'proveedor',       'label' => 'Proveedor del gasto',    'icon' => 'bi-shop',      'type' => 'text',       'grupo' => 'Terceros reembolsados', 'col' => 6],
+                ['tab' => $tF, 'key' => 'ruc_proveedor',   'label' => 'RUC del proveedor',      'icon' => 'bi-card-text', 'type' => 'text',       'grupo' => 'Terceros reembolsados', 'col' => 6],
+                ['tab' => $tF, 'key' => 'doc_reembolso',   'label' => 'Nº comprobante',         'icon' => 'bi-receipt',   'type' => 'text',       'grupo' => 'Terceros reembolsados', 'col' => 6, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tF, 'key' => 'fecha_reembolso', 'label' => 'Fecha del comprobante',  'icon' => 'bi-calendar',  'type' => 'date_range', 'grupo' => 'Terceros reembolsados', 'col' => 6],
+                // ── Cliente ──
+                ['tab' => $tF, 'key' => 'cliente',      'label' => 'Cliente',         'icon' => 'bi-person',         'type' => 'text', 'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tF, 'key' => 'ruc',          'label' => 'RUC / Cédula',    'icon' => 'bi-card-text',      'type' => 'text', 'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tF, 'key' => 'obs',          'label' => 'Observaciones',   'icon' => 'bi-chat-left-text', 'type' => 'text', 'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tF, 'key' => 'autorizacion', 'label' => 'Nº autorización', 'icon' => 'bi-shield-check',   'type' => 'text', 'grupo' => 'Cliente', 'col' => 6],
+                ['tab' => $tF, 'key' => 'clave',        'label' => 'Clave de acceso', 'icon' => 'bi-key',            'type' => 'text', 'grupo' => 'Cliente', 'col' => 6],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorFR"></div>
             <input type="hidden" id="buscarFR" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorFR',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorFR',
                         hiddenInputId: 'buscarFR',
-                        placeholder: 'Buscar...',
-                        fields: [
-                            { key: 'cliente',        label: 'Cliente',       icon: 'bi-person',          type: 'text' },
-                            { key: 'ruc',            label: 'RUC / Cédula',  icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',         label: 'Número',        icon: 'bi-hash',            type: 'text' },
-                            { key: 'serie',          label: 'Serie',         icon: 'bi-upc-scan',        type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial',     label: 'Secuencial',    icon: 'bi-123',             type: 'text' },
-                            { key: 'usuario',        label: 'Usuario',       icon: 'bi-person-circle',   type: 'text' },
-                            { key: 'fecha',          label: 'Fecha emisión', icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'monto',          label: 'Monto total',   icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'reembolso',      label: 'Base reembolso',icon: 'bi-arrow-repeat',    type: 'number_range' },
-                            { key: 'estado',         label: 'Estado',        icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'borrador',   l: 'Borrador' },
-                                { v: 'autorizado', l: 'Autorizado' },
-                                { v: 'anulado',    l: 'Anulado' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_borrador',   label: 'Borrador',    mk: () => ({ key: 'estado', op: '=', value: 'borrador',   display: 'Borrador' }) },
-                            { id: 'qf_autorizado', label: 'Autorizadas', mk: () => ({ key: 'estado', op: '=', value: 'autorizado', display: 'Autorizado' }) },
-                            { id: 'qf_anulado',    label: 'Anuladas',    mk: () => ({ key: 'estado', op: '=', value: 'anulado',    display: 'Anulado' }) },
-                            { id: 'qf_hoy',        label: 'Hoy',         mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                            { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de facturas de reembolso',
+                        inputWidth: 420,
+                        extraId: 'fmExtraFR',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las facturas (líneas, comprobantes
+                        // de terceros, formas de pago e información adicional).
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de las facturas de reembolso',
+                            placeholder: 'Descripción, proveedor, RUC, Nº de comprobante, forma de pago, información adicional...',
+                            columns: [
+                                { key: 'origen',      label: 'Tipo' },
+                                { key: 'tipo',        label: 'Detalle / Comprobante' },
+                                { key: 'descripcion', label: 'Descripción / Proveedor' },
+                                { key: 'cantidad',    label: 'Cant.', align: 'end' },
+                                { key: 'monto',       label: 'Valor', align: 'end' },
+                                { key: 'numero',      label: 'Factura', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',       label: 'Fecha' },
+                                { key: 'cliente',     label: 'Cliente' },
+                                { key: 'estado',      label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                setTimeout(() => window.FR_abrirModalFR({ dataset: { row: JSON.stringify({ id: row.id_factura, estado: row.estado_valor }) } }), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosFacturasReembolso, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#fr-table-body',   // se atenúa mientras se busca
                         onApply: () => window.FR_fetchSearch && window.FR_fetchSearch(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraFR" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero'                        => 'Número',
@@ -139,11 +202,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-danger px-2" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-success px-2" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>

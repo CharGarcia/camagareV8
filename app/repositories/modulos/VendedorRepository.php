@@ -54,11 +54,64 @@ class VendedorRepository extends BaseRepository
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
+        // Usuario que registró (texto libre). Solo el listado del módulo busca texto:
+        // el resto de llamadores (combos de vendedor en facturas, proformas…) pasan ''.
+        $joins = "LEFT JOIN usuarios ureg ON ureg.id = v.created_by";
+
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (v.nombre ILIKE :buscar OR v.identificacion ILIKE :buscar OR v.correo ILIKE :buscar)";
-            $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
+            // Texto libre estándar (todas las palabras, en cualquier orden, sin tildes)
+            // sobre las columnas del listado + lo que identifica al vendedor. Antes era
+            // un ILIKE de la frase completa sobre nombre, identificación y correo.
+            // Decisión del usuario: Estado NO entra en el texto libre (se filtra desde
+            // el modal de filtros).
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    'v.nombre',          // Nombre Vendedor
+                    'v.identificacion',  // Identificación
+                    'v.correo',          // Correo
+                    'v.telefono',        // Teléfono
+                    'v.direccion',       // Dirección (ficha)
+                    'ureg.nombre',       // Usuario que registró (ficha)
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
+
+        // v.status es entero (1 = activo); el modal envía 'activo'/'inactivo'.
+        foreach (['estado', 'status'] as $claveEstado) {
+            if (!isset($parsed['filtros'][$claveEstado])) {
+                continue;
+            }
+            $mapEstado = ['activo' => '1', 'inactivo' => '0'];
+            $val = $parsed['filtros'][$claveEstado]['valor'];
+            $parsed['filtros'][$claveEstado]['valor'] = is_array($val)
+                ? array_map(fn($x) => $mapEstado[strtolower(trim((string) $x))] ?? $x, $val)
+                : ($mapEstado[strtolower(trim((string) $val))] ?? $val);
+        }
+
+        $exacto = [
+            // Antes apuntaba a v.estado, columna que no existe: cualquier estado:… lanzaba
+            // error de SQL. Igual que la columna Estado del listado, solo status = 1
+            // (o NULL) es "Activo".
+            'estado'    => "CASE WHEN COALESCE(v.status, 1) = 1 THEN '1' ELSE '0' END",
+            'status'    => 'v.status',
+            'usuario'   => 'v.created_by',
+            // Sí/No calculados.
+            'con_clientes' => "CASE WHEN EXISTS (SELECT 1 FROM clientes cl WHERE cl.id_empresa = v.id_empresa AND cl.id_vendedor = v.id AND cl.eliminado = false) THEN 'si' ELSE 'no' END",
+            'con_email'    => "CASE WHEN NULLIF(TRIM(COALESCE(v.correo, '')), '') IS NULL THEN 'no' ELSE 'si' END",
+        ];
+        if ($this->tieneVinculoExplicito()) {
+            // Usuario del sistema vinculado (columna opcional según la migración aplicada).
+            $exacto['usuario_vinculado'] = 'v.id_usuario_vinculado';
+            $exacto['con_usuario']       = "CASE WHEN v.id_usuario_vinculado IS NOT NULL THEN 'si' ELSE 'no' END";
+        }
+
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
                 'nombre'         => 'v.nombre',
@@ -70,11 +123,15 @@ class VendedorRepository extends BaseRepository
                 'telefono'       => 'v.telefono',
                 'direccion'      => 'v.direccion',
             ],
-            'exacto' => [ 'estado' => 'v.estado' ],
+            'exacto' => $exacto,
+            'fecha'  => [
+                'registro'   => 'v.created_at',
+                'created_at' => 'v.created_at',
+            ],
         ]);
 
-        // Obtener total
-        $sqlCount = "SELECT COUNT(*) FROM {$this->table} v $where";
+        // Obtener total (mismos JOIN que las filas: el texto libre usa ureg).
+        $sqlCount = "SELECT COUNT(*) FROM {$this->table} v $joins $where";
         $stCount = $this->db->prepare($sqlCount);
         $stCount->execute($params);
         $total = (int) $stCount->fetchColumn();
@@ -86,8 +143,9 @@ class VendedorRepository extends BaseRepository
                 $offset = ($page - 1) * $perPage;
                 $limitOffset = " LIMIT $perPage OFFSET $offset";
             }
-            $sql = "SELECT v.* 
+            $sql = "SELECT v.*
                     FROM {$this->table} v
+                    $joins
                     $where
                     ORDER BY v.{$ordenCol} $ordenDir, v.id DESC
                     $limitOffset";
@@ -97,6 +155,31 @@ class VendedorRepository extends BaseRepository
         }
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros del listado: solo los usuarios que
+     * la empresa realmente usa en sus vendedores (no eliminados). `vinculados` queda
+     * vacío si la columna id_usuario_vinculado aún no existe.
+     *
+     * @return array{usuarios: array, vinculados: array, con_vinculo: bool}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $leer = function (string $col) use ($idEmpresa): array {
+            $st = $this->db->prepare("SELECT DISTINCT u.id, u.nombre
+                                      FROM vendedores v JOIN usuarios u ON u.id = v.{$col}
+                                      WHERE v.id_empresa = :id_empresa AND v.eliminado = false
+                                      ORDER BY u.nombre");
+            $st->execute([':id_empresa' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        };
+
+        return [
+            'usuarios'   => $leer('created_by'),
+            'vinculados' => $this->tieneVinculoExplicito() ? $leer('id_usuario_vinculado') : [],
+            'con_vinculo' => $this->tieneVinculoExplicito(),
+        ];
     }
 
     /**

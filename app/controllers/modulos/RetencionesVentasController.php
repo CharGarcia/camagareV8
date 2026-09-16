@@ -72,6 +72,7 @@ class RetencionesVentasController extends BaseModuloController
         // arriba trae todos los puntos de emisión activos de la empresa (comentario
         // en el bucle anterior), sin cruzar contra documentos ya registrados.
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+        $usuariosFiltro = $this->repository->getUsuariosConRetenciones($idEmpresa);
 
         $this->viewWithLayout('layouts.main', 'modulos/retenciones_ventas/index', [
             'titulo'      => 'Retenciones en Ventas',
@@ -91,8 +92,51 @@ class RetencionesVentasController extends BaseModuloController
             'rutaModulo'  => $this->getRutaModulo(),
             'puntos'      => $puntos,
             'seriesFiltro' => $seriesFiltro,
+            'usuariosFiltro' => $usuariosFiltro,
             'fullWidth'   => true,
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las líneas de
+     * las retenciones (documento sustento, impuesto, código, base, porcentaje, valor).
+     * Mismo alcance que el listado.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        // El código de impuesto llega como código SRI (1/2/6) o como texto (RENTA/IVA/ISD).
+        $impuestos = ['1' => 'Renta', 'RENTA' => 'Renta', '2' => 'IVA', 'IVA' => 'IVA', '6' => 'ISD', 'ISD' => 'ISD'];
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $codImp = strtoupper((string) ($r['codigo_impuesto'] ?? ''));
+            $rows[] = [
+                'impuesto'     => $impuestos[$codImp] ?? $codImp,
+                'codigo'       => $r['codigo_retencion'] ?? '',
+                'doc_sustento' => $r['num_doc_sustento'] ?? '',
+                'base'         => $r['base_imponible'] !== null ? number_format((float) $r['base_imponible'], 2) : '',
+                'porcentaje'   => $r['porcentaje_retencion'] !== null ? rtrim(rtrim(number_format((float) $r['porcentaje_retencion'], 2, '.', ''), '0'), '.') . '%' : '',
+                'valor'        => $r['valor_retenido'] !== null ? number_format((float) $r['valor_retenido'], 2) : '',
+                'id_retencion' => (int) $r['id_retencion'],
+                'numero'       => $r['numero'] ?? '',
+                'fecha'        => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'cliente'      => $r['cliente'] ?? '',
+                'origen'       => ($r['origen'] ?? 'manual') === 'electronico' ? 'Electrónico' : 'Manual',
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -136,16 +180,16 @@ class RetencionesVentasController extends BaseModuloController
                         : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Manual</span>';
 
                     echo '<tr class="retv-row" role="button" tabindex="0" data-row=\'' . $rowData . '\' onclick="window.RETV_abrirModal(this)">
-                            <td class="ps-3"><code>' . htmlspecialchars($numero) . '</code></td>
-                            <td>' . $fecha . '</td>
-                            <td class="fw-medium text-truncate" style="max-width:200px">' . htmlspecialchars($r['cliente_nombre'] ?? '—') . '</td>
-                            <td><small class="text-muted">' . htmlspecialchars($r['cliente_ruc'] ?? '—') . '</small></td>
-                            <td><small>' . htmlspecialchars($r['periodo_fiscal'] ?? '—') . '</small></td>
-                            <td class="text-end">$' . number_format((float)($r['total_renta'] ?? 0), 2) . '</td>
-                            <td class="text-end">$' . number_format((float)($r['total_iva'] ?? 0), 2) . '</td>
-                            <td class="text-end">$' . number_format((float)($r['total_isd'] ?? 0), 2) . '</td>
-                            <td class="text-end fw-bold">$' . number_format((float)($r['total_retenido'] ?? 0), 2) . '</td>
-                            <td class="text-center pe-3">' . $origen . '</td>
+                            <td class="ps-3" data-col="numero"><code>' . htmlspecialchars($numero) . '</code></td>
+                            <td data-col="fecha_emision">' . $fecha . '</td>
+                            <td class="fw-medium text-truncate" data-col="cliente_nombre" style="max-width:200px">' . htmlspecialchars($r['cliente_nombre'] ?? '—') . '</td>
+                            <td data-col="cliente_ruc"><small class="text-muted">' . htmlspecialchars($r['cliente_ruc'] ?? '—') . '</small></td>
+                            <td data-col="periodo_fiscal"><small>' . htmlspecialchars($r['periodo_fiscal'] ?? '—') . '</small></td>
+                            <td class="text-end" data-col="total_renta">$' . number_format((float)($r['total_renta'] ?? 0), 2) . '</td>
+                            <td class="text-end" data-col="total_iva">$' . number_format((float)($r['total_iva'] ?? 0), 2) . '</td>
+                            <td class="text-end" data-col="total_isd">$' . number_format((float)($r['total_isd'] ?? 0), 2) . '</td>
+                            <td class="text-end fw-bold" data-col="total_retenido">$' . number_format((float)($r['total_retenido'] ?? 0), 2) . '</td>
+                            <td class="text-center pe-3" data-col="origen">' . $origen . '</td>
                           </tr>';
                 }
             }

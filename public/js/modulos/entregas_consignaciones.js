@@ -34,10 +34,11 @@ function entcCambiarPagina(p) {
 }
 
 async function entcCargarGrid() {
+    // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+    // vaciarse; también al paginar, ordenar o registrar una entrega.
+    const tbody = document.getElementById('entc_grid_body');
+    if (tbody) tbody.classList.add('fm-cargando-target');
     try {
-        const tbody = document.getElementById('entc_grid_body');
-        tbody.innerHTML = `<tr><td colspan="${ENTC_NUM_COLUMNAS}" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
-
         const bInput = document.getElementById('b');
         const buscar = bInput ? bInput.value : '';
 
@@ -63,6 +64,8 @@ async function entcCargarGrid() {
     } catch (e) {
         console.error(e);
         if (window.Swal) Swal.fire('Error', 'No se pudo cargar la lista de consignaciones', 'error');
+    } finally {
+        if (tbody) tbody.classList.remove('fm-cargando-target');
     }
 }
 

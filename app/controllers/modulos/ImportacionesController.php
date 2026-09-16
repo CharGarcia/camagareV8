@@ -86,6 +86,8 @@ class ImportacionesController extends BaseModuloController
             'titulo'             => 'Importaciones',
             'perm'               => $perm,
             'seriesFiltro'       => $seriesFiltro,
+            // Selects del modal de filtros: solo valores usados por la empresa.
+            'valoresFiltro'      => $this->repository->getValoresFiltro($idEmpresa),
             'rows'               => $result['rows'],
             'total'              => $total,
             'page'               => $page,
@@ -180,6 +182,51 @@ class ImportacionesController extends BaseModuloController
     // LISTADO AJAX
     // ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las
+     * importaciones (productos, facturas del exterior y gastos de nacionalización).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $origenes = ['PRODUCTO' => 'Producto', 'FACTURA' => 'Factura del exterior', 'GASTO' => 'Gasto'];
+        $estados  = [
+            'borrador' => 'Borrador', 'en_transito' => 'En tránsito', 'registrada' => 'Registrada',
+            'pendiente_aprobacion' => 'Pendiente aprobación', 'nacionalizada' => 'Nacionalizada',
+            'cerrada' => 'Cerrada', 'anulada' => 'Anulada',
+        ];
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'origen'      => $origenes[$r['origen']] ?? $r['origen'],
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                'cantidad'    => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 4, '.', ''), '0'), '.') : '',
+                'monto'       => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                // abrirModalImportacion() lee id, numero_importacion y proveedor_nombre del data-row.
+                'id'                 => (int) $r['id'],
+                'numero_importacion' => $r['numero_importacion'] ?? '',
+                'proveedor_nombre'   => $r['proveedor'] ?? '',
+                'referencia_dai'     => $r['referencia_dai'] ?? '',
+                'fecha'       => !empty($r['fecha_nacionalizacion']) ? date('d-m-Y', strtotime($r['fecha_nacionalizacion'])) : '',
+                'estado'      => $estados[$r['estado'] ?? ''] ?? ucfirst((string) ($r['estado'] ?? '')),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
+    }
+
     public function searchAjax(): void
     {
         $this->requireLeer();
@@ -218,6 +265,7 @@ class ImportacionesController extends BaseModuloController
                     'anulada'       => 'bg-danger bg-opacity-10 text-danger border-danger',
                     'en_transito'   => 'bg-warning bg-opacity-10 text-warning border-warning',
                     'registrada'    => 'bg-info bg-opacity-10 text-info border-info',
+                    'pendiente_aprobacion' => 'bg-info bg-opacity-10 text-info border-info',
                     default         => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
                 };
                 $estadoLabel = match ($estado) {
@@ -226,6 +274,8 @@ class ImportacionesController extends BaseModuloController
                     'anulada'       => 'Anulada',
                     'en_transito'   => 'En tránsito',
                     'registrada'    => 'Registrada',
+                    // Faltaba: tras buscar, una importación pendiente de aprobación se veía como «Borrador».
+                    'pendiente_aprobacion' => 'Pendiente aprobación',
                     default         => 'Borrador',
                 };
                 $estadoBadge = '<span class="badge ' . $estadoClass . ' border border-opacity-25">' . $estadoLabel . '</span>';

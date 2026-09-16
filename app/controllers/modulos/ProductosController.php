@@ -56,7 +56,7 @@ class ProductosController extends BaseModuloController
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden, true);
         $rows = $result['rows'];
         $total = $result['total'];
 
@@ -88,8 +88,67 @@ class ProductosController extends BaseModuloController
             'ordenParam' => \App\Helpers\OrdenListado::aCadena($orden),
             'vistaConfig'=> $prefsVista,
             'decPrecio'  => $decPrecio,
-            'fullWidth'  => true
+            'fullWidth'  => true,
+            // Selects del modal de filtros: solo valores que la empresa usa en sus productos.
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de los productos
+     * (variantes, componentes de kits, precios adicionales y códigos de proveedor).
+     * Cada fila trae además la fila del listado del producto (`fila`) para que el
+     * botón "Abrir" muestre la ficha con el mismo modal del listado.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        try {
+            $detalles = $this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50);
+
+            // Filas del listado de los productos encontrados (una sola consulta, mismo
+            // alcance de registros propios), para abrir la ficha sin otra petición.
+            $filas = [];
+            $ids = array_values(array_unique(array_map(fn($d) => (int) $d['id_producto'], $detalles)));
+            if ($ids) {
+                $res = $this->service->getListado($idEmpresa, 'id:' . implode(',', $ids), 1, 0, 'nombre', 'ASC', $idUsuarioFiltro);
+                foreach ($res['rows'] as $f) {
+                    $filas[(int) $f['id']] = $f;
+                }
+            }
+
+            $etiquetas = ['VARIANTE' => 'Variante', 'COMPONENTE' => 'Componente (kit)', 'PRECIO' => 'Precio adicional', 'HOMOLOGACION' => 'Código de proveedor'];
+            $rows = [];
+            foreach ($detalles as $d) {
+                $rows[] = [
+                    'origen'      => $etiquetas[$d['origen']] ?? $d['origen'],
+                    'detalle'     => $d['detalle'] ?? '',
+                    'valor'       => $d['valor'] ?? '',
+                    'monto'       => $d['monto'] !== null ? number_format((float) $d['monto'], 2) : '',
+                    'id_producto' => (int) $d['id_producto'],
+                    'codigo'      => $d['codigo'] ?? '',
+                    'nombre'      => $d['nombre'] ?? '',
+                    'estado'      => ((int) ($d['status'] ?? 1) === 1) ? 'Activo' : 'Inactivo',
+                    'fila'        => $filas[(int) $d['id_producto']] ?? null,
+                ];
+            }
+            echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['rows' => [], 'error' => 'No se pudo buscar en los detalles.']);
+        }
     }
 
     public function searchAjax(): void
@@ -110,7 +169,7 @@ class ProductosController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden, true);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -521,7 +580,7 @@ class ProductosController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden, true);
         $rows = $data['rows'];
 
         try {
@@ -640,7 +699,7 @@ class ProductosController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden, true);
         $rows = $data['rows'];
 
         try {

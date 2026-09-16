@@ -44,8 +44,30 @@ class ServicioExternoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre (buscador FiltrosModal, sin sugerencias): columnas del listado
+            // + campos que identifican la orden aunque no sean columnas.
+            // Decisión del usuario: la columna Estado (y el tipo de documento generado)
+            // NO entran en el texto libre; se filtran solo desde el modal de filtros.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['o.numero_orden', 'o.equipo_descripcion', 'c.nombre', 'c.identificacion', 'o.estado'],
+                [
+                    'o.numero_orden',                                           // N° Orden
+                    'o.secuencial',
+                    "CONCAT(o.establecimiento,'-',o.punto_emision)",            // Serie
+                    "TO_CHAR(o.fecha_servicio, 'DD-MM-YYYY HH24:MI')",          // Fecha (como se muestra)
+                    'o.fecha_servicio::text',
+                    'o.equipo_descripcion',                                     // Equipo
+                    'o.equipo_marca', 'o.equipo_modelo', 'o.equipo_serie',
+                    'c.nombre',                                                 // Cliente
+                    'c.identificacion',
+                    'o.total::text',                                            // Total
+                    'o.direccion_servicio', 'o.descripcion_trabajo', 'o.observaciones',
+                    'o.numero_documento',                                       // Documento de venta generado
+                    '(SELECT u.nombre FROM usuarios u WHERE u.id = o.created_by)', // Usuario que registró
+                    // Servicios/productos de la orden (código + descripción)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, d.descripcion), ' ')
+                        FROM servicioexterno_ordenes_detalle d LEFT JOIN productos p ON p.id = d.id_producto
+                       WHERE d.id_orden = o.id AND d.eliminado = false)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -54,19 +76,33 @@ class ServicioExternoRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (vista servicio_externo/index.php). Nunca quitar
+        // claves: viajan también en los enlaces de PDF/Excel y en URLs guardadas.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [
                 'cliente' => 'c.nombre',
                 'orden'   => 'o.numero_orden',
                 'equipo'  => 'o.equipo_descripcion',
+                'ruc'           => 'c.identificacion',
+                'marca'         => 'o.equipo_marca',
+                'modelo'        => 'o.equipo_modelo',
+                'serie_equipo'  => 'o.equipo_serie',
+                'direccion'     => 'o.direccion_servicio',
+                'trabajo'       => "CONCAT_WS(' ', o.descripcion_trabajo, o.observaciones)",
+                'documento'     => 'o.numero_documento',
             ],
             'exacto' => [
                 'estado'  => 'o.estado',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), igual que factura.
                 'serie'   => "CONCAT(o.establecimiento,'-',o.punto_emision)",
+                'usuario'        => 'o.created_by',
+                'tipo_documento' => 'o.tipo_documento',
+                // con_documento:si / con_documento:no (se generó factura o recibo)
+                'con_documento'  => "CASE WHEN o.id_documento IS NULL THEN 'no' ELSE 'si' END",
             ],
             'fecha'  => [
-                'fecha'   => 'o.fecha_servicio',
+                'fecha'        => 'o.fecha_servicio',
+                'finalizacion' => 'o.fecha_finalizacion',
             ],
             'numerico' => [
                 'total'      => 'o.total',
@@ -111,6 +147,68 @@ class ServicioExternoRepository extends BaseRepository
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
         return ['total' => $total, 'rows' => $rows];
+    }
+
+    /** Usuarios que han registrado alguna orden en la empresa (filtro "Usuario" del modal de filtros). */
+    public function getUsuariosConOrdenes(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM servicioexterno_ordenes o
+                JOIN usuarios u ON u.id = o.created_by
+                WHERE o.id_empresa = :id_empresa AND o.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las órdenes (pestaña "Detalles" del modal de filtros):
+     * cada servicio/producto que coincide con el texto, con la orden a la que pertenece.
+     * Mismo alcance que el listado (empresa, no eliminadas, registros propios por
+     * created_by si aplica). No busca en el tipo de línea.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "o.id_empresa = :id_empresa AND o.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND o.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['p.codigo', 'd.descripcion', 'b.nombre', 'd.cantidad::text', 'd.precio_unitario::text', 'd.total_linea::text'],
+            $q, $params, 'dt'
+        );
+        if ($condDet === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT o.id, o.numero_orden, o.fecha_servicio, o.equipo_descripcion, o.estado, c.nombre AS cliente
+                    FROM servicioexterno_ordenes o
+                    LEFT JOIN clientes c ON c.id = o.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT 'LINEA' AS origen, d.tipo_linea AS tipo, p.codigo AS referencia, d.descripcion,
+                       d.cantidad, d.total_linea AS monto,
+                       b2.id AS id_orden, b2.numero_orden, b2.fecha_servicio, b2.equipo_descripcion, b2.estado, b2.cliente
+                FROM servicioexterno_ordenes_detalle d
+                JOIN base b2 ON b2.id = d.id_orden
+                LEFT JOIN productos p ON p.id = d.id_producto
+                LEFT JOIN bodegas b ON b.id = d.id_bodega
+                WHERE d.eliminado = false AND $condDet
+                ORDER BY b2.fecha_servicio DESC, b2.id DESC, d.id
+                LIMIT $limit";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     // ─── SECUENCIAL (mismas reglas que recibo de venta) ───────────────────────

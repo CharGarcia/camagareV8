@@ -46,6 +46,8 @@ class CitasPagosController extends BaseModuloController
             'rutaModulo'  => self::RUTA_MODULO,
             'vistaConfig' => $prefsVista,
             'resumen'     => $resumen,
+            // Selects del modal de filtros (solo lo que la empresa ya usó en pagos)
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
             'fullWidth'   => true,
         ]);
     }

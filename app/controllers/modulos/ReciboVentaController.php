@@ -75,6 +75,9 @@ class ReciboVentaController extends BaseModuloController
         }
 
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+        // Selects del modal de filtros: solo vendedores/usuarios con recibos en la empresa.
+        $vendedoresFiltro = $this->repository->getVendedoresConRecibos($idEmpresa);
+        $usuariosFiltro   = $this->repository->getUsuariosConRecibos($idEmpresa);
 
         $vendedorRepo = new \App\repositories\modulos\VendedorRepository();
         $vendedores = $vendedorRepo->getListado($idEmpresa, '', 1, 1000, 'nombre', 'ASC')['rows'];
@@ -112,8 +115,58 @@ class ReciboVentaController extends BaseModuloController
             'vendedores'  => $vendedores,
             'puntos'      => $puntos,
             'seriesFiltro' => $seriesFiltro,
+            'vendedoresFiltro' => $vendedoresFiltro,
+            'usuariosFiltro'   => $usuariosFiltro,
             'fullWidth'   => true,
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de los recibos
+     * (productos, formas de pago e información adicional). Mismo alcance que el
+     * listado, incluidos los registros propios cuando no hay acceso total.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $origenes = ['PRODUCTO' => 'Producto', 'PAGO' => 'Forma de pago', 'ADICIONAL' => 'Info. adicional'];
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'origen'      => $origenes[$r['origen']] ?? $r['origen'],
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                'extra'       => $r['extra'] ?? '',
+                'cantidad'    => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 4, '.', ''), '0'), '.') : '',
+                'monto'       => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'numero'      => $r['numero'] ?? '',
+                'fecha'       => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'cliente'     => $r['cliente'] ?? '',
+                'estado'      => ucfirst((string) ($r['estado'] ?? '')),
+                // Datos que necesita abrirModalFacturaVer() para abrir el recibo
+                // (id, estado, fecha y RUC del recibo activo; número para el título).
+                'id_recibo'       => (int) $r['id_recibo'],
+                'estado_raw'      => (string) ($r['estado'] ?? ''),
+                'fecha_emision'   => (string) ($r['fecha_emision'] ?? ''),
+                'cliente_ruc'     => $r['cliente_ruc'] ?? '',
+                'establecimiento' => $r['establecimiento'] ?? '',
+                'punto_emision'   => $r['punto_emision'] ?? '',
+                'secuencial'      => $r['secuencial'] ?? '',
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function searchAjax(): void

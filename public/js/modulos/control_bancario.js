@@ -311,7 +311,10 @@
 
         const miSeq = ++searchRequestSeq;
         const tbody = document.getElementById('cb-tbody');
-        tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5"><span class="spinner-border spinner-border-sm text-primary"></span></td></tr>';
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras carga
+        // (también al paginar, ordenar o cambiar los filtros de la tarjeta), en lugar de
+        // reemplazarse por una fila con spinner.
+        tbody.classList.add('fm-cargando-target');
 
         const flujo = (document.getElementById('cb-flujo') || {}).value || 'TODOS';
         const tipo = (document.getElementById('cb-tipo') || {}).value || '';
@@ -348,6 +351,10 @@
             if (miSeq === searchRequestSeq) {
                 tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5 text-danger">Error de red o servidor.</td></tr>';
             }
+        } finally {
+            // Solo la última búsqueda apaga el indicador (una respuesta vieja no lo quita
+            // mientras la nueva sigue en curso).
+            if (miSeq === searchRequestSeq) tbody.classList.remove('fm-cargando-target');
         }
     };
 

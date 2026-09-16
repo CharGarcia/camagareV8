@@ -67,6 +67,8 @@ class MenuController extends BaseModuloController
             'ordenDir'    => $ordenDir,
             'vistaConfig' => $prefsVista,
             'fullWidth'   => true,
+            // Selects del modal de filtros (solo valores usados por la empresa).
+            'opcionesFiltro' => $this->service->getOpcionesFiltro($idEmpresa),
         ]);
     }
 

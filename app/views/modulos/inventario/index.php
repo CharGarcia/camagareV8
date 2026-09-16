@@ -39,7 +39,7 @@ $columnasTabla = [
     'observaciones'    => 'Observaciones'
 ];
 
-// Opciones para los selects del buscador de filtros (FiltrosBusqueda)
+// Opciones para los selects del modal de filtros (FiltrosModal)
 $optBodegas  = array_map(fn($b) => ['v' => (string)$b['id'], 'l' => $b['nombre']], $bodegas ?? []);
 $optUsuarios = array_map(fn($u) => ['v' => (string)$u['id'], 'l' => $u['nombre']], $usuarios ?? []);
 $optMedidas  = array_map(fn($m) => ['v' => (string)$m['id'], 'l' => $m['nombre'] . ' (' . ($m['abreviatura'] ?? '') . ')'], $medidas ?? []);
@@ -81,59 +81,94 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y Exportación -->
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorINV" style="width: 480px;"></div>
+            <?php
+            // Buscador estándar (FiltrosModal): texto libre sobre las columnas del listado
+            // (sin sugerencias) + botón embudo que abre un modal con todos los filtros +
+            // chips de los activos. Las claves (key) deben existir en los mapas de
+            // InventarioRepository::getKardex(). Sin pestaña Detalles: cada fila ya es una
+            // línea del kardex (no tiene tablas hijas que buscar).
+            $optCategorias = array_map(fn($c) => ['v' => (string) $c['id'], 'l' => (string) $c['nombre']], $categorias ?? []);
+            $opcionesSiNo  = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $tM = 'Movimiento';
+            // Filas de 12 columnas:
+            //   Movimiento:   [Fecha 6][Tipo 3][Origen 3]
+            //                 [Bodega 4][Usuario 4][Medida 4]
+            //                 [Observaciones 12]
+            //   Producto:     [Producto 4][Código 4][Categoría 4]
+            //   Lote y serie: [Lote 3][NUP 3][Caducidad 6]
+            //                 [Con lote 6][Con NUP 6]
+            //   Valores:      [Cantidad 4][Costo unitario 4][Costo total 4]
+            $filtrosInventario = [
+                // ── Movimiento ──
+                ['tab' => $tM, 'key' => 'fecha',      'label' => 'Fecha del movimiento', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Movimiento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tM, 'key' => 'tipo',       'label' => 'Tipo',                 'icon' => 'bi-arrow-down-up',  'type' => 'select',     'grupo' => 'Movimiento', 'col' => 3, 'options' => [
+                    ['v' => 'entrada', 'l' => 'Entrada (+)'],
+                    ['v' => 'salida',  'l' => 'Salida (-)'],
+                ]],
+                ['tab' => $tM, 'key' => 'origen',     'label' => 'Origen',               'icon' => 'bi-link-45deg',     'type' => 'select',     'grupo' => 'Movimiento', 'col' => 3, 'options' => $optOrigen],
+                ['tab' => $tM, 'key' => 'id_bodega',  'label' => 'Bodega',               'icon' => 'bi-house-door',     'type' => 'select',     'grupo' => 'Movimiento', 'col' => 4, 'options' => $optBodegas],
+                ['tab' => $tM, 'key' => 'id_usuario', 'label' => 'Usuario',              'icon' => 'bi-person',         'type' => 'select',     'grupo' => 'Movimiento', 'col' => 4, 'options' => $optUsuarios],
+                ['tab' => $tM, 'key' => 'id_medida',  'label' => 'Unidad de medida',     'icon' => 'bi-rulers',         'type' => 'select',     'grupo' => 'Movimiento', 'col' => 4, 'options' => $optMedidas],
+                ['tab' => $tM, 'key' => 'obs',        'label' => 'Observaciones',        'icon' => 'bi-chat-left-text', 'type' => 'text',       'grupo' => 'Movimiento', 'col' => 12],
+                // ── Producto ──
+                ['tab' => $tM, 'key' => 'producto',     'label' => 'Producto',  'icon' => 'bi-box-seam', 'type' => 'text',   'grupo' => 'Producto', 'col' => 4],
+                ['tab' => $tM, 'key' => 'codigo',       'label' => 'Código',    'icon' => 'bi-upc',      'type' => 'text',   'grupo' => 'Producto', 'col' => 4],
+                ['tab' => $tM, 'key' => 'id_categoria', 'label' => 'Categoría', 'icon' => 'bi-folder',   'type' => 'select', 'grupo' => 'Producto', 'col' => 4, 'options' => $optCategorias],
+                // ── Lote y serie ──
+                ['tab' => $tM, 'key' => 'lote',      'label' => 'Lote',            'icon' => 'bi-tag',             'type' => 'text',       'grupo' => 'Lote y serie', 'col' => 3],
+                ['tab' => $tM, 'key' => 'nup',       'label' => 'NUP / Serial',    'icon' => 'bi-upc-scan',        'type' => 'text',       'grupo' => 'Lote y serie', 'col' => 3],
+                ['tab' => $tM, 'key' => 'caducidad', 'label' => 'Fecha de caducidad', 'icon' => 'bi-calendar-x',   'type' => 'date_range', 'grupo' => 'Lote y serie', 'col' => 6],
+                ['tab' => $tM, 'key' => 'con_lote',  'label' => 'Lote registrado', 'icon' => 'bi-tags',            'type' => 'select',     'grupo' => 'Lote y serie', 'col' => 6, 'options' => $opcionesSiNo('Con lote', 'Sin lote')],
+                ['tab' => $tM, 'key' => 'con_nup',   'label' => 'NUP / Serial registrado', 'icon' => 'bi-upc',     'type' => 'select',     'grupo' => 'Lote y serie', 'col' => 6, 'options' => $opcionesSiNo('Con NUP / serial', 'Sin NUP / serial')],
+                // ── Valores ──
+                ['tab' => $tM, 'key' => 'cantidad',       'label' => 'Cantidad',       'icon' => 'bi-123',             'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tM, 'key' => 'costo_unitario', 'label' => 'Costo unitario', 'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tM, 'key' => 'costo_total',    'label' => 'Costo total',    'icon' => 'bi-cash-stack',      'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorINV"></div>
             <input type="hidden" id="buscarInventario" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorINV',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorINV',
                         hiddenInputId: 'buscarInventario',
-                        placeholder: 'Buscar producto, código, obs...',
-                        fields: [
-                            { key: 'producto',   label: 'Producto',    icon: 'bi-box-seam',      type: 'text' },
-                            { key: 'codigo',     label: 'Código',      icon: 'bi-upc',           type: 'text' },
-                            { key: 'tipo',       label: 'Tipo mov.',   icon: 'bi-arrow-down-up', type: 'select', options: [
-                                { v: 'entrada', l: 'Entrada (+)' },
-                                { v: 'salida',  l: 'Salida (-)' },
-                            ]},
-                            { key: 'fecha',      label: 'Fecha',       icon: 'bi-calendar-event', type: 'date_range' },
-                            { key: 'id_bodega',  label: 'Bodega',      icon: 'bi-house-door',     type: 'select', options: <?= json_encode($optBodegas, JSON_UNESCAPED_UNICODE) ?> },
-                            { key: 'id_usuario', label: 'Usuario',     icon: 'bi-person',         type: 'select', options: <?= json_encode($optUsuarios, JSON_UNESCAPED_UNICODE) ?> },
-                            { key: 'id_medida',  label: 'Medida',      icon: 'bi-rulers',         type: 'select', options: <?= json_encode($optMedidas, JSON_UNESCAPED_UNICODE) ?> },
-                            { key: 'lote',       label: 'Lote',        icon: 'bi-tag',            type: 'text' },
-                            { key: 'nup',        label: 'NUP / Serial', icon: 'bi-upc-scan',      type: 'text' },
-                            { key: 'origen',     label: 'Origen',      icon: 'bi-link-45deg',     type: 'select', options: <?= json_encode($optOrigen, JSON_UNESCAPED_UNICODE) ?> },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_entrada', label: 'Entradas', mk: () => ({ key: 'tipo', op: '=', value: 'entrada', display: 'Entrada (+)' }) },
-                            { id: 'qf_salida',  label: 'Salidas',  mk: () => ({ key: 'tipo', op: '=', value: 'salida',  display: 'Salida (-)' }) },
-                            { id: 'qf_hoy',     label: 'Hoy',      mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                            { id: 'qf_mes',     label: 'Este mes', mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de movimientos de inventario',
+                        inputWidth: 420,
+                        extraId: 'fmExtraINV',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosInventario, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyInventario',   // se atenúa mientras se busca
                         onApply: () => window.fetchSearch && window.fetchSearch(1),
                     }).init();
                 });
             </script>
 
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraINV" class="btn-group btn-group-sm">
+                <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
+                <?php
+                // La búsqueda viaja en `b` (lo que leen exportPdf/exportExcel), no en `buscar`.
+                $qFiltros = $filtros;
+                unset($qFiltros['buscar']);
+                $qStr = http_build_query(['b' => $buscar] + $qFiltros);
+                ?>
+                <a id="btnExportPdf" href="<?= $urlBase ?>/exportPdf?<?= htmlspecialchars($qStr) ?>"
+                    class="btn btn-outline-danger" title="Descargar PDF">
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
+                </a>
+                <a id="btnExportExcel" href="<?= $urlBase ?>/exportExcel?<?= htmlspecialchars($qStr) ?>"
+                    class="btn btn-outline-success" title="Descargar Excel">
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
+                </a>
+            </div>
+
             <div class="form-check form-switch mb-0 ms-1" title="Mostrar solo los movimientos anulados">
                 <input class="form-check-input" type="checkbox" role="switch" id="chkVerAnulados" onchange="window.fetchSearch(1)">
                 <label class="form-check-label small text-muted" for="chkVerAnulados">Ver anulados</label>
-            </div>
-
-            <div class="btn-group btn-group-sm">
-                <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                <?php $qStr = http_build_query($filtros); ?>
-                <a id="btnExportPdf" href="<?= $urlBase ?>/exportPdf?<?= $qStr ?>"
-                    class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
-                </a>
-                <a id="btnExportExcel" href="<?= $urlBase ?>/exportExcel?<?= $qStr ?>"
-                    class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
-                </a>
             </div>
         </div>
 
@@ -239,6 +274,10 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
             const term = inputBuscar ? inputBuscar.value.trim() : '';
             const verAnulados = document.getElementById('chkVerAnulados')?.checked ? '1' : '';
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}&ver_anulados=${verAnulados}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar, ordenar o cambiar "Ver anulados".
+            const tbody = document.getElementById('tbodyInventario');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -265,6 +304,8 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
                 });
             } catch (e) {
                 console.error('Error cargando listado de inventario:', e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
             }
         };
 

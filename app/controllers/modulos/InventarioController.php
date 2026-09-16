@@ -68,6 +68,7 @@ class InventarioController extends BaseModuloController
         $tipoRef    = (new InventarioRepository())->getTiposReferencia($idEmpresa);
         $umRepo     = new \App\repositories\modulos\UnidadesMedidaRepository();
         $medidas    = $umRepo->getActive($idEmpresa);
+        $categorias = $this->service->getCategoriasConMovimientos($idEmpresa);
 
         $permisos   = $this->getPermisos();
         $base       = BASE_URL;
@@ -85,6 +86,7 @@ class InventarioController extends BaseModuloController
             'usuarios'   => $usuarios,
             'tipos_ref'  => $tipoRef,
             'medidas'    => $medidas,
+            'categorias' => $categorias,
             'saldo'      => $saldo,
             'filtros'    => $filtros,
             'perm'       => $permisos,
@@ -170,7 +172,7 @@ class InventarioController extends BaseModuloController
         $this->renderPagination($page, $totalPages);
         $paginationHtml = ob_get_clean();
 
-        $queryStr = http_build_query($filtros);
+        $queryStr = $this->queryExportacion($filtros);
 
         echo json_encode([
             'ok'         => true,
@@ -206,6 +208,18 @@ class InventarioController extends BaseModuloController
             'id_medida'       => $_GET['id_medida'] ?? $_POST['id_medida'] ?? '',
             'ver_anulados'    => !empty($_GET['ver_anulados'] ?? $_POST['ver_anulados'] ?? ''),
         ];
+    }
+
+    /**
+     * Query string de los enlaces de PDF/Excel. exportPdf()/exportExcel() leen la búsqueda
+     * en `b` (como el listado); antes se enviaba como `buscar` y las exportaciones salían
+     * sin la búsqueda ni los filtros del buscador.
+     */
+    private function queryExportacion(array $filtros): string
+    {
+        $q = $filtros;
+        unset($q['buscar']);
+        return http_build_query(['b' => $filtros['buscar'] ?? ''] + $q);
     }
 
     private function renderPagination(int $page, int $totalPages): void

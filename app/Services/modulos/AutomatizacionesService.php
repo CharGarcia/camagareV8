@@ -20,6 +20,56 @@ class AutomatizacionesService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /**
+     * Opciones (valor/etiqueta) de los selects del modal de filtros del listado: solo
+     * lo que la empresa ya usa, con las etiquetas del catálogo de HandlerFactory.
+     *
+     * @return array<string, array<int, array{v:string, l:string}>>
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa, ?int $idUsuarioFiltro = null): array
+    {
+        $usadas = $this->repository->getOpcionesFiltroListado($idEmpresa, $idUsuarioFiltro);
+
+        $etiquetasModulo = array_column(HandlerFactory::getModulosDisponibles(), 'label', 'key');
+        $humanizar = static fn(string $v): string => ucfirst(str_replace('_', ' ', $v));
+
+        $modulos = array_map(
+            static fn($m) => ['v' => (string) $m, 'l' => $etiquetasModulo[$m] ?? $humanizar((string) $m)],
+            $usadas['modulos']
+        );
+
+        // La misma acción (p. ej. enviar_sri) existe en varios módulos: una sola opción por clave.
+        $acciones = [];
+        foreach ($usadas['acciones'] as $a) {
+            $clave = (string) $a['accion'];
+            if (isset($acciones[$clave])) {
+                continue;
+            }
+            $catalogo = array_column(HandlerFactory::getAccionesPorModulo((string) $a['modulo']), 'label', 'key');
+            $acciones[$clave] = ['v' => $clave, 'l' => $catalogo[$clave] ?? $humanizar($clave)];
+        }
+        usort($acciones, static fn($x, $y) => strcmp($x['l'], $y['l']));
+
+        $etiquetasFrecuencia = [
+            'minutos' => 'Cada N minutos', 'horas' => 'Cada N horas', 'diario' => 'Diario',
+            'semanal' => 'Semanal', 'mensual' => 'Mensual', 'cron_personalizado' => 'Cron personalizado',
+        ];
+        $frecuencias = array_map(
+            static fn($f) => ['v' => (string) $f, 'l' => $etiquetasFrecuencia[$f] ?? $humanizar((string) $f)],
+            $usadas['frecuencias']
+        );
+
+        $idNombre = static fn(array $lista) => array_map(static fn($r) => ['v' => (string) $r['id'], 'l' => (string) $r['nombre']], $lista);
+
+        return [
+            'modulos'          => $modulos,
+            'acciones'         => array_values($acciones),
+            'frecuencias'      => $frecuencias,
+            'establecimientos' => $idNombre($usadas['establecimientos']),
+            'usuarios'         => $idNombre($usadas['usuarios']),
+        ];
+    }
+
     public function getById(int $id, int $idEmpresa): ?array
     {
         return $this->repository->findById($id, $idEmpresa);

@@ -87,8 +87,25 @@ class CargaInventarioRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre: columnas del listado + lo que identifica la carga (motivo de
+            // rechazo y los productos de sus líneas). Decisión del usuario: Tipo y Estado
+            // NO entran en el texto libre (antes sí); se filtran desde el modal.
             $condicion = FiltrosBusqueda::condicionTexto(
-                ['CAST(c.numero AS TEXT)', 'c.tipo_movimiento', 'c.estado', 'c.observacion', 'u.nombre', 'ua.nombre'],
+                [
+                    'CAST(c.numero AS TEXT)',                 // N°
+                    "TO_CHAR(c.fecha, 'DD-MM-YYYY')",         // Fecha (como se muestra)
+                    'CAST(c.total_lineas AS TEXT)',           // Líneas
+                    'u.nombre',                               // Creado por
+                    'ua.nombre',                              // Aprobado por
+                    'c.observacion',                          // Observación
+                    'c.motivo_rechazo',                       // Motivo del rechazo (detalle)
+                    // Códigos (tal como venían en el archivo y el del sistema) y nombres
+                    // de los productos de las líneas.
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', d.cod_producto_raw, pd.codigo, pd.nombre), ' ')
+                        FROM inventario_cargas_detalle d
+                        LEFT JOIN productos pd ON pd.id = d.id_producto
+                       WHERE d.id_carga = c.id AND d.eliminado = false)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -98,10 +115,34 @@ class CargaInventarioRepository extends BaseRepository
             }
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'texto'    => ['observacion' => 'c.observacion', 'creado' => 'u.nombre', 'aprobado' => 'ua.nombre'],
-            'exacto'   => ['estado' => 'c.estado', 'tipo' => 'c.tipo_movimiento'],
+            'texto'    => [
+                'observacion' => 'c.observacion',
+                'creado'      => 'u.nombre',
+                'aprobado'    => 'ua.nombre',
+                'motivo'      => 'c.motivo_rechazo',
+            ],
+            'exacto'   => [
+                'estado'      => 'c.estado',
+                'tipo'        => 'c.tipo_movimiento',
+                // Selects nuevos del modal de filtros.
+                'id_creado'   => 'c.created_by',
+                'id_aprobado' => 'c.aprobada_por',
+                // Misma regla que el ícono de advertencia de la fila (_fila.php).
+                'con_error'   => "CASE WHEN c.estado = 'pendiente' AND COALESCE(c.validada, false) = false THEN 'si' ELSE 'no' END",
+            ],
             'numerico' => ['numero' => 'c.numero', 'lineas' => 'c.total_lineas'],
-            'fecha'    => ['fecha' => 'c.fecha'],
+            'fecha'    => [
+                'fecha'      => 'c.fecha',
+                'aprobacion' => 'c.aprobada_at',
+                'registro'   => 'c.created_at',
+            ],
+            // Lo que vive en las líneas: la carga entra si ALGUNA línea cumple.
+            'existe'   => [
+                'producto'  => ['tipo' => 'texto', 'col' => "CONCAT_WS(' ', d.cod_producto_raw, pd.codigo, pd.nombre)",
+                                'sql' => 'EXISTS (SELECT 1 FROM inventario_cargas_detalle d LEFT JOIN productos pd ON pd.id = d.id_producto WHERE d.id_carga = c.id AND d.eliminado = false AND {cond})'],
+                'id_bodega' => ['tipo' => 'exacto', 'col' => 'd.id_bodega',
+                                'sql' => 'EXISTS (SELECT 1 FROM inventario_cargas_detalle d WHERE d.id_carga = c.id AND d.eliminado = false AND {cond})'],
+            ],
         ]);
 
         // Los JOIN van también en el COUNT: el buscador filtra por nombre del
@@ -131,6 +172,94 @@ class CargaInventarioRepository extends BaseRepository
         $st->execute($params);
 
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros: solo los usuarios y bodegas que
+     * aparecen en las cargas (no eliminadas) de la empresa.
+     *
+     * @return array{creadores: array, aprobadores: array, bodegas: array}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $leer = function (string $sql) use ($idEmpresa): array {
+            $st = $this->db->prepare($sql);
+            $st->execute([':e' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        };
+
+        return [
+            'creadores'   => $leer("SELECT DISTINCT u.id, u.nombre FROM inventario_cargas c JOIN usuarios u ON u.id = c.created_by
+                                     WHERE c.id_empresa = :e AND c.eliminado = false ORDER BY u.nombre"),
+            'aprobadores' => $leer("SELECT DISTINCT u.id, u.nombre FROM inventario_cargas c JOIN usuarios u ON u.id = c.aprobada_por
+                                     WHERE c.id_empresa = :e AND c.eliminado = false ORDER BY u.nombre"),
+            'bodegas'     => $leer("SELECT DISTINCT b.id, b.nombre
+                                      FROM inventario_cargas c
+                                      JOIN inventario_cargas_detalle d ON d.id_carga = c.id AND d.eliminado = false
+                                      JOIN bodegas b ON b.id = d.id_bodega
+                                     WHERE c.id_empresa = :e AND c.eliminado = false ORDER BY b.nombre"),
+        ];
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las cargas (pestaña "Detalles" del modal de filtros):
+     * cada línea que coincide con el texto (producto, código del archivo, bodega,
+     * lote, NUP, observación, error, cantidad, costo), junto con la carga a la que
+     * pertenece. Mismo alcance que el listado: empresa, no eliminadas y registros
+     * propios (created_by) si el usuario no tiene acceso total.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':e' => $idEmpresa];
+        $whereBase = "c.id_empresa = :e AND c.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND c.created_by = :uid";
+            $params[':uid'] = $idUsuario;
+        }
+
+        $condLinea = FiltrosBusqueda::condicionTexto(
+            [
+                'd.cod_producto_raw', 'p.codigo', 'p.nombre',
+                'd.cod_bodega_raw', 'b.nombre',
+                'd.numero_lote', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')", 'd.nup',
+                'd.observacion', 'd.error_linea',
+                'ROUND(d.cantidad, 2)::text', 'ROUND(d.costo_unitario, 2)::text',
+            ],
+            $q, $params, 'dl'
+        );
+        if ($condLinea === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT c.id, c.numero, c.fecha, c.tipo_movimiento, c.estado
+                    FROM inventario_cargas c
+                    WHERE $whereBase
+                )
+                SELECT d.id AS id_linea,
+                       COALESCE(p.codigo, d.cod_producto_raw) AS producto_codigo,
+                       p.nombre AS producto_nombre,
+                       COALESCE(b.nombre, d.cod_bodega_raw) AS bodega,
+                       d.cantidad, d.costo_unitario, d.numero_lote, d.nup, d.observacion, d.error_linea, d.linea_valida,
+                       bs.id AS id_carga, bs.numero, bs.fecha, bs.tipo_movimiento, bs.estado
+                FROM inventario_cargas_detalle d
+                JOIN base bs ON bs.id = d.id_carga
+                LEFT JOIN productos p ON p.id = d.id_producto
+                LEFT JOIN bodegas   b ON b.id = d.id_bodega
+                WHERE d.eliminado = false AND $condLinea
+                ORDER BY bs.fecha DESC, bs.id DESC, d.id ASC
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function getById(int $id, int $idEmpresa): ?array

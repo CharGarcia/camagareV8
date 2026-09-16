@@ -18,21 +18,47 @@ class AsientoContableRepository
         $this->modelDetalle = new AsientoContableDetalle();
     }
 
+    /** Prepara y ejecuta una consulta de lectura (punto único usado por el listado y su buscador). */
+    protected function ejecutarLectura(string $sql, array $params = []): \PDOStatement
+    {
+        $stmt = \App\core\Database::getConnection()->prepare($sql);
+        $stmt->execute($params);
+        return $stmt;
+    }
+
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir): array
     {
         $offset = ($page - 1) * $perPage;
-        
-        $sql = "SELECT id, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber 
-                FROM asientos_contables_cabecera 
-                WHERE id_empresa = :id_empresa AND eliminado = false 
-                AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
-                
+
+        $sql = "SELECT a.id, a.fecha_asiento, a.tipo_comprobante, a.numero_comprobante, a.concepto, a.estado, a.modulo_origen, a.total_debe, a.total_haber
+                FROM asientos_contables_cabecera a
+                LEFT JOIN usuarios u ON u.id = a.created_by
+                WHERE a.id_empresa = :id_empresa AND a.eliminado = false
+                AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+
         $params = [':id_empresa' => $idEmpresa];
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre: columnas del listado y lo que identifica el asiento aunque no
+            // sea columna. Decisión del usuario: Tipo, Origen y Estado NO entran en el
+            // texto libre; se filtran solo desde el modal. Las cuentas de las líneas se
+            // buscan en la pestaña Detalles (en el texto libre casi todo asiento
+            // coincidiría con cualquier cuenta de uso común).
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['numero_comprobante', 'concepto', 'modulo_origen'],
+                [
+                    'a.numero_comprobante',                              // Comprobante
+                    'a.fecha_asiento::text',                             // Fecha (Y-m-d, como se ve en la tabla)
+                    "TO_CHAR(a.fecha_asiento, 'DD-MM-YYYY')",            // Fecha (d-m-Y)
+                    'a.concepto',                                        // Concepto
+                    'a.total_debe::text',                                // Total
+                    'a.observaciones',
+                    'u.nombre',                                          // Usuario que registró
+                    // Documentos y referencias de las líneas (Egreso 001-..., Factura ...)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', d.documento_referencia, d.referencia_detalle), ' ')
+                        FROM asientos_contables_detalle d
+                       WHERE d.id_asiento = a.id AND d.eliminado = false)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -41,29 +67,43 @@ class AsientoContableRepository
                 $sql .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (las viejas se conservan: viajan en URLs guardadas).
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($sql, $params, $parsed['filtros'], [
             'texto'    => [
-                'concepto' => 'concepto',
-                'numero'   => 'numero_comprobante',
-                'origen'   => 'modulo_origen',
+                'concepto'      => 'a.concepto',
+                'numero'        => 'a.numero_comprobante',
+                'origen'        => 'a.modulo_origen',
+                'observaciones' => 'a.observaciones',
             ],
             'exacto'   => [
-                'estado' => 'estado',
-                'tipo'   => 'tipo_comprobante',
+                'estado'   => 'a.estado',
+                // Hay tipos guardados en mayúsculas (VENTAS, EGRESOS…): se compara en minúsculas.
+                'tipo'     => 'LOWER(a.tipo_comprobante)',
+                'modulo'   => 'a.modulo_origen',
+                'usuario'  => 'a.created_by',
+                // cuadrado:si / cuadrado:no — Debe = Haber
+                'cuadrado' => "CASE WHEN COALESCE(a.total_debe, 0) = COALESCE(a.total_haber, 0) THEN 'si' ELSE 'no' END",
+                // editado:si / editado:no — asiento automático corregido a mano
+                'editado'  => "CASE WHEN a.editado_manual THEN 'si' ELSE 'no' END",
             ],
             'fecha'    => [
-                'fecha' => 'fecha_asiento',
+                'fecha'    => 'a.fecha_asiento',
+                'registro' => 'a.created_at',
             ],
             'numerico' => [
-                'total' => 'total_debe',
+                'total' => 'a.total_debe',
+            ],
+            // Lo que vive en las líneas: el asiento entra si ALGUNA línea cumple.
+            'existe'   => [
+                'cuenta'     => ['tipo' => 'texto', 'col' => "CONCAT_WS(' ', pc.codigo, pc.nombre)",
+                                 'sql'  => 'EXISTS (SELECT 1 FROM asientos_contables_detalle d LEFT JOIN plan_cuentas pc ON pc.id = d.id_cuenta_contable WHERE d.id_asiento = a.id AND d.eliminado = false AND {cond})'],
+                'referencia' => ['tipo' => 'texto', 'col' => "CONCAT_WS(' ', d.documento_referencia, d.referencia_detalle)",
+                                 'sql'  => 'EXISTS (SELECT 1 FROM asientos_contables_detalle d WHERE d.id_asiento = a.id AND d.eliminado = false AND {cond})'],
             ],
         ]);
 
         $sqlCount = "SELECT COUNT(*) as total FROM ($sql) as sub";
-        $pdo = \App\core\Database::getConnection();
-        $stmtCount = $pdo->prepare($sqlCount);
-        $stmtCount->execute($params);
-        $total = (int)$stmtCount->fetchColumn();
+        $total = (int) $this->ejecutarLectura($sqlCount, $params)->fetchColumn();
 
         // Debe cubrir TODAS las columnas con `data-sort` del thead de la vista: las que
         // falten se descartan acá en silencio y el listado se ordena por fecha_asiento, así
@@ -80,18 +120,112 @@ class AsientoContableRepository
         // comparten fecha_asiento), y sin un criterio estable LIMIT/OFFSET puede
         // repetir una fila en dos páginas y saltarse otra. La consulta no usa
         // alias de tabla, por eso la columna va suelta.
-        $sql .= " ORDER BY {$ordenCol} {$ordenDir}, id DESC";
-        
+        $sql .= " ORDER BY a.{$ordenCol} {$ordenDir}, a.id DESC";
+
         if ($perPage > 0) {
             $sql .= " LIMIT {$perPage} OFFSET {$offset}";
         }
 
-        $pdo = \App\core\Database::getConnection();
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $rows = $this->ejecutarLectura($sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros del listado: solo lo que la empresa
+     * ya usó (tipos de comprobante en minúsculas, orígenes y usuarios que registraron).
+     *
+     * @return array{tipos: string[], modulos: string[], usuarios: array<int, array{id:int, nombre:string}>}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "a.id_empresa = :id_empresa AND a.eliminado = false
+                      AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+
+        $tipos = $this->ejecutarLectura(
+            "SELECT DISTINCT LOWER(a.tipo_comprobante) AS tipo FROM asientos_contables_cabecera a
+             WHERE $whereBase AND COALESCE(a.tipo_comprobante, '') <> '' ORDER BY 1",
+            $params
+        )->fetchAll(\PDO::FETCH_COLUMN);
+        $modulos = $this->ejecutarLectura(
+            "SELECT DISTINCT a.modulo_origen FROM asientos_contables_cabecera a
+             WHERE $whereBase AND COALESCE(a.modulo_origen, '') <> '' ORDER BY 1",
+            $params
+        )->fetchAll(\PDO::FETCH_COLUMN);
+        $usuarios = $this->ejecutarLectura(
+            "SELECT DISTINCT u.id, u.nombre FROM asientos_contables_cabecera a
+             JOIN usuarios u ON u.id = a.created_by
+             WHERE $whereBase ORDER BY u.nombre",
+            $params
+        )->fetchAll(\PDO::FETCH_ASSOC);
+
+        return ['tipos' => $tipos, 'modulos' => $modulos, 'usuarios' => $usuarios];
+    }
+
+    /**
+     * Búsqueda libre DENTRO de los asientos (pestaña "Detalles" del modal de filtros):
+     * cada línea (cuenta, referencias, tercero, centro de costo, proyecto, debe/haber)
+     * que coincide con el texto, junto con el asiento al que pertenece. Mismo alcance
+     * que el listado (empresa, no eliminados, ambiente) y, si se indica, solo los
+     * asientos registrados por ese usuario.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "a.id_empresa = :id_empresa AND a.eliminado = false
+                      AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND a.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            [
+                'pc.codigo', 'pc.nombre',
+                'd.referencia_detalle', 'd.documento_referencia',
+                'd.debe::text', 'd.haber::text',
+                'cc.nombre', 'pr.nombre',
+                'cl.nombre', 'cl.identificacion',
+                'pv.razon_social', 'pv.nombre_comercial', 'pv.identificacion',
+                'em.nombres_apellidos', 'em.identificacion',
+            ],
+            $q, $params, 'dt'
+        );
+        if ($condDet === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT a.id, a.numero_comprobante, a.fecha_asiento, a.concepto, a.estado
+                    FROM asientos_contables_cabecera a
+                    WHERE $whereBase
+                )
+                SELECT b.id AS id_asiento, b.numero_comprobante, b.fecha_asiento, b.concepto, b.estado,
+                       d.id AS id_detalle, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
+                       d.debe, d.haber, d.referencia_detalle, d.documento_referencia,
+                       cc.nombre AS centro_costo, pr.nombre AS proyecto,
+                       COALESCE(cl.nombre, pv.razon_social, em.nombres_apellidos) AS tercero
+                FROM asientos_contables_detalle d
+                JOIN base b ON b.id = d.id_asiento
+                LEFT JOIN plan_cuentas  pc ON pc.id = d.id_cuenta_contable
+                LEFT JOIN centro_costos cc ON cc.id = d.id_centro_costo
+                LEFT JOIN proyectos     pr ON pr.id = d.id_proyecto
+                LEFT JOIN clientes      cl ON d.tipo_entidad = 'cliente'   AND cl.id = d.id_entidad
+                LEFT JOIN proveedores   pv ON d.tipo_entidad = 'proveedor' AND pv.id = d.id_entidad
+                LEFT JOIN empleados     em ON d.tipo_entidad = 'empleado'  AND em.id = d.id_entidad
+                WHERE d.eliminado = false AND $condDet
+                ORDER BY b.fecha_asiento DESC, b.id DESC, d.id
+                LIMIT $limit";
+
+        return $this->ejecutarLectura($sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     public function getDetalleAsiento(int $idAsiento, int $idEmpresa): array

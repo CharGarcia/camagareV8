@@ -138,51 +138,93 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y Exportación -->
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorPED" style="width: 300px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar: texto libre sobre las columnas del listado (sin sugerencias),
+            // botón embudo que abre el modal de filtros y chips dentro de la caja.
+            // Las claves (key) deben existir en los mapas de PedidoRepository::getListado().
+            $opcionesSerie       = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesResponsable = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $responsablesFiltro ?? []);
+            $opcionesUsuario     = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $usuariosFiltro ?? []);
+            $tP = 'Pedido';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento: [Fecha de emisión 6][Estado 3][Serie 3]
+            //              [Nº pedido 4][Secuencial 2][Fecha de entrega 6]
+            //              [Usuario que registró 4][Documentos generados 4][Total 4]
+            //   Cliente:   [Cliente 4][RUC / Cédula 4][Responsable de entrega 4]
+            //              [Observaciones 6][Observaciones internas 6]
+            $filtrosPedidos = [
+                // ── Documento ──
+                ['tab' => $tP, 'key' => 'fecha_pedido', 'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                // Estados reales: Pendiente, Procesado (consumido por completo) y Anulado.
+                ['tab' => $tP, 'key' => 'estado', 'label' => 'Estado', 'icon' => 'bi-flag', 'type' => 'select', 'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'Pendiente', 'l' => 'Pendiente'],
+                    ['v' => 'Procesado', 'l' => 'Procesado'],
+                    ['v' => 'Anulado',   'l' => 'Anulado'],
+                ]],
+                ['tab' => $tP, 'key' => 'serie',         'label' => 'Serie',            'icon' => 'bi-upc-scan',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tP, 'key' => 'numero',        'label' => 'Nº pedido',        'icon' => 'bi-hash',           'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tP, 'key' => 'secuencial',    'label' => 'Secuencial',       'icon' => 'bi-123',            'type' => 'text',       'grupo' => 'Documento', 'col' => 2, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tP, 'key' => 'fecha_entrega', 'label' => 'Fecha de entrega', 'icon' => 'bi-calendar-check', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6],
+                ['tab' => $tP, 'key' => 'id_usuario',    'label' => 'Usuario que registró', 'icon' => 'bi-person-gear', 'type' => 'select',    'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesUsuario],
+                ['tab' => $tP, 'key' => 'documentos',    'label' => 'Documentos generados', 'icon' => 'bi-files',       'type' => 'select',    'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con consignación o factura'],
+                    ['v' => 'no', 'l' => 'Sin documentos'],
+                ]],
+                ['tab' => $tP, 'key' => 'total',         'label' => 'Total',            'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Documento', 'col' => 4],
+                // ── Cliente ──
+                ['tab' => $tP, 'key' => 'cliente',        'label' => 'Cliente',                'icon' => 'bi-person',         'type' => 'text',   'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tP, 'key' => 'ruc',            'label' => 'RUC / Cédula',           'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tP, 'key' => 'id_responsable', 'label' => 'Responsable de entrega', 'icon' => 'bi-person-badge',   'type' => 'select', 'grupo' => 'Cliente', 'col' => 4, 'options' => $opcionesResponsable],
+                ['tab' => $tP, 'key' => 'observaciones',  'label' => 'Observaciones',          'icon' => 'bi-chat-left-text', 'type' => 'text',   'grupo' => 'Cliente', 'col' => 6],
+                ['tab' => $tP, 'key' => 'obs_internas',   'label' => 'Observaciones internas', 'icon' => 'bi-lock',           'type' => 'text',   'grupo' => 'Cliente', 'col' => 6],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorPED"></div>
             <input type="hidden" id="buscarPedido" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorPED',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorPED',
                         hiddenInputId: 'buscarPedido',
-                        fields: [
-                            { key: 'cliente',        label: 'Cliente',        icon: 'bi-person',          type: 'text' },
-                            { key: 'responsable',    label: 'Resp. Entrega',  icon: 'bi-person-badge',    type: 'text' },
-                            { key: 'observaciones',  label: 'Observaciones',  icon: 'bi-chat-left-text',  type: 'text' },
-                            { key: 'fecha_pedido',   label: 'Fecha Emisión',  icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'fecha_entrega',  label: 'Fecha Entrega',  icon: 'bi-calendar-check',  type: 'date_range' },
-                            { key: 'estado',         label: 'Estado',         icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'Pendiente', l: 'Pendiente' },
-                                { v: 'Facturado', l: 'Facturado' },
-                                { v: 'Procesado', l: 'Procesado' },
-                                { v: 'Anulado',   l: 'Anulado' },
-                            ]},
-                            { key: 'serie',          label: 'Serie',          icon: 'bi-upc-scan', type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial',     label: 'Secuencial',     icon: 'bi-123',      type: 'text' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_pendiente', label: 'Pendientes', mk: () => ({ key: 'estado', op: '=', value: 'Pendiente', display: 'Pendiente' }) },
-                            { id: 'qf_facturado', label: 'Facturados', mk: () => ({ key: 'estado', op: '=', value: 'Facturado', display: 'Facturado' }) },
-                            { id: 'qf_anulado',   label: 'Anulados',   mk: () => ({ key: 'estado', op: '=', value: 'Anulado',   display: 'Anulado' }) },
-                            { id: 'qf_hoy',        label: 'Hoy',        mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha_pedido') },
-                            { id: 'qf_mes',        label: 'Este mes',   mk: () => FiltrosBusqueda.helpers.esteMes('fecha_pedido') },
-                            { id: 'qf_mes_pasado', label: 'Mes pasado', mk: () => FiltrosBusqueda.helpers.mesPasado('fecha_pedido') },
-                            { id: 'qf_anio',       label: 'Este año',   mk: () => FiltrosBusqueda.helpers.esteAnio('fecha_pedido') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de pedidos',
+                        inputWidth: 420,
+                        extraId: 'fmExtraPED',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de los pedidos (productos
+                        // pedidos y consignaciones/facturas que los consumieron). Cada
+                        // coincidencia dice a qué pedido pertenece.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de los pedidos',
+                            placeholder: 'Producto, código, cantidad, Nº de consignación o factura...',
+                            columns: [
+                                { key: 'origen',      label: 'Tipo' },
+                                { key: 'tipo',        label: 'Código / Nº documento', class: 'font-monospace' },
+                                { key: 'descripcion', label: 'Producto' },
+                                { key: 'cantidad',    label: 'Cant.', align: 'end' },
+                                { key: 'documento',   label: 'Fecha / estado doc.' },
+                                { key: 'numero',      label: 'Pedido', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',       label: 'Fecha' },
+                                { key: 'cliente',     label: 'Cliente' },
+                                { key: 'estado',      label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => { fm.hide(); setTimeout(() => editarPedido(row.id_pedido), 350); },
+                        },
+                        fields: <?= json_encode($filtrosPedidos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#lista-pedidos',   // se atenúa mientras se busca
                         onApply: () => window.PED_fetchSearch && window.PED_fetchSearch(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraPED" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero_pedido'  => 'Nro. Pedido',
@@ -200,11 +242,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 <a id="btnExportPdf" href="<?= $urlBasePedidos ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-danger" title="Exportar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBasePedidos ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-success" title="Exportar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>

@@ -82,6 +82,8 @@ class AprobacionesConfigController extends BaseModuloController
             'ordenDir'    => $ordenDir,
             'disponibles' => $this->service->getTiposDisponibles($idEmpresa),
             'usuarios'    => $this->service->getUsuariosEmpresa($idEmpresa),
+            // Selects del modal de filtros (solo lo que la empresa ya configuró)
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
             'vistaConfig' => $prefsVista,
             'fullWidth'   => true,
         ]);

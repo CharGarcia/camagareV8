@@ -69,46 +69,71 @@ $filasHtml = $filasHtml ?? '';
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y exportación -->
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorCR" style="width: 420px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado de estaciones (sin
+            // sugerencias) + botón "Filtros" (embudo) que abre un modal con todos los filtros
+            // + chips de los activos. Las claves (key) deben existir en los mapas de
+            // ConfiguracionRestauranteRepository::getListado(). El selector "Papel de la
+            // tirilla" del encabezado es un ajuste del salón, no un filtro: no se toca.
+            // Sin pestaña Detalles: la estación no tiene líneas propias.
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $tE = 'Estación';
+            // Filas de 12 columnas:
+            //   Estación:  [Nombre 6][Tipo 3][Estado 3]
+            //   Impresión: [Impresión 4][Predeterminada 4][En uso 4] [Papel 6][Copias 6]
+            //   Registro:  [Fecha de registro 6][Usuario 6]
+            $filtrosEstaciones = [
+                ['tab' => $tE, 'key' => 'nombre',         'label' => 'Nombre',            'icon' => 'bi-printer',        'type' => 'text',         'grupo' => 'Estación', 'col' => 6],
+                ['tab' => $tE, 'key' => 'tipo',           'label' => 'Tipo',              'icon' => 'bi-fire',           'type' => 'select',       'grupo' => 'Estación', 'col' => 3, 'options' => [
+                    ['v' => 'cocina', 'l' => 'Cocina'],
+                    ['v' => 'barra',  'l' => 'Barra'],
+                    ['v' => 'otro',   'l' => 'Otro'],
+                ]],
+                ['tab' => $tE, 'key' => 'estado',         'label' => 'Estado',            'icon' => 'bi-flag',           'type' => 'select',       'grupo' => 'Estación', 'col' => 3, 'options' => [
+                    ['v' => 'true',  'l' => 'Activa'],
+                    ['v' => 'false', 'l' => 'Inactiva'],
+                ]],
+                ['tab' => $tE, 'key' => 'impresion',      'label' => 'Impresión',         'icon' => 'bi-printer-fill',   'type' => 'select',       'grupo' => 'Impresión', 'col' => 4, 'options' => [
+                    ['v' => 'automatica', 'l' => 'Automática'],
+                    ['v' => 'pedido',     'l' => 'A pedido'],
+                    ['v' => 'pantalla',   'l' => 'Solo pantalla'],
+                ]],
+                ['tab' => $tE, 'key' => 'predeterminada', 'label' => 'Predeterminada',    'icon' => 'bi-star',           'type' => 'select',       'grupo' => 'Impresión', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Sí'],
+                    ['v' => 'no', 'l' => 'No'],
+                ]],
+                ['tab' => $tE, 'key' => 'usos',           'label' => 'En uso (ítems)',    'icon' => 'bi-link-45deg',     'type' => 'number_range', 'grupo' => 'Impresión', 'col' => 4],
+                ['tab' => $tE, 'key' => 'papel',          'label' => 'Papel (mm)',        'icon' => 'bi-file-earmark',   'type' => 'number_range', 'grupo' => 'Impresión', 'col' => 6],
+                ['tab' => $tE, 'key' => 'copias',         'label' => 'Copias',            'icon' => 'bi-files',          'type' => 'number_range', 'grupo' => 'Impresión', 'col' => 6],
+                ['tab' => $tE, 'key' => 'registro',       'label' => 'Fecha de registro', 'icon' => 'bi-calendar-event', 'type' => 'date_range',   'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tE, 'key' => 'usuario',        'label' => 'Usuario que registró', 'icon' => 'bi-person-gear', 'type' => 'select',       'grupo' => 'Registro', 'col' => 6, 'options' => $opcionesUsuario],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorCR"></div>
             <input type="hidden" id="buscarEstacion" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorCR',
+                    if (!window.FiltrosModal) return;
+                    window.CR_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorCR',
                         hiddenInputId: 'buscarEstacion',
-                        fields: [
-                            { key: 'nombre', label: 'Nombre', icon: 'bi-printer', type: 'text' },
-                            { key: 'tipo',   label: 'Tipo',   icon: 'bi-fire',    type: 'select', options: [
-                                { v: 'cocina', l: 'Cocina' },
-                                { v: 'barra',  l: 'Barra' },
-                                { v: 'otro',   l: 'Otro' },
-                            ]},
-                            { key: 'imprime', label: 'Imprime órdenes', icon: 'bi-printer-fill', type: 'select', options: [
-                                { v: 'true',  l: 'Sí' },
-                                { v: 'false', l: 'No' },
-                            ]},
-                            { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select', options: [
-                                { v: 'true',  l: 'Activa' },
-                                { v: 'false', l: 'Inactiva' },
-                            ]},
-                            { key: 'papel',  label: 'Papel (mm)', icon: 'bi-file-earmark', type: 'number_range' },
-                            { key: 'copias', label: 'Copias',     icon: 'bi-files',        type: 'number_range' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_activas',  label: 'Activas',        mk: () => ({ key: 'estado',  op: '=', value: 'true',  display: 'Activa' }) },
-                            { id: 'qf_imprimen', label: 'Con impresora',  mk: () => ({ key: 'imprime', op: '=', value: 'true',  display: 'Sí' }) },
-                            { id: 'qf_pantalla', label: 'Solo pantalla',  mk: () => ({ key: 'imprime', op: '=', value: 'false', display: 'No' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de estaciones',
+                        inputWidth: 420,
+                        extraId: 'fmExtraCR',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosEstaciones, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyEstaciones',   // se atenúa mientras se busca
                         onApply: () => window.fetchSearch && window.fetchSearch(1),
-                    }).init();
+                    });
+                    window.CR_filtros.init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraCR" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'nombre'         => 'Nombre',
@@ -125,11 +150,11 @@ $filasHtml = $filasHtml ?? '';
 
                 <a id="btnExportPdf" href="<?= $urlBaseCR ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBaseCR ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>

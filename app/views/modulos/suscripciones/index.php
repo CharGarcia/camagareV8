@@ -60,38 +60,112 @@ $estadoClases = [
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorSUSC" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // "Filtros" (embudo) que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de SuscripcionesRepository::getListado().
+            $opF = $opcionesFiltro ?? [];
+            $opcionesPeriodicidad = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $opF['periodicidades'] ?? []);
+            $opcionesUsuario      = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $opF['usuarios'] ?? []);
+            $tS = 'Suscripción';
+            // Filas de 12 columnas:
+            //   Suscripción: [Próximo cobro 6][Estado 3][Periodicidad 3] [Comprobante 3][Forma de cobro 3][Pasarela 3][Con cobros 3]
+            //                [Fecha de inicio 6][Fecha de fin 6] [Monto 4][Ítems 4][Intentos fallidos 4]
+            //                [N° factura / recibo 6][N° interno 6]
+            //   Cliente y registro: [Cliente 3][RUC 3][Observaciones 3][Usuario 3]
+            $filtrosSuscripciones = [
+                ['tab' => $tS, 'key' => 'proximo_cobro', 'label' => 'Próximo cobro',     'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Suscripción', 'col' => 6, 'atajos' => true],
+                ['tab' => $tS, 'key' => 'estado',        'label' => 'Estado',            'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Suscripción', 'col' => 3, 'options' => [
+                    ['v' => 'activo',     'l' => 'Activo'],
+                    ['v' => 'pausado',    'l' => 'Pausado'],
+                    ['v' => 'suspendido', 'l' => 'Suspendido'],
+                    ['v' => 'cancelado',  'l' => 'Cancelado'],
+                ]],
+                ['tab' => $tS, 'key' => 'periodicidad',  'label' => 'Periodicidad',      'icon' => 'bi-arrow-repeat',    'type' => 'select',       'grupo' => 'Suscripción', 'col' => 3, 'options' => $opcionesPeriodicidad],
+                ['tab' => $tS, 'key' => 'comprobante',   'label' => 'Comprobante',       'icon' => 'bi-receipt',         'type' => 'select',       'grupo' => 'Suscripción', 'col' => 3, 'options' => [
+                    ['v' => 'factura', 'l' => 'Factura'],
+                    ['v' => 'recibo',  'l' => 'Recibo'],
+                ]],
+                ['tab' => $tS, 'key' => 'forma_cobro',   'label' => 'Forma de cobro',    'icon' => 'bi-credit-card',     'type' => 'select',       'grupo' => 'Suscripción', 'col' => 3, 'options' => [
+                    ['v' => 'credito', 'l' => 'Crédito'],
+                    ['v' => 'tarjeta', 'l' => 'Tarjeta'],
+                ]],
+                ['tab' => $tS, 'key' => 'pasarela',      'label' => 'Pasarela de tarjeta', 'icon' => 'bi-shield-lock',   'type' => 'select',       'grupo' => 'Suscripción', 'col' => 3, 'options' => [
+                    ['v' => 'kushki', 'l' => 'Kushki'],
+                    ['v' => 'nuvei',  'l' => 'Nuvei'],
+                ]],
+                ['tab' => $tS, 'key' => 'con_pagos',     'label' => 'Cobros registrados', 'icon' => 'bi-cash-coin',      'type' => 'select',       'grupo' => 'Suscripción', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Con cobros'],
+                    ['v' => 'no', 'l' => 'Sin cobros'],
+                ]],
+                ['tab' => $tS, 'key' => 'inicio',        'label' => 'Fecha de inicio',   'icon' => 'bi-calendar-plus',   'type' => 'date_range',   'grupo' => 'Suscripción', 'col' => 6],
+                ['tab' => $tS, 'key' => 'fin',           'label' => 'Fecha de fin',      'icon' => 'bi-calendar-x',      'type' => 'date_range',   'grupo' => 'Suscripción', 'col' => 6],
+                ['tab' => $tS, 'key' => 'monto',         'label' => 'Monto por cobro (con IVA)', 'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Suscripción', 'col' => 4],
+                ['tab' => $tS, 'key' => 'items',         'label' => 'Ítems',             'icon' => 'bi-list-ol',         'type' => 'number_range', 'grupo' => 'Suscripción', 'col' => 4],
+                ['tab' => $tS, 'key' => 'intentos',      'label' => 'Intentos fallidos', 'icon' => 'bi-exclamation-octagon', 'type' => 'number_range', 'grupo' => 'Suscripción', 'col' => 4],
+                ['tab' => $tS, 'key' => 'documento',     'label' => 'N° factura / recibo generado', 'icon' => 'bi-file-earmark-text', 'type' => 'text', 'grupo' => 'Suscripción', 'col' => 6, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tS, 'key' => 'id',            'label' => 'N° interno de la suscripción', 'icon' => 'bi-hash', 'type' => 'text',        'grupo' => 'Suscripción', 'col' => 6],
+                ['tab' => $tS, 'key' => 'cliente',       'label' => 'Cliente',           'icon' => 'bi-person',          'type' => 'text',         'grupo' => 'Cliente y registro', 'col' => 3],
+                ['tab' => $tS, 'key' => 'ruc',           'label' => 'RUC / Cédula',      'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Cliente y registro', 'col' => 3],
+                ['tab' => $tS, 'key' => 'observaciones', 'label' => 'Observaciones / info adicional', 'icon' => 'bi-chat-left-text', 'type' => 'text', 'grupo' => 'Cliente y registro', 'col' => 3],
+                ['tab' => $tS, 'key' => 'usuario',       'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',  'type' => 'select',       'grupo' => 'Cliente y registro', 'col' => 3, 'options' => $opcionesUsuario],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorSUSC"></div>
             <input type="hidden" id="buscarSusc" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorSUSC',
+                    if (!window.FiltrosModal) return;
+                    // Abre el modal de edición de una suscripción por id: el modal necesita la
+                    // fila completa del listado (data-susc), así que se pide esa fila filtrada.
+                    const abrirSuscPorId = async (id) => {
+                        try {
+                            const resp = await fetch(`<?= $urlBase ?>/searchAjax?b=${encodeURIComponent('id:' + id)}&page=1`);
+                            const data = await resp.json();
+                            const tmp = document.createElement('tbody');
+                            tmp.innerHTML = data.rows || '';
+                            const tr = tmp.querySelector('tr[data-susc]');
+                            if (tr && typeof window.abrirModalSuscEditar === 'function') window.abrirModalSuscEditar(tr);
+                        } catch (e) { console.error(e); }
+                    };
+                    window.SUSC_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorSUSC',
                         hiddenInputId: 'buscarSusc',
-                        fields: [
-                            { key: 'cliente',  label: 'Cliente',         icon: 'bi-person',          type: 'text' },
-                            { key: 'ruc',      label: 'Identificación',  icon: 'bi-card-text',       type: 'text' },
-                            { key: 'proximo_cobro', label: 'Próximo cobro', icon: 'bi-calendar-event', type: 'date_range' },
-                            { key: 'monto',    label: 'Monto',           icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'estado',   label: 'Estado',          icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'activa',     l: 'Activa' },
-                                { v: 'pausada',    l: 'Pausada' },
-                                { v: 'cancelada',  l: 'Cancelada' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_activa',  label: 'Activas',  mk: () => ({ key: 'estado', op: '=', value: 'activa',  display: 'Activa' }) },
-                            { id: 'qf_pausada', label: 'Pausadas', mk: () => ({ key: 'estado', op: '=', value: 'pausada', display: 'Pausada' }) },
-                            { id: 'qf_mes',     label: 'Próximo cobro este mes', mk: () => FiltrosBusqueda.helpers.esteMes('proximo_cobro') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de suscripciones',
+                        inputWidth: 420,
+                        extraId: 'fmExtraSUSC',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las suscripciones.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: '<?= $urlBase ?>/buscarDetallesAjax',
+                            label: 'Buscar libremente dentro de las suscripciones',
+                            placeholder: 'Producto, servicio, código, n° de factura o recibo, fecha o monto de un cobro, información adicional...',
+                            columns: [
+                                { key: 'origen',        label: 'Tipo' },
+                                { key: 'referencia',    label: 'Código / Documento', class: 'font-monospace' },
+                                { key: 'descripcion',   label: 'Descripción' },
+                                { key: 'fecha',         label: 'Fecha' },
+                                { key: 'monto',         label: 'Monto', align: 'end' },
+                                { key: 'cliente',       label: 'Cliente' },
+                                { key: 'proximo_cobro', label: 'Próx. cobro' },
+                                { key: 'estado',        label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'id', op: '=', value: String(row.id_suscripcion) }),
+                            onOpen: (row, fm) => { fm.hide(); setTimeout(() => abrirSuscPorId(row.id_suscripcion), 350); },
+                        },
+                        fields: <?= json_encode($filtrosSuscripciones, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodySusc',   // se atenúa mientras se busca
                         onApply: () => window.fetchSearch && window.fetchSearch(1),
-                    }).init();
+                    });
+                    window.SUSC_filtros.init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraSUSC" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'nombre_cliente'         => 'Cliente',
@@ -110,11 +184,11 @@ $estadoClases = [
 
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -293,6 +367,10 @@ $estadoClases = [
     window.fetchSearch = async (page = 1) => {
         const b   = inputB ? inputB.value.trim() : '';
         const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga; también al paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('tbodySusc');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const resp = await fetch(uri);
             const data = await resp.json();
@@ -306,7 +384,11 @@ $estadoClases = [
 
                 updateIcons();
             }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
+        }
     };
 
     document.querySelectorAll('.sortable-header').forEach(h => {

@@ -87,6 +87,9 @@ class NovedadesController extends BaseModuloController
             'motivos'    => CatalogoNovedades::motivosSalida(),
             'meses'      => CatalogoNovedades::MESES,
             'aplicaEn'   => CatalogoNovedades::aplicaEn(),
+            // Selects del modal de filtros: solo los valores que la empresa realmente usa.
+            'aniosFiltro'    => $this->service->getAniosUsados($idEmpresa),
+            'usuariosFiltro' => $this->service->getUsuariosConNovedades($idEmpresa),
             'vistaConfig' => $prefsVista,
             'idEmpresa'  => $idEmpresa,
         ]);

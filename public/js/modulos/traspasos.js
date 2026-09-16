@@ -38,7 +38,9 @@
     window.TRP_fetchSearch = async function (p = 1) {
         const b = document.getElementById('buscarTraspaso')?.value || '';
         const tbody = document.getElementById('tbodyTraspasos');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><span class="spinner-border text-primary"></span></td></tr>';
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras carga
+        // (también al paginar y ordenar) en lugar de reemplazarse por una fila con spinner.
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const res = await (await fetch(`${TRP_URL}/searchAjax?b=${encodeURIComponent(b)}&page=${p}&sort=${window.currentSort}&dir=${window.currentDir}`)).json();
             if (tbody) tbody.innerHTML = res.rows;
@@ -58,6 +60,8 @@
             });
         } catch (e) {
             console.error(e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     };
 

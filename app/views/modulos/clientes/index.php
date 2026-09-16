@@ -47,50 +47,92 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorCLI" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal): texto libre sobre las columnas del listado
+            // (sin sugerencias) + botón embudo que abre un modal con todos los filtros +
+            // chips de los activos. Las claves (key) deben existir en los mapas de
+            // ClienteRepository::getListado(). Sin pestaña Detalles: el cliente no tiene
+            // tablas hijas que buscar.
+            $opcFiltro = $opcionesFiltro ?? [];
+            $opcionesVendedor  = array_map(fn($v) => ['v' => (string) $v['id'], 'l' => (string) $v['nombre']], $opcFiltro['vendedores'] ?? []);
+            $opcionesProvincia = array_map(fn($p) => ['v' => (string) $p['codigo'], 'l' => (string) $p['nombre']], $opcFiltro['provincias'] ?? []);
+            $opcionesCiudad    = array_map(fn($c) => ['v' => (string) $c['codigo'], 'l' => $c['nombre'] . (!empty($c['provincia']) ? ' (' . $c['provincia'] . ')' : '')], $opcFiltro['ciudades'] ?? []);
+            $opcionesUsuario   = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => (string) $u['nombre']], $opcFiltro['usuarios'] ?? []);
+            $opcionesSiNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $tC = 'Cliente';
+            // Filas de 12 columnas:
+            //   Identificación: [Tipo 3][RUC 3][Nombre 4][Estado 2]
+            //   Contacto:       [Correo 3][Con correo 3][Teléfono 3][Dirección 3]
+            //   Ubicación:      [Provincia 4][Ciudad 4][Ubicación en mapa 4]
+            //   Comercial:      [Vendedor 4][Plazo 4][Cobro automático 4]
+            //   Visitas:        [Día 4][Frecuencia 4][Semana del mes 4]
+            //   Registro:       [Fecha de registro 6][Usuario 6]
+            $filtrosClientes = [
+                // ── Identificación ──
+                ['tab' => $tC, 'key' => 'tipo',      'label' => 'Tipo identificación', 'icon' => 'bi-credit-card',   'type' => 'select', 'grupo' => 'Identificación', 'col' => 3, 'options' => [
+                    ['v' => '04', 'l' => 'RUC'],
+                    ['v' => '05', 'l' => 'Cédula'],
+                    ['v' => '06', 'l' => 'Pasaporte'],
+                    ['v' => '07', 'l' => 'Consumidor final'],
+                    ['v' => '08', 'l' => 'Identificación del exterior'],
+                ]],
+                ['tab' => $tC, 'key' => 'ruc',       'label' => 'RUC / Cédula',        'icon' => 'bi-card-text',     'type' => 'text',   'grupo' => 'Identificación', 'col' => 3],
+                ['tab' => $tC, 'key' => 'nombre',    'label' => 'Razón social',        'icon' => 'bi-person',        'type' => 'text',   'grupo' => 'Identificación', 'col' => 4],
+                ['tab' => $tC, 'key' => 'estado',    'label' => 'Estado',              'icon' => 'bi-flag',          'type' => 'select', 'grupo' => 'Identificación', 'col' => 2, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                // ── Contacto ──
+                ['tab' => $tC, 'key' => 'email',     'label' => 'Correo',              'icon' => 'bi-envelope',      'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                ['tab' => $tC, 'key' => 'con_email', 'label' => 'Correo registrado',   'icon' => 'bi-envelope-check','type' => 'select', 'grupo' => 'Contacto', 'col' => 3, 'options' => $opcionesSiNo('Con correo', 'Sin correo')],
+                ['tab' => $tC, 'key' => 'telefono',  'label' => 'Teléfono',            'icon' => 'bi-telephone',     'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                ['tab' => $tC, 'key' => 'direccion', 'label' => 'Dirección',           'icon' => 'bi-geo',           'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                // ── Ubicación ──
+                ['tab' => $tC, 'key' => 'cod_provincia', 'label' => 'Provincia',       'icon' => 'bi-map',           'type' => 'select', 'grupo' => 'Ubicación', 'col' => 4, 'options' => $opcionesProvincia],
+                ['tab' => $tC, 'key' => 'cod_ciudad',    'label' => 'Ciudad',          'icon' => 'bi-geo-alt',       'type' => 'select', 'grupo' => 'Ubicación', 'col' => 4, 'options' => $opcionesCiudad],
+                ['tab' => $tC, 'key' => 'ubicacion',     'label' => 'Ubicación en el mapa', 'icon' => 'bi-pin-map',  'type' => 'select', 'grupo' => 'Ubicación', 'col' => 4, 'options' => $opcionesSiNo('Con ubicación', 'Sin ubicación')],
+                // ── Comercial ──
+                ['tab' => $tC, 'key' => 'id_vendedor', 'label' => 'Vendedor',          'icon' => 'bi-person-badge',  'type' => 'select',       'grupo' => 'Comercial', 'col' => 4, 'options' => $opcionesVendedor],
+                ['tab' => $tC, 'key' => 'plazo',       'label' => 'Plazo (días)',      'icon' => 'bi-calendar-range','type' => 'number_range', 'grupo' => 'Comercial', 'col' => 4],
+                ['tab' => $tC, 'key' => 'cobro_auto',  'label' => 'Cobro automático',  'icon' => 'bi-cash-coin',     'type' => 'select',       'grupo' => 'Comercial', 'col' => 4, 'options' => $opcionesSiNo('Con cobro automático', 'Sin cobro automático')],
+                // ── Visitas ──
+                ['tab' => $tC, 'key' => 'dia_visita',    'label' => 'Día de visita',   'icon' => 'bi-calendar-week', 'type' => 'select', 'grupo' => 'Visitas', 'col' => 4, 'options' => [
+                    ['v' => '1', 'l' => 'Lunes'], ['v' => '2', 'l' => 'Martes'], ['v' => '3', 'l' => 'Miércoles'],
+                    ['v' => '4', 'l' => 'Jueves'], ['v' => '5', 'l' => 'Viernes'], ['v' => '6', 'l' => 'Sábado'], ['v' => '7', 'l' => 'Domingo'],
+                ]],
+                ['tab' => $tC, 'key' => 'frecuencia',    'label' => 'Frecuencia de visita', 'icon' => 'bi-arrow-repeat', 'type' => 'select', 'grupo' => 'Visitas', 'col' => 4,
+                    'options' => array_map(fn($k, $l) => ['v' => (string) $k, 'l' => $l], array_keys(\App\Helpers\DiasVisita::FRECUENCIAS), \App\Helpers\DiasVisita::FRECUENCIAS)],
+                ['tab' => $tC, 'key' => 'semana_visita', 'label' => 'Semana del mes',  'icon' => 'bi-calendar3',     'type' => 'select', 'grupo' => 'Visitas', 'col' => 4,
+                    'options' => array_map(fn($k, $l) => ['v' => (string) $k, 'l' => $l], array_keys(\App\Helpers\DiasVisita::SEMANAS), \App\Helpers\DiasVisita::SEMANAS)],
+                // ── Registro ──
+                ['tab' => $tC, 'key' => 'registro', 'label' => 'Fecha de registro',    'icon' => 'bi-calendar-event','type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tC, 'key' => 'usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',   'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcionesUsuario],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorCLI"></div>
             <input type="hidden" id="buscarCliente" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorCLI',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorCLI',
                         hiddenInputId: 'buscarCliente',
-                        fields: [
-                            { key: 'nombre',    label: 'Nombre',             icon: 'bi-person',        type: 'text' },
-                            { key: 'ruc',       label: 'RUC / Cédula',       icon: 'bi-card-text',     type: 'text' },
-                            { key: 'email',     label: 'Email',              icon: 'bi-envelope',      type: 'text' },
-                            { key: 'telefono',  label: 'Teléfono',           icon: 'bi-telephone',     type: 'text' },
-                            { key: 'direccion', label: 'Dirección',          icon: 'bi-geo',           type: 'text' },
-                            { key: 'ciudad',    label: 'Ciudad',             icon: 'bi-geo-alt',       type: 'text' },
-                            { key: 'provincia', label: 'Provincia',          icon: 'bi-map',           type: 'text' },
-                            { key: 'vendedor',  label: 'Vendedor',           icon: 'bi-person-badge',  type: 'text' },
-                            { key: 'plazo',     label: 'Plazo (días)',       icon: 'bi-calendar-range', type: 'number_range' },
-                            { key: 'tipo',      label: 'Tipo identificación', icon: 'bi-credit-card',  type: 'select', options: [
-                                { v: '04', l: 'RUC' },
-                                { v: '05', l: 'Cédula' },
-                                { v: '06', l: 'Pasaporte' },
-                                { v: '07', l: 'Consumidor Final' },
-                                { v: '08', l: 'Identificación Exterior' },
-                            ]},
-                            { key: 'estado',    label: 'Estado',             icon: 'bi-flag',          type: 'select', options: [
-                                { v: 'activo',   l: 'Activo' },
-                                { v: 'inactivo', l: 'Inactivo' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_activo',    label: 'Activos',    mk: () => ({ key: 'estado', op: '=', value: 'activo',   display: 'Activo' }) },
-                            { id: 'qf_inactivo',  label: 'Inactivos',  mk: () => ({ key: 'estado', op: '=', value: 'inactivo', display: 'Inactivo' }) },
-                            { id: 'qf_con_plazo', label: 'Con plazo',  mk: () => ({ key: 'plazo',  op: '>', value: '0',        display: '> 0 días' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de clientes',
+                        inputWidth: 420,
+                        extraId: 'fmExtraCLI',   // columnas + PDF + Excel + Mapa, pegados al final del grupo
+                        fields: <?= json_encode($filtrosClientes, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyClientes',   // se atenúa mientras se busca
                         onApply: () => window.fetchSearch && window.fetchSearch(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraCLI" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'identificacion' => 'Identificación',
@@ -108,9 +150,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                <a id="btnExportPdf" href="<?= $urlBaseClientes ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a id="btnExportExcel" href="<?= $urlBaseClientes ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
-                <a href="<?= $urlBaseClientes ?>/mapa" class="btn btn-outline-secondary" title="Mapa de clientes"><i class="bi bi-map"></i> Mapa</a>
+                <a id="btnExportPdf" href="<?= $urlBaseClientes ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a id="btnExportExcel" href="<?= $urlBaseClientes ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
+                <a href="<?= $urlBaseClientes ?>/mapa" class="btn btn-outline-secondary" title="Mapa de clientes"><i class="bi bi-map"></i><span class="d-none d-md-inline"> Mapa</span></a>
                 <?php if ($perm['crear']): ?>
                     <button type="button" class="btn btn-outline-primary d-none" id="btnCopiarClientesEmpresa" title="Copiar todos los clientes a otra empresa" onclick="abrirModalCopiarClientesEmpresa()">
                         <i class="bi bi-arrow-left-right"></i> Copiar a otra empresa
@@ -232,6 +274,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const term = inputBuscar ? inputBuscar.value.trim() : '';
             const orden = window.CMG_ordenParam(window.currentSorts);
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar (que llaman a esta función directo).
+            const tbody = document.getElementById('tbodyClientes');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -247,7 +293,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     // repinta el motor global; aquí solo se le pide que se refresque.
                     if (sorter) sorter.refreshIcons();
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         };
 
         // Ordenamiento (motor global: persiste la preferencia y pinta los íconos).

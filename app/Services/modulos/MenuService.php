@@ -49,6 +49,12 @@ class MenuService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Valores usados por los ítems de la empresa para los selects del modal de filtros del listado. */
+    public function getOpcionesFiltro(int $idEmpresa): array
+    {
+        return $this->repository->getOpcionesFiltro($idEmpresa);
+    }
+
     public function findById(int $id, int $idEmpresa): ?array
     {
         return $this->repository->find($id, $idEmpresa);

@@ -57,6 +57,12 @@ class MarcacionService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Puntos y usuarios usados en las marcaciones (selects del modal de filtros). */
+    public function getOpcionesFiltro(int $idEmpresa): array
+    {
+        return $this->repository->getOpcionesFiltro($idEmpresa);
+    }
+
     /**
      * Marcación desde el celular del empleado escaneando el QR del punto.
      *

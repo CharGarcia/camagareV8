@@ -29,6 +29,12 @@ class CitaAgendaService
         return $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $filtros);
     }
 
+    /** Tipos, recursos y usuarios usados por la empresa (selects del modal de filtros). */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        return $this->repo->getOpcionesFiltroListado($idEmpresa);
+    }
+
     public function getById(int $id, int $idEmpresa): array
     {
         $row = $this->repo->getById($id, $idEmpresa);

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/vendedores
 tipo: modulo
 visibilidad: todos
-etiquetas: vendedores, vendedor, comercial, agente, asesor, comision, ventas por vendedor, importar vendedores, carga masiva, excel, vincular usuario con vendedor, usuario del sistema, que el asesor vea solo sus ventas, quien es cada vendedor, cartera del vendedor, clientes asignados
-version: 1.3
+etiquetas: vendedores, buscar vendedor, buscador, filtros, filtrar vendedores, vendedores sin clientes, chips, vendedor, comercial, agente, asesor, comision, ventas por vendedor, importar vendedores, carga masiva, excel, vincular usuario con vendedor, usuario del sistema, que el asesor vea solo sus ventas, quien es cada vendedor, cartera del vendedor, clientes asignados
+version: 1.4
 orden: 50
 estado: activo
 ---
@@ -46,6 +46,41 @@ que tiene asignados. El filtro *Vendedor* le aparece fijo en su nombre.
   justamente para los casos en que esa cédula no está cargada o no coincide.
 - No tiene nada que ver con quién creó la ficha: eso se sigue guardando aparte.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del listado (nombre,
+identificación, correo y teléfono) y además en la dirección y en el usuario que
+registró al vendedor. La columna **Estado** no entra en la búsqueda libre: para
+filtrar por ella use la ventana de filtros. Puede escribir varias palabras en
+cualquier orden y no importan mayúsculas ni tildes: *tipan luis* encuentra a
+*Luis Tipan*. Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras
+busca, aparece un **círculo girando** al final del cuadro y la tabla se ve
+atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
+Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento.
+La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
+
+| Bloque | Filtros |
+|--------|---------|
+| Vendedor | Nombre, identificación, estado (activo / inactivo), con o sin clientes asignados |
+| Contacto | Correo, con o sin correo registrado, teléfono, dirección |
+| Usuario del sistema | Usuario del sistema vinculado y si está o no vinculado a un usuario (solo aparece cuando la base ya tiene el campo *Usuario del sistema*) |
+| Registro | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), usuario que registró |
+
+*Con clientes asignados* son los vendedores que figuran como vendedor de al
+menos un cliente. Los selectores de usuario listan solo los usuarios que
+aparecen en los vendedores de la empresa.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último. Los botones de **PDF** y **Excel** exportan con
+la misma búsqueda y filtros que haya en pantalla.
+
 ## Carga masiva desde Excel
 
 Si tiene muchos vendedores, no hace falta registrarlos uno por uno: en
@@ -73,6 +108,15 @@ la guía *Importar datos desde Excel*.
 
 ## Historial de cambios
 
+- **1.4** — Nuevo buscador del listado: lo que se escribe se busca por palabras
+  sueltas, en cualquier orden y sin tildes, en nombre, identificación, correo,
+  teléfono, dirección y usuario que registró (antes solo la frase completa en
+  nombre, identificación y correo). Los filtros pasan a una **ventana propia**
+  (botón del embudo, se aplican con *Aplicar*) con criterios nuevos: con/sin
+  clientes asignados, con/sin correo, usuario del sistema vinculado, fecha de
+  registro y usuario que registró. Se corrigen tres fallas: el filtro de estado
+  daba error, los filtros no refrescaban la tabla y, después de buscar o cambiar
+  de página, las columnas quedaban descuadradas respecto de los títulos.
 - **1.3** — El apartado *Usuario del sistema* explica dónde se usa ese vínculo:
   en el Reporte de Ventas, el Reporte de Ventas por Vendedor y Cuentas por
   Cobrar, para que el usuario de nivel 1 sin *Acceso total* vea solo lo de su

@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.12
+etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips
+version: 1.13
 orden: 15
 estado: activo
 ---
@@ -159,6 +159,48 @@ por cada entrega/factura), y el sistema lleva la cuenta:
   cuánto de ellas llegó); en cuanto la orden tiene alguna compra vinculada,
   esas líneas se dan por recibidas sin poder distinguir si fue parcial.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias y sin recargar la página. Busca en las columnas de
+la orden: N° orden, secuencial, fecha de la orden, proveedor, identificación,
+fecha de recepción y observaciones. Además busca en quién la aprobó, el usuario
+que la creó, los **productos pedidos** (código, descripción y notas de cada línea)
+y el **número de las compras vinculadas**. La columna **Estado** no entra en la
+búsqueda libre: para filtrar por ella use la ventana de filtros. Puede escribir
+varias palabras en cualquier orden y no importan mayúsculas ni tildes. Para
+limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un
+**círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Orden de compra** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de la orden (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), fecha de recepción, fecha de envío al proveedor, fecha de aprobación, estado (borrador, enviado, aprobado, recibido parcial, recibido, anulado), serie, secuencial, N° orden, con o sin compra vinculada, usuario que la creó |
+| Valores | Total con IVA y número de ítems (cada uno con mínimo y máximo) |
+| Proveedor | Proveedor, identificación, aprobado por, observaciones |
+
+Los selectores *Serie* y *Usuario* listan solo lo que la empresa ya usó.
+
+**Pestaña Detalles** (lo que hay dentro de la orden). Es un único cuadro,
+**Buscar libremente dentro de las órdenes de compra**: escriba un producto, un
+código, una descripción, una nota de línea o el número de una compra vinculada,
+y aparece la lista de **cada ítem o compra que coincide** con la orden a la que
+pertenece (número, fecha, proveedor y estado). Un clic en la fila deja el listado
+mostrando solo esa orden; el ícono de la derecha la abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
 ## Duplicar una orden
 
 Una orden Enviada, Aprobada o Recibida parcialmente ya no se puede editar.
@@ -273,6 +315,17 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.13** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias ni
+  recarga la página; lo que se escribe se busca en las columnas de la orden (y en
+  aprobado por, usuario, productos pedidos y compras vinculadas), salvo Estado. Los
+  filtros pasan a una **ventana propia** (botón del embudo, se aplican con *Aplicar*)
+  con dos pestañas: **Orden de compra** (criterios nuevos: fechas de recepción, envío y
+  aprobación, con/sin compra vinculada, usuario, número de ítems, aprobado por y
+  observaciones; el estado ahora lista también *enviado*, *recibido parcial* y
+  *recibido*) y **Detalles**, búsqueda libre dentro de los ítems y las compras
+  vinculadas. Los filtros activos se ven como etiquetas dentro del cuadro y la tabla se
+  atenúa mientras busca. Además, paginar u ordenar ya no pierde la búsqueda con la que
+  se abrió la página.
 - **1.12** — En el celular, la lista de productos ya no desaparece al buscar
   por código o descripción. Cuando el teclado tapa el campo del detalle —la tabla
   de productos queda en la parte baja del formulario— el formulario sube el campo

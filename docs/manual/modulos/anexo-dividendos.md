@@ -5,8 +5,8 @@ categoria: Impuestos
 ruta_modulo: modulos/anexo-dividendos
 tipo: modulo
 visibilidad: todos
-etiquetas: anexo dividendos, ADI, dividendos, utilidades, accionistas, socios, participes, reparto de utilidades, retencion dividendos, impuesto unico dividendos, articulo 39.2, anexo anual SRI, ADI-2025.zip, dimm anexos
-version: 1.6
+etiquetas: anexo dividendos, ADI, dividendos, utilidades, accionistas, socios, participes, reparto de utilidades, retencion dividendos, impuesto unico dividendos, articulo 39.2, anexo anual SRI, ADI-2025.zip, dimm anexos, buscar anexo, buscador, filtros, filtrar anexos, buscar beneficiario, chips
+version: 1.7
 orden: 31
 estado: activo
 ---
@@ -74,10 +74,50 @@ en **SRI en Línea → Anexos → Envío y consulta de anexos → Anexo de Divid
 7. Pulse **Generar anexo** y descargue el **ZIP** para subirlo al portal.
 
 El listado admite las mismas herramientas que el resto de módulos: buscador con
-filtros (año, informante, identificación, estado y tipo de informante), orden por
-cualquier columna —incluidos los totales—, paginación y exportación a **PDF** y
-**Excel** con los filtros aplicados. Las columnas visibles se configuran con el
-botón de columnas y quedan guardadas para cada usuario, igual que el orden.
+filtros (ver *Buscar y filtrar el listado*), orden por cualquier columna —incluidos
+los totales—, paginación y exportación a **PDF** y **Excel** con los filtros
+aplicados. Las columnas visibles se configuran con el botón de columnas y quedan
+guardadas para cada usuario, igual que el orden.
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del anexo: año,
+identificación, informante, número de beneficiarios, distribuido, ingreso gravado y
+retención, y además en las observaciones y en la **identificación y el nombre de
+los beneficiarios**. Las columnas **Tipo informante** y **Estado** no entran en la
+búsqueda libre (escribir *borrador* ya no filtra por estado): para filtrar por ellas
+use la ventana de filtros. Puede escribir varias palabras en cualquier orden y no
+importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el
+cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y la tabla
+se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios, en
+dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese
+momento. La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
+
+**Pestaña Anexo:**
+
+| Bloque | Filtros |
+|--------|---------|
+| Anexo | Fecha de registro contable de algún dividendo (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), año informado, estado (borrador, generado, presentado), tipo de informante, con o sin beneficiarios, usuario que lo creó, observaciones |
+| Valores | Dividendo distribuido, ingreso gravado, retención, número de beneficiarios y utilidad del ejercicio (cada uno con mínimo y máximo) |
+| Informante | Informante, identificación |
+| Distribución | Tipo de beneficiario y tipo de dividendo (anexos que tengan al menos una línea de ese tipo) |
+
+**Pestaña Detalles** (lo que hay dentro del anexo). Es un único cuadro, **Buscar
+libremente dentro de los anexos**: escriba la identificación o el nombre de un
+beneficiario, el año que generó la utilidad, una fecha o un monto, y aparece la
+lista de **cada beneficiario o línea de dividendo que coincide** con el año del anexo
+y su estado. Un clic en la fila deja el listado mostrando solo ese año; el ícono de
+la derecha abre el anexo directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Campos del formulario
 
@@ -281,6 +321,15 @@ del sistema.
 
 ## Historial de cambios
 
+- **1.7** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias; lo que
+  se escribe se busca en las columnas del anexo (incluidos los totales), las
+  observaciones y los beneficiarios, salvo Tipo informante y Estado. Los filtros pasan
+  a una **ventana propia** (botón del embudo, se aplican con *Aplicar*) con dos
+  pestañas: **Anexo** (criterios nuevos: fecha de registro contable con atajos, con/sin
+  beneficiarios, usuario, totales, utilidad del ejercicio, tipo de beneficiario y tipo
+  de dividendo) y **Detalles**, búsqueda libre dentro de los beneficiarios y la
+  distribución. Los filtros activos se ven como etiquetas dentro del cuadro y la tabla
+  se atenúa mientras busca.
 - **1.6** — La cabecera y la sección de utilidades se ajustaron a la estructura
   real del anexo, verificada contra un archivo del DIMM Anexos del SRI.
 - **1.5** — El anexo se genera aunque no haya dividendos distribuidos, con la

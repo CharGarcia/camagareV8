@@ -70,48 +70,97 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y Exportación -->
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorCI" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal): texto libre sobre las columnas del listado
+            // (sin sugerencias) + botón embudo que abre un modal con todos los filtros +
+            // chips de los activos. Las claves (key) deben existir en los mapas de
+            // CargaInventarioRepository::getListado().
+            // Dos pestañas: "Carga" (filtros por campo) y "Detalles" (búsqueda libre dentro
+            // de las líneas de las cargas; ver `busquedaDetalle` abajo, sin filtros por campo).
+            $opcFiltro = $opcionesFiltro ?? [];
+            $opcIdNombre = fn(string $k) => array_map(fn($x) => ['v' => (string) $x['id'], 'l' => (string) $x['nombre']], $opcFiltro[$k] ?? []);
+            $tC = 'Carga';
+            // Filas de 12 columnas:
+            //   Carga:    [Fecha 6][Tipo 3][Estado 3]
+            //             [N° de carga 4][Líneas 4][Con líneas en error 4]
+            //             [Observación 6][Motivo de rechazo 6]
+            //   Personas: [Creado por 4][Aprobado por 4][Fecha de aprobación 4]
+            //   Líneas:   [Producto 6][Bodega 6]
+            $filtrosCargas = [
+                // ── Carga ──
+                ['tab' => $tC, 'key' => 'fecha',  'label' => 'Fecha de la carga', 'icon' => 'bi-calendar-event',   'type' => 'date_range', 'grupo' => 'Carga', 'col' => 6, 'atajos' => true],
+                ['tab' => $tC, 'key' => 'tipo',   'label' => 'Tipo',              'icon' => 'bi-arrow-left-right', 'type' => 'select',     'grupo' => 'Carga', 'col' => 3, 'options' => [
+                    ['v' => 'entrada', 'l' => 'Entrada'],
+                    ['v' => 'salida',  'l' => 'Salida'],
+                    ['v' => 'ajuste',  'l' => 'Ajuste'],
+                ]],
+                ['tab' => $tC, 'key' => 'estado', 'label' => 'Estado',            'icon' => 'bi-flag',             'type' => 'select',     'grupo' => 'Carga', 'col' => 3, 'options' => [
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                    ['v' => 'aprobada',  'l' => 'Aprobada'],
+                    ['v' => 'rechazada', 'l' => 'Rechazada'],
+                ]],
+                ['tab' => $tC, 'key' => 'numero',      'label' => 'N° de carga',         'icon' => 'bi-hash',            'type' => 'number_range', 'grupo' => 'Carga', 'col' => 4],
+                ['tab' => $tC, 'key' => 'lineas',      'label' => 'Líneas',              'icon' => 'bi-list-ol',         'type' => 'number_range', 'grupo' => 'Carga', 'col' => 4],
+                ['tab' => $tC, 'key' => 'con_error',   'label' => 'Líneas con error',    'icon' => 'bi-exclamation-triangle', 'type' => 'select', 'grupo' => 'Carga', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Pendiente con líneas en error'],
+                    ['v' => 'no', 'l' => 'Sin líneas en error'],
+                ]],
+                ['tab' => $tC, 'key' => 'observacion', 'label' => 'Observación / Ref',   'icon' => 'bi-chat-left-text',  'type' => 'text',         'grupo' => 'Carga', 'col' => 6],
+                ['tab' => $tC, 'key' => 'motivo',      'label' => 'Motivo de rechazo',   'icon' => 'bi-x-octagon',       'type' => 'text',         'grupo' => 'Carga', 'col' => 6],
+                // ── Personas ──
+                ['tab' => $tC, 'key' => 'id_creado',   'label' => 'Creado por',          'icon' => 'bi-person',          'type' => 'select',     'grupo' => 'Personas', 'col' => 4, 'options' => $opcIdNombre('creadores')],
+                ['tab' => $tC, 'key' => 'id_aprobado', 'label' => 'Aprobado por',        'icon' => 'bi-person-check',    'type' => 'select',     'grupo' => 'Personas', 'col' => 4, 'options' => $opcIdNombre('aprobadores')],
+                ['tab' => $tC, 'key' => 'aprobacion',  'label' => 'Fecha de aprobación', 'icon' => 'bi-calendar-check',  'type' => 'date_range', 'grupo' => 'Personas', 'col' => 4],
+                // ── Líneas ──
+                ['tab' => $tC, 'key' => 'producto',    'label' => 'Producto (código o nombre)', 'icon' => 'bi-box-seam', 'type' => 'text',   'grupo' => 'Líneas', 'col' => 6],
+                ['tab' => $tC, 'key' => 'id_bodega',   'label' => 'Bodega',              'icon' => 'bi-house-door',      'type' => 'select', 'grupo' => 'Líneas', 'col' => 6, 'options' => $opcIdNombre('bodegas')],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorCI"></div>
             <input type="hidden" id="ci-buscar" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorCI',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorCI',
                         hiddenInputId: 'ci-buscar',
-                        fields: [
-                            { key: 'numero',      label: 'N° de carga',  icon: 'bi-hash',             type: 'number_range' },
-                            { key: 'fecha',       label: 'Fecha',        icon: 'bi-calendar-event',   type: 'date_range' },
-                            { key: 'observacion', label: 'Observación / Ref', icon: 'bi-chat-left-text', type: 'text' },
-                            { key: 'creado',      label: 'Creado por',   icon: 'bi-person',           type: 'text' },
-                            { key: 'aprobado',    label: 'Aprobado por', icon: 'bi-person-check',     type: 'text' },
-                            { key: 'lineas',      label: 'Líneas',       icon: 'bi-list-ol',          type: 'number_range' },
-                            { key: 'tipo',        label: 'Tipo',         icon: 'bi-arrow-left-right', type: 'select', options: [
-                                { v: 'entrada', l: 'Entrada' },
-                                { v: 'salida',  l: 'Salida' },
-                                { v: 'ajuste',  l: 'Ajuste' },
-                            ]},
-                            { key: 'estado',      label: 'Estado',       icon: 'bi-flag',             type: 'select', options: [
-                                { v: 'pendiente', l: 'Pendiente' },
-                                { v: 'aprobada',  l: 'Aprobada' },
-                                { v: 'rechazada', l: 'Rechazada' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_pendiente', label: 'Pendientes', mk: () => ({ key: 'estado', op: '=', value: 'pendiente', display: 'Pendiente' }) },
-                            { id: 'qf_aprobada',  label: 'Aprobadas',  mk: () => ({ key: 'estado', op: '=', value: 'aprobada',  display: 'Aprobada' }) },
-                            { id: 'qf_rechazada', label: 'Rechazadas', mk: () => ({ key: 'estado', op: '=', value: 'rechazada', display: 'Rechazada' }) },
-                            { id: 'qf_entrada',   label: 'Entradas',   mk: () => ({ key: 'tipo',   op: '=', value: 'entrada',   display: 'Entrada' }) },
-                            { id: 'qf_salida',    label: 'Salidas',    mk: () => ({ key: 'tipo',   op: '=', value: 'salida',    display: 'Salida' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de cargas de inventario',
+                        inputWidth: 420,
+                        extraId: 'fmExtraCI',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las líneas de las cargas.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= $urlBase ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de las cargas',
+                            placeholder: 'Código o nombre de producto, bodega, lote, NUP, observación, error, cantidad...',
+                            columns: [
+                                { key: 'producto',   label: 'Producto' },
+                                { key: 'bodega',     label: 'Bodega' },
+                                { key: 'cantidad',   label: 'Cantidad', align: 'end' },
+                                { key: 'costo',      label: 'Costo unit.', align: 'end' },
+                                { key: 'lote',       label: 'Lote / NUP' },
+                                { key: 'nota',       label: 'Observación' },
+                                { key: 'numero_txt', label: 'Carga', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',      label: 'Fecha' },
+                                { key: 'tipo',       label: 'Tipo' },
+                                { key: 'estado',     label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: String(row.numero) }),
+                            onOpen: (row, fm) => { fm.hide(); setTimeout(() => CI_verDetalle(row.id_carga), 350); },
+                        },
+                        fields: <?= json_encode($filtrosCargas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#ci-tbody',   // se atenúa mientras se busca
                         onApply: () => window.CI_buscar && window.CI_buscar(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraCI" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero'      => 'N°',
@@ -128,11 +177,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
 
                 <a id="ci-btn-pdf" href="<?= $urlBase ?>/export-pdf<?= $exportQs ?>"
                    target="_blank" class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="ci-btn-excel" href="<?= $urlBase ?>/export-excel<?= $exportQs ?>"
                    class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -282,6 +331,10 @@ window.CI_buscar = async function (p = 1) {
     const b = (document.getElementById('ci-buscar')?.value || '').trim();
     const orden = window.CMG_ordenParam(CI_currentSorts || []);
     const uri = `${CI_URL}/searchAjax?b=${encodeURIComponent(b)}&page=${p}&orden=${encodeURIComponent(orden)}`;
+    // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+    // carga, también al paginar u ordenar (que llaman a esta función directo).
+    const tbody = document.getElementById('ci-tbody');
+    if (tbody) tbody.classList.add('fm-cargando-target');
     try {
         const resp = await fetch(uri);
         const data = await resp.json();
@@ -298,6 +351,8 @@ window.CI_buscar = async function (p = 1) {
         if (CI_sorter) CI_sorter.refreshIcons();
     } catch (e) {
         console.error('Error en búsqueda de cargas de inventario:', e);
+    } finally {
+        if (tbody) tbody.classList.remove('fm-cargando-target');
     }
 };
 

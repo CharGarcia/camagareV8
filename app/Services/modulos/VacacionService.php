@@ -29,6 +29,18 @@ class VacacionService
         return $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Años del mes del rol usados por la empresa (modal de filtros del listado). */
+    public function getAniosUsados(int $idEmpresa): array
+    {
+        return $this->repo->getAniosUsados($idEmpresa);
+    }
+
+    /** Usuarios que registraron vacaciones en la empresa (modal de filtros del listado). */
+    public function getUsuariosConVacaciones(int $idEmpresa): array
+    {
+        return $this->repo->getUsuariosConVacaciones($idEmpresa);
+    }
+
     public function getDetalle(int $id, int $idEmpresa): ?array
     {
         return $this->repo->getDetalle($id, $idEmpresa);

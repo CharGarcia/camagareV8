@@ -24,6 +24,12 @@ class CitaPagoService
         return $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $filtros);
     }
 
+    /** Tipos de cita, recursos y usuarios usados en pagos (selects del modal de filtros). */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        return $this->repo->getOpcionesFiltroListado($idEmpresa);
+    }
+
     public function getResumen(int $idEmpresa): array
     {
         return $this->repo->getResumen($idEmpresa);

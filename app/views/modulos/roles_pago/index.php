@@ -45,40 +45,102 @@ $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'succes
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorROL" style="width: 420px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // embudo que abre el modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de RolPagoRepository::getListado().
+            $opcionesTipoRol = [];
+            foreach (CatalogoRol::tipos() as $v => $l) {
+                $opcionesTipoRol[] = ['v' => (string) $v, 'l' => $l];
+            }
+            $opcionesEstadoRol = [];
+            foreach (CatalogoRol::estados() as $v => $l) {
+                $opcionesEstadoRol[] = ['v' => (string) $v, 'l' => $l];
+            }
+            $opcionesMesRol = [];
+            foreach ($meses as $n => $nom) {
+                $opcionesMesRol[] = ['v' => (string) $n, 'l' => $nom];
+            }
+            $opcionesAnioRol    = array_map(fn($a) => ['v' => (string) $a, 'l' => (string) $a], $aniosFiltro ?? []);
+            $opcionesUsuarioRol = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            // Dos pestañas: "Rol" (filtros por campo de la corrida) y "Detalles" (solo la
+            // búsqueda libre dentro de las líneas de empleado y sus rubros; sin filtros por campo).
+            $tR = 'Rol';
+            // Orden pensado en filas de 12 columnas:
+            //   Corrida:  [Fecha de pago 6][Mes 3][Año 3]
+            //             [Tipo de rol 4][Estado 4][Asiento 4]
+            //             [Corrida 4][Descripción 4][Usuario 4]
+            //   Valores:  [Neto 6][Nº de empleados 6]
+            //             [Total ingresos 4][Total egresos 4][Aporte patronal 4]
+            //   Empleado: [Empleado 6][Identificación 6]
+            $filtrosRoles = [
+                // ── Corrida ──
+                ['tab' => $tR, 'key' => 'fecha',       'label' => 'Fecha de pago',        'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Corrida', 'col' => 6, 'atajos' => true],
+                ['tab' => $tR, 'key' => 'mes',         'label' => 'Mes del período',      'icon' => 'bi-calendar-month', 'type' => 'select',     'grupo' => 'Corrida', 'col' => 3, 'options' => $opcionesMesRol],
+                ['tab' => $tR, 'key' => 'anio',        'label' => 'Año del período',      'icon' => 'bi-calendar',       'type' => 'select',     'grupo' => 'Corrida', 'col' => 3, 'options' => $opcionesAnioRol],
+                ['tab' => $tR, 'key' => 'tipo',        'label' => 'Tipo de rol',          'icon' => 'bi-cash-stack',     'type' => 'select',     'grupo' => 'Corrida', 'col' => 4, 'options' => $opcionesTipoRol],
+                ['tab' => $tR, 'key' => 'estado',      'label' => 'Estado',               'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Corrida', 'col' => 4, 'options' => $opcionesEstadoRol],
+                ['tab' => $tR, 'key' => 'asiento',     'label' => 'Asiento contable',     'icon' => 'bi-journal-check',  'type' => 'select',     'grupo' => 'Corrida', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con asiento'],
+                    ['v' => 'no', 'l' => 'Sin asiento'],
+                ]],
+                ['tab' => $tR, 'key' => 'corrida',     'label' => 'Corrida (tipo y período)', 'icon' => 'bi-hash',       'type' => 'text',       'grupo' => 'Corrida', 'col' => 4, 'placeholder' => 'Rol Mensual Julio 2026'],
+                ['tab' => $tR, 'key' => 'descripcion', 'label' => 'Descripción',          'icon' => 'bi-chat-left-text', 'type' => 'text',       'grupo' => 'Corrida', 'col' => 4],
+                ['tab' => $tR, 'key' => 'usuario',     'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select',     'grupo' => 'Corrida', 'col' => 4, 'options' => $opcionesUsuarioRol],
+                // ── Valores ──
+                ['tab' => $tR, 'key' => 'neto',            'label' => 'Neto',            'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
+                ['tab' => $tR, 'key' => 'empleados',       'label' => 'Nº de empleados', 'icon' => 'bi-people',          'type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
+                ['tab' => $tR, 'key' => 'ingresos',        'label' => 'Total ingresos',  'icon' => 'bi-plus-circle',     'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tR, 'key' => 'egresos',         'label' => 'Total egresos',   'icon' => 'bi-dash-circle',     'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tR, 'key' => 'aporte_patronal', 'label' => 'Aporte patronal', 'icon' => 'bi-building',        'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // ── Empleado ──
+                ['tab' => $tR, 'key' => 'empleado',       'label' => 'Empleado incluido',  'icon' => 'bi-person',    'type' => 'text', 'grupo' => 'Empleado', 'col' => 6],
+                ['tab' => $tR, 'key' => 'identificacion', 'label' => 'Identificación',     'icon' => 'bi-card-text', 'type' => 'text', 'grupo' => 'Empleado', 'col' => 6],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorROL"></div>
             <input type="hidden" id="buscarRol" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorROL',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorROL',
                         hiddenInputId: 'buscarRol',
-                        fields: [
-                            { key: 'tipo', label: 'Tipo de rol', icon: 'bi-cash-stack', type: 'select', options: [
-                                { v: 'MENSUAL', l: 'Rol Mensual' }, { v: 'QUINCENA', l: 'Quincena' }, { v: 'SEMANAL', l: 'Semanal' }
-                            ]},
-                            { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select', options: [
-                                { v: 'borrador', l: 'Borrador' }, { v: 'generado', l: 'Generado' }, { v: 'pagado', l: 'Pagado' },
-                                { v: 'contabilizado', l: 'Contabilizado' }, { v: 'anulado', l: 'Anulado' }
-                            ]},
-                            { key: 'mes', label: 'Mes', icon: 'bi-calendar-month', type: 'select', options: [
-                                <?php foreach ($meses as $n => $nom): ?>{ v: '<?= $n ?>', l: '<?= htmlspecialchars($nom) ?>' },<?php endforeach; ?>
-                            ]},
-                            { key: 'anio', label: 'Año', icon: 'bi-calendar', type: 'text' },
-                            { key: 'neto', label: 'Neto', icon: 'bi-currency-dollar', type: 'number_range' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_mensual',  label: 'Mensuales', mk: () => ({ key: 'tipo',   op: '=', value: 'MENSUAL',  display: 'Mensual' }) },
-                            { id: 'qf_generado', label: 'Generados', mk: () => ({ key: 'estado', op: '=', value: 'generado', display: 'Generado' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de roles de pago',
+                        inputWidth: 420,
+                        extraId: 'fmExtraROL',   // columnas, pegado al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las corridas (líneas de
+                        // empleado y rubros). Cada coincidencia dice a qué corrida pertenece.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= $urlBaseRol ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de los roles de pago',
+                            placeholder: 'Empleado, identificación, cargo, rubro (sueldo, horas extra, IESS…), valor...',
+                            columns: [
+                                { key: 'origen',         label: 'Tipo' },
+                                { key: 'empleado',       label: 'Empleado' },
+                                { key: 'identificacion', label: 'Identificación', class: 'font-monospace' },
+                                { key: 'concepto',       label: 'Cargo / Rubro' },
+                                { key: 'monto',          label: 'Valor', align: 'end' },
+                                { key: 'corrida',        label: 'Corrida', class: 'fw-semibold' },
+                                { key: 'fecha',          label: 'Fecha de pago' },
+                                { key: 'estado',         label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'corrida', value: row.corrida }),
+                            onOpen: (row, fm) => { fm.hide(); setTimeout(() => window.abrirModalVer && window.abrirModalVer({ id: row.id_rol }), 350); },
+                        },
+                        fields: <?= json_encode($filtrosRoles, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyRoles',   // se atenúa mientras se busca
                         onApply: () => window.cambiarPaginaAjax && window.cambiarPaginaAjax(1),
                     }).init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraROL" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'tipo' => 'Tipo', 'periodo' => 'Período', 'empleados' => 'Empleados', 'neto' => 'Neto', 'estado' => 'Estado',
@@ -155,6 +217,10 @@ $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'succes
 
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar (que llaman a esta función directo).
+            const tbody = document.getElementById('tbodyRoles');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(`${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`);
                 const data = await resp.json();
@@ -164,7 +230,11 @@ $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'succes
                     document.getElementById('wrapper-pagination').innerHTML = data.pagination;
                     document.getElementById('paginationInfo').textContent = data.info;
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         }
 
         if (window.CMG_initSort) {

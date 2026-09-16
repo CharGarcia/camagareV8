@@ -48,58 +48,106 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <form id="formOC" method="POST" action="<?= $urlBaseOc ?>" class="d-flex align-items-center m-0">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            $opcionesSerie   = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $tO = 'Orden de compra';
+            // Filas de 12 columnas:
+            //   Documento: [Fecha de la orden 6][Fecha de recepción 6]
+            //              [Fecha de envío 6][Fecha de aprobación 6]
+            //              [Estado 4][Serie 4][Secuencial 4]
+            //              [Nº orden 4][Compra vinculada 4][Usuario 4]
+            //   Valores:   [Total 6][Nº de ítems 6]
+            //   Proveedor: [Proveedor 4][Identificación 4][Aprobado por 4]
+            //              [Observaciones 12]
+            $filtrosOrdenes = [
+                ['tab' => $tO, 'key' => 'fecha',            'label' => 'Fecha de la orden',   'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tO, 'key' => 'fecha_recepcion',  'label' => 'Fecha de recepción',  'icon' => 'bi-box-seam',       'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6],
+                ['tab' => $tO, 'key' => 'fecha_envio',      'label' => 'Fecha de envío al proveedor', 'icon' => 'bi-send', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6],
+                ['tab' => $tO, 'key' => 'fecha_aprobacion', 'label' => 'Fecha de aprobación', 'icon' => 'bi-check2-circle',  'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6],
+                ['tab' => $tO, 'key' => 'estado',           'label' => 'Estado',              'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'borrador', 'l' => 'Borrador'],
+                    ['v' => 'enviado',  'l' => 'Enviado'],
+                    ['v' => 'aprobado', 'l' => 'Aprobado'],
+                    ['v' => 'parcial',  'l' => 'Recibido parcial'],
+                    ['v' => 'recibido', 'l' => 'Recibido'],
+                    ['v' => 'anulado',  'l' => 'Anulado'],
+                ]],
+                ['tab' => $tO, 'key' => 'serie',            'label' => 'Serie',               'icon' => 'bi-upc-scan',       'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesSerie],
+                ['tab' => $tO, 'key' => 'secuencial',       'label' => 'Secuencial',          'icon' => 'bi-123',            'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tO, 'key' => 'numero',           'label' => 'Nº orden',            'icon' => 'bi-hash',           'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tO, 'key' => 'compra',           'label' => 'Compra vinculada',    'icon' => 'bi-cart-check',     'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con compra vinculada'],
+                    ['v' => 'no', 'l' => 'Sin compra vinculada'],
+                ]],
+                ['tab' => $tO, 'key' => 'id_usuario',       'label' => 'Usuario que la creó', 'icon' => 'bi-person-gear',    'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesUsuario],
+                // Valores
+                ['tab' => $tO, 'key' => 'monto',            'label' => 'Total (con IVA)',     'icon' => 'bi-currency-dollar','type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
+                ['tab' => $tO, 'key' => 'items',            'label' => 'Número de ítems',     'icon' => 'bi-list-ol',        'type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
+                // Proveedor
+                ['tab' => $tO, 'key' => 'proveedor',        'label' => 'Proveedor',           'icon' => 'bi-building',       'type' => 'text',   'grupo' => 'Proveedor', 'col' => 4],
+                ['tab' => $tO, 'key' => 'ruc',              'label' => 'Identificación',      'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Proveedor', 'col' => 4],
+                ['tab' => $tO, 'key' => 'aprobado_por',     'label' => 'Aprobado por',        'icon' => 'bi-person-check',   'type' => 'text',   'grupo' => 'Proveedor', 'col' => 4],
+                ['tab' => $tO, 'key' => 'obs',              'label' => 'Observaciones',       'icon' => 'bi-chat-left-text', 'type' => 'text',   'grupo' => 'Proveedor', 'col' => 12],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <form id="formOC" method="POST" action="<?= $urlBaseOc ?>" class="d-none" onsubmit="return false;">
                 <input type="hidden" name="page" value="1">
                 <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
                 <input type="hidden" name="dir"  value="<?= htmlspecialchars($ordenDir) ?>">
                 <input type="hidden" name="b" id="ocInputBuscar" value="<?= htmlspecialchars($buscar) ?>">
-                <div id="fbBuscadorOC" style="width: 480px;"></div>
             </form>
+            <div id="fmBuscadorOC"></div>
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    let debounceSubmit;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorOC',
+                    if (!window.FiltrosModal) return;
+                    window.OC_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorOC',
                         hiddenInputId: 'ocInputBuscar',
-                        placeholder: 'Buscar...',
-                        fields: [
-                            { key: 'proveedor', label: 'Proveedor',    icon: 'bi-building',        type: 'text' },
-                            { key: 'ruc',       label: 'RUC',          icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',    label: 'Nº orden',     icon: 'bi-hash',            type: 'text' },
-                            { key: 'serie',     label: 'Serie',        icon: 'bi-upc-scan',        type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial', label: 'Secuencial',  icon: 'bi-123',             type: 'text' },
-                            { key: 'fecha',     label: 'Fecha',        icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'monto',     label: 'Monto total',  icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'estado',    label: 'Estado',       icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'borrador', l: 'Borrador' },
-                                { v: 'aprobado', l: 'Aprobado' },
-                                { v: 'anulado',  l: 'Anulado' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_borrador', label: 'Borrador',    mk: () => ({ key: 'estado', op: '=', value: 'borrador', display: 'Borrador' }) },
-                            { id: 'qf_aprobado', label: 'Aprobadas',   mk: () => ({ key: 'estado', op: '=', value: 'aprobado', display: 'Aprobado' }) },
-                            { id: 'qf_anulado',  label: 'Anuladas',    mk: () => ({ key: 'estado', op: '=', value: 'anulado',  display: 'Anulado' }) },
-                            { id: 'qf_mes',      label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_anio',     label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                        ],
-                        onApply: () => {
-                            clearTimeout(debounceSubmit);
-                            debounceSubmit = setTimeout(() => document.getElementById('formOC').submit(), 500);
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de órdenes de compra',
+                        inputWidth: 420,
+                        extraId: 'fmExtraOC',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las órdenes (ítems y compras vinculadas).
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= $urlBaseOc ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de las órdenes de compra',
+                            placeholder: 'Producto, código, descripción, notas, número de la compra vinculada...',
+                            columns: [
+                                { key: 'origen',      label: 'Tipo' },
+                                { key: 'tipo',        label: 'Código / Compra' },
+                                { key: 'descripcion', label: 'Descripción / Fecha' },
+                                { key: 'cantidad',    label: 'Cant.', align: 'end' },
+                                { key: 'monto',       label: 'Valor', align: 'end' },
+                                { key: 'numero',      label: 'Orden', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',       label: 'Fecha' },
+                                { key: 'proveedor',   label: 'Proveedor' },
+                                { key: 'estado',      label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                // ocAbrirEditar lee la orden del data-row de la fila.
+                                setTimeout(() => window.ocAbrirEditar({ dataset: { row: JSON.stringify(row.orden) } }), 350);
+                            },
                         },
-                    }).init();
+                        fields: <?= json_encode($filtrosOrdenes, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyOrdenesCompra',   // se atenúa mientras se busca
+                        onApply: () => {
+                            ocCurrentBuscar = document.getElementById('ocInputBuscar').value;
+                            return ocBuscar(1);
+                        },
+                    });
+                    window.OC_filtros.init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraOC" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero_orden'              => 'N° Orden',
@@ -115,12 +163,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <a id="btnExportPdf"
                    href="<?= $urlBaseOc ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-danger" title="Exportar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel"
                    href="<?= $urlBaseOc ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-success" title="Exportar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -205,7 +253,9 @@ window.OC_TARIFAS_IVA     = <?= json_encode(array_values($tarifasIva ?? [])) ?>;
 let ocCurrentSort  = '<?= $ordenCol ?>';
 let ocCurrentDir   = '<?= $ordenDir ?>';
 let ocCurrentPage  = <?= $page ?>;
-let ocCurrentBuscar= '';
+// Arranca con la búsqueda con la que se cargó la página (?b=), no vacía: si no,
+// paginar u ordenar tras abrir una URL con filtros los perdía.
+let ocCurrentBuscar= document.getElementById('ocInputBuscar')?.value || '';
 
 // ── Auto-fill proveedor al crear uno nuevo desde el modal ────────────────────
 document.addEventListener('proveedorGuardado', function(e) {
@@ -246,6 +296,10 @@ async function ocBuscar(page = 1) {
         sort: ocCurrentSort,
         dir:  ocCurrentDir,
     });
+    // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+    // carga, también al paginar y ordenar, que llaman a esta función directo.
+    const tbodyCarga = document.getElementById('tbodyOrdenesCompra');
+    if (tbodyCarga) tbodyCarga.classList.add('fm-cargando-target');
     try {
         const resp = await fetch(`${OC_URL_BASE}/searchAjax?${params}`, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -258,6 +312,7 @@ async function ocBuscar(page = 1) {
         document.getElementById('btnExportPdf').href   = data.pdf_url;
         document.getElementById('btnExportExcel').href = data.excel_url;
     } catch (e) { console.error(e); }
+    finally { if (tbodyCarga) tbodyCarga.classList.remove('fm-cargando-target'); }
 }
 
 // ── Poblar select serie (un único select combinado cod_est-cod_punto) ──────────

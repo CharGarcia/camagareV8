@@ -65,40 +65,97 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorSE" style="width: 460px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // "Filtros" (embudo) que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de ServicioExternoRepository::getListado().
+            $opcionesSerie   = array_map(fn($x) => ['v' => $x['establecimiento'] . '-' . $x['punto_emision'], 'l' => $x['establecimiento'] . '-' . $x['punto_emision']], $seriesFiltro ?? []);
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $tO = 'Orden';
+            // Filas de 12 columnas:
+            //   Orden:   [Fecha 6][Estado 3][Serie 3] [N° Orden 4][Secuencial 4][Total 4]
+            //            [Documento generado 4][Tipo de documento 4][N° documento 4] [Fecha de finalización 6][Usuario 6]
+            //   Equipo:  [Equipo 3][Marca 3][Modelo 3][N° de serie 3]
+            //   Cliente y trabajo: [Cliente 3][RUC 3][Dirección 3][Trabajo / observaciones 3]
+            $filtrosServicioExterno = [
+                ['tab' => $tO, 'key' => 'fecha',          'label' => 'Fecha del servicio', 'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Orden', 'col' => 6, 'atajos' => true],
+                ['tab' => $tO, 'key' => 'estado',         'label' => 'Estado',             'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Orden', 'col' => 3, 'options' => [
+                    ['v' => 'borrador',  'l' => 'Borrador'],
+                    ['v' => 'facturado', 'l' => 'Facturado'],
+                    ['v' => 'anulado',   'l' => 'Anulado'],
+                ]],
+                ['tab' => $tO, 'key' => 'serie',          'label' => 'Serie',              'icon' => 'bi-upc-scan',        'type' => 'select',       'grupo' => 'Orden', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tO, 'key' => 'orden',          'label' => 'N° Orden',           'icon' => 'bi-hash',            'type' => 'text',         'grupo' => 'Orden', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tO, 'key' => 'secuencial',     'label' => 'Secuencial',         'icon' => 'bi-123',             'type' => 'text',         'grupo' => 'Orden', 'col' => 4, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tO, 'key' => 'total',          'label' => 'Total',              'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Orden', 'col' => 4],
+                ['tab' => $tO, 'key' => 'con_documento',  'label' => 'Documento de venta', 'icon' => 'bi-receipt',         'type' => 'select',       'grupo' => 'Orden', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con documento generado'],
+                    ['v' => 'no', 'l' => 'Sin documento generado'],
+                ]],
+                ['tab' => $tO, 'key' => 'tipo_documento', 'label' => 'Tipo de documento',  'icon' => 'bi-tag',             'type' => 'select',       'grupo' => 'Orden', 'col' => 4, 'options' => [
+                    ['v' => 'FACTURA', 'l' => 'Factura'],
+                    ['v' => 'RECIBO',  'l' => 'Recibo de venta'],
+                ]],
+                ['tab' => $tO, 'key' => 'documento',      'label' => 'N° documento generado', 'icon' => 'bi-file-earmark-text', 'type' => 'text',     'grupo' => 'Orden', 'col' => 4],
+                ['tab' => $tO, 'key' => 'finalizacion',   'label' => 'Fecha de finalización', 'icon' => 'bi-calendar-check', 'type' => 'date_range',  'grupo' => 'Orden', 'col' => 6],
+                ['tab' => $tO, 'key' => 'usuario',        'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',   'type' => 'select',       'grupo' => 'Orden', 'col' => 6, 'options' => $opcionesUsuario],
+                ['tab' => $tO, 'key' => 'equipo',         'label' => 'Equipo',             'icon' => 'bi-tools',           'type' => 'text',         'grupo' => 'Equipo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'marca',          'label' => 'Marca',              'icon' => 'bi-badge-tm',        'type' => 'text',         'grupo' => 'Equipo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'modelo',         'label' => 'Modelo',             'icon' => 'bi-cpu',             'type' => 'text',         'grupo' => 'Equipo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'serie_equipo',   'label' => 'N° de serie del equipo', 'icon' => 'bi-upc',         'type' => 'text',         'grupo' => 'Equipo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'cliente',        'label' => 'Cliente',            'icon' => 'bi-person',          'type' => 'text',         'grupo' => 'Cliente y trabajo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'ruc',            'label' => 'RUC / Cédula',       'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Cliente y trabajo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'direccion',      'label' => 'Dirección del servicio', 'icon' => 'bi-geo-alt',     'type' => 'text',         'grupo' => 'Cliente y trabajo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'trabajo',        'label' => 'Trabajo / observaciones', 'icon' => 'bi-chat-left-text', 'type' => 'text',     'grupo' => 'Cliente y trabajo', 'col' => 3],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorSE"></div>
             <input type="hidden" id="b" name="b" value="<?= htmlspecialchars($buscar) ?>">
 
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorSE',
+                    if (!window.FiltrosModal) return;
+                    window.SE_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorSE',
                         hiddenInputId: 'b',
-                        fields: [
-                            { key: 'orden',   label: 'N° Orden', icon: 'bi-hash',    type: 'text' },
-                            { key: 'equipo',  label: 'Equipo',   icon: 'bi-tools',   type: 'text' },
-                            { key: 'cliente', label: 'Cliente',  icon: 'bi-person',  type: 'text' },
-                            { key: 'estado',  label: 'Estado',   icon: 'bi-flag',    type: 'select', options: [
-                                { v: 'borrador',  l: 'Borrador' },
-                                { v: 'facturado', l: 'Facturado' },
-                                { v: 'anulado',   l: 'Anulado' },
-                            ]},
-                            { key: 'serie',     label: 'Serie',       icon: 'bi-upc-scan', type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',      type: 'text' },
-                        ],
-                        onApply: () => { g_paginaActual = 1; cargarGrid(); },
-                    }).init();
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de servicio externo',
+                        inputWidth: 420,
+                        extraId: 'fmExtraSE',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las órdenes (servicios/productos).
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: '<?= $urlBase ?>/buscarDetallesAjax',
+                            label: 'Buscar libremente dentro de las órdenes',
+                            placeholder: 'Servicio, producto, código, bodega, monto...',
+                            columns: [
+                                { key: 'origen',       label: 'Tipo' },
+                                { key: 'referencia',   label: 'Código', class: 'font-monospace' },
+                                { key: 'descripcion',  label: 'Descripción' },
+                                { key: 'cantidad',     label: 'Cant.', align: 'end' },
+                                { key: 'monto',        label: 'Total', align: 'end' },
+                                { key: 'numero_orden', label: 'Orden', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',        label: 'Fecha' },
+                                { key: 'equipo',       label: 'Equipo' },
+                                { key: 'cliente',      label: 'Cliente' },
+                                { key: 'estado',       label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'orden', value: row.numero_orden }),
+                            onOpen: (row, fm) => { fm.hide(); setTimeout(() => window.seAbrirVerId && window.seAbrirVerId(row.id_orden, false), 350); },
+                        },
+                        fields: <?= json_encode($filtrosServicioExterno, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#grid-body',   // se atenúa mientras se busca
+                        onApply: () => { g_paginaActual = 1; return cargarGrid(); },
+                    });
+                    window.SE_filtros.init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraSE" class="btn-group btn-group-sm">
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas([
                     'fecha_servicio' => 'Fecha',
                     'numero_orden'   => 'N° Orden',
@@ -108,8 +165,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'estado'         => 'Estado',
                 ], $vistaConfig ?? [], 'servicio-externo'); ?>
 
-                <a class="btn btn-outline-danger pdf-export-btn" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a class="btn btn-outline-success excel-export-btn" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+                <a class="btn btn-outline-danger pdf-export-btn" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a class="btn btn-outline-success excel-export-btn" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i><span class="d-none d-md-inline"> Excel</span></a>
             </div>
         </div>
 
@@ -249,9 +306,11 @@ echo \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo); ?>
     function cambiarPaginaAjax(p) { g_paginaActual = p; cargarGrid(); }
 
     async function cargarGrid() {
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+        // vaciarse; también al paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('grid-body');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
-            const tbody = document.getElementById('grid-body');
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></td></tr>';
             const b_input = document.getElementById('b');
             g_buscar = b_input ? b_input.value : '';
             const params = new URLSearchParams({ b: g_buscar, page: g_paginaActual, sort: g_ordenCol, dir: g_ordenDir });
@@ -265,5 +324,6 @@ echo \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo); ?>
                 const xls = document.querySelector('.excel-export-btn'); if (xls) xls.href = data.excel_url;
             }
         } catch (e) { console.error(e); Swal.fire('Error', 'No se pudo cargar la lista', 'error'); }
+        finally { if (tbody) tbody.classList.remove('fm-cargando-target'); }
     }
 </script>

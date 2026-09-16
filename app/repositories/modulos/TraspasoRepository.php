@@ -40,9 +40,23 @@ class TraspasoRepository extends BaseRepository
         $where = "WHERE t.id_empresa = :id_empresa AND t.eliminado = false AND t.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        // Texto libre: las columnas del listado y lo que identifica el traspaso. Decisión
+        // del usuario (igual que Compras/Ingresos/Egresos): la columna Estado NO entra en
+        // el texto libre; se filtra solo desde el modal de filtros. El usuario va en
+        // subconsulta para no cambiar los JOIN del COUNT.
         if ($parsed['texto_libre'] !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['t.numero_traspaso', 'fo.nombre', 'fd.nombre', 't.observaciones'],
+                [
+                    't.numero_traspaso',          // Nº Traspaso
+                    't.secuencial',
+                    't.fecha_emision::text',      // Fecha
+                    'fo.nombre',                  // Origen
+                    'fd.nombre',                  // Destino
+                    't.monto::text',              // Monto
+                    // Fuera del listado, pero identifican el traspaso:
+                    't.observaciones',
+                    '(SELECT ux.nombre FROM usuarios ux WHERE ux.id = t.created_by)',
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -64,6 +78,11 @@ class TraspasoRepository extends BaseRepository
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del buscador.
                 'serie'  => "CONCAT(t.establecimiento,'-',t.punto_emision)",
+                // Claves nuevas del modal de filtros (selects por id).
+                'id_origen'  => 't.id_forma_origen',
+                'id_destino' => 't.id_forma_destino',
+                'id_usuario' => 't.created_by',
+                'asiento'    => "CASE WHEN t.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
             ],
             'fecha'    => [ 'fecha' => 't.fecha_emision', 'fecha_emision' => 't.fecha_emision' ],
             'numerico' => [
@@ -99,6 +118,27 @@ class TraspasoRepository extends BaseRepository
         $rows = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Valores REALMENTE usados por la empresa para los selects del modal de filtros:
+     * formas de pago de origen y de destino, y usuarios que registraron traspasos.
+     *
+     * @return array{origenes: array, destinos: array, usuarios: array}
+     */
+    public function getValoresFiltro(int $idEmpresa): array
+    {
+        $run = function (string $sql) use ($idEmpresa): array {
+            $st = $this->db->prepare($sql);
+            $st->execute([':id_empresa' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        };
+        $base = "FROM traspasos_cabecera t WHERE t.id_empresa = :id_empresa AND t.eliminado = false";
+        return [
+            'origenes' => $run("SELECT DISTINCT f.id, f.nombre FROM empresa_formas_pago f WHERE f.id IN (SELECT t.id_forma_origen $base) ORDER BY f.nombre"),
+            'destinos' => $run("SELECT DISTINCT f.id, f.nombre FROM empresa_formas_pago f WHERE f.id IN (SELECT t.id_forma_destino $base) ORDER BY f.nombre"),
+            'usuarios' => $run("SELECT DISTINCT u.id, u.nombre FROM usuarios u WHERE u.id IN (SELECT t.created_by $base) ORDER BY u.nombre"),
+        ];
     }
 
     public function getPorId(int $id, int $idEmpresa): ?array

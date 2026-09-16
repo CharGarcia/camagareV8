@@ -42,9 +42,28 @@ class NotaDebitoRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
+        // Texto libre: las columnas del listado y lo que identifica la nota aunque no
+        // sea columna. El buscador de la vista no sugiere campos; lo escrito se busca
+        // en todo. Decisión del usuario: las columnas Correo y Estado NO entran en el
+        // texto libre (se filtran solo desde el modal de filtros).
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['nd.secuencial', 'c.nombre', 'c.identificacion', 'nd.num_doc_modificado'],
+                [
+                    "CONCAT(nd.establecimiento,'-',nd.punto_emision,'-',nd.secuencial)", // Nº Nota
+                    'nd.secuencial',
+                    'nd.fecha_emision::text',                                             // Fecha
+                    'c.nombre',                                                           // Cliente
+                    'c.identificacion',                                                   // Identificación
+                    'nd.num_doc_modificado',                                              // Doc. Modificado
+                    'nd.total_sin_impuestos::text',                                       // Subtotal
+                    'nd.importe_total::text',                                             // Total
+                    'u.nombre',                                                           // Usuario
+                    // Fuera del listado, pero identifican la nota:
+                    'nd.numero_autorizacion',
+                    'nd.clave_acceso',
+                    'nd.observaciones',
+                    "(SELECT STRING_AGG(ndm.razon, ' ') FROM nota_debito_motivos ndm WHERE ndm.id_nota_debito = nd.id)", // motivos (razones)
+                ],
                 $textoLibre,
                 $params,
                 'tl'
@@ -60,30 +79,57 @@ class NotaDebitoRepository extends BaseRepository
                 'ruc'            => 'c.identificacion',
                 'ci'             => 'c.identificacion',
                 'identificacion' => 'c.identificacion',
-                'numero'         => 'nd.secuencial',
-                'nro'            => 'nd.secuencial',
+                // Nº completo (001-001-000000123): también encuentra solo el secuencial,
+                // como antes, porque es una coincidencia parcial (ILIKE).
+                'numero'         => "CONCAT(nd.establecimiento,'-',nd.punto_emision,'-',nd.secuencial)",
+                'nro'            => "CONCAT(nd.establecimiento,'-',nd.punto_emision,'-',nd.secuencial)",
                 'doc_modificado' => 'nd.num_doc_modificado',
                 'usuario'        => 'u.nombre',
+                'obs'            => 'nd.observaciones',
+                'observacion'    => 'nd.observaciones',
+                'autorizacion'   => 'nd.numero_autorizacion',
+                'clave'          => 'nd.clave_acceso',
+                'clave_acceso'   => 'nd.clave_acceso',
             ],
             'exacto' => [
                 'estado' => 'nd.estado',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del modal de nota de débito.
                 'serie'  => "CONCAT(nd.establecimiento,'-',nd.punto_emision)",
+                'estado_correo' => "COALESCE(NULLIF(nd.estado_correo,''),'pendiente')",
+                'correo'        => "COALESCE(NULLIF(nd.estado_correo,''),'pendiente')",
+                'id_usuario'    => 'nd.id_usuario',
+                // asiento:si / asiento:no
+                'asiento'       => "CASE WHEN nd.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
+                // ambiente:1 (pruebas) / ambiente:2 (producción)
+                'ambiente'      => 'nd.tipo_ambiente',
             ],
             'fecha' => [
                 'fecha'         => 'nd.fecha_emision',
                 'fecha_emision' => 'nd.fecha_emision',
+                'fecha_autorizacion' => 'nd.fecha_autorizacion',
+                'autorizada'         => 'nd.fecha_autorizacion',
+                'fecha_sustento'     => 'nd.fecha_emision_docs_sustento',
             ],
             'numerico' => [
                 'monto'    => 'nd.importe_total',
                 'total'    => 'nd.importe_total',
                 'subtotal' => 'nd.total_sin_impuestos',
+                // IVA: no es columna, se deduce de los totales.
+                'iva'      => '(nd.importe_total - nd.total_sin_impuestos)',
                 // Comparación numérica: "298" encuentra "000000298" sin que el
                 // usuario tenga que escribir los ceros a la izquierda, y sigue
                 // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
                 // en '=', nunca hace substring).
                 'secuencial' => 'nd.secuencial::numeric',
+            ],
+            'existe' => [
+                // motivo:texto → alguna razón de la nota contiene el texto
+                'motivo' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM nota_debito_motivos ndm2 WHERE ndm2.id_nota_debito = nd.id AND {cond})',
+                    'col'  => 'ndm2.razon',
+                    'tipo' => 'texto',
+                ],
             ],
         ]);
 
@@ -131,6 +177,100 @@ class NotaDebitoRepository extends BaseRepository
             'total' => $total,
             'rows'  => $rows
         ];
+    }
+
+    /** Usuarios que han registrado alguna nota de débito en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConNotas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM nota_debito_cabecera nd
+                JOIN usuarios u ON u.id = nd.id_usuario
+                WHERE nd.id_empresa = :id_empresa AND nd.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las notas de débito (pestaña "Detalles" del modal de
+     * filtros): devuelve cada motivo, forma de pago o campo de información adicional
+     * que coincide con el texto, junto con la nota a la que pertenece. Mismo alcance
+     * que el listado (empresa, no eliminadas, ambiente, registros propios por id_usuario).
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "nd.id_empresa = :id_empresa AND nd.eliminado = false
+                      AND nd.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND nd.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condMot = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['m.razon', 'm.valor::text'],
+            $q, $params, 'mt'
+        );
+        $condPago = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['fp.nombre', 'p.forma_pago', 'p.total::text', 'p.plazo::text', 'p.unidad_tiempo'],
+            $q, $params, 'pg'
+        );
+        $condAdic = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['a.nombre', 'a.valor'],
+            $q, $params, 'ad'
+        );
+        if ($condMot === '' || $condPago === '' || $condAdic === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT nd.id, CONCAT(nd.establecimiento,'-',nd.punto_emision,'-',nd.secuencial) AS numero,
+                           nd.fecha_emision, nd.estado, nd.num_doc_modificado, c.nombre AS cliente
+                    FROM nota_debito_cabecera nd
+                    LEFT JOIN clientes c ON c.id = nd.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'MOTIVO' AS origen,
+                           NULL AS tipo,
+                           m.razon AS descripcion,
+                           m.valor AS monto,
+                           b.id AS id_nota, b.numero, b.fecha_emision, b.estado, b.num_doc_modificado, b.cliente
+                    FROM nota_debito_motivos m
+                    JOIN base b ON b.id = m.id_nota_debito
+                    WHERE $condMot
+                    UNION ALL
+                    SELECT 'PAGO' AS origen,
+                           COALESCE(fp.nombre, p.forma_pago) AS tipo,
+                           NULLIF(CONCAT_WS(' ', p.plazo::text, p.unidad_tiempo), '') AS descripcion,
+                           p.total AS monto,
+                           b.id AS id_nota, b.numero, b.fecha_emision, b.estado, b.num_doc_modificado, b.cliente
+                    FROM nota_debito_pagos p
+                    JOIN base b ON b.id = p.id_nota_debito
+                    LEFT JOIN formas_pago_sri fp ON fp.codigo = p.forma_pago
+                    WHERE $condPago
+                    UNION ALL
+                    SELECT 'ADICIONAL' AS origen,
+                           a.nombre AS tipo,
+                           a.valor AS descripcion,
+                           NULL AS monto,
+                           b.id AS id_nota, b.numero, b.fecha_emision, b.estado, b.num_doc_modificado, b.cliente
+                    FROM nota_debito_adicional a
+                    JOIN base b ON b.id = a.id_nota_debito
+                    WHERE $condAdic
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id_nota DESC, x.origen
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

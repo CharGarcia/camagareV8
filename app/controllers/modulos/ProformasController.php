@@ -64,6 +64,10 @@ class ProformasController extends BaseModuloController
         // serie de una proforma NUEVA), esto incluye series de cualquier
         // establecimiento y aunque el punto ya no tenga secuencial configurado.
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+        // Valores realmente usados, para los selects del modal de filtros del buscador.
+        $estadosFiltro    = $this->repository->getEstadosUsados($idEmpresa);
+        $vendedoresFiltro = $this->repository->getVendedoresConProformas($idEmpresa);
+        $usuariosFiltro   = $this->repository->getUsuariosConProformas($idEmpresa);
 
         $vendedorRepo = new \App\repositories\modulos\VendedorRepository();
         $vendedores   = $vendedorRepo->getListado($idEmpresa, '', 1, 1000, 'nombre', 'ASC')['rows'];
@@ -91,6 +95,9 @@ class ProformasController extends BaseModuloController
             'establecimientos' => $establecimientos,
             'puntos'          => $puntos,
             'seriesFiltro'    => $seriesFiltro,
+            'estadosFiltro'    => $estadosFiltro,
+            'vendedoresFiltro' => $vendedoresFiltro,
+            'usuariosFiltro'   => $usuariosFiltro,
             'vendedores'      => $vendedores,
             'tarifasIva'      => $tarifasIva,
             // Reabrir una proforma aprobada (volverla a borrador) es solo para
@@ -99,6 +106,44 @@ class ProformasController extends BaseModuloController
             'puedeReabrir'    => (int) ($_SESSION['nivel'] ?? 1) >= 2,
             'fullWidth'       => true,
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las proformas
+     * (productos cotizados e información adicional). Mismo alcance que el listado.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $origenes = ['PRODUCTO' => 'Producto', 'ADICIONAL' => 'Info. adicional'];
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'origen'      => $origenes[$r['origen']] ?? $r['origen'],
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                'cantidad'    => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 4, '.', ''), '0'), '.') : '',
+                'monto'       => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'id_proforma' => (int) $r['id_proforma'],
+                'numero'      => $r['numero'] ?? '',
+                'fecha'       => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'cliente'     => $r['cliente'] ?? '',
+                'estado'      => ucfirst(mb_strtolower((string) ($r['estado'] ?? ''))),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function searchAjax(): void

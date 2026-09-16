@@ -28,10 +28,40 @@ class LiquidacionCompraRepository extends BaseRepository
 
         $where = "WHERE l.id_empresa = :id_empresa AND l.eliminado = false AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
-        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        $parsed  = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        $filtros = $parsed['filtros'];
+
+        // Abonos de la liquidación, con la misma regla que Compras: pagos de Egresos
+        // (tipo_documento LIQUIDACION, egreso no anulado) + retenciones no anuladas
+        // enlazadas por id_liquidacion. Los usan los filtros "pago:", "saldo:",
+        // "retenido:" y "retencion:" (no son columnas del listado).
+        $sqlPagado   = "(SELECT COALESCE(SUM(ed.monto_pagado), 0) FROM egresos_detalle ed INNER JOIN egresos_cabecera ec ON ed.id_egreso = ec.id WHERE ed.tipo_documento = 'LIQUIDACION' AND ed.id_referencia_documento = l.id AND ed.eliminado = false AND ec.estado != 'anulado' AND ec.eliminado = false)";
+        $sqlRetenido = "(SELECT COALESCE(SUM(r.total_retenido), 0) FROM retencion_compra_cabecera r WHERE r.id_liquidacion = l.id AND r.id_empresa = l.id_empresa AND r.eliminado = false AND r.estado != 'anulada')";
+        $sqlAbonos   = "($sqlPagado + $sqlRetenido)";
+        $saldo       = "GREATEST(0, l.importe_total - $sqlAbonos)";
+
+        // Texto libre: las columnas del listado y lo que identifica la liquidación.
+        // Decisión del usuario (igual que Compras/Ingresos/Egresos/Facturas): las
+        // columnas de estado (Correo, Estado) NO entran en el texto libre; se filtran
+        // solo desde el modal de filtros.
         if ($parsed['texto_libre'] !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ["CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial)", 'p.razon_social', 'p.identificacion'],
+                [
+                    "CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial)", // Nº Liquidación
+                    'l.secuencial',
+                    'l.fecha_emision::text',                                          // Fecha
+                    'p.razon_social',                                                 // Proveedor
+                    'p.identificacion',                                               // Identificación
+                    'l.total_sin_impuestos::text',                                    // Subtotal
+                    'l.total_descuento::text',                                        // Descuento
+                    'l.importe_total::text',                                          // Total
+                    'u.nombre',                                                       // Usuario
+                    // Fuera del listado, pero identifican la liquidación:
+                    'l.numero_autorizacion',
+                    'l.clave_acceso',
+                    'l.observaciones',
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', ld.codigo_principal, ld.codigo_auxiliar, ld.descripcion), ' ') FROM liquidaciones_detalle ld WHERE ld.id_cabecera = l.id)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -40,13 +70,41 @@ class LiquidacionCompraRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
-        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+
+        // ── Estado de pago (CALCULADO): pago:pendiente | pago:abonada | pago:pagada ──
+        $pagoFiltro = $filtros['estado_pago'] ?? $filtros['pago'] ?? null;
+        unset($filtros['estado_pago'], $filtros['pago']);
+        if ($pagoFiltro !== null) {
+            $valores = is_array($pagoFiltro['valor']) ? $pagoFiltro['valor'] : [$pagoFiltro['valor']];
+            $conds = [];
+            foreach ($valores as $val) {
+                $v2 = strtolower(trim((string) $val));
+                if (in_array($v2, ['pagada', 'pagado', 'pagadas'], true)) {
+                    $conds[] = "($saldo <= 0.01)";
+                } elseif (in_array($v2, ['abonada', 'abonado', 'abonadas', 'parcial'], true)) {
+                    $conds[] = "($saldo > 0.01 AND $sqlAbonos > 0)";
+                } elseif (in_array($v2, ['pendiente', 'pendientes'], true)) {
+                    $conds[] = "($saldo > 0.01 AND $sqlAbonos <= 0)";
+                }
+            }
+            if ($conds) {
+                $cond = '(' . implode(' OR ', $conds) . ')';
+                $where .= !empty($pagoFiltro['neg']) ? " AND NOT $cond" : " AND $cond";
+            }
+        }
+
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
             'texto' => [
                 'proveedor'      => 'p.razon_social',
                 'ruc'            => 'p.identificacion',
                 'identificacion' => 'p.identificacion',
                 'numero'         => "CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial)",
                 'nro'            => "CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial)",
+                // Claves del modal de filtros (public/js/components/filtros_modal.js).
+                'autorizacion'   => "CONCAT_WS(' ', l.numero_autorizacion, l.clave_acceso)",
+                'obs'            => 'l.observaciones',
+                'observacion'    => 'l.observaciones',
+                'usuario'        => 'u.nombre',
             ],
             'exacto'   => [
                 'estado' => 'l.estado',
@@ -54,12 +112,21 @@ class LiquidacionCompraRepository extends BaseRepository
                 // emisión propio de la empresa que registra la liquidación (no del
                 // proveedor), tal como se muestra en el selector "Serie" del modal.
                 'serie'  => "CONCAT(l.establecimiento,'-',l.punto_emision)",
+                'estado_correo' => "COALESCE(NULLIF(l.estado_correo, ''), 'pendiente')",
+                'id_usuario'    => 'l.id_usuario',
+                'id_sustento'   => 'l.id_sustento_tributario',
+                'asiento'       => "CASE WHEN l.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
+                'retencion'     => "CASE WHEN EXISTS (SELECT 1 FROM retencion_compra_cabecera rx WHERE rx.id_liquidacion = l.id AND rx.id_empresa = l.id_empresa AND rx.eliminado = false AND rx.estado != 'anulada') THEN 'si' ELSE 'no' END",
             ],
             'fecha'    => [ 'fecha' => 'l.fecha_emision', 'fecha_emision' => 'l.fecha_emision' ],
             'numerico' => [
                 'monto'      => 'l.importe_total',
                 'total'      => 'l.importe_total',
                 'secuencial' => 'l.secuencial::numeric',
+                'subtotal'   => 'l.total_sin_impuestos',
+                'descuento'  => 'COALESCE(l.total_descuento, 0)',
+                'saldo'      => $saldo,
+                'retenido'   => $sqlRetenido,
             ],
         ]);
 
@@ -68,7 +135,13 @@ class LiquidacionCompraRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        $sqlCount = "SELECT COUNT(*) FROM liquidaciones_cabecera l INNER JOIN proveedores p ON l.id_proveedor = p.id $where";
+        // El COUNT solo suma el JOIN de usuarios cuando el WHERE lo usa (texto libre o
+        // "usuario:"); es 1:1 por la PK, así que no cambia el total.
+        $joinsCount = "INNER JOIN proveedores p ON l.id_proveedor = p.id";
+        if (str_contains($where, 'u.nombre')) {
+            $joinsCount .= " LEFT JOIN usuarios u ON l.id_usuario = u.id";
+        }
+        $sqlCount = "SELECT COUNT(*) FROM liquidaciones_cabecera l $joinsCount $where";
         $total = $this->query($sqlCount, $params)->fetchColumn();
 
         $allowedCols = ['id', 'fecha_emision', 'secuencial', 'importe_total', 'total_sin_impuestos', 'total_descuento', 'estado', 'estado_correo', 'proveedor_nombre', 'proveedor_ruc', 'usuario_nombre', 'observaciones'];
@@ -116,6 +189,118 @@ class LiquidacionCompraRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return $st->fetchAll();
+    }
+
+    /** Usuarios que han registrado alguna liquidación en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConLiquidaciones(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM liquidaciones_cabecera l
+                JOIN usuarios u ON u.id = l.id_usuario
+                WHERE l.id_empresa = :id_empresa AND l.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Sustentos tributarios REALMENTE usados en liquidaciones de la empresa (select del modal de filtros). */
+    public function getSustentosUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT st.id, st.codigo, st.nombre
+                FROM liquidaciones_cabecera l
+                JOIN sustento_tributario st ON st.id = l.id_sustento_tributario
+                WHERE l.id_empresa = :id_empresa AND l.eliminado = false
+                ORDER BY st.codigo";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las liquidaciones (pestaña "Detalles" del modal de
+     * filtros): cada producto/servicio, forma de pago SRI y dato de información
+     * adicional que coincide con el texto, con la liquidación a la que pertenece.
+     * Mismo alcance que el listado (empresa, no eliminadas, ambiente) y registros
+     * propios por l.id_usuario, igual que getListado(). Las tablas hijas no tienen
+     * columna `eliminado`.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "l.id_empresa = :id_empresa AND l.eliminado = false
+                      AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND l.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.codigo_principal', 'd.codigo_auxiliar', 'd.descripcion', 'd.info_adicional', 'd.cantidad::text', 'd.precio_unitario::text', 'd.precio_total_sin_impuesto::text'],
+            $q, $params, 'dt'
+        );
+        $condPago = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['fp.nombre', 'lp.forma_pago', 'lp.total::text', 'lp.plazo::text', 'lp.unidad_tiempo'],
+            $q, $params, 'pg'
+        );
+        $condAdic = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['a.nombre', 'a.valor'],
+            $q, $params, 'ad'
+        );
+        if ($condDet === '' || $condPago === '' || $condAdic === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT l.id, l.establecimiento, l.punto_emision, l.secuencial,
+                           l.fecha_emision, l.estado, p.razon_social AS proveedor
+                    FROM liquidaciones_cabecera l
+                    INNER JOIN proveedores p ON p.id = l.id_proveedor
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen,
+                           COALESCE(NULLIF(d.codigo_principal, ''), d.codigo_auxiliar) AS tipo,
+                           d.descripcion,
+                           d.cantidad,
+                           d.precio_total_sin_impuesto AS monto,
+                           b.*
+                    FROM liquidaciones_detalle d
+                    JOIN base b ON b.id = d.id_cabecera
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'PAGO' AS origen,
+                           COALESCE(fp.nombre, lp.forma_pago) AS tipo,
+                           CASE WHEN COALESCE(lp.plazo, 0) > 0
+                                THEN CONCAT_WS(' ', lp.plazo::text, NULLIF(lp.unidad_tiempo, ''))
+                                ELSE 'Contado' END AS descripcion,
+                           NULL AS cantidad,
+                           lp.total AS monto,
+                           b.*
+                    FROM liquidaciones_pagos lp
+                    JOIN base b ON b.id = lp.id_cabecera
+                    LEFT JOIN formas_pago_sri fp ON fp.codigo = lp.forma_pago
+                    WHERE $condPago
+                    UNION ALL
+                    SELECT 'ADICIONAL' AS origen,
+                           a.nombre AS tipo,
+                           a.valor AS descripcion,
+                           NULL AS cantidad,
+                           NULL AS monto,
+                           b.*
+                    FROM liquidaciones_adicional a
+                    JOIN base b ON b.id = a.id_cabecera
+                    WHERE $condAdic
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id DESC, x.origen
+                LIMIT $limit";
+
+        return $this->query($sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     /**

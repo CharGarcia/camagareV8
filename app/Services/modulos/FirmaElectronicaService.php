@@ -36,6 +36,12 @@ class FirmaElectronicaService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Tipos de firma y usuarios usados (selects del modal de filtros del listado). */
+    public function getOpcionesFiltroListado(int $idEmpresa, ?int $idUsuarioFiltro = null): array
+    {
+        return $this->repository->getOpcionesFiltroListado($idEmpresa, $idUsuarioFiltro);
+    }
+
     public function crear(array $data): int
     {
         $this->rules->validar($data);

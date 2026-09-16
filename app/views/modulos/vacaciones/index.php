@@ -37,40 +37,72 @@ $colores = ['registrado' => 'info', 'pagado' => 'success', 'anulado' => 'danger'
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorVAC" style="width: 440px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // embudo que abre el modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de VacacionRepository::getListado().
+            // Vacaciones no tiene tablas hijas: una sola pestaña, sin "Detalles".
+            $opcionesMesVac = [];
+            foreach ($meses as $n => $nom) {
+                $opcionesMesVac[] = ['v' => (string) $n, 'l' => $nom];
+            }
+            $opcionesAnioVac    = array_map(fn($a) => ['v' => (string) $a, 'l' => (string) $a], $aniosFiltro ?? []);
+            $opcionesUsuarioVac = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $tV = 'Vacación';
+            // Orden pensado en filas de 12 columnas:
+            //   Vacación: [Desde 6][Hasta 6]
+            //             [Mes del rol 3][Año 3][Estado 3][Afecta al rol 3]
+            //   Valores:  [Días gozados 4][Días de derecho 4][Valor 4]
+            //   Empleado: [Empleado 3][Identificación 3][Observación 3][Usuario 3]
+            $filtrosVacaciones = [
+                // ── Vacación ──
+                ['tab' => $tV, 'key' => 'desde',      'label' => 'Desde',          'icon' => 'bi-calendar-date',  'type' => 'date_range', 'grupo' => 'Vacación', 'col' => 6, 'atajos' => true],
+                ['tab' => $tV, 'key' => 'hasta',      'label' => 'Hasta',          'icon' => 'bi-calendar-date',  'type' => 'date_range', 'grupo' => 'Vacación', 'col' => 6],
+                ['tab' => $tV, 'key' => 'mes',        'label' => 'Mes del rol',    'icon' => 'bi-calendar-month', 'type' => 'select',     'grupo' => 'Vacación', 'col' => 3, 'options' => $opcionesMesVac],
+                ['tab' => $tV, 'key' => 'anio',       'label' => 'Año del rol',    'icon' => 'bi-calendar',       'type' => 'select',     'grupo' => 'Vacación', 'col' => 3, 'options' => $opcionesAnioVac],
+                ['tab' => $tV, 'key' => 'estado',     'label' => 'Estado',         'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Vacación', 'col' => 3, 'options' => [
+                    ['v' => 'registrado', 'l' => 'Registrado'],
+                    ['v' => 'pagado',     'l' => 'Pagado'],
+                    ['v' => 'anulado',    'l' => 'Anulado'],
+                ]],
+                ['tab' => $tV, 'key' => 'afecta_rol', 'label' => 'Afecta al rol',  'icon' => 'bi-cash-stack',     'type' => 'select',     'grupo' => 'Vacación', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Sí, se incluye en el rol'],
+                    ['v' => 'no', 'l' => 'No'],
+                ]],
+                // ── Valores ──
+                ['tab' => $tV, 'key' => 'dias',         'label' => 'Días gozados',    'icon' => 'bi-123',             'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tV, 'key' => 'dias_derecho', 'label' => 'Días de derecho', 'icon' => 'bi-calendar-check',  'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tV, 'key' => 'valor',        'label' => 'Valor',           'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // ── Empleado ──
+                ['tab' => $tV, 'key' => 'empleado',       'label' => 'Empleado',             'icon' => 'bi-person',         'type' => 'text',   'grupo' => 'Empleado', 'col' => 3],
+                ['tab' => $tV, 'key' => 'identificacion', 'label' => 'Identificación',       'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Empleado', 'col' => 3],
+                ['tab' => $tV, 'key' => 'observacion',    'label' => 'Observación',          'icon' => 'bi-chat-left-text', 'type' => 'text',   'grupo' => 'Empleado', 'col' => 3],
+                ['tab' => $tV, 'key' => 'usuario',        'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select', 'grupo' => 'Empleado', 'col' => 3, 'options' => $opcionesUsuarioVac],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorVAC"></div>
             <input type="hidden" id="buscarVac" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorVAC',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorVAC',
                         hiddenInputId: 'buscarVac',
-                        fields: [
-                            { key: 'empleado', label: 'Empleado', icon: 'bi-person', type: 'text' },
-                            { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select', options: [
-                                { v: 'registrado', l: 'Registrado' }, { v: 'pagado', l: 'Pagado' }, { v: 'anulado', l: 'Anulado' }
-                            ]},
-                            { key: 'mes', label: 'Mes del rol', icon: 'bi-calendar-month', type: 'select', options: [
-                                <?php foreach ($meses as $n => $nom): ?>{ v: '<?= $n ?>', l: '<?= htmlspecialchars($nom) ?>' },<?php endforeach; ?>
-                            ]},
-                            { key: 'anio', label: 'Año', icon: 'bi-calendar', type: 'text' },
-                            { key: 'dias', label: 'Días', icon: 'bi-123', type: 'number_range' },
-                            { key: 'valor', label: 'Valor', icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'desde', label: 'Desde', icon: 'bi-calendar-date', type: 'date_range' },
-                            { key: 'hasta', label: 'Hasta', icon: 'bi-calendar-date', type: 'date_range' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_reg', label: 'Registrados', mk: () => ({ key: 'estado', op: '=', value: 'registrado', display: 'Registrado' }) },
-                            { id: 'qf_pag', label: 'Pagados',     mk: () => ({ key: 'estado', op: '=', value: 'pagado', display: 'Pagado' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de vacaciones',
+                        inputWidth: 420,
+                        extraId: 'fmExtraVAC',   // columnas, pegado al final del grupo
+                        fields: <?= json_encode($filtrosVacaciones, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyVacaciones',   // se atenúa mientras se busca
                         onApply: () => window.cambiarPaginaAjax && window.cambiarPaginaAjax(1),
                     }).init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraVAC" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'empleado' => 'Empleado', 'identificacion' => 'Identificación', 'desde' => 'Desde',
@@ -148,6 +180,10 @@ $colores = ['registrado' => 'info', 'pagado' => 'success', 'anulado' => 'danger'
 
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar (que llaman a esta función directo).
+            const tbody = document.getElementById('tbodyVacaciones');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(`${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`);
                 const data = await resp.json();
@@ -157,7 +193,11 @@ $colores = ['registrado' => 'info', 'pagado' => 'success', 'anulado' => 'danger'
                     document.getElementById('wrapper-pagination').innerHTML = data.pagination;
                     document.getElementById('paginationInfo').textContent = data.info;
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         }
 
         if (window.CMG_initSort) {

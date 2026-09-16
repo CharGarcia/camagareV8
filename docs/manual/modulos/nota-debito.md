@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri
-version: 1.4
+etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips
+version: 1.5
 orden: 31
 estado: activo
 ---
@@ -58,6 +58,52 @@ un botón **Excel** (icono verde) que descarga los motivos, totales y forma de
 pago de esa nota de débito puntual. Solo se habilita con el documento ya
 guardado.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la nota: N° nota,
+secuencial, fecha, cliente, identificación, documento modificado, subtotal,
+total y usuario. Además busca en el número de autorización, la clave de acceso,
+las observaciones y los **motivos** de la nota. Las columnas **Correo** y
+**Estado** no entran en la búsqueda libre: para filtrar por ellas use la
+ventana de filtros. Puede escribir varias palabras en cualquier orden y no
+importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en
+el cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y
+la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Nota de débito** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (borrador, autorizado, anulado), correo (enviado o pendiente), serie, N° nota, secuencial, con o sin asiento contable, fecha de autorización, usuario que registró |
+| Documento modificado | N° de la factura modificada, fecha de esa factura, motivo (busca en las razones de la nota) |
+| Valores | Total, subtotal e IVA (cada uno con mínimo y máximo) |
+| Cliente | Cliente, RUC / cédula, observaciones, N° autorización, clave de acceso |
+
+El selector *Usuario que registró* lista solo a quienes ya registraron notas
+de débito en la empresa, y *Serie* solo las series con notas guardadas. El
+*IVA* se calcula como total menos subtotal.
+
+**Pestaña Detalles** (lo que hay dentro de la nota). Es un único cuadro,
+**Buscar libremente dentro de las notas de débito**: escriba un motivo, un
+valor, una forma de pago SRI, un plazo o un dato de la información adicional,
+y aparece la lista de **cada línea que coincide** con la nota a la que
+pertenece (número, fecha, factura modificada, cliente y estado). Un clic en la
+fila deja el listado mostrando solo esa nota; el ícono de la derecha la abre
+directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
 ## Exportar el listado
 
 Los botones **Excel** y **PDF** de la parte superior del listado exportan las
@@ -99,6 +145,16 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.5** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas de la nota (y en autorización,
+  clave de acceso, observaciones y motivos), salvo Correo y Estado. Los filtros
+  pasan a una **ventana propia** (botón del embudo, se aplican con *Aplicar*)
+  con dos pestañas: **Nota de débito** (filtros por campo, con criterios
+  nuevos: correo, con/sin asiento, fecha de autorización, usuario como lista,
+  fecha del documento modificado, motivo, IVA, observaciones, autorización y
+  clave de acceso) y **Detalles** (búsqueda dentro de motivos, formas de pago e
+  información adicional). Los filtros activos se ven como etiquetas dentro del
+  cuadro y la tabla se atenúa mientras carga.
 - **1.4** — El envío al SRI comprueba ahora que la **fecha de emisión sea la de
   hoy**, como ya hacían factura de venta y liquidación de compra. Antes el documento
   salía con cualquier fecha y era el propio SRI quien lo rechazaba.

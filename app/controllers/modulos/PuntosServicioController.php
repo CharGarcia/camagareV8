@@ -66,6 +66,8 @@ class PuntosServicioController extends BaseModuloController
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
             'idEmpresa'  => $idEmpresa,
+            // Select "Usuario que registró" del modal de filtros (solo usuarios con puntos).
+            'usuariosFiltro' => $this->puntoService->getUsuariosConPuntos($idEmpresa),
         ]);
     }
 

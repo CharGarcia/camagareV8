@@ -97,6 +97,10 @@
         const termino = inputBuscar ? inputBuscar.value.trim() : '';
         const uri = `${URL_BASE}/searchAjax?b=${encodeURIComponent(termino)}&page=${page}` +
                     `&sort=${window.currentSort}&dir=${window.currentDir}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga, también al paginar y ordenar, que llaman a esta función directo.
+        const tbodyCarga = el('tbodyAdi');
+        if (tbodyCarga) tbodyCarga.classList.add('fm-cargando-target');
         try {
             const res = await (await fetch(uri)).json();
             if (!res.ok) return;
@@ -109,6 +113,8 @@
             el('btnExportExcelAdi').href = res.excel_url;
         } catch (e) {
             console.error('Error al buscar anexos de dividendos:', e);
+        } finally {
+            if (tbodyCarga) tbodyCarga.classList.remove('fm-cargando-target');
         }
     };
 

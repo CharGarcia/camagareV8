@@ -29,18 +29,69 @@ class RolPagoRepository extends BaseRepository
         }
         $where .= " AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
+        $numEmpleados = '(SELECT COUNT(*) FROM rol_detalle d WHERE d.id_rol = r.id)';
+
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (r.descripcion ILIKE :b OR r.tipo_rol ILIKE :b OR r.estado ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            // Texto libre: las columnas del listado + lo que identifica la corrida.
+            // Decisión del usuario: las columnas Tipo y Estado NO entran en el texto
+            // libre; se filtran desde el modal.
+            $condicion = FiltrosBusqueda::condicionTexto(
+                [
+                    self::exprPeriodoTexto('r'),                           // Período ("Julio 2026 #1")
+                    "{$numEmpleados}::text",                               // Empleados
+                    'r.total_neto::text',                                  // Neto
+                    'r.descripcion',
+                    "TO_CHAR(r.fecha_pago, 'DD-MM-YYYY')",                 // Fecha de pago
+                    'r.fecha_pago::text',
+                    'u.nombre',                                            // Usuario que registró
+                    // Empleados incluidos en la corrida (nombre e identificación)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', e.nombres_apellidos, e.identificacion), ' ')
+                        FROM rol_detalle d JOIN empleados e ON e.id = d.id_empleado WHERE d.id_rol = r.id)",
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
+        // Claves del modal de filtros (FiltrosModal en la vista). Las viejas se conservan.
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'exacto'   => ['tipo' => 'r.tipo_rol', 'estado' => 'r.estado', 'mes' => 'r.periodo_mes', 'anio' => 'r.periodo_anio'],
+            'texto'    => [
+                'descripcion' => 'r.descripcion',
+                // Tipo + período ("Rol Mensual Julio 2026", "Quincena Julio 2026 #1"): lo usa
+                // la pestaña Detalles para dejar el listado en una sola corrida.
+                'corrida'     => self::exprCorridaTexto('r'),
+            ],
+            'exacto'   => [
+                'tipo'    => 'r.tipo_rol',
+                'estado'  => 'r.estado',
+                'mes'     => 'r.periodo_mes',
+                'anio'    => 'r.periodo_anio',
+                'usuario' => 'r.created_by',
+                // asiento:si / asiento:no
+                'asiento' => "CASE WHEN r.id_asiento IS NULL THEN 'no' ELSE 'si' END",
+            ],
             'fecha'    => ['fecha' => 'r.fecha_pago'],
-            'numerico' => ['neto' => 'r.total_neto'],
+            'numerico' => [
+                'neto'            => 'r.total_neto',
+                'ingresos'        => 'r.total_ingresos',
+                'egresos'         => 'r.total_egresos',
+                'aporte_patronal' => 'r.total_aporte_patronal',
+                'empleados'       => "{$numEmpleados}::numeric",
+            ],
+            // Empleados de la corrida: entra si ALGUNA línea del rol cumple.
+            'existe'   => [
+                'empleado'       => ['tipo' => 'texto', 'col' => 'e.nombres_apellidos',
+                                     'sql' => 'EXISTS (SELECT 1 FROM rol_detalle d JOIN empleados e ON e.id = d.id_empleado WHERE d.id_rol = r.id AND {cond})'],
+                'identificacion' => ['tipo' => 'texto', 'col' => 'e.identificacion',
+                                     'sql' => 'EXISTS (SELECT 1 FROM rol_detalle d JOIN empleados e ON e.id = d.id_empleado WHERE d.id_rol = r.id AND {cond})'],
+            ],
         ]);
 
-        $from = "FROM {$this->table} r {$where}";
+        $from = "FROM {$this->table} r LEFT JOIN usuarios u ON u.id = r.created_by {$where}";
         $stTotal = $this->db->prepare("SELECT COUNT(*) {$from}");
         $stTotal->execute($params);
         $total = (int) $stTotal->fetchColumn();
@@ -53,6 +104,122 @@ class RolPagoRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /** Período como se muestra en el listado ("Julio 2026", "Julio 2026 #2"). */
+    private static function exprPeriodoTexto(string $a): string
+    {
+        $casos = '';
+        foreach (\App\models\CatalogoNovedades::MESES as $num => $nombre) {
+            $casos .= ' WHEN ' . (int) $num . " THEN '" . str_replace("'", "''", $nombre) . "'";
+        }
+        return "CONCAT(CASE {$a}.periodo_mes{$casos} END, ' ', {$a}.periodo_anio,
+                       CASE WHEN {$a}.numero_periodo > 0 THEN CONCAT(' #', {$a}.numero_periodo) ELSE '' END)";
+    }
+
+    /** Tipo + período de la corrida ("Rol Mensual Julio 2026"): filtro `corrida:`. */
+    private static function exprCorridaTexto(string $a): string
+    {
+        $casos = '';
+        foreach (\App\models\CatalogoRol::TIPOS as $cod => $nombre) {
+            $casos .= " WHEN '" . str_replace("'", "''", $cod) . "' THEN '" . str_replace("'", "''", $nombre) . "'";
+        }
+        return "CONCAT(CASE {$a}.tipo_rol{$casos} ELSE {$a}.tipo_rol END, ' ', " . self::exprPeriodoTexto($a) . ')';
+    }
+
+    /** Años de período usados por la empresa (select "Año" del modal de filtros). */
+    public function getAniosUsados(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT DISTINCT periodo_anio FROM {$this->table}
+                                  WHERE id_empresa = :id_empresa AND eliminado = false AND periodo_anio IS NOT NULL
+                                  ORDER BY periodo_anio DESC");
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** Usuarios que crearon alguna corrida de rol en la empresa (select "Usuario que registró"). */
+    public function getUsuariosConRoles(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT DISTINCT u.id, u.nombre
+                                  FROM {$this->table} r
+                                  JOIN usuarios u ON u.id = r.created_by
+                                  WHERE r.id_empresa = :id_empresa AND r.eliminado = false
+                                  ORDER BY u.nombre");
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las corridas (pestaña "Detalles" del modal de filtros):
+     * cada línea de empleado y cada rubro (ingreso/egreso) que coincide con el texto,
+     * junto con la corrida a la que pertenece. Mismo alcance que el listado (empresa,
+     * no eliminadas, ambiente actual y registros propios por created_by si aplica).
+     * No busca en columnas de estado ni de tipo.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "r.id_empresa = :id_empresa AND r.eliminado = false
+                      AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= ' AND r.created_by = :id_usuario';
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        // Línea del empleado: nombre, identificación, cargo, sueldo base y neto.
+        $condEmp = FiltrosBusqueda::condicionTexto(
+            ['e.nombres_apellidos', 'e.identificacion', 'e.cargo', 'd.sueldo_base::text', 'd.neto::text'],
+            $q, $params, 'em'
+        );
+        // Rubro: concepto, código, valor y la observación de la novedad de origen.
+        $condRub = FiltrosBusqueda::condicionTexto(
+            ['rr.concepto', 'rr.codigo', 'rr.valor::text', 'n.observacion'],
+            $q, $params, 'rb'
+        );
+        if ($condEmp === '' || $condRub === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $corrida = self::exprCorridaTexto('r');
+        $sql = "WITH base AS (
+                    SELECT r.id, r.estado, r.fecha_pago, r.periodo_anio, r.periodo_mes, {$corrida} AS corrida
+                    FROM {$this->table} r
+                    WHERE {$whereBase}
+                )
+                SELECT * FROM (
+                    SELECT 'EMPLEADO' AS origen,
+                           e.nombres_apellidos AS empleado, e.identificacion,
+                           e.cargo AS concepto,
+                           d.neto AS monto,
+                           b.id AS id_rol, b.corrida, b.fecha_pago, b.estado, b.periodo_anio, b.periodo_mes
+                    FROM rol_detalle d
+                    JOIN base b ON b.id = d.id_rol
+                    JOIN empleados e ON e.id = d.id_empleado
+                    WHERE {$condEmp}
+                    UNION ALL
+                    SELECT CASE WHEN rr.tipo = 'egreso' THEN 'EGRESO' ELSE 'INGRESO' END AS origen,
+                           e.nombres_apellidos AS empleado, e.identificacion,
+                           rr.concepto,
+                           rr.valor AS monto,
+                           b.id AS id_rol, b.corrida, b.fecha_pago, b.estado, b.periodo_anio, b.periodo_mes
+                    FROM rol_detalle_rubro rr
+                    JOIN rol_detalle d ON d.id = rr.id_detalle
+                    JOIN base b ON b.id = d.id_rol
+                    JOIN empleados e ON e.id = d.id_empleado
+                    LEFT JOIN novedades n ON n.id = rr.id_novedad
+                    WHERE {$condRub}
+                ) x
+                ORDER BY x.periodo_anio DESC, x.periodo_mes DESC, x.id_rol DESC, x.empleado, x.origen
+                LIMIT {$limit}";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function existsCorrida(int $idEmpresa, string $tipo, int $anio, int $mes, int $numero, ?int $excludeId = null): bool

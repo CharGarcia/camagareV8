@@ -114,6 +114,8 @@ class FacturacionCvController extends BaseModuloController
             'vendedores'  => $vendedores,
             'puntos'      => $puntos,
             'seriesFiltro' => $seriesFiltro,
+            // Selects del modal de filtros del listado (solo valores usados por la empresa).
+            'opcionesFiltros' => $this->service->getOpcionesFiltros($idEmpresa),
             'formasPago'  => $formasPago,
             'rows'        => $rows,
             'total'       => $total,
@@ -192,6 +194,64 @@ class FacturacionCvController extends BaseModuloController
             'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
         ]);
         exit;
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de los documentos
+     * (productos facturados con lote/NUP y consignación de origen, e información adicional).
+     * Devuelve id/estado/id_factura/serie/secuencial para abrir el modal del documento.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim((string) ($_GET['q'] ?? ''));
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $esProducto = ($r['origen'] === 'PRODUCTO');
+            $descripcion = (string) ($r['descripcion'] ?? '');
+            if (!$esProducto) {
+                // Información adicional: pares "nombre: valor" legibles.
+                $pares = json_decode((string) ($r['info_adicional'] ?? ''), true);
+                $descripcion = is_array($pares)
+                    ? implode(' · ', array_map(
+                        fn($p) => is_array($p) ? trim(($p['nombre'] ?? '') . ': ' . ($p['valor'] ?? ''), ': ') : (string) $p,
+                        $pares
+                    ))
+                    : (string) ($r['info_adicional'] ?? '');
+            }
+            $estado = (string) ($r['estado'] ?? '');
+            $rows[] = [
+                'origen'       => $esProducto ? 'Producto' : 'Información adicional',
+                'tipo'         => $r['tipo'] ?? '',
+                'descripcion'  => $descripcion,
+                'extra'        => $r['extra'] ?? '',
+                'consignacion' => $r['consignacion'] ?? '',
+                'cantidad'     => $r['cantidad'] !== null ? number_format((float) $r['cantidad'], 2) : '',
+                'monto'        => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'id'           => (int) $r['id'],
+                'id_factura'   => $r['id_factura'] !== null ? (int) $r['id_factura'] : null,
+                'serie'        => $r['serie'] ?? '',
+                'secuencial'   => $r['secuencial'] ?? '',
+                'numero'       => ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? ''),
+                'factura'      => $r['numero_factura'] ?? '',
+                'fecha'        => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime((string) $r['fecha_emision'])) : '',
+                'cliente'      => $r['cliente_nombre'] ?? '',
+                'estado'       => $estado,
+                'estado_label' => ucfirst($estado),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     /** Filas del listado con el filtro/orden actual, sin paginar (para exportar). */

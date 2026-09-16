@@ -89,6 +89,8 @@ class AnexoDividendosController extends BaseModuloController
             'rutaModulo'  => $this->getRutaModulo(),
             'sinTablas'   => !$listo,
             'catalogo'    => $this->catalogoParaVista(),
+            // Select "Usuario" del modal de filtros: solo quienes crearon anexos.
+            'usuariosFiltro' => $listo ? $this->repo->getUsuariosConAnexos($idEmpresa) : [],
             'fullWidth'   => true,
         ]);
     }
@@ -128,6 +130,45 @@ class AnexoDividendosController extends BaseModuloController
             'pdf_url'    => $urlModulo . '/export-pdf' . $qs,
             'excel_url'  => $urlModulo . '/export-excel' . $qs,
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de los anexos
+     * (beneficiarios y líneas de la distribución de dividendos).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+
+        $q = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2 || !$this->repo->tablasListas()) {
+            $this->json(['rows' => []]);
+            return;
+        }
+
+        $idUsuarioFiltro = $this->filtroPropios($this->getPermisos());
+        $rows = [];
+        foreach ($this->repo->buscarEnDetalles((int) $_SESSION['id_empresa'], $q, $idUsuarioFiltro, 50) as $r) {
+            $esBenef = $r['origen'] === 'BENEFICIARIO';
+            $codigo  = (string) ($r['codigo'] ?? '');
+            $rows[] = [
+                'origen'      => $esBenef ? 'Beneficiario' : 'Dividendo',
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                // Beneficiario: su tipo; dividendo: el tipo de dividendo (catálogo del SRI).
+                'clase'       => $esBenef
+                    ? (CatalogoAdi::TIPO_BENEFICIARIO[$codigo] ?? $codigo)
+                    : ((CatalogoAdi::TIPO_DIVIDENDO[$codigo][0] ?? null) ?? $codigo),
+                'fecha_linea' => !empty($r['fecha_linea']) ? date('d-m-Y', strtotime((string) $r['fecha_linea'])) : '',
+                'monto'       => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                // ADI_abrir(id) abre el anexo por su id.
+                'id'          => (int) $r['id'],
+                'anio'        => (int) $r['anio'],
+                'informante'  => $r['razon_social'] ?? '',
+                'estado'      => $this->etiquetaEstado((string) $r['estado']),
+            ];
+        }
+        $this->json(['rows' => $rows]);
     }
 
     /** POST: abre (o crea) el anexo del año indicado y devuelve su contenido. */

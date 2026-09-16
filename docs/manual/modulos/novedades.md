@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
-etiquetas: novedades, novedad, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, multa, carga masiva, importar, importacion, excel, plantilla, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada
-version: 1.2
+etiquetas: novedades, novedad, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, multa, carga masiva, importar, importacion, excel, plantilla, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
+version: 1.3
 orden: 20
 estado: activo
 ---
@@ -121,6 +121,46 @@ elimine desde el listado, una a una, las novedades que sí se pueden.
 > Quien no tenga **acceso total** solo ve y elimina las cargas que hizo él mismo, y
 > la eliminación requiere permiso de **eliminar** en el módulo. La pestaña
 > *Historial* se puede ocultar desde el engranaje de las pestañas.
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF, Excel e Importar.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la novedad: empleado,
+identificación, fecha (tal como se ve, por ejemplo *07-07-2026*), período (por
+ejemplo *Julio 2026*) y valor. Además busca en la observación y en el usuario
+que registró la novedad. Las columnas **Tipo**, **Afecta a**, **Motivo**,
+**Estado** y **Pago** no entran en la búsqueda libre: para filtrar por ellas use
+la ventana de filtros. Puede escribir varias palabras en cualquier orden y no
+importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el
+cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y la
+tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
+Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento. La
+ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
+
+| Bloque | Filtros |
+|--------|---------|
+| Novedad | Fecha (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), mes y año del período, tipo de novedad, afecta a (rol de pagos, quincena o pago semanal), motivo de salida, estado (activo / anulado), pago (pagada / pendiente) y origen (registro manual o importada desde Excel) |
+| Valor y registro | Valor, con mínimo y máximo (es monto, horas o días según el tipo), y usuario que registró |
+| Empleado | Empleado, identificación y observación |
+
+El selector *Año del período* y el de *Usuario que registró* listan solo lo que
+la empresa ya usó. El filtro *Pago* aplica la misma regla que la columna Pago:
+la novedad está pagada cuando el rol en el que se descontó o pagó ya está
+cubierto por egresos, o cuando vino marcada como pagada en la migración.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último. Los botones PDF y Excel exportan lo que se ve
+filtrado.
+
+> Quien no tenga **acceso total** solo ve en el listado las novedades que
+> registró él mismo.
+
 ## Errores frecuentes
 
 - **"El valor no puede ser negativo"**: elija el tipo de novedad de descuento en
@@ -147,6 +187,11 @@ elimine desde el listado, una a una, las novedades que sí se pueden.
 
 ## Historial de cambios
 
+- **1.3** — Nuevo buscador del listado: búsqueda libre en todas las columnas
+  (sin Tipo, Afecta a, Motivo, Estado ni Pago) y botón embudo con la ventana de
+  filtros; se suman los filtros de afecta a, motivo de salida, pago, origen,
+  identificación y usuario que registró. Los filtros activos se ven como chips
+  dentro del cuadro.
 - **1.2** — El cuadro de Importar se divide en dos pestañas (Importar e Historial,
   con las 10 últimas cargas). La plantilla se descarga ya llena con el personal
   activo —identificación, nombre, tipo, periodo, fecha y observación— y suma la

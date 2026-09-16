@@ -48,25 +48,48 @@ class ConfiguracionRestauranteRepository extends BaseRepository
 
         // Buscador estándar: texto libre + filtros clave:valor, siempre con
         // consultas preparadas (nunca concatenando lo que escribe el usuario).
+        $usos = "(SELECT COUNT(*) FROM menu_items m
+                   WHERE m.id_estacion_impresion = e.id AND m.id_empresa = e.id_empresa AND m.eliminado = false)
+               + (SELECT COUNT(*) FROM categorias c
+                   WHERE c.id_estacion_impresion = e.id AND c.id_empresa = e.id_empresa AND c.eliminado = false)";
+
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre (buscador FiltrosModal, sin sugerencias): columnas del listado.
+            // Decisión del usuario: Tipo, Impresión (modo), Predeterminada y Estado NO
+            // entran en el texto libre; se filtran solo desde el modal de filtros.
             $where .= ' AND ' . \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['e.nombre', 'e.tipo'],
+                [
+                    'e.nombre',                                                               // Nombre
+                    "CASE WHEN e.imprime_ordenes IS TRUE THEN CONCAT(e.ancho_papel, ' mm') END", // Papel (como se muestra)
+                    'CASE WHEN e.imprime_ordenes IS TRUE THEN e.copias::text END',            // Copias
+                    "CASE WHEN ({$usos}) > 0 THEN CONCAT(({$usos}), ' ítem(s)') END",         // En uso
+                    '(SELECT u.nombre FROM usuarios u WHERE u.id = e.created_by)',            // Usuario que registró
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
             );
         }
+        // Claves del modal de filtros (vista configuracion_restaurante/index.php). Nunca
+        // quitar claves: viajan también en los enlaces de PDF/Excel.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'    => ['nombre' => 'e.nombre'],
-            'exacto'   => ['tipo' => 'e.tipo', 'estado' => 'e.activo', 'imprime' => 'e.imprime_ordenes'],
-            'numerico' => ['papel' => 'e.ancho_papel', 'copias' => 'e.copias'],
+            'exacto'   => [
+                // estado / imprime: true | false (booleanos, valores del buscador anterior)
+                'tipo' => 'e.tipo', 'estado' => 'e.activo', 'imprime' => 'e.imprime_ordenes',
+                // impresion: automatica | pedido | pantalla (columna Impresión del listado)
+                'impresion'      => "CASE WHEN e.imprime_ordenes IS NOT TRUE THEN 'pantalla'
+                                          WHEN e.imprimir_auto IS TRUE THEN 'automatica' ELSE 'pedido' END",
+                // predeterminada: si | no (estrella de la fila)
+                'predeterminada' => $this->soportaPredeterminada()
+                    ? "CASE WHEN e.es_predeterminada IS TRUE THEN 'si' ELSE 'no' END"
+                    : "'no'",
+                'usuario'        => 'e.created_by',
+            ],
+            'fecha'    => ['registro' => 'e.created_at'],
+            'numerico' => ['papel' => 'e.ancho_papel', 'copias' => 'e.copias', 'usos' => "({$usos})"],
         ]);
-
-        $usos = "(SELECT COUNT(*) FROM menu_items m
-                   WHERE m.id_estacion_impresion = e.id AND m.id_empresa = e.id_empresa AND m.eliminado = false)
-               + (SELECT COUNT(*) FROM categorias c
-                   WHERE c.id_estacion_impresion = e.id AND c.id_empresa = e.id_empresa AND c.eliminado = false)";
 
         $stTotal = $this->db->prepare("SELECT COUNT(*) FROM estaciones_impresion e {$where}");
         $stTotal->execute($params);
@@ -94,6 +117,18 @@ class ConfiguracionRestauranteRepository extends BaseRepository
         $st->execute($params);
 
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /** Usuarios que registraron alguna estación de la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConEstaciones(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT DISTINCT u.id, u.nombre
+                                  FROM estaciones_impresion e
+                                  JOIN usuarios u ON u.id = e.created_by
+                                  WHERE e.id_empresa = :e AND e.eliminado = false
+                                  ORDER BY u.nombre");
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** Todas las estaciones de la empresa, sin paginar (selectores y validaciones). */

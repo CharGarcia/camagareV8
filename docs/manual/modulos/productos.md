@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
-etiquetas: productos, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
-version: 1.5
+etiquetas: productos, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
+version: 1.6
 orden: 10
 estado: activo
 ---
@@ -125,16 +125,69 @@ de lista. Los ítems del menú la heredan del producto que tienen vinculado; un
 ítem de la carta sin producto vinculado no permite editar el precio. Ver
 *Comandas* y *Punto de venta (POS)* para cómo se usa.
 
-## Buscar en el listado
+## Buscar y filtrar el listado
 
-Además del texto libre, el buscador acepta filtros `clave:valor`
-(`categoria:Bebidas`, `codigo:0012`), rangos numéricos y negaciones con `-`.
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF, Excel y Actualizar Costos.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del listado: código,
+código auxiliar, código de barras, descripción, categoría, marca, unidad de
+medida, ubicación, precio base, valor del IVA, ICE, PVP final y stock mínimo y
+máximo. Además busca en el nombre del ICE, el usuario que registró el producto,
+sus **variantes** (por ejemplo *talla XL* o *color rojo*) y los **códigos con que
+lo factura cada proveedor**. Las columnas **Tipo**, **Tipo IVA**, **Inv.** y
+**Estado** no entran en la búsqueda libre, y tampoco el **Saldo**: para filtrar
+por ellas use la ventana de filtros. Puede escribir varias palabras en cualquier
+orden y no importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse
+Escape en el cuadro. Mientras busca, aparece un **círculo girando** al final del
+cuadro y la tabla se ve atenuada.
+
+Los buscadores de producto de las facturas, el punto de venta, las compras y
+demás documentos no cambian: siguen buscando por descripción y códigos.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Producto:**
+
+| Bloque | Filtros |
+|--------|---------|
+| Producto | Código, código auxiliar, código de barras, descripción |
+| Clasificación | Tipo (bien / servicio), categoría, marca, estado (activo / inactivo) |
+| Inventario | Inventariable, unidad de medida, ubicación, saldo en todas las bodegas, stock mínimo y máximo (cada uno con mínimo y máximo), saldo bajo el stock mínimo, kit con o sin componentes |
+| Precios e impuestos | Precio base y PVP final (con mínimo y máximo), tipo de IVA, con o sin ICE, se vende, se compra, con o sin precios adicionales |
+| Registro | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), usuario que registró |
+
+Los selectores de categoría, marca, unidad de medida, tipo de IVA y usuario
+listan solo lo que la empresa ya usa en sus productos. *Saldo bajo el stock
+mínimo* trae los productos inventariables que tienen un stock mínimo definido y
+cuyo saldo actual (suma de todas las bodegas) está por debajo: es la lista de lo
+que hay que reponer. En *Estado*, **Inactivo** incluye cualquier producto que no
+esté activo, igual que en la columna del listado.
+
+**Pestaña Detalles** (lo que hay dentro del producto). Es un único cuadro,
+**Buscar libremente dentro de los productos**: escriba una variante, el código o
+nombre de un componente de un kit, el nombre de una lista de precios o el código
+o nombre de un proveedor, y aparece la lista de **cada detalle que coincide**
+con el producto al que pertenece (código, descripción y estado). Un clic en la
+fila deja el listado mostrando ese producto; el ícono de la derecha abre
+directamente su ficha. Por ejemplo, *mayorista* lista todos los productos que
+tienen ese precio adicional.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último. Quien ya conoce la sintaxis `clave:valor` puede
+seguir escribiéndola (`categoria:Bebidas`, `stock:<=0`); los enlaces guardados
+siguen funcionando.
 
 El listado se puede ordenar por cualquier columna, ocultar columnas y **exportar
 a PDF y Excel**. Cada usuario conserva su configuración de columnas. El Excel
-respeta los filtros de búsqueda activos e incluye, además de los datos básicos,
-**IVA, ICE, PVP, Costo, Margen y Utilidad %** de cada producto (Margen = Precio
-Base − Costo; Utilidad % = Margen sobre el Costo).
+respeta la búsqueda y los filtros activos e incluye, además de los datos
+básicos, **IVA, ICE, PVP, Costo, Margen y Utilidad %** de cada producto (Margen
+= Precio Base − Costo; Utilidad % = Margen sobre el Costo).
 
 ## Ordenar el listado
 
@@ -187,6 +240,19 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.6** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas del listado (incluidos valor del
+  IVA, ICE y PVP), las variantes y los códigos de proveedor, salvo Tipo, Tipo
+  IVA, Inv., Estado y Saldo. Los filtros pasan a una **ventana propia** (botón
+  del embudo, se aplican con *Aplicar*) con dos pestañas: **Producto** (criterios
+  nuevos: categoría, marca, unidad de medida y tipo de IVA como lista, saldo bajo
+  el stock mínimo, kit, PVP final, con/sin ICE, se vende, se compra, precios
+  adicionales, fecha de registro y usuario) y **Detalles**, un cuadro de
+  **búsqueda libre dentro de los productos** (variantes, componentes, precios
+  adicionales y códigos de proveedor). *Estado = Inactivo* ahora incluye a todos
+  los productos que no están activos, y *Inventariable = No* a los que no tienen
+  el dato, igual que en las columnas. Los filtros activos se ven como etiquetas
+  dentro del cuadro y la tabla se atenúa mientras busca.
 - **1.5** — El listado se puede **ordenar por hasta tres columnas a la vez**:
   Shift+clic en el título de la segunda columna la encadena a la primera (por
   ejemplo *Categoría* y, dentro de cada una, la *Descripción*). Cada encabezado

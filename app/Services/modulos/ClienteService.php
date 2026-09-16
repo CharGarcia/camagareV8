@@ -296,9 +296,15 @@ class ClienteService
      * @param array $ordenMulti Criterios de orden múltiple (ver App\Helpers\OrdenListado).
      *        Vacío = se ordena por $ordenCol/$ordenDir, como siempre.
      */
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, array $ordenMulti = []): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, array $ordenMulti = [], bool $busquedaAmplia = false): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, false, $ordenMulti);
+        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, false, $ordenMulti, $busquedaAmplia);
+    }
+
+    /** Opciones de los selects del modal de filtros del listado (valores usados por la empresa). */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        return $this->repository->getOpcionesFiltroListado($idEmpresa);
     }
 
     /**

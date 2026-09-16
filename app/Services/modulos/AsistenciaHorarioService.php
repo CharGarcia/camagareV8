@@ -30,6 +30,12 @@ class AsistenciaHorarioService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Usuarios que crearon turnos en la empresa (modal de filtros del listado). */
+    public function getUsuariosConHorarios(int $idEmpresa): array
+    {
+        return $this->repository->getUsuariosConHorarios($idEmpresa);
+    }
+
     public function getDetalle(int $id, int $idEmpresa): ?array
     {
         return $this->repository->findById($id, $idEmpresa);

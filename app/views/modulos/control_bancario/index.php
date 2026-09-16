@@ -186,11 +186,78 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
         <div class="card-header bg-white py-2 px-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-2">
-                    <link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-                    <script src="<?= rtrim($base, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-                    <div id="fbBuscadorCB" style="width: 420px;"></div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <?php
+                    // Filtros del modal (botón embudo). Actúan DENTRO de la cuenta y el período
+                    // elegidos en la tarjeta superior, que siguen mandando sobre los saldos.
+                    // Filas de 12 columnas:
+                    //   Movimiento: [Fecha 6][Fecha Banco 6]
+                    //               [Fecha Cheque 6][Tipo 3][Dirección del cheque 3]
+                    //               [Comprobante 3][Nº Cheque 3][Documento Ref. 3][Clasificado 3]
+                    //   Valores:    [Debe 4][Haber 4][Saldo 4]
+                    //   Tercero:    [Tercero 4][Beneficiario / Cliente 4][Concepto 4]
+                    //               [Glosa 6][Observación 6]
+                    $tM = 'Movimiento';
+                    $filtrosControlBancario = [
+                        ['tab' => $tM, 'key' => 'fecha',         'label' => 'Fecha del movimiento', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Movimiento', 'col' => 6, 'atajos' => true],
+                        ['tab' => $tM, 'key' => 'fecha_banco',   'label' => 'Fecha Banco',     'icon' => 'bi-calendar-check',   'type' => 'date_range', 'grupo' => 'Movimiento', 'col' => 6],
+                        ['tab' => $tM, 'key' => 'fecha_cheque',  'label' => 'Fecha del cheque', 'icon' => 'bi-calendar2-week',  'type' => 'date_range', 'grupo' => 'Movimiento', 'col' => 6],
+                        ['tab' => $tM, 'key' => 'tipo',          'label' => 'Tipo',            'icon' => 'bi-tag',              'type' => 'select',     'grupo' => 'Movimiento', 'col' => 3, 'options' => [
+                            ['v' => 'deposito',      'l' => 'Depósito'],
+                            ['v' => 'transferencia', 'l' => 'Transferencia'],
+                            ['v' => 'cheque',        'l' => 'Cheque'],
+                            ['v' => 'debito',        'l' => 'Débito'],
+                            ['v' => 'nota_debito',   'l' => 'Nota Débito'],
+                            ['v' => 'nota_credito',  'l' => 'Nota Crédito'],
+                            ['v' => 'tarjeta',       'l' => 'Tarjeta'],
+                            ['v' => 'payphone',      'l' => 'Payphone'],
+                            ['v' => 'otro',          'l' => 'Otro'],
+                        ]],
+                        ['tab' => $tM, 'key' => 'direccion',     'label' => 'Dirección (cheque)', 'icon' => 'bi-arrow-left-right', 'type' => 'select', 'grupo' => 'Movimiento', 'col' => 3, 'options' => [
+                            ['v' => 'recibido', 'l' => 'Recibido'],
+                            ['v' => 'emitido',  'l' => 'Emitido'],
+                        ]],
+                        ['tab' => $tM, 'key' => 'comprobante',   'label' => 'Comprobante',     'icon' => 'bi-journal-text',     'type' => 'text',       'grupo' => 'Movimiento', 'col' => 3],
+                        ['tab' => $tM, 'key' => 'numero_cheque', 'label' => 'Nº Cheque',       'icon' => 'bi-hash',             'type' => 'text',       'grupo' => 'Movimiento', 'col' => 3],
+                        ['tab' => $tM, 'key' => 'documento',     'label' => 'Documento Ref.',  'icon' => 'bi-file-text',        'type' => 'text',       'grupo' => 'Movimiento', 'col' => 3],
+                        ['tab' => $tM, 'key' => 'clasificado',   'label' => 'Clasificación manual', 'icon' => 'bi-pencil-square', 'type' => 'select',   'grupo' => 'Movimiento', 'col' => 3, 'options' => [
+                            ['v' => 'si', 'l' => 'Clasificado / conciliado'],
+                            ['v' => 'no', 'l' => 'Sin clasificar'],
+                        ]],
+                        // Valores
+                        ['tab' => $tM, 'key' => 'debe',          'label' => 'Monto Debe',      'icon' => 'bi-currency-dollar',  'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                        ['tab' => $tM, 'key' => 'haber',         'label' => 'Monto Haber',     'icon' => 'bi-currency-dollar',  'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                        ['tab' => $tM, 'key' => 'saldo',         'label' => 'Saldo',           'icon' => 'bi-wallet2',          'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                        // Tercero
+                        ['tab' => $tM, 'key' => 'tercero',       'label' => 'Tercero',         'icon' => 'bi-person',           'type' => 'text',       'grupo' => 'Tercero', 'col' => 4],
+                        ['tab' => $tM, 'key' => 'beneficiario',  'label' => 'Beneficiario / Cliente', 'icon' => 'bi-person-check', 'type' => 'text',    'grupo' => 'Tercero', 'col' => 4],
+                        ['tab' => $tM, 'key' => 'concepto',      'label' => 'Concepto',        'icon' => 'bi-chat-left-text',   'type' => 'text',       'grupo' => 'Tercero', 'col' => 4],
+                        ['tab' => $tM, 'key' => 'glosa',         'label' => 'Glosa',           'icon' => 'bi-text-paragraph',   'type' => 'text',       'grupo' => 'Tercero', 'col' => 6],
+                        ['tab' => $tM, 'key' => 'observacion',   'label' => 'Observación',     'icon' => 'bi-sticky',           'type' => 'text',       'grupo' => 'Tercero', 'col' => 6],
+                    ];
+                    ?>
+                    <link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+                    <script src="<?= rtrim($base, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+                    <div id="fmBuscadorCB"></div>
                     <input type="hidden" id="cb-buscar" value="">
+                    <script>
+                        document.addEventListener('DOMContentLoaded', () => {
+                            if (!window.FiltrosModal) return;
+                            // Sin pestaña Detalles: un movimiento bancario no tiene tablas hijas.
+                            window.CB_filtros = new FiltrosModal({
+                                containerId: 'fmBuscadorCB',
+                                hiddenInputId: 'cb-buscar',
+                                placeholder: 'Buscar en todas las columnas...',
+                                titulo: 'Filtros de movimientos bancarios',
+                                inputWidth: 420,
+                                extraId: 'fmExtraCB',   // columnas + PDF + Excel, pegados al final del grupo
+                                fields: <?= json_encode($filtrosControlBancario, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                                loadingTarget: '#cb-tbody',   // se atenúa mientras se busca
+                                onApply: () => window.CB_fetchSearch && window.CB_fetchSearch(1),
+                            });
+                            window.CB_filtros.init();
+                        });
+                    </script>
 
                     <?php
                     $columnasTabla = [
@@ -209,11 +276,11 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         'saldo' => 'Saldo',
                     ];
                     ?>
-                    <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-
-                    <div class="btn-group btn-group-sm">
-                        <a id="cb-btn-pdf" href="#" class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                        <a id="cb-btn-excel" href="#" class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                    <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+                    <div id="fmExtraCB" class="btn-group btn-group-sm">
+                        <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
+                        <a id="cb-btn-pdf" href="#" class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                        <a id="cb-btn-excel" href="#" class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
                     </div>
                     <div class="vr mx-1"></div>
                     <div class="btn-group btn-group-sm">
@@ -508,30 +575,5 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo) ?>
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>
 <script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= asset_ver('/js/modulos/asientos_contables_modal.js') ?>"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        if (!window.FiltrosBusqueda) return;
-        new FiltrosBusqueda({
-            containerId: 'fbBuscadorCB',
-            hiddenInputId: 'cb-buscar',
-            fields: [
-                { key: 'numero_cheque', label: 'Nº Cheque', icon: 'bi-hash', type: 'text' },
-                { key: 'tercero', label: 'Tercero', icon: 'bi-person', type: 'text' },
-                { key: 'concepto', label: 'Concepto', icon: 'bi-chat-left-text', type: 'text' },
-                { key: 'documento', label: 'Documento Ref.', icon: 'bi-file-text', type: 'text' },
-                { key: 'tipo', label: 'Tipo', icon: 'bi-tag', type: 'select', options: [
-                    { v: 'deposito', l: 'Depósito' }, { v: 'cheque', l: 'Cheque' }, { v: 'transferencia', l: 'Transferencia' },
-                    { v: 'nota_debito', l: 'Nota Débito' }, { v: 'nota_credito', l: 'Nota Crédito' }, { v: 'otro', l: 'Otro' },
-                ]},
-                { key: 'direccion', label: 'Dirección (cheque)', icon: 'bi-arrow-left-right', type: 'select', options: [
-                    { v: 'recibido', l: 'Recibido' }, { v: 'emitido', l: 'Emitido' },
-                ]},
-                { key: 'fecha_banco', label: 'Fecha Banco', icon: 'bi-calendar-check', type: 'date_range' },
-                { key: 'debe', label: 'Monto Debe', icon: 'bi-currency-dollar', type: 'number_range' },
-                { key: 'haber', label: 'Monto Haber', icon: 'bi-currency-dollar', type: 'number_range' },
-            ],
-            onApply: () => window.CB_fetchSearch && window.CB_fetchSearch(1),
-        }).init();
-    });
-</script>
+<?php // El buscador del listado (FiltrosModal) se inicializa junto a la tabla, en la cabecera de la tarjeta. ?>
 <script src="<?= $base ?>/js/modulos/control_bancario.js?v=<?= asset_ver('/js/modulos/control_bancario.js') ?>"></script>

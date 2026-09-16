@@ -96,54 +96,111 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorRet" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            $opcionesSerie    = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesUsuario  = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $opcionesSustento = array_map(fn($s) => ['v' => (string) $s['id'], 'l' => $s['codigo'] . ' - ' . $s['nombre']], $sustentosFiltro ?? []);
+            $nombresTipoDoc   = ['01' => 'Factura', '03' => 'Liquidación de compra', '05' => 'Nota de débito'];
+            $opcionesTipoDoc  = array_map(fn($c) => ['v' => (string) $c, 'l' => $c . ' - ' . ($nombresTipoDoc[(string) $c] ?? 'Otro')], $tiposDocFiltro ?? []);
+            $siNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $tR = 'Retención';
+            // Filas de 12 columnas:
+            //   Documento: [Fecha de emisión 6][Serie 3][Secuencial 3]
+            //              [Estado 4][Estado de correo 4][Período fiscal 4]
+            //              [Secuencial contiene 4][Nº autorización 4][Clave de acceso 4]
+            //              [Asiento 6][Usuario 6]
+            //   Documento sustento: [Fecha doc. sustento 6][Tipo 3][Vinculada 3]
+            //              [Nº doc. sustento 6][Sustento tributario 6]
+            //   Valores:   [Total retenido 6][Total doc. sustento 6]
+            //              [Renta 4][IVA 4][ISD 4]
+            //   Proveedor: [Proveedor 6][RUC 6]
+            $filtrosRetenciones = [
+                ['tab' => $tR, 'key' => 'fecha',         'label' => 'Fecha de emisión',   'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tR, 'key' => 'serie',         'label' => 'Serie',              'icon' => 'bi-upc-scan',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tR, 'key' => 'secuencial',    'label' => 'Secuencial',         'icon' => 'bi-123',            'type' => 'text',       'grupo' => 'Documento', 'col' => 3, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tR, 'key' => 'estado',        'label' => 'Estado',             'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'borrador',      'l' => 'Borrador'],
+                    ['v' => 'pendiente',     'l' => 'Pendiente'],
+                    ['v' => 'autorizada',    'l' => 'Autorizada'],
+                    ['v' => 'no_autorizada', 'l' => 'No autorizada'],
+                    ['v' => 'anulada',       'l' => 'Anulada'],
+                ]],
+                ['tab' => $tR, 'key' => 'estado_correo', 'label' => 'Estado de correo',   'icon' => 'bi-envelope',       'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                    ['v' => 'enviado',   'l' => 'Enviado'],
+                ]],
+                ['tab' => $tR, 'key' => 'periodo',       'label' => 'Período fiscal',     'icon' => 'bi-calendar3',      'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => 'MM/AAAA'],
+                ['tab' => $tR, 'key' => 'numero',        'label' => 'Secuencial (contiene)', 'icon' => 'bi-hash',        'type' => 'text',       'grupo' => 'Documento', 'col' => 4],
+                ['tab' => $tR, 'key' => 'autorizacion',  'label' => 'Nº autorización',    'icon' => 'bi-shield-check',   'type' => 'text',       'grupo' => 'Documento', 'col' => 4],
+                ['tab' => $tR, 'key' => 'clave_acceso',  'label' => 'Clave de acceso',    'icon' => 'bi-key',            'type' => 'text',       'grupo' => 'Documento', 'col' => 4],
+                ['tab' => $tR, 'key' => 'asiento',       'label' => 'Asiento contable',   'icon' => 'bi-journal-check',  'type' => 'select',     'grupo' => 'Documento', 'col' => 6, 'options' => $siNo('Con asiento', 'Sin asiento')],
+                ['tab' => $tR, 'key' => 'id_usuario',    'label' => 'Usuario',            'icon' => 'bi-person-circle',  'type' => 'select',     'grupo' => 'Documento', 'col' => 6, 'options' => $opcionesUsuario],
+                // Documento sustento
+                ['tab' => $tR, 'key' => 'fecha_doc_sustento', 'label' => 'Fecha del documento sustento', 'icon' => 'bi-calendar-check', 'type' => 'date_range', 'grupo' => 'Documento sustento', 'col' => 6],
+                ['tab' => $tR, 'key' => 'tipo_doc',      'label' => 'Tipo de documento',  'icon' => 'bi-file-earmark',   'type' => 'select',     'grupo' => 'Documento sustento', 'col' => 3, 'options' => $opcionesTipoDoc],
+                ['tab' => $tR, 'key' => 'vinculada',     'label' => 'Vinculada a compra', 'icon' => 'bi-link-45deg',     'type' => 'select',     'grupo' => 'Documento sustento', 'col' => 3, 'options' => $siNo('Vinculada a una compra o liquidación', 'Sin vincular')],
+                ['tab' => $tR, 'key' => 'doc_sustento',  'label' => 'Nº documento sustento', 'icon' => 'bi-receipt',     'type' => 'text',       'grupo' => 'Documento sustento', 'col' => 6, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tR, 'key' => 'id_sustento',   'label' => 'Sustento tributario','icon' => 'bi-file-earmark-text', 'type' => 'select',  'grupo' => 'Documento sustento', 'col' => 6, 'options' => $opcionesSustento],
+                // Valores
+                ['tab' => $tR, 'key' => 'total',         'label' => 'Total retenido',     'icon' => 'bi-currency-dollar','type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
+                ['tab' => $tR, 'key' => 'doc_total',     'label' => 'Total del documento sustento', 'icon' => 'bi-receipt-cutoff', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
+                ['tab' => $tR, 'key' => 'renta',         'label' => 'Total Renta',        'icon' => 'bi-percent',        'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tR, 'key' => 'iva',           'label' => 'Total IVA',          'icon' => 'bi-receipt',        'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tR, 'key' => 'isd',           'label' => 'Total ISD',          'icon' => 'bi-bank',           'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // Proveedor
+                ['tab' => $tR, 'key' => 'proveedor',     'label' => 'Proveedor',          'icon' => 'bi-building',       'type' => 'text',       'grupo' => 'Proveedor', 'col' => 6],
+                ['tab' => $tR, 'key' => 'ruc',           'label' => 'RUC / Identificación', 'icon' => 'bi-card-text',    'type' => 'text',       'grupo' => 'Proveedor', 'col' => 6],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorRet"></div>
             <input type="hidden" id="buscarRet" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorRet',
+                    if (!window.FiltrosModal) return;
+                    window.RET_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorRet',
                         hiddenInputId: 'buscarRet',
-                        fields: [
-                            { key: 'proveedor',    label: 'Proveedor',      icon: 'bi-building',        type: 'text' },
-                            { key: 'ruc',          label: 'RUC',            icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',       label: 'Secuencial (contiene)', icon: 'bi-hash',     type: 'text' },
-                            { key: 'serie',        label: 'Serie',          icon: 'bi-upc-scan',        type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial',   label: 'Secuencial',     icon: 'bi-123',             type: 'text' },
-                            { key: 'doc_sustento', label: 'Doc. sustento',  icon: 'bi-receipt',         type: 'text' },
-                            { key: 'clave_acceso', label: 'Clave de acceso', icon: 'bi-key',            type: 'text' },
-                            { key: 'periodo',      label: 'Período',        icon: 'bi-calendar3',       type: 'text' },
-                            { key: 'usuario',      label: 'Usuario',        icon: 'bi-person-circle',   type: 'text' },
-                            { key: 'fecha',        label: 'Fecha emisión',  icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'total',        label: 'Total retenido', icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'renta',        label: 'Total Renta',    icon: 'bi-percent',         type: 'number_range' },
-                            { key: 'iva',          label: 'Total IVA',      icon: 'bi-receipt',         type: 'number_range' },
-                            { key: 'isd',          label: 'Total ISD',      icon: 'bi-bank',            type: 'number_range' },
-                            { key: 'estado',       label: 'Estado',         icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'autorizado', l: 'Autorizado' },
-                                { v: 'pendiente',  l: 'Pendiente' },
-                                { v: 'anulado',    l: 'Anulado' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_hoy',        label: 'Hoy',         mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                            { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_mes_pasado', label: 'Mes pasado',  mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
-                            { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de retenciones en compras',
+                        inputWidth: 420,
+                        extraId: 'fmExtraRet',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las líneas de las retenciones.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de las retenciones',
+                            placeholder: 'Código de retención, concepto, impuesto, base, porcentaje, valor...',
+                            columns: [
+                                { key: 'tipo',        label: 'Impuesto · Código' },
+                                { key: 'descripcion', label: 'Concepto' },
+                                { key: 'base',        label: 'Base', align: 'end' },
+                                { key: 'porcentaje',  label: '%', align: 'end' },
+                                { key: 'monto',       label: 'Retenido', align: 'end' },
+                                { key: 'numero',      label: 'Retención', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',       label: 'Fecha' },
+                                { key: 'proveedor',   label: 'Proveedor' },
+                                { key: 'estado',      label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.secuencial }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                // RET_abrirModal lee el id del data-row de la fila.
+                                setTimeout(() => window.RET_abrirModal({ dataset: { row: JSON.stringify({ id: row.id }) } }), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosRetenciones, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#ret-table-body',   // se atenúa mientras se busca
                         onApply: () => window.RET_fetchSearch && window.RET_fetchSearch(1),
-                    }).init();
+                    });
+                    window.RET_filtros.init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraRet" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero'               => 'Nº Retención',
@@ -161,11 +218,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-danger px-2" title="Exportar PDF">
-                    <i class="fa-regular fa-file-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-success px-2" title="Exportar Excel">
-                    <i class="fa-regular fa-file-excel"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>

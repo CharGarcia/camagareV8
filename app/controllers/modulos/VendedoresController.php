@@ -74,6 +74,8 @@ class VendedoresController extends BaseModuloController
             'ordenDir'   => $ordenDir,
             'vistaConfig'=> $prefsVista,
             'fullWidth'  => true,
+            // Selects del modal de filtros: solo valores que la empresa usa en sus vendedores.
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
         ]);
     }
 
@@ -118,13 +120,15 @@ class VendedoresController extends BaseModuloController
                     : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>';
 
                 $dataAttr = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
+                // Mismas 5 columnas y en el mismo orden que el <thead> de la vista (antes
+                // salían 6, con Identificación primero y una Dirección sin encabezado, y la
+                // tabla quedaba descuadrada después de buscar o paginar).
                 echo '<tr class="vendedor-row" role="button" tabindex="0" data-row=\'' . $dataAttr . '\' onclick="abrirModalVendedorEditar(this)">
-                        <td class="ps-3" data-col="identificacion"><code class="text-secondary">' . htmlspecialchars($r['identificacion'] ?? '') . '</code></td>
-                        <td class="fw-medium" data-col="nombre">' . htmlspecialchars($r['nombre'] ?? '') . '</td>
-                        <td data-col="correo">' . htmlspecialchars($r['correo'] ?? '—') . '</td>
-                        <td data-col="telefono">' . htmlspecialchars($r['telefono'] ?? '—') . '</td>
-                        <td data-col="direccion" class="text-muted small">' . htmlspecialchars($r['direccion'] ?? '—') . '</td>
-                        <td class="text-center pe-3" data-col="status">' . $statusBadge . '</td>
+                        <td class="ps-3 fw-bold" data-col="nombre">' . htmlspecialchars((string) ($r['nombre'] ?? '')) . '</td>
+                        <td data-col="identificacion">' . htmlspecialchars((string) ($r['identificacion'] ?? '-')) . '</td>
+                        <td class="small text-muted" data-col="correo">' . htmlspecialchars((string) ($r['correo'] ?? '-')) . '</td>
+                        <td data-col="telefono">' . htmlspecialchars((string) ($r['telefono'] ?? '-')) . '</td>
+                        <td class="text-center" data-col="status">' . $statusBadge . '</td>
                       </tr>';
             }
         }

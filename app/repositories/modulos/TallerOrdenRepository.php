@@ -46,12 +46,47 @@ class TallerOrdenRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (o.numero_orden ILIKE :b OR o.placa ILIKE :b OR o.marca ILIKE :b
-                             OR o.modelo ILIKE :b OR o.nombre_usuario ILIKE :b
-                             OR c.nombre ILIKE :b OR c.identificacion ILIKE :b
-                             OR o.motivo_ingreso ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            // Texto libre (buscador FiltrosModal, sin sugerencias): todas las palabras, en
+            // cualquier orden, sin distinguir tildes. Columnas del listado + campos que
+            // identifican la orden aunque no sean columnas.
+            // Decisión del usuario: Estado, Tipo de servicio, Prioridad y Aprob. (sí/no)
+            // NO entran en el texto libre; se filtran solo desde el modal de filtros.
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    'o.numero_orden',                                           // N° Orden
+                    'o.secuencial',
+                    "CONCAT(o.establecimiento,'-',o.punto_emision)",            // Serie
+                    "TO_CHAR(o.fecha_ingreso, 'DD-MM-YYYY HH24:MI')",           // Fecha (como se muestra)
+                    'o.fecha_ingreso::text',
+                    'o.placa',                                                  // Placa
+                    "CONCAT_WS(' ', o.marca, o.modelo)",                        // Vehículo
+                    'o.anio', 'o.color', 'o.chasis', 'o.motor',
+                    'c.nombre',                                                 // Cliente
+                    'c.identificacion',
+                    'o.nombre_usuario', 'o.telefono_contacto', 'o.correo_contacto',
+                    'd.nombre',                                                 // Departamento
+                    'o.total::text',                                            // Total
+                    'o.motivo_ingreso', 'o.diagnostico_texto', 'o.observaciones', 'o.recomendaciones',
+                    'o.aseguradora', 'o.numero_siniestro', 'o.ajustador',
+                    'o.numero_documento',                                       // Documento de venta generado
+                    '(SELECT u.nombre FROM usuarios u WHERE u.id = o.created_by)',                      // Usuario que registró
+                    '(SELECT ea.nombres_apellidos FROM empleados ea WHERE ea.id = o.id_empleado_asesor)', // Asesor
+                    '(SELECT ej.nombres_apellidos FROM empleados ej WHERE ej.id = o.id_empleado_jefe)',   // Jefe de taller
+                    // Repuestos / mano de obra de la orden (código + descripción)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, td.descripcion), ' ')
+                        FROM taller_ordenes_detalle td LEFT JOIN productos p ON p.id = td.id_producto
+                       WHERE td.id_orden = o.id AND td.eliminado = false)",
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
+        // Claves del modal de filtros (vista taller/index.php). Nunca quitar claves:
+        // viajan también en los enlaces de PDF/Excel y en URLs guardadas.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [
                 'orden'        => 'o.numero_orden',
@@ -61,6 +96,10 @@ class TallerOrdenRepository extends BaseRepository
                 'modelo'       => 'o.modelo',
                 'aseguradora'  => 'o.aseguradora',
                 'siniestro'    => 'o.numero_siniestro',
+                'ruc'          => 'c.identificacion',
+                'contacto'     => "CONCAT_WS(' ', o.nombre_usuario, o.telefono_contacto, o.correo_contacto)",
+                'documento'    => 'o.numero_documento',
+                'observaciones'=> "CONCAT_WS(' ', o.motivo_ingreso, o.diagnostico_texto, o.observaciones, o.recomendaciones)",
             ],
             'exacto' => [
                 'estado'       => 'o.estado',
@@ -70,10 +109,20 @@ class TallerOrdenRepository extends BaseRepository
                 'aprobada'     => 'o.aprobado',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), igual que factura.
                 'serie'        => "CONCAT(o.establecimiento,'-',o.punto_emision)",
+                // aprobado:si / aprobado:no (presupuesto aprobado por el cliente, columna Aprob.)
+                'aprobado'      => "CASE WHEN o.aprobado IS TRUE THEN 'si' ELSE 'no' END",
+                'es_siniestro'  => "CASE WHEN o.es_siniestro IS TRUE THEN 'si' ELSE 'no' END",
+                'con_documento' => "CASE WHEN o.id_documento IS NULL THEN 'no' ELSE 'si' END",
+                'tipo_documento'=> 'o.tipo_documento',
+                'usuario'       => 'o.created_by',
+                'asesor'        => 'o.id_empleado_asesor',
+                'jefe'          => 'o.id_empleado_jefe',
             ],
             'fecha'  => [
                 'fecha'        => 'o.fecha_ingreso',
                 'entrega'      => 'o.fecha_entrega',
+                'estimada'     => 'o.fecha_estimada_entrega',
+                'proxima_cita' => 'o.proxima_cita',
             ],
             'numerico' => [
                 'total'        => 'o.total',
@@ -120,6 +169,116 @@ class TallerOrdenRepository extends BaseRepository
         $st->execute($params);
 
         return ['total' => $total, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /**
+     * Valores realmente usados por la empresa en sus órdenes, para los selects del
+     * modal de filtros: usuarios que registraron, asesores, jefes de taller y
+     * departamentos actuales (por nombre, igual que la clave `departamento`).
+     */
+    public function getOpcionesFiltro(int $idEmpresa): array
+    {
+        $p = [':e' => $idEmpresa];
+        $q = function (string $sql) use ($p): array {
+            $st = $this->db->prepare($sql);
+            $st->execute($p);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        };
+        return [
+            'usuarios' => $q("SELECT DISTINCT u.id, u.nombre FROM taller_ordenes o JOIN usuarios u ON u.id = o.created_by
+                              WHERE o.id_empresa = :e AND o.eliminado = false ORDER BY u.nombre"),
+            'asesores' => $q("SELECT DISTINCT e.id, e.nombres_apellidos AS nombre FROM taller_ordenes o JOIN empleados e ON e.id = o.id_empleado_asesor
+                              WHERE o.id_empresa = :e AND o.eliminado = false ORDER BY 2"),
+            'jefes'    => $q("SELECT DISTINCT e.id, e.nombres_apellidos AS nombre FROM taller_ordenes o JOIN empleados e ON e.id = o.id_empleado_jefe
+                              WHERE o.id_empresa = :e AND o.eliminado = false ORDER BY 2"),
+            'departamentos' => $q("SELECT DISTINCT d.nombre FROM taller_ordenes o JOIN taller_departamentos d ON d.id = o.id_departamento_actual
+                              WHERE o.id_empresa = :e AND o.eliminado = false ORDER BY d.nombre"),
+        ];
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las órdenes (pestaña "Detalles" del modal de filtros):
+     * repuestos / mano de obra, trabajos registrados por departamento, observaciones del
+     * checklist de recepción y notas de la bitácora (sin los eventos automáticos de
+     * líneas, que repetirían los repuestos). Mismo alcance que el listado (empresa, no
+     * eliminadas, registros propios por created_by). No busca en estados ni tipos.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "o.id_empresa = :id_empresa AND o.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND o.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $F = \App\Helpers\FiltrosBusqueda::class;
+        $condDet = $F::condicionTexto(
+            ['p.codigo', 'td.descripcion', 'td.observacion', 'td.motivo_rechazo', 'dep.nombre', 'emp.nombres_apellidos',
+             'td.cantidad::text', 'td.precio_unitario::text', 'td.total_linea::text'],
+            $q, $params, 'dt'
+        );
+        $condEta = $F::condicionTexto(['te.trabajo_realizado', 'te.observaciones', 'dep.nombre', 'emp.nombres_apellidos'], $q, $params, 'et');
+        $condChk = $F::condicionTexto(['tc.item', 'tc.observacion'], $q, $params, 'ck');
+        $condBit = $F::condicionTexto(['tb.concepto', 'tb.detalle'], $q, $params, 'bt');
+        if ($condDet === '' || $condEta === '' || $condChk === '' || $condBit === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT o.id, o.numero_orden, o.fecha_ingreso, o.placa, o.estado, c.nombre AS cliente
+                    FROM taller_ordenes o
+                    LEFT JOIN clientes c ON c.id = o.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'LINEA' AS origen, td.tipo_linea AS tipo, p.codigo AS referencia, td.descripcion,
+                           td.cantidad, td.total_linea AS monto,
+                           b.id AS id_orden, b.numero_orden, b.fecha_ingreso, b.placa, b.estado, b.cliente
+                    FROM taller_ordenes_detalle td
+                    JOIN base b ON b.id = td.id_orden
+                    LEFT JOIN productos p ON p.id = td.id_producto
+                    LEFT JOIN taller_departamentos dep ON dep.id = td.id_departamento
+                    LEFT JOIN empleados emp ON emp.id = td.id_empleado_tecnico
+                    WHERE td.eliminado = false AND $condDet
+                    UNION ALL
+                    SELECT 'ETAPA' AS origen, dep.nombre AS tipo, emp.nombres_apellidos AS referencia,
+                           NULLIF(CONCAT_WS(' — ', te.trabajo_realizado, te.observaciones), '') AS descripcion,
+                           NULL AS cantidad, NULL AS monto,
+                           b.id, b.numero_orden, b.fecha_ingreso, b.placa, b.estado, b.cliente
+                    FROM taller_ordenes_etapas te
+                    JOIN base b ON b.id = te.id_orden
+                    LEFT JOIN taller_departamentos dep ON dep.id = te.id_departamento
+                    LEFT JOIN empleados emp ON emp.id = te.id_empleado_responsable
+                    WHERE te.eliminado = false
+                      AND (COALESCE(te.trabajo_realizado, '') <> '' OR COALESCE(te.observaciones, '') <> '')
+                      AND $condEta
+                    UNION ALL
+                    SELECT 'CHECKLIST' AS origen, tc.grupo AS tipo, tc.item AS referencia, tc.observacion AS descripcion,
+                           NULL, NULL,
+                           b.id, b.numero_orden, b.fecha_ingreso, b.placa, b.estado, b.cliente
+                    FROM taller_ordenes_checklist tc
+                    JOIN base b ON b.id = tc.id_orden
+                    WHERE tc.eliminado = false AND COALESCE(tc.observacion, '') <> '' AND $condChk
+                    UNION ALL
+                    SELECT 'BITACORA' AS origen, tb.tipo_evento AS tipo, NULL AS referencia,
+                           NULLIF(CONCAT_WS(' — ', tb.concepto, tb.detalle), '') AS descripcion,
+                           NULL, NULL,
+                           b.id, b.numero_orden, b.fecha_ingreso, b.placa, b.estado, b.cliente
+                    FROM taller_ordenes_bitacora tb
+                    JOIN base b ON b.id = tb.id_orden
+                    WHERE tb.eliminado = false AND tb.tipo_evento NOT LIKE 'linea%' AND $condBit
+                ) x
+                ORDER BY x.fecha_ingreso DESC, x.id_orden DESC, x.origen
+                LIMIT $limit";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     // ─── TABLERO: órdenes activas agrupadas por departamento ──────────────────

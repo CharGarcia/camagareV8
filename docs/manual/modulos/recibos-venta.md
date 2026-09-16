@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento
-version: 1.7
+etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento
+version: 1.8
 orden: 35
 estado: activo
 ---
@@ -54,6 +54,52 @@ los que se emitió**, aunque el inventario haya cambiado desde entonces.
 | Cobro | Se registra como cobro de tipo recibo |
 | Contabilidad | Genera asiento de venta |
 | SRI | **No** se envía |
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del recibo: número, fecha,
+cliente, identificación, subtotal, descuento, IVA, ICE, propina, total,
+vendedor, observaciones y usuario. Además busca en el número de la **factura
+generada** desde el recibo y en los **códigos y descripciones de los productos**
+del recibo. Las columnas **Impuestos** (con o sin), **Estado de pago** y
+**Estado** no entran en la búsqueda libre: para filtrar por ellas use la ventana
+de filtros. Puede escribir varias palabras en cualquier orden y no importan
+mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el cuadro.
+Mientras busca, aparece un **círculo girando** al final del cuadro y la tabla se
+ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Recibo** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (borrador, emitido, facturado, anulado), estado de pago (pendiente / abonado / pagado), serie, N° recibo, secuencial, con o sin impuestos, origen (directo, desde factura de venta, POS / caja), con o sin asiento contable, días de crédito |
+| Valores | Total, saldo pendiente, subtotal, descuento, IVA, ICE y propina (cada uno con mínimo y máximo) |
+| Tercero | Cliente, RUC / cédula, vendedor, usuario que registró, observaciones, factura generada |
+
+Los selectores *Serie*, *Vendedor* y *Usuario que registró* listan solo lo que
+la empresa ya usó en sus recibos. El *estado de pago* y el *saldo pendiente* se
+calculan con la misma regla que la columna Estado de pago: los cobros de
+Ingresos no anulados registrados contra el recibo.
+
+**Pestaña Detalles** (lo que hay dentro del recibo). Es un único cuadro,
+**Buscar libremente dentro de los recibos**: escriba un producto, un código, un
+lote, una forma de pago, un plazo o un dato de la información adicional, y
+aparece la lista de **cada línea que coincide** con el recibo al que pertenece
+(número, fecha, cliente y estado). Un clic en la fila deja el listado mostrando
+solo ese recibo; el ícono de la derecha lo abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Exportar el documento
 
@@ -110,6 +156,13 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.8** — Nuevo **buscador del listado**: la búsqueda libre recorre todas las
+  columnas (incluido el IVA), la factura generada y los productos del recibo; el
+  botón del embudo abre la ventana de filtros con pestañas *Recibo* y *Detalles*,
+  y los filtros activos se ven como etiquetas dentro del cuadro. Se agregan los
+  filtros de saldo pendiente, origen, asiento contable, días de crédito,
+  vendedor y usuario como selectores y factura generada; el estado
+  *Autorizado*, que un recibo nunca tiene, se reemplaza por los estados reales.
 - **1.7** — La columna **Vencimiento** de cada línea se limita ahora al **lote
   seleccionado** (y elegir la fecha selecciona su lote). Antes se ofrecían todas
   las fechas del producto, con lo que podía registrarse una combinación

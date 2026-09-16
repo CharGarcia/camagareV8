@@ -133,6 +133,12 @@ class ServicioExternoService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Búsqueda libre dentro de las órdenes (servicios/productos) — pestaña Detalles del buscador. */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuario, $limit);
+    }
+
     public function getDetalleCompleto(int $id, int $idEmpresa): ?array
     {
         $cab = $this->repository->find($id, $idEmpresa);

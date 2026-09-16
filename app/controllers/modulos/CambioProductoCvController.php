@@ -103,6 +103,8 @@ class CambioProductoCvController extends BaseModuloController
             'empresa'      => $empresaData,
             'puntos'       => $puntos,
             'seriesFiltro' => $seriesFiltro,
+            // Selects del modal de filtros del listado (solo valores usados por la empresa).
+            'opcionesFiltros' => $this->service->getOpcionesFiltros($idEmpresa),
             'rows'         => $rows,
             'total'        => $total,
             'page'         => $page,
@@ -180,6 +182,54 @@ class CambioProductoCvController extends BaseModuloController
             'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
         ]);
         exit;
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de los cambios (líneas
+     * devueltas y entregadas con lote/NUP, bodega y documento de origen). Devuelve
+     * id/estado/serie/secuencial para abrir el modal del cambio (abrirModalCambioVer).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim((string) ($_GET['q'] ?? ''));
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $origenes = ['FACTURA' => 'Factura de consignación', 'CAMBIO' => 'Cambio anterior', 'CONSIGNACION' => 'Consignación'];
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $origenDoc = $r['documento_origen'] ?? '';
+            if ($origenDoc !== '' && isset($origenes[strtoupper((string) ($r['origen_tipo'] ?? ''))])) {
+                $origenDoc = $origenes[strtoupper((string) $r['origen_tipo'])] . ' ' . $origenDoc;
+            }
+            $rows[] = [
+                'origen'      => ($r['tipo_linea'] ?? '') === 'devolucion' ? 'Devolución' : 'Entrega',
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                'extra'       => $r['extra'] ?? '',
+                'bodega'      => $r['bodega'] ?? '',
+                'documento'   => $origenDoc,
+                'cantidad'    => $r['cantidad'] !== null ? number_format((float) $r['cantidad'], 2) : '',
+                'monto'       => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'id'          => (int) $r['id'],
+                'serie'       => $r['serie'] ?? '',
+                'secuencial'  => $r['secuencial'] ?? '',
+                'numero'      => ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? ''),
+                'fecha'       => !empty($r['fecha_cambio']) ? date('d-m-Y', strtotime((string) $r['fecha_cambio'])) : '',
+                'cliente'     => $r['cliente_nombre'] ?? '',
+                'estado'      => (string) ($r['estado'] ?? ''),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     /** Filas del listado con el filtro/orden actual, sin paginar (para exportar). */

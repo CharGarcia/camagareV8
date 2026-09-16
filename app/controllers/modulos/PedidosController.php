@@ -94,6 +94,9 @@ class PedidosController extends BaseModuloController {
         // serie de un pedido NUEVO), esto incluye series de cualquier
         // establecimiento y aunque el punto ya no tenga secuencial configurado.
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+        // Selects del modal de filtros: solo responsables/usuarios con pedidos en la empresa.
+        $responsablesFiltro = $this->repository->getResponsablesConPedidos($idEmpresa);
+        $usuariosFiltro     = $this->repository->getUsuariosConPedidos($idEmpresa);
 
         $this->viewWithLayout('layouts.main', 'modulos/pedidos/index', [
             'titulo' => 'Pedidos de Ventas',
@@ -103,6 +106,8 @@ class PedidosController extends BaseModuloController {
             'responsables' => $responsables,
             'empresa' => $empresaData,
             'seriesFiltro' => $seriesFiltro,
+            'responsablesFiltro' => $responsablesFiltro,
+            'usuariosFiltro' => $usuariosFiltro,
             'tarifasIva' => $this->repository->getTarifasIva(),
             'unidades' => $this->repository->getUnidadesMedida($idEmpresa),
             'rows' => $rows,
@@ -440,6 +445,49 @@ class PedidosController extends BaseModuloController {
             echo json_encode(['ok' => false, 'mensaje' => 'Error al preparar la factura: ' . $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de los pedidos
+     * (productos pedidos y documentos que los consumieron). Mismo alcance que el
+     * listado, incluidos los registros propios cuando no hay acceso total.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $origenes = ['PRODUCTO' => 'Producto', 'CONSIGNACION' => 'Consignación de venta', 'FACTURA' => 'Factura de venta'];
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $esDoc = $r['origen'] !== 'PRODUCTO';
+            $rows[] = [
+                'origen'      => $origenes[$r['origen']] ?? $r['origen'],
+                // Producto: su código; documento: su número.
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                'cantidad'    => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 4, '.', ''), '0'), '.') : '',
+                'documento'   => $esDoc
+                    ? trim((!empty($r['fecha_doc']) ? date('d-m-Y', strtotime($r['fecha_doc'])) : '') . ' ' . ucfirst((string) ($r['estado_doc'] ?? '')))
+                    : '',
+                'id_pedido'   => (int) $r['id_pedido'],
+                'numero'      => $r['numero'] ?? '',
+                'fecha'       => !empty($r['fecha_pedido']) ? date('d-m-Y', strtotime($r['fecha_pedido'])) : '',
+                'cliente'     => $r['cliente'] ?? '',
+                'estado'      => (string) ($r['estado'] ?? ''),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function searchAjax(): void

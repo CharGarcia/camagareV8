@@ -56,9 +56,151 @@ class EntregasConsignacionesRepository extends BaseRepository
         LEFT JOIN usuarios u ON u.id = e.created_by
     ";
 
+    /**
+     * Columnas de cada fila del listado (y de la cabecera que devuelve buscarEnDetalles(),
+     * para abrir el mismo modal de detalle desde la pestaña Detalles del buscador).
+     */
+    private const COLUMNAS_LISTADO = "
+        cv.id AS id_consignacion, cv.serie, cv.secuencial, cv.estado AS estado_consignacion,
+        cv.fecha_emision, cv.fecha_entrega, cv.hora_entrega_desde, cv.hora_entrega_hasta,
+        cv.total, cv.observaciones AS observaciones_consignacion,
+        " . self::EXPR_DIAS . " AS dias_espera,
+        c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+        c.direccion AS cliente_direccion,
+        rt.nombre AS responsable_traslado_nombre,
+        e.id, e.canal, e.estado, e.latitud, e.longitud, e.precision_m, e.firma_path,
+        e.capturado_en, e.dispositivo_id, e.observaciones,
+        u.nombre AS registrado_por
+    ";
+
     public function __construct()
     {
         parent::__construct('consignaciones_ventas_entregas');
+    }
+
+    /**
+     * Condición de alcance compartida: multiempresa + soft-delete + estados entregables
+     * + filtro "solo mis responsables". Devuelve null si el usuario no puede ver nada.
+     */
+    private function condicionAlcance(int $idEmpresa, ?array $idsResponsables, array &$params): ?string
+    {
+        $params[':e'] = $idEmpresa;
+        $cond = "cv.id_empresa = :e AND cv.eliminado = false AND cv.estado IN ('Emitida', 'Entregada', 'Facturada')";
+        if ($idsResponsables !== null) {
+            if (empty($idsResponsables)) {
+                return null;
+            }
+            $marcadores = [];
+            foreach (array_values($idsResponsables) as $i => $idResp) {
+                $clave = ":r{$i}";
+                $marcadores[] = $clave;
+                $params[$clave] = $idResp;
+            }
+            $cond .= " AND cv.id_responsable_traslado IN (" . implode(',', $marcadores) . ")";
+        }
+        return $cond;
+    }
+
+    /** Responsables de traslado usados en las consignaciones entregables: filtro del modal de filtros. */
+    public function getResponsablesUsados(int $idEmpresa, ?array $idsResponsables): array
+    {
+        $params = [];
+        $cond = $this->condicionAlcance($idEmpresa, $idsResponsables, $params);
+        if ($cond === null) {
+            return [];
+        }
+        $sql = "SELECT DISTINCT rt.id, rt.nombre
+                FROM consignaciones_ventas cv
+                JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
+                WHERE $cond
+                ORDER BY rt.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que registraron entregas (columna "Registrado por"): filtro del modal de filtros. */
+    public function getUsuariosEntregas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM consignaciones_ventas_entregas e
+                JOIN usuarios u ON u.id = e.created_by
+                WHERE e.id_empresa = :e AND e.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las consignaciones (pestaña "Detalles" del modal de filtros):
+     * cada producto consignado (código, nombre, lote, NUP, caducidad, bodega) y cada
+     * evidencia de entrega registrada (canal, dispositivo, observación) que coincide con
+     * el texto, con la consignación a la que pertenece. Mismo alcance que el listado
+     * (empresa, no eliminadas, estados entregables y "solo mis responsables"), sin el
+     * filtro de estado de entrega: busca en pendientes y entregadas.
+     *
+     * La CTE `base` trae las mismas columnas que una fila del listado, para abrir el
+     * modal de detalle con los mismos datos.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?array $idsResponsables = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [];
+        $cond = $this->condicionAlcance($idEmpresa, $idsResponsables, $params);
+        if ($cond === null) {
+            return [];
+        }
+
+        $condProd = FiltrosBusqueda::condicionTexto(
+            ['p.codigo', 'p.nombre', 'p.codigo_barras', 'd.lote', 'd.nup', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')",
+             'bo.nombre', 'd.cantidad::text'],
+            $q, $params, 'pr'
+        );
+        $condEnt = FiltrosBusqueda::condicionTexto(
+            ['ev.observaciones', 'ev.dispositivo_id', 'ue.nombre', "TO_CHAR(ev.capturado_en, 'DD-MM-YYYY HH24:MI:SS')"],
+            $q, $params, 'en'
+        );
+        if ($condProd === '' || $condEnt === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT " . self::COLUMNAS_LISTADO . "
+                    " . self::JOIN_BASE . "
+                    WHERE $cond
+                ),
+                coincidencias AS (
+                    SELECT 'PRODUCTO' AS det_origen, p.codigo AS det_tipo, p.nombre AS det_descripcion,
+                           NULLIF(CONCAT_WS(' / ', NULLIF(d.lote, ''), NULLIF(d.nup, ''), TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')), '') AS det_extra,
+                           d.cantidad AS det_cantidad, d.id_consignacion AS det_id_cons
+                    FROM consignaciones_ventas_detalles d
+                    JOIN base b ON b.id_consignacion = d.id_consignacion
+                    LEFT JOIN productos p ON p.id = d.id_producto
+                    LEFT JOIN bodegas bo ON bo.id = d.id_bodega
+                    WHERE d.eliminado = false AND $condProd
+                    UNION ALL
+                    SELECT 'ENTREGA' AS det_origen, ev.canal AS det_tipo, ev.observaciones AS det_descripcion,
+                           TO_CHAR(ev.capturado_en, 'DD-MM-YYYY HH24:MI:SS') AS det_extra,
+                           NULL::numeric AS det_cantidad, ev.id_consignacion AS det_id_cons
+                    FROM consignaciones_ventas_entregas ev
+                    JOIN base b ON b.id_consignacion = ev.id_consignacion
+                    LEFT JOIN usuarios ue ON ue.id = ev.created_by
+                    WHERE ev.eliminado = false AND $condEnt
+                )
+                SELECT x.det_origen, x.det_tipo, x.det_descripcion, x.det_extra, x.det_cantidad, b.*
+                FROM coincidencias x
+                JOIN base b ON b.id_consignacion = x.det_id_cons
+                ORDER BY b.fecha_emision DESC, b.id_consignacion DESC, x.det_origen
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
@@ -144,8 +286,32 @@ class EntregasConsignacionesRepository extends BaseRepository
         $filtros    = $parsed['filtros'];
 
         if ($textoLibre !== '') {
+            // Texto libre (buscador FiltrosModal de la vista): las columnas del listado y lo
+            // que identifica a la consignación aunque no sea columna. Decisión del usuario:
+            // Estado y Canal (tipo) NO entran en el texto libre; se filtran desde el modal.
+            // Firma y GPS son íconos sí/no: también van solo al modal.
             $condicion = FiltrosBusqueda::condicionTexto(
-                ['cv.secuencial', 'c.nombre', 'c.direccion', 'rt.nombre', 'u.nombre'],
+                [
+                    "TO_CHAR(cv.fecha_emision, 'DD-MM-YYYY')",                   // Emisión
+                    "CONCAT(cv.serie, '-', cv.secuencial)",                      // Consignación
+                    'c.nombre',                                                  // Cliente
+                    'c.identificacion',
+                    'c.direccion',                                               // Dirección
+                    'rt.nombre',                                                 // Responsable
+                    "TO_CHAR(cv.fecha_entrega, 'DD-MM-YYYY')",                   // Entrega programada
+                    '(' . self::EXPR_DIAS . ')::text',                           // Días
+                    "TO_CHAR(e.capturado_en, 'DD-MM-YYYY HH24:MI:SS')",          // Fecha/hora entrega
+                    'u.nombre',                                                  // Registrado por
+                    'e.observaciones',                                           // Observaciones (de la entrega)
+                    'cv.observaciones',                                          // Observaciones de la consignación
+                    'cv.punto_llegada',
+                    'e.dispositivo_id',
+                    // Productos consignados (código, nombre, lote y NUP)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup), ' ')
+                        FROM consignaciones_ventas_detalles d
+                        LEFT JOIN productos p ON p.id = d.id_producto
+                       WHERE d.id_consignacion = cv.id AND d.eliminado = false)",
+                ],
                 $textoLibre,
                 $params,
                 'tl'
@@ -161,7 +327,9 @@ class EntregasConsignacionesRepository extends BaseRepository
         FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
             'texto' => [
                 'secuencial'     => 'cv.secuencial',
-                'numero'         => 'cv.secuencial',
+                // Nº completo "serie-secuencial" (contiene al secuencial: las búsquedas
+                // viejas por secuencial siguen encontrando lo mismo).
+                'numero'         => "CONCAT(cv.serie, '-', cv.secuencial)",
                 'cliente'        => 'c.nombre',
                 'ruc'            => 'c.identificacion',
                 'identificacion' => 'c.identificacion',
@@ -174,7 +342,12 @@ class EntregasConsignacionesRepository extends BaseRepository
                 'obs'            => 'e.observaciones',
             ],
             'exacto' => [
-                'canal' => 'e.canal',
+                'canal'          => 'e.canal',
+                'id_responsable' => 'cv.id_responsable_traslado',
+                'id_usuario'     => 'e.created_by',
+                // firma:si / firma:no y gps:si / gps:no (mismas reglas que los íconos de la tabla)
+                'firma'          => "CASE WHEN e.id IS NOT NULL AND e.firma_path IS NOT NULL AND e.firma_path <> '' THEN 'si' ELSE 'no' END",
+                'gps'            => "CASE WHEN e.id IS NOT NULL AND e.latitud IS NOT NULL AND e.longitud IS NOT NULL THEN 'si' ELSE 'no' END",
             ],
             'fecha' => [
                 // Admiten valor parcial ("emision:2026" = todo el año, "emision:2026-08" =
@@ -254,16 +427,7 @@ class EntregasConsignacionesRepository extends BaseRepository
 
         $orderBy = OrdenListado::clausula($orden, self::MAPA_ORDEN, 'cv.fecha_emision', 'cv.id DESC');
 
-        $sql = "SELECT cv.id AS id_consignacion, cv.serie, cv.secuencial, cv.estado AS estado_consignacion,
-                       cv.fecha_emision, cv.fecha_entrega, cv.hora_entrega_desde, cv.hora_entrega_hasta,
-                       cv.total, cv.observaciones AS observaciones_consignacion,
-                       " . self::EXPR_DIAS . " AS dias_espera,
-                       c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
-                       c.direccion AS cliente_direccion,
-                       rt.nombre AS responsable_traslado_nombre,
-                       e.id, e.canal, e.estado, e.latitud, e.longitud, e.precision_m, e.firma_path,
-                       e.capturado_en, e.dispositivo_id, e.observaciones,
-                       u.nombre AS registrado_por
+        $sql = "SELECT " . self::COLUMNAS_LISTADO . "
                 " . self::JOIN_BASE . "
                 $where
                 $orderBy

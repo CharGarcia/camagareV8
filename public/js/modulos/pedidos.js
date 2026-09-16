@@ -102,7 +102,7 @@ function pedBloquearExportSiExcede(e) {
         confirmButtonColor: '#f39c12',
     }).then(() => {
         const inputBuscar = document.getElementById('buscarPedido');
-        const widget = document.querySelector('#fbBuscadorPED input');
+        const widget = document.querySelector('#fmBuscadorPED .fm-typer');
         (widget || inputBuscar)?.focus();
     });
 }
@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById(id)?.addEventListener('click', pedBloquearExportSiExcede);
     });
 
-    // Buscador principal (widget FiltrosBusqueda): respaldo por si el valor del
+    // Buscador principal (widget FiltrosModal): respaldo por si el valor del
     // input oculto cambia sin pasar por onApply (mismo patrón que Egresos).
     const inputBuscarPed = document.getElementById('buscarPedido');
     if (inputBuscarPed) {
@@ -288,6 +288,9 @@ async function PED_fetchSearch(page = 1) {
     
     if (!tbody) return;
 
+    // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras se
+    // busca, también al paginar u ordenar (que llaman a esta función directo).
+    tbody.classList.add('fm-cargando-target');
     try {
         const orden = window.CMG_ordenParam(window.currentSorts || []);
         const uri = `${window.CMG_urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
@@ -312,6 +315,8 @@ async function PED_fetchSearch(page = 1) {
             Error al cargar registros: ${err.message}
         </td></tr>`;
         infoPag.textContent = 'Error de carga';
+    } finally {
+        tbody.classList.remove('fm-cargando-target');
     }
 }
 

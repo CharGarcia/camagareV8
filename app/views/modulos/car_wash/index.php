@@ -65,44 +65,97 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorCW" style="width: 460px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // "Filtros" (embudo) que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de OrdenCarWashRepository::getListado().
+            $opcionesSerie = array_map(fn($x) => ['v' => $x['establecimiento'] . '-' . $x['punto_emision'], 'l' => $x['establecimiento'] . '-' . $x['punto_emision']], $seriesFiltro ?? []);
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $tO = 'Orden';
+            // Filas de 12 columnas:
+            //   Orden:    [Fecha 6][Estado 3][Serie 3] [N° Orden 4][Secuencial 4][Total 4]
+            //             [Documento generado 4][Tipo de documento 4][N° documento 4] [Fecha de entrega 6][Próxima cita 6]
+            //   Vehículo: [Placa 3][Marca 3][Modelo 3][Kilometraje 3]
+            //   Cliente:  [Cliente 3][RUC 3][Usuario 3][Observaciones 3]
+            $filtrosCarWash = [
+                ['tab' => $tO, 'key' => 'fecha',          'label' => 'Fecha de ingreso',   'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Orden', 'col' => 6, 'atajos' => true],
+                ['tab' => $tO, 'key' => 'estado',         'label' => 'Estado',             'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Orden', 'col' => 3, 'options' => [
+                    ['v' => 'borrador',  'l' => 'Borrador'],
+                    ['v' => 'facturado', 'l' => 'Facturado'],
+                    ['v' => 'anulado',   'l' => 'Anulado'],
+                ]],
+                ['tab' => $tO, 'key' => 'serie',          'label' => 'Serie',              'icon' => 'bi-upc-scan',        'type' => 'select',       'grupo' => 'Orden', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tO, 'key' => 'orden',          'label' => 'N° Orden',           'icon' => 'bi-hash',            'type' => 'text',         'grupo' => 'Orden', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tO, 'key' => 'secuencial',     'label' => 'Secuencial',         'icon' => 'bi-123',             'type' => 'text',         'grupo' => 'Orden', 'col' => 4, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tO, 'key' => 'total',          'label' => 'Total',              'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Orden', 'col' => 4],
+                ['tab' => $tO, 'key' => 'con_documento',  'label' => 'Documento de venta', 'icon' => 'bi-receipt',         'type' => 'select',       'grupo' => 'Orden', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con documento generado'],
+                    ['v' => 'no', 'l' => 'Sin documento generado'],
+                ]],
+                ['tab' => $tO, 'key' => 'tipo_documento', 'label' => 'Tipo de documento',  'icon' => 'bi-tag',             'type' => 'select',       'grupo' => 'Orden', 'col' => 4, 'options' => [
+                    ['v' => 'FACTURA', 'l' => 'Factura'],
+                    ['v' => 'RECIBO',  'l' => 'Recibo de venta'],
+                ]],
+                ['tab' => $tO, 'key' => 'documento',      'label' => 'N° documento generado', 'icon' => 'bi-file-earmark-text', 'type' => 'text',     'grupo' => 'Orden', 'col' => 4],
+                ['tab' => $tO, 'key' => 'fecha_entrega',  'label' => 'Fecha de entrega',   'icon' => 'bi-calendar-check',  'type' => 'date_range',   'grupo' => 'Orden', 'col' => 6],
+                ['tab' => $tO, 'key' => 'proxima_cita',   'label' => 'Próxima cita',       'icon' => 'bi-calendar-plus',   'type' => 'date_range',   'grupo' => 'Orden', 'col' => 6],
+                ['tab' => $tO, 'key' => 'placa',          'label' => 'Placa',              'icon' => 'bi-car-front',       'type' => 'text',         'grupo' => 'Vehículo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'marca',          'label' => 'Marca',              'icon' => 'bi-badge-tm',        'type' => 'text',         'grupo' => 'Vehículo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'modelo',         'label' => 'Modelo',             'icon' => 'bi-car-front-fill',  'type' => 'text',         'grupo' => 'Vehículo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'kilometraje',    'label' => 'Kilometraje',        'icon' => 'bi-speedometer2',    'type' => 'number_range', 'grupo' => 'Vehículo', 'col' => 3],
+                ['tab' => $tO, 'key' => 'cliente',        'label' => 'Cliente',            'icon' => 'bi-person',          'type' => 'text',         'grupo' => 'Cliente y registro', 'col' => 3],
+                ['tab' => $tO, 'key' => 'ruc',            'label' => 'RUC / Cédula',       'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Cliente y registro', 'col' => 3],
+                ['tab' => $tO, 'key' => 'usuario',        'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',   'type' => 'select',       'grupo' => 'Cliente y registro', 'col' => 3, 'options' => $opcionesUsuario],
+                ['tab' => $tO, 'key' => 'observaciones',  'label' => 'Observaciones / novedades', 'icon' => 'bi-chat-left-text', 'type' => 'text',  'grupo' => 'Cliente y registro', 'col' => 3],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorCW"></div>
             <input type="hidden" id="b" name="b" value="<?= htmlspecialchars($buscar) ?>">
 
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorCW',
+                    if (!window.FiltrosModal) return;
+                    window.CW_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorCW',
                         hiddenInputId: 'b',
-                        fields: [
-                            { key: 'orden',   label: 'N° Orden', icon: 'bi-hash',      type: 'text' },
-                            { key: 'placa',   label: 'Placa',    icon: 'bi-car-front', type: 'text' },
-                            { key: 'cliente', label: 'Cliente',  icon: 'bi-person',    type: 'text' },
-                            { key: 'estado',  label: 'Estado',   icon: 'bi-flag',      type: 'select', options: [
-                                { v: 'borrador',  l: 'Borrador' },
-                                { v: 'facturado', l: 'Facturado' },
-                                { v: 'anulado',   l: 'Anulado' },
-                            ]},
-                            { key: 'serie',     label: 'Serie',       icon: 'bi-upc-scan', type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',      type: 'text' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_proceso', label: 'En proceso', mk: () => ({ key: 'estado', op: '=', value: 'en_proceso', display: 'En proceso' }) },
-                            { id: 'qf_terminado', label: 'Terminados', mk: () => ({ key: 'estado', op: '=', value: 'terminado', display: 'Terminados' }) },
-                        ],
-                        onApply: () => { g_paginaActual = 1; cargarGrid(); },
-                    }).init();
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de órdenes car-wash',
+                        inputWidth: 420,
+                        extraId: 'fmExtraCW',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las órdenes (servicios/productos y novedades).
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: '<?= $urlBase ?>/buscarDetallesAjax',
+                            label: 'Buscar libremente dentro de las órdenes',
+                            placeholder: 'Servicio, producto, código, novedad, monto...',
+                            columns: [
+                                { key: 'origen',       label: 'Tipo' },
+                                { key: 'referencia',   label: 'Código / Severidad', class: 'font-monospace' },
+                                { key: 'descripcion',  label: 'Descripción' },
+                                { key: 'cantidad',     label: 'Cant.', align: 'end' },
+                                { key: 'monto',        label: 'Total', align: 'end' },
+                                { key: 'numero_orden', label: 'Orden', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',        label: 'Fecha' },
+                                { key: 'placa',        label: 'Placa' },
+                                { key: 'cliente',      label: 'Cliente' },
+                                { key: 'estado',       label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'orden', value: row.numero_orden }),
+                            onOpen: (row, fm) => { fm.hide(); setTimeout(() => window.cwAbrirVerId(row.id_orden, false), 350); },
+                        },
+                        fields: <?= json_encode($filtrosCarWash, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#grid-body',   // se atenúa mientras se busca
+                        onApply: () => { g_paginaActual = 1; return cargarGrid(); },
+                    });
+                    window.CW_filtros.init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraCW" class="btn-group btn-group-sm">
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas([
                     'fecha_ingreso' => 'Fecha',
                     'numero_orden'  => 'N° Orden',
@@ -112,8 +165,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'estado'        => 'Estado',
                 ], $vistaConfig ?? [], 'car-wash'); ?>
 
-                <a class="btn btn-outline-danger pdf-export-btn" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a class="btn btn-outline-success excel-export-btn" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+                <a class="btn btn-outline-danger pdf-export-btn" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a class="btn btn-outline-success excel-export-btn" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i><span class="d-none d-md-inline"> Excel</span></a>
             </div>
         </div>
 
@@ -253,9 +306,11 @@ echo \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo); ?>
     function cambiarPaginaAjax(p) { g_paginaActual = p; cargarGrid(); }
 
     async function cargarGrid() {
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+        // vaciarse; también al paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('grid-body');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
-            const tbody = document.getElementById('grid-body');
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></td></tr>';
             const b_input = document.getElementById('b');
             g_buscar = b_input ? b_input.value : '';
             const params = new URLSearchParams({ b: g_buscar, page: g_paginaActual, sort: g_ordenCol, dir: g_ordenDir });
@@ -269,5 +324,6 @@ echo \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo); ?>
                 const xls = document.querySelector('.excel-export-btn'); if (xls) xls.href = data.excel_url;
             }
         } catch (e) { console.error(e); Swal.fire('Error', 'No se pudo cargar la lista', 'error'); }
+        finally { if (tbody) tbody.classList.remove('fm-cargando-target'); }
     }
 </script>

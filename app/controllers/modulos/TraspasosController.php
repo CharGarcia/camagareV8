@@ -105,6 +105,8 @@ class TraspasosController extends BaseModuloController
             'puntos'            => $puntos,
             'formasPago'        => $formasPago,
             'seriesFiltro'      => $seriesFiltro,
+            // Selects del modal de filtros: solo valores usados por la empresa.
+            'valoresFiltro'     => $this->repository->getValoresFiltro($idEmpresa),
             'fullWidth'         => true,
         ]);
     }

@@ -22,9 +22,55 @@ $cols = [
 ];
 ?>
 
-<!-- FiltrosBusqueda -->
-<link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
+<?php
+// Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+// embudo que abre el modal con todos los filtros + chips de los activos. Las claves
+// (key) deben existir en los mapas de CitaPagoRepository::getListado().
+$opcionesFiltro  = $opcionesFiltro ?? [];
+$opcionesTipo    = array_map(fn($t) => ['v' => (string) $t['id'], 'l' => $t['nombre']], $opcionesFiltro['tipos'] ?? []);
+$opcionesRecurso = array_map(fn($r) => ['v' => (string) $r['id'], 'l' => $r['nombre']], $opcionesFiltro['recursos'] ?? []);
+$opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $opcionesFiltro['usuarios'] ?? []);
+// Una sola pestaña, sin "Detalles" (el pago no tiene tablas hijas).
+// Filas de 12 columnas:
+//   Pago: [Fecha de registro 6][Estado 3][Tipo de pago 3]
+//         [Método 4][Monto 4][Usuario que registró 4]
+//         [Referencia 12]
+//   Cita: [Fecha de la cita 6][Tipo de cita 3][Recurso 3]
+//         [Cliente 4][Identificación 4][Título de la cita 4]
+$filtrosPagos = [
+    ['key' => 'fecha',          'label' => 'Fecha de registro',    'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Pago', 'col' => 6, 'atajos' => true],
+    ['key' => 'estado',         'label' => 'Estado',               'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Pago', 'col' => 3, 'options' => [
+        ['v' => 'pendiente',   'l' => 'Pendiente'],
+        ['v' => 'completado',  'l' => 'Completado'],
+        ['v' => 'fallido',     'l' => 'Fallido'],
+        ['v' => 'reembolsado', 'l' => 'Reembolsado'],
+    ]],
+    ['key' => 'tipo_pago',      'label' => 'Tipo de pago',         'icon' => 'bi-cash-coin',       'type' => 'select',       'grupo' => 'Pago', 'col' => 3, 'options' => [
+        ['v' => 'total',    'l' => 'Total'],
+        ['v' => 'anticipo', 'l' => 'Anticipo'],
+    ]],
+    ['key' => 'gateway',        'label' => 'Método',               'icon' => 'bi-credit-card',     'type' => 'select',       'grupo' => 'Pago', 'col' => 4, 'options' => [
+        ['v' => 'sitio',         'l' => 'En sitio'],
+        ['v' => 'efectivo',      'l' => 'Efectivo'],
+        ['v' => 'tarjeta',       'l' => 'Tarjeta'],
+        ['v' => 'transferencia', 'l' => 'Transferencia'],
+        ['v' => 'stripe',        'l' => 'Stripe'],
+        ['v' => 'paypal',        'l' => 'PayPal'],
+    ]],
+    ['key' => 'monto',          'label' => 'Monto',                'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Pago', 'col' => 4],
+    ['key' => 'usuario',        'label' => 'Usuario que registró', 'icon' => 'bi-person-badge',    'type' => 'select',       'grupo' => 'Pago', 'col' => 4, 'options' => $opcionesUsuario],
+    ['key' => 'referencia',     'label' => 'Referencia',           'icon' => 'bi-hash',            'type' => 'text',         'grupo' => 'Pago', 'col' => 12],
+    ['key' => 'fecha_cita',     'label' => 'Fecha de la cita',     'icon' => 'bi-calendar3',       'type' => 'date_range',   'grupo' => 'Cita', 'col' => 6],
+    ['key' => 'id_tipo_cita',   'label' => 'Tipo de cita',         'icon' => 'bi-tags',            'type' => 'select',       'grupo' => 'Cita', 'col' => 3, 'options' => $opcionesTipo],
+    ['key' => 'id_recurso',     'label' => 'Recurso',              'icon' => 'bi-person-gear',     'type' => 'select',       'grupo' => 'Cita', 'col' => 3, 'options' => $opcionesRecurso],
+    ['key' => 'cliente',        'label' => 'Cliente',              'icon' => 'bi-person',          'type' => 'text',         'grupo' => 'Cita', 'col' => 4],
+    ['key' => 'identificacion', 'label' => 'Identificación',       'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Cita', 'col' => 4],
+    ['key' => 'titulo',         'label' => 'Título de la cita',    'icon' => 'bi-tag',             'type' => 'text',         'grupo' => 'Cita', 'col' => 4],
+];
+?>
+<!-- FiltrosModal -->
+<link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig) ?>
 
@@ -103,32 +149,28 @@ const URL_PAGOS = '<?= $urlBase ?>';
     <div class="card-body py-2 px-3">
         <div class="d-flex align-items-center gap-2 flex-wrap">
 
-            <!-- FiltrosBusqueda -->
-            <div id="fbBuscadorPagos" style="min-width:320px;flex:1;max-width:520px;"></div>
+            <!-- Buscador (FiltrosModal) -->
+            <div id="fmBuscadorPAGOS"></div>
             <input type="hidden" id="buscarPagosHidden" value="">
 
-            <!-- Columnas -->
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraPAGOS" class="btn-group btn-group-sm">
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($cols, $vistaConfig, $rutaModulo) ?>
+                <a id="btnExportPdf" href="#" target="_blank" class="btn btn-outline-danger" title="Exportar PDF">
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
+                </a>
+                <a id="btnExportExcel" href="#" target="_blank" class="btn btn-outline-success" title="Exportar Excel">
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
+                </a>
             </div>
 
             <!-- Paginación por página -->
-            <select id="perPageSel" class="form-select form-select-sm" style="width:auto;" onchange="cargarPagos(1)">
+            <select id="perPageSel" class="form-select form-select-sm ms-auto" style="width:auto;" onchange="cargarPagos(1)">
                 <option value="15">15</option>
                 <option value="25" selected>25</option>
                 <option value="50">50</option>
                 <option value="100">100</option>
             </select>
-
-            <!-- Export -->
-            <div class="btn-group btn-group-sm ms-auto">
-                <a id="btnExportPdf" href="#" target="_blank" class="btn btn-outline-danger btn-sm" title="Exportar PDF">
-                    <i class="bi bi-file-pdf me-1"></i>PDF
-                </a>
-                <a id="btnExportExcel" href="#" target="_blank" class="btn btn-outline-success btn-sm" title="Exportar Excel">
-                    <i class="bi bi-file-earmark-excel me-1"></i>Excel
-                </a>
-            </div>
         </div>
     </div>
 </div>
@@ -211,6 +253,7 @@ let _pagSort = { col: 'created_at', dir: 'DESC' };
 let _pagPage = 1;
 
 // ─── Cargar datos ─────────────────────────────────────────────────────────────
+// Devuelve la promesa: FiltrosModal apaga su indicador de carga cuando termina.
 function cargarPagos(page) {
     _pagPage = page ?? _pagPage;
     const perPage = parseInt(document.getElementById('perPageSel').value) || 25;
@@ -224,12 +267,12 @@ function cargarPagos(page) {
         dir:      _pagSort.dir,
     });
 
-    document.getElementById('tbodyPagos').innerHTML =
-        `<tr><td colspan="9" class="text-center py-5 text-muted">
-            <span class="spinner-border spinner-border-sm me-2"></span> Cargando...
-         </td></tr>`;
+    // Mismo indicador que el buscador: la tabla se atenúa en vez de vaciarse. Se
+    // aplica aquí también para paginar y ordenar, que llaman a esta función directo.
+    const tbody = document.getElementById('tbodyPagos');
+    if (tbody) tbody.classList.add('fm-cargando-target');
 
-    fetch(`${URL_PAGOS}/search-ajax?${params}`)
+    return fetch(`${URL_PAGOS}/search-ajax?${params}`)
         .then(r => r.json())
         .then(res => {
             if (!res.ok) { console.error(res); return; }
@@ -242,7 +285,8 @@ function cargarPagos(page) {
         .catch(e => {
             document.getElementById('tbodyPagos').innerHTML =
                 `<tr><td colspan="9" class="text-center py-4 text-danger">Error al cargar datos.</td></tr>`;
-        });
+        })
+        .finally(() => { if (tbody) tbody.classList.remove('fm-cargando-target'); });
 }
 
 // ─── Renderizar filas ─────────────────────────────────────────────────────────
@@ -374,45 +418,17 @@ function escHtml(str) {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
 
-    // FiltrosBusqueda
-    if (window.FiltrosBusqueda && document.getElementById('fbBuscadorPagos')) {
-        new FiltrosBusqueda({
-            containerId:   'fbBuscadorPagos',
+    // Buscador (FiltrosModal)
+    if (window.FiltrosModal && document.getElementById('fmBuscadorPAGOS')) {
+        new FiltrosModal({
+            containerId:   'fmBuscadorPAGOS',
             hiddenInputId: 'buscarPagosHidden',
-            placeholder:   'Buscar por cliente, tipo de cita, referencia...',
-            fields: [
-                { key: 'cliente',    label: 'Cliente',    icon: 'bi-person',       type: 'text'   },
-                { key: 'referencia', label: 'Referencia', icon: 'bi-hash',         type: 'text'   },
-                { key: 'tipo_cita',  label: 'Tipo cita',  icon: 'bi-tags',         type: 'text'   },
-                { key: 'estado',     label: 'Estado',     icon: 'bi-flag',         type: 'select', options: [
-                    { v: 'pendiente',   l: 'Pendiente'   },
-                    { v: 'completado',  l: 'Completado'  },
-                    { v: 'fallido',     l: 'Fallido'     },
-                    { v: 'reembolsado', l: 'Reembolsado' },
-                ]},
-                { key: 'gateway',    label: 'Método',     icon: 'bi-credit-card',  type: 'select', options: [
-                    { v: 'sitio',         l: 'En sitio'      },
-                    { v: 'efectivo',      l: 'Efectivo'      },
-                    { v: 'tarjeta',       l: 'Tarjeta'       },
-                    { v: 'transferencia', l: 'Transferencia' },
-                    { v: 'stripe',        l: 'Stripe'        },
-                    { v: 'paypal',        l: 'PayPal'        },
-                ]},
-                { key: 'tipo_pago',  label: 'Tipo pago',  icon: 'bi-cash-coin',    type: 'select', options: [
-                    { v: 'total',    l: 'Total'    },
-                    { v: 'anticipo', l: 'Anticipo' },
-                ]},
-                { key: 'monto',      label: 'Monto',      icon: 'bi-currency-dollar', type: 'numeric' },
-                { key: 'fecha',      label: 'Fecha reg.',  icon: 'bi-calendar',    type: 'date'   },
-                { key: 'fecha_cita', label: 'Fecha cita', icon: 'bi-calendar3',    type: 'date'   },
-            ],
-            quickFilters: [
-                { id: 'qf_pendiente',  label: 'Pendientes',   mk: () => ({ key: 'estado', op: '=', value: 'pendiente',   display: 'Pendiente'   }) },
-                { id: 'qf_completado', label: 'Completados',  mk: () => ({ key: 'estado', op: '=', value: 'completado',  display: 'Completado'  }) },
-                { id: 'qf_hoy',        label: 'Hoy',          mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                { id: 'qf_mes',        label: 'Este mes',     mk: () => FiltrosBusqueda.helpers.esteMes('fecha')  },
-                { id: 'qf_anticipo',   label: 'Anticipos',    mk: () => ({ key: 'tipo_pago', op: '=', value: 'anticipo', display: 'Anticipo' }) },
-            ],
+            placeholder:   'Buscar en todas las columnas...',
+            titulo:        'Filtros de pagos de citas',
+            inputWidth:    420,
+            extraId:       'fmExtraPAGOS',   // columnas + PDF + Excel, pegados al final del grupo
+            fields: <?= json_encode($filtrosPagos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+            loadingTarget: '#tbodyPagos',    // se atenúa mientras se busca
             onApply: () => cargarPagos(1),
         }).init();
     }

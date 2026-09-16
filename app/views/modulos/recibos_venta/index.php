@@ -204,68 +204,129 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <!-- Buscador con filtros (componente reusable) -->
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorFV" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar: texto libre sobre las columnas del listado (sin sugerencias),
+            // botón embudo que abre el modal de filtros y chips dentro de la caja.
+            // Las claves (key) deben existir en los mapas de ReciboVentaRepository::getListado().
+            $opcionesSerie    = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesVendedor = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $vendedoresFiltro ?? []);
+            $opcionesUsuario  = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $usuariosFiltro ?? []);
+            $tR = 'Recibo';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento: [Fecha de emisión 6][Estado 3][Estado de pago 3]
+            //              [Serie 3][Nº recibo 3][Secuencial 2][Impuestos 4]
+            //              [Origen 4][Asiento contable 4][Días de crédito 4]
+            //   Valores:   [Total 4][Saldo pendiente 4][Subtotal 4]
+            //              [Descuento 3][IVA 3][ICE 3][Propina 3]
+            //   Tercero:   [Cliente 3][RUC 3][Vendedor 3][Usuario 3]
+            //              [Observaciones 6][Factura generada 6]
+            $filtrosRecibos = [
+                // ── Documento ──
+                ['tab' => $tR, 'key' => 'fecha',  'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                // Estados reales del recibo: borrador (al guardar), emitido (valor por defecto
+                // de la tabla), facturado y anulado (al anular o al generar la factura).
+                ['tab' => $tR, 'key' => 'estado', 'label' => 'Estado',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'borrador',  'l' => 'Borrador'],
+                    ['v' => 'emitido',   'l' => 'Emitido'],
+                    ['v' => 'facturado', 'l' => 'Facturado'],
+                    ['v' => 'anulado',   'l' => 'Anulado'],
+                ]],
+                ['tab' => $tR, 'key' => 'pago',   'label' => 'Estado de pago',   'icon' => 'bi-wallet2',        'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                    ['v' => 'abonada',   'l' => 'Abonado'],
+                    ['v' => 'pagada',    'l' => 'Pagado'],
+                ]],
+                ['tab' => $tR, 'key' => 'serie',      'label' => 'Serie',      'icon' => 'bi-upc-scan', 'type' => 'select', 'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tR, 'key' => 'numero',     'label' => 'Nº recibo',  'icon' => 'bi-hash',     'type' => 'text',   'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tR, 'key' => 'secuencial', 'label' => 'Secuencial', 'icon' => 'bi-123',      'type' => 'text',   'grupo' => 'Documento', 'col' => 2, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tR, 'key' => 'impuestos',  'label' => 'Impuestos',  'icon' => 'bi-percent',  'type' => 'select', 'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'true',  'l' => 'Con impuestos'],
+                    ['v' => 'false', 'l' => 'Sin impuestos'],
+                ]],
+                ['tab' => $tR, 'key' => 'origen',  'label' => 'Origen',           'icon' => 'bi-signpost',      'type' => 'select', 'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'directa', 'l' => 'Directo'],
+                    ['v' => 'factura', 'l' => 'Desde factura de venta'],
+                    ['v' => 'pos',     'l' => 'POS / caja'],
+                ]],
+                ['tab' => $tR, 'key' => 'asiento', 'label' => 'Asiento contable', 'icon' => 'bi-journal-check', 'type' => 'select', 'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con asiento'],
+                    ['v' => 'no', 'l' => 'Sin asiento'],
+                ]],
+                ['tab' => $tR, 'key' => 'dias_credito', 'label' => 'Días de crédito', 'icon' => 'bi-hourglass-split', 'type' => 'number_range', 'grupo' => 'Documento', 'col' => 4],
+                // ── Valores ──
+                ['tab' => $tR, 'key' => 'monto',     'label' => 'Total',           'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tR, 'key' => 'saldo',     'label' => 'Saldo pendiente', 'icon' => 'bi-wallet',          'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tR, 'key' => 'subtotal',  'label' => 'Subtotal',        'icon' => 'bi-receipt',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tR, 'key' => 'descuento', 'label' => 'Descuento',       'icon' => 'bi-tag',             'type' => 'number_range', 'grupo' => 'Valores', 'col' => 3],
+                ['tab' => $tR, 'key' => 'iva',       'label' => 'IVA',             'icon' => 'bi-percent',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 3],
+                ['tab' => $tR, 'key' => 'ice',       'label' => 'ICE',             'icon' => 'bi-percent',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 3],
+                ['tab' => $tR, 'key' => 'propina',   'label' => 'Propina',         'icon' => 'bi-cash-coin',       'type' => 'number_range', 'grupo' => 'Valores', 'col' => 3],
+                // ── Tercero ──
+                ['tab' => $tR, 'key' => 'cliente',     'label' => 'Cliente',              'icon' => 'bi-person',         'type' => 'text',   'grupo' => 'Tercero', 'col' => 3],
+                ['tab' => $tR, 'key' => 'ruc',         'label' => 'RUC / Cédula',         'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Tercero', 'col' => 3],
+                ['tab' => $tR, 'key' => 'id_vendedor', 'label' => 'Vendedor',             'icon' => 'bi-person-badge',   'type' => 'select', 'grupo' => 'Tercero', 'col' => 3, 'options' => $opcionesVendedor],
+                ['tab' => $tR, 'key' => 'id_usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select', 'grupo' => 'Tercero', 'col' => 3, 'options' => $opcionesUsuario],
+                ['tab' => $tR, 'key' => 'obs',         'label' => 'Observaciones',        'icon' => 'bi-chat-left-text', 'type' => 'text',   'grupo' => 'Tercero', 'col' => 6],
+                ['tab' => $tR, 'key' => 'factura',     'label' => 'Factura generada',     'icon' => 'bi-receipt-cutoff', 'type' => 'text',   'grupo' => 'Tercero', 'col' => 6, 'placeholder' => '001-001-000000123'],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorRV"></div>
             <input type="hidden" id="buscarFactura" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId:   'fbBuscadorFV',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorRV',
                         hiddenInputId: 'buscarFactura',
-                        placeholder:   'Buscar recibos...',
-                        fields: [
-                            { key: 'cliente',   label: 'Cliente',       icon: 'bi-person',          type: 'text' },
-                            { key: 'ruc',       label: 'RUC / Cédula',  icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',    label: 'Nº Recibo',     icon: 'bi-hash',            type: 'text' },
-                            { key: 'serie',     label: 'Serie',         icon: 'bi-upc-scan',        type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial', label: 'Secuencial',   icon: 'bi-123',             type: 'text' },
-                            { key: 'vendedor',  label: 'Vendedor',      icon: 'bi-person-badge',    type: 'text' },
-                            { key: 'usuario',   label: 'Usuario',       icon: 'bi-person-circle',   type: 'text' },
-                            { key: 'obs',       label: 'Observaciones', icon: 'bi-chat-left-text',  type: 'text' },
-                            { key: 'fecha',     label: 'Fecha emisión', icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'monto',     label: 'Total',         icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'subtotal',  label: 'Subtotal',      icon: 'bi-receipt',         type: 'number_range' },
-                            { key: 'descuento', label: 'Descuento',     icon: 'bi-tag',             type: 'number_range' },
-                            { key: 'iva',       label: 'IVA',           icon: 'bi-percent',         type: 'number_range' },
-                            { key: 'ice',       label: 'ICE',           icon: 'bi-percent',         type: 'number_range' },
-                            { key: 'propina',   label: 'Propina',       icon: 'bi-cash-coin',       type: 'number_range' },
-                            { key: 'estado',    label: 'Estado',        icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'borrador',   l: 'Borrador' },
-                                { v: 'autorizado', l: 'Autorizado' },
-                                { v: 'anulado',    l: 'Anulado' },
-                            ]},
-                            { key: 'pago',      label: 'Estado pago',   icon: 'bi-wallet2',         type: 'select', options: [
-                                { v: 'pendiente', l: 'Pendiente' },
-                                { v: 'abonada',   l: 'Abonada' },
-                                { v: 'pagada',    l: 'Pagada' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_borrador',   label: 'Borrador',    mk: () => ({ key: 'estado', op: '=', value: 'borrador',   display: 'Borrador' }) },
-                            { id: 'qf_autorizado', label: 'Autorizadas', mk: () => ({ key: 'estado', op: '=', value: 'autorizado', display: 'Autorizado' }) },
-                            { id: 'qf_anulado',    label: 'Anuladas',    mk: () => ({ key: 'estado', op: '=', value: 'anulado',    display: 'Anulado' }) },
-                            { id: 'qf_pago_pend',  label: 'Pago pendiente', mk: () => ({ key: 'pago', op: '=', value: 'pendiente', display: 'Pendiente' }) },
-                            { id: 'qf_pago_abon',  label: 'Abonadas',    mk: () => ({ key: 'pago', op: '=', value: 'abonada',  display: 'Abonada' }) },
-                            { id: 'qf_pago_pag',   label: 'Pagadas',     mk: () => ({ key: 'pago', op: '=', value: 'pagada',   display: 'Pagada' }) },
-                            { id: 'qf_hoy',        label: 'Hoy',         mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                            { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_mes_pasado', label: 'Mes pasado',  mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
-                            { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de recibos',
+                        inputWidth: 420,
+                        extraId: 'fmExtraRV',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de los recibos (productos,
+                        // formas de pago e información adicional). Cada coincidencia dice a
+                        // qué recibo pertenece.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de los recibos',
+                            placeholder: 'Producto, código, lote, forma de pago, plazo, información adicional...',
+                            columns: [
+                                { key: 'origen',      label: 'Tipo' },
+                                { key: 'tipo',        label: 'Código / Forma' },
+                                { key: 'descripcion', label: 'Descripción' },
+                                { key: 'extra',       label: 'Lote / NUP', class: 'font-monospace' },
+                                { key: 'cantidad',    label: 'Cant.', align: 'end' },
+                                { key: 'monto',       label: 'Valor', align: 'end' },
+                                { key: 'numero',      label: 'Recibo', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',       label: 'Fecha' },
+                                { key: 'cliente',     label: 'Cliente' },
+                                { key: 'estado',      label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                // abrirModalFacturaVer() lee el recibo de data-row: id, estado,
+                                // fecha y RUC fijan el recibo activo; el resto se carga por AJAX.
+                                const data = {
+                                    id: row.id_recibo, estado: row.estado_raw, fecha_emision: row.fecha_emision,
+                                    cliente_ruc: row.cliente_ruc, cliente_nombre: row.cliente,
+                                    establecimiento: row.establecimiento, punto_emision: row.punto_emision, secuencial: row.secuencial,
+                                };
+                                setTimeout(() => window.abrirModalFacturaVer({ dataset: { row: JSON.stringify(data) } }), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosRecibos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyFacturas',   // se atenúa mientras se busca
                         onApply: () => window.RV_fetchSearch && window.RV_fetchSearch(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraRV" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero'              => 'Número',
@@ -290,11 +351,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -1095,12 +1156,15 @@ $totalPages = $totalPagesOriginal;
         const sort    = window.RV_currentSort || 'fecha_emision';
         const dir     = window.RV_currentDir  || 'DESC';
         const url     = `${B_URL}/${RUTA_MODULO}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // se busca, también al paginar u ordenar (que llaman a esta función directo).
+        const tbody = document.getElementById('tbodyFacturas');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const resp = await fetch(url);
             if (!resp.ok) return;
             const data = await resp.json();
             if (!data.ok) return;
-            const tbody = document.getElementById('tbodyFacturas');
             if (tbody) tbody.innerHTML = data.rows ?? '';
             const pgCont = document.getElementById('paginationContainer');
             if (pgCont) pgCont.innerHTML = data.pagination ?? '';
@@ -1122,6 +1186,8 @@ $totalPages = $totalPagesOriginal;
             });
         } catch (e) {
             console.error('RV_fetchSearch error:', e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     };
 

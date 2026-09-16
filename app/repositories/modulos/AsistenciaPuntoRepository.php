@@ -32,8 +32,18 @@ class AsistenciaPuntoRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre (buscador FiltrosModal del listado de Puntos de servicio): columnas
+            // del listado + campos que identifican el punto. Decisión del usuario: Estado y
+            // GPS (sí/no) NO entran en el texto libre; se filtran solo desde el modal.
+            // El token del QR tampoco (es el secreto del enlace público).
             $condicion = FiltrosBusqueda::condicionTexto(
-                ['p.nombre', 'p.direccion'],
+                [
+                    'p.nombre',                                                    // Nombre
+                    'p.direccion',                                                 // Dirección
+                    "CONCAT(p.radio_m, ' m')",                                     // Radio (como se muestra)
+                    "CONCAT_WS(', ', p.latitud::text, p.longitud::text)",          // Coordenadas
+                    '(SELECT u.nombre FROM usuarios u WHERE u.id = p.created_by)', // Usuario que registró
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -42,9 +52,17 @@ class AsistenciaPuntoRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (vista puntos_servicio/index.php). Nunca quitar claves.
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'    => ['nombre' => 'p.nombre', 'direccion' => 'p.direccion'],
-            'exacto'   => ['estado' => 'p.estado'],
+            'exacto'   => [
+                'estado'      => 'p.estado',
+                // gps:si / gps:no — el punto exige ubicación GPS al marcar (columna GPS)
+                'gps'         => "CASE WHEN p.exige_gps IS TRUE THEN 'si' ELSE 'no' END",
+                'ubicacion'   => "CASE WHEN p.latitud IS NOT NULL AND p.longitud IS NOT NULL THEN 'si' ELSE 'no' END",
+                'usuario'     => 'p.created_by',
+            ],
+            'fecha'    => ['registro' => 'p.created_at'],
             'numerico' => ['radio' => 'p.radio_m'],
         ]);
 
@@ -63,6 +81,18 @@ class AsistenciaPuntoRepository extends BaseRepository
         $st->execute($params);
 
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /** Usuarios que han registrado algún punto de servicio en la empresa (filtro "Usuario" del modal). */
+    public function getUsuariosConPuntos(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT DISTINCT u.id, u.nombre
+                                  FROM {$this->table} p
+                                  JOIN usuarios u ON u.id = p.created_by
+                                  WHERE p.id_empresa = :id_empresa AND p.eliminado = false
+                                  ORDER BY u.nombre");
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function create(array $d): int

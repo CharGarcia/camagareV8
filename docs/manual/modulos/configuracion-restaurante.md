@@ -5,8 +5,8 @@ categoria: Restaurante
 ruta_modulo: modulos/configuracion-restaurante
 tipo: modulo
 visibilidad: todos
-etiquetas: configuracion restaurante, estaciones, estacion de preparacion, cocina, barra, parrilla, impresora de cocina, imprimir ordenes, estacion predeterminada, stock general, sin menu, sin carta, preparar en, kds, ancho de papel, tirilla, 58mm, 80mm, papel de la tirilla
-version: 1.1
+etiquetas: configuracion restaurante, estaciones, estacion de preparacion, cocina, barra, parrilla, impresora de cocina, imprimir ordenes, estacion predeterminada, stock general, sin menu, sin carta, preparar en, kds, ancho de papel, tirilla, 58mm, 80mm, papel de la tirilla, buscar estacion, buscador, filtros, filtrar estaciones, estaciones sin uso, chips
+version: 1.2
 orden: 45
 estado: activo
 ---
@@ -97,13 +97,49 @@ pensada para 80 y las descripciones no se partan en tres líneas.
 Se guarda solo al elegirlo, y vale para toda la empresa.
 ## El listado
 
-Como el resto de listados del sistema: **buscador** (texto libre o filtros
-`clave:valor` — `tipo:barra`, `imprime:true`, `estado:false`, `papel:80`),
-**ordenamiento** por cualquier columna, **paginación**, **exportación a PDF y
-Excel** y elección de las columnas visibles, que se recuerda por usuario.
+Como el resto de listados del sistema: **buscador** con ventana de filtros (ver
+*Buscar y filtrar el listado*), **ordenamiento** por cualquier columna,
+**paginación**, **exportación a PDF y Excel** y elección de las columnas
+visibles, que se recuerda por usuario.
 
 La columna *En uso* dice cuántos ítems de la carta o categorías preparan en cada
 estación: es lo que impide eliminarla.
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla de estaciones hay un solo grupo: el botón del **embudo**, el
+cuadro de búsqueda y los botones de columnas, PDF y Excel. El selector *Papel de
+la tirilla* del encabezado no es un filtro: es el ajuste del salón descrito
+arriba.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la estación: nombre,
+papel (por ejemplo *80 mm*, solo en las que imprimen), copias y *En uso* (por
+ejemplo *3 ítem*). También encuentra las estaciones por el usuario que las
+registró. Las columnas **Tipo**, **Impresión**, **Predeterminada** y **Estado**
+no entran en la búsqueda libre: para filtrar por ellas use la ventana de
+filtros. Puede escribir varias palabras en cualquier orden y no importan
+mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el cuadro.
+Mientras busca, aparece un **círculo girando** al final del cuadro y la tabla se
+ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
+Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento.
+La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
+
+| Bloque | Filtros |
+|--------|---------|
+| Estación | Nombre, tipo (cocina, barra u otro) y estado (activa o inactiva) |
+| Impresión | Impresión (automática, a pedido o solo pantalla), predeterminada (sí o no), en uso, papel en mm y copias (estos tres con mínimo y máximo) |
+| Registro | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*) y usuario que registró |
+
+Por ejemplo, *En uso* de 0 a 0 lista las estaciones que ya se pueden eliminar.
+Los filtros escritos a mano de antes (`tipo:barra`, `imprime:true`,
+`estado:false`, `papel:80`) siguen funcionando.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Campos de la estación
 
@@ -162,6 +198,15 @@ fila correspondiente del listado.
   y hay varias impresoras; marque con la estrella cuál debe sacar la orden.
 
 ## Historial de cambios
+
+- **1.2** — Nuevo buscador del listado de estaciones: el cuadro ya no despliega
+  sugerencias; lo que se escribe se busca en el nombre, papel, copias, *En uso*
+  y usuario que registró, salvo Tipo, Impresión, Predeterminada y Estado. Los
+  filtros pasan a una **ventana propia** (botón del embudo, se aplican con
+  *Aplicar*) con criterios nuevos: impresión (automática, a pedido o solo
+  pantalla), predeterminada, en uso, fecha de registro y usuario. Los accesos
+  *Activas*, *Con impresora* y *Solo pantalla* pasan a ser opciones de sus
+  filtros. Nueva sección *Buscar y filtrar el listado*.
 
 - **1.1** — Ajuste del ancho de papel (58/80 mm) de la tirilla de cuenta y
   factura, para toda la empresa.

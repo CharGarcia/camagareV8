@@ -113,6 +113,21 @@ class CambioProductoCvService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Búsqueda libre dentro de los cambios (líneas devueltas y entregadas): pestaña Detalles del buscador. */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuarioFiltro = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, $limit);
+    }
+
+    /** Listas de los selects del modal de filtros: solo los valores que la empresa ya usó. */
+    public function getOpcionesFiltros(int $idEmpresa): array
+    {
+        return [
+            'responsables' => $this->repository->getResponsablesUsados($idEmpresa),
+            'usuarios'     => $this->repository->getUsuariosUsados($idEmpresa),
+        ];
+    }
+
     /** Líneas a devolver (facturas de consignación + cambios previos). $idCliente null = todos los clientes. */
     public function getLineasDisponiblesCliente(int $idEmpresa, ?int $idCliente, string $q, ?int $excluirCambio = null): array
     {

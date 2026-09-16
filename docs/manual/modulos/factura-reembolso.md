@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
-etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico
-version: 1.2
+etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips
+version: 1.3
 orden: 21
 estado: activo
 ---
@@ -56,6 +56,52 @@ reembolsado (proveedor, documento y su IVA).
    **Correo** (el correo también se envía automáticamente al autorizarse).
    El botón **Excel** (icono verde) descarga el detalle, los terceros
    reembolsados y los totales en una hoja de cálculo.
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la factura: número,
+secuencial, fecha, cliente, identificación, cantidad de terceros, valor
+reembolsado, total y usuario. Además busca en las observaciones, el número de
+autorización, la clave de acceso, las **descripciones de las líneas** y los
+**comprobantes de terceros** (proveedor, RUC y número del comprobante). La
+columna **Estado** no entra en la búsqueda libre: para filtrar por ella use la
+ventana de filtros. Puede escribir varias palabras en cualquier orden y no
+importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en
+el cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y
+la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Factura de reembolso** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (borrador, autorizado, anulado), correo (enviado o pendiente), serie, número, secuencial, con o sin asiento contable, fecha de autorización, usuario que registró |
+| Valores | Total, reembolsado (base + IVA, como la columna), base del reembolso, subtotal, descuento y cantidad de comprobantes de terceros (cada uno con mínimo y máximo) |
+| Terceros reembolsados | Proveedor del gasto, RUC del proveedor, N° del comprobante y su fecha (basta con que un comprobante coincida) |
+| Cliente | Cliente, RUC / cédula, observaciones, N° autorización, clave de acceso |
+
+El selector *Usuario que registró* lista solo a quienes ya registraron facturas
+de reembolso en la empresa, y *Serie* solo las series con facturas guardadas.
+
+**Pestaña Detalles** (lo que hay dentro de la factura). Es un único cuadro,
+**Buscar libremente dentro de las facturas de reembolso**: escriba una
+descripción, un proveedor, un RUC, el número de un comprobante de terceros,
+una forma de pago o un dato de la información adicional, y aparece la lista de
+**cada línea que coincide** con la factura a la que pertenece (número, fecha,
+cliente y estado). Un clic en la fila deja el listado mostrando solo esa
+factura; el ícono de la derecha la abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Campos del formulario
 
@@ -132,6 +178,17 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.3** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas de la factura (incluidos terceros y
+  reembolsado) y en autorización, clave de acceso, líneas y comprobantes de
+  terceros, salvo Estado. Los filtros pasan a una **ventana propia** (botón del
+  embudo, se aplican con *Aplicar*) con dos pestañas: **Factura de reembolso**
+  (filtros por campo, con criterios nuevos: correo, con/sin asiento, fecha de
+  autorización, usuario como lista, reembolsado, subtotal, descuento, cantidad
+  de terceros, proveedor, RUC y comprobante de reembolso, observaciones,
+  autorización y clave) y **Detalles** (búsqueda dentro de líneas, comprobantes
+  de terceros, formas de pago e información adicional). Los filtros activos se
+  ven como etiquetas dentro del cuadro y la tabla se atenúa mientras carga.
 - **1.2** — El módulo respeta ahora el **cierre contable**: no se puede operar
   sobre una factura de reembolso cuyo período esté cerrado. Antes no se comprobaba.
 - **1.0** — Versión inicial: creación, edición, terceros reembolsados

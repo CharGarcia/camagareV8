@@ -36,6 +36,87 @@ class RetornoCvRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /** Responsables de traslado usados en retornos de la empresa: filtro del modal de filtros. */
+    public function getResponsablesUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT rt.id, rt.nombre
+                FROM retornos_cv r
+                JOIN responsables_traslado rt ON rt.id = r.id_responsable_traslado
+                WHERE r.id_empresa = :id_empresa AND r.eliminado = false
+                ORDER BY rt.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que registraron retornos en la empresa: filtro "Usuario que registró" del modal. */
+    public function getUsuariosUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM retornos_cv r
+                JOIN usuarios u ON u.id = r.created_by
+                WHERE r.id_empresa = :id_empresa AND r.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de los retornos (pestaña "Detalles" del modal de filtros): cada
+     * línea retornada (producto, lote, NUP, caducidad, bodega y consignación de origen) que
+     * coincide con el texto, con el retorno al que pertenece. Mismo alcance que el listado:
+     * empresa, no eliminados y registros propios (created_by) si $idUsuario viene informado.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "r.id_empresa = :id_empresa AND r.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND r.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condProd = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['p.codigo', 'p.nombre', 'p.codigo_barras', 'd.lote', 'd.nup', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')",
+             'bo.nombre', "CONCAT(cv.serie, '-', cv.secuencial)", 'd.cantidad::text', 'd.precio_unitario::text', 'd.total::text'],
+            $q, $params, 'pr'
+        );
+        if ($condProd === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT r.id, r.serie, r.secuencial, r.fecha_retorno, r.estado, c.nombre AS cliente_nombre
+                    FROM retornos_cv r
+                    INNER JOIN clientes c ON c.id = r.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT 'PRODUCTO' AS origen, p.codigo AS tipo, p.nombre AS descripcion,
+                       NULLIF(CONCAT_WS(' / ', NULLIF(d.lote, ''), NULLIF(d.nup, ''), TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')), '') AS extra,
+                       bo.nombre AS bodega,
+                       CONCAT(cv.serie, '-', cv.secuencial) AS consignacion,
+                       d.cantidad, d.total AS monto,
+                       b.id, b.serie, b.secuencial, b.fecha_retorno, b.estado, b.cliente_nombre
+                FROM retornos_cv_detalles d
+                JOIN base b ON b.id = d.id_retorno
+                LEFT JOIN productos p ON p.id = d.id_producto
+                LEFT JOIN bodegas bo ON bo.id = d.id_bodega
+                LEFT JOIN consignaciones_ventas cv ON cv.id = d.id_consignacion
+                WHERE d.eliminado = false AND $condProd
+                ORDER BY b.fecha_retorno DESC, b.id DESC, d.id
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // ─── LISTADO PAGINADO ─────────────────────────────────────────────────────
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
@@ -50,31 +131,85 @@ class RetornoCvRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (r.secuencial ILIKE :b OR c.nombre ILIKE :b OR c.identificacion ILIKE :b OR r.estado ILIKE :b OR r.motivo ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            // Texto libre (buscador FiltrosModal de la vista), por palabras y sin tildes: las
+            // columnas del listado y lo que identifica al retorno aunque no sea columna.
+            // Decisión del usuario: la columna Estado NO entra; se filtra desde el modal.
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    "TO_CHAR(r.fecha_retorno, 'DD-MM-YYYY')",             // Fecha (como se muestra)
+                    'r.fecha_retorno::text',
+                    "CONCAT(r.serie, '-', r.secuencial)",                 // Secuencial (serie-secuencial)
+                    'c.nombre',                                           // Cliente
+                    'c.identificacion',
+                    'r.motivo',                                           // Motivo
+                    'r.observaciones',
+                    'rt.nombre',                                          // Responsable de traslado
+                    'r.punto_partida',
+                    'r.punto_llegada',
+                    'r.total::text',
+                    'u.nombre',                                           // Usuario que registró
+                    // Productos retornados (código, nombre, lote y NUP)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup), ' ')
+                        FROM retornos_cv_detalles d
+                        LEFT JOIN productos p ON p.id = d.id_producto
+                       WHERE d.id_retorno = r.id AND d.eliminado = false)",
+                    // Documentos relacionados: consignaciones de origen
+                    "(SELECT STRING_AGG(DISTINCT CONCAT(cv.serie, '-', cv.secuencial), ' ')
+                        FROM retornos_cv_detalles d
+                        JOIN consignaciones_ventas cv ON cv.id = d.id_consignacion
+                       WHERE d.id_retorno = r.id AND d.eliminado = false)",
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
+        // Claves del modal de filtros (FiltrosModal en la vista). Las claves viejas se
+        // conservan: viajan en los enlaces de PDF/Excel.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [
-                'cliente'    => 'c.nombre',
-                'motivo'     => 'r.motivo',
+                'cliente'       => 'c.nombre',
+                'ruc'           => 'c.identificacion',
+                'motivo'        => 'r.motivo',
+                'observaciones' => 'r.observaciones',
+                'numero'        => "CONCAT(r.serie, '-', r.secuencial)",
             ],
             'exacto' => [
-                'estado'     => 'r.estado',
-                'serie'      => "CONCAT(r.establecimiento,'-',r.punto_emision)",
+                'estado'         => 'r.estado',
+                'serie'          => "CONCAT(r.establecimiento,'-',r.punto_emision)",
+                'id_responsable' => 'r.id_responsable_traslado',
+                'id_usuario'     => 'r.created_by',
+                // asiento:si / asiento:no
+                'asiento'        => "CASE WHEN r.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
             ],
             'fecha'  => [
                 'fecha'      => 'r.fecha_retorno',
             ],
             'numerico' => [
                 'total'      => 'r.total',
+                'subtotal'   => 'r.subtotal',
+                'impuesto'   => 'r.impuesto',
                 'secuencial' => 'r.secuencial::numeric',
+            ],
+            'existe' => [
+                // Nº de la consignación de origen de alguna línea
+                'consignacion' => ['tipo' => 'texto', 'col' => "CONCAT(cvx.serie, '-', cvx.secuencial)",
+                                   'sql'  => 'EXISTS (SELECT 1 FROM retornos_cv_detalles dx
+                                                       JOIN consignaciones_ventas cvx ON cvx.id = dx.id_consignacion
+                                                      WHERE dx.id_retorno = r.id AND dx.eliminado = false AND {cond})'],
             ],
         ]);
 
+        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan c, rt y u.
         $sqlCount = "
             SELECT COUNT(*)
             FROM retornos_cv r
             INNER JOIN clientes c ON c.id = r.id_cliente
+            LEFT JOIN responsables_traslado rt ON rt.id = r.id_responsable_traslado
+            LEFT JOIN usuarios u ON u.id = r.created_by
             $where
         ";
         $stCount = $this->db->prepare($sqlCount);
@@ -104,6 +239,7 @@ class RetornoCvRepository extends BaseRepository
             FROM retornos_cv r
             INNER JOIN clientes c ON c.id = r.id_cliente
             LEFT JOIN responsables_traslado rt ON rt.id = r.id_responsable_traslado
+            LEFT JOIN usuarios u ON u.id = r.created_by
             $where
             ORDER BY $sort $dir, r.id DESC
             $limitClause

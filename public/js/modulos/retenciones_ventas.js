@@ -150,6 +150,10 @@
     window.RETV_fetchSearch = async (page = 1) => {
         const buscar = (document.getElementById('buscarRetV') || {}).value || '';
         const url = `${BASE}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga (también al paginar y ordenar, que llaman a esta función directo).
+        const tbody = document.getElementById('retv-table-body');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const res  = await fetch(url);
             const data = await res.json();
@@ -157,9 +161,18 @@
                 document.getElementById('retv-table-body').innerHTML        = data.rows;
                 document.getElementById('retv-pagination').innerHTML        = data.pagination;
                 document.getElementById('retv-pagination-info').textContent = data.info;
+
+                // Los enlaces de exportación siguen a la búsqueda y el orden aplicados.
+                const qs = `b=${encodeURIComponent(buscar)}&sort=${encodeURIComponent(currentSort)}&dir=${encodeURIComponent(currentDir)}`;
+                const btnPdf = document.getElementById('btnExportPdf');
+                if (btnPdf) btnPdf.href = `${BASE}/export-pdf?${qs}`;
+                const btnXls = document.getElementById('btnExportExcel');
+                if (btnXls) btnXls.href = `${BASE}/export-excel?${qs}`;
             }
         } catch (e) {
             console.error('Error buscando retenciones de ventas:', e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     };
 

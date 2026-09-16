@@ -47,9 +47,21 @@ class ProductoService
      * @param array $ordenMulti Criterios de orden múltiple (ver App\Helpers\OrdenListado).
      *        Vacío = se ordena por $ordenCol/$ordenDir, como siempre.
      */
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, array $ordenMulti = []): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, array $ordenMulti = [], bool $busquedaAmplia = false): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, null, false, $ordenMulti);
+        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, null, false, $ordenMulti, $busquedaAmplia);
+    }
+
+    /** Opciones de los selects del modal de filtros del listado (valores usados por la empresa). */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        return $this->repository->getOpcionesFiltroListado($idEmpresa);
+    }
+
+    /** Pestaña "Detalles" del modal de filtros: variantes, componentes, precios y homologaciones. */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuario, $limit);
     }
 
     public function crear(array $data): int

@@ -61,49 +61,107 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
         <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
             
-            <div class="d-flex align-items-center gap-2">
-                <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-                <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-                <div id="fbBuscadorCONS" style="width: 480px;"></div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <?php
+                // Buscador: texto libre sobre las columnas del listado (sin sugerencias) +
+                // botón embudo que abre un modal con todos los filtros + chips de los activos.
+                // Las claves (key) deben existir en los mapas de ConsignacionVentaRepository::getListado().
+                $opcionesSerie       = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+                $opcionesVendedor    = array_map(fn($v) => ['v' => (string) $v['id'], 'l' => $v['nombre']], $opcionesFiltros['vendedores'] ?? []);
+                $opcionesResponsable = array_map(fn($r) => ['v' => (string) $r['id'], 'l' => $r['nombre']], $opcionesFiltros['responsables'] ?? []);
+                $opcionesUsuario     = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $opcionesFiltros['usuarios'] ?? []);
+                $siNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+                // Dos pestañas: "Consignación" (filtros por campo) y "Detalles" (solo la búsqueda
+                // libre dentro de las consignaciones, ver `busquedaDetalle` abajo).
+                $tC = 'Consignación';
+                // Orden pensado en filas de 12 columnas:
+                //   Documento: [Fecha de emisión 6][Fecha de entrega 6]
+                //              [Estado 3][Serie 3][Nº consignación 3][Secuencial 3]
+                //              [Asiento 4][Facturación 4][Usuario 4]
+                //   Valores:   [Total 4][Subtotal 4][IVA 4]
+                //   Cliente:   [Cliente 4][RUC 4][Asesor 4]
+                //              [Responsable de traslado 4][Punto de llegada 4][Observaciones 4]
+                $filtrosConsignaciones = [
+                    // ── Documento ──
+                    ['tab' => $tC, 'key' => 'fecha',          'label' => 'Fecha de emisión',     'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                    ['tab' => $tC, 'key' => 'fecha_entrega',  'label' => 'Fecha de entrega',     'icon' => 'bi-calendar-check',  'type' => 'date_range',   'grupo' => 'Documento', 'col' => 6],
+                    ['tab' => $tC, 'key' => 'estado',         'label' => 'Estado',               'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                        ['v' => 'Borrador',  'l' => 'Borrador'],
+                        ['v' => 'Emitida',   'l' => 'Emitida (pendiente de entrega)'],
+                        ['v' => 'Entregada', 'l' => 'Entregada'],
+                        ['v' => 'Anulada',   'l' => 'Anulada'],
+                    ]],
+                    ['tab' => $tC, 'key' => 'serie',          'label' => 'Serie',                'icon' => 'bi-upc-scan',        'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                    ['tab' => $tC, 'key' => 'numero',         'label' => 'Nº consignación',      'icon' => 'bi-hash',            'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                    ['tab' => $tC, 'key' => 'secuencial',     'label' => 'Secuencial',           'icon' => 'bi-123',             'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => 'Sin ceros'],
+                    ['tab' => $tC, 'key' => 'asiento',        'label' => 'Asiento contable',     'icon' => 'bi-journal-check',   'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $siNo('Con asiento', 'Sin asiento')],
+                    ['tab' => $tC, 'key' => 'facturada',      'label' => 'Facturación',          'icon' => 'bi-receipt',         'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $siNo('Con factura de consignación', 'Sin factura de consignación')],
+                    ['tab' => $tC, 'key' => 'id_usuario',     'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',     'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesUsuario],
+                    // ── Valores ──
+                    ['tab' => $tC, 'key' => 'total',          'label' => 'Total',                'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                    ['tab' => $tC, 'key' => 'subtotal',       'label' => 'Subtotal',             'icon' => 'bi-receipt',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                    ['tab' => $tC, 'key' => 'impuesto',       'label' => 'IVA',                  'icon' => 'bi-percent',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                    // ── Cliente ──
+                    ['tab' => $tC, 'key' => 'cliente',        'label' => 'Cliente',              'icon' => 'bi-person',          'type' => 'text',         'grupo' => 'Cliente', 'col' => 4],
+                    ['tab' => $tC, 'key' => 'ruc',            'label' => 'RUC / Cédula',         'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Cliente', 'col' => 4],
+                    ['tab' => $tC, 'key' => 'id_vendedor',    'label' => 'Asesor',               'icon' => 'bi-person-badge',    'type' => 'select',       'grupo' => 'Cliente', 'col' => 4, 'options' => $opcionesVendedor],
+                    ['tab' => $tC, 'key' => 'id_responsable', 'label' => 'Responsable de traslado', 'icon' => 'bi-truck',        'type' => 'select',       'grupo' => 'Cliente', 'col' => 4, 'options' => $opcionesResponsable],
+                    ['tab' => $tC, 'key' => 'punto_llegada',  'label' => 'Punto de llegada',     'icon' => 'bi-geo-alt',         'type' => 'text',         'grupo' => 'Cliente', 'col' => 4],
+                    ['tab' => $tC, 'key' => 'observaciones',  'label' => 'Observaciones',        'icon' => 'bi-chat-left-text',  'type' => 'text',         'grupo' => 'Cliente', 'col' => 4],
+                ];
+                ?>
+                <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+                <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+                <div id="fmBuscadorCONS"></div>
                 <input type="hidden" id="b" name="b" value="<?= htmlspecialchars($buscar) ?>">
-                
+
                 <script>
                     document.addEventListener('DOMContentLoaded', () => {
-                        if (!window.FiltrosBusqueda) return;
-                        new FiltrosBusqueda({
-                            containerId: 'fbBuscadorCONS',
+                        if (!window.FiltrosModal) return;
+                        new FiltrosModal({
+                            containerId: 'fmBuscadorCONS',
                             hiddenInputId: 'b',
-                            fields: [
-                                { key: 'fecha',      label: 'Fecha emisión',     icon: 'bi-calendar',       type: 'date_range' },
-                                { key: 'serie',      label: 'Serie',             icon: 'bi-upc-scan',       type: 'select', options: [
-                                    <?php foreach ($seriesFiltro as $s): ?>
-                                    { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                    <?php endforeach; ?>
-                                ]},
-                                { key: 'secuencial', label: 'Secuencial',        icon: 'bi-123',            type: 'text' },
-                                { key: 'cliente',    label: 'Cliente',           icon: 'bi-person',         type: 'text' },
-                                { key: 'vendedor',   label: 'Vendedor',          icon: 'bi-person-badge',   type: 'text' },
-                                { key: 'responsable',label: 'Resp. traslado',    icon: 'bi-truck',          type: 'text' },
-                                { key: 'total',      label: 'Total',             icon: 'bi-currency-dollar',type: 'number_range' },
-                                { key: 'estado',     label: 'Estado',            icon: 'bi-flag',           type: 'select', options: [
-                                    { v: 'Emitida',   l: 'Emitida' },
-                                    { v: 'Borrador',  l: 'Borrador' },
-                                    { v: 'Entregada', l: 'Entregada' },
-                                    { v: 'Anulada',   l: 'Anulada' },
-                                ]},
-                            ],
-                            quickFilters: [
-                                { id: 'qf_emitida',   label: 'Emitidas',   mk: () => ({ key: 'estado', op: '=', value: 'Emitida',   display: 'Emitidas' }) },
-                                { id: 'qf_entregada', label: 'Entregadas', mk: () => ({ key: 'estado', op: '=', value: 'Entregada', display: 'Entregadas' }) },
-                                { id: 'qf_hoy',       label: 'Hoy',        mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                                { id: 'qf_mes',       label: 'Este mes',   mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            ],
-                            onApply: () => { g_paginaActual = 1; cargarGrid(); },
+                            placeholder: 'Buscar en todas las columnas...',
+                            titulo: 'Filtros de consignaciones',
+                            inputWidth: 420,
+                            extraId: 'fmExtraCONS',   // columnas + PDF + Excel, pegados al final del grupo
+                            // Pestaña Detalles: búsqueda libre dentro de las consignaciones (productos
+                            // con lote/NUP y documentos relacionados). Cada coincidencia dice a qué
+                            // consignación pertenece.
+                            busquedaDetalle: {
+                                tab: 'Detalles',
+                                url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                                label: 'Buscar libremente dentro de las consignaciones',
+                                placeholder: 'Producto, código, lote, NUP, bodega, factura, retorno o cambio relacionado...',
+                                columns: [
+                                    { key: 'origen',      label: 'Tipo' },
+                                    { key: 'tipo',        label: 'Código / Nº' },
+                                    { key: 'descripcion', label: 'Descripción' },
+                                    { key: 'extra',       label: 'Lote / NUP / Caducidad', class: 'font-monospace' },
+                                    { key: 'cantidad',    label: 'Cant.', align: 'end' },
+                                    { key: 'monto',       label: 'Valor', align: 'end' },
+                                    { key: 'numero',      label: 'Consignación', class: 'font-monospace fw-semibold' },
+                                    { key: 'fecha',       label: 'Fecha' },
+                                    { key: 'cliente',     label: 'Cliente' },
+                                    { key: 'estado',      label: 'Estado' },
+                                ],
+                                onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                                onOpen: (row, fm) => {
+                                    fm.hide();
+                                    // abrirModalConsignacionVer lee la cabecera del data-row de la fila.
+                                    const fila = { getAttribute: () => JSON.stringify(row.registro || {}) };
+                                    setTimeout(() => abrirModalConsignacionVer(fila), 350);
+                                },
+                            },
+                            fields: <?= json_encode($filtrosConsignaciones, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                            loadingTarget: '#grid-body',   // se atenúa mientras se busca
+                            onApply: () => { g_paginaActual = 1; return cargarGrid(); },
                         }).init();
                     });
                 </script>
 
-                <div class="btn-group btn-group-sm">
+                <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+                <div id="fmExtraCONS" class="btn-group btn-group-sm">
                     <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas([
                         'fecha_emision' => 'Fecha',
                         'secuencial' => 'Secuencial',
@@ -113,8 +171,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         'estado' => 'Estado'
                     ], $vistaConfig ?? [], 'consignaciones-ventas'); ?>
 
-                    <a class="btn btn-outline-danger pdf-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                    <a class="btn btn-outline-success excel-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+                    <a class="btn btn-outline-danger pdf-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                    <a class="btn btn-outline-success excel-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i><span class="d-none d-md-inline"> Excel</span></a>
                 </div>
             </div>
 
@@ -256,10 +314,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     async function cargarGrid() {
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+        // vaciarse; también al paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('grid-body');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
-            const tbody = document.getElementById('grid-body');
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></td></tr>';
-            
             const b_input = document.getElementById('b');
             g_buscar = b_input ? b_input.value : '';
 
@@ -284,6 +343,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         } catch(e) {
             console.error(e);
             Swal.fire('Error', 'No se pudo cargar la lista', 'error');
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     }
 </script>

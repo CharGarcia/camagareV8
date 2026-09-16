@@ -81,6 +81,18 @@ class TallerOrdenService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Valores usados por la empresa para los selects del modal de filtros del listado. */
+    public function getOpcionesFiltro(int $idEmpresa): array
+    {
+        return $this->repository->getOpcionesFiltro($idEmpresa);
+    }
+
+    /** Búsqueda libre dentro de las órdenes (líneas, etapas, checklist, bitácora) — pestaña Detalles del buscador. */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuario, $limit);
+    }
+
     /** Tablero del jefe de taller: órdenes activas agrupadas por departamento. */
     public function getTablero(int $idEmpresa, ?int $idUsuarioFiltro): array
     {

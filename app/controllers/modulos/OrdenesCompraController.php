@@ -102,6 +102,8 @@ class OrdenesCompraController extends BaseModuloController
             'perm'            => $perm,
             'rutaModulo'      => self::RUTA_MODULO,
             'seriesFiltro'    => $seriesFiltro,
+            // Select "Usuario" del modal de filtros: solo quienes crearon órdenes.
+            'usuariosFiltro'  => $repoVista->getUsuariosConOrdenes($idEmpresa),
             'rows'            => $rows,
             'total'           => $total,
             'page'            => $page,
@@ -116,6 +118,53 @@ class OrdenesCompraController extends BaseModuloController
             'tarifasIva'      => $tarifasIva,
             'fullWidth'       => true,
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las órdenes
+     * (ítems pedidos y compras vinculadas).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $estados = [
+            'borrador' => 'Borrador', 'enviado' => 'Enviado', 'aprobado' => 'Aprobado',
+            'parcial'  => 'Recibido parcial', 'recibido' => 'Recibido', 'anulado' => 'Anulado',
+        ];
+        $origenes = ['PRODUCTO' => 'Ítem', 'COMPRA' => 'Compra vinculada'];
+        $camposOrden = ['id', 'id_proveedor', 'id_establecimiento', 'id_punto_emision', 'establecimiento', 'punto_emision',
+                        'secuencial', 'numero_orden', 'fecha_orden', 'fecha_recepcion', 'observaciones', 'estado',
+                        'proveedor_nombre', 'proveedor_identificacion', 'proveedor_email'];
+
+        $rows = [];
+        foreach ((new OrdenCompraRepository())->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'origen'      => $origenes[$r['origen']] ?? $r['origen'],
+                'tipo'        => $r['det_tipo'] ?? '',
+                'descripcion' => $r['det_descripcion'] ?? '',
+                'cantidad'    => $r['det_cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['det_cantidad'], 4, '.', ''), '0'), '.') : '',
+                'monto'       => $r['det_monto'] !== null ? number_format((float) $r['det_monto'], 2) : '',
+                'numero'      => $r['numero_orden'] ?? '',
+                'fecha'       => !empty($r['fecha_orden']) ? date('d-m-Y', strtotime($r['fecha_orden'])) : '',
+                'proveedor'   => $r['proveedor_nombre'] ?? '',
+                'estado'      => $estados[$r['estado'] ?? ''] ?? ucfirst((string) ($r['estado'] ?? '')),
+                // Cabecera para ocAbrirEditar(), que la lee del data-row de la fila.
+                'orden'       => array_intersect_key($r, array_flip($camposOrden)),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function searchAjax(): void

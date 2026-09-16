@@ -57,6 +57,24 @@ class EntregasConsignacionesService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $idsResponsables);
     }
 
+    /**
+     * Búsqueda libre dentro de las consignaciones (productos y evidencias de entrega):
+     * pestaña Detalles del buscador. Mismo alcance por responsables que el listado.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?array $idsResponsables, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idsResponsables, $limit);
+    }
+
+    /** Listas de los selects del modal de filtros: solo los valores realmente usados. */
+    public function getOpcionesFiltros(int $idEmpresa, ?array $idsResponsables): array
+    {
+        return [
+            'responsables' => $this->repository->getResponsablesUsados($idEmpresa, $idsResponsables),
+            'usuarios'     => $this->repository->getUsuariosEntregas($idEmpresa),
+        ];
+    }
+
     /** KPIs de la tarjeta superior: pendientes, entregadas (total y por canal), incompletas y tiempo promedio. */
     public function getResumen(int $idEmpresa, string $buscar, ?array $idsResponsables): array
     {

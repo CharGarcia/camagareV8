@@ -40,6 +40,100 @@ class CambioProductoCvRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /**
+     * Expresión SQL con el número (serie-secuencial) del documento de origen de una línea de
+     * cambio, según su origen_tipo: FACTURA (facturación de consignación), CAMBIO (cambio
+     * anterior) o CONSIGNACION. NULL en las entregas de catálogo (sin origen).
+     */
+    private static function sqlNumeroOrigen(string $alias): string
+    {
+        return "(CASE {$alias}.origen_tipo
+                    WHEN 'FACTURA'      THEN (SELECT CONCAT(ox.serie, '-', ox.secuencial) FROM consignaciones_facturas ox WHERE ox.id = {$alias}.id_origen)
+                    WHEN 'CAMBIO'       THEN (SELECT CONCAT(ox.serie, '-', ox.secuencial) FROM cambios_producto_cv ox WHERE ox.id = {$alias}.id_origen)
+                    WHEN 'CONSIGNACION' THEN (SELECT CONCAT(ox.serie, '-', ox.secuencial) FROM consignaciones_ventas ox WHERE ox.id = {$alias}.id_origen)
+                 END)";
+    }
+
+    /** Responsables de traslado usados en cambios de la empresa: filtro del modal de filtros. */
+    public function getResponsablesUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT rt.id, rt.nombre
+                FROM cambios_producto_cv r
+                JOIN responsables_traslado rt ON rt.id = r.id_responsable_traslado
+                WHERE r.id_empresa = :id_empresa AND r.eliminado = false
+                ORDER BY rt.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que registraron cambios en la empresa: filtro "Usuario que registró" del modal. */
+    public function getUsuariosUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM cambios_producto_cv r
+                JOIN usuarios u ON u.id = r.created_by
+                WHERE r.id_empresa = :id_empresa AND r.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de los cambios (pestaña "Detalles" del modal de filtros): cada
+     * línea devuelta o entregada (producto, lote, NUP, caducidad, bodega y documento de
+     * origen) que coincide con el texto, con el cambio al que pertenece. Mismo alcance que
+     * el listado: empresa, no eliminados y registros propios (created_by) si $idUsuario viene.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "r.id_empresa = :id_empresa AND r.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND r.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condLinea = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['p.codigo', 'p.nombre', 'p.codigo_barras', 'd.lote', 'd.nup', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')",
+             'bo.nombre', self::sqlNumeroOrigen('d'), 'd.cantidad::text', 'd.precio_unitario::text', 'd.total::text'],
+            $q, $params, 'ln'
+        );
+        if ($condLinea === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT r.id, r.serie, r.secuencial, r.fecha_cambio, r.estado, c.nombre AS cliente_nombre
+                    FROM cambios_producto_cv r
+                    INNER JOIN clientes c ON c.id = r.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT d.tipo_linea, d.origen_tipo, p.codigo AS tipo, p.nombre AS descripcion,
+                       NULLIF(CONCAT_WS(' / ', NULLIF(d.lote, ''), NULLIF(d.nup, ''), TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')), '') AS extra,
+                       bo.nombre AS bodega,
+                       " . self::sqlNumeroOrigen('d') . " AS documento_origen,
+                       d.cantidad, d.total AS monto,
+                       b.id, b.serie, b.secuencial, b.fecha_cambio, b.estado, b.cliente_nombre
+                FROM cambios_producto_cv_detalles d
+                JOIN base b ON b.id = d.id_cambio
+                LEFT JOIN productos p ON p.id = d.id_producto
+                LEFT JOIN bodegas bo ON bo.id = d.id_bodega
+                WHERE d.eliminado = false AND $condLinea
+                ORDER BY b.fecha_cambio DESC, b.id DESC, d.tipo_linea, d.id
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // ─── LISTADO PAGINADO ─────────────────────────────────────────────────────
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
@@ -54,8 +148,31 @@ class CambioProductoCvRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre (buscador FiltrosModal de la vista): las columnas del listado y lo
+            // que identifica al cambio aunque no sea columna. Decisión del usuario: la
+            // columna Estado NO entra en el texto libre; se filtra desde el modal.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['r.secuencial', 'c.nombre', 'c.identificacion', 'r.estado', 'r.motivo'],
+                [
+                    "TO_CHAR(r.fecha_cambio, 'DD-MM-YYYY')",              // Fecha (como se muestra)
+                    'r.fecha_cambio::text',
+                    "CONCAT(r.serie, '-', r.secuencial)",                 // Secuencial (serie-secuencial)
+                    'c.nombre',                                           // Cliente
+                    'c.identificacion',
+                    'r.motivo',                                           // Motivo
+                    'r.diferencia::text',                                 // Diferencia
+                    'r.observaciones',
+                    'rt.nombre',                                          // Responsable de traslado
+                    'u.nombre',                                           // Usuario que registró
+                    // Productos devueltos y entregados (código, nombre, lote y NUP)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup), ' ')
+                        FROM cambios_producto_cv_detalles d
+                        LEFT JOIN productos p ON p.id = d.id_producto
+                       WHERE d.id_cambio = r.id AND d.eliminado = false)",
+                    // Documentos relacionados: documentos de origen de las líneas
+                    "(SELECT STRING_AGG(" . self::sqlNumeroOrigen('d') . ", ' ')
+                        FROM cambios_producto_cv_detalles d
+                       WHERE d.id_cambio = r.id AND d.eliminado = false)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -64,28 +181,48 @@ class CambioProductoCvRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (FiltrosModal en la vista). Las claves viejas se
+        // conservan: viajan en los enlaces de PDF/Excel.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [
-                'cliente'    => 'c.nombre',
-                'motivo'     => 'r.motivo',
+                'cliente'       => 'c.nombre',
+                'ruc'           => 'c.identificacion',
+                'motivo'        => 'r.motivo',
+                'observaciones' => 'r.observaciones',
+                'numero'        => "CONCAT(r.serie, '-', r.secuencial)",
             ],
             'exacto' => [
-                'estado'     => 'r.estado',
-                'serie'      => "CONCAT(r.establecimiento,'-',r.punto_emision)",
+                'estado'         => 'r.estado',
+                'serie'          => "CONCAT(r.establecimiento,'-',r.punto_emision)",
+                'id_responsable' => 'r.id_responsable_traslado',
+                'id_usuario'     => 'r.created_by',
+                // asiento:si / asiento:no
+                'asiento'        => "CASE WHEN r.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
             ],
             'fecha'  => [
                 'fecha'      => 'r.fecha_cambio',
             ],
             'numerico' => [
-                'diferencia' => 'r.diferencia',
-                'secuencial' => 'r.secuencial::numeric',
+                'diferencia'         => 'r.diferencia',
+                'subtotal_devuelto'  => 'r.subtotal_devuelto',
+                'subtotal_entregado' => 'r.subtotal_entregado',
+                'secuencial'         => 'r.secuencial::numeric',
+            ],
+            'existe' => [
+                // Nº del documento de origen (factura de consignación, cambio o consignación) de alguna línea
+                'documento_origen' => ['tipo' => 'texto', 'col' => self::sqlNumeroOrigen('dx'),
+                                       'sql'  => 'EXISTS (SELECT 1 FROM cambios_producto_cv_detalles dx
+                                                           WHERE dx.id_cambio = r.id AND dx.eliminado = false AND {cond})'],
             ],
         ]);
 
+        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan c, rt y u.
         $sqlCount = "
             SELECT COUNT(*)
             FROM cambios_producto_cv r
             INNER JOIN clientes c ON c.id = r.id_cliente
+            LEFT JOIN responsables_traslado rt ON rt.id = r.id_responsable_traslado
+            LEFT JOIN usuarios u ON u.id = r.created_by
             $where
         ";
         $stCount = $this->db->prepare($sqlCount);
@@ -113,6 +250,8 @@ class CambioProductoCvRepository extends BaseRepository
                    c.nombre as cliente_nombre, c.identificacion as cliente_identificacion
             FROM cambios_producto_cv r
             INNER JOIN clientes c ON c.id = r.id_cliente
+            LEFT JOIN responsables_traslado rt ON rt.id = r.id_responsable_traslado
+            LEFT JOIN usuarios u ON u.id = r.created_by
             $where
             ORDER BY $sort $dir, r.id DESC
             $limitClause

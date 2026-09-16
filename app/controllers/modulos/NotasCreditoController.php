@@ -67,6 +67,7 @@ class NotasCreditoController extends BaseModuloController
         }
 
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+        $usuariosFiltro = $this->repository->getUsuariosConNotas($idEmpresa);
 
         $bodegaRepo = new BodegaRepository();
         $bodegas = $bodegaRepo->getBodegasPermitidas((int)$_SESSION['id_usuario'], $idEmpresa, (int)$_SESSION['nivel']);
@@ -92,9 +93,51 @@ class NotasCreditoController extends BaseModuloController
             'establecimientos' => $establecimientos,
             'puntos'      => $puntos,
             'seriesFiltro' => $seriesFiltro,
+            'usuariosFiltro' => $usuariosFiltro,
             'bodegas'     => $bodegas,
             'fullWidth'   => true,
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las notas de
+     * crédito (líneas e información adicional). Mismo alcance que el listado.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $origenes = ['PRODUCTO' => 'Producto / servicio', 'ADICIONAL' => 'Info. adicional'];
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'origen'         => $origenes[$r['origen']] ?? $r['origen'],
+                'tipo'           => $r['tipo'] ?? '',
+                'descripcion'    => $r['descripcion'] ?? '',
+                'cantidad'       => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 4, '.', ''), '0'), '.') : '',
+                'monto'          => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'id_nota'        => (int) $r['id_nota'],
+                'numero'         => $r['numero'] ?? '',
+                'fecha'          => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'doc_modificado' => $r['num_doc_modificado'] ?? '',
+                'cliente'        => $r['cliente'] ?? '',
+                'estado'         => ucfirst((string) ($r['estado'] ?? '')),
+                // Valor crudo: el modal lo usa para abrir en solo lectura lo que no es borrador.
+                'estado_valor'   => (string) ($r['estado'] ?? ''),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function searchAjax(): void

@@ -46,15 +46,37 @@ class RetencionVentaRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
+        // Texto libre: las columnas del listado y lo que identifica la retención aunque
+        // no sea columna. El buscador de la vista no sugiere campos; lo escrito se busca
+        // en todo (cada palabra en cualquier columna, sin importar tildes). Decisión del
+        // usuario: la columna Origen (tipo) NO entra en el texto libre (se filtra solo
+        // desde el modal de filtros).
         if ($textoLibre !== '') {
-            $where .= " AND (
-                r.secuencial ILIKE :b
-                OR r.clave_acceso ILIKE :b
-                OR c.nombre ILIKE :b
-                OR c.identificacion ILIKE :b
-                OR r.periodo_fiscal ILIKE :b
-            )";
-            $params[':b'] = '%' . $textoLibre . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    "CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial)", // Nº Retención
+                    'r.secuencial',
+                    'r.fecha_emision::text',                                          // Fecha
+                    'c.nombre',                                                       // Cliente
+                    'c.identificacion',                                               // Identificación
+                    'r.periodo_fiscal',                                               // Período
+                    'r.total_renta::text',                                            // Total Renta
+                    'r.total_iva::text',                                              // Total IVA
+                    'r.total_isd::text',                                              // Total ISD
+                    '(r.total_renta + r.total_iva + r.total_isd)::text',              // Total Ret.
+                    // Fuera del listado, pero identifican la retención:
+                    'r.clave_acceso',
+                    'u.nombre',                                                       // usuario que registró
+                    // Documentos sustento y códigos de retención de las líneas
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', rvd.num_doc_sustento, rvd.codigo_retencion), ' ') FROM retencion_venta_detalle rvd WHERE rvd.id_retencion = r.id)",
+                ],
+                $textoLibre,
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
@@ -63,18 +85,27 @@ class RetencionVentaRepository extends BaseRepository
                 'ruc'            => 'c.identificacion',
                 'ci'             => 'c.identificacion',
                 'identificacion' => 'c.identificacion',
-                'numero'         => 'r.secuencial',
-                'nro'            => 'r.secuencial',
+                // Nº completo (001-001-000000123): también encuentra solo el secuencial,
+                // como antes, porque es una coincidencia parcial (ILIKE).
+                'numero'         => "CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial)",
+                'nro'            => "CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial)",
                 'periodo'        => 'r.periodo_fiscal',
                 'clave_acceso'   => 'r.clave_acceso',
+                'clave'          => 'r.clave_acceso',
                 'usuario'        => 'u.nombre',
             ],
             'exacto' => [
+                // Valores reales: manual / electronico
                 'origen' => 'r.origen',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del buscador (mismo patrón que
                 // FacturaVentaRepository::getListado()).
                 'serie'  => "CONCAT(r.establecimiento,'-',r.punto_emision)",
+                'id_usuario' => 'r.created_by',
+                // asiento:si / asiento:no
+                'asiento'    => "CASE WHEN r.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
+                // ambiente:1 (pruebas) / ambiente:2 (producción)
+                'ambiente'   => 'r.tipo_ambiente',
             ],
             'fecha' => [
                 'fecha'         => 'r.fecha_emision',
@@ -91,6 +122,26 @@ class RetencionVentaRepository extends BaseRepository
                 // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
                 // en '=', nunca hace substring).
                 'secuencial' => 'r.secuencial::numeric',
+            ],
+            'existe' => [
+                // doc_sustento:001-001-000000123 → alguna línea retiene ese documento
+                'doc_sustento' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM retencion_venta_detalle rvd2 WHERE rvd2.id_retencion = r.id AND {cond})',
+                    'col'  => 'rvd2.num_doc_sustento',
+                    'tipo' => 'texto',
+                ],
+                // codigo_retencion:312 → alguna línea usa ese código de retención
+                'codigo_retencion' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM retencion_venta_detalle rvd3 WHERE rvd3.id_retencion = r.id AND {cond})',
+                    'col'  => 'rvd3.codigo_retencion',
+                    'tipo' => 'exacto',
+                ],
+                // fecha_sustento:2026-01..2026-03 → fecha del documento sustento de alguna línea
+                'fecha_sustento' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM retencion_venta_detalle rvd4 WHERE rvd4.id_retencion = r.id AND {cond})',
+                    'col'  => 'rvd4.fecha_emision_doc_sustento',
+                    'tipo' => 'fecha',
+                ],
             ],
         ]);
 
@@ -147,6 +198,71 @@ class RetencionVentaRepository extends BaseRepository
                 ORDER BY establecimiento, punto_emision";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que han registrado alguna retención en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConRetenciones(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM retencion_venta_cabecera r
+                JOIN usuarios u ON u.id = r.created_by
+                WHERE r.id_empresa = :id_empresa AND r.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las retenciones (pestaña "Detalles" del modal de
+     * filtros): devuelve cada línea retenida (documento sustento, impuesto, código,
+     * base, porcentaje, valor) que coincide con el texto, junto con la retención a la
+     * que pertenece. Mismo alcance que el listado (empresa, no eliminadas, ambiente,
+     * registros propios por created_by).
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':ie' => $idEmpresa];
+        $whereBase = "r.id_empresa = :ie AND r.eliminado = false
+                      AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :ie)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND r.created_by = :iu";
+            $params[':iu'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.num_doc_sustento', 'd.codigo_impuesto', 'd.codigo_retencion', 'd.base_imponible::text',
+             'd.porcentaje_retencion::text', 'd.valor_retenido::text', 'd.fecha_emision_doc_sustento::text'],
+            $q, $params, 'dt'
+        );
+        if ($condDet === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT r.id, CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial) AS numero,
+                           r.fecha_emision, r.origen, c.nombre AS cliente
+                    FROM retencion_venta_cabecera r
+                    LEFT JOIN clientes c ON c.id = r.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT d.num_doc_sustento, d.codigo_impuesto, d.codigo_retencion,
+                       d.base_imponible, d.porcentaje_retencion, d.valor_retenido,
+                       b.id AS id_retencion, b.numero, b.fecha_emision, b.origen, b.cliente
+                FROM retencion_venta_detalle d
+                JOIN base b ON b.id = d.id_retencion
+                WHERE $condDet
+                ORDER BY b.fecha_emision DESC, b.id DESC, d.id
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

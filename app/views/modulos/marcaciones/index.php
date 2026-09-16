@@ -54,37 +54,82 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorMARC" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // embudo que abre el modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de MarcacionRepository::getListado().
+            // La marcación no tiene tablas hijas: una sola pestaña, sin "Detalles".
+            $opcionesPuntoMarc   = array_map(fn($p) => ['v' => (string) $p['id'], 'l' => $p['nombre']], $opcionesFiltro['puntos'] ?? []);
+            $opcionesUsuarioMarc = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $opcionesFiltro['usuarios'] ?? []);
+            $tM = 'Marcación';
+            // Orden pensado en filas de 12 columnas:
+            //   Marcación: [Fecha 6][Tipo 3][Estado 3]
+            //              [Método 4][Punto de servicio 4][Nombre del punto 4]
+            //   Ubicación: [Distancia 3][Fuera del radio 3][Con GPS 3][Dispositivo 3]
+            //   Empleado:  [Empleado 3][Identificación 3][Observación 3][Registrada por 3]
+            $filtrosMarcaciones = [
+                // ── Marcación ──
+                ['tab' => $tM, 'key' => 'fecha',    'label' => 'Fecha',             'icon' => 'bi-calendar-date',      'type' => 'date_range', 'grupo' => 'Marcación', 'col' => 6, 'atajos' => true],
+                ['tab' => $tM, 'key' => 'tipo',     'label' => 'Tipo',              'icon' => 'bi-box-arrow-in-right', 'type' => 'select',     'grupo' => 'Marcación', 'col' => 3, 'options' => [
+                    ['v' => 'entrada',      'l' => 'Entrada'],
+                    ['v' => 'salida',       'l' => 'Salida'],
+                    ['v' => 'inicio_break', 'l' => 'Inicio break'],
+                    ['v' => 'fin_break',    'l' => 'Fin break'],
+                ]],
+                ['tab' => $tM, 'key' => 'estado',   'label' => 'Estado',            'icon' => 'bi-flag',               'type' => 'select',     'grupo' => 'Marcación', 'col' => 3, 'options' => [
+                    ['v' => 'valida',     'l' => 'Válida'],
+                    ['v' => 'sospechosa', 'l' => 'Sospechosa'],
+                    ['v' => 'anulada',    'l' => 'Anulada'],
+                ]],
+                ['tab' => $tM, 'key' => 'metodo',   'label' => 'Método',            'icon' => 'bi-phone',              'type' => 'select',     'grupo' => 'Marcación', 'col' => 4, 'options' => [
+                    ['v' => 'qr_punto', 'l' => 'QR del punto'],
+                    ['v' => 'geo',      'l' => 'Ubicación (GPS)'],
+                    ['v' => 'facial',   'l' => 'Reconocimiento facial'],
+                    ['v' => 'manual',   'l' => 'Registro manual'],
+                ]],
+                ['tab' => $tM, 'key' => 'id_punto', 'label' => 'Punto de servicio', 'icon' => 'bi-geo-alt',            'type' => 'select',     'grupo' => 'Marcación', 'col' => 4, 'options' => $opcionesPuntoMarc],
+                ['tab' => $tM, 'key' => 'punto',    'label' => 'Nombre del punto',  'icon' => 'bi-geo',                'type' => 'text',       'grupo' => 'Marcación', 'col' => 4],
+                // ── Ubicación ──
+                ['tab' => $tM, 'key' => 'distancia',   'label' => 'Distancia (m)',   'icon' => 'bi-rulers',             'type' => 'number_range', 'grupo' => 'Ubicación', 'col' => 3],
+                ['tab' => $tM, 'key' => 'fuera_radio', 'label' => 'Fuera del radio', 'icon' => 'bi-exclamation-triangle', 'type' => 'select',     'grupo' => 'Ubicación', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Fuera del radio'],
+                    ['v' => 'no', 'l' => 'Dentro o sin medir'],
+                ]],
+                ['tab' => $tM, 'key' => 'con_gps',     'label' => 'Ubicación del celular', 'icon' => 'bi-crosshair',     'type' => 'select',       'grupo' => 'Ubicación', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Con GPS'],
+                    ['v' => 'no', 'l' => 'Sin GPS'],
+                ]],
+                ['tab' => $tM, 'key' => 'dispositivo', 'label' => 'Dispositivo',     'icon' => 'bi-phone-vibrate',      'type' => 'text',         'grupo' => 'Ubicación', 'col' => 3],
+                // ── Empleado ──
+                ['tab' => $tM, 'key' => 'empleado',       'label' => 'Empleado',       'icon' => 'bi-person',         'type' => 'text',   'grupo' => 'Empleado', 'col' => 3],
+                ['tab' => $tM, 'key' => 'identificacion', 'label' => 'Identificación', 'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Empleado', 'col' => 3],
+                ['tab' => $tM, 'key' => 'observacion',    'label' => 'Observación',    'icon' => 'bi-chat-left-text', 'type' => 'text',   'grupo' => 'Empleado', 'col' => 3],
+                ['tab' => $tM, 'key' => 'usuario',        'label' => 'Registrada por', 'icon' => 'bi-person-gear',    'type' => 'select', 'grupo' => 'Empleado', 'col' => 3, 'options' => $opcionesUsuarioMarc],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorMARC"></div>
             <input type="hidden" id="buscarMarc" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorMARC',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorMARC',
                         hiddenInputId: 'buscarMarc',
-                        fields: [
-                            { key: 'empleado', label: 'Empleado', icon: 'bi-person', type: 'text' },
-                            { key: 'punto', label: 'Punto', icon: 'bi-geo-alt', type: 'text' },
-                            { key: 'tipo', label: 'Tipo', icon: 'bi-box-arrow-in-right', type: 'select', options: [
-                                { v: 'entrada', l: 'Entrada' }, { v: 'salida', l: 'Salida' },
-                                { v: 'inicio_break', l: 'Inicio break' }, { v: 'fin_break', l: 'Fin break' }
-                            ]},
-                            { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select', options: [
-                                { v: 'valida', l: 'Válida' }, { v: 'sospechosa', l: 'Sospechosa' }, { v: 'anulada', l: 'Anulada' }
-                            ]},
-                            { key: 'fecha', label: 'Fecha', icon: 'bi-calendar-date', type: 'date_range' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_susp', label: 'Sospechosas', mk: () => ({ key: 'estado', op: '=', value: 'sospechosa', display: 'Sospechosa' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de marcaciones',
+                        inputWidth: 420,
+                        extraId: 'fmExtraMARC',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosMarcaciones, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyMarcaciones',   // se atenúa mientras se busca
                         onApply: () => window.cambiarPaginaAjax && window.cambiarPaginaAjax(1),
                     }).init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraMARC" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'empleado'  => 'Empleado',
@@ -99,11 +144,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -216,6 +261,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar (que llaman a esta función directo).
+            const tbody = document.getElementById('tbodyMarcaciones');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -236,7 +285,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         } else icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
                     });
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         }
 
         window.eliminarMarcacion = function (id) {

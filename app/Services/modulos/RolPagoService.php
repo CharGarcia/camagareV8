@@ -58,6 +58,24 @@ class RolPagoService
         return $result;
     }
 
+    /** Años de período usados por la empresa (modal de filtros del listado). */
+    public function getAniosUsados(int $idEmpresa): array
+    {
+        return $this->repo->getAniosUsados($idEmpresa);
+    }
+
+    /** Usuarios que crearon corridas de rol en la empresa (modal de filtros del listado). */
+    public function getUsuariosConRoles(int $idEmpresa): array
+    {
+        return $this->repo->getUsuariosConRoles($idEmpresa);
+    }
+
+    /** Búsqueda libre dentro de las corridas: líneas de empleado y rubros (pestaña Detalles). */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        return $this->repo->buscarEnDetalles($idEmpresa, $q, $idUsuario, $limit);
+    }
+
     public function getDetalle(int $id, int $idEmpresa, ?int $idUsuario = null): ?array
     {
         $cab = $this->repo->findCabecera($id, $idEmpresa);

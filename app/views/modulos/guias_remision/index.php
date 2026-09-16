@@ -52,56 +52,107 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorGR" style="width: 420px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // "Filtros" que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de GuiaRemisionRepository::getListado().
+            $opcionesSerie         = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesUsuario       = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $opcionesTransportista = array_map(fn($t) => ['v' => (string) $t['id'], 'l' => $t['nombre']], $transportistasFiltro ?? []);
+            // Dos pestañas: "Guía" (filtros por campo de la cabecera) y "Detalles" (solo la
+            // búsqueda libre dentro de las guías, ver `busquedaDetalle` abajo).
+            $tG = 'Guía';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento:          [Fecha de emisión 6][Estado 3][Correo 3]
+            //                       [Serie 3][Nº guía 3][Secuencial 2][Usuario que registró 4]
+            //                       [Fecha de autorización 6][Clave de acceso 6]
+            //   Traslado:           [Inicio del transporte 6][Fin del transporte 6]
+            //                       [Transportista 4][Placa 4][Motivo 4]
+            //                       [Dirección de partida 4][Dirección de destino 4][Ruta 4]
+            //   Documento sustento: [Nº documento 6][Fecha del documento 6]
+            //   Destinatario:       [Destinatario 6][RUC 6]
+            $filtrosGuias = [
+                // ── Documento ──
+                ['tab' => $tG, 'key' => 'fecha',      'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tG, 'key' => 'estado',     'label' => 'Estado',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'borrador',   'l' => 'Borrador'],
+                    ['v' => 'autorizado', 'l' => 'Autorizado'],
+                    ['v' => 'anulado',    'l' => 'Anulado'],
+                ]],
+                ['tab' => $tG, 'key' => 'correo',     'label' => 'Correo',           'icon' => 'bi-envelope',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'enviado',   'l' => 'Enviado'],
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                ]],
+                ['tab' => $tG, 'key' => 'serie',      'label' => 'Serie',            'icon' => 'bi-upc-scan',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tG, 'key' => 'numero',     'label' => 'Nº guía',          'icon' => 'bi-hash',           'type' => 'text',       'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tG, 'key' => 'secuencial', 'label' => 'Secuencial',       'icon' => 'bi-123',            'type' => 'text',       'grupo' => 'Documento', 'col' => 2, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tG, 'key' => 'id_usuario', 'label' => 'Usuario que registró', 'icon' => 'bi-person-gear', 'type' => 'select',  'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesUsuario],
+                ['tab' => $tG, 'key' => 'fecha_autorizacion', 'label' => 'Fecha de autorización', 'icon' => 'bi-patch-check', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6],
+                ['tab' => $tG, 'key' => 'clave',      'label' => 'Clave de acceso',  'icon' => 'bi-key',            'type' => 'text',       'grupo' => 'Documento', 'col' => 6],
+                // ── Traslado ──
+                ['tab' => $tG, 'key' => 'fecha_inicio',     'label' => 'Inicio del transporte', 'icon' => 'bi-calendar-check', 'type' => 'date_range', 'grupo' => 'Traslado', 'col' => 6],
+                ['tab' => $tG, 'key' => 'fecha_fin',        'label' => 'Fin del transporte',    'icon' => 'bi-calendar-x',     'type' => 'date_range', 'grupo' => 'Traslado', 'col' => 6],
+                ['tab' => $tG, 'key' => 'id_transportista', 'label' => 'Transportista',         'icon' => 'bi-person-badge',   'type' => 'select',     'grupo' => 'Traslado', 'col' => 4, 'options' => $opcionesTransportista],
+                ['tab' => $tG, 'key' => 'placa',            'label' => 'Placa',                 'icon' => 'bi-truck',          'type' => 'text',       'grupo' => 'Traslado', 'col' => 4],
+                ['tab' => $tG, 'key' => 'motivo',           'label' => 'Motivo',                'icon' => 'bi-chat-left-text', 'type' => 'text',       'grupo' => 'Traslado', 'col' => 4],
+                ['tab' => $tG, 'key' => 'partida',          'label' => 'Dirección de partida',  'icon' => 'bi-geo',            'type' => 'text',       'grupo' => 'Traslado', 'col' => 4],
+                ['tab' => $tG, 'key' => 'destino',          'label' => 'Dirección de destino',  'icon' => 'bi-geo-alt',        'type' => 'text',       'grupo' => 'Traslado', 'col' => 4],
+                ['tab' => $tG, 'key' => 'ruta',             'label' => 'Ruta',                  'icon' => 'bi-signpost',       'type' => 'text',       'grupo' => 'Traslado', 'col' => 4],
+                // ── Documento sustento ──
+                ['tab' => $tG, 'key' => 'doc_sustento',   'label' => 'Nº documento sustento', 'icon' => 'bi-receipt',  'type' => 'text',       'grupo' => 'Documento sustento', 'col' => 6, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tG, 'key' => 'fecha_sustento', 'label' => 'Fecha del documento',   'icon' => 'bi-calendar', 'type' => 'date_range', 'grupo' => 'Documento sustento', 'col' => 6],
+                // ── Destinatario ──
+                ['tab' => $tG, 'key' => 'cliente', 'label' => 'Destinatario', 'icon' => 'bi-person',    'type' => 'text', 'grupo' => 'Destinatario', 'col' => 6],
+                ['tab' => $tG, 'key' => 'ruc',     'label' => 'RUC / Cédula', 'icon' => 'bi-card-text', 'type' => 'text', 'grupo' => 'Destinatario', 'col' => 6],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorGR"></div>
             <input type="hidden" id="buscarGuia" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorGR',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorGR',
                         hiddenInputId: 'buscarGuia',
-                        fields: [
-                            { key: 'cliente',       label: 'Destinatario',  icon: 'bi-person',          type: 'text' },
-                            { key: 'transportista', label: 'Transportista', icon: 'bi-person-badge',    type: 'text' },
-                            { key: 'placa',         label: 'Placa',         icon: 'bi-truck',           type: 'text' },
-                            { key: 'motivo',        label: 'Motivo',        icon: 'bi-chat-left-text',  type: 'text' },
-                            { key: 'fecha',         label: 'Fecha emisión', icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'fecha_inicio',  label: 'F. Inicio transporte', icon: 'bi-calendar-check', type: 'date_range' },
-                            { key: 'estado',        label: 'Estado',        icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'borrador',      l: 'Borrador' },
-                                { v: 'autorizado',    l: 'Autorizado' },
-                                { v: 'no_autorizado', l: 'No autorizado' },
-                                { v: 'devuelta',      l: 'Devuelta' },
-                                { v: 'anulado',       l: 'Anulado' },
-                            ]},
-                            { key: 'correo',        label: 'Correo',        icon: 'bi-envelope',        type: 'select', options: [
-                                { v: 'pendiente', l: 'Pendiente' },
-                                { v: 'enviado',   l: 'Enviado' },
-                            ]},
-                            { key: 'serie',         label: 'Serie',         icon: 'bi-upc-scan', type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial',    label: 'Secuencial',    icon: 'bi-123', type: 'text' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_borrador',   label: 'Borradores',  mk: () => ({ key: 'estado', op: '=', value: 'borrador',   display: 'Borrador' }) },
-                            { id: 'qf_autorizado', label: 'Autorizadas', mk: () => ({ key: 'estado', op: '=', value: 'autorizado', display: 'Autorizado' }) },
-                            { id: 'qf_anulado',    label: 'Anuladas',    mk: () => ({ key: 'estado', op: '=', value: 'anulado',    display: 'Anulado' }) },
-                            { id: 'qf_hoy',        label: 'Hoy',        mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                            { id: 'qf_mes',        label: 'Este mes',   mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_mes_pasado', label: 'Mes pasado', mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
-                            { id: 'qf_anio',       label: 'Este año',   mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de guías de remisión',
+                        inputWidth: 420,
+                        extraId: 'fmExtraGR',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las guías (productos transportados
+                        // e información adicional). Cada coincidencia dice a qué guía pertenece.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de las guías',
+                            placeholder: 'Producto, código, descripción, cantidad, información adicional...',
+                            columns: [
+                                { key: 'origen',        label: 'Tipo' },
+                                { key: 'tipo',          label: 'Código / Campo' },
+                                { key: 'descripcion',   label: 'Descripción' },
+                                { key: 'cantidad',      label: 'Cant.', align: 'end' },
+                                { key: 'numero',        label: 'Guía', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',         label: 'Fecha' },
+                                { key: 'cliente',       label: 'Destinatario' },
+                                { key: 'transportista', label: 'Transportista' },
+                                { key: 'estado',        label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                setTimeout(() => window.GR_abrirEditar({ id: row.id_guia }), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosGuias, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#gr-tbody',   // se atenúa mientras se busca
                         onApply: () => GR_buscar(),
                     }).init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraGR" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero'                  => 'Número',
@@ -121,12 +172,12 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 <a id="gr-pdf-btn"
                    href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="gr-excel-btn"
                    href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -275,14 +326,19 @@ $rutaModulo = $grRutaRespaldo;
         window.GR_abrirEditar(el);
     }
 
-    function GR_buscar() { GR_cargar(1); }
-    function GR_cambiarPagina(p) { GR_cargar(p); }
+    // Devuelven la promesa: FiltrosModal apaga su indicador de carga cuando termina.
+    function GR_buscar() { return GR_cargar(1); }
+    function GR_cambiarPagina(p) { return GR_cargar(p); }
 
     function GR_cargar(p) {
         GR_page = p;
         const q   = document.getElementById('buscarGuia').value;
         const url = GR_urlBase + '/search-ajax?b=' + encodeURIComponent(q) + '&page=' + p + '&sort=' + GR_sort + '&dir=' + GR_dir;
-        fetch(url)
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga (también al paginar y ordenar, que llaman a esta función directo).
+        const tbodyCarga = document.getElementById('gr-tbody');
+        if (tbodyCarga) tbodyCarga.classList.add('fm-cargando-target');
+        return fetch(url)
             .then(r => r.json())
             .then(d => {
                 if (!d.ok) return;
@@ -294,7 +350,9 @@ $rutaModulo = $grRutaRespaldo;
                 document.querySelectorAll('#gr-tbody .gr-row').forEach(el => {
                     el.onclick = function() { abrirModalGR(this); };
                 });
-            });
+            })
+            .catch(e => console.error('Error al buscar guías:', e))
+            .finally(() => { if (tbodyCarga) tbodyCarga.classList.remove('fm-cargando-target'); });
     }
 
     document.addEventListener('click', e => {

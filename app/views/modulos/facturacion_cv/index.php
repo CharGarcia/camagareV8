@@ -45,47 +45,104 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorFAC" style="width: 460px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // embudo que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de ConsignacionFacturaRepository::getListado().
+            $opcionesSerie    = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesVendedor = array_map(fn($v) => ['v' => (string) $v['id'], 'l' => $v['nombre']], $opcionesFiltros['vendedores'] ?? []);
+            $opcionesUsuario  = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $opcionesFiltros['usuarios'] ?? []);
+            // Dos pestañas: "Facturación" (filtros por campo) y "Detalles" (solo la búsqueda
+            // libre dentro de los documentos, ver `busquedaDetalle` abajo).
+            $tF = 'Facturación';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento: [Fecha 6][Estado 3][Serie 3]
+            //              [Nº documento 3][Secuencial 3][Factura 3][Consignación 3]
+            //              [Asiento 4][Vendedor 4][Usuario 4]
+            //   Valores:   [Total 4][Subtotal 4][IVA 4]
+            //   Cliente:   [Cliente 4][RUC 4][Observaciones 4]
+            $filtrosFacturacion = [
+                // ── Documento ──
+                ['tab' => $tF, 'key' => 'fecha',         'label' => 'Fecha de emisión',     'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tF, 'key' => 'estado',        'label' => 'Estado',               'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'borrador',  'l' => 'Borrador'],
+                    ['v' => 'facturada', 'l' => 'Facturada'],
+                    ['v' => 'anulada',   'l' => 'Anulada'],
+                ]],
+                ['tab' => $tF, 'key' => 'serie',         'label' => 'Serie',                'icon' => 'bi-upc-scan',        'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tF, 'key' => 'numero',        'label' => 'Nº documento',         'icon' => 'bi-hash',            'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tF, 'key' => 'secuencial',    'label' => 'Secuencial',           'icon' => 'bi-123',             'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tF, 'key' => 'factura',       'label' => 'Factura de venta',     'icon' => 'bi-receipt',         'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tF, 'key' => 'consignacion',  'label' => 'Consignación de origen', 'icon' => 'bi-box-seam',      'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tF, 'key' => 'asiento',       'label' => 'Asiento de reingreso', 'icon' => 'bi-journal-check',   'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con asiento'],
+                    ['v' => 'no', 'l' => 'Sin asiento'],
+                ]],
+                ['tab' => $tF, 'key' => 'id_vendedor',   'label' => 'Vendedor',             'icon' => 'bi-person-badge',    'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesVendedor],
+                ['tab' => $tF, 'key' => 'id_usuario',    'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',     'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesUsuario],
+                // ── Valores ──
+                ['tab' => $tF, 'key' => 'total',         'label' => 'Total',                'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tF, 'key' => 'subtotal',      'label' => 'Subtotal',             'icon' => 'bi-receipt',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tF, 'key' => 'impuesto',      'label' => 'IVA',                  'icon' => 'bi-percent',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // ── Cliente ──
+                ['tab' => $tF, 'key' => 'cliente',       'label' => 'Cliente',              'icon' => 'bi-person',          'type' => 'text',         'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tF, 'key' => 'ruc',           'label' => 'RUC / Cédula',         'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tF, 'key' => 'observaciones', 'label' => 'Observaciones',        'icon' => 'bi-chat-left-text',  'type' => 'text',         'grupo' => 'Cliente', 'col' => 4],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorFAC"></div>
             <input type="hidden" id="b" name="b" value="<?= htmlspecialchars($buscar) ?>">
 
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorFAC',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorFAC',
                         hiddenInputId: 'b',
-                        fields: [
-                            { key: 'serie',      label: 'Serie',      icon: 'bi-upc-scan', type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',      type: 'text' },
-                            { key: 'cliente',    label: 'Cliente',    icon: 'bi-person',   type: 'text' },
-                            { key: 'factura',    label: 'Factura',    icon: 'bi-receipt',  type: 'text' },
-                            { key: 'observaciones', label: 'Observaciones', icon: 'bi-chat-left-text', type: 'text' },
-                            { key: 'fecha',      label: 'Fecha',      icon: 'bi-calendar', type: 'date_range' },
-                            { key: 'total',      label: 'Total',      icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'estado',     label: 'Estado',     icon: 'bi-flag',   type: 'select', options: [
-                                { v: 'borrador',  l: 'Borrador' },
-                                { v: 'facturada', l: 'Facturada' },
-                                { v: 'anulada',   l: 'Anulada' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_borrador',  label: 'Borradores', mk: () => ({ key: 'estado', op: '=', value: 'borrador',  display: 'Borradores' }) },
-                            { id: 'qf_facturada', label: 'Facturadas', mk: () => ({ key: 'estado', op: '=', value: 'facturada', display: 'Facturadas' }) },
-                            { id: 'qf_mes',       label: 'Este mes',   mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                        ],
-                        onApply: () => { g_paginaActual = 1; cargarGrid(); },
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de facturación de consignaciones',
+                        inputWidth: 420,
+                        extraId: 'fmExtraFAC',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de los documentos (productos con
+                        // lote/NUP y consignación de origen, e información adicional).
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= $urlBaseFac ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de las facturaciones',
+                            placeholder: 'Producto, código, lote, NUP, bodega, consignación de origen, información adicional...',
+                            columns: [
+                                { key: 'origen',       label: 'Tipo' },
+                                { key: 'tipo',         label: 'Código' },
+                                { key: 'descripcion',  label: 'Descripción' },
+                                { key: 'extra',        label: 'Lote / NUP / Caducidad', class: 'font-monospace' },
+                                { key: 'consignacion', label: 'Consignación', class: 'font-monospace' },
+                                { key: 'cantidad',     label: 'Cant.', align: 'end' },
+                                { key: 'monto',        label: 'Valor', align: 'end' },
+                                { key: 'numero',       label: 'Documento', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',        label: 'Fecha' },
+                                { key: 'cliente',      label: 'Cliente' },
+                                { key: 'estado_label', label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                // abrirModalFacturacionVer lee el documento del data-row de la fila.
+                                const fila = { id: row.id, estado: row.estado, id_factura: row.id_factura, serie: row.serie, secuencial: row.secuencial };
+                                setTimeout(() => window.abrirModalFacturacionVer({ dataset: { row: JSON.stringify(fila) } }), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosFacturacion, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#grid-body',   // se atenúa mientras se busca
+                        onApply: () => { g_paginaActual = 1; return cargarGrid(); },
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraFAC" class="btn-group btn-group-sm">
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas([
                     'fecha'      => 'Fecha',
                     'secuencial' => 'Secuencial',
@@ -95,8 +152,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'estado'     => 'Estado'
                 ], $vistaConfig ?? [], 'facturacion-cv'); ?>
 
-                <a class="btn btn-outline-danger pdf-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a class="btn btn-outline-success excel-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+                <a class="btn btn-outline-danger pdf-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a class="btn btn-outline-success excel-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i><span class="d-none d-md-inline"> Excel</span></a>
             </div>
         </div>
 
@@ -213,9 +270,11 @@ include dirname(__DIR__) . '/clientes/modal_cliente.php';
     function cambiarPaginaAjax(p) { g_paginaActual = p; cargarGrid(); }
 
     async function cargarGrid() {
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+        // vaciarse; también al paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('grid-body');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
-            const tbody = document.getElementById('grid-body');
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></td></tr>';
             const b_input = document.getElementById('b');
             g_buscar = b_input ? b_input.value : '';
             const params = new URLSearchParams({ b: g_buscar, page: g_paginaActual, sort: g_ordenCol, dir: g_ordenDir });
@@ -232,6 +291,8 @@ include dirname(__DIR__) . '/clientes/modal_cliente.php';
         } catch (e) {
             console.error(e);
             Swal.fire('Error', 'No se pudo cargar la lista', 'error');
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     }
 </script>

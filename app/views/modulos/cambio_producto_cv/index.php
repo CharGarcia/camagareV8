@@ -53,42 +53,106 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorCAM" style="width: 460px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // embudo que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de CambioProductoCvRepository::getListado().
+            $opcionesSerie       = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesResponsable = array_map(fn($r) => ['v' => (string) $r['id'], 'l' => $r['nombre']], $opcionesFiltros['responsables'] ?? []);
+            $opcionesUsuario     = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $opcionesFiltros['usuarios'] ?? []);
+            // Dos pestañas: "Cambio" (filtros por campo) y "Detalles" (solo la búsqueda libre
+            // dentro de los cambios, ver `busquedaDetalle` abajo).
+            $tC = 'Cambio';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento: [Fecha 6][Estado 3][Serie 3]
+            //              [Nº cambio 3][Secuencial 3][Documento de origen 3][Asiento 3]
+            //              [Responsable 6][Usuario 6]
+            //   Valores:   [Diferencia 4][Subtotal devuelto 4][Subtotal entregado 4]
+            //   Cliente:   [Cliente 4][RUC 4][Motivo 4]
+            //              [Observaciones 12]
+            $filtrosCambios = [
+                // ── Documento ──
+                ['tab' => $tC, 'key' => 'fecha',              'label' => 'Fecha del cambio',     'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tC, 'key' => 'estado',             'label' => 'Estado',               'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'Borrador', 'l' => 'Borrador'],
+                    ['v' => 'Emitida',  'l' => 'Emitida'],
+                    ['v' => 'Anulada',  'l' => 'Anulada'],
+                ]],
+                ['tab' => $tC, 'key' => 'serie',              'label' => 'Serie',                'icon' => 'bi-upc-scan',        'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tC, 'key' => 'numero',             'label' => 'Nº cambio',            'icon' => 'bi-hash',            'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tC, 'key' => 'secuencial',         'label' => 'Secuencial',           'icon' => 'bi-123',             'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tC, 'key' => 'documento_origen',   'label' => 'Documento de origen',  'icon' => 'bi-link-45deg',      'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tC, 'key' => 'asiento',            'label' => 'Asiento contable',     'icon' => 'bi-journal-check',   'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Con asiento'],
+                    ['v' => 'no', 'l' => 'Sin asiento'],
+                ]],
+                ['tab' => $tC, 'key' => 'id_responsable',     'label' => 'Responsable de traslado', 'icon' => 'bi-truck',        'type' => 'select',       'grupo' => 'Documento', 'col' => 6, 'options' => $opcionesResponsable],
+                ['tab' => $tC, 'key' => 'id_usuario',         'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',     'type' => 'select',       'grupo' => 'Documento', 'col' => 6, 'options' => $opcionesUsuario],
+                // ── Valores ──
+                ['tab' => $tC, 'key' => 'diferencia',         'label' => 'Diferencia',           'icon' => 'bi-plus-slash-minus','type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'subtotal_devuelto',  'label' => 'Subtotal devuelto',    'icon' => 'bi-box-arrow-in-left', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'subtotal_entregado', 'label' => 'Subtotal entregado',   'icon' => 'bi-box-arrow-right', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // ── Cliente ──
+                ['tab' => $tC, 'key' => 'cliente',            'label' => 'Cliente',              'icon' => 'bi-person',          'type' => 'text',         'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tC, 'key' => 'ruc',                'label' => 'RUC / Cédula',         'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tC, 'key' => 'motivo',             'label' => 'Motivo',               'icon' => 'bi-chat',            'type' => 'text',         'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tC, 'key' => 'observaciones',      'label' => 'Observaciones',        'icon' => 'bi-chat-left-text',  'type' => 'text',         'grupo' => 'Cliente', 'col' => 12],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorCAM"></div>
             <input type="hidden" id="b" name="b" value="<?= htmlspecialchars($buscar) ?>">
 
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorCAM',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorCAM',
                         hiddenInputId: 'b',
-                        fields: [
-                            { key: 'serie',      label: 'Serie',      icon: 'bi-upc-scan', type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',     type: 'text' },
-                            { key: 'cliente',    label: 'Cliente',    icon: 'bi-person', type: 'text' },
-                            { key: 'motivo',     label: 'Motivo',     icon: 'bi-chat',   type: 'text' },
-                            { key: 'estado',     label: 'Estado',     icon: 'bi-flag',   type: 'select', options: [
-                                { v: 'Emitida',  l: 'Emitida' },
-                                { v: 'Borrador', l: 'Borrador' },
-                                { v: 'Anulada',  l: 'Anulada' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_emitida', label: 'Emitidos', mk: () => ({ key: 'estado', op: '=', value: 'Emitida', display: 'Emitidos' }) },
-                        ],
-                        onApply: () => { g_paginaActual = 1; cargarGrid(); },
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de cambios de productos',
+                        inputWidth: 420,
+                        extraId: 'fmExtraCAM',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de los cambios (líneas devueltas y
+                        // entregadas con lote/NUP, bodega y documento de origen).
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= $urlBaseCam ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de los cambios',
+                            placeholder: 'Producto, código, lote, NUP, bodega, factura de consignación o documento de origen...',
+                            columns: [
+                                { key: 'origen',      label: 'Línea' },
+                                { key: 'tipo',        label: 'Código' },
+                                { key: 'descripcion', label: 'Producto' },
+                                { key: 'extra',       label: 'Lote / NUP / Caducidad', class: 'font-monospace' },
+                                { key: 'bodega',      label: 'Bodega' },
+                                { key: 'documento',   label: 'Documento de origen' },
+                                { key: 'cantidad',    label: 'Cant.', align: 'end' },
+                                { key: 'monto',       label: 'Valor', align: 'end' },
+                                { key: 'numero',      label: 'Cambio', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',       label: 'Fecha' },
+                                { key: 'cliente',     label: 'Cliente' },
+                                { key: 'estado',      label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                // abrirModalCambioVer lee el cambio del data-row de la fila.
+                                const datos = JSON.stringify({ id: row.id, estado: row.estado, serie: row.serie, secuencial: row.secuencial });
+                                setTimeout(() => window.abrirModalCambioVer({ getAttribute: () => datos }), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosCambios, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#grid-body',   // se atenúa mientras se busca
+                        onApply: () => { g_paginaActual = 1; return cargarGrid(); },
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraCAM" class="btn-group btn-group-sm">
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas([
                     'fecha_cambio' => 'Fecha',
                     'secuencial'   => 'Secuencial',
@@ -98,8 +162,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'estado'       => 'Estado'
                 ], $vistaConfig ?? [], 'cambio-producto-cv'); ?>
 
-                <a class="btn btn-outline-danger pdf-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a class="btn btn-outline-success excel-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+                <a class="btn btn-outline-danger pdf-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a class="btn btn-outline-success excel-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i><span class="d-none d-md-inline"> Excel</span></a>
             </div>
         </div>
 
@@ -211,10 +275,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     async function cargarGrid() {
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+        // vaciarse; también al paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('grid-body');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
-            const tbody = document.getElementById('grid-body');
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></td></tr>';
-
             const b_input = document.getElementById('b');
             g_buscar = b_input ? b_input.value : '';
 
@@ -233,6 +298,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         } catch (e) {
             console.error(e);
             Swal.fire('Error', 'No se pudo cargar la lista', 'error');
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     }
 </script>

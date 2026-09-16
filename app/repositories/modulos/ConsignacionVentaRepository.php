@@ -25,6 +25,147 @@ class ConsignacionVentaRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Asesores (vendedores) usados en consignaciones de la empresa: filtro "Asesor" del modal de filtros. */
+    public function getVendedoresUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT v.id, v.nombre
+                FROM consignaciones_ventas cv
+                JOIN vendedores v ON v.id = cv.id_vendedor
+                WHERE cv.id_empresa = :id_empresa AND cv.eliminado = false
+                ORDER BY v.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Responsables de traslado usados en consignaciones de la empresa: filtro del modal de filtros. */
+    public function getResponsablesUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT rt.id, rt.nombre
+                FROM consignaciones_ventas cv
+                JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
+                WHERE cv.id_empresa = :id_empresa AND cv.eliminado = false
+                ORDER BY rt.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que registraron consignaciones en la empresa: filtro "Usuario que registró" del modal. */
+    public function getUsuariosUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM consignaciones_ventas cv
+                JOIN usuarios u ON u.id = cv.created_by
+                WHERE cv.id_empresa = :id_empresa AND cv.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las consignaciones (pestaña "Detalles" del modal de filtros):
+     * cada producto consignado y cada documento relacionado (factura de consignación,
+     * retorno, cambio de producto) que coincide con el texto, junto con la consignación a
+     * la que pertenece. Mismo alcance que el listado: empresa, no eliminadas y registros
+     * propios (created_by) cuando $idUsuario viene informado.
+     *
+     * La CTE `base` trae la cabecera completa (cv.* + nombres) para que la vista pueda abrir
+     * el modal de la consignación con los mismos datos que la fila del listado.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "cv.id_empresa = :id_empresa AND cv.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND cv.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condProd = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['p.codigo', 'p.nombre', 'p.codigo_barras', 'd.lote', 'd.nup', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')",
+             'bo.nombre', 'd.cantidad::text', 'd.precio_unitario::text', 'd.total::text'],
+            $q, $params, 'pr'
+        );
+        $condFac = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ["CONCAT(cf.serie, '-', cf.secuencial)", 'cf.numero_factura', 'cf.observaciones', 'cf.total::text'],
+            $q, $params, 'fc'
+        );
+        $condRet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ["CONCAT(r.serie, '-', r.secuencial)", 'r.motivo', 'r.observaciones', 'r.total::text'],
+            $q, $params, 'rt'
+        );
+        $condCam = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ["CONCAT(cc.serie, '-', cc.secuencial)", 'cc.motivo', 'cc.observaciones'],
+            $q, $params, 'cm'
+        );
+        if ($condProd === '' || $condFac === '' || $condRet === '' || $condCam === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT cv.*,
+                           c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+                           v.nombre AS vendedor_nombre,
+                           rt.nombre AS responsable_traslado_nombre
+                    FROM consignaciones_ventas cv
+                    INNER JOIN clientes c ON c.id = cv.id_cliente
+                    LEFT JOIN vendedores v ON v.id = cv.id_vendedor
+                    LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
+                    WHERE $whereBase
+                ),
+                coincidencias AS (
+                    SELECT 'PRODUCTO' AS origen, p.codigo AS tipo, p.nombre AS descripcion,
+                           NULLIF(CONCAT_WS(' / ', NULLIF(d.lote, ''), NULLIF(d.nup, ''), TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')), '') AS extra,
+                           d.cantidad, d.total AS monto, d.id_consignacion AS id_cons
+                    FROM consignaciones_ventas_detalles d
+                    JOIN base b ON b.id = d.id_consignacion
+                    LEFT JOIN productos p ON p.id = d.id_producto
+                    LEFT JOIN bodegas bo ON bo.id = d.id_bodega
+                    WHERE d.eliminado = false AND $condProd
+                    UNION ALL
+                    SELECT DISTINCT 'FACTURA' AS origen, CONCAT(cf.serie, '-', cf.secuencial) AS tipo,
+                           cf.numero_factura AS descripcion, NULL AS extra,
+                           NULL::numeric AS cantidad, cf.total AS monto, cfd.id_consignacion AS id_cons
+                    FROM consignaciones_facturas cf
+                    JOIN consignaciones_facturas_detalles cfd ON cfd.id_consignacion_factura = cf.id
+                    JOIN base b ON b.id = cfd.id_consignacion
+                    WHERE cf.eliminado = false AND $condFac
+                    UNION ALL
+                    SELECT DISTINCT 'RETORNO' AS origen, CONCAT(r.serie, '-', r.secuencial) AS tipo,
+                           NULLIF(r.motivo, '') AS descripcion, NULL AS extra,
+                           NULL::numeric AS cantidad, r.total AS monto, rd.id_consignacion AS id_cons
+                    FROM retornos_cv r
+                    JOIN retornos_cv_detalles rd ON rd.id_retorno = r.id
+                    JOIN base b ON b.id = rd.id_consignacion
+                    WHERE r.eliminado = false AND $condRet
+                    UNION ALL
+                    SELECT DISTINCT 'CAMBIO' AS origen, CONCAT(cc.serie, '-', cc.secuencial) AS tipo,
+                           NULLIF(cc.motivo, '') AS descripcion, NULL AS extra,
+                           NULL::numeric AS cantidad, cc.diferencia AS monto, ccd.id_origen AS id_cons
+                    FROM cambios_producto_cv cc
+                    JOIN cambios_producto_cv_detalles ccd ON ccd.id_cambio = cc.id
+                         AND ccd.origen_tipo = 'CONSIGNACION' AND ccd.eliminado = false
+                    JOIN base b ON b.id = ccd.id_origen
+                    WHERE cc.eliminado = false AND $condCam
+                )
+                SELECT x.origen, x.tipo, x.descripcion, x.extra, x.cantidad, x.monto, b.*
+                FROM coincidencias x
+                JOIN base b ON b.id = x.id_cons
+                ORDER BY b.fecha_emision DESC, b.id DESC, x.origen
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
     {
         $params = [':e' => $idEmpresa];
@@ -40,8 +181,49 @@ class ConsignacionVentaRepository extends BaseRepository
         $filtros    = $parsed['filtros'];
 
         if ($textoLibre !== '') {
+            // Texto libre (buscador FiltrosModal de la vista): las columnas del listado y
+            // lo que identifica a la consignación aunque no sea columna. Decisión del
+            // usuario: la columna Estado NO entra en el texto libre; se filtra desde el
+            // modal de filtros.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['cv.secuencial', 'c.nombre', 'c.identificacion', 'v.nombre', 'cv.estado', 'cv.observaciones'],
+                [
+                    "TO_CHAR(cv.fecha_emision, 'DD-MM-YYYY')",            // Fecha (como se muestra)
+                    'cv.fecha_emision::text',                             // Fecha (yyyy-mm-dd)
+                    "CONCAT(cv.serie, '-', cv.secuencial)",               // Secuencial (serie-secuencial)
+                    'c.nombre',                                           // Cliente
+                    'c.identificacion',
+                    'v.nombre',                                           // Asesor
+                    'cv.observaciones',                                   // Observaciones
+                    'rt.nombre',                                          // Responsable de traslado
+                    'cv.punto_partida',
+                    'cv.punto_llegada',
+                    'cv.total::text',
+                    'u.nombre',                                           // Usuario que registró
+                    // Productos consignados (código, nombre, lote y NUP)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup), ' ')
+                        FROM consignaciones_ventas_detalles d
+                        LEFT JOIN productos p ON p.id = d.id_producto
+                       WHERE d.id_consignacion = cv.id AND d.eliminado = false)",
+                    // Documentos relacionados: facturas de la consignación (nº interno y nº de la factura SRI)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', CONCAT(cf.serie, '-', cf.secuencial), cf.numero_factura), ' ')
+                        FROM consignaciones_facturas cf
+                       WHERE cf.eliminado = false
+                         AND EXISTS (SELECT 1 FROM consignaciones_facturas_detalles cfd
+                                      WHERE cfd.id_consignacion_factura = cf.id AND cfd.id_consignacion = cv.id))",
+                    // Documentos relacionados: retornos de esta consignación
+                    "(SELECT STRING_AGG(CONCAT(r.serie, '-', r.secuencial), ' ')
+                        FROM retornos_cv r
+                       WHERE r.eliminado = false
+                         AND EXISTS (SELECT 1 FROM retornos_cv_detalles rd
+                                      WHERE rd.id_retorno = r.id AND rd.id_consignacion = cv.id))",
+                    // Documentos relacionados: cambios de producto que entregan desde esta consignación
+                    "(SELECT STRING_AGG(CONCAT(cc.serie, '-', cc.secuencial), ' ')
+                        FROM cambios_producto_cv cc
+                       WHERE cc.eliminado = false
+                         AND EXISTS (SELECT 1 FROM cambios_producto_cv_detalles ccd
+                                      WHERE ccd.id_cambio = cc.id AND ccd.origen_tipo = 'CONSIGNACION'
+                                        AND ccd.id_origen = cv.id AND ccd.eliminado = false))",
+                ],
                 $textoLibre,
                 $params,
                 'tl'
@@ -51,9 +233,13 @@ class ConsignacionVentaRepository extends BaseRepository
             }
         }
 
+        // Claves del modal de filtros (FiltrosModal en la vista). Las claves viejas se
+        // conservan aunque la UI ya no las muestre: viajan en los enlaces de PDF/Excel.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
             'texto' => [
-                'numero'         => 'cv.secuencial',
+                // Nº completo "serie-secuencial" (contiene al secuencial, así que las
+                // búsquedas viejas por secuencial siguen encontrando lo mismo).
+                'numero'         => "CONCAT(cv.serie, '-', cv.secuencial)",
                 'cliente'        => 'c.nombre',
                 'ruc'            => 'c.identificacion',
                 'identificacion' => 'c.identificacion',
@@ -63,10 +249,22 @@ class ConsignacionVentaRepository extends BaseRepository
                 'obs'            => 'cv.observaciones',
                 'observacion'    => 'cv.observaciones',
                 'observaciones'  => 'cv.observaciones',
+                'punto_llegada'  => 'cv.punto_llegada',
             ],
             'exacto' => [
-                'estado' => 'cv.estado',
-                'serie'  => "CONCAT(cv.establecimiento,'-',cv.punto_emision)",
+                'estado'         => 'cv.estado',
+                'serie'          => "CONCAT(cv.establecimiento,'-',cv.punto_emision)",
+                'id_vendedor'    => 'cv.id_vendedor',
+                'id_responsable' => 'cv.id_responsable_traslado',
+                'id_usuario'     => 'cv.created_by',
+                // asiento:si / asiento:no
+                'asiento'        => "CASE WHEN cv.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
+                // facturada:si / facturada:no — tiene alguna factura de consignación no anulada
+                'facturada'      => "CASE WHEN EXISTS (SELECT 1 FROM consignaciones_facturas_detalles cfd
+                                                        JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
+                                                       WHERE cfd.id_consignacion = cv.id AND cf.eliminado = false
+                                                         AND LOWER(cf.estado) <> 'anulada')
+                                          THEN 'si' ELSE 'no' END",
             ],
             'fecha' => [
                 'fecha'         => 'cv.fecha_emision',
@@ -78,16 +276,19 @@ class ConsignacionVentaRepository extends BaseRepository
                 'total'      => 'cv.total',
                 'monto'      => 'cv.total',
                 'subtotal'   => 'cv.subtotal',
+                'impuesto'   => 'cv.impuesto',
                 'secuencial' => 'cv.secuencial::numeric',
             ],
         ]);
 
+        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan c, v, rt y u.
         $sqlCount = "
             SELECT COUNT(*)
             FROM consignaciones_ventas cv
             INNER JOIN clientes c ON c.id = cv.id_cliente
             LEFT JOIN vendedores v ON v.id = cv.id_vendedor
             LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
+            LEFT JOIN usuarios u ON u.id = cv.created_by
             $where
         ";
         $stCount = $this->db->prepare($sqlCount);
@@ -121,6 +322,7 @@ class ConsignacionVentaRepository extends BaseRepository
             INNER JOIN clientes c ON c.id = cv.id_cliente
             LEFT JOIN vendedores v ON v.id = cv.id_vendedor
             LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
+            LEFT JOIN usuarios u ON u.id = cv.created_by
             $where
             ORDER BY $sort $dir, cv.id DESC
             $limitClause

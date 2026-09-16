@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura
-version: 1.8
+etiquetas: facturacion de consignacion, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura
+version: 1.9
 orden: 47
 estado: activo
 ---
@@ -50,8 +50,8 @@ por aquí.
 
 El listado muestra **Fecha, Secuencial, Cliente, Factura, Observaciones y
 Estado**. Todas esas columnas se pueden ordenar, ocultar y redimensionar por
-usuario, y el buscador filtra por cada una de ellas (además de por *serie* y
-*total*). Al hacer clic en una fila se abre el documento.
+usuario, y el buscador filtra el listado (ver *Buscar y filtrar el listado*).
+Al hacer clic en una fila se abre el documento.
 
 El flujo tiene **dos pasos** a propósito: primero se arma y revisa el documento,
 y solo cuando está correcto se emite la factura.
@@ -76,6 +76,51 @@ y solo cuando está correcto se emite la factura.
    de facturas ya filtrado por el número recién generado. Si no tiene ese
    permiso, solo se muestra la confirmación y se queda en Facturación de
    Consignaciones.
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del documento: fecha,
+número (serie y secuencial), cliente, RUC o cédula, factura de venta y
+observaciones. Además busca en el vendedor, el total, el usuario que lo
+registró, la información adicional, los **productos facturados** (código,
+nombre, lote y NUP) y el número de las **consignaciones de origen**. La columna
+**Estado** no entra en la búsqueda libre: para filtrar por ella use la ventana
+de filtros. Puede escribir varias palabras en cualquier orden y no importan
+mayúsculas ni tildes. Mientras busca, aparece un **círculo girando** al final
+del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Facturación** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (borrador, facturada, anulada), serie, Nº documento, secuencial, factura de venta, consignación de origen, con o sin asiento de reingreso, vendedor, usuario que registró |
+| Valores | Total, subtotal e IVA (cada uno con mínimo y máximo) |
+| Cliente | Cliente, RUC / cédula, observaciones |
+
+Los selectores *Serie*, *Vendedor* y *Usuario que registró* listan solo lo que
+la empresa ya usó en estos documentos.
+
+**Pestaña Detalles** (lo que hay dentro del documento). Es un único cuadro,
+**Buscar libremente dentro de las facturaciones**: escriba un producto, un
+código, un lote, un NUP, una bodega, el número de una consignación de origen o
+un dato de la información adicional (por ejemplo un correo), y aparece la lista
+de **cada coincidencia** con el documento al que pertenece (número, fecha,
+cliente y estado). Un clic en la fila deja el listado mostrando solo ese
+documento; el ícono de la derecha lo abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último. El PDF y el Excel del listado salen con los
+mismos filtros.
 
 ## Descuentos
 
@@ -189,6 +234,17 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.9** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas del documento y además en el
+  vendedor, el usuario, la información adicional, los productos facturados
+  (código, nombre, lote, NUP) y las consignaciones de origen, salvo la columna
+  Estado. Los filtros pasan a una **ventana propia** (botón del embudo, se
+  aplican con *Aplicar*) con dos pestañas: **Facturación** (filtros por campo,
+  con criterios nuevos: Nº documento, consignación de origen, con/sin asiento de
+  reingreso, vendedor y usuario como listas, subtotal, IVA y RUC) y
+  **Detalles**, un cuadro de **búsqueda libre dentro de las facturaciones** que
+  dice a qué documento pertenece cada coincidencia. Los filtros activos se ven
+  como etiquetas dentro del cuadro. Nueva sección *Buscar y filtrar el listado*.
 - **1.8** — Al **generar la factura**, si el usuario puede ver *Facturas de
   Venta*, se le pregunta si desea ir a ese módulo; al aceptar se abre el
   listado filtrado por la factura recién emitida. Sin ese permiso no se ofrece.

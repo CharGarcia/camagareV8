@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular
-version: 1.4
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips
+version: 1.5
 orden: 40
 estado: activo
 ---
@@ -43,6 +43,51 @@ registrar una compra normal.
 | Código de sustento tributario | Obligatorio |
 | Secuencial | Obligatorio |
 | Ítems | Al menos uno |
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la liquidación: N°
+liquidación, secuencial, fecha, proveedor, identificación, subtotal, descuento,
+total y usuario. Además busca en el número de autorización, la clave de acceso,
+las observaciones y los **códigos y descripciones de los productos o servicios**
+de la liquidación. Las columnas **Correo** y **Estado** no entran en la búsqueda
+libre: para filtrar por ellas use la ventana de filtros. Puede escribir varias
+palabras en cualquier orden y no importan mayúsculas ni tildes. Para limpiar,
+borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo
+girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Liquidación** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), serie, secuencial, estado (borrador, autorizado, anulado), estado de pago (pendiente / abonada / pagada), estado de correo (pendiente / enviado), N° liquidación, N° autorización o clave de acceso, sustento tributario, con o sin asiento contable, con o sin retención |
+| Valores | Total, subtotal, descuento, saldo pendiente y valor retenido (cada uno con mínimo y máximo) |
+| Proveedor | Proveedor, identificación, usuario, observaciones |
+
+Los selectores *Serie*, *Sustento tributario* y *Usuario* listan solo lo que la
+empresa ya usó. El *estado de pago* y el *saldo pendiente* se calculan con los
+pagos registrados en Egresos y las retenciones no anuladas de la liquidación.
+
+**Pestaña Detalles** (lo que hay dentro de la liquidación). Es un único cuadro,
+**Buscar libremente dentro de las liquidaciones**: escriba un producto o
+servicio, un código, una forma de pago SRI, un plazo o un dato de la
+información adicional, y aparece la lista de **cada línea que coincide** con la
+liquidación a la que pertenece (número, fecha, proveedor y estado). Un clic en
+la fila deja el listado mostrando solo esa liquidación; el ícono de la derecha
+la abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Documentos del módulo
 
@@ -101,6 +146,15 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.5** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias; lo que
+  se escribe se busca en las columnas de la liquidación (y en autorización, clave de
+  acceso, observaciones y productos), salvo Correo y Estado. Los filtros pasan a una
+  **ventana propia** (botón del embudo, se aplican con *Aplicar*) con dos pestañas:
+  **Liquidación** (criterios nuevos: estado de pago, estado de correo, autorización,
+  sustento, con/sin asiento y retención, subtotal, descuento, saldo pendiente, valor
+  retenido, usuario y observaciones) y **Detalles**, búsqueda libre dentro de los
+  productos, formas de pago e información adicional. Los filtros activos se ven como
+  etiquetas dentro del cuadro y la tabla se atenúa mientras busca.
 - **1.4** — Corregido el **PDF** de las liquidaciones con muchas líneas. Cuando el detalle
   no cabía en una página, cada línea siguiente abría una página nueva casi vacía (41
   líneas daban 5 páginas; 80, 44), y a veces quedaba una página en blanco. Ahora el

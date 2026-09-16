@@ -52,7 +52,13 @@ class ProductoRepository extends BaseRepository
         ?int $idUsuarioFiltro = null,
         ?string $soloOpcion = null,
         bool $soloActivos = false,
-        array $ordenMulti = []
+        array $ordenMulti = [],
+        // true solo desde el listado del módulo Productos (y sus exportaciones): el texto
+        // libre busca en todas las columnas del listado. Los buscadores de producto de
+        // facturas, POS, compras, comandas… llaman sin este flag y siguen buscando solo
+        // por nombre y códigos, para no llenarlos de ruido (una marca, un precio…) ni
+        // pagar las subconsultas de variantes y homologaciones en cada tecla.
+        bool $busquedaAmplia = false
     ): array {
         // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
         // MAPA_ORDEN, con p.id como desempate para que las filas empatadas no bailen
@@ -83,8 +89,37 @@ class ProductoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            $columnasTexto = ['p.nombre', 'p.codigo', 'p.codigo_auxiliar', 'p.codigo_barras'];
+            if ($busquedaAmplia) {
+                // Listado del módulo: columnas visibles + lo que identifica al producto.
+                // Decisión del usuario: Tipo, Tipo IVA, Inv. y Estado NO entran en el texto
+                // libre (se filtran desde el modal). Saldo tampoco: es una suma del kardex
+                // por fila y evaluarla en cada tecla sobre todo el catálogo es caro; se
+                // filtra con el rango "Saldo" del modal.
+                $columnasTexto = [
+                    'p.codigo',                     // Código
+                    'p.codigo_auxiliar',            // Cód. Aux.
+                    'p.codigo_barras',              // Barras
+                    'p.nombre',                     // Descripción
+                    'cat.nombre',                   // Categoría
+                    'mar.nombre',                   // Marca
+                    'um.nombre',                    // Medida
+                    'p.ubicacion',                  // Ubicación
+                    'ROUND(p.precio_base, 2)::text',                                                            // P. Base
+                    'NULLIF(ROUND((p.precio_base + COALESCE(p.valor_ice, 0)) * (COALESCE(ti.porcentaje_iva, 0) / 100), 2), 0)::text', // Val. IVA (sin los 0.00: si no, "0" coincide con todo)
+                    'NULLIF(ROUND(COALESCE(p.valor_ice, 0), 2), 0)::text',                                               // ICE
+                    'ROUND((p.precio_base + COALESCE(p.valor_ice, 0)) * (1 + COALESCE(ti.porcentaje_iva, 0) / 100), 2)::text', // PVP Final
+                    'NULLIF(ROUND(p.stock_minimo, 2), 0)::text', // Mín.
+                    'NULLIF(ROUND(p.stock_maximo, 2), 0)::text', // Máx.
+                    'p.nombre_ice',                 // Nombre del ICE (ficha)
+                    'ureg.nombre',                  // Usuario que registró (ficha)
+                    // Variantes (nombre y valor) y códigos con que lo factura cada proveedor.
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', pv.nombre, pv.valor), ' ') FROM productos_variantes pv WHERE pv.id_producto = p.id AND pv.eliminado = false)",
+                    "(SELECT STRING_AGG(ph.codigo_proveedor, ' ') FROM productos_homologacion ph WHERE ph.id_empresa = p.id_empresa AND ph.id_producto = p.id AND ph.eliminado = false)",
+                ];
+            }
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['p.nombre', 'p.codigo', 'p.codigo_auxiliar', 'p.codigo_barras'],
+                $columnasTexto,
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -123,13 +158,41 @@ class ProductoRepository extends BaseRepository
                 'ubicacion'     => 'p.ubicacion',
             ],
             'exacto'   => [
-                'estado'       => 'p.status',
+                // Igual que la columna Estado del listado: solo status = 1 es "Activo";
+                // cualquier otro valor (0, o el 2 que traen productos migrados) se ve y se
+                // filtra como Inactivo. Antes estado:inactivo comparaba = 0 y dejaba fuera
+                // a los de status 2. `status` sigue comparando el valor crudo.
+                'estado'       => "CASE WHEN COALESCE(p.status, 1) = 1 THEN '1' ELSE '0' END",
                 'status'       => 'p.status',
                 'tipo'         => 'p.tipo_produccion',
-                'inventariable' => 'p.inventariable',
+                // NULL se ve como "No" en la columna Inv.; con la columna cruda,
+                // inventariable:false los dejaba fuera.
+                'inventariable' => 'COALESCE(p.inventariable, false)',
+                // Selects del modal de filtros (catálogos por id).
+                'id'           => 'p.id',
+                'id_categoria' => 'p.id_categoria',
+                'id_marca'     => 'p.id_marca',
+                'id_medida'    => 'p.id_medida',
+                'id_tarifa_iva'=> 'p.tarifa_iva',
+                'usuario'      => 'p.created_by',
+                // Sí/No calculados.
+                'con_ice'      => "CASE WHEN COALESCE(p.valor_ice, 0) > 0 OR p.id_ice IS NOT NULL THEN 'si' ELSE 'no' END",
+                'para_venta'   => "CASE WHEN COALESCE((p.opciones->>'venta')::boolean, false) THEN 'si' ELSE 'no' END",
+                'para_compra'  => "CASE WHEN COALESCE((p.opciones->>'compra')::boolean, false) THEN 'si' ELSE 'no' END",
+                'kit'          => "CASE WHEN EXISTS (SELECT 1 FROM productos_componentes pcm WHERE pcm.id_producto_padre = p.id AND pcm.eliminado = false) THEN 'si' ELSE 'no' END",
+                'con_precios'  => "CASE WHEN EXISTS (SELECT 1 FROM productos_precios ppr WHERE ppr.id_empresa = p.id_empresa AND ppr.eliminado = false AND ppr.id_producto = p.id) THEN 'si' ELSE 'no' END",
+                // Bajo el mínimo: inventariable, con stock mínimo definido y saldo del kardex por debajo.
+                'bajo_minimo'  => "CASE WHEN COALESCE(p.inventariable, false) AND COALESCE(p.stock_minimo, 0) > 0
+                                        AND (SELECT COALESCE(SUM(k.cantidad), 0) FROM inventario_kardex k WHERE k.id_producto = p.id AND k.id_empresa = p.id_empresa AND k.eliminado = false) < p.stock_minimo
+                                   THEN 'si' ELSE 'no' END",
+            ],
+            'fecha'    => [
+                'registro'   => 'p.created_at',
+                'created_at' => 'p.created_at',
             ],
             'numerico' => [
                 'precio'    => 'p.precio_base',
+                'pvp'       => '((p.precio_base + COALESCE(p.valor_ice, 0)) * (1 + COALESCE(ti.porcentaje_iva, 0) / 100))',
                 // p.stock no existe: el saldo real se calcula en vivo desde el Kardex
                 // (misma subquery correlacionada que la columna saldo_actual del SELECT).
                 'stock'     => '(SELECT COALESCE(SUM(k.cantidad), 0) FROM inventario_kardex k WHERE k.id_producto = p.id AND k.id_empresa = p.id_empresa AND k.eliminado = false)',
@@ -138,9 +201,14 @@ class ProductoRepository extends BaseRepository
             ],
         ]);
 
+        // Mismos JOIN en el COUNT que usan el texto libre y los filtros (ti: Val. IVA/PVP;
+        // ureg: usuario que registró, solo en la búsqueda amplia).
         $countJoins = "LEFT JOIN categorias cat ON cat.id = p.id_categoria
                        LEFT JOIN marcas mar ON mar.id = p.id_marca
-                       LEFT JOIN unidades_medida um ON um.id = p.id_medida";
+                       LEFT JOIN unidades_medida um ON um.id = p.id_medida
+                       LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva";
+        $joinUsuario = $busquedaAmplia ? "LEFT JOIN usuarios ureg ON ureg.id = p.created_by" : '';
+        $countJoins .= "\n                       {$joinUsuario}";
 
         $sqlCount = "SELECT COUNT(*) FROM {$this->table} p {$countJoins} {$whereSql}";
         $stCount  = $this->db->prepare($sqlCount);
@@ -170,9 +238,10 @@ class ProductoRepository extends BaseRepository
                     LEFT JOIN marcas mar ON mar.id = p.id_marca
                     LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
                     LEFT JOIN unidades_medida um ON um.id = p.id_medida
+                    {$joinUsuario}
                     {$whereSql}
                     $orderBy";
-                    
+
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
         }
@@ -185,6 +254,113 @@ class ProductoRepository extends BaseRepository
             'total' => $total,
             'rows'  => $rows
         ];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros del listado: solo los valores que
+     * la empresa realmente usa en sus productos (no eliminados).
+     *
+     * @return array{categorias: array, marcas: array, medidas: array, tarifas_iva: array, usuarios: array}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $p = [':id_empresa' => $idEmpresa];
+        $leer = function (string $select, string $join, string $orden) use ($p): array {
+            $st = $this->db->prepare("SELECT DISTINCT {$select}
+                                      FROM productos p {$join}
+                                      WHERE p.id_empresa = :id_empresa AND p.eliminado = false
+                                      ORDER BY {$orden}");
+            $st->execute($p);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        };
+
+        return [
+            'categorias'  => $leer('c.id, c.nombre', 'JOIN categorias c ON c.id = p.id_categoria', 'c.nombre'),
+            'marcas'      => $leer('m.id, m.nombre', 'JOIN marcas m ON m.id = p.id_marca', 'm.nombre'),
+            'medidas'     => $leer('um.id, um.nombre', 'JOIN unidades_medida um ON um.id = p.id_medida', 'um.nombre'),
+            'tarifas_iva' => $leer('ti.id, ti.tarifa AS nombre', 'JOIN tarifa_iva ti ON ti.id = p.tarifa_iva', 'nombre'),
+            'usuarios'    => $leer('u.id, u.nombre', 'JOIN usuarios u ON u.id = p.created_by', 'u.nombre'),
+        ];
+    }
+
+    /**
+     * Búsqueda libre DENTRO de los productos (pestaña "Detalles" del modal de filtros):
+     * cada variante, componente (kit), precio adicional y código de proveedor
+     * (homologación) que coincide con el texto, junto con el producto al que pertenece.
+     * Mismo alcance que el listado: empresa, no eliminados y registros propios
+     * (created_by) si el usuario no tiene acceso total.
+     *
+     * @return array<int, array{origen:string, detalle:?string, valor:?string, monto:?string,
+     *                          id_producto:int, codigo:?string, nombre:?string, status:?int, created_at:?string}>
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "p.id_empresa = :id_empresa AND p.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND p.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condVar  = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['pv.nombre', 'pv.valor', 'pv.precio_adicional::text'], $q, $params, 'dv');
+        $condComp = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['h.codigo', 'h.nombre', 'pc.cantidad::text', 'um.nombre'], $q, $params, 'dc');
+        $condPre  = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['pp.nombre_precio', 'pp.precio::text'], $q, $params, 'dp');
+        $condHom  = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['ph.codigo_proveedor', 'pr.razon_social', 'pr.identificacion'], $q, $params, 'dh');
+        if ($condVar === '' || $condComp === '' || $condPre === '' || $condHom === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT p.id, p.codigo, p.nombre, p.status, p.created_at
+                    FROM productos p
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'VARIANTE' AS origen, pv.nombre AS detalle, pv.valor AS valor, pv.precio_adicional AS monto,
+                           b.id AS id_producto, b.codigo, b.nombre, b.status, b.created_at
+                    FROM productos_variantes pv
+                    JOIN base b ON b.id = pv.id_producto
+                    WHERE pv.eliminado = false AND $condVar
+                    UNION ALL
+                    SELECT 'COMPONENTE' AS origen, CONCAT_WS(' - ', h.codigo, h.nombre) AS detalle,
+                           CONCAT_WS(' ', TRIM(TO_CHAR(pc.cantidad, 'FM999999990.####')), um.nombre) AS valor, NULL AS monto,
+                           b.id AS id_producto, b.codigo, b.nombre, b.status, b.created_at
+                    FROM productos_componentes pc
+                    JOIN base b ON b.id = pc.id_producto_padre
+                    JOIN productos h ON h.id = pc.id_producto_hijo
+                    LEFT JOIN unidades_medida um ON um.id = pc.id_medida
+                    WHERE pc.eliminado = false AND $condComp
+                    UNION ALL
+                    SELECT 'PRECIO' AS origen, pp.nombre_precio AS detalle,
+                           CONCAT_WS(' a ', TO_CHAR(pp.valido_desde, 'DD-MM-YYYY'), TO_CHAR(pp.valido_hasta, 'DD-MM-YYYY')) AS valor,
+                           pp.precio AS monto,
+                           b.id AS id_producto, b.codigo, b.nombre, b.status, b.created_at
+                    FROM productos_precios pp
+                    JOIN base b ON b.id = pp.id_producto
+                    WHERE pp.id_empresa = :id_empresa AND pp.eliminado = false AND $condPre
+                    UNION ALL
+                    SELECT 'HOMOLOGACION' AS origen, pr.razon_social AS detalle, ph.codigo_proveedor AS valor, NULL AS monto,
+                           b.id AS id_producto, b.codigo, b.nombre, b.status, b.created_at
+                    FROM productos_homologacion ph
+                    JOIN base b ON b.id = ph.id_producto
+                    LEFT JOIN proveedores pr ON pr.id = ph.id_proveedor
+                    WHERE ph.id_empresa = :id_empresa AND ph.eliminado = false AND $condHom
+                ) x
+                ORDER BY x.nombre ASC, x.id_producto DESC, x.origen
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

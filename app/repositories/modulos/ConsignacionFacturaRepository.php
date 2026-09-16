@@ -42,6 +42,100 @@ class ConsignacionFacturaRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /** Vendedores usados en documentos de facturación de consignaciones: filtro del modal de filtros. */
+    public function getVendedoresUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT v.id, v.nombre
+                FROM consignaciones_facturas cf
+                JOIN vendedores v ON v.id = cf.id_vendedor
+                WHERE cf.id_empresa = :id_empresa AND cf.eliminado = false
+                ORDER BY v.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que registraron documentos de facturación de consignaciones: filtro del modal. */
+    public function getUsuariosUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM consignaciones_facturas cf
+                JOIN usuarios u ON u.id = cf.created_by
+                WHERE cf.id_empresa = :id_empresa AND cf.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de los documentos (pestaña "Detalles" del modal de filtros):
+     * cada línea facturada (producto, lote, NUP, bodega, consignación de origen) y cada
+     * dato de información adicional que coincide con el texto, con el documento al que
+     * pertenece. Mismo alcance que el listado: empresa, no eliminados y registros propios
+     * (created_by) cuando $idUsuario viene informado. No busca en el estado.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "cf.id_empresa = :id_empresa AND cf.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND cf.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condProd = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['p.codigo', 'p.nombre', 'p.codigo_barras', 'd.lote', 'd.nup', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')",
+             'bo.nombre', "CONCAT(cv.serie, '-', cv.secuencial)", 'd.cantidad::text', 'd.precio_unitario::text', 'd.total::text'],
+            $q, $params, 'pr'
+        );
+        $condInfo = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ["regexp_replace(COALESCE(b.info_adicional, ''), '\"(nombre|valor)\"\\s*:', '', 'g')"],
+            $q, $params, 'ia'
+        );
+        if ($condProd === '' || $condInfo === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT cf.id, cf.serie, cf.secuencial, cf.fecha_emision, cf.estado, cf.id_factura,
+                           cf.numero_factura, cf.info_adicional, c.nombre AS cliente_nombre
+                    FROM consignaciones_facturas cf
+                    LEFT JOIN clientes c ON c.id = cf.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen, p.codigo AS tipo, p.nombre AS descripcion,
+                           NULLIF(CONCAT_WS(' / ', NULLIF(d.lote, ''), NULLIF(d.nup, ''), TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')), '') AS extra,
+                           CONCAT(cv.serie, '-', cv.secuencial) AS consignacion,
+                           d.cantidad, d.total AS monto, NULL AS info_adicional,
+                           b.id, b.serie, b.secuencial, b.fecha_emision, b.estado, b.id_factura, b.numero_factura, b.cliente_nombre
+                    FROM consignaciones_facturas_detalles d
+                    JOIN base b ON b.id = d.id_consignacion_factura
+                    LEFT JOIN productos p ON p.id = d.id_producto
+                    LEFT JOIN bodegas bo ON bo.id = d.id_bodega
+                    LEFT JOIN consignaciones_ventas cv ON cv.id = d.id_consignacion
+                    WHERE d.eliminado = false AND $condProd
+                    UNION ALL
+                    SELECT 'INFO' AS origen, NULL AS tipo, NULL AS descripcion, NULL AS extra, NULL AS consignacion,
+                           NULL::numeric AS cantidad, NULL::numeric AS monto, b.info_adicional,
+                           b.id, b.serie, b.secuencial, b.fecha_emision, b.estado, b.id_factura, b.numero_factura, b.cliente_nombre
+                    FROM base b
+                    WHERE $condInfo
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id DESC, x.origen DESC
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // ─── SALDO FACTURABLE ─────────────────────────────────────────────────────
 
     /**
@@ -215,8 +309,34 @@ class ConsignacionFacturaRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre (buscador FiltrosModal de la vista): las columnas del listado y lo
+            // que identifica al documento aunque no sea columna. Decisión del usuario: la
+            // columna Estado NO entra en el texto libre; se filtra desde el modal.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['cf.secuencial', 'c.nombre', 'c.identificacion', 'cf.numero_factura'],
+                [
+                    "TO_CHAR(cf.fecha_emision, 'DD-MM-YYYY')",            // Fecha (como se muestra)
+                    'cf.fecha_emision::text',
+                    "CONCAT(cf.serie, '-', cf.secuencial)",               // Secuencial (serie-secuencial)
+                    'c.nombre',                                           // Cliente
+                    'c.identificacion',
+                    'cf.numero_factura',                                  // Factura
+                    'cf.observaciones',                                   // Observaciones
+                    'v.nombre',                                           // Vendedor
+                    'cf.total::text',
+                    'u.nombre',                                           // Usuario que registró
+                    // Información adicional (JSON [{nombre, valor}]): sin las claves del JSON
+                    "regexp_replace(COALESCE(cf.info_adicional, ''), '\"(nombre|valor)\"\\s*:', '', 'g')",
+                    // Productos facturados (código, nombre, lote y NUP)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup), ' ')
+                        FROM consignaciones_facturas_detalles d
+                        LEFT JOIN productos p ON p.id = d.id_producto
+                       WHERE d.id_consignacion_factura = cf.id AND d.eliminado = false)",
+                    // Documentos relacionados: consignaciones de origen
+                    "(SELECT STRING_AGG(DISTINCT CONCAT(cv.serie, '-', cv.secuencial), ' ')
+                        FROM consignaciones_facturas_detalles d
+                        JOIN consignaciones_ventas cv ON cv.id = d.id_consignacion
+                       WHERE d.id_consignacion_factura = cf.id AND d.eliminado = false)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -225,28 +345,48 @@ class ConsignacionFacturaRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (FiltrosModal en la vista). Las claves viejas se
+        // conservan: viajan en los enlaces de PDF/Excel.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [
                 'cliente'       => 'c.nombre',
+                'ruc'           => 'c.identificacion',
                 'factura'       => 'cf.numero_factura',
                 'observaciones' => 'cf.observaciones',
+                'numero'        => "CONCAT(cf.serie, '-', cf.secuencial)",
             ],
             'exacto' => [
-                'estado' => 'cf.estado',
-                'serie'  => "CONCAT(cf.establecimiento,'-',cf.punto_emision)",
+                'estado'      => 'cf.estado',
+                'serie'       => "CONCAT(cf.establecimiento,'-',cf.punto_emision)",
+                'id_vendedor' => 'cf.id_vendedor',
+                'id_usuario'  => 'cf.created_by',
+                // asiento:si / asiento:no (asiento de reingreso a costo)
+                'asiento'     => "CASE WHEN cf.id_asiento_reingreso IS NULL THEN 'no' ELSE 'si' END",
             ],
             'fecha'  => [
                 'fecha' => 'cf.fecha_emision',
             ],
             'numerico' => [
                 'total'      => 'cf.total',
+                'subtotal'   => 'cf.subtotal',
+                'impuesto'   => 'cf.impuesto',
                 'secuencial' => 'cf.secuencial::numeric',
+            ],
+            'existe' => [
+                // Nº de la consignación de origen de alguna línea
+                'consignacion' => ['tipo' => 'texto', 'col' => "CONCAT(cvx.serie, '-', cvx.secuencial)",
+                                   'sql'  => 'EXISTS (SELECT 1 FROM consignaciones_facturas_detalles dx
+                                                       JOIN consignaciones_ventas cvx ON cvx.id = dx.id_consignacion
+                                                      WHERE dx.id_consignacion_factura = cf.id AND dx.eliminado = false AND {cond})'],
             ],
         ]);
 
+        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan c, v y u.
         $sqlCount = "SELECT COUNT(*)
                      FROM consignaciones_facturas cf
                      LEFT JOIN clientes c ON c.id = cf.id_cliente
+                     LEFT JOIN vendedores v ON v.id = cf.id_vendedor
+                     LEFT JOIN usuarios u ON u.id = cf.created_by
                      $where";
         $stCount = $this->db->prepare($sqlCount);
         $stCount->execute($params);
@@ -276,6 +416,7 @@ class ConsignacionFacturaRepository extends BaseRepository
                 LEFT JOIN clientes c ON c.id = cf.id_cliente
                 LEFT JOIN vendedores v ON v.id = cf.id_vendedor
                 LEFT JOIN ventas_cabecera vc ON vc.id = cf.id_factura
+                LEFT JOIN usuarios u ON u.id = cf.created_by
                 $where
                 ORDER BY $sort $dir, cf.id DESC
                 $limitClause";

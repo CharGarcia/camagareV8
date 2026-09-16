@@ -98,53 +98,116 @@ $estadoLabelMap = [
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorImportaciones" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            $vf = $valoresFiltro ?? [];
+            $opcionesSerie    = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesIncoterm = array_map(fn($x) => ['v' => (string) $x, 'l' => (string) $x], $vf['incoterms'] ?? []);
+            $opcionesBodega   = array_map(fn($b) => ['v' => (string) $b['id'], 'l' => $b['nombre']], $vf['bodegas'] ?? []);
+            $opcionesAgente   = array_map(fn($a) => ['v' => (string) $a['id'], 'l' => $a['nombre']], $vf['agentes'] ?? []);
+            $opcionesUsuario  = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $vf['usuarios'] ?? []);
+            $tI = 'Importación';
+            // Filas de 12 columnas:
+            //   Documento: [Fecha nacionalización 6][Fecha embarque 6]
+            //              [Fecha llegada 6][Estado 3][Serie 3]
+            //              [Nº importación 4][Secuencial 2][Referencia DAI 3][Incoterm 3]
+            //              [Bodega destino 4][Criterio de prorrateo 4][Asiento 4]
+            //              [Agente afianzado 6][Usuario 6]
+            //   Valores:   [Costo nacionalizado 4][Subtotal FOB 4][Gastos capitalizables 4]
+            //              [IVA 4][ISD 4][Otros gastos 4]
+            //   Proveedor: [Proveedor del exterior 6][Identificación 6]
+            //              [Observaciones 12]
+            $filtrosImportaciones = [
+                ['tab' => $tI, 'key' => 'fecha',      'label' => 'Fecha de nacionalización', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tI, 'key' => 'embarque',   'label' => 'Fecha de embarque',   'icon' => 'bi-calendar-plus',  'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6],
+                ['tab' => $tI, 'key' => 'llegada',    'label' => 'Fecha de llegada',    'icon' => 'bi-calendar-check', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6],
+                ['tab' => $tI, 'key' => 'estado',     'label' => 'Estado',              'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'borrador',             'l' => 'Borrador'],
+                    ['v' => 'en_transito',          'l' => 'En tránsito'],
+                    ['v' => 'registrada',           'l' => 'Registrada'],
+                    ['v' => 'pendiente_aprobacion', 'l' => 'Pendiente aprobación'],
+                    ['v' => 'nacionalizada',        'l' => 'Nacionalizada'],
+                    ['v' => 'cerrada',              'l' => 'Cerrada'],
+                    ['v' => 'anulada',              'l' => 'Anulada'],
+                ]],
+                ['tab' => $tI, 'key' => 'serie',      'label' => 'Serie',               'icon' => 'bi-upc-scan',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tI, 'key' => 'numero',     'label' => 'Nº importación',      'icon' => 'bi-hash',           'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tI, 'key' => 'secuencial', 'label' => 'Secuencial',          'icon' => 'bi-123',            'type' => 'text',       'grupo' => 'Documento', 'col' => 2, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tI, 'key' => 'dai',        'label' => 'Referencia DAI',      'icon' => 'bi-file-earmark-text', 'type' => 'text',    'grupo' => 'Documento', 'col' => 3],
+                ['tab' => $tI, 'key' => 'incoterm',   'label' => 'Incoterm',            'icon' => 'bi-truck',          'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesIncoterm],
+                ['tab' => $tI, 'key' => 'id_bodega',  'label' => 'Bodega destino',      'icon' => 'bi-house-door',     'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesBodega],
+                ['tab' => $tI, 'key' => 'criterio',   'label' => 'Criterio de prorrateo', 'icon' => 'bi-diagram-3',    'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'fob',      'l' => 'Por valor FOB'],
+                    ['v' => 'peso',     'l' => 'Por peso (Kg)'],
+                    ['v' => 'volumen',  'l' => 'Por volumen (m3)'],
+                    ['v' => 'cantidad', 'l' => 'Por cantidad'],
+                ]],
+                ['tab' => $tI, 'key' => 'asiento',    'label' => 'Asiento contable',    'icon' => 'bi-journal-check',  'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con asiento'],
+                    ['v' => 'no', 'l' => 'Sin asiento'],
+                ]],
+                ['tab' => $tI, 'key' => 'id_agente',  'label' => 'Agente afianzado',    'icon' => 'bi-person-badge',   'type' => 'select',     'grupo' => 'Documento', 'col' => 6, 'options' => $opcionesAgente],
+                ['tab' => $tI, 'key' => 'id_usuario', 'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',   'type' => 'select',     'grupo' => 'Documento', 'col' => 6, 'options' => $opcionesUsuario],
+                // Valores
+                ['tab' => $tI, 'key' => 'total',      'label' => 'Costo nacionalizado', 'icon' => 'bi-currency-dollar','type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tI, 'key' => 'fob',        'label' => 'Subtotal FOB',        'icon' => 'bi-cash-stack',     'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tI, 'key' => 'gastos',     'label' => 'Gastos capitalizables', 'icon' => 'bi-plus-slash-minus', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tI, 'key' => 'iva',        'label' => 'IVA de importación',  'icon' => 'bi-percent',        'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tI, 'key' => 'isd',        'label' => 'ISD',                 'icon' => 'bi-bank',           'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tI, 'key' => 'otros',      'label' => 'Otros gastos',        'icon' => 'bi-receipt',        'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // Proveedor
+                ['tab' => $tI, 'key' => 'proveedor',  'label' => 'Proveedor del exterior', 'icon' => 'bi-building',    'type' => 'text',   'grupo' => 'Proveedor', 'col' => 6],
+                ['tab' => $tI, 'key' => 'ruc',        'label' => 'Identificación',      'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Proveedor', 'col' => 6],
+                ['tab' => $tI, 'key' => 'obs',        'label' => 'Observaciones',       'icon' => 'bi-chat-text',      'type' => 'text',   'grupo' => 'Proveedor', 'col' => 12],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorImportaciones"></div>
             <input type="hidden" id="inputBuscarImportaciones" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorImportaciones',
+                    if (!window.FiltrosModal) return;
+                    window.IMP_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorImportaciones',
                         hiddenInputId: 'inputBuscarImportaciones',
-                        placeholder: 'Buscar...',
-                        fields: [
-                            { key: 'proveedor',       label: 'Proveedor del exterior', icon: 'bi-building',        type: 'text' },
-                            { key: 'dai',             label: 'Referencia DAI',         icon: 'bi-file-earmark-text', type: 'text' },
-                            { key: 'incoterm',        label: 'Incoterm',               icon: 'bi-truck',           type: 'text' },
-                            { key: 'obs',             label: 'Observaciones',          icon: 'bi-chat-text',       type: 'text' },
-                            { key: 'serie',           label: 'Serie',                  icon: 'bi-upc-scan',        type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial',      label: 'Secuencial',             icon: 'bi-123',             type: 'text' },
-                            { key: 'fecha',           label: 'Fecha nacionalización',  icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'embarque',        label: 'Fecha embarque',         icon: 'bi-calendar-plus',   type: 'date_range' },
-                            { key: 'llegada',         label: 'Fecha llegada',          icon: 'bi-calendar-check',  type: 'date_range' },
-                            { key: 'total',           label: 'Costo nacionalizado',    icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'fob',             label: 'Subtotal FOB',           icon: 'bi-cash-stack',      type: 'number_range' },
-                            { key: 'estado',          label: 'Estado',                 icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'borrador',             l: 'Borrador' },
-                                { v: 'en_transito',          l: 'En tránsito' },
-                                { v: 'pendiente_aprobacion', l: 'Pendiente aprobación' },
-                                { v: 'nacionalizada',        l: 'Nacionalizada' },
-                                { v: 'cerrada',              l: 'Cerrada' },
-                                { v: 'anulada',              l: 'Anulada' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                            { id: 'qf_borrador',   label: 'Borradores',  mk: () => ({ key: 'estado', op: '=', value: 'borrador', display: 'Borrador' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de importaciones',
+                        inputWidth: 420,
+                        extraId: 'fmExtraImportaciones',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las importaciones.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= $urlBase ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de las importaciones',
+                            placeholder: 'Producto, código, lote, factura del exterior, gasto, compra o liquidación vinculada...',
+                            columns: [
+                                { key: 'origen',             label: 'Tipo' },
+                                { key: 'tipo',               label: 'Código / Nº / Gasto' },
+                                { key: 'descripcion',        label: 'Descripción' },
+                                { key: 'cantidad',           label: 'Cant.', align: 'end' },
+                                { key: 'monto',              label: 'Valor', align: 'end' },
+                                { key: 'numero_importacion', label: 'Importación', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',              label: 'F. nacionalización' },
+                                { key: 'proveedor_nombre',   label: 'Proveedor' },
+                                { key: 'estado',             label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero_importacion }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                // abrirModalImportacion lee la importación del data-row de la fila.
+                                setTimeout(() => window.abrirModalImportacion({ dataset: { row: JSON.stringify(row) } }), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosImportaciones, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyImportaciones',   // se atenúa mientras se busca
                         onApply: () => window.CMG_fetchSearchImp && window.CMG_fetchSearchImp(1),
-                    }).init();
+                    });
+                    window.IMP_filtros.init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraImportaciones" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero_importacion'        => 'N° Importación',
@@ -160,9 +223,9 @@ $estadoLabelMap = [
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
-                    class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+                    class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
-                    class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                    class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
             </div>
         </div>
         <div class="d-flex align-items-center gap-3">
@@ -261,6 +324,10 @@ $estadoLabelMap = [
         window.CMG_fetchSearchImp = async (page = 1) => {
             const term = input ? input.value.trim() : '';
             const uri = `${window.CMG_urlBaseImp}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.CMG_currentSortImp}&dir=${window.CMG_currentDirImp}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar y ordenar, que llaman a esta función directo.
+            const tbody = document.getElementById('tbodyImportaciones');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -277,6 +344,8 @@ $estadoLabelMap = [
                 }
             } catch (e) {
                 console.error('Error búsqueda importaciones:', e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
             }
         };
 

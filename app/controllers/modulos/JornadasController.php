@@ -83,6 +83,8 @@ class JornadasController extends BaseModuloController
             'vistaConfig' => $prefsVista,
             'meses'      => CatalogoNovedades::MESES,
             'aplicaEnOpts' => CatalogoNovedades::aplicaEn(),
+            // Selects del modal de filtros: solo los valores que la empresa realmente usa.
+            'opcionesFiltro' => $this->service->getOpcionesFiltro($idEmpresa),
         ]);
     }
 

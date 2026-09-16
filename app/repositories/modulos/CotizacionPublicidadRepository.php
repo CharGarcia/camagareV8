@@ -40,10 +40,39 @@ class CotizacionPublicidadRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
+        // Número tal como se ve en el listado: 001-2026 V1 (número-año de emisión V versión).
+        $numeroVisible = "CONCAT(LPAD(q.numero::text, 3, '0'), '-', EXTRACT(YEAR FROM q.fecha_emision)::int, ' V', q.version)";
+        // Nº de la factura de venta generada al convertir la cotización.
+        $numFactura = "(SELECT CONCAT(fv.establecimiento,'-',fv.punto_emision,'-',fv.secuencial) FROM ventas_cabecera fv WHERE fv.id = q.id_factura_convertida)";
+        // presupuesto es VARCHAR (lo llena un input numérico): se convierte a número
+        // solo si lo es, para que el filtro compare como número y no como texto
+        // (como texto, "1500" >= "200" es falso).
+        $presupuestoNum = "(CASE WHEN q.presupuesto ~ '^ *-{0,1}[0-9]+([.][0-9]+){0,1} *$' THEN TRIM(q.presupuesto)::numeric END)";
+
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        // Texto libre: las columnas del listado y campos que identifican la cotización
+        // aunque no sean columnas. Decisión del usuario: la columna Estado NO entra en
+        // el texto libre (se filtra solo desde el modal de filtros).
         if ($parsed['texto_libre'] !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['c.nombre', 'c.identificacion', 'q.contacto', 'q.proyecto', 'q.observaciones', 'CAST(q.numero AS TEXT)'],
+                [
+                    $numeroVisible,                 // Número
+                    'CAST(q.numero AS TEXT)',
+                    'q.fecha_emision::text',        // Fecha
+                    'c.nombre',                     // Cliente
+                    'q.contacto',                   // Contacto
+                    'q.proyecto',                   // Proyecto
+                    'ven.nombre',                   // Ejecutivo
+                    'q.presupuesto',                // Presupuesto
+                    'q.comision::text',             // Comisión %
+                    'q.importe_total::text',        // Total
+                    'q.observaciones',              // Observaciones
+                    // Fuera del listado, pero identifican la cotización:
+                    'c.identificacion',
+                    'u.nombre',                     // usuario
+                    $numFactura,                    // factura generada
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', d.descripcion, cat.nombre), ' ') FROM cotizacion_publicidad_detalle d LEFT JOIN cotizacion_publicidad_categorias cat ON cat.id = d.id_categoria WHERE d.id_cotizacion = q.id)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -60,9 +89,14 @@ class CotizacionPublicidadRepository extends BaseRepository
                 'contacto'      => 'q.contacto',
                 'obs'           => 'q.observaciones',
                 'observaciones' => 'q.observaciones',
+                'factura'       => $numFactura,
             ],
             'exacto' => [
-                'estado' => 'q.estado',
+                'estado'      => 'q.estado',
+                // Número visible exacto, p. ej. cotizacion:"001-2026 V1".
+                'cotizacion'  => $numeroVisible,
+                'id_vendedor' => 'q.id_vendedor',
+                'id_usuario'  => 'q.id_usuario',
             ],
             'fecha'   => [
                 'fecha' => 'q.fecha_emision',
@@ -70,7 +104,20 @@ class CotizacionPublicidadRepository extends BaseRepository
             'numerico' => [
                 'total'       => 'q.importe_total',
                 'comision'    => 'q.comision',
-                'presupuesto' => 'q.presupuesto',
+                'presupuesto' => $presupuestoNum,
+                'numero'      => 'q.numero',
+                'version'     => 'q.version',
+                'subtotal'    => 'q.total_sin_impuestos',
+                'valor_comision' => 'q.total_comision',
+                'iva'         => 'q.total_iva',
+            ],
+            'existe' => [
+                // Categoría de alguna de las líneas cotizadas.
+                'id_categoria' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM cotizacion_publicidad_detalle dc WHERE dc.id_cotizacion = q.id AND {cond})',
+                    'col'  => 'dc.id_categoria',
+                    'tipo' => 'exacto',
+                ],
             ],
         ]);
 
@@ -103,6 +150,113 @@ class CotizacionPublicidadRepository extends BaseRepository
 
         $rows = $this->query($sql, $params)->fetchAll();
         return ['rows' => $rows, 'total' => (int) $total];
+    }
+
+    /** Ejecutivos (vendedores) con alguna cotización en la empresa (select del modal de filtros). */
+    public function getVendedoresConCotizaciones(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT ven.id, ven.nombre
+                FROM cotizacion_publicidad_cabecera q
+                JOIN vendedores ven ON ven.id = q.id_vendedor
+                WHERE q.id_empresa = :id_empresa AND q.eliminado = false
+                ORDER BY ven.nombre";
+        return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que han registrado alguna cotización en la empresa (select del modal de filtros). */
+    public function getUsuariosConCotizaciones(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM cotizacion_publicidad_cabecera q
+                JOIN usuarios u ON u.id = q.id_usuario
+                WHERE q.id_empresa = :id_empresa AND q.eliminado = false
+                ORDER BY u.nombre";
+        return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Categorías usadas en alguna línea de las cotizaciones de la empresa (select del modal de filtros). */
+    public function getCategoriasUsadas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT cat.id, cat.nombre
+                FROM cotizacion_publicidad_cabecera q
+                JOIN cotizacion_publicidad_detalle d ON d.id_cotizacion = q.id
+                JOIN cotizacion_publicidad_categorias cat ON cat.id = d.id_categoria
+                WHERE q.id_empresa = :id_empresa AND q.eliminado = false
+                ORDER BY cat.nombre";
+        return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las cotizaciones (pestaña "Detalles" del modal de
+     * filtros): devuelve cada línea cotizada y cada costo de proveedor que coincide con
+     * el texto, junto con la cotización a la que pertenece. Mismo alcance que el
+     * listado (empresa, no eliminadas, registros propios por created_by).
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "q.id_empresa = :id_empresa AND q.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND q.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.descripcion', 'cat.nombre', 'd.precio_unitario::text', 'd.ciudades::text', 'd.dias::text',
+             'd.cantidad::text', 'd.precio_total_sin_impuesto::text'],
+            $q, $params, 'dt'
+        );
+        $condCosto = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['p.razon_social', 'p.nombre_comercial', 'p.identificacion', 'co.factura_proveedor', 'co.valor_costo::text',
+             'co.observacion_costo', 'd.descripcion'],
+            $q, $params, 'co'
+        );
+        if ($condDet === '' || $condCosto === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT q.id, CONCAT(LPAD(q.numero::text, 3, '0'), '-', EXTRACT(YEAR FROM q.fecha_emision)::int, ' V', q.version) AS numero,
+                           q.fecha_emision, q.estado, q.proyecto, c.nombre AS cliente
+                    FROM cotizacion_publicidad_cabecera q
+                    INNER JOIN clientes c ON c.id = q.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'LINEA' AS origen,
+                           cat.nombre AS tipo,
+                           d.descripcion,
+                           d.cantidad,
+                           d.precio_total_sin_impuesto AS monto,
+                           NULL AS extra,
+                           b.id AS id_cotizacion, b.numero, b.fecha_emision, b.estado, b.proyecto, b.cliente
+                    FROM cotizacion_publicidad_detalle d
+                    JOIN base b ON b.id = d.id_cotizacion
+                    LEFT JOIN cotizacion_publicidad_categorias cat ON cat.id = d.id_categoria
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'COSTO' AS origen,
+                           p.razon_social AS tipo,
+                           d.descripcion,
+                           NULL AS cantidad,
+                           co.valor_costo AS monto,
+                           NULLIF(CONCAT_WS(' ', co.factura_proveedor, co.observacion_costo), '') AS extra,
+                           b.id AS id_cotizacion, b.numero, b.fecha_emision, b.estado, b.proyecto, b.cliente
+                    FROM cotizacion_publicidad_costos co
+                    JOIN cotizacion_publicidad_detalle d ON d.id = co.id_detalle
+                    JOIN base b ON b.id = d.id_cotizacion
+                    LEFT JOIN proveedores p ON p.id = co.id_proveedor
+                    WHERE $condCosto
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id_cotizacion DESC, x.origen
+                LIMIT $limit";
+
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function getPorId(int $id): ?array

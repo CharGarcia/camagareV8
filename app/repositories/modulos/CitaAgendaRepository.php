@@ -76,10 +76,68 @@ class CitaAgendaRepository extends BaseRepository
         $where  = "WHERE c.id_empresa = :id_empresa AND c.eliminado = false";
         $params = [':id_empresa' => $idEmpresa];
 
-        if ($buscar !== '') {
-            $where .= " AND (cl.nombre ILIKE :buscar OR cl.identificacion ILIKE :buscar OR c.titulo ILIKE :buscar OR ct.nombre ILIKE :buscar)";
-            $params[':buscar'] = '%' . $buscar . '%';
+        // $buscar es el string serializado del buscador (FiltrosModal en la vista):
+        // `clave:valor ... texto libre`. Un texto sin claves (URLs viejas) se trata
+        // igual: todo es texto libre.
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            // Texto libre: las columnas del listado y lo que identifica la cita aunque
+            // no sea columna. Decisión del usuario: Tipo (tipo de cita), Estado y
+            // Origen NO entran en el texto libre; se filtran solo desde el modal.
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    "TO_CHAR(c.fecha_inicio, 'DD-MM-YYYY HH24:MI')",      // Fecha inicio (d-m-Y)
+                    'c.fecha_inicio::text',                               // Fecha inicio (Y-m-d, como se ve en la tabla)
+                    'cl.nombre',                                          // Cliente
+                    'cl.identificacion',
+                    "CONCAT_WS(' ', ce.nombres, ce.apellidos)",           // Cliente del portal
+                    'ce.identificacion',
+                    'ce.email',
+                    'ce.telefono',
+                    'cr.nombre',                                          // Recurso
+                    'c.titulo',                                           // Título
+                    'c.notas',
+                    'u.nombre',                                           // Usuario que registró
+                    "(SELECT STRING_AGG(p.referencia_externa, ' ') FROM citas_pagos p
+                       WHERE p.id_cita = c.id AND p.id_empresa = c.id_empresa AND p.eliminado = false)", // Referencias de pago
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
+        // Claves del modal de filtros. Las viejas (q, cliente, titulo, tipo, recurso,
+        // fecha, estado, origen) se conservan: viajan en los enlaces de PDF/Excel.
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto' => [
+                'q'              => "CONCAT_WS(' ', cl.nombre, cl.identificacion, c.titulo, ct.nombre, cr.nombre)",
+                'cliente'        => "CONCAT_WS(' ', cl.nombre, ce.nombres, ce.apellidos)",
+                'identificacion' => "CONCAT_WS(' ', cl.identificacion, ce.identificacion)",
+                'titulo'         => 'c.titulo',
+                'tipo'           => 'ct.nombre',
+                'recurso'        => 'cr.nombre',
+                'notas'          => 'c.notas',
+            ],
+            'exacto' => [
+                'estado'       => 'c.estado',
+                'origen'       => 'c.origen',
+                'id_tipo_cita' => 'c.id_tipo_cita',
+                'id_recurso'   => 'c.id_recurso',
+                'usuario'      => 'c.created_by',
+                // pago:si / pago:no — la cita tiene algún pago registrado
+                'pago'         => "CASE WHEN EXISTS (SELECT 1 FROM citas_pagos p
+                                        WHERE p.id_cita = c.id AND p.id_empresa = c.id_empresa AND p.eliminado = false)
+                                   THEN 'si' ELSE 'no' END",
+            ],
+            'fecha' => [
+                'fecha'     => 'c.fecha_inicio',
+                'fecha_fin' => 'c.fecha_fin',
+                'registro'  => 'c.created_at',
+            ],
+        ]);
         if (!empty($filtros['estado'])) {
             $where .= " AND c.estado = :estado";
             $params[':estado'] = $filtros['estado'];
@@ -105,6 +163,8 @@ class CitaAgendaRepository extends BaseRepository
             LEFT JOIN citas_tipos    ct ON ct.id = c.id_tipo_cita
             LEFT JOIN citas_recursos cr ON cr.id = c.id_recurso
             LEFT JOIN clientes       cl ON cl.id = c.id_cliente AND cl.id_empresa = c.id_empresa AND cl.eliminado = false
+            LEFT JOIN citas_clientes_externos ce ON ce.id = c.id_cliente_externo AND ce.id_empresa = c.id_empresa
+            LEFT JOIN usuarios       u  ON u.id = c.created_by
         ";
 
         $colMap = [
@@ -148,6 +208,48 @@ class CitaAgendaRepository extends BaseRepository
         }
         $stmt->execute();
         return ['rows' => $stmt->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros del listado: solo los tipos de
+     * cita, recursos y usuarios que la empresa ya usó en alguna cita (incluye los
+     * tipos/recursos hoy inactivos, porque sus citas siguen en el listado).
+     *
+     * @return array{tipos: array<int, array{id:int, nombre:string}>, recursos: array<int, array{id:int, nombre:string}>, usuarios: array<int, array{id:int, nombre:string}>}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $tipos = $this->db->prepare("
+            SELECT DISTINCT ct.id, ct.nombre
+            FROM citas c
+            JOIN citas_tipos ct ON ct.id = c.id_tipo_cita
+            WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+            ORDER BY ct.nombre
+        ");
+        $tipos->execute($params);
+        $recursos = $this->db->prepare("
+            SELECT DISTINCT cr.id, cr.nombre
+            FROM citas c
+            JOIN citas_recursos cr ON cr.id = c.id_recurso
+            WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+            ORDER BY cr.nombre
+        ");
+        $recursos->execute($params);
+        $usuarios = $this->db->prepare("
+            SELECT DISTINCT u.id, u.nombre
+            FROM citas c
+            JOIN usuarios u ON u.id = c.created_by
+            WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+            ORDER BY u.nombre
+        ");
+        $usuarios->execute($params);
+
+        return [
+            'tipos'    => $tipos->fetchAll(PDO::FETCH_ASSOC),
+            'recursos' => $recursos->fetchAll(PDO::FETCH_ASSOC),
+            'usuarios' => $usuarios->fetchAll(PDO::FETCH_ASSOC),
+        ];
     }
 
     // ─── CRUD ─────────────────────────────────────────────────────────────────

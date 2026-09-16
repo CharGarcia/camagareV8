@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro
-version: 1.5
+etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips
+version: 1.6
 orden: 40
 estado: activo
 ---
@@ -59,6 +59,53 @@ Al registrar el ingreso que cobra esa factura, la retención se descuenta del
 saldo pendiente. Por eso conviene registrarla **antes** de dar por cobrada la
 factura: así los números cuadran solos.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel. Los botones PDF y Excel
+exportan las retenciones que coinciden con la búsqueda y el orden aplicados.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la retención: N°
+retención, secuencial, fecha, cliente, identificación, período, total renta,
+total IVA, total ISD y total retenido. Además busca en la clave de acceso, el
+usuario que la registró y, dentro de las líneas, los **números de los
+documentos sustento** y los **códigos de retención**. La columna **Origen** no
+entra en la búsqueda libre: para filtrar por ella use la ventana de filtros.
+Puede escribir varias palabras en cualquier orden y no importan mayúsculas ni
+tildes. Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras
+busca, aparece un **círculo girando** al final del cuadro y la tabla se ve
+atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Retención** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), origen (manual o electrónico), serie, N° retención, secuencial, período fiscal, con o sin asiento contable, clave de acceso, usuario que registró |
+| Documento sustento | N° del documento sustento, fecha de ese documento y código de retención (basta con que una línea coincida) |
+| Valores | Total retenido, total renta, total IVA y total ISD (cada uno con mínimo y máximo) |
+| Cliente | Cliente, RUC / cédula |
+
+El selector *Usuario que registró* lista solo a quienes ya registraron
+retenciones en la empresa, y *Serie* solo las series con retenciones guardadas.
+
+**Pestaña Detalles** (lo que hay dentro de la retención). Es un único cuadro,
+**Buscar libremente dentro de las retenciones**: escriba el número de una
+factura sustento, un código de retención, un impuesto, una base, un porcentaje
+o un valor retenido, y aparece la lista de **cada línea que coincide** con la
+retención a la que pertenece (número, fecha, cliente y origen). Un clic en la
+fila deja el listado mostrando solo esa retención; el ícono de la derecha la
+abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
 ## Exportar el comprobante
 
 En el modal de una retención ya guardada, junto al botón **PDF** hay un botón
@@ -103,6 +150,19 @@ cerrado.
 
 ## Historial de cambios
 
+- **1.6** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en todas las columnas (incluido el total retenido,
+  cada palabra por separado y sin importar tildes) y en la clave de acceso, el
+  usuario y los documentos sustento y códigos de las líneas, salvo Origen. Los
+  filtros pasan a una **ventana propia** (botón del embudo, se aplican con
+  *Aplicar*) con dos pestañas: **Retención** (filtros por campo, con criterios
+  nuevos: con/sin asiento, usuario como lista, documento sustento, fecha del
+  documento sustento y código de retención) y **Detalles** (búsqueda dentro de
+  las líneas retenidas). Corregido el filtro de origen: la opción
+  *Automáticas* no encontraba nada porque el valor real es *Electrónico*. Tras
+  buscar, los botones PDF y Excel exportan ahora lo filtrado (antes seguían con
+  la búsqueda con la que se abrió la pantalla) y las columnas ocultas se
+  mantienen ocultas.
 - **1.5** — El modal de la retención se abre **siempre en la pestaña *General***, tanto al
   registrar una nueva como al cargar una existente. Antes, si el usuario había dejado
   activa *Asiento contable* al cerrar, la siguiente retención se abría en esa pestaña.

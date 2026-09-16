@@ -81,49 +81,39 @@ class ProveedorRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            // Texto libre sobre TODAS las columnas visibles del listado, incluidas las
-            // que vienen de catálogos por JOIN: por palabras, en cualquier orden y sin
-            // distinguir mayúsculas ni tildes.
+            // Texto libre sobre las columnas visibles del listado, incluidas las que
+            // vienen de catálogos por JOIN: por palabras, en cualquier orden y sin
+            // distinguir mayúsculas ni tildes. También lo usan los buscadores de
+            // proveedor de otros módulos (egresos, declaraciones, reportes…).
+            // Decisión del usuario: las columnas de tipo/clasificación (Tipo Id., Tipo
+            // Empresa, Rela. SRI) y Estado NO entran en el texto libre; se filtran desde
+            // el modal de filtros (antes "activo"/"si"/"no" escritos solos filtraban por
+            // esas columnas).
             $cond = \App\Helpers\FiltrosBusqueda::condicionTexto([
-                'p.identificacion',
-                'icv.nombre',
-                'p.razon_social',
-                'p.nombre_comercial',
-                'p.email',
-                'p.telefono',
-                'p.direccion',
-                'p.plazo::text',
-                'b.nombre_banco',
-                'te.nombre',
-                'prov.nombre',
-                'ciu.nombre',
+                'p.identificacion',        // Identificación
+                'p.razon_social',          // Razón Social
+                'p.nombre_comercial',      // Nombre Comercial
+                'p.email',                 // Correo
+                'p.telefono',              // Teléfono
+                'p.direccion',             // Dirección
+                'p.plazo::text',           // Plazo (Días)
+                'b.nombre_banco',          // Banco
+                'prov.nombre',             // Provincia
+                'ciu.nombre',              // Ciudad
+                'p.numero_cta',            // Nº de cuenta bancaria (ficha, identifica al proveedor)
             ], $parsed['texto_libre'], $params, 'prov_b');
 
-            // Estado y Rela. SRI son booleanos que en la tabla se ven como texto. Se
-            // aceptan sus etiquetas, pero solo si el usuario escribió exactamente esa
-            // palabra: con un ILIKE parcial, escribir "no" devolvería medio listado.
-            $etiqueta = strtr(mb_strtolower(trim($parsed['texto_libre']), 'UTF-8'), [
-                'í' => 'i'
-            ]);
-            $extra = match ($etiqueta) {
-                'activo'   => 'p.status = true',
-                'inactivo' => 'p.status = false',
-                'si'       => 'p.relacionado = true',
-                'no'       => 'p.relacionado = false',
-                default    => null,
-            };
-
             if ($cond !== '') {
-                $whereSql .= ' AND (' . $cond . ($extra !== null ? ' OR ' . $extra : '') . ')';
-            } elseif ($extra !== null) {
-                $whereSql .= ' AND ' . $extra;
+                $whereSql .= ' AND ' . $cond;
             }
         }
 
         // Filtros booleanos con sintaxis clave:valor (estado:activo, relacionado:no).
         // Se resuelven aquí porque el helper compara contra un placeholder de texto y
         // la columna real es booleana (además, p.estado no existe: es p.status).
-        foreach (['estado' => 'p.status', 'relacionado' => 'p.relacionado'] as $claveBool => $colBool) {
+        // NULL se lee igual que en la tabla del listado: estado NULL = Activo,
+        // relacionado NULL = No.
+        foreach (['estado' => 'COALESCE(p.status, true)', 'relacionado' => 'COALESCE(p.relacionado, false)'] as $claveBool => $colBool) {
             if (!isset($parsed['filtros'][$claveBool])) {
                 continue;
             }
@@ -136,7 +126,11 @@ class ProveedorRepository extends BaseRepository
             if ($literal === null) {
                 continue;
             }
-            $whereSql .= " AND {$colBool} " . ($parsed['filtros'][$claveBool]['neg'] ? '!=' : '=') . " {$literal}";
+            // Con el COALESCE de arriba las filas con NULL (proveedores migrados sin el
+            // dato) entran en el lado que muestra la tabla; antes `= false` las dejaba
+            // fuera de "relacionado:no" y "sí + no" no sumaba el total.
+            $esTrue = ($literal === 'true') !== (bool) $parsed['filtros'][$claveBool]['neg'];
+            $whereSql .= " AND {$colBool} = " . ($esTrue ? 'true' : 'false');
             unset($parsed['filtros'][$claveBool]);
         }
 
@@ -160,6 +154,23 @@ class ProveedorRepository extends BaseRepository
             ],
             'exacto'   => [
                 'tipo'        => 'p.tipo_id_proveedor',
+                // Selects del modal de filtros (catálogos por id/código).
+                'id_tipo_empresa'  => 'p.tipo_empresa',
+                'id_banco'         => 'p.id_banco',
+                'cod_provincia'    => 'p.provincia',
+                'cod_ciudad'       => "CONCAT(p.provincia, '-', p.ciudad)",
+                'id_retencion_renta' => 'p.id_retencion_renta',
+                'id_retencion_iva' => 'p.id_retencion_iva',
+                'id_sustento'      => 'p.id_sustento_tributario',
+                'usuario'          => 'p.created_by',
+                // Sí/No calculados.
+                'con_email'        => "CASE WHEN NULLIF(TRIM(COALESCE(p.email, '')), '') IS NULL THEN 'no' ELSE 'si' END",
+                'ubicacion'        => "CASE WHEN p.latitud IS NOT NULL AND p.longitud IS NOT NULL THEN 'si' ELSE 'no' END",
+                'pago_auto'        => "CASE WHEN p.id_forma_pago_predeterminada IS NOT NULL THEN 'si' ELSE 'no' END",
+            ],
+            'fecha'    => [
+                'registro'   => 'p.created_at',
+                'created_at' => 'p.created_at',
             ],
             'numerico' => [ 'plazo' => 'p.plazo' ],
         ]);
@@ -199,6 +210,40 @@ class ProveedorRepository extends BaseRepository
         return [
             'total' => $total,
             'rows'  => $rows
+        ];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros del listado: solo los valores que
+     * la empresa realmente usa en sus proveedores (no eliminados).
+     *
+     * @return array{tipos_empresa: array, bancos: array, provincias: array, ciudades: array,
+     *               retenciones_renta: array, retenciones_iva: array, sustentos: array, usuarios: array}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $p = [':id_empresa' => $idEmpresa];
+        $base = "FROM proveedores p %s WHERE p.id_empresa = :id_empresa AND p.eliminado = false";
+        $leer = function (string $select, string $join, string $orden) use ($p, $base): array {
+            $st = $this->db->prepare("SELECT DISTINCT {$select} " . sprintf($base, $join) . " ORDER BY {$orden}");
+            $st->execute($p);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        };
+
+        return [
+            'tipos_empresa'     => $leer('te.id, te.nombre', 'JOIN tipo_empresa te ON te.id = p.tipo_empresa', 'te.nombre'),
+            'bancos'            => $leer('b.id, b.nombre_banco AS nombre', 'JOIN bancos_ecuador b ON b.id = p.id_banco', 'nombre'),
+            'provincias'        => $leer('pr.codigo, pr.nombre', 'JOIN provincia pr ON pr.codigo = p.provincia', 'pr.nombre'),
+            'ciudades'          => $leer("CONCAT(p.provincia, '-', p.ciudad) AS codigo, ciu.nombre, pr.nombre AS provincia",
+                                         'JOIN ciudad ciu ON ciu.codigo = p.ciudad AND ciu.cod_prov = p.provincia LEFT JOIN provincia pr ON pr.codigo = p.provincia',
+                                         'ciu.nombre, provincia'),
+            'retenciones_renta' => $leer("r.id, CONCAT(r.codigo_ret, ' - ', r.concepto_ret, ' (', r.porcentaje_ret, '%)') AS nombre",
+                                         'JOIN retenciones_sri r ON r.id = p.id_retencion_renta', 'nombre'),
+            'retenciones_iva'   => $leer("r.id, CONCAT(r.codigo_ret, ' - ', r.concepto_ret, ' (', r.porcentaje_ret, '%)') AS nombre",
+                                         'JOIN retenciones_sri r ON r.id = p.id_retencion_iva', 'nombre'),
+            'sustentos'         => $leer("st.id, CONCAT(st.codigo, ' - ', st.nombre) AS nombre",
+                                         'JOIN sustento_tributario st ON st.id = p.id_sustento_tributario', 'nombre'),
+            'usuarios'          => $leer('u.id, u.nombre', 'JOIN usuarios u ON u.id = p.created_by', 'u.nombre'),
         ];
     }
 

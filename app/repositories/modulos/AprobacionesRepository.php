@@ -107,15 +107,29 @@ class AprobacionesRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            // El texto libre también busca por nombre de aprobador: "¿quién aprueba
-            // qué?" es la pregunta natural en este módulo.
-            $where .= " AND (t.nombre ILIKE :b OR t.descripcion ILIKE :b OR t.modulo_ruta ILIKE :b"
-                . " OR EXISTS (SELECT 1 FROM usuarios u2
-                               WHERE u2.id IN (SELECT jsonb_array_elements_text(c.usuarios_aprobadores)::int)
-                                 AND u2.nombre ILIKE :b))";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            // Texto libre (todas las palabras, sin tildes): columnas del listado. También
+            // busca por nombre de aprobador: "¿quién aprueba qué?" es la pregunta natural
+            // en este módulo. Decisión del usuario: Estado NO entra en el texto libre; se
+            // filtra solo desde el modal.
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    "REPLACE(REPLACE(t.modulo_ruta, '-', ' '), '_', ' ')", // Módulo (la ruta, con espacios)
+                    't.nombre',                                            // Proceso
+                    't.descripcion',                                       // Proceso (descripción bajo el nombre)
+                    self::SQL_APROBADORES,                                 // Aprobadores
+                    'c.umbral_monto::text',                                // Monto mínimo
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
 
+        // Claves del modal de filtros (las viejas se conservan: viajan en los enlaces
+        // de PDF/Excel).
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
                 'proceso'    => 't.nombre',
@@ -123,10 +137,21 @@ class AprobacionesRepository extends BaseRepository
                 'modulo'     => 't.modulo_ruta',
                 'aprobador'  => self::SQL_APROBADORES,
             ],
-            // El estado se compara como texto ('activa'/'inactiva'): comparar el
-            // boolean crudo contra la cadena que escribe el usuario reventaría en PG.
-            'exacto'   => ['estado' => "CASE WHEN c.requiere_aprobacion THEN 'activa' ELSE 'inactiva' END"],
+            'exacto'   => [
+                // El estado se compara como texto ('activa'/'inactiva'): comparar el
+                // boolean crudo contra la cadena que escribe el usuario reventaría en PG.
+                'estado'      => "CASE WHEN c.requiere_aprobacion THEN 'activa' ELSE 'inactiva' END",
+                'modulo_ruta' => 't.modulo_ruta',
+                // con_monto:si / con_monto:no — tiene monto mínimo (> 0)
+                'con_monto'   => "CASE WHEN COALESCE(c.umbral_monto, 0) > 0 THEN 'si' ELSE 'no' END",
+            ],
             'numerico' => ['monto' => 'c.umbral_monto', 'umbral' => 'c.umbral_monto'],
+            'fecha'    => ['actualizado' => 'c.updated_at'],
+            // aprobador_id:9 — el usuario está entre los aprobadores (JSONB de ids)
+            'existe'   => [
+                'aprobador_id' => ['tipo' => 'exacto', 'col' => 'ap.id_usuario',
+                                   'sql'  => 'EXISTS (SELECT 1 FROM jsonb_array_elements_text(c.usuarios_aprobadores) AS ap(id_usuario) WHERE {cond})'],
+            ],
         ]);
 
         $from = "FROM aprobaciones_config c
@@ -157,6 +182,39 @@ class AprobacionesRepository extends BaseRepository
         $st->execute($params);
 
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros: módulos (rutas) y aprobadores que
+     * aparecen en alguna aprobación configurada de la empresa.
+     *
+     * @return array{modulos: string[], aprobadores: array<int, array{id:int, nombre:string}>}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $st = $this->db->prepare(
+            "SELECT DISTINCT t.modulo_ruta
+             FROM aprobaciones_config c
+             INNER JOIN aprobaciones_tipos t ON t.id = c.id_tipo
+             WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND t.activo = true
+             ORDER BY t.modulo_ruta"
+        );
+        $st->execute($params);
+        $modulos = $st->fetchAll(PDO::FETCH_COLUMN);
+
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+             FROM aprobaciones_config c
+             INNER JOIN aprobaciones_tipos t ON t.id = c.id_tipo
+             CROSS JOIN LATERAL jsonb_array_elements_text(c.usuarios_aprobadores) AS ap(id_usuario)
+             INNER JOIN usuarios u ON u.id::text = ap.id_usuario
+             WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND t.activo = true
+             ORDER BY u.nombre"
+        );
+        $st->execute($params);
+
+        return ['modulos' => $modulos, 'aprobadores' => $st->fetchAll(PDO::FETCH_ASSOC)];
     }
 
     /** Ids de tipo ya configurados en la empresa (para saber si un alta es alta o edición). */

@@ -24,9 +24,29 @@ class FacturaReembolsoRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
+        // Texto libre: las columnas del listado (incluidas las calculadas Terceros y
+        // Reembolsado) y lo que identifica la factura aunque no sea columna: líneas,
+        // proveedores y comprobantes de reembolso. Decisión del usuario: la columna Estado
+        // (y el estado del correo) NO entran en el texto libre (se filtran desde el modal).
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ["CONCAT(fr.establecimiento,'-',fr.punto_emision,'-',fr.secuencial)", 'c.nombre', 'c.identificacion', 'fr.observaciones'],
+                [
+                    "CONCAT(fr.establecimiento,'-',fr.punto_emision,'-',fr.secuencial)", // Número
+                    'fr.secuencial',
+                    'fr.fecha_emision::text',                                             // Fecha
+                    'c.nombre',                                                           // Cliente
+                    'c.identificacion',                                                   // Identificación
+                    "(SELECT COUNT(*) FROM factura_reembolso_terceros frt0 WHERE frt0.id_factura_reembolso = fr.id)::text", // Terceros
+                    '(COALESCE(fr.total_base_imponible_reembolso,0) + COALESCE(fr.total_impuesto_reembolso,0))::text',      // Reembolsado
+                    'fr.importe_total::text',                                             // Total
+                    'u.nombre',                                                           // Usuario
+                    // Fuera del listado, pero identifican la factura:
+                    'fr.observaciones',
+                    'fr.numero_autorizacion',
+                    'fr.clave_acceso',
+                    "(SELECT STRING_AGG(frd.descripcion, ' ') FROM factura_reembolso_detalle frd WHERE frd.id_factura_reembolso = fr.id)",
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', frt.razon_social_proveedor_reembolso, frt.identificacion_proveedor_reembolso, CONCAT(frt.estab_doc_reembolso,'-',frt.pto_emi_doc_reembolso,'-',frt.secuencial_doc_reembolso)), ' ') FROM factura_reembolso_terceros frt WHERE frt.id_factura_reembolso = fr.id)",
+                ],
                 $textoLibre,
                 $params,
                 'tl'
@@ -48,29 +68,67 @@ class FacturaReembolsoRepository extends BaseRepository
                 'obs'            => 'fr.observaciones',
                 'autorizacion'   => 'fr.numero_autorizacion',
                 'clave'          => 'fr.clave_acceso',
+                'observacion'    => 'fr.observaciones',
+                'clave_acceso'   => 'fr.clave_acceso',
             ],
             'exacto' => [
                 'estado'        => 'fr.estado',
-                'estado_correo' => 'fr.estado_correo',
-                'correo'        => 'fr.estado_correo',
+                'estado_correo' => "COALESCE(NULLIF(fr.estado_correo,''),'pendiente')",
+                'correo'        => "COALESCE(NULLIF(fr.estado_correo,''),'pendiente')",
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del buscador.
                 'serie'         => "CONCAT(fr.establecimiento,'-',fr.punto_emision)",
+                'id_usuario'    => 'fr.id_usuario',
+                // asiento:si / asiento:no
+                'asiento'       => "CASE WHEN fr.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
+                // ambiente:1 (pruebas) / ambiente:2 (producción)
+                'ambiente'      => 'fr.tipo_ambiente',
             ],
             'fecha' => [
                 'fecha'         => 'fr.fecha_emision',
                 'fecha_emision' => 'fr.fecha_emision',
+                'fecha_autorizacion' => 'fr.fecha_autorizacion',
+                'autorizada'         => 'fr.fecha_autorizacion',
             ],
             'numerico' => [
                 'monto'    => 'fr.importe_total',
                 'total'    => 'fr.importe_total',
                 'subtotal' => 'fr.total_sin_impuestos',
                 'reembolso' => 'fr.total_base_imponible_reembolso',
+                // Columna "Reembolsado": base + impuesto de los comprobantes de terceros
+                'reembolsado' => '(COALESCE(fr.total_base_imponible_reembolso,0) + COALESCE(fr.total_impuesto_reembolso,0))',
+                'descuento' => 'COALESCE(fr.total_descuento,0)',
+                // Columna "Terceros": cantidad de comprobantes de reembolso
+                'terceros'  => '(SELECT COUNT(*) FROM factura_reembolso_terceros frt1 WHERE frt1.id_factura_reembolso = fr.id)',
                 // Comparación numérica: "298" encuentra "000000298" sin que el
                 // usuario tenga que escribir los ceros a la izquierda, y sigue
                 // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
                 // en '=', nunca hace substring).
                 'secuencial' => 'fr.secuencial::numeric',
+            ],
+            'existe' => [
+                // proveedor:texto → algún comprobante de reembolso es de ese proveedor
+                'proveedor' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM factura_reembolso_terceros frt2 WHERE frt2.id_factura_reembolso = fr.id AND {cond})',
+                    'col'  => 'frt2.razon_social_proveedor_reembolso',
+                    'tipo' => 'texto',
+                ],
+                'ruc_proveedor' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM factura_reembolso_terceros frt3 WHERE frt3.id_factura_reembolso = fr.id AND {cond})',
+                    'col'  => 'frt3.identificacion_proveedor_reembolso',
+                    'tipo' => 'texto',
+                ],
+                // doc_reembolso:001-001-000000123 → número de algún comprobante de reembolso
+                'doc_reembolso' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM factura_reembolso_terceros frt4 WHERE frt4.id_factura_reembolso = fr.id AND {cond})',
+                    'col'  => "CONCAT(frt4.estab_doc_reembolso,'-',frt4.pto_emi_doc_reembolso,'-',frt4.secuencial_doc_reembolso)",
+                    'tipo' => 'texto',
+                ],
+                'fecha_reembolso' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM factura_reembolso_terceros frt5 WHERE frt5.id_factura_reembolso = fr.id AND {cond})',
+                    'col'  => 'frt5.fecha_emision_doc_reembolso',
+                    'tipo' => 'fecha',
+                ],
             ],
         ]);
 
@@ -135,6 +193,120 @@ class FacturaReembolsoRepository extends BaseRepository
                 ORDER BY establecimiento, punto_emision";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que han registrado alguna factura de reembolso en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConFacturas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM factura_reembolso_cabecera fr
+                JOIN usuarios u ON u.id = fr.id_usuario
+                WHERE fr.id_empresa = :id_empresa AND fr.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las facturas de reembolso (pestaña "Detalles" del modal
+     * de filtros): devuelve cada línea, comprobante de reembolso de terceros, forma de
+     * pago o campo de información adicional que coincide con el texto, junto con la
+     * factura a la que pertenece. Mismo alcance que el listado (empresa, no eliminadas,
+     * ambiente, registros propios por id_usuario).
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "fr.id_empresa = :id_empresa AND fr.eliminado = false
+                      AND fr.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND fr.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.descripcion', 'd.cantidad::text', 'd.precio_unitario::text', 'd.precio_total_sin_impuesto::text'],
+            $q, $params, 'dt'
+        );
+        $condTer = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['t.razon_social_proveedor_reembolso', 't.identificacion_proveedor_reembolso',
+             "CONCAT(t.estab_doc_reembolso,'-',t.pto_emi_doc_reembolso,'-',t.secuencial_doc_reembolso)",
+             't.numero_autorizacion_doc_reemb', 't.base_imponible_total::text', 't.impuesto_total::text'],
+            $q, $params, 'tr'
+        );
+        $condPago = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['fp.nombre', 'p.forma_pago', 'p.total::text', 'p.plazo::text', 'p.unidad_tiempo'],
+            $q, $params, 'pg'
+        );
+        $condAdic = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['a.nombre', 'a.valor'],
+            $q, $params, 'ad'
+        );
+        if ($condDet === '' || $condTer === '' || $condPago === '' || $condAdic === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT fr.id, CONCAT(fr.establecimiento,'-',fr.punto_emision,'-',fr.secuencial) AS numero,
+                           fr.fecha_emision, fr.estado, c.nombre AS cliente
+                    FROM factura_reembolso_cabecera fr
+                    LEFT JOIN clientes c ON c.id = fr.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'LINEA' AS origen,
+                           CASE WHEN d.es_reembolso THEN 'Reembolso' ELSE 'Honorarios' END AS tipo,
+                           d.descripcion,
+                           d.cantidad,
+                           d.precio_total_sin_impuesto AS monto,
+                           b.id AS id_factura, b.numero, b.fecha_emision, b.estado, b.cliente
+                    FROM factura_reembolso_detalle d
+                    JOIN base b ON b.id = d.id_factura_reembolso
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'TERCERO' AS origen,
+                           CONCAT(t.estab_doc_reembolso,'-',t.pto_emi_doc_reembolso,'-',t.secuencial_doc_reembolso) AS tipo,
+                           NULLIF(CONCAT_WS(' · ', NULLIF(t.razon_social_proveedor_reembolso, ''), NULLIF(t.identificacion_proveedor_reembolso, '')), '') AS descripcion,
+                           NULL AS cantidad,
+                           (COALESCE(t.base_imponible_total, 0) + COALESCE(t.impuesto_total, 0)) AS monto,
+                           b.id AS id_factura, b.numero, b.fecha_emision, b.estado, b.cliente
+                    FROM factura_reembolso_terceros t
+                    JOIN base b ON b.id = t.id_factura_reembolso
+                    WHERE $condTer
+                    UNION ALL
+                    SELECT 'PAGO' AS origen,
+                           COALESCE(fp.nombre, p.forma_pago) AS tipo,
+                           NULLIF(CONCAT_WS(' ', p.plazo::text, p.unidad_tiempo), '') AS descripcion,
+                           NULL AS cantidad,
+                           p.total AS monto,
+                           b.id AS id_factura, b.numero, b.fecha_emision, b.estado, b.cliente
+                    FROM factura_reembolso_pagos p
+                    JOIN base b ON b.id = p.id_factura_reembolso
+                    LEFT JOIN formas_pago_sri fp ON fp.codigo = p.forma_pago
+                    WHERE $condPago
+                    UNION ALL
+                    SELECT 'ADICIONAL' AS origen,
+                           a.nombre AS tipo,
+                           a.valor AS descripcion,
+                           NULL AS cantidad,
+                           NULL AS monto,
+                           b.id AS id_factura, b.numero, b.fecha_emision, b.estado, b.cliente
+                    FROM factura_reembolso_adicional a
+                    JOIN base b ON b.id = a.id_factura_reembolso
+                    WHERE $condAdic
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id_factura DESC, x.origen
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

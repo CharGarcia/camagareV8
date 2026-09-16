@@ -60,15 +60,34 @@ class RetencionCompraRepository extends BaseRepository
         $params = [':ie' => $idEmpresa];
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        // Texto libre: todas las palabras, en cualquier orden, sobre las columnas del
+        // listado y lo que identifica la retención. Decisión del usuario (igual que
+        // Compras/Ingresos/Egresos): Tipo Doc., Correo y Estado NO entran en el texto
+        // libre; se filtran solo desde el modal de filtros.
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (
-                r.secuencial ILIKE :b
-                OR r.num_doc_sustento ILIKE :b
-                OR p.razon_social ILIKE :b
-                OR p.identificacion ILIKE :b
-                OR r.periodo_fiscal ILIKE :b
-            )";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    "CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial)", // Nº Retención
+                    'r.secuencial',
+                    'r.fecha_emision::text',                                          // Fecha
+                    'p.razon_social',                                                 // Proveedor
+                    'p.identificacion',                                               // Identificación
+                    'r.num_doc_sustento',                                             // Doc. Sustento
+                    'r.periodo_fiscal',                                               // Período
+                    'r.total_retenido::text',                                         // Total Ret.
+                    // Fuera del listado, pero identifican la retención:
+                    'r.clave_acceso',
+                    'r.numero_autorizacion',
+                    'u.nombre',
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', dx.codigo_retencion, dx.concepto), ' ') FROM retencion_compra_detalle dx WHERE dx.id_retencion = r.id)",
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
@@ -81,14 +100,26 @@ class RetencionCompraRepository extends BaseRepository
                 'periodo'        => 'r.periodo_fiscal',
                 'clave_acceso'   => 'r.clave_acceso',
                 'usuario'        => 'u.nombre',
+                // Claves nuevas del modal de filtros.
+                'autorizacion'   => 'r.numero_autorizacion',
             ],
             'exacto'   => [
                 'estado' => 'r.estado',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del filtro de retenciones de compra.
                 'serie'  => "CONCAT(r.establecimiento,'-',r.punto_emision)",
+                'estado_correo' => "COALESCE(NULLIF(r.estado_correo, ''), 'pendiente')",
+                'tipo_doc'      => 'r.tipo_doc_sustento',
+                'id_usuario'    => 'r.id_usuario',
+                'id_sustento'   => 'r.id_sustento_tributario',
+                'asiento'       => "CASE WHEN r.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
+                // Enlazada a una compra o liquidación registrada en el sistema.
+                'vinculada'     => "CASE WHEN r.id_compra IS NOT NULL OR r.id_liquidacion IS NOT NULL THEN 'si' ELSE 'no' END",
             ],
-            'fecha'    => [ 'fecha' => 'r.fecha_emision', 'fecha_emision' => 'r.fecha_emision' ],
+            'fecha'    => [
+                'fecha' => 'r.fecha_emision', 'fecha_emision' => 'r.fecha_emision',
+                'fecha_doc_sustento' => 'r.fecha_emision_doc_sustento',
+            ],
             'numerico' => [
                 // La cabecera de una retención de COMPRA guarda un único importe
                 // (total_retenido); el desglose por impuesto vive en el detalle. Ojo
@@ -105,6 +136,7 @@ class RetencionCompraRepository extends BaseRepository
                 // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE
                 // en '=', nunca hace substring).
                 'secuencial' => 'r.secuencial::numeric',
+                'doc_total'  => 'COALESCE(r.doc_sustento_total, 0)',
             ],
         ]);
 
@@ -162,6 +194,102 @@ class RetencionCompraRepository extends BaseRepository
                 ORDER BY establecimiento, punto_emision";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que han registrado alguna retención de compra en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConRetenciones(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM retencion_compra_cabecera r
+                JOIN usuarios u ON u.id = r.id_usuario
+                WHERE r.id_empresa = :id_empresa AND r.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Tipos de documento sustento REALMENTE usados en las retenciones de la empresa (select del modal de filtros). */
+    public function getTiposDocSustentoUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT r.tipo_doc_sustento AS codigo
+                FROM retencion_compra_cabecera r
+                WHERE r.id_empresa = :id_empresa AND r.eliminado = false
+                  AND r.tipo_doc_sustento IS NOT NULL AND r.tipo_doc_sustento <> ''
+                ORDER BY r.tipo_doc_sustento";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    /** Sustentos tributarios REALMENTE usados en las retenciones de la empresa (select del modal de filtros). */
+    public function getSustentosUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT st.id, st.codigo, st.nombre
+                FROM retencion_compra_cabecera r
+                JOIN sustento_tributario st ON st.id = r.id_sustento_tributario
+                WHERE r.id_empresa = :id_empresa AND r.eliminado = false
+                ORDER BY st.codigo";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las retenciones (pestaña "Detalles" del modal de
+     * filtros): cada línea de retención (código, concepto, impuesto, base,
+     * porcentaje, valor, documento sustento de la línea) que coincide con el texto,
+     * con la retención a la que pertenece. Mismo alcance que el listado (empresa,
+     * no eliminadas, ambiente) y registros propios por r.id_usuario, igual que
+     * getListado(). retencion_compra_detalle no tiene columna `eliminado`.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':ie' => $idEmpresa];
+        $whereBase = "r.id_empresa = :ie AND r.eliminado = false
+                      AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :ie)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND r.id_usuario = :iu";
+            $params[':iu'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.codigo_retencion', 'd.concepto', "(CASE UPPER(COALESCE(d.codigo_impuesto, '')) WHEN '1' THEN 'RENTA' WHEN '2' THEN 'IVA' WHEN '6' THEN 'ISD' ELSE d.codigo_impuesto END)", 'd.base_imponible::text',
+             'd.porcentaje_retener::text', 'd.valor_retenido::text', 'd.num_doc_sustento'],
+            $q, $params, 'dt'
+        );
+        if ($condDet === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT r.id, r.establecimiento, r.punto_emision, r.secuencial,
+                           r.fecha_emision, r.estado, p.razon_social AS proveedor
+                    FROM retencion_compra_cabecera r
+                    LEFT JOIN proveedores p ON p.id = r.id_proveedor
+                    WHERE $whereBase
+                )
+                SELECT 'RETENCION' AS origen,
+                       CONCAT_WS(' · ', NULLIF((CASE UPPER(COALESCE(d.codigo_impuesto, '')) WHEN '1' THEN 'RENTA' WHEN '2' THEN 'IVA' WHEN '6' THEN 'ISD' ELSE d.codigo_impuesto END), ''), NULLIF(d.codigo_retencion, '')) AS tipo,
+                       d.concepto AS descripcion,
+                       d.base_imponible,
+                       d.porcentaje_retener,
+                       d.valor_retenido AS monto,
+                       b.*
+                FROM retencion_compra_detalle d
+                JOIN base b ON b.id = d.id_retencion
+                WHERE $condDet
+                ORDER BY b.fecha_emision DESC, b.id DESC, d.id
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

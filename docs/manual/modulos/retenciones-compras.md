@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride
-version: 1.13
+etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips
+version: 1.14
 orden: 30
 estado: activo
 ---
@@ -33,29 +33,50 @@ El porcentaje sale del código que elija en la lista del catálogo del SRI y sol
 puede escribir cuando ese código es de **tarifa variable** (ver *El porcentaje lo
 decide el catálogo*, más abajo).
 
-## Buscar en el listado
+## Buscar y filtrar el listado
 
-El buscador acepta texto libre —número de la retención, número del documento de
-sustento, nombre o RUC del proveedor y período fiscal— y filtros `clave:valor`:
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
 
-| Filtro | Ejemplo | Qué hace |
-|--------|---------|----------|
-| `proveedor:` | `proveedor:"Corporación Favorita"` | Por nombre del proveedor |
-| `ruc:` | `ruc:1790016919001` | Por RUC o cédula del proveedor |
-| `numero:` | `numero:298` | Por número de la retención |
-| `secuencial:` | `secuencial:298` | Igual, sin escribir los ceros a la izquierda |
-| `doc_sustento:` | `doc_sustento:001-001-000000123` | Por el documento retenido |
-| `serie:` | `serie:001-001` | Establecimiento y punto de emisión |
-| `estado:` | `estado:borrador` | Borrador, autorizada, anulada… |
-| `periodo:` | `periodo:07/2026` | Por período fiscal |
-| `fecha:` | `fecha:2026-08` · `fecha:>=2026-01-01` | Por fecha de emisión, con rangos |
-| `monto:` / `total:` | `monto:>=100` · `monto:100..500` | Por el total retenido |
-| `renta:` `iva:` `isd:` | `iva:>0` | Por el importe retenido de cada impuesto |
-| `clave_acceso:` | `clave_acceso:2608…` | Por clave de acceso |
-| `usuario:` | `usuario:ana` | Quién registró la retención |
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la retención: N°
+retención, secuencial, fecha, proveedor, identificación, documento sustento,
+período fiscal y total retenido. Además busca en la clave de acceso, el número de
+autorización, el usuario que la registró y los **códigos y conceptos de
+retención** de sus líneas. Las columnas **Tipo Doc.**, **Correo** y **Estado** no
+entran en la búsqueda libre: para filtrar por ellas use la ventana de filtros.
+Puede escribir varias palabras en cualquier orden y no importan mayúsculas ni
+tildes. Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca,
+aparece un **círculo girando** al final del cuadro y la tabla se ve atenuada.
 
-Se pueden combinar (`proveedor:favorita estado:borrador`) y negar anteponiendo un
-guion (`-estado:anulada`).
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Retención** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), serie, secuencial, estado (borrador, pendiente, autorizada, no autorizada, anulada), estado de correo (pendiente / enviado), período fiscal, secuencial que contiene, N° autorización, clave de acceso, con o sin asiento contable, usuario |
+| Documento sustento | Fecha del documento sustento, tipo de documento, vinculada o no a una compra o liquidación del sistema, N° del documento sustento, sustento tributario |
+| Valores | Total retenido, total del documento sustento, total de renta, de IVA y de ISD (cada uno con mínimo y máximo) |
+| Proveedor | Proveedor, RUC / identificación |
+
+Los selectores *Serie*, *Tipo de documento*, *Sustento tributario* y *Usuario*
+listan solo lo que la empresa ya usó.
+
+**Pestaña Detalles** (las líneas de la retención). Es un único cuadro, **Buscar
+libremente dentro de las retenciones**: escriba un código de retención (por
+ejemplo *303*), un concepto, el impuesto (*renta*, *IVA*, *ISD*), una base, un
+porcentaje o un valor, y aparece la lista de **cada línea que coincide** con la
+retención a la que pertenece (número, fecha, proveedor y estado). Un clic en la
+fila deja el listado mostrando solo esa retención; el ícono de la derecha la abre
+directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Cómo buscar el código de retención
 
@@ -315,6 +336,18 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.14** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias; lo que
+  se escribe se busca en las columnas de la retención (y en clave de acceso,
+  autorización, usuario y códigos/conceptos de retención), salvo Tipo Doc., Correo y
+  Estado, y ahora exige todas las palabras en cualquier orden. Los filtros pasan a una
+  **ventana propia** (botón del embudo, se aplican con *Aplicar*) con dos pestañas:
+  **Retención** (criterios nuevos: estado de correo, N° autorización, con/sin asiento,
+  usuario como lista, fecha y tipo del documento sustento, vinculada a una compra,
+  sustento tributario y total del documento sustento) y **Detalles**, búsqueda libre
+  dentro de las líneas de retención. El filtro de estado ofrecía valores que no existen
+  (*autorizado*, *anulado*); ahora lista los reales (borrador, pendiente, autorizada, no
+  autorizada, anulada). Los filtros activos se ven como etiquetas dentro del cuadro y la
+  tabla se atenúa mientras busca.
 - **1.13** — Corregido el **"ERROR 45 SECUENCIAL REGISTRADO"** al enviar al SRI. Pasaba
   cuando se eliminaba una retención en borrador que el SRI ya había recibido: su número
   quedaba libre en el sistema y la siguiente retención lo volvía a tomar, pero el SRI ya

@@ -66,6 +66,8 @@ class ConfiguracionRestauranteController extends BaseModuloController
             'ordenCol'    => $ordenCol,
             'ordenDir'    => $ordenDir,
             'anchoTirilla' => $this->service->getAnchoTirilla($idEmpresa),
+            // Select "Usuario que registró" del modal de filtros (solo usuarios con estaciones).
+            'usuariosFiltro' => $this->service->getUsuariosConEstaciones($idEmpresa),
             'vistaConfig' => $prefsVista,
             'fullWidth'   => true,
         ]);

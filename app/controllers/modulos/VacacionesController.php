@@ -56,6 +56,9 @@ class VacacionesController extends BaseModuloController
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
             'meses'      => CatalogoNovedades::MESES,
+            // Selects del modal de filtros: solo los valores que la empresa realmente usa.
+            'aniosFiltro'    => $this->service->getAniosUsados($idEmpresa),
+            'usuariosFiltro' => $this->service->getUsuariosConVacaciones($idEmpresa),
             'vistaConfig' => $prefsVista,
             'idEmpresa'  => $idEmpresa,
         ]);

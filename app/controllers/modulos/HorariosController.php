@@ -61,6 +61,8 @@ class HorariosController extends BaseModuloController
             'buscar'     => $buscar,
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
+            // Select del modal de filtros: solo los usuarios que realmente crearon turnos.
+            'usuariosFiltro' => $this->service->getUsuariosConHorarios($idEmpresa),
             'vistaConfig' => $prefsVista,
         ]);
     }

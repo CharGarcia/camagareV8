@@ -30,20 +30,96 @@ class SuscripcionesRepository extends BaseRepository
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
+        // Expresiones calculadas (subconsultas: el COUNT solo une `clientes`).
+        $exprItems = "(SELECT COUNT(*) FROM suscripciones_detalle sdi WHERE sdi.id_suscripcion = s.id AND sdi.eliminado = false)";
+        // Monto de cada cobro: suma de los ítems con su IVA (igual que la ficha de empresa).
+        $exprMonto = "ROUND(COALESCE((SELECT SUM(sdm.cantidad * sdm.precio_unitario * (1 + sdm.porcentaje_iva / 100))
+                                      FROM suscripciones_detalle sdm
+                                      WHERE sdm.id_suscripcion = s.id AND sdm.eliminado = false), 0), 2)";
+
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (c.nombre ILIKE :buscar OR c.identificacion ILIKE :buscar)";
-            $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
+            // Texto libre (buscador FiltrosModal, sin sugerencias): columnas del listado +
+            // campos que identifican la suscripción. Decisión del usuario: Estado,
+            // Periodicidad, Comprobante y Cobro (tipos/clasificación) NO entran en el
+            // texto libre; se filtran solo desde el modal de filtros.
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    'c.nombre',                                                   // Cliente
+                    'c.identificacion',                                           // RUC/Cédula
+                    "TO_CHAR(s.proximo_cobro, 'DD-MM-YYYY')",                     // Próx. Cobro (como se muestra)
+                    's.proximo_cobro::text',
+                    "TO_CHAR(s.fecha_inicio, 'DD-MM-YYYY')",                      // Inicio
+                    's.fecha_inicio::text',
+                    "TO_CHAR(s.fecha_fin, 'DD-MM-YYYY')",                         // Fin
+                    's.fecha_fin::text',
+                    "CONCAT({$exprItems}, ' ítem')",                              // Ítems ("2 ítems")
+                    "{$exprMonto}::text",                                         // Monto del cobro (con IVA)
+                    's.observaciones',
+                    's.info_adicional::text',
+                    "CONCAT_WS(' ', s.kushki_card_last4, s.kushki_card_brand, s.kushki_card_name)",
+                    '(SELECT CONCAT_WS(\' \', nt.ultimos4, nt.marca) FROM nuvei_tarjetas_cliente nt WHERE nt.id = s.id_nuvei_tarjeta)',
+                    '(SELECT u.nombre FROM usuarios u WHERE u.id = s.created_by)', // Usuario que registró
+                    // Productos/servicios de la suscripción (código, nombre y descripción)
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, sdt.descripcion), ' ')
+                        FROM suscripciones_detalle sdt LEFT JOIN productos p ON p.id = sdt.id_producto
+                       WHERE sdt.id_suscripcion = s.id AND sdt.eliminado = false)",
+                    // Facturas / recibos generados por los cobros
+                    "(SELECT STRING_AGG(COALESCE(NULLIF(rv.recibo_numero, ''), NULLIF(CONCAT_WS('-', rv.establecimiento, rv.punto_emision, rv.secuencial), ''), NULLIF(CONCAT_WS('-', vc.establecimiento, vc.punto_emision, vc.secuencial), '')), ' ')
+                        FROM suscripciones_pagos sp
+                        LEFT JOIN ventas_cabecera vc        ON vc.id = sp.id_factura
+                        LEFT JOIN recibos_venta_cabecera rv ON rv.id = sp.id_recibo
+                       WHERE sp.id_suscripcion = s.id AND sp.eliminado = false)",
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
+        // Claves del modal de filtros (vista suscripciones/index.php). Nunca quitar claves:
+        // viajan también en los enlaces de PDF/Excel y en URLs guardadas.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
                 'cliente'        => 'c.nombre',
                 'ruc'            => 'c.identificacion',
                 'identificacion' => 'c.identificacion',
+                'observaciones'  => "CONCAT_WS(' ', s.observaciones, s.info_adicional::text)",
             ],
-            'exacto'   => [ 'estado' => 's.estado' ],
-            'fecha'    => [ 'proximo_cobro' => 's.proximo_cobro', 'fecha' => 's.proximo_cobro' ],
-            'numerico' => [ 'monto' => 's.monto', 'total' => 's.monto' ],
+            'exacto'   => [
+                'estado'       => 's.estado',
+                'id'           => 's.id::text',   // texto: un valor no numérico no rompe la consulta
+                'periodicidad' => 's.id_periodicidad',
+                'comprobante'  => 's.tipo_comprobante',
+                'forma_cobro'  => 's.forma_cobro',
+                'pasarela'     => 's.pasarela_tarjeta',
+                'usuario'      => 's.created_by',
+                // con_pagos:si / con_pagos:no (ya tiene cobros registrados)
+                'con_pagos'    => "CASE WHEN EXISTS (SELECT 1 FROM suscripciones_pagos spx WHERE spx.id_suscripcion = s.id AND spx.eliminado = false) THEN 'si' ELSE 'no' END",
+            ],
+            'fecha'    => [
+                'proximo_cobro' => 's.proximo_cobro', 'fecha' => 's.proximo_cobro',
+                'inicio'        => 's.fecha_inicio',
+                'fin'           => 's.fecha_fin',
+            ],
+            'numerico' => [
+                // `monto`/`total` apuntaban a s.monto, columna que no existe en `suscripciones`
+                // (el filtro lanzaba error SQL): ahora es el monto calculado de los ítems.
+                'monto'     => $exprMonto,
+                'total'     => $exprMonto,
+                'items'     => $exprItems,
+                'intentos'  => 's.intentos_fallidos',
+            ],
+            'existe'   => [
+                // N° de factura / recibo generado por algún cobro de la suscripción
+                'documento' => ['tipo' => 'texto', 'col' => "COALESCE(NULLIF(rvd.recibo_numero, ''), NULLIF(CONCAT_WS('-', rvd.establecimiento, rvd.punto_emision, rvd.secuencial), ''), NULLIF(CONCAT_WS('-', vcd.establecimiento, vcd.punto_emision, vcd.secuencial), ''))",
+                                'sql'  => 'EXISTS (SELECT 1 FROM suscripciones_pagos spd
+                                                   LEFT JOIN ventas_cabecera vcd        ON vcd.id = spd.id_factura
+                                                   LEFT JOIN recibos_venta_cabecera rvd ON rvd.id = spd.id_recibo
+                                                   WHERE spd.id_suscripcion = s.id AND spd.eliminado = false AND {cond})'],
+            ],
         ]);
 
         $sqlCount = "SELECT COUNT(*)
@@ -90,6 +166,108 @@ class SuscripcionesRepository extends BaseRepository
         }
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Valores realmente usados por las suscripciones de la empresa, para los selects
+     * del modal de filtros: periodicidades y usuarios que registraron.
+     */
+    public function getOpcionesFiltro(int $idEmpresa): array
+    {
+        $q = function (string $sql) use ($idEmpresa): array {
+            $st = $this->db->prepare($sql);
+            $st->execute([':e' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        };
+        return [
+            'periodicidades' => $q("SELECT DISTINCT per.id, per.nombre, per.meses FROM suscripciones s
+                                    JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                                    WHERE s.id_empresa = :e AND s.eliminado = false ORDER BY per.meses, per.nombre"),
+            'usuarios'       => $q("SELECT DISTINCT u.id, u.nombre FROM suscripciones s
+                                    JOIN usuarios u ON u.id = s.created_by
+                                    WHERE s.id_empresa = :e AND s.eliminado = false ORDER BY u.nombre"),
+        ];
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las suscripciones (pestaña "Detalles" del modal de
+     * filtros): productos/servicios facturados, cobros registrados (fecha, monto,
+     * factura o recibo y n° de transacción) e información adicional. Mismo alcance que
+     * el listado (empresa, no eliminadas, registros propios por created_by). No busca
+     * en el estado del cobro.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "s.id_empresa = :id_empresa AND s.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND s.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $F = \App\Helpers\FiltrosBusqueda::class;
+        $condDet = $F::condicionTexto(
+            ['p.codigo', 'p.nombre', 'd.descripcion', 'd.cantidad::text', 'd.precio_unitario::text',
+             'ROUND(d.cantidad * d.precio_unitario * (1 + d.porcentaje_iva / 100), 2)::text'],
+            $q, $params, 'dt'
+        );
+        $condPag = $F::condicionTexto(
+            ["COALESCE(NULLIF(rv.recibo_numero, ''), NULLIF(CONCAT_WS('-', rv.establecimiento, rv.punto_emision, rv.secuencial), ''), NULLIF(CONCAT_WS('-', vc.establecimiento, vc.punto_emision, vc.secuencial), ''))", "TO_CHAR(sp.fecha_cobro, 'DD-MM-YYYY')", 'sp.fecha_cobro::text',
+             'sp.monto::text', 'sp.kushki_transaction_id', 'sp.nuvei_transaction_id'],
+            $q, $params, 'pg'
+        );
+        $condInf = $F::condicionTexto(["ia.elem->>'concepto'", "ia.elem->>'detalle'"], $q, $params, 'ia');
+        if ($condDet === '' || $condPag === '' || $condInf === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT s.id, s.proximo_cobro, s.estado, s.info_adicional, c.nombre AS cliente, c.identificacion
+                    FROM suscripciones s
+                    LEFT JOIN clientes c ON c.id = s.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'ITEM' AS origen, p.codigo AS referencia,
+                           COALESCE(NULLIF(d.descripcion, ''), p.nombre) AS descripcion,
+                           NULL::date AS fecha,
+                           ROUND(d.cantidad * d.precio_unitario * (1 + d.porcentaje_iva / 100), 2) AS monto,
+                           b.id AS id_suscripcion, b.proximo_cobro, b.estado, b.cliente, b.identificacion
+                    FROM suscripciones_detalle d
+                    JOIN base b ON b.id = d.id_suscripcion
+                    LEFT JOIN productos p ON p.id = d.id_producto
+                    WHERE d.eliminado = false AND $condDet
+                    UNION ALL
+                    SELECT 'COBRO' AS origen, COALESCE(NULLIF(rv.recibo_numero, ''), NULLIF(CONCAT_WS('-', rv.establecimiento, rv.punto_emision, rv.secuencial), ''), NULLIF(CONCAT_WS('-', vc.establecimiento, vc.punto_emision, vc.secuencial), '')) AS referencia,
+                           NULLIF(CONCAT_WS(' ', CASE WHEN sp.id_recibo IS NOT NULL THEN 'Recibo' WHEN sp.id_factura IS NOT NULL THEN 'Factura' END,
+                                                 sp.kushki_transaction_id, sp.nuvei_transaction_id), '') AS descripcion,
+                           sp.fecha_cobro::date AS fecha, sp.monto,
+                           b.id, b.proximo_cobro, b.estado, b.cliente, b.identificacion
+                    FROM suscripciones_pagos sp
+                    JOIN base b ON b.id = sp.id_suscripcion
+                    LEFT JOIN ventas_cabecera vc        ON vc.id = sp.id_factura
+                    LEFT JOIN recibos_venta_cabecera rv ON rv.id = sp.id_recibo
+                    WHERE sp.eliminado = false AND $condPag
+                    UNION ALL
+                    SELECT 'INFO' AS origen, ia.elem->>'concepto' AS referencia, ia.elem->>'detalle' AS descripcion,
+                           NULL::date, NULL::numeric,
+                           b.id, b.proximo_cobro, b.estado, b.cliente, b.identificacion
+                    FROM base b
+                    CROSS JOIN LATERAL jsonb_array_elements(
+                        CASE WHEN jsonb_typeof(b.info_adicional) = 'array' THEN b.info_adicional ELSE '[]'::jsonb END
+                    ) AS ia(elem)
+                    WHERE $condInf
+                ) x
+                ORDER BY x.proximo_cobro DESC NULLS LAST, x.id_suscripcion DESC, x.origen, x.fecha DESC NULLS LAST
+                LIMIT $limit";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

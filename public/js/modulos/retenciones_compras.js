@@ -108,6 +108,10 @@
     window.RET_fetchSearch = async (page = 1) => {
         const buscar = (document.getElementById('buscarRet') || {}).value || '';
         const url = `${BASE}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga, también al paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('ret-table-body');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const res  = await fetch(url);
             const data = await res.json();
@@ -118,6 +122,8 @@
             }
         } catch (e) {
             console.error('Error buscando retenciones:', e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     };
 

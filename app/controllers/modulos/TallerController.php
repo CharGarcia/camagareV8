@@ -102,8 +102,53 @@ class TallerController extends BaseModuloController
                 'ordenDir'    => $ordenDir,
                 'vistaConfig' => $prefsVista,
                 'abrirOrden'  => $abrirOrden,
+                // Selects del modal de filtros (solo valores usados por la empresa).
+                'opcionesFiltro' => $this->service->getOpcionesFiltro($idEmpresa),
             ]
         ));
+    }
+
+    /**
+     * Pestaña "Detalles" del buscador (FiltrosModal): búsqueda libre dentro de las
+     * órdenes (repuestos/mano de obra, trabajos por departamento, checklist y
+     * bitácora). Aplica registros propios (§6).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $origenes = ['LINEA' => 'Línea', 'ETAPA' => 'Trabajo de departamento', 'CHECKLIST' => 'Checklist', 'BITACORA' => 'Bitácora'];
+        $tiposLinea = ['repuesto' => 'Repuesto', 'mano_obra' => 'Mano de obra', 'insumo' => 'Insumo', 'tercero' => 'Trabajo de tercero'];
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $tipo = (string) ($r['tipo'] ?? '');
+            $rows[] = [
+                'origen'       => $origenes[$r['origen']] ?? $r['origen'],
+                'tipo'         => $r['origen'] === 'LINEA' ? ($tiposLinea[$tipo] ?? ucfirst($tipo))
+                                  : ucfirst(str_replace('_', ' ', $tipo)),
+                'referencia'   => $r['referencia'] ?? '',
+                'descripcion'  => $r['descripcion'] ?? '',
+                'monto'        => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'id_orden'     => (int) $r['id_orden'],
+                'numero_orden' => $r['numero_orden'] ?? '',
+                'fecha'        => !empty($r['fecha_ingreso']) ? date('d-m-Y', strtotime((string) $r['fecha_ingreso'])) : '',
+                'placa'        => $r['placa'] ?? '',
+                'cliente'      => $r['cliente'] ?? '',
+                'estado'       => ucfirst(str_replace('_', ' ', (string) ($r['estado'] ?? ''))),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function searchAjax(): void

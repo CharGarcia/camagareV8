@@ -43,32 +43,60 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorCASIS" style="width: 420px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // "Filtros" (embudo) que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de AsistenciaPuntoRepository::getListado().
+            // Sin pestaña Detalles: el punto es un catálogo sin líneas propias.
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $tP = 'Punto de servicio';
+            // Filas de 12 columnas:
+            //   Punto:    [Nombre 6][Dirección 6] [Estado 3][Radio 3][Exige GPS 3][Ubicación 3]
+            //   Registro: [Fecha de registro 6][Usuario 6]
+            $filtrosPuntos = [
+                ['tab' => $tP, 'key' => 'nombre',      'label' => 'Nombre',              'icon' => 'bi-geo-alt',        'type' => 'text',         'grupo' => 'Punto', 'col' => 6],
+                ['tab' => $tP, 'key' => 'direccion',   'label' => 'Dirección',           'icon' => 'bi-signpost',       'type' => 'text',         'grupo' => 'Punto', 'col' => 6],
+                ['tab' => $tP, 'key' => 'estado',      'label' => 'Estado',              'icon' => 'bi-flag',           'type' => 'select',       'grupo' => 'Punto', 'col' => 3, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                ['tab' => $tP, 'key' => 'radio',       'label' => 'Radio (metros)',      'icon' => 'bi-bullseye',       'type' => 'number_range', 'grupo' => 'Punto', 'col' => 3],
+                ['tab' => $tP, 'key' => 'gps',         'label' => 'Exige GPS',           'icon' => 'bi-crosshair',      'type' => 'select',       'grupo' => 'Punto', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Sí'],
+                    ['v' => 'no', 'l' => 'No'],
+                ]],
+                ['tab' => $tP, 'key' => 'ubicacion',   'label' => 'Ubicación (coordenadas)', 'icon' => 'bi-pin-map',    'type' => 'select',       'grupo' => 'Punto', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Con coordenadas'],
+                    ['v' => 'no', 'l' => 'Sin coordenadas'],
+                ]],
+                ['tab' => $tP, 'key' => 'registro',    'label' => 'Fecha de registro',   'icon' => 'bi-calendar-event', 'type' => 'date_range',   'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tP, 'key' => 'usuario',     'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',   'type' => 'select',       'grupo' => 'Registro', 'col' => 6, 'options' => $opcionesUsuario],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorCASIS"></div>
             <input type="hidden" id="buscarCasis" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorCASIS',
+                    if (!window.FiltrosModal) return;
+                    window.CASIS_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorCASIS',
                         hiddenInputId: 'buscarCasis',
-                        fields: [
-                            { key: 'nombre', label: 'Nombre', icon: 'bi-geo-alt', type: 'text' },
-                            { key: 'direccion', label: 'Dirección', icon: 'bi-signpost', type: 'text' },
-                            { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select', options: [
-                                { v: 'activo', l: 'Activo' }, { v: 'inactivo', l: 'Inactivo' }
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_activo', label: 'Activos', mk: () => ({ key: 'estado', op: '=', value: 'activo', display: 'Activo' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de puntos de servicio',
+                        inputWidth: 420,
+                        extraId: 'fmExtraCASIS',   // columnas, pegadas al final del grupo
+                        fields: <?= json_encode($filtrosPuntos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyPuntos',   // se atenúa mientras se busca
                         onApply: () => window.cambiarPaginaAjax && window.cambiarPaginaAjax(1),
-                    }).init();
+                    });
+                    window.CASIS_filtros.init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraCASIS" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'nombre'    => 'Nombre',
@@ -167,6 +195,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga; también al paginar y ordenar, que llaman a esta función directo.
+            const tbody = document.getElementById('tbodyPuntos');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -183,7 +215,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         } else icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
                     });
                 }
-            } catch (e) {}
+            } catch (e) {
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         }
 
         if (window.CMG_initSort) {

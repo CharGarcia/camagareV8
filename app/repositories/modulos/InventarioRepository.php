@@ -407,8 +407,27 @@ class InventarioRepository extends BaseRepository
         // Ver §9 CLAUDE.md — mismo patrón que Proveedores.
         $parsed = \App\Helpers\FiltrosBusqueda::parsear((string)($filtros['buscar'] ?? ''));
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre sobre las columnas del listado de Movimientos de Inventario (único
+            // llamador que manda texto) + lo que identifica al producto. Decisión del
+            // usuario: Tipo (entrada/salida) y Origen (referencia_tipo) NO entran en el
+            // texto libre; se filtran desde el modal de filtros.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['p.nombre', 'p.codigo', 'k.observaciones', 'b.nombre'],
+                [
+                    "TO_CHAR(k.fecha_movimiento, 'DD-MM-YYYY HH24:MI:SS')", // Fecha (como se muestra)
+                    'p.nombre',                                             // Producto
+                    'p.codigo',                                             // Producto (código)
+                    'p.codigo_auxiliar',
+                    'p.codigo_barras',
+                    'b.nombre',                                             // Bodega
+                    'ROUND(ABS(k.cantidad), 2)::text',                      // Cant.
+                    'um.nombre',                                            // Medida
+                    'um.abreviatura',
+                    'k.numero_lote',                                        // Lote
+                    "TO_CHAR(k.fecha_caducidad, 'DD-MM-YYYY')",             // Caducidad
+                    'k.nup',                                                // NUP/Serial
+                    'u.nombre',                                             // Usuario
+                    'k.observaciones',                                      // Obs.
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -432,9 +451,21 @@ class InventarioRepository extends BaseRepository
                 'id_bodega'  => 'k.id_bodega',
                 'id_usuario' => 'k.created_by',
                 'id_medida'  => 'k.id_medida',
+                // Selects nuevos del modal de filtros.
+                'id_categoria' => 'p.id_categoria',
+                'con_lote'     => "CASE WHEN NULLIF(TRIM(COALESCE(k.numero_lote, '')), '') IS NULL THEN 'no' ELSE 'si' END",
+                'con_nup'      => "CASE WHEN NULLIF(TRIM(COALESCE(k.nup, '')), '') IS NULL THEN 'no' ELSE 'si' END",
             ],
             'fecha' => [
-                'fecha' => 'k.fecha_movimiento',
+                'fecha'      => 'k.fecha_movimiento',
+                'caducidad'  => 'k.fecha_caducidad',
+                'registro'   => 'k.created_at',
+            ],
+            'numerico' => [
+                // La columna Cant. se muestra sin signo (el signo lo da el tipo).
+                'cantidad'       => 'ABS(k.cantidad)',
+                'costo_unitario' => 'k.costo_unitario',
+                'costo_total'    => 'ABS(k.costo_total)',
             ],
         ]);
 
@@ -480,11 +511,13 @@ class InventarioRepository extends BaseRepository
             $params[':id_m'] = (int)$filtros['id_medida'];
         }
 
+        // Mismos JOIN que las filas: el texto libre usa también u (usuario).
         $sqlCount = "SELECT COUNT(*), COALESCE(SUM(k.cantidad), 0) as total_cantidad
                      FROM inventario_kardex k
                      INNER JOIN productos p ON p.id = k.id_producto
                      INNER JOIN bodegas b ON b.id = k.id_bodega
                      LEFT JOIN unidades_medida um ON um.id = k.id_medida
+                     LEFT JOIN usuarios u ON u.id = k.created_by
                      $where";
         $stCount  = $this->db->prepare($sqlCount);
         $stCount->execute($params);
@@ -659,6 +692,27 @@ class InventarioRepository extends BaseRepository
      * DISTINCT. Por eso, si el índice no existe (SQL aún no aplicado en esa
      * base), se usa el DISTINCT de una sola pasada. Mismo resultado.
      */
+    /**
+     * Categorías de producto que tienen algún movimiento de inventario en la empresa
+     * (select "Categoría" del modal de filtros de Movimientos de Inventario). Recorre
+     * categorías → productos → EXISTS en el kardex (idx_kardex_empresa_producto), sin
+     * leer el kardex completo.
+     */
+    public function getCategoriasConMovimientos(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT c.id, c.nombre
+                                    FROM categorias c
+                                   WHERE c.id_empresa = :e AND c.eliminado = false
+                                     AND EXISTS (SELECT 1 FROM productos p
+                                                  WHERE p.id_categoria = c.id AND p.id_empresa = :e
+                                                    AND EXISTS (SELECT 1 FROM inventario_kardex k
+                                                                 WHERE k.id_empresa = :e AND k.id_producto = p.id
+                                                                   AND k.eliminado = false))
+                                   ORDER BY c.nombre ASC");
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getTiposReferencia(int $idEmpresa): array
     {
         if (!$this->indiceExiste('idx_kardex_referencia')) {

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri
-version: 1.7
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips
+version: 1.8
 orden: 30
 estado: activo
 ---
@@ -87,6 +87,52 @@ un botón **Excel** (icono verde) que descarga el detalle y los totales de esa
 nota de crédito puntual. Igual que PDF y XML, solo se habilita cuando el
 documento ya está guardado.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la nota: N° nota,
+secuencial, fecha, cliente, identificación, documento modificado, subtotal,
+descuento, total, motivo y usuario. Además busca en el número de autorización,
+la clave de acceso, las observaciones y los **códigos y descripciones de los
+productos o servicios** de la nota. Las columnas **Correo** y **Estado** no
+entran en la búsqueda libre: para filtrar por ellas use la ventana de filtros.
+Puede escribir varias palabras en cualquier orden y no importan mayúsculas ni
+tildes. Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras
+busca, aparece un **círculo girando** al final del cuadro y la tabla se ve
+atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Nota de crédito** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (borrador, autorizado, anulado), correo (enviado o pendiente), serie, N° nota, secuencial, con o sin asiento contable, fecha de autorización, usuario que registró |
+| Documento modificado | N° de la factura modificada, fecha de esa factura, motivo |
+| Valores | Total, subtotal y descuento (cada uno con mínimo y máximo) |
+| Cliente | Cliente, RUC / cédula, observaciones, N° autorización, clave de acceso |
+
+El selector *Usuario que registró* lista solo a quienes ya registraron notas
+de crédito en la empresa, y *Serie* solo las series con notas guardadas.
+
+**Pestaña Detalles** (lo que hay dentro de la nota). Es un único cuadro,
+**Buscar libremente dentro de las notas de crédito**: escriba un producto, un
+código, una cantidad, un valor o un dato de la información adicional (por
+ejemplo, un correo), y aparece la lista de **cada línea que coincide** con la
+nota a la que pertenece (número, fecha, factura modificada, cliente y estado).
+Un clic en la fila deja el listado mostrando solo esa nota; el ícono de la
+derecha la abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
 ## Exportar el listado
 
 Los botones **Excel** y **PDF** de la parte superior del listado exportan las
@@ -128,6 +174,16 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.8** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas de la nota (y en autorización,
+  clave de acceso, observaciones y productos), salvo Correo y Estado. Los
+  filtros pasan a una **ventana propia** (botón del embudo, se aplican con
+  *Aplicar*) con dos pestañas: **Nota de crédito** (filtros por campo, con
+  criterios nuevos: correo, con/sin asiento, fecha de autorización, usuario
+  como lista, fecha del documento modificado, descuento, observaciones,
+  autorización y clave de acceso) y **Detalles** (búsqueda dentro de los
+  productos e información adicional). Los filtros activos se ven como
+  etiquetas dentro del cuadro y la tabla se atenúa mientras carga.
 - **1.7** — El envío al SRI comprueba ahora que la **fecha de emisión sea la de
   hoy**, como ya hacían factura de venta y liquidación de compra. Antes el documento
   salía con cualquier fecha y era el propio SRI quien lo rechazaba.

@@ -45,42 +45,68 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorMENU" style="width: 420px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // "Filtros" (embudo) que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de MenuRepository::getListado().
+            // Sin pestaña Detalles: el ítem del menú no tiene líneas propias.
+            $opF = $opcionesFiltro ?? [];
+            $opcionesCategoria = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $opF['categorias'] ?? []);
+            $opcionesEstacion  = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $opF['estaciones'] ?? []);
+            $opcionesIva       = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => ($x['tarifa'] ?: ((int) $x['porcentaje_iva'] . '%'))], $opF['tarifas'] ?? []);
+            $opcionesUsuario   = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $opF['usuarios'] ?? []);
+            $siNoBool = [['v' => 'true', 'l' => 'Sí'], ['v' => 'false', 'l' => 'No']];
+            $tM = 'Ítem del menú';
+            // Filas de 12 columnas:
+            //   Ítem:     [Nombre 6][Descripción 6] [Categoría 4][Preparar en 4][Disponible 2][Destacado 2]
+            //             [Producto vinculado 4][Código de producto 4][Con producto 4]
+            //   Precio:   [Precio 4][IVA 4][Precio c/IVA 4]
+            //   Registro: [Fecha de registro 6][Usuario 6]
+            $filtrosMenu = [
+                ['tab' => $tM, 'key' => 'nombre',          'label' => 'Nombre',             'icon' => 'bi-egg-fried',       'type' => 'text',         'grupo' => 'Ítem', 'col' => 6],
+                ['tab' => $tM, 'key' => 'descripcion',     'label' => 'Descripción',        'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Ítem', 'col' => 6],
+                ['tab' => $tM, 'key' => 'id_categoria',    'label' => 'Categoría',          'icon' => 'bi-tags',            'type' => 'select',       'grupo' => 'Ítem', 'col' => 4, 'options' => $opcionesCategoria],
+                ['tab' => $tM, 'key' => 'estacion',        'label' => 'Preparar en',        'icon' => 'bi-printer',         'type' => 'select',       'grupo' => 'Ítem', 'col' => 4, 'options' => $opcionesEstacion],
+                ['tab' => $tM, 'key' => 'disponible',      'label' => 'Disponible',         'icon' => 'bi-toggle-on',       'type' => 'select',       'grupo' => 'Ítem', 'col' => 2, 'options' => $siNoBool],
+                ['tab' => $tM, 'key' => 'destacado',       'label' => 'Destacado',          'icon' => 'bi-star',            'type' => 'select',       'grupo' => 'Ítem', 'col' => 2, 'options' => $siNoBool],
+                ['tab' => $tM, 'key' => 'producto',        'label' => 'Producto vinculado', 'icon' => 'bi-box-seam',        'type' => 'text',         'grupo' => 'Ítem', 'col' => 4],
+                ['tab' => $tM, 'key' => 'codigo_producto', 'label' => 'Código del producto', 'icon' => 'bi-upc',            'type' => 'text',         'grupo' => 'Ítem', 'col' => 4],
+                ['tab' => $tM, 'key' => 'con_producto',    'label' => 'Vínculo con producto', 'icon' => 'bi-link-45deg',    'type' => 'select',       'grupo' => 'Ítem', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Vinculado a un producto'],
+                    ['v' => 'no', 'l' => 'Sin producto (no se puede cobrar)'],
+                ]],
+                ['tab' => $tM, 'key' => 'precio',          'label' => 'Precio',             'icon' => 'bi-cash',            'type' => 'number_range', 'grupo' => 'Precio', 'col' => 4],
+                ['tab' => $tM, 'key' => 'iva',             'label' => 'IVA',                'icon' => 'bi-percent',         'type' => 'select',       'grupo' => 'Precio', 'col' => 4, 'options' => $opcionesIva],
+                ['tab' => $tM, 'key' => 'precio_con_iva',  'label' => 'Precio c/IVA',       'icon' => 'bi-cash-stack',      'type' => 'number_range', 'grupo' => 'Precio', 'col' => 4],
+                ['tab' => $tM, 'key' => 'registro',        'label' => 'Fecha de registro',  'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tM, 'key' => 'usuario',         'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',   'type' => 'select',       'grupo' => 'Registro', 'col' => 6, 'options' => $opcionesUsuario],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorMENU"></div>
             <input type="hidden" id="buscarMenu" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorMENU',
+                    if (!window.FiltrosModal) return;
+                    window.MENU_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorMENU',
                         hiddenInputId: 'buscarMenu',
-                        fields: [
-                            { key: 'nombre',    label: 'Nombre',    icon: 'bi-egg-fried', type: 'text' },
-                            { key: 'categoria', label: 'Categoría', icon: 'bi-tags',      type: 'text' },
-                            { key: 'producto',  label: 'Producto vinculado', icon: 'bi-box-seam', type: 'text' },
-                            { key: 'precio',    label: 'Precio',    icon: 'bi-cash',      type: 'number_range' },
-                            { key: 'disponible', label: 'Disponible', icon: 'bi-toggle-on', type: 'select', options: [
-                                { v: 'true',  l: 'Sí' },
-                                { v: 'false', l: 'No' },
-                            ]},
-                            { key: 'destacado', label: 'Destacado', icon: 'bi-star', type: 'select', options: [
-                                { v: 'true',  l: 'Sí' },
-                                { v: 'false', l: 'No' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_disponibles', label: 'Disponibles',    mk: () => ({ key: 'disponible', op: '=', value: 'true',  display: 'Sí' }) },
-                            { id: 'qf_agotados',    label: 'No disponibles', mk: () => ({ key: 'disponible', op: '=', value: 'false', display: 'No' }) },
-                            { id: 'qf_destacados',  label: 'Destacados',     mk: () => ({ key: 'destacado',  op: '=', value: 'true',  display: 'Sí' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros del menú',
+                        inputWidth: 420,
+                        extraId: 'fmExtraMENU',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosMenu, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyMenu',   // se atenúa mientras se busca
                         onApply: () => window.fetchSearch && window.fetchSearch(1),
-                    }).init();
+                    });
+                    window.MENU_filtros.init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraMENU" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'foto' => 'Foto', 'nombre' => 'Nombre', 'categoria' => 'Categoría',
@@ -90,8 +116,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                <a id="btnExportPdf" href="<?= $urlBaseMenu ?>/export-pdf?b=<?= urlencode($buscar) ?>" class="btn btn-outline-danger"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a id="btnExportExcel" href="<?= $urlBaseMenu ?>/export-excel?b=<?= urlencode($buscar) ?>" class="btn btn-outline-success"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <a id="btnExportPdf" href="<?= $urlBaseMenu ?>/export-pdf?b=<?= urlencode($buscar) ?>" class="btn btn-outline-danger"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a id="btnExportExcel" href="<?= $urlBaseMenu ?>/export-excel?b=<?= urlencode($buscar) ?>" class="btn btn-outline-success"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
             </div>
         </div>
 
@@ -732,6 +758,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.fetchSearch = async (page = 1) => {
         const term = inputBuscar ? inputBuscar.value.trim() : '';
         const url = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga; también al paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('tbodyMenu');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const resp = await fetch(url);
             const data = await resp.json();
@@ -751,7 +781,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     }
                 });
             }
-        } catch (err) {}
+        } catch (err) {
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
+        }
     };
 
     window.cambiarPaginaAjax = function (n) { window.fetchSearch(n); };

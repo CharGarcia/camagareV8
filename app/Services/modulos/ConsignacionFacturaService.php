@@ -76,6 +76,21 @@ class ConsignacionFacturaService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Búsqueda libre dentro de los documentos (líneas e información adicional): pestaña Detalles del buscador. */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuarioFiltro = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, $limit);
+    }
+
+    /** Listas de los selects del modal de filtros: solo los valores que la empresa ya usó. */
+    public function getOpcionesFiltros(int $idEmpresa): array
+    {
+        return [
+            'vendedores' => $this->repository->getVendedoresUsados($idEmpresa),
+            'usuarios'   => $this->repository->getUsuariosUsados($idEmpresa),
+        ];
+    }
+
     public function buscarConsignacionesFacturables(int $idEmpresa, string $q): array
     {
         return $this->repository->buscarConsignacionesFacturables($idEmpresa, $q);

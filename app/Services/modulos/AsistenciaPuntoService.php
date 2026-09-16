@@ -30,6 +30,12 @@ class AsistenciaPuntoService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Usuarios que registraron puntos (select "Usuario" del modal de filtros del listado). */
+    public function getUsuariosConPuntos(int $idEmpresa): array
+    {
+        return $this->repository->getUsuariosConPuntos($idEmpresa);
+    }
+
     public function getDetalle(int $id, int $idEmpresa): ?array
     {
         return $this->repository->findById($id, $idEmpresa);

@@ -694,9 +694,30 @@ class ControlBancarioRepository extends BaseRepository
 
         if (!empty($filtros['buscar'])) {
             $parsed = FiltrosBusqueda::parsear($filtros['buscar']);
+            // Texto libre: las columnas del listado (incluido el saldo acumulado, que ya
+            // viene calculado en el CTE) y la observación de la clasificación. Decisión del
+            // usuario (igual que Compras/Ingresos/Egresos): Tipo y la dirección del cheque
+            // (recibido/emitido) son clasificaciones y NO entran en el texto libre; se
+            // filtran desde el modal de filtros (o el selector Tipo de la tarjeta superior).
             if ($parsed['texto_libre'] !== '') {
                 $condicion = FiltrosBusqueda::condicionTexto(
-                    ['numero_comprobante', 'concepto', 'referencia_detalle', 'documento_referencia', 'nombre_entidad', 'numero_cheque'],
+                    [
+                        'fecha_asiento::text',                 // Fecha
+                        'fecha_banco::text',                   // Fecha Banco
+                        'numero_comprobante',                  // Comprobante
+                        'numero_cheque',                       // Cheque
+                        'fecha_cheque::text',                  // Fecha Cheque
+                        'beneficiario_cheque',                 // Beneficiario / Cliente
+                        'documento_referencia',                // Documento Ref.
+                        'nombre_entidad',                      // Tercero
+                        'referencia_detalle',                  // Glosa
+                        'concepto',                            // Glosa (cuando la línea no tiene referencia)
+                        'debe::text',                          // Debe
+                        'haber::text',                         // Haber
+                        'ROUND(saldo_acumulado, 2)::text',     // Saldo
+                        // Fuera del listado, pero identifica el movimiento:
+                        'observacion',
+                    ],
                     $parsed['texto_libre'],
                     $params,
                     'tl'
@@ -704,6 +725,18 @@ class ControlBancarioRepository extends BaseRepository
                 if ($condicion !== '') {
                     $whereSql .= " AND {$condicion}";
                 }
+            }
+            // tipo: el valor de un select del modal (p. ej. "debito") es un tipo COMPLETO y
+            // debe compararse exacto: por ILIKE "debito" también traería NOTA_DEBITO. Lo que
+            // no sea un tipo conocido (texto parcial escrito a mano, "tipo:dep") sigue por
+            // ILIKE como antes, para no romper URLs guardadas.
+            $tiposConocidos = ['DEPOSITO', 'CHEQUE', 'TRANSFERENCIA', 'DEBITO', 'NOTA_DEBITO', 'NOTA_CREDITO', 'TARJETA', 'PAYPHONE', 'OTRO'];
+            $fTipo = $parsed['filtros']['tipo'] ?? null;
+            if ($fTipo !== null && $fTipo['op'] === 'ILIKE' && !is_array($fTipo['valor'])
+                && in_array(strtoupper(trim((string) $fTipo['valor'])), $tiposConocidos, true)) {
+                $whereSql .= ($fTipo['neg'] ? ' AND tipo_transaccion <> :f_tipo_exacto' : ' AND tipo_transaccion = :f_tipo_exacto');
+                $params[':f_tipo_exacto'] = strtoupper(trim((string) $fTipo['valor']));
+                unset($parsed['filtros']['tipo']);
             }
             $mapas = [
                 'texto' => [
@@ -718,6 +751,14 @@ class ControlBancarioRepository extends BaseRepository
                     // en el buscador; ILIKE es case-insensitive, '=' de 'exacto' no lo es.
                     'tipo' => 'tipo_transaccion',
                     'direccion' => 'cheque_direccion',
+                    // Claves nuevas del modal de filtros.
+                    'comprobante' => 'numero_comprobante',
+                    'beneficiario' => 'beneficiario_cheque',
+                ],
+                'exacto' => [
+                    // clasificado:si → el movimiento tiene clasificación/conciliación propia
+                    // en control_bancario_movimientos (tipo, cheque o Fecha Banco manual).
+                    'clasificado' => "CASE WHEN id_clasificacion IS NULL THEN 'no' ELSE 'si' END",
                 ],
                 'fecha' => [
                     'fecha' => 'fecha_asiento',
@@ -727,6 +768,7 @@ class ControlBancarioRepository extends BaseRepository
                 'numerico' => [
                     'debe' => 'debe',
                     'haber' => 'haber',
+                    'saldo' => 'ROUND(saldo_acumulado, 2)',
                 ],
             ];
             FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], $mapas);

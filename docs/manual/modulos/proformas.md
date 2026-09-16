@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero
-version: 1.13
+etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips
+version: 1.14
 orden: 15
 estado: activo
 ---
@@ -136,6 +136,51 @@ tarifa** y el **TOTAL**.
 > Si cambia la configuración de decimales o de cálculo del IVA, las proformas ya
 > guardadas conservan los valores con los que se grabaron. Se actualizan cuando
 > se vuelve a abrir y guardar la proforma.
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la proforma: número,
+secuencial, fecha, cliente, RUC / CI, vendedor, total y observaciones. Además
+busca en el usuario que la registró y en los **códigos y descripciones de los
+productos** cotizados. Las columnas **Estado** y **Correo** no entran en la
+búsqueda libre: para filtrar por ellas use la ventana de filtros. Puede
+escribir varias palabras en cualquier orden y no importan mayúsculas ni tildes.
+Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca,
+aparece un **círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Proforma** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado, correo (enviado o pendiente), serie, número, secuencial, días de vigencia, vigencia (vigente o vencida), facturada o sin facturar, aprobada por el cliente desde el correo, usuario que registró |
+| Valores | Total, subtotal y descuento (cada uno con mínimo y máximo) |
+| Cliente | Cliente, RUC / cédula, vendedor, observaciones |
+
+El selector *Estado* trae los estados del recorrido (borrador, aprobada,
+rechazada, convertida, anulada) y, si la empresa tiene proformas migradas con
+otro estado (por ejemplo *Emitida*), también ese. *Vigencia* compara la fecha
+de emisión más los días de vigencia con la fecha de hoy. *Vendedor* y *Usuario
+que registró* listan solo a quienes ya aparecen en proformas de la empresa.
+
+**Pestaña Detalles** (lo que hay dentro de la proforma). Es un único cuadro,
+**Buscar libremente dentro de las proformas**: escriba un producto, un código,
+una cantidad, un valor o un dato de la información adicional, y aparece la
+lista de **cada línea que coincide** con la proforma a la que pertenece
+(número, fecha, cliente y estado). Un clic en la fila deja el listado mostrando
+solo esa proforma; el ícono de la derecha la abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Ordenar el listado
 
@@ -373,6 +418,17 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.14** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en todas las columnas (incluidos vendedor, total y
+  los productos cotizados, cada palabra por separado y sin importar tildes),
+  salvo Estado y Correo. Los filtros pasan a una **ventana propia** (botón del
+  embudo, se aplican con *Aplicar*) con dos pestañas: **Proforma** (filtros por
+  campo, con criterios nuevos: correo, días de vigencia, vigente/vencida,
+  facturada, aprobada por el cliente, usuario, subtotal, descuento y vendedor)
+  y **Detalles** (búsqueda dentro de los productos y la información adicional).
+  El filtro de estado encuentra también las proformas migradas con el estado en
+  mayúsculas. Los filtros activos se ven como etiquetas dentro del cuadro y la
+  tabla se atenúa mientras carga.
 - **1.13** — El **PDF de la proforma** muestra el **código** de cada ítem en la
   primera columna, en lugar del número de línea (1, 2, 3…), igual que el Excel.
   Las celdas del detalle **parten el texto en varias líneas** cuando no cabe en

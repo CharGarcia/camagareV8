@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
-etiquetas: pedidos, pedido de cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes
-version: 1.3
+etiquetas: pedidos, pedido de cliente, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes
+version: 1.4
 orden: 0
 estado: activo
 ---
@@ -60,10 +60,8 @@ editar antes de enviar).
 
 ### El listado
 
-- **Buscador**: acepta texto libre (número, cliente, responsable, observaciones) y
-  filtros por cliente, responsable, observaciones, fecha de emisión, fecha de
-  entrega, estado, serie y secuencial. Los botones rápidos filtran Pendientes,
-  Facturados, Anulados, Hoy, Este mes, Mes pasado y Este año.
+- **Buscador**: texto libre, ventana de filtros y búsqueda dentro de los pedidos;
+  se explica en *Buscar y filtrar el listado*.
 - **Orden**: se ordena haciendo clic en cualquier encabezado y el sistema recuerda
   su elección para la próxima vez. De fábrica muestra **lo más reciente primero**
   (por fecha de emisión).
@@ -81,6 +79,51 @@ editar antes de enviar).
 - **PDF y Excel** exportan lo que está en pantalla, con el mismo filtro y el mismo
   orden. El tope es de **500 filas**: si la búsqueda trae más, el sistema pide
   acotarla antes de descargar.
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del pedido: número, fecha
+de emisión, fecha de entrega, rango horario, cliente, responsable de entrega,
+observaciones y observaciones internas. Además busca en la identificación del
+cliente, el usuario que registró el pedido, los **códigos y nombres de los
+productos pedidos** y los **números de las consignaciones y facturas** que ya
+tomaron el pedido. La columna **Estado** no entra en la búsqueda libre: para
+filtrar por ella use la ventana de filtros. Puede escribir varias palabras en
+cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el texto
+o pulse Escape en el cuadro. Mientras busca, aparece un **círculo girando** al
+final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Pedido** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (pendiente, procesado, anulado), serie, N° pedido, secuencial, fecha de entrega, usuario que registró, documentos generados (con consignación o factura / sin documentos), total (mínimo y máximo) |
+| Cliente | Cliente, RUC / cédula, responsable de entrega, observaciones, observaciones internas |
+
+Los selectores *Serie*, *Usuario que registró* y *Responsable de entrega* listan
+solo lo que la empresa ya usó en sus pedidos. El *total* es la suma de las líneas
+del pedido.
+
+**Pestaña Detalles** (lo que hay dentro del pedido). Es un único cuadro,
+**Buscar libremente dentro de los pedidos**: escriba un producto, un código, una
+cantidad o el número de una consignación o factura, y aparece la lista de **cada
+línea que coincide** con el pedido al que pertenece (número, fecha, cliente y
+estado). Para las consignaciones y facturas se muestra además su fecha y su
+estado. Un clic en la fila deja el listado mostrando solo ese pedido; el ícono
+de la derecha lo abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Campos del formulario
 
@@ -165,6 +208,14 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
 
 ## Historial de cambios
 
+- **1.4** — Nuevo **buscador del listado**: la búsqueda libre recorre todas las
+  columnas, la identificación del cliente, el usuario, los productos y las
+  consignaciones o facturas que tomaron el pedido; el botón del embudo abre la
+  ventana de filtros con pestañas *Pedido* y *Detalles*, y los filtros activos se
+  ven como etiquetas dentro del cuadro. Se agregan los filtros de N° pedido, RUC,
+  usuario que registró, documentos generados, total y observaciones internas, y el
+  responsable de entrega pasa a ser un selector. Se quita el estado *Facturado*,
+  que un pedido nunca tiene.
 - **1.3** — El listado se puede **ordenar por hasta tres columnas a la vez**:
   Shift+clic en el título de la segunda columna la encadena a la primera (por
   ejemplo *Estado* y, dentro de cada estado, la *Fecha de entrega*). Cada

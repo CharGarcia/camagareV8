@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
-etiquetas: clientes, cliente, cartera, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
-version: 2.0
+etiquetas: clientes, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
+version: 2.1
 orden: 10
 estado: activo
 ---
@@ -37,32 +37,55 @@ quedó realmente grabado, para que siga completando pestañas sin volver a busca
 el cliente. Si lo creó desde una factura, pedido u orden de lavado, el documento
 de fondo ya lo tiene seleccionado; cierre la ficha cuando termine.
 
-## Buscar en el listado
+## Buscar y filtrar el listado
 
-El buscador acepta texto libre y también filtros con la forma `clave:valor`:
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF, Excel y Mapa.
 
-- `garcia` busca ese texto en las columnas principales.
-- `identificacion:1712345678` filtra por un campo concreto.
-- `clave:"valor con espacios"` para valores que llevan espacios.
-- `-clave:valor` excluye los que coincidan.
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del listado:
+identificación, razón social, correo, teléfono, dirección, plazo, provincia,
+ciudad y vendedor. Además busca en la observación de la ruta de visita y en el
+nombre del usuario que registró al cliente. Las columnas **Tipo Id.**,
+**Estado** y **Días de visita** no entran en la búsqueda libre: para filtrar por
+ellas use la ventana de filtros. Puede escribir varias palabras en cualquier
+orden y no importan mayúsculas ni tildes: *garcia quito* encuentra a los García
+de Quito. Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras
+busca, aparece un **círculo girando** al final del cuadro y la tabla se ve
+atenuada.
 
-Para la ruta de visita hay filtros propios:
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
+Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento.
+La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
 
-- `dia_visita:martes` — los clientes que se visitan ese día. Acepta el nombre
-  (`miércoles`, con o sin tilde), la abreviatura (`mie`, `X`) o el número
-  (`1` = lunes … `7` = domingo).
-- `dia_visita:lun,mie` — cualquiera de esos días.
-- `-dia_visita:sabado` — los que **no** se visitan ese día (incluye a los que no
-  tienen ruta definida).
-- `frecuencia:quincenal` — por frecuencia de visita.
-- `semana_visita:1` — los que se visitan en esa semana del mes.
+| Bloque | Filtros |
+|--------|---------|
+| Identificación | Tipo de identificación (RUC, cédula, pasaporte, consumidor final, exterior), RUC / cédula, razón social, estado (activo / inactivo) |
+| Contacto | Correo, con o sin correo registrado, teléfono, dirección |
+| Ubicación | Provincia, ciudad, con o sin ubicación en el mapa |
+| Comercial | Vendedor, plazo en días (mínimo y máximo), con o sin cobro automático |
+| Visitas | Día de visita, frecuencia de visita (semanal, quincenal, mensual), semana del mes |
+| Registro | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), usuario que registró |
 
-Combínelos: `vendedor:"Juan Pérez" dia_visita:martes` da la ruta de ese vendedor
-para los martes.
+Los selectores de *Provincia*, *Ciudad*, *Vendedor* y *Usuario* listan solo lo
+que la empresa ya usa en sus clientes. *Con cobro automático* son los clientes
+que tienen una forma de cobro predeterminada en la pestaña Cobros. El filtro
+*Día de visita* trae a los clientes que se visitan ese día; para ver la ruta de
+un vendedor un día concreto, combine *Vendedor* con *Día de visita*.
 
-El listado permite además ordenar por cualquier columna, mostrar u ocultar
-columnas, ajustar su ancho y exportar a PDF y Excel. Esas preferencias se
-guardan por usuario.
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
+**Filtros escritos a mano.** Quien ya conoce la sintaxis `clave:valor` puede
+seguir escribiéndola en el cuadro (por ejemplo `dia_visita:lun,mie` para varios
+días o `-dia_visita:sabado` para los que **no** se visitan ese día, incluidos
+los que no tienen ruta). Los enlaces guardados con esos filtros siguen
+funcionando.
+
+El listado permite además mostrar u ocultar columnas, ajustar su ancho y
+exportar a PDF y Excel **con la misma búsqueda y filtros** que tenga en
+pantalla. Esas preferencias se guardan por usuario.
 
 ## Ordenar por varias columnas
 
@@ -362,6 +385,16 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **2.1** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en todas las columnas del listado (identificación,
+  razón social, correo, teléfono, dirección, plazo, provincia, ciudad y
+  vendedor), salvo Tipo Id., Estado y Días de visita. Los filtros pasan a una
+  **ventana propia** (botón del embudo, se aplican con *Aplicar*) con criterios
+  nuevos: con/sin correo, provincia, ciudad y vendedor como lista, con/sin
+  ubicación en el mapa, con/sin cobro automático, día, frecuencia y semana de
+  visita, fecha de registro y usuario que registró. Los filtros activos se ven
+  como etiquetas dentro del cuadro y la tabla se atenúa mientras busca. Los
+  buscadores de cliente de facturas, pedidos y demás documentos no cambian.
 - **2.0** — El listado se puede **ordenar por hasta tres columnas a la vez**:
   Shift+clic en el título de la segunda columna la encadena a la primera (por
   ejemplo, agrupar por *Ciudad* y dentro ordenar por *Razón Social*). Cada

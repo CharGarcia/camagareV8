@@ -5,8 +5,8 @@ categoria: Asistencia
 ruta_modulo: modulos/marcaciones
 tipo: modulo
 visibilidad: todos
-etiquetas: marcaciones, marcar, entrada, salida, asistencia, reloj, gps, ubicacion, distancia, metros, punto de servicio, atrasos, faltas, credencial, qr, celular, rostro, reconocimiento facial, sospechosa, exportar, pdf, excel, reporte
-version: 1.2
+etiquetas: marcaciones, marcar, entrada, salida, asistencia, reloj, gps, ubicacion, distancia, metros, punto de servicio, atrasos, faltas, credencial, qr, celular, rostro, reconocimiento facial, sospechosa, exportar, pdf, excel, reporte, buscar marcaciones, buscador, filtros, filtrar marcaciones, marcaciones sospechosas, fuera del radio, sin gps, chips
+version: 1.3
 orden: 30
 estado: activo
 ---
@@ -97,6 +97,42 @@ Estas marcaciones no tienen distancia (nadie envió una ubicación) y se
 identifican como tales en la columna *Punto*: una asistencia llena de marcaciones
 manuales deja de ser un control.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la marcación: empleado
+(nombre o identificación), punto, fecha y hora (tal como se ven, por ejemplo
+*25-07-2026 17:22*) y distancia (por ejemplo *37 m*). Además busca en la
+observación (el motivo por el que quedó sospechosa), el dispositivo desde el que
+se marcó y el usuario que registró una marcación manual. Las columnas **Tipo** y
+**Estado**, y el método, no entran en la búsqueda libre: para filtrar por ellas
+use la ventana de filtros. Puede escribir varias palabras en cualquier orden y
+no importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en
+el cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y
+la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
+Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento. La
+ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
+
+| Bloque | Filtros |
+|--------|---------|
+| Marcación | Fecha (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), tipo (entrada, salida, inicio o fin de break), estado (válida, sospechosa, anulada), método (QR del punto, ubicación, reconocimiento facial, registro manual), punto de servicio y nombre del punto |
+| Ubicación | Distancia en metros (mínimo y máximo), fuera del radio del punto, con o sin GPS del celular y dispositivo |
+| Empleado | Empleado, identificación, observación y usuario que registró la marcación manual |
+
+El selector *Punto de servicio* y el de *Registrada por* listan solo lo que la
+empresa ya usó en sus marcaciones. *Fuera del radio* aplica la misma regla que el
+aviso rojo de la columna Distancia. El antiguo acceso rápido *Sospechosas* es
+ahora la opción *Sospechosa* del estado.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
 ## Exportar a PDF y Excel
 
 Los botones **PDF** y **Excel** de la barra del listado descargan **lo que los
@@ -137,6 +173,12 @@ queda impreso en la cabecera del documento.
 
 ## Historial de cambios
 
+- **1.3** — Nuevo buscador del listado: búsqueda libre en todas las columnas
+  (sin Tipo ni Estado), observación, dispositivo y usuario; botón embudo con la
+  ventana de filtros (se suman método, punto de servicio, distancia, fuera del
+  radio, con o sin GPS, dispositivo, identificación, observación y usuario). El
+  acceso rápido *Sospechosas* pasa a ser una opción del estado. Los filtros
+  activos se ven como chips dentro del cuadro.
 - **1.2** — La distancia al punto ahora se calcula siempre que haya coordenadas
   del teléfono y del punto (antes solo con *Exige GPS* activado), y el listado
   explica por qué falta cuando no hay dato. El registro manual permite indicar el

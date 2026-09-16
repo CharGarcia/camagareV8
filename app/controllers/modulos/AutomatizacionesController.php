@@ -76,6 +76,9 @@ class AutomatizacionesController extends BaseModuloController
             'ordenCol'    => $ordenCol,
             'ordenDir'    => $ordenDir,
             'modulos'     => $modulos,
+            // Selects del modal de filtros (solo lo que la empresa ya usa; con el mismo
+            // alcance de registros propios que el listado)
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa, $idUsuarioFiltro),
             'vistaConfig' => $prefsVista,
             'envioAutomaticoCorreo' => $envioAutomaticoCorreo,
             'fullWidth'   => true,

@@ -49,42 +49,64 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
 
         <!-- Buscador y botones -->
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorAUTO" style="width:480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) +
+            // botón embudo que abre el modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de AutomatizacionesRepository::getListado().
+            // Una sola pestaña, sin "Detalles": el historial de ejecuciones se consulta
+            // en el modal de cada automatización.
+            $opcionesFiltro = $opcionesFiltro ?? [];
+            // Filas de 12 columnas:
+            //   Automatización: [Nombre 6][Estado 3][Último resultado 3]
+            //                   [Módulo 4][Acción 4][Frecuencia 4]
+            //                   [Próxima ejecución 6][Última ejecución 6]
+            //                   [Establecimiento 4][Usuario que la creó 4][Descripción 4]
+            $filtrosAutomatizaciones = [
+                ['key' => 'nombre',             'label' => 'Nombre',               'icon' => 'bi-tag',            'type' => 'text',       'grupo' => 'Automatización', 'col' => 6],
+                ['key' => 'estado',             'label' => 'Estado',               'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Automatización', 'col' => 3, 'options' => [
+                    ['v' => 'activo',     'l' => 'Activo'],
+                    ['v' => 'inactivo',   'l' => 'Inactivo'],
+                    ['v' => 'en_proceso', 'l' => 'En proceso'],
+                ]],
+                ['key' => 'resultado',          'label' => 'Último resultado',     'icon' => 'bi-check-circle',   'type' => 'select',     'grupo' => 'Automatización', 'col' => 3, 'options' => [
+                    ['v' => 'exitoso',      'l' => 'Exitoso'],
+                    ['v' => 'error',        'l' => 'Error'],
+                    ['v' => 'sin_ejecutar', 'l' => 'Sin ejecuciones'],
+                ]],
+                ['key' => 'modulo_clave',       'label' => 'Módulo',               'icon' => 'bi-grid',           'type' => 'select',     'grupo' => 'Automatización', 'col' => 4, 'options' => $opcionesFiltro['modulos'] ?? []],
+                ['key' => 'accion_clave',       'label' => 'Acción',               'icon' => 'bi-lightning',      'type' => 'select',     'grupo' => 'Automatización', 'col' => 4, 'options' => $opcionesFiltro['acciones'] ?? []],
+                ['key' => 'frecuencia',         'label' => 'Frecuencia',           'icon' => 'bi-arrow-repeat',   'type' => 'select',     'grupo' => 'Automatización', 'col' => 4, 'options' => $opcionesFiltro['frecuencias'] ?? []],
+                ['key' => 'proxima',            'label' => 'Próxima ejecución',    'icon' => 'bi-clock',          'type' => 'date_range', 'grupo' => 'Automatización', 'col' => 6, 'atajos' => true],
+                ['key' => 'ultima',             'label' => 'Última ejecución',     'icon' => 'bi-clock-history',  'type' => 'date_range', 'grupo' => 'Automatización', 'col' => 6, 'atajos' => true],
+                ['key' => 'id_establecimiento', 'label' => 'Establecimiento',      'icon' => 'bi-shop',           'type' => 'select',     'grupo' => 'Automatización', 'col' => 4, 'options' => $opcionesFiltro['establecimientos'] ?? []],
+                ['key' => 'usuario',            'label' => 'Usuario que la creó',  'icon' => 'bi-person-badge',   'type' => 'select',     'grupo' => 'Automatización', 'col' => 4, 'options' => $opcionesFiltro['usuarios'] ?? []],
+                ['key' => 'descripcion',        'label' => 'Descripción',          'icon' => 'bi-card-text',      'type' => 'text',       'grupo' => 'Automatización', 'col' => 4],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorAUTO"></div>
             <input type="hidden" id="buscarAuto" value="<?= htmlspecialchars($buscar) ?>">
             <script>
             document.addEventListener('DOMContentLoaded', () => {
-                if (!window.FiltrosBusqueda) return;
-                new FiltrosBusqueda({
-                    containerId:   'fbBuscadorAUTO',
+                if (!window.FiltrosModal) return;
+                new FiltrosModal({
+                    containerId:   'fmBuscadorAUTO',
                     hiddenInputId: 'buscarAuto',
-                    fields: [
-                        { key: 'nombre',    label: 'Nombre',    icon: 'bi-tag',           type: 'text' },
-                        { key: 'modulo',    label: 'Módulo',    icon: 'bi-grid',          type: 'text' },
-                        { key: 'accion',    label: 'Acción',    icon: 'bi-lightning',     type: 'text' },
-                        { key: 'estado',    label: 'Estado',    icon: 'bi-flag',          type: 'select', options: [
-                            { v: 'activo',     l: 'Activo' },
-                            { v: 'inactivo',   l: 'Inactivo' },
-                            { v: 'en_proceso', l: 'En proceso' },
-                        ]},
-                        { key: 'resultado', label: 'Último resultado', icon: 'bi-check-circle', type: 'select', options: [
-                            { v: 'exitoso',  l: 'Exitoso' },
-                            { v: 'error',    l: 'Error' },
-                        ]},
-                    ],
-                    quickFilters: [
-                        { id: 'qf_activo',   label: 'Activas',    mk: () => ({ key: 'estado', op: '=', value: 'activo',   display: 'Activo' }) },
-                        { id: 'qf_inactivo', label: 'Inactivas',  mk: () => ({ key: 'estado', op: '=', value: 'inactivo', display: 'Inactivo' }) },
-                        { id: 'qf_error',    label: 'Con errores',mk: () => ({ key: 'resultado', op: '=', value: 'error', display: 'Error' }) },
-                    ],
+                    placeholder:   'Buscar en todas las columnas...',
+                    titulo:        'Filtros de automatizaciones',
+                    inputWidth:    420,
+                    extraId:       'fmExtraAUTO',   // columnas + PDF + Excel, pegados al final del grupo
+                    fields: <?= json_encode($filtrosAutomatizaciones, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                    loadingTarget: '#tbodyAutomatizaciones',   // se atenúa mientras se busca
                     onApply: () => window.fetchSearch && window.fetchSearch(1),
                 }).init();
             });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraAUTO" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'nombre'            => 'Nombre',
@@ -102,12 +124,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <a id="btnExportPdf"
                    href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-danger" title="Exportar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel"
                    href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-success" title="Exportar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -218,6 +240,10 @@ window.AUTO_ENVIO_AUTOMATICO_CORREO = <?= !empty($envioAutomaticoCorreo) ? 'true
     window.fetchSearch = async (page = 1) => {
         const term = inputBusc ? inputBusc.value.trim() : '';
         const uri  = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+        // vaciarse. Aquí también para paginar y ordenar, que llaman a esta función directo.
+        const tbody = document.getElementById('tbodyAutomatizaciones');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const res  = await fetch(uri, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const data = await res.json();
@@ -240,7 +266,11 @@ window.AUTO_ENVIO_AUTOMATICO_CORREO = <?= !empty($envioAutomaticoCorreo) ? 'true
                     icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
                 }
             });
-        } catch (e) { console.error('Error búsqueda automatizaciones:', e); }
+        } catch (e) {
+            console.error('Error búsqueda automatizaciones:', e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
+        }
     };
 
     document.querySelectorAll('.sortable-header').forEach(h => {

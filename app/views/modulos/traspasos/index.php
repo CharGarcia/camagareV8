@@ -64,49 +64,66 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorTRP" style="width: 420px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            $vf = $valoresFiltro ?? [];
+            $opcionesSerie   = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesOrigen  = array_map(fn($f) => ['v' => (string) $f['id'], 'l' => $f['nombre']], $vf['origenes'] ?? []);
+            $opcionesDestino = array_map(fn($f) => ['v' => (string) $f['id'], 'l' => $f['nombre']], $vf['destinos'] ?? []);
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $vf['usuarios'] ?? []);
+            $tT = 'Traspaso';
+            // Filas de 12 columnas:
+            //   Documento: [Fecha 6][Estado 3][Asiento 3]
+            //              [Serie 4][Secuencial 4][Nº traspaso 4]
+            //              [Usuario 6][Monto 6]
+            //   Cuentas:   [Origen 6][Destino 6]
+            //              [Observación 12]
+            // Sin pestaña Detalles: el traspaso no tiene tablas hijas.
+            $filtrosTraspasos = [
+                ['tab' => $tT, 'key' => 'fecha',      'label' => 'Fecha',           'icon' => 'bi-calendar-event',  'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tT, 'key' => 'estado',     'label' => 'Estado',          'icon' => 'bi-flag',            'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'registrado', 'l' => 'Registrado'],
+                    ['v' => 'anulado',    'l' => 'Anulado'],
+                ]],
+                ['tab' => $tT, 'key' => 'asiento',    'label' => 'Asiento contable', 'icon' => 'bi-journal-check',  'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'si', 'l' => 'Con asiento'],
+                    ['v' => 'no', 'l' => 'Sin asiento'],
+                ]],
+                ['tab' => $tT, 'key' => 'serie',      'label' => 'Serie',           'icon' => 'bi-upc-scan',        'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesSerie],
+                ['tab' => $tT, 'key' => 'secuencial', 'label' => 'Secuencial',      'icon' => 'bi-123',             'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tT, 'key' => 'numero',     'label' => 'Nº traspaso',     'icon' => 'bi-hash',            'type' => 'text',       'grupo' => 'Documento', 'col' => 4, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tT, 'key' => 'id_usuario', 'label' => 'Usuario que registró', 'icon' => 'bi-person-gear', 'type' => 'select',    'grupo' => 'Documento', 'col' => 6, 'options' => $opcionesUsuario],
+                ['tab' => $tT, 'key' => 'monto',      'label' => 'Monto',           'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Documento', 'col' => 6],
+                // Cuentas
+                ['tab' => $tT, 'key' => 'id_origen',  'label' => 'Origen',          'icon' => 'bi-box-arrow-up-right',     'type' => 'select', 'grupo' => 'Cuentas', 'col' => 6, 'options' => $opcionesOrigen],
+                ['tab' => $tT, 'key' => 'id_destino', 'label' => 'Destino',         'icon' => 'bi-box-arrow-in-down-left', 'type' => 'select', 'grupo' => 'Cuentas', 'col' => 6, 'options' => $opcionesDestino],
+                ['tab' => $tT, 'key' => 'obs',        'label' => 'Observación',     'icon' => 'bi-chat-left-text',  'type' => 'text',       'grupo' => 'Cuentas', 'col' => 12],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorTRP"></div>
             <input type="hidden" id="buscarTraspaso" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorTRP',
+                    if (!window.FiltrosModal) return;
+                    window.TRP_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorTRP',
                         hiddenInputId: 'buscarTraspaso',
-                        fields: [
-                            { key: 'origen',     label: 'Origen',      icon: 'bi-box-arrow-up-right',  type: 'text' },
-                            { key: 'destino',    label: 'Destino',     icon: 'bi-box-arrow-in-down-left', type: 'text' },
-                            { key: 'numero',     label: 'Nº traspaso', icon: 'bi-hash',            type: 'text' },
-                            { key: 'obs',        label: 'Observación', icon: 'bi-chat-left-text',  type: 'text' },
-                            { key: 'fecha',      label: 'Fecha',       icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'monto',      label: 'Monto',       icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'estado',     label: 'Estado',      icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'registrado', l: 'Registrado' },
-                                { v: 'anulado',     l: 'Anulado' },
-                            ]},
-                            { key: 'serie',      label: 'Serie',       icon: 'bi-upc-scan', type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial', label: 'Secuencial',  icon: 'bi-123',      type: 'text' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_registrado', label: 'Registrados', mk: () => ({ key: 'estado', op: '=', value: 'registrado', display: 'Registrado' }) },
-                            { id: 'qf_anulado',    label: 'Anulados',    mk: () => ({ key: 'estado', op: '=', value: 'anulado',  display: 'Anulado' }) },
-                            { id: 'qf_hoy',        label: 'Hoy',         mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                            { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_mes_pasado', label: 'Mes pasado',  mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
-                            { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de traspasos',
+                        inputWidth: 420,
+                        extraId: 'fmExtraTRP',   // columnas, pegadas al final del grupo
+                        fields: <?= json_encode($filtrosTraspasos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyTraspasos',   // se atenúa mientras se busca
                         onApply: () => window.TRP_fetchSearch && window.TRP_fetchSearch(1),
-                    }).init();
+                    });
+                    window.TRP_filtros.init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraTRP" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero_traspaso' => 'Nº Traspaso',

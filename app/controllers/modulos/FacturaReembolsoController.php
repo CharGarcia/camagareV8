@@ -82,6 +82,7 @@ class FacturaReembolsoController extends BaseModuloController
         // arriba es solo "qué serie puedo usar en un documento NUEVO" (ver comentario
         // en el bucle anterior).
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+        $usuariosFiltro = $this->repository->getUsuariosConFacturas($idEmpresa);
 
         $total = $result['total'];
         $this->viewWithLayout('layouts.main', 'modulos/factura_reembolso/index', [
@@ -104,11 +105,53 @@ class FacturaReembolsoController extends BaseModuloController
             'establecimientos'  => $establecimientos,
             'puntos'            => $puntos,
             'seriesFiltro'      => $seriesFiltro,
+            'usuariosFiltro'    => $usuariosFiltro,
             'tarifasIva'        => $this->repository->getTarifasIva(),
             'formasPago'        => $this->repository->getFormasPago(),
             'tiposIdentificacion' => $this->repository->getTiposIdentificacionProveedor(),
             'fullWidth'         => true,
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las facturas de
+     * reembolso (líneas, comprobantes de terceros, formas de pago e información
+     * adicional). Mismo alcance que el listado.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $origenes = ['LINEA' => 'Línea', 'TERCERO' => 'Comprobante de reembolso', 'PAGO' => 'Forma de pago', 'ADICIONAL' => 'Info. adicional'];
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'origen'      => $origenes[$r['origen']] ?? $r['origen'],
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                'cantidad'    => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 4, '.', ''), '0'), '.') : '',
+                'monto'       => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'id_factura'  => (int) $r['id_factura'],
+                'numero'      => $r['numero'] ?? '',
+                'fecha'       => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'cliente'     => $r['cliente'] ?? '',
+                'estado'      => ucfirst((string) ($r['estado'] ?? '')),
+                // Valor crudo: el modal lo usa para abrir en solo lectura lo que no es borrador.
+                'estado_valor' => (string) ($r['estado'] ?? ''),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function searchAjax(): void

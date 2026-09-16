@@ -54,6 +54,10 @@
         const sort = window.currentSort || 'fecha_emision';
         const dir = window.currentDir || 'DESC';
         const url = `${BASE_URL}/modulos/factura-reembolso/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+        // carga (también al paginar y ordenar, que llaman a esta función directo).
+        const tbody = document.getElementById('fr-table-body');
+        if (tbody) tbody.classList.add('fm-cargando-target');
 
         try {
             const resp = await fetch(url);
@@ -61,7 +65,6 @@
             const data = await resp.json();
             if (!data.ok) return;
 
-            const tbody = document.getElementById('fr-table-body');
             if (tbody) tbody.innerHTML = data.rows ?? '';
             const pg = document.getElementById('fr-pagination');
             if (pg) pg.innerHTML = data.pagination ?? '';
@@ -74,6 +77,8 @@
             if (btnExcel && data.excel_url) btnExcel.href = data.excel_url;
         } catch (e) {
             console.error('Error al buscar facturas de reembolso:', e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     };
 

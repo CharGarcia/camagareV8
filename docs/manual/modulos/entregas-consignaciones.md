@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
-etiquetas: entregas, entrega, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas
-version: 1.5
+etiquetas: entregas, entrega, buscar entrega, buscar consignacion, buscador, filtros, filtrar entregas, buscar por producto, buscar por lote, con firma, sin firma, con gps, sin gps, chips, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas
+version: 1.6
 orden: 0
 estado: activo
 ---
@@ -48,10 +48,10 @@ hasta que se entrega.
 2. Use el selector **Pendientes / Entregadas / Todas** (o el campo *Estado de
    entrega* del buscador) para cambiar qué se lista. Al volver a "Pendientes" el
    filtro desaparece porque es el valor por defecto.
-3. Use el buscador para filtrar por cliente, dirección, N° de consignación,
-   responsable, producto, canal o rango de fechas (emisión, entrega programada
-   o entrega real); o use los selectores de **Año** / **Mes** como atajo rápido
-   sobre la fecha de emisión.
+3. Escriba en el buscador para filtrar el listado, o pulse el **embudo** para
+   abrir la ventana de filtros (ver *Buscar y filtrar el listado*); también
+   puede usar los selectores de **Año** / **Mes** como atajo rápido sobre la
+   fecha de emisión.
 4. Haga clic en una fila para ver el detalle: datos de la consignación (cliente,
    dirección, entrega programada, responsable, días en espera) y, si ya fue
    entregada, la evidencia: mapa con el punto de entrega, firma de recepción y
@@ -106,6 +106,57 @@ parte.
 - **Evidencia incompleta**: entregadas sin evidencia registrada, sin GPS, o de
   canal móvil sin firma (una entrega web nunca captura firma, así que eso solo
   no cuenta como incompleta).
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel; a su lado quedan los selectores
+de estado, año y mes.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del listado: emisión,
+consignación (serie y secuencial), cliente, RUC o cédula, dirección,
+responsable, entrega programada, días, fecha/hora de entrega, registrado por y
+observaciones de la entrega. Además busca en las observaciones y el punto de
+llegada de la consignación, el dispositivo de la app móvil y los **productos
+consignados** (código, nombre, lote y NUP). Las columnas **Estado** y **Canal**
+no entran en la búsqueda libre, y *Firma* y *GPS* tampoco: para filtrar por
+ellas use la ventana de filtros. Puede escribir varias palabras en cualquier
+orden y no importan mayúsculas ni tildes. La búsqueda respeta el estado de
+entrega elegido (por defecto, pendientes). Mientras busca, aparece un **círculo
+girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Entrega**:
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), entrega programada, fecha de entrega real, estado de entrega (pendientes por defecto, entregadas o todas), canal (app móvil o web), Nº consignación, con o sin firma, con o sin GPS, días (mínimo y máximo), registrado por, producto |
+| Cliente | Cliente, RUC / cédula, dirección, responsable de traslado, observaciones de la entrega |
+
+Los selectores *Responsable de traslado* y *Registrado por* listan solo los que
+ya aparecen en las consignaciones y entregas de la empresa. Los selectores de
+**estado**, **Año** y **Mes** del encabezado ponen el mismo filtro que la
+ventana (Año y Mes arman el rango completo de fechas de emisión), y se
+actualizan si el filtro se cambia desde la ventana o se quita su etiqueta.
+
+**Pestaña Detalles**. Es un único cuadro, **Buscar libremente dentro de las
+consignaciones**: escriba un producto, un código, un lote, un NUP, una bodega,
+un dispositivo o un texto de la observación de una entrega, y aparece la lista
+de **cada coincidencia** con la consignación a la que pertenece (número,
+emisión, cliente y estado). Busca en pendientes y entregadas a la vez, dentro
+del mismo alcance por responsables del listado. Un clic en la fila deja el
+listado mostrando solo esa consignación (con el estado de entrega que le
+corresponde); el ícono de la derecha abre su detalle directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último. Los KPIs, el PDF y el Excel usan los mismos
+filtros.
 
 ## Permisos
 
@@ -196,6 +247,18 @@ igual que una que no existe.
   entregas registradas manualmente desde la web nunca tienen firma).
 
 ## Historial de cambios
+
+- **1.6** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas del listado y en los productos
+  consignados (código, nombre, lote, NUP), salvo Estado, Canal, Firma y GPS.
+  Los filtros pasan a una **ventana propia** (botón del embudo, se aplican con
+  *Aplicar*) con dos pestañas: **Entrega** (filtros por campo, con criterios
+  nuevos: con/sin firma, con/sin GPS, días, RUC, observaciones, y responsable
+  y *registrado por* como listas) y **Detalles**, un cuadro de **búsqueda libre
+  dentro de las consignaciones** (productos y evidencias de entrega) que dice a
+  qué consignación pertenece cada coincidencia. Los atajos *Hoy* / *Este mes*
+  pasan a la fecha de emisión de la ventana; los selectores de estado, año y
+  mes se mantienen. Nueva sección *Buscar y filtrar el listado*.
 
 - **1.5** — El usuario puede **marcar cada consignación pendiente como
   entregada** desde el módulo: botón *Entregar* en la fila (columna *Acciones*)

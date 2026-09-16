@@ -50,6 +50,110 @@ class ProformaRepository extends BaseRepository
     }
 
     /**
+     * Estados (en minúsculas) que la empresa REALMENTE tiene en sus proformas, para
+     * completar el select "Estado" del modal de filtros con los que no son del flujo
+     * actual (p. ej. los migrados, como "emitida").
+     */
+    public function getEstadosUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT LOWER(estado) AS estado
+                FROM proformas_cabecera
+                WHERE id_empresa = :id_empresa AND eliminado = false AND estado IS NOT NULL AND estado != ''
+                ORDER BY 1";
+        return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(\PDO::FETCH_COLUMN);
+    }
+
+    /** Vendedores con alguna proforma en la empresa (select "Vendedor" del modal de filtros). */
+    public function getVendedoresConProformas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT ven.id, ven.nombre
+                FROM proformas_cabecera p
+                JOIN vendedores ven ON ven.id = p.id_vendedor
+                WHERE p.id_empresa = :id_empresa AND p.eliminado = false
+                ORDER BY ven.nombre";
+        return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que han registrado alguna proforma en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConProformas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM proformas_cabecera p
+                JOIN usuarios u ON u.id = p.id_usuario
+                WHERE p.id_empresa = :id_empresa AND p.eliminado = false
+                ORDER BY u.nombre";
+        return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las proformas (pestaña "Detalles" del modal de filtros):
+     * devuelve cada producto cotizado o campo de información adicional que coincide con
+     * el texto, junto con la proforma a la que pertenece. Mismo alcance que el listado
+     * (empresa, no eliminadas, registros propios por id_usuario; el listado no filtra
+     * por ambiente).
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "p.id_empresa = :id_empresa AND p.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND p.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.codigo_principal', 'd.codigo_auxiliar', 'd.descripcion', 'd.cantidad::text',
+             'd.precio_unitario::text', 'd.precio_total_sin_impuesto::text'],
+            $q, $params, 'dt'
+        );
+        $condAdic = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['a.nombre', 'a.valor'],
+            $q, $params, 'ad'
+        );
+        if ($condDet === '' || $condAdic === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT p.id, CONCAT(p.establecimiento,'-',p.punto_emision,'-',p.secuencial) AS numero,
+                           p.fecha_emision, p.estado, c.nombre AS cliente
+                    FROM proformas_cabecera p
+                    INNER JOIN clientes c ON c.id = p.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen,
+                           COALESCE(NULLIF(d.codigo_principal,''), d.codigo_auxiliar) AS tipo,
+                           d.descripcion,
+                           d.cantidad,
+                           d.precio_total_sin_impuesto AS monto,
+                           b.id AS id_proforma, b.numero, b.fecha_emision, b.estado, b.cliente
+                    FROM proformas_detalle d
+                    JOIN base b ON b.id = d.id_proforma
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'ADICIONAL' AS origen,
+                           a.nombre AS tipo,
+                           a.valor AS descripcion,
+                           NULL AS cantidad,
+                           NULL AS monto,
+                           b.id AS id_proforma, b.numero, b.fecha_emision, b.estado, b.cliente
+                    FROM proformas_adicional a
+                    JOIN base b ON b.id = a.id_proforma
+                    WHERE $condAdic
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id_proforma DESC, x.origen
+                LIMIT $limit";
+
+        return $this->query($sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
      * expresión SQL con la que se ordena. Es la whitelist del ORDER BY y el mapa que
      * necesita `OrdenListado::clausula()` para encadenar varias columnas.
@@ -90,14 +194,32 @@ class ProformaRepository extends BaseRepository
         }
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        // Texto libre: las columnas del listado y lo que identifica la proforma aunque no
+        // sea columna (cada palabra en cualquier columna, sin importar tildes). Decisión
+        // del usuario: las columnas Estado y Correo NO entran en el texto libre (se
+        // filtran solo desde el modal de filtros).
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (
-                CONCAT(p.establecimiento,'-',p.punto_emision,'-',p.secuencial) ILIKE :b
-                OR c.nombre ILIKE :b
-                OR c.identificacion ILIKE :b
-                OR p.observaciones ILIKE :b
-            )";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    "CONCAT(p.establecimiento,'-',p.punto_emision,'-',p.secuencial)", // Número
+                    'p.secuencial',
+                    'p.fecha_emision::text',                                          // Fecha
+                    'c.nombre',                                                       // Cliente
+                    'c.identificacion',                                               // RUC/CI
+                    'ven.nombre',                                                     // Vendedor
+                    'p.importe_total::text',                                          // Total
+                    'p.observaciones',                                                // Observaciones
+                    // Fuera del listado, pero identifican la proforma:
+                    'u.nombre',                                                       // usuario que la registró
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', pd.codigo_principal, pd.codigo_auxiliar, pd.descripcion), ' ') FROM proformas_detalle pd WHERE pd.id_proforma = p.id)",
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $where .= " AND {$condicion}";
+            }
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'  => [
@@ -106,18 +228,37 @@ class ProformaRepository extends BaseRepository
                 'numero'        => "CONCAT(p.establecimiento,'-',p.punto_emision,'-',p.secuencial)",
                 'obs'           => 'p.observaciones',
                 'observaciones' => 'p.observaciones',
+                'vendedor'      => 'ven.nombre',
+                'usuario'       => 'u.nombre',
             ],
             'exacto' => [
-                'estado'  => 'p.estado',
+                // En minúsculas: los datos migrados traen el estado en mayúsculas (ANULADA).
+                'estado'  => 'LOWER(p.estado)',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del modal de proforma.
                 'serie'   => "CONCAT(p.establecimiento,'-',p.punto_emision)",
+                'correo'        => "COALESCE(NULLIF(p.estado_correo,''),'pendiente')",
+                'estado_correo' => "COALESCE(NULLIF(p.estado_correo,''),'pendiente')",
+                'id_vendedor'   => 'p.id_vendedor',
+                'id_usuario'    => 'p.id_usuario',
+                // facturada:si / facturada:no → ya se convirtió en factura
+                'facturada'     => "CASE WHEN p.id_factura_convertida IS NULL THEN 'no' ELSE 'si' END",
+                // aprobacion_cliente:si / no → el cliente la aprobó desde el enlace del correo
+                'aprobacion_cliente' => "CASE WHEN p.aprobacion_cliente_fecha IS NULL THEN 'no' ELSE 'si' END",
+                // vigencia:vigente / vencida → fecha de emisión + días de vigencia contra hoy
+                'vigencia'      => "CASE WHEN p.fecha_emision + COALESCE(p.dias_vigencia, 0) >= CURRENT_DATE THEN 'vigente' ELSE 'vencida' END",
             ],
             'fecha'   => [
                 'fecha'   => 'p.fecha_emision',
+                'fecha_emision'   => 'p.fecha_emision',
+                'fecha_convertida' => 'p.fecha_convertida',
             ],
             'numerico' => [
                 'total'   => 'p.importe_total',
+                'monto'   => 'p.importe_total',
+                'subtotal'  => 'p.total_sin_impuestos',
+                'descuento' => 'p.total_descuento',
+                'dias_vigencia' => 'COALESCE(p.dias_vigencia, 0)',
                 // Comparación numérica: "298" encuentra "000000298" sin que el
                 // usuario tenga que escribir los ceros a la izquierda, y sigue
                 // siendo coincidencia EXACTA (el bucket numérico convierte ILIKE

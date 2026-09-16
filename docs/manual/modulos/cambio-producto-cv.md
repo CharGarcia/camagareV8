@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: cambio de producto, cambios de productos, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo
-version: 1.3
+etiquetas: cambio de producto, cambios de productos, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo
+version: 1.4
 orden: 47
 estado: activo
 ---
@@ -81,6 +81,50 @@ producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
 Al abrir un cambio ya guardado, cada línea muestra de dónde salió: *Fact. consig.
 001-001-000000123*, *Cambio 001-001-000000004*, *Consignación 001-001-000000012*
 o *Bodega*.
+
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del cambio: fecha, número
+(serie y secuencial), cliente, RUC o cédula, motivo y diferencia. Además busca
+en las observaciones, el responsable de traslado, el usuario que lo registró,
+los **productos devueltos y entregados** (código, nombre, lote y NUP) y el
+número de los **documentos de origen** de las líneas (factura de consignación,
+cambio anterior o consignación). La columna **Estado** no entra en la búsqueda
+libre: para filtrar por ella use la ventana de filtros. Puede escribir varias
+palabras en cualquier orden y no importan mayúsculas ni tildes. Mientras busca,
+aparece un **círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Cambio** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha del cambio (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (borrador, emitida, anulada), serie, Nº cambio, secuencial, documento de origen, con o sin asiento contable, responsable de traslado, usuario que registró |
+| Valores | Diferencia, subtotal devuelto y subtotal entregado (cada uno con mínimo y máximo) |
+| Cliente | Cliente, RUC / cédula, motivo, observaciones |
+
+Los selectores *Serie*, *Responsable de traslado* y *Usuario que registró*
+listan solo lo que la empresa ya usó en sus cambios.
+
+**Pestaña Detalles** (lo que hay dentro del cambio). Es un único cuadro,
+**Buscar libremente dentro de los cambios**: escriba un producto, un código, un
+lote, un NUP, una fecha de caducidad, una bodega o el número del documento de
+origen, y aparece la lista de **cada línea (devolución o entrega) que coincide**
+con el cambio al que pertenece (número, fecha, cliente y estado). Un clic en la
+fila deja el listado mostrando solo ese cambio; el ícono de la derecha lo abre
+directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
 
 ## Campos del formulario
 
@@ -171,6 +215,17 @@ o *Bodega*.
 
 ## Historial de cambios
 
+- **1.4** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas del cambio y además en los
+  productos devueltos y entregados (código, nombre, lote, NUP), los documentos
+  de origen, el responsable y el usuario; la columna Estado ya no entra en la
+  búsqueda libre. Los filtros pasan a una **ventana propia** (botón del embudo,
+  se aplican con *Aplicar*) con dos pestañas: **Cambio** (filtros por campo, con
+  criterios nuevos: fecha, Nº cambio, documento de origen, con/sin asiento,
+  responsable y usuario como listas, diferencia, subtotales devuelto y
+  entregado, RUC y observaciones) y **Detalles**, un cuadro de **búsqueda libre
+  dentro de los cambios** que dice a qué cambio pertenece cada línea. Nueva
+  sección *Buscar y filtrar el listado*.
 - **1.3** — Lo que se devuelve se busca en las **facturas de consignación**
   (módulo Facturación de consignaciones, estado *facturada*), ya no en las
   facturas de venta directas. Lote, NUP, bodega, precio e IVA se copian de

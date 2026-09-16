@@ -61,42 +61,82 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorNOV" style="width: 460px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // embudo que abre el modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de NovedadRepository::getListado().
+            // Novedades no tiene tablas hijas: una sola pestaña, sin "Detalles".
+            $opcionesTipoNov = array_map(fn($t) => ['v' => (string) $t['codigo'], 'l' => $t['nombre']], CatalogoNovedades::tipos());
+            $opcionesMesNov  = [];
+            foreach ($meses as $n => $nom) {
+                $opcionesMesNov[] = ['v' => (string) $n, 'l' => $nom];
+            }
+            $opcionesAnioNov = array_map(fn($a) => ['v' => (string) $a, 'l' => (string) $a], $aniosFiltro ?? []);
+            $opcionesAplicaEnNov = [];
+            foreach (CatalogoNovedades::aplicaEn() as $v => $l) {
+                $opcionesAplicaEnNov[] = ['v' => (string) $v, 'l' => $l];
+            }
+            $opcionesMotivoNov  = array_map(fn($m) => ['v' => (string) $m['codigo'], 'l' => $m['nombre']], CatalogoNovedades::motivosSalida());
+            $opcionesUsuarioNov = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $tN = 'Novedad';
+            // Orden pensado en filas de 12 columnas:
+            //   Novedad:  [Fecha 6][Mes 3][Año 3]
+            //             [Tipo 4][Afecta a 4][Motivo de salida 4]
+            //             [Estado 4][Pago 4][Origen 4]
+            //   Valor y registro: [Valor 6][Usuario que registró 6]
+            //   Empleado: [Empleado 4][Identificación 4][Observación 4]
+            $filtrosNovedades = [
+                // ── Novedad ──
+                ['tab' => $tN, 'key' => 'fecha',     'label' => 'Fecha',            'icon' => 'bi-calendar-date',   'type' => 'date_range', 'grupo' => 'Novedad', 'col' => 6, 'atajos' => true],
+                ['tab' => $tN, 'key' => 'mes',       'label' => 'Mes del período',  'icon' => 'bi-calendar-month',  'type' => 'select',     'grupo' => 'Novedad', 'col' => 3, 'options' => $opcionesMesNov],
+                ['tab' => $tN, 'key' => 'anio',      'label' => 'Año del período',  'icon' => 'bi-calendar',        'type' => 'select',     'grupo' => 'Novedad', 'col' => 3, 'options' => $opcionesAnioNov],
+                ['tab' => $tN, 'key' => 'codigo',    'label' => 'Tipo de novedad',  'icon' => 'bi-clipboard',       'type' => 'select',     'grupo' => 'Novedad', 'col' => 4, 'options' => $opcionesTipoNov],
+                ['tab' => $tN, 'key' => 'aplica_en', 'label' => 'Afecta a',         'icon' => 'bi-diagram-2',       'type' => 'select',     'grupo' => 'Novedad', 'col' => 4, 'options' => $opcionesAplicaEnNov],
+                ['tab' => $tN, 'key' => 'motivo',    'label' => 'Motivo de salida', 'icon' => 'bi-box-arrow-right', 'type' => 'select',     'grupo' => 'Novedad', 'col' => 4, 'options' => $opcionesMotivoNov],
+                ['tab' => $tN, 'key' => 'estado',    'label' => 'Estado',           'icon' => 'bi-flag',            'type' => 'select',     'grupo' => 'Novedad', 'col' => 4, 'options' => [
+                    ['v' => 'activo',  'l' => 'Activo'],
+                    ['v' => 'anulado', 'l' => 'Anulado'],
+                ]],
+                ['tab' => $tN, 'key' => 'pago',      'label' => 'Pago',             'icon' => 'bi-cash-coin',       'type' => 'select',     'grupo' => 'Novedad', 'col' => 4, 'options' => [
+                    ['v' => 'pagada',    'l' => 'Pagada'],
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                ]],
+                ['tab' => $tN, 'key' => 'origen',    'label' => 'Origen',           'icon' => 'bi-upload',          'type' => 'select',     'grupo' => 'Novedad', 'col' => 4, 'options' => [
+                    ['v' => 'manual', 'l' => 'Registro manual'],
+                    ['v' => 'carga',  'l' => 'Importada desde Excel'],
+                ]],
+                // ── Valor y registro ──
+                ['tab' => $tN, 'key' => 'valor',     'label' => 'Valor (monto, horas o días)', 'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valor y registro', 'col' => 6],
+                ['tab' => $tN, 'key' => 'usuario',   'label' => 'Usuario que registró',        'icon' => 'bi-person-gear',     'type' => 'select',       'grupo' => 'Valor y registro', 'col' => 6, 'options' => $opcionesUsuarioNov],
+                // ── Empleado ──
+                ['tab' => $tN, 'key' => 'empleado',       'label' => 'Empleado',       'icon' => 'bi-person',         'type' => 'text', 'grupo' => 'Empleado', 'col' => 4],
+                ['tab' => $tN, 'key' => 'identificacion', 'label' => 'Identificación', 'icon' => 'bi-card-text',      'type' => 'text', 'grupo' => 'Empleado', 'col' => 4],
+                ['tab' => $tN, 'key' => 'observacion',    'label' => 'Observación',    'icon' => 'bi-chat-left-text', 'type' => 'text', 'grupo' => 'Empleado', 'col' => 4],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorNOV"></div>
             <input type="hidden" id="buscarNov" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorNOV',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorNOV',
                         hiddenInputId: 'buscarNov',
-                        fields: [
-                            { key: 'empleado', label: 'Empleado', icon: 'bi-person', type: 'text' },
-                            { key: 'codigo', label: 'Tipo de novedad', icon: 'bi-clipboard', type: 'select', options: [
-                                <?php foreach (CatalogoNovedades::tipos() as $t): ?>{ v: '<?= htmlspecialchars($t['codigo']) ?>', l: '<?= htmlspecialchars($t['nombre']) ?>' },<?php endforeach; ?>
-                            ]},
-                            { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select', options: [
-                                { v: 'activo', l: 'Activo' }, { v: 'anulado', l: 'Anulado' }
-                            ]},
-                            { key: 'mes', label: 'Mes', icon: 'bi-calendar-month', type: 'select', options: [
-                                <?php foreach ($meses as $n => $nom): ?>{ v: '<?= $n ?>', l: '<?= htmlspecialchars($nom) ?>' },<?php endforeach; ?>
-                            ]},
-                            { key: 'anio', label: 'Año', icon: 'bi-calendar', type: 'text' },
-                            { key: 'valor', label: 'Valor', icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'fecha', label: 'Fecha', icon: 'bi-calendar-date', type: 'date_range' },
-                            { key: 'observacion', label: 'Observación', icon: 'bi-chat-left-text', type: 'text' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_activo',  label: 'Activos',  mk: () => ({ key: 'estado', op: '=', value: 'activo',  display: 'Activo' }) },
-                            { id: 'qf_anulado', label: 'Anulados', mk: () => ({ key: 'estado', op: '=', value: 'anulado', display: 'Anulado' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de novedades',
+                        inputWidth: 420,
+                        extraId: 'fmExtraNOV',   // columnas + PDF + Excel + Importar, pegados al final del grupo
+                        fields: <?= json_encode($filtrosNovedades, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyNovedades',   // se atenúa mientras se busca
                         onApply: () => window.cambiarPaginaAjax && window.cambiarPaginaAjax(1),
                     }).init();
                 });
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraNOV" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'empleado'       => 'Empleado',
@@ -112,8 +152,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                <a id="btnExportPdf" href="<?= $urlBaseNov ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a id="btnExportExcel" href="<?= $urlBaseNov ?>/export-excel?b=<?= urlencode($buscar) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <a id="btnExportPdf" href="<?= $urlBaseNov ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a id="btnExportExcel" href="<?= $urlBaseNov ?>/export-excel?b=<?= urlencode($buscar) ?>" class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
                 <?php if ($perm['crear']): ?>
                     <button type="button" class="btn btn-outline-primary" title="Cargar novedades desde Excel" onclick="window.abrirImportNov()"><i class="bi bi-upload"></i> Importar</button>
                 <?php endif; ?>
@@ -210,6 +250,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar (que llaman a esta función directo).
+            const tbody = document.getElementById('tbodyNovedades');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -218,6 +262,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     document.getElementById('tbodyNovedades').innerHTML = data.rows;
                     document.getElementById('wrapper-pagination').innerHTML = data.pagination;
                     document.getElementById('paginationInfo').textContent = data.info;
+                    // Enlaces de exportación con la búsqueda y el orden vigentes.
+                    const btnPdf = document.getElementById('btnExportPdf');
+                    const btnXls = document.getElementById('btnExportExcel');
+                    const qs = `b=${encodeURIComponent(b)}&sort=${encodeURIComponent(currentSort)}&dir=${encodeURIComponent(currentDir)}`;
+                    if (btnPdf) btnPdf.href = `${urlBase}/export-pdf?${qs}`;
+                    if (btnXls) btnXls.href = `${urlBase}/export-excel?${qs}`;
                     document.querySelectorAll('.sortable-header').forEach(th => {
                         const icon = th.querySelector('i');
                         if (!icon) return;
@@ -226,7 +276,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         } else icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
                     });
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         }
 
         if (window.CMG_initSort) {

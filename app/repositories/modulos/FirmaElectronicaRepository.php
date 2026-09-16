@@ -30,10 +30,75 @@ class FirmaElectronicaRepository extends BaseRepository
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
-        if ($buscar !== '') {
-            $whereSql .= " AND (f.nombres ILIKE :b OR f.apellidos ILIKE :b OR f.numero_identificacion ILIKE :b OR f.correo ILIKE :b OR f.nombre_producto ILIKE :b)";
-            $params[':b'] = '%' . $buscar . '%';
+        // $buscar es el string serializado del buscador (FiltrosModal en la vista):
+        // `clave:valor ... texto libre`. Antes se buscaba el string completo con un
+        // solo ILIKE, así que los filtros del buscador (estado:, estado_pago:…) nunca
+        // se aplicaban.
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            // Texto libre: columnas del listado y lo que identifica la firma. Decisión del
+            // usuario: Tipo Firma (producto), Pago, Factura (estado) y Estado NO entran;
+            // se filtran solo desde el modal. Datos sensibles fuera del texto libre a
+            // propósito: código dactilar, fecha de nacimiento, dirección, adjuntos y rutas.
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                [
+                    "CONCAT_WS(' ', f.nombres, f.apellidos)",              // Nombres
+                    'f.numero_identificacion',                              // Identificación
+                    'f.telefono',                                           // Teléfono
+                    'f.correo',                                             // Correo
+                    "TO_CHAR(f.fecha_caducidad, 'DD-MM-YYYY')",             // Caducidad
+                    "TO_CHAR(f.created_at, 'DD-MM-YYYY HH24:MI:SS')",       // Fecha
+                    'f.ruc_empresa', 'f.nombre_empresa',                    // Empresa (firma con RUC / jurídica)
+                    'f.facturacion_nombres', 'f.facturacion_num_id',        // A quién se factura
+                    "CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)", // Nº de la factura
+                    'f.observaciones',
+                    'u.nombre',                                             // Usuario que registró
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $whereSql .= " AND {$condicion}";
+            }
         }
+        // Claves del modal de filtros (las viejas se conservan: viajan en los enlaces
+        // de PDF/Excel).
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
+            'texto'  => [
+                'nombres'        => 'f.nombres',
+                'apellidos'      => 'f.apellidos',
+                'identificacion' => 'f.numero_identificacion',
+                'telefono'       => 'f.telefono',
+                'correo'         => 'f.correo',
+                'tipo_firma'     => 'f.nombre_producto',
+                'empresa'        => "CONCAT_WS(' ', f.ruc_empresa, f.nombre_empresa)",
+            ],
+            'exacto' => [
+                'estado'              => 'f.estado',
+                'estado_pago'         => 'f.estado_pago',
+                'tipo_identificacion' => 'f.tipo_identificacion',
+                'tipo_persona'        => 'f.tipo_persona',
+                'id_producto'         => 'f.id_producto',
+                'usuario'             => 'f.created_by',
+                'con_ruc'             => "CASE WHEN f.con_ruc THEN 'si' ELSE 'no' END",
+                // Misma regla que la columna Factura: sin factura o factura eliminada = por facturar
+                'factura'             => "CASE WHEN f.id_factura IS NULL OR v.id IS NULL OR v.eliminado THEN 'por_facturar' ELSE LOWER(v.estado) END",
+                // Misma regla que el color de la columna Caducidad (30 días)
+                'vigencia'            => "CASE WHEN f.fecha_caducidad IS NULL THEN 'sin_fecha'
+                                               WHEN f.fecha_caducidad < CURRENT_DATE THEN 'vencida'
+                                               WHEN f.fecha_caducidad <= CURRENT_DATE + 30 THEN 'por_vencer'
+                                               ELSE 'vigente' END",
+            ],
+            'fecha'  => [
+                'fecha'     => 'f.created_at',
+                'caducidad' => 'f.fecha_caducidad',
+            ],
+        ]);
+
+        // Mismos JOIN en el conteo y el listado: el texto libre y los filtros usan v y u.
+        $joinsFiltro = "LEFT JOIN ventas_cabecera v ON v.id = f.id_factura
+                        LEFT JOIN usuarios        u ON u.id = f.created_by";
 
         $cols = [
             'nombres'              => 'f.nombres',
@@ -51,7 +116,7 @@ class FirmaElectronicaRepository extends BaseRepository
         $col = $cols[$ordenCol] ?? 'f.created_at';
         $dir = ($ordenDir === 'DESC') ? 'DESC' : 'ASC';
 
-        $sqlCount = "SELECT COUNT(*) FROM {$this->table} f {$whereSql}";
+        $sqlCount = "SELECT COUNT(*) FROM {$this->table} f {$joinsFiltro} {$whereSql}";
         $stCount  = $this->db->prepare($sqlCount);
         $stCount->execute($params);
         $total = (int) $stCount->fetchColumn();
@@ -78,7 +143,7 @@ class FirmaElectronicaRepository extends BaseRepository
                     FROM {$this->table} f
                     LEFT JOIN provincia       p ON p.codigo = f.cod_prov
                     LEFT JOIN ciudad          c ON c.codigo = f.cod_ciudad AND c.cod_prov = f.cod_prov
-                    LEFT JOIN ventas_cabecera v ON v.id = f.id_factura
+                    {$joinsFiltro}
                     {$whereSql}
                     ORDER BY {$col} {$dir}, f.id DESC";
         if ($perPage > 0) {
@@ -90,6 +155,44 @@ class FirmaElectronicaRepository extends BaseRepository
         $rows = $stRows->fetchAll(PDO::FETCH_ASSOC);
 
         return ['total' => $total, 'rows' => $rows];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros: tipos de firma (productos) y
+     * usuarios que ya aparecen en alguna firma de la empresa, con el mismo alcance
+     * de registros propios que el listado.
+     *
+     * @return array{productos: array<int, array{id:int, nombre:string}>, usuarios: array<int, array{id:int, nombre:string}>}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa, ?int $idUsuarioFiltro = null): array
+    {
+        $whereSql = $this->getBaseWhere($idEmpresa, 'f', $idUsuarioFiltro);
+        $params   = [':id_empresa' => $idEmpresa];
+        if ($idUsuarioFiltro !== null) {
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+
+        // Un producto puede haber cambiado de nombre: se toma el nombre más reciente guardado en la firma.
+        $st = $this->db->prepare(
+            "SELECT DISTINCT ON (f.id_producto) f.id_producto AS id, f.nombre_producto AS nombre
+             FROM {$this->table} f
+             {$whereSql} AND f.id_producto IS NOT NULL
+             ORDER BY f.id_producto, f.created_at DESC"
+        );
+        $st->execute($params);
+        $productos = $st->fetchAll(PDO::FETCH_ASSOC);
+        usort($productos, static fn($a, $b) => strcmp((string) $a['nombre'], (string) $b['nombre']));
+
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+             FROM {$this->table} f
+             JOIN usuarios u ON u.id = f.created_by
+             {$whereSql}
+             ORDER BY u.nombre"
+        );
+        $st->execute($params);
+
+        return ['productos' => $productos, 'usuarios' => $st->fetchAll(PDO::FETCH_ASSOC)];
     }
 
     public function getDetalleCompleto(int $id, int $idEmpresa): ?array

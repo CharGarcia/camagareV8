@@ -50,44 +50,87 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorJORN" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre las columnas del listado (sin sugerencias) + botón
+            // embudo que abre el modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de AsistenciaJornadaRepository::getListado().
+            // La jornada no tiene tablas hijas: una sola pestaña, sin "Detalles".
+            $opcionesPuntoJorn   = array_map(fn($p) => ['v' => (string) $p['id'], 'l' => $p['nombre']], $opcionesFiltro['puntos'] ?? []);
+            $opcionesHorarioJorn = array_map(fn($h) => ['v' => (string) $h['id'], 'l' => $h['nombre']], $opcionesFiltro['horarios'] ?? []);
+            $opcionesUsuarioJorn = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $opcionesFiltro['usuarios'] ?? []);
+            $tJ = 'Jornada';
+            $siNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            // Orden pensado en filas de 12 columnas:
+            //   Jornada:     [Fecha 6][Estado 3][Novedad generada 3]
+            //                [Punto de servicio 6][Horario 6]
+            //   Marcaciones: [Hora de entrada 4][Hora de salida 4][Salida registrada 4]
+            //   Valores:     [Horas trabajadas 4][Atraso 4][Extra 4]
+            //   Empleado:    [Empleado 3][Identificación 3][Observación 3][Usuario 3]
+            $filtrosJornadas = [
+                // ── Jornada ──
+                ['tab' => $tJ, 'key' => 'fecha',      'label' => 'Fecha',             'icon' => 'bi-calendar-date',  'type' => 'date_range', 'grupo' => 'Jornada', 'col' => 6, 'atajos' => true],
+                ['tab' => $tJ, 'key' => 'estado',     'label' => 'Estado',            'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Jornada', 'col' => 3, 'options' => [
+                    ['v' => 'completa',   'l' => 'Completa'],
+                    ['v' => 'incompleta', 'l' => 'Incompleta (requiere revisión)'],
+                    ['v' => 'falta',      'l' => 'Falta'],
+                    ['v' => 'permiso',    'l' => 'Permiso'],
+                ]],
+                ['tab' => $tJ, 'key' => 'novedad',    'label' => 'Novedad generada',  'icon' => 'bi-journal-plus',   'type' => 'select',     'grupo' => 'Jornada', 'col' => 3, 'options' => $siNo('Con novedad', 'Sin novedad')],
+                ['tab' => $tJ, 'key' => 'id_punto',   'label' => 'Punto de servicio', 'icon' => 'bi-geo-alt',        'type' => 'select',     'grupo' => 'Jornada', 'col' => 6, 'options' => $opcionesPuntoJorn],
+                ['tab' => $tJ, 'key' => 'id_horario', 'label' => 'Horario / turno',   'icon' => 'bi-clock',          'type' => 'select',     'grupo' => 'Jornada', 'col' => 6, 'options' => $opcionesHorarioJorn],
+                // ── Marcaciones ──
+                ['tab' => $tJ, 'key' => 'entrada',    'label' => 'Hora de entrada',   'icon' => 'bi-box-arrow-in-right', 'type' => 'text',   'grupo' => 'Marcaciones', 'col' => 4, 'placeholder' => '08:05'],
+                ['tab' => $tJ, 'key' => 'salida',     'label' => 'Hora de salida',    'icon' => 'bi-box-arrow-right',    'type' => 'text',   'grupo' => 'Marcaciones', 'col' => 4, 'placeholder' => '17:00'],
+                ['tab' => $tJ, 'key' => 'con_salida', 'label' => 'Salida registrada', 'icon' => 'bi-door-closed',        'type' => 'select', 'grupo' => 'Marcaciones', 'col' => 4, 'options' => $siNo('Con salida', 'Sin salida')],
+                // ── Valores ──
+                ['tab' => $tJ, 'key' => 'horas',  'label' => 'Horas trabajadas', 'icon' => 'bi-hourglass-split',  'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tJ, 'key' => 'atraso', 'label' => 'Atraso (min)',     'icon' => 'bi-clock',            'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tJ, 'key' => 'extra',  'label' => 'Extra (min)',      'icon' => 'bi-plus-slash-minus', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // ── Empleado ──
+                ['tab' => $tJ, 'key' => 'empleado',       'label' => 'Empleado',            'icon' => 'bi-person',         'type' => 'text',   'grupo' => 'Empleado', 'col' => 3],
+                ['tab' => $tJ, 'key' => 'identificacion', 'label' => 'Identificación',      'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Empleado', 'col' => 3],
+                ['tab' => $tJ, 'key' => 'observacion',    'label' => 'Observación',         'icon' => 'bi-chat-left-text', 'type' => 'text',   'grupo' => 'Empleado', 'col' => 3],
+                ['tab' => $tJ, 'key' => 'usuario',        'label' => 'Usuario que calculó', 'icon' => 'bi-person-gear',    'type' => 'select', 'grupo' => 'Empleado', 'col' => 3, 'options' => $opcionesUsuarioJorn],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorJORN"></div>
             <input type="hidden" id="buscarJorn" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    window.jornFiltros = new FiltrosBusqueda({
-                        containerId: 'fbBuscadorJORN',
+                    if (!window.FiltrosModal) return;
+                    // Instancia global: la usa el botón "Requieren revisión" de la cabecera.
+                    window.jornFiltros = new FiltrosModal({
+                        containerId: 'fmBuscadorJORN',
                         hiddenInputId: 'buscarJorn',
-                        fields: [
-                            { key: 'empleado', label: 'Empleado', icon: 'bi-person', type: 'text' },
-                            { key: 'estado', label: 'Estado', icon: 'bi-flag', type: 'select', options: [
-                                { v: 'completa', l: 'Completa' }, { v: 'incompleta', l: 'Incompleta' }, { v: 'falta', l: 'Falta' }, { v: 'permiso', l: 'Permiso' }
-                            ]},
-                            { key: 'fecha', label: 'Fecha', icon: 'bi-calendar-date', type: 'date_range' },
-                            { key: 'atraso', label: 'Atraso (min)', icon: 'bi-clock', type: 'number_range' },
-                            { key: 'extra', label: 'Extra (min)', icon: 'bi-plus-slash-minus', type: 'number_range' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_revisar', label: 'Requieren revisión', mk: () => ({ key: 'estado', op: '=', value: 'incompleta', display: 'Incompleta' }) },
-                            { id: 'qf_falta', label: 'Faltas', mk: () => ({ key: 'estado', op: '=', value: 'falta', display: 'Falta' }) },
-                            { id: 'qf_atraso', label: 'Con atraso', mk: () => ({ key: 'atraso', op: '>', value: '0', display: '> 0' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de jornadas',
+                        inputWidth: 420,
+                        extraId: 'fmExtraJORN',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosJornadas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyJornadas',   // se atenúa mientras se busca
                         onApply: () => window.cambiarPaginaAjax && window.cambiarPaginaAjax(1),
                     });
                     window.jornFiltros.init();
                 });
 
-                // Botón de acceso rápido de la cabecera: activa/desactiva el quick
-                // filter "Requieren revisión" (jornadas incompletas). Reutiliza el
-                // toggle del buscador para que el chip refleje el estado.
+                // Botón de acceso rápido de la cabecera: pone o quita el filtro
+                // estado = incompleta (jornadas que requieren revisión) como chip del
+                // buscador, igual que si se eligiera en el modal.
                 window.jornRequierenRevision = function () {
-                    if (window.jornFiltros) window.jornFiltros.toggleQuick('qf_revisar');
+                    const fm = window.jornFiltros;
+                    if (!fm) return;
+                    if (fm.tieneFiltro('estado', 'incompleta')) {
+                        fm.quitarFiltro('estado', 'incompleta');
+                    } else {
+                        fm.aplicarFiltro({ key: 'estado', op: '=', value: 'incompleta' }, false);
+                    }
                 };
             </script>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraJORN" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = ['empleado'=>'Empleado','fecha'=>'Fecha','entrada'=>'Entrada','salida'=>'Salida','horas'=>'Horas','atraso'=>'Atraso','extra'=>'Extra','estado'=>'Estado'];
                 ?>
@@ -95,11 +138,11 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
 
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -274,6 +317,10 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar (que llaman a esta función directo).
+            const tbody = document.getElementById('tbodyJornadas');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri); const data = await resp.json();
                 if (data.ok) {
@@ -291,7 +338,11 @@ $estadoColor = ['completa' => 'success', 'incompleta' => 'warning', 'falta' => '
                         else icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
                     });
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         }
 
         window.abrirRecalcular = function () { mRec = mRec || new bootstrap.Modal(document.getElementById('modalRecalc')); mRec.show(); };

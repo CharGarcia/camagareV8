@@ -54,6 +54,10 @@ class CotizacionPublicidadController extends BaseModuloController
 
         $tarifasIva = (new \App\models\TarifaIva())->getActivos();
         $categorias = $this->repository->getCategorias($idEmpresa);
+        // Selects del modal de filtros: solo lo que la empresa usó en sus cotizaciones.
+        $vendedoresFiltro = $this->repository->getVendedoresConCotizaciones($idEmpresa);
+        $usuariosFiltro   = $this->repository->getUsuariosConCotizaciones($idEmpresa);
+        $categoriasFiltro = $this->repository->getCategoriasUsadas($idEmpresa);
 
         $permClientes  = $this->permisosModuloPorRuta('modulos/clientes');
         $permProductos = $this->permisosModuloPorRuta('modulos/productos');
@@ -80,9 +84,56 @@ class CotizacionPublicidadController extends BaseModuloController
             'vendedores'   => $vendedores,
             'tarifasIva'   => $tarifasIva,
             'categorias'   => $categorias,
+            'vendedoresFiltro' => $vendedoresFiltro,
+            'usuariosFiltro'   => $usuariosFiltro,
+            'categoriasFiltro' => $categoriasFiltro,
             'puntos'       => $puntos,
             'fullWidth'    => true,
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las
+     * cotizaciones (líneas cotizadas y costos por proveedor). Mismo alcance que el
+     * listado, incluidos los registros propios cuando no hay acceso total.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $origenes = ['LINEA' => 'Línea cotizada', 'COSTO' => 'Costo de proveedor'];
+        $estados  = ['borrador' => 'Borrador', 'aprobada' => 'Aprobada', 'rechazada' => 'Rechazada', 'convertida' => 'Convertida', 'anulada' => 'Anulada'];
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $estado = (string) ($r['estado'] ?? '');
+            $rows[] = [
+                'origen'        => $origenes[$r['origen']] ?? $r['origen'],
+                // Línea: categoría; costo: proveedor.
+                'tipo'          => $r['tipo'] ?? '',
+                'descripcion'   => $r['descripcion'] ?? '',
+                'extra'         => $r['extra'] ?? '',
+                'cantidad'      => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 4, '.', ''), '0'), '.') : '',
+                'monto'         => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'id_cotizacion' => (int) $r['id_cotizacion'],
+                'numero'        => $r['numero'] ?? '',
+                'fecha'         => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'cliente'       => $r['cliente'] ?? '',
+                'proyecto'      => $r['proyecto'] ?? '',
+                'estado'        => $estados[$estado] ?? ucfirst($estado),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function searchAjax(): void

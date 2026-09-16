@@ -105,6 +105,8 @@ class EntregasConsignacionesController extends BaseModuloController
             'ordenDir'      => OrdenListado::primeraDir($orden, self::ORDEN_DIR_DEFECTO),
             'vistaConfig'   => $prefsVista,
             'resumen'       => $resumen,
+            // Selects del modal de filtros del listado (solo valores usados).
+            'opcionesFiltros' => $this->service->getOpcionesFiltros($idEmpresa, $idsResponsables),
             'anioDesde'     => $anioActual - 5,
             'anioHasta'     => $anioActual,
         ]);
@@ -167,6 +169,49 @@ class EntregasConsignacionesController extends BaseModuloController
             'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/exportExcel?b=' . urlencode($buscar) . $qsOrden,
         ]);
         exit;
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las consignaciones
+     * (productos consignados y evidencias de entrega). El alcance es el mismo del listado:
+     * en este módulo la visibilidad la manda el vínculo usuario ↔ responsable de traslado
+     * (filtroResponsablesActual), no el creador del documento. Cada fila trae `registro`,
+     * la fila del listado ya preparada, para abrir el modal de detalle (entcAbrirDetalle).
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim((string) ($_GET['q'] ?? ''));
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $resultado = $this->service->buscarEnDetalles($idEmpresa, $q, $this->filtroResponsablesActual(), 50);
+        $camposDetalle = ['det_origen', 'det_tipo', 'det_descripcion', 'det_extra', 'det_cantidad'];
+
+        $rows = [];
+        foreach ($resultado as $r) {
+            $registro = $this->prepararFilas([array_diff_key($r, array_flip($camposDetalle))])[0];
+            $esProducto = ($r['det_origen'] === 'PRODUCTO');
+            $rows[] = [
+                'origen'      => $esProducto ? 'Producto' : 'Entrega registrada',
+                'tipo'        => $esProducto ? ($r['det_tipo'] ?? '') : (($r['det_tipo'] ?? '') === 'web' ? 'Web (manual)' : 'App móvil'),
+                'descripcion' => $r['det_descripcion'] ?? '',
+                'extra'       => $r['det_extra'] ?? '',
+                'cantidad'    => $r['det_cantidad'] !== null ? number_format((float) $r['det_cantidad'], 2) : '',
+                'numero'      => ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? ''),
+                'fecha'       => $registro['fecha_emision_fmt'] ?? '',
+                'cliente'     => $r['cliente_nombre'] ?? '',
+                'estado'      => $this->estadoTexto((string) ($r['estado_consignacion'] ?? '')),
+                'pendiente'   => !empty($registro['pendiente']),
+                'registro'    => $registro,
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     /**

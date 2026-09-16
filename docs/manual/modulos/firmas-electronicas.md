@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, certificado, p12, token, caducada, por caducar, caduca mañana, aviso de caducidad, correo de aviso, notificacion por correo, renovar firma, vencimiento de la firma, firmar comprobantes, sri, firma invalida, xades, no se ajusta a xades, certificado de firma, anf, uanataca, security data, banco central
-version: 1.3
+etiquetas: firma electronica, certificado, p12, token, caducada, por caducar, caduca mañana, aviso de caducidad, correo de aviso, notificacion por correo, renovar firma, vencimiento de la firma, firmar comprobantes, sri, firma invalida, xades, no se ajusta a xades, certificado de firma, anf, uanataca, security data, banco central, buscar firma, buscador, filtros, filtrar firmas, firmas por facturar, firmas vencidas, chips
+version: 1.4
 orden: 20
 estado: activo
 ---
@@ -82,6 +82,41 @@ Si aparece este error con una firma recién cargada, avise a soporte indicando
 **qué entidad emitió el certificado**. No es un problema de la clave ni del
 archivo, y volver a cargar la firma no lo soluciona.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la firma: nombres y
+apellidos, identificación, teléfono, correo, caducidad y fecha de registro
+(como *29-04-2028*). Además busca en el RUC y nombre de la empresa del titular,
+los datos de facturación (nombre e identificación), el número de la factura,
+las observaciones y el usuario que registró la firma. Las columnas **Tipo
+Firma**, **Pago**, **Factura** y **Estado** no entran en la búsqueda libre: para
+filtrar por ellas use la ventana de filtros. Por seguridad, el código dactilar,
+la fecha de nacimiento, la dirección y los archivos adjuntos no se buscan.
+Puede escribir varias palabras en cualquier orden y no importan mayúsculas ni
+tildes. Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras
+busca, aparece un **círculo girando** al final del cuadro y la tabla se ve
+atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
+Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento.
+La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
+
+| Bloque | Filtros |
+|--------|---------|
+| Firma | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado del trámite, estado del pago, factura (por facturar, borrador, facturado, anulado), tipo de firma, usuario que registró, fecha de caducidad, vigencia (vigente, por vencer en 30 días, vencida, sin fecha) |
+| Titular | Nombres, apellidos, identificación, tipo de identificación, tipo de persona, con o sin RUC, teléfono, correo, empresa (RUC o nombre) |
+
+Los selectores *Tipo de firma* y *Usuario que registró* listan solo lo que ya
+aparece en las firmas registradas.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
 ## Errores frecuentes
 
 - **Todos los comprobantes empiezan a fallar el mismo día**: lo primero a revisar
@@ -101,6 +136,15 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **1.4** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas de la firma (salvo Tipo Firma,
+  Pago, Factura y Estado) y en empresa, datos de facturación, número de factura,
+  observaciones y usuario. Los filtros pasan a una **ventana propia** (botón del
+  embudo, se aplican con *Aplicar*) y **ahora sí se aplican** (antes los filtros
+  del buscador se ignoraban); criterios nuevos: factura, tipo de firma y usuario
+  como listas, fechas de registro y caducidad, vigencia, tipo de persona, con
+  RUC y empresa. Los filtros activos se ven como etiquetas dentro del cuadro.
+  Nueva sección *Buscar y filtrar el listado*.
 - **1.3** — Nuevo aviso automático por correo: un día antes de la caducidad
   de la firma activa (o hasta 7 días después si nunca se avisó) se envía un
   correo al correo registrado en la ficha de la empresa. Una sola vez por

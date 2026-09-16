@@ -76,6 +76,22 @@ class ConsignacionVentaService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Búsqueda libre dentro de las consignaciones (productos y documentos relacionados): pestaña Detalles del buscador. */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuarioFiltro = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, $limit);
+    }
+
+    /** Listas de los selects del modal de filtros: solo los valores que la empresa ya usó. */
+    public function getOpcionesFiltros(int $idEmpresa): array
+    {
+        return [
+            'vendedores'   => $this->repository->getVendedoresUsados($idEmpresa),
+            'responsables' => $this->repository->getResponsablesUsados($idEmpresa),
+            'usuarios'     => $this->repository->getUsuariosUsados($idEmpresa),
+        ];
+    }
+
     public function getDetalleCompleto(int $id, int $idEmpresa): ?array
     {
         $cabecera = $this->repository->find($id, $idEmpresa);

@@ -44,44 +44,100 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            <link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim($base, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorCP" style="width:480px;"></div>
+            <?php
+            // Buscador estándar: texto libre sobre las columnas del listado (sin sugerencias),
+            // botón embudo que abre el modal de filtros y chips dentro de la caja.
+            // Las claves (key) deben existir en los mapas de CotizacionPublicidadRepository::getListado().
+            $opcionesVendedor  = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $vendedoresFiltro ?? []);
+            $opcionesUsuario   = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $usuariosFiltro ?? []);
+            $opcionesCategoria = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $categoriasFiltro ?? []);
+            $tC = 'Cotización';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento: [Fecha de emisión 6][Estado 3][Nº cotización 3]
+            //              [Número 3][Versión 3][Categoría 3][Usuario que registró 3]
+            //   Valores:   [Total 4][Presupuesto 4][Comisión % 4]
+            //              [Subtotal 4][Valor comisión 4][IVA 4]
+            //   Cliente:   [Cliente 3][RUC / CI 3][Ejecutivo 3][Contacto 3]
+            //              [Proyecto 4][Observaciones 4][Factura generada 4]
+            $filtrosCotizaciones = [
+                // ── Documento ──
+                ['tab' => $tC, 'key' => 'fecha',  'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tC, 'key' => 'estado', 'label' => 'Estado',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'borrador',   'l' => 'Borrador'],
+                    ['v' => 'aprobada',   'l' => 'Aprobada'],
+                    ['v' => 'rechazada',  'l' => 'Rechazada'],
+                    ['v' => 'convertida', 'l' => 'Convertida'],
+                    ['v' => 'anulada',    'l' => 'Anulada'],
+                ]],
+                // Nº visible exacto (número-año V versión), el mismo formato de la columna Número.
+                ['tab' => $tC, 'key' => 'cotizacion',   'label' => 'Nº cotización',        'icon' => 'bi-upc',            'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-2026 V1'],
+                ['tab' => $tC, 'key' => 'numero',       'label' => 'Número',               'icon' => 'bi-hash',           'type' => 'number_range', 'grupo' => 'Documento', 'col' => 3],
+                ['tab' => $tC, 'key' => 'version',      'label' => 'Versión',              'icon' => 'bi-layers',         'type' => 'number_range', 'grupo' => 'Documento', 'col' => 3],
+                ['tab' => $tC, 'key' => 'id_categoria', 'label' => 'Categoría',            'icon' => 'bi-tags',           'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesCategoria],
+                ['tab' => $tC, 'key' => 'id_usuario',   'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesUsuario],
+                // ── Valores ──
+                ['tab' => $tC, 'key' => 'total',          'label' => 'Total',          'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'presupuesto',    'label' => 'Presupuesto',    'icon' => 'bi-cash-stack',      'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'comision',       'label' => 'Comisión %',     'icon' => 'bi-percent',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'subtotal',       'label' => 'Subtotal',       'icon' => 'bi-receipt-cutoff',  'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'valor_comision', 'label' => 'Valor comisión', 'icon' => 'bi-coin',            'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'iva',            'label' => 'IVA',            'icon' => 'bi-percent',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // ── Cliente ──
+                ['tab' => $tC, 'key' => 'cliente',     'label' => 'Cliente',       'icon' => 'bi-person',            'type' => 'text',   'grupo' => 'Cliente', 'col' => 3],
+                ['tab' => $tC, 'key' => 'ruc',         'label' => 'RUC / CI',      'icon' => 'bi-card-text',         'type' => 'text',   'grupo' => 'Cliente', 'col' => 3],
+                ['tab' => $tC, 'key' => 'id_vendedor', 'label' => 'Ejecutivo',     'icon' => 'bi-person-badge',      'type' => 'select', 'grupo' => 'Cliente', 'col' => 3, 'options' => $opcionesVendedor],
+                ['tab' => $tC, 'key' => 'contacto',    'label' => 'Contacto',      'icon' => 'bi-person-lines-fill', 'type' => 'text',   'grupo' => 'Cliente', 'col' => 3],
+                ['tab' => $tC, 'key' => 'proyecto',    'label' => 'Proyecto',      'icon' => 'bi-kanban',            'type' => 'text',   'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tC, 'key' => 'obs',         'label' => 'Observaciones', 'icon' => 'bi-chat-left-text',    'type' => 'text',   'grupo' => 'Cliente', 'col' => 4],
+                ['tab' => $tC, 'key' => 'factura',     'label' => 'Factura generada', 'icon' => 'bi-receipt',        'type' => 'text',   'grupo' => 'Cliente', 'col' => 4, 'placeholder' => '001-001-000000123'],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim($base, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorCP"></div>
             <input type="hidden" id="buscarCotizacion" value="<?= htmlspecialchars($buscar) ?>">
             <script>
             document.addEventListener('DOMContentLoaded', () => {
-                if (!window.FiltrosBusqueda) return;
-                new FiltrosBusqueda({
-                    containerId:   'fbBuscadorCP',
+                if (!window.FiltrosModal) return;
+                new FiltrosModal({
+                    containerId: 'fmBuscadorCP',
                     hiddenInputId: 'buscarCotizacion',
-                    fields: [
-                        { key: 'cliente',       label: 'Cliente',       icon: 'bi-person',          type: 'text' },
-                        { key: 'ruc',           label: 'RUC / CI',      icon: 'bi-card-text',       type: 'text' },
-                        { key: 'proyecto',      label: 'Proyecto',      icon: 'bi-kanban',          type: 'text' },
-                        { key: 'contacto',      label: 'Contacto',      icon: 'bi-person-lines-fill',type: 'text' },
-                        { key: 'obs',           label: 'Observaciones', icon: 'bi-chat-left-text',  type: 'text' },
-                        { key: 'fecha',         label: 'Fecha',         icon: 'bi-calendar',        type: 'date_range' },
-                        { key: 'total',         label: 'Total',         icon: 'bi-currency-dollar', type: 'number_range' },
-                        { key: 'presupuesto',   label: 'Presupuesto',   icon: 'bi-cash-stack',      type: 'number_range' },
-                        { key: 'estado',        label: 'Estado',        icon: 'bi-flag',            type: 'select', options: [
-                            { v: 'borrador',   l: 'Borrador' },
-                            { v: 'aprobada',   l: 'Aprobada' },
-                            { v: 'rechazada',  l: 'Rechazada' },
-                            { v: 'convertida', l: 'Convertida' },
-                            { v: 'anulada',    l: 'Anulada' },
-                        ]},
-                    ],
-                    quickFilters: [
-                        { id: 'qf_borrador',   label: 'Borrador',    mk: () => ({ key: 'estado', op: '=', value: 'borrador',   display: 'Borrador' }) },
-                        { id: 'qf_aprobada',   label: 'Aprobadas',   mk: () => ({ key: 'estado', op: '=', value: 'aprobada',   display: 'Aprobada' }) },
-                        { id: 'qf_convertida', label: 'Convertidas', mk: () => ({ key: 'estado', op: '=', value: 'convertida', display: 'Convertida' }) },
-                    ],
+                    placeholder: 'Buscar en todas las columnas...',
+                    titulo: 'Filtros de cotizaciones',
+                    inputWidth: 420,
+                    extraId: 'fmExtraCP',   // columnas + Excel, pegados al final del grupo
+                    // Pestaña Detalles: búsqueda libre dentro de las cotizaciones (líneas
+                    // cotizadas y costos por proveedor). Cada coincidencia dice a qué
+                    // cotización pertenece.
+                    busquedaDetalle: {
+                        tab: 'Detalles',
+                        url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                        label: 'Buscar libremente dentro de las cotizaciones',
+                        placeholder: 'Descripción, categoría, valor, proveedor, factura del proveedor...',
+                        columns: [
+                            { key: 'origen',      label: 'Tipo' },
+                            { key: 'tipo',        label: 'Categoría / Proveedor' },
+                            { key: 'descripcion', label: 'Descripción' },
+                            { key: 'extra',       label: 'Factura proveedor', class: 'font-monospace' },
+                            { key: 'cantidad',    label: 'Cant.', align: 'end' },
+                            { key: 'monto',       label: 'Valor', align: 'end' },
+                            { key: 'numero',      label: 'Cotización', class: 'font-monospace fw-semibold' },
+                            { key: 'fecha',       label: 'Fecha' },
+                            { key: 'cliente',     label: 'Cliente' },
+                            { key: 'estado',      label: 'Estado' },
+                        ],
+                        onSelect: (row, fm) => fm.aplicarFiltro({ key: 'cotizacion', value: row.numero }),
+                        onOpen: (row, fm) => { fm.hide(); setTimeout(() => window.CP && CP.verDetalle(row.id_cotizacion), 350); },
+                    },
+                    fields: <?= json_encode($filtrosCotizaciones, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                    loadingTarget: '#tbodyCotizaciones',   // se atenúa mientras se busca
                     onApply: () => window.fetchSearch && window.fetchSearch(1),
                 }).init();
             });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraCP" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero'          => 'Número',
@@ -101,7 +157,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 <a id="btnExportExcel" href="<?= $urlBase ?>/exportExcelAjax?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                     class="btn btn-outline-success" title="Exportar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -256,6 +312,10 @@ $totalPages = $totalPagesOriginal;
     window.fetchSearch = async (page = 1) => {
         const b = inputBusc ? inputBusc.value.trim() : '';
         const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras se
+        // busca, también al paginar u ordenar (que llaman a esta función directo).
+        const tbody = document.getElementById('tbodyCotizaciones');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const data = await (await fetch(uri)).json();
             if (!data.ok) return;
@@ -273,6 +333,7 @@ $totalPages = $totalPagesOriginal;
                     : 'bi bi-arrow-down-up small text-muted ms-1';
             });
         } catch (e) { console.error('Error búsqueda cotizaciones:', e); }
+        finally { if (tbody) tbody.classList.remove('fm-cargando-target'); }
     };
 
     document.querySelectorAll('.sortable-header').forEach(h => {

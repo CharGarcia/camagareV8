@@ -5,8 +5,8 @@ categoria: Operaciones
 ruta_modulo: modulos/taller
 tipo: modulo
 visibilidad: todos
-etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.7
+etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes de trabajo, filtro de fechas, buscar por repuesto, chips
+version: 1.8
 orden: 0
 estado: activo
 ---
@@ -143,6 +143,59 @@ Para que el PDF se adjunte, la plantilla debe tener una cabecera de tipo
 **DOCUMENT**. Si la empresa todavía no conectó WhatsApp Business, el botón
 ofrece abrir el chat normal para escribirle al cliente, aunque sin adjunto.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la orden: fecha, N°
+orden, serie, secuencial, placa, vehículo (marca y modelo), cliente (nombre y
+RUC / cédula), departamento y total. Además busca en el año, color, chasis y
+motor del vehículo; el contacto (nombre, teléfono y correo); el motivo de
+ingreso, diagnóstico, observaciones y recomendaciones; la aseguradora, el N° de
+siniestro y el ajustador; el número del documento de venta generado; el usuario
+que registró la orden, el asesor y el jefe de taller; y los **repuestos y la
+mano de obra** de la orden (código y descripción). Las columnas **Estado** y
+**Aprob.**, el tipo de servicio y la prioridad no entran en la búsqueda libre:
+para filtrar por ellos use la ventana de filtros. Puede escribir varias
+palabras en cualquier orden y no importan mayúsculas ni tildes. Para limpiar,
+borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un
+**círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Orden** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Orden | Fecha de ingreso (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado, tipo de servicio, serie, N° orden, secuencial, prioridad, departamento actual, presupuesto aprobado o sin aprobación, total (mínimo y máximo), entrega estimada, fecha de entrega, con o sin documento de venta generado, tipo de documento (factura o recibo de venta) y N° del documento generado |
+| Vehículo | Placa, marca, modelo y kilometraje (mínimo y máximo) |
+| Cliente y responsables | Cliente, RUC / cédula, contacto (nombre, teléfono o correo), usuario que registró, asesor de servicio y jefe de taller |
+| Siniestro y notas | Es o no siniestro, aseguradora, N° de siniestro, próxima cita y un campo para buscar en el motivo, diagnóstico, observaciones o recomendaciones |
+
+Los selectores *Serie*, *Departamento actual*, *Usuario que registró*, *Asesor
+de servicio* y *Jefe de taller* listan solo lo que la empresa ya usó en sus
+órdenes.
+
+**Pestaña Detalles** (lo que hay dentro de la orden). Es un único cuadro,
+**Buscar libremente dentro de las órdenes**: escriba un repuesto, un código, un
+técnico, lo que registró un departamento como trabajo realizado, una
+observación del checklist de recepción o una nota de la bitácora, y aparece la
+lista de **cada coincidencia** con la orden a la que pertenece (número, fecha,
+placa, cliente y estado). Un clic en la fila deja el listado mostrando solo esa
+orden; el ícono de la derecha la abre directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último.
+
+Si no tiene **acceso total** al módulo, tanto el listado como la pestaña
+Detalles muestran solo las órdenes que usted registró.
+
 ## Campos del formulario
 
 | Campo | Obligatorio | Qué significa |
@@ -276,6 +329,20 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.8** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas de la orden, en el vehículo, el
+  contacto, las notas, los responsables y los repuestos y mano de obra, salvo
+  Estado, Aprob., tipo de servicio y prioridad. Los filtros pasan a una
+  **ventana propia** (botón del embudo, se aplican con *Aplicar*) con dos
+  pestañas: **Orden** (filtros por campo, con criterios nuevos: prioridad,
+  departamento y aprobación como listas, total, entrega estimada y real,
+  documento generado, kilometraje, RUC, contacto, usuario, asesor, jefe de
+  taller, siniestro, próxima cita y notas) y **Detalles**, un cuadro de búsqueda
+  libre dentro de las órdenes (repuestos, trabajos por departamento, checklist
+  y bitácora). Se quitaron los accesos *En taller*, *Por aprobar* y *Para
+  entregar*: esos estados se eligen en el filtro Estado. Nueva sección *Buscar
+  y filtrar el listado*.
 
 - **1.7** — El número del documento puede numerarse **por fecha de emisión**,
   reiniciando el correlativo cada año o cada mes (`202600017`, `202609017`). Se

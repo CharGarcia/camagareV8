@@ -62,9 +62,30 @@ class ImportacionesRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
+        // Texto libre: las columnas del listado y lo que identifica la importación.
+        // Decisión del usuario (igual que Compras/Ingresos/Egresos): la columna Estado
+        // NO entra en el texto libre; se filtra solo desde el modal de filtros. Los datos
+        // de otras tablas van en subconsultas para no cambiar los JOIN del COUNT.
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['p.razon_social', 'p.identificacion', 'i.referencia_dai', 'i.observaciones', 'i.numero_importacion'],
+                [
+                    'i.numero_importacion',                                              // N° Importación
+                    'i.secuencial',
+                    'i.referencia_dai',                                                  // Referencia DAI
+                    'p.razon_social',                                                    // Proveedor exterior
+                    'p.identificacion',
+                    'i.incoterm',                                                        // Incoterm
+                    '(SELECT bx.nombre FROM bodegas bx WHERE bx.id = i.id_bodega_destino)', // Bodega destino
+                    'i.fecha_nacionalizacion::text',                                     // Fecha nacionalización
+                    'i.subtotal_fob::text',                                              // Subtotal FOB
+                    'i.costo_total_nacionalizado::text',                                 // Costo total
+                    // Fuera del listado, pero identifican la importación:
+                    'i.observaciones',
+                    '(SELECT ux.nombre FROM usuarios ux WHERE ux.id = i.created_by)',
+                    '(SELECT ax.razon_social FROM proveedores ax WHERE ax.id = i.id_agente_afianzado)',
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', dx.codigo_producto_raw, prx.codigo, dx.descripcion, dx.numero_lote), ' ') FROM importaciones_detalle dx LEFT JOIN productos prx ON prx.id = dx.id_producto WHERE dx.id_importacion = i.id AND dx.eliminado = false)",
+                    "(SELECT STRING_AGG(fx.numero_factura, ' ') FROM importaciones_factura_exterior fx WHERE fx.id_importacion = i.id AND fx.eliminado = false)",
+                ],
                 $textoLibre,
                 $params,
                 'tl'
@@ -81,12 +102,19 @@ class ImportacionesRepository extends BaseRepository
                 'incoterm'       => 'i.incoterm',
                 'obs'            => 'i.observaciones',
                 'numero'         => 'i.numero_importacion',
+                // Claves nuevas del modal de filtros.
+                'ruc'            => 'p.identificacion',
             ],
             'exacto' => [
                 'estado' => 'i.estado',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), igual patrón
                 // que FacturaVentaRepository::getListado().
                 'serie'  => "CONCAT(i.establecimiento,'-',i.punto_emision)",
+                'id_bodega'  => 'i.id_bodega_destino',
+                'id_agente'  => 'i.id_agente_afianzado',
+                'id_usuario' => 'i.created_by',
+                'criterio'   => 'i.criterio_prorrateo',
+                'asiento'    => "CASE WHEN i.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
             ],
             'fecha' => [
                 'fecha'              => 'i.fecha_nacionalizacion',
@@ -100,6 +128,10 @@ class ImportacionesRepository extends BaseRepository
                 // Comparación numérica exacta: "298" encuentra "000000298" sin ceros
                 // a la izquierda, pero nunca hace substring (ver FacturaVentaRepository).
                 'secuencial' => 'i.secuencial::numeric',
+                'gastos'     => 'COALESCE(i.total_gastos_capitalizables, 0)',
+                'iva'        => 'COALESCE(i.total_iva, 0)',
+                'isd'        => 'COALESCE(i.total_isd, 0)',
+                'otros'      => 'COALESCE(i.total_otros_gastos, 0)',
             ],
         ]);
 
@@ -134,6 +166,126 @@ class ImportacionesRepository extends BaseRepository
         $rows = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Valores REALMENTE usados por la empresa para los selects del modal de filtros:
+     * incoterms, bodegas destino, agentes afianzados y usuarios que registraron.
+     *
+     * @return array{incoterms: string[], bodegas: array, agentes: array, usuarios: array}
+     */
+    public function getValoresFiltro(int $idEmpresa): array
+    {
+        $base = "FROM importaciones_cabecera i WHERE i.id_empresa = :id_empresa AND i.eliminado = false";
+        $run = function (string $sql) use ($idEmpresa) {
+            $st = $this->db->prepare($sql);
+            $st->execute([':id_empresa' => $idEmpresa]);
+            return $st;
+        };
+        return [
+            'incoterms' => $run("SELECT DISTINCT i.incoterm $base AND i.incoterm IS NOT NULL AND i.incoterm <> '' ORDER BY i.incoterm")->fetchAll(PDO::FETCH_COLUMN),
+            'bodegas'   => $run("SELECT DISTINCT b.id, b.nombre FROM importaciones_cabecera i JOIN bodegas b ON b.id = i.id_bodega_destino
+                                 WHERE i.id_empresa = :id_empresa AND i.eliminado = false ORDER BY b.nombre")->fetchAll(PDO::FETCH_ASSOC),
+            'agentes'   => $run("SELECT DISTINCT a.id, a.razon_social AS nombre FROM importaciones_cabecera i JOIN proveedores a ON a.id = i.id_agente_afianzado
+                                 WHERE i.id_empresa = :id_empresa AND i.eliminado = false ORDER BY a.razon_social")->fetchAll(PDO::FETCH_ASSOC),
+            'usuarios'  => $run("SELECT DISTINCT u.id, u.nombre FROM importaciones_cabecera i JOIN usuarios u ON u.id = i.created_by
+                                 WHERE i.id_empresa = :id_empresa AND i.eliminado = false ORDER BY u.nombre")->fetchAll(PDO::FETCH_ASSOC),
+        ];
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las importaciones (pestaña "Detalles" del modal de
+     * filtros): cada producto importado, factura del exterior y gasto de
+     * nacionalización (con la compra o liquidación vinculada) que coincide con el
+     * texto, con la importación a la que pertenece. Mismo alcance que el listado
+     * (empresa, no eliminadas, registros propios por created_by; el listado no
+     * filtra por tipo_ambiente, así que aquí tampoco). Las tablas hijas se filtran
+     * por eliminado = false.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "i.id_empresa = :id_empresa AND i.eliminado = false";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND i.created_by = :id_usuario_filtro";
+            $params[':id_usuario_filtro'] = $idUsuario;
+        }
+
+        $tiposGasto = "(CASE g.tipo_gasto WHEN 'arancel_ad_valorem' THEN 'Arancel Ad-Valorem' WHEN 'fodinfa' THEN 'FODINFA'
+                        WHEN 'iva_importacion' THEN 'IVA de importación' WHEN 'isd' THEN 'ISD' WHEN 'flete_internacional' THEN 'Flete internacional'
+                        WHEN 'seguro' THEN 'Seguro' WHEN 'agente_afianzado' THEN 'Agente afianzado' WHEN 'almacenaje' THEN 'Almacenaje'
+                        WHEN 'transporte_interno' THEN 'Transporte interno' WHEN 'otro' THEN 'Otro' ELSE g.tipo_gasto END)";
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.codigo_producto_raw', 'pr.codigo', 'pr.nombre', 'd.descripcion', 'd.numero_lote', 'd.nup',
+             'd.cantidad::text', 'd.precio_total_fob::text'],
+            $q, $params, 'dt'
+        );
+        $condFac = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['f.numero_factura', 'pf.razon_social', 'pf.identificacion', 'f.forma_pago', 'f.monto_usd::text'],
+            $q, $params, 'fe'
+        );
+        $condGas = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            [$tiposGasto, 'g.descripcion', 'g.monto::text',
+             "CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)",
+             "CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial)"],
+            $q, $params, 'ga'
+        );
+        if ($condDet === '' || $condFac === '' || $condGas === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT i.id, i.numero_importacion, i.referencia_dai, i.fecha_nacionalizacion,
+                           i.created_at, i.estado, p.razon_social AS proveedor
+                    FROM importaciones_cabecera i
+                    INNER JOIN proveedores p ON p.id = i.id_proveedor
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen,
+                           COALESCE(NULLIF(pr.codigo, ''), d.codigo_producto_raw) AS tipo,
+                           COALESCE(NULLIF(d.descripcion, ''), pr.nombre) AS descripcion,
+                           d.cantidad,
+                           d.precio_total_fob AS monto,
+                           b.*
+                    FROM importaciones_detalle d
+                    JOIN base b ON b.id = d.id_importacion
+                    LEFT JOIN productos pr ON pr.id = d.id_producto
+                    WHERE d.eliminado = false AND $condDet
+                    UNION ALL
+                    SELECT 'FACTURA' AS origen,
+                           f.numero_factura AS tipo,
+                           pf.razon_social AS descripcion,
+                           NULL AS cantidad,
+                           f.monto_usd AS monto,
+                           b.*
+                    FROM importaciones_factura_exterior f
+                    JOIN base b ON b.id = f.id_importacion
+                    LEFT JOIN proveedores pf ON pf.id = f.id_proveedor
+                    WHERE f.eliminado = false AND $condFac
+                    UNION ALL
+                    SELECT 'GASTO' AS origen,
+                           $tiposGasto AS tipo,
+                           g.descripcion,
+                           NULL AS cantidad,
+                           g.monto,
+                           b.*
+                    FROM importaciones_gastos g
+                    JOIN base b ON b.id = g.id_importacion
+                    LEFT JOIN compras_cabecera c ON c.id = g.id_compra
+                    LEFT JOIN liquidaciones_cabecera l ON l.id = g.id_liquidacion_compra
+                    WHERE g.eliminado = false AND $condGas
+                ) x
+                ORDER BY x.fecha_nacionalizacion DESC NULLS LAST, x.id DESC, x.origen
+                LIMIT $limit";
+
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     // ─────────────────────────────────────────────────────────────────────

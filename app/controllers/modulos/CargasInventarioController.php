@@ -91,7 +91,55 @@ class CargasInventarioController extends BaseModuloController
             'aprobadoresNombres' => $this->service->getAprobadoresNombres($idEmpresa),
             'rutaModulo'  => self::RUTA_MODULO,
             'fullWidth'   => true,
+            // Selects del modal de filtros: solo usuarios y bodegas que aparecen en las cargas.
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las líneas de
+     * las cargas. Devuelve cada línea que coincide con la carga a la que pertenece.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $estados = ['pendiente' => 'Pendiente', 'aprobada' => 'Aprobada', 'rechazada' => 'Rechazada'];
+        $rows = [];
+        try {
+            foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+                $valida = !in_array($r['linea_valida'], [false, 'f', 0, '0'], true);
+                $rows[] = [
+                    'producto'    => trim(($r['producto_codigo'] ?? '') . ' - ' . ($r['producto_nombre'] ?? ''), ' -'),
+                    'bodega'      => $r['bodega'] ?? '',
+                    'cantidad'    => number_format((float) ($r['cantidad'] ?? 0), 2),
+                    'costo'       => number_format((float) ($r['costo_unitario'] ?? 0), 2),
+                    'lote'        => trim(($r['numero_lote'] ?? '') . (!empty($r['nup']) ? ' · ' . $r['nup'] : ''), ' ·'),
+                    'nota'        => $valida ? (string) ($r['observacion'] ?? '') : ('Error: ' . ($r['error_linea'] ?? '')),
+                    'id_carga'    => (int) $r['id_carga'],
+                    'numero'      => (int) $r['numero'],
+                    'numero_txt'  => '#' . (int) $r['numero'],
+                    'fecha'       => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '',
+                    'tipo'        => ucfirst((string) ($r['tipo_movimiento'] ?? '')),
+                    'estado'      => $estados[$r['estado'] ?? ''] ?? ucfirst((string) ($r['estado'] ?? '')),
+                ];
+            }
+            echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['rows' => [], 'error' => 'No se pudo buscar en los detalles.']);
+        }
     }
 
     /**

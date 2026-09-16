@@ -66,8 +66,53 @@ class AsientosContablesController extends BaseModuloController
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
             'vistaConfig'=> $prefsVista,
+            // Selects del modal de filtros (solo lo que la empresa ya usó)
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
             'fullWidth'  => true,
         ]);
+    }
+
+    /**
+     * Pestaña "Detalles" del buscador: búsqueda libre dentro de las líneas de los
+     * asientos (cuenta, referencias, tercero, centro de costo, proyecto, debe/haber).
+     * Registros propios (CLAUDE.md §6): sin acceso total, solo los asientos que
+     * registró el usuario.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $debe  = (float) ($r['debe'] ?? 0);
+            $haber = (float) ($r['haber'] ?? 0);
+            $rows[] = [
+                'id_asiento'  => (int) $r['id_asiento'],
+                'numero'      => $r['numero_comprobante'] ?? '',
+                'fecha'       => !empty($r['fecha_asiento']) ? date('d-m-Y', strtotime($r['fecha_asiento'])) : '',
+                'cuenta'      => trim(($r['cuenta_codigo'] ?? '') . ' ' . ($r['cuenta_nombre'] ?? '')),
+                'referencia'  => implode(' · ', array_filter([
+                    $r['documento_referencia'] ?? '', $r['referencia_detalle'] ?? '',
+                    $r['centro_costo'] ?? '', $r['proyecto'] ?? '',
+                ], fn($v) => trim((string) $v) !== '')),
+                'tercero'     => $r['tercero'] ?? '',
+                'debe'        => $debe != 0.0 ? number_format($debe, 2) : '',
+                'haber'       => $haber != 0.0 ? number_format($haber, 2) : '',
+                'estado'      => ucfirst((string) ($r['estado'] ?? '')),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     /**

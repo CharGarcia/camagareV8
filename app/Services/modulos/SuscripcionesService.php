@@ -29,6 +29,18 @@ class SuscripcionesService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Valores usados por la empresa para los selects del modal de filtros del listado. */
+    public function getOpcionesFiltro(int $idEmpresa): array
+    {
+        return $this->repository->getOpcionesFiltro($idEmpresa);
+    }
+
+    /** Búsqueda libre dentro de las suscripciones (ítems, cobros, info adicional) — pestaña Detalles del buscador. */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuario, $limit);
+    }
+
     public function getPeriodicidades(): array
     {
         return $this->repository->getPeriodicidades();

@@ -42,6 +42,12 @@ class ConfiguracionRestauranteService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
     }
 
+    /** Usuarios que registraron estaciones (select "Usuario" del modal de filtros del listado). */
+    public function getUsuariosConEstaciones(int $idEmpresa): array
+    {
+        return $this->repository->getUsuariosConEstaciones($idEmpresa);
+    }
+
     public function getEstaciones(int $idEmpresa): array
     {
         return $this->repository->getEstaciones($idEmpresa);

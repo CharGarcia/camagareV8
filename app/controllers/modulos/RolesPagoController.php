@@ -62,9 +62,49 @@ class RolesPagoController extends BaseModuloController
             'tipos'      => CatalogoRol::tipos(),
             'estados'    => CatalogoRol::estados(),
             'meses'      => CatalogoNovedades::MESES,
+            // Selects del modal de filtros: solo los valores que la empresa realmente usa.
+            'aniosFiltro'    => $this->service->getAniosUsados($idEmpresa),
+            'usuariosFiltro' => $this->service->getUsuariosConRoles($idEmpresa),
             'vistaConfig' => $prefsVista,
             'idEmpresa'  => $idEmpresa,
         ]);
+    }
+
+    /**
+     * Búsqueda libre dentro de las corridas (pestaña "Detalles" del modal de filtros):
+     * líneas de empleado y rubros que coinciden, con la corrida a la que pertenecen.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $origenes = ['EMPLEADO' => 'Empleado', 'INGRESO' => 'Rubro de ingreso', 'EGRESO' => 'Rubro de egreso'];
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'origen'         => $origenes[$r['origen']] ?? $r['origen'],
+                'empleado'       => $r['empleado'] ?? '',
+                'identificacion' => $r['identificacion'] ?? '',
+                'concepto'       => $r['concepto'] ?? '',
+                'monto'          => number_format((float) ($r['monto'] ?? 0), 2),
+                'id_rol'         => (int) $r['id_rol'],
+                'corrida'        => $r['corrida'] ?? '',
+                'fecha'          => !empty($r['fecha_pago']) ? date('d-m-Y', strtotime((string) $r['fecha_pago'])) : '',
+                'estado'         => CatalogoRol::nombreEstado((string) ($r['estado'] ?? '')),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function searchAjax(): void

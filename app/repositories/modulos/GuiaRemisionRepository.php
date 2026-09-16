@@ -47,9 +47,34 @@ class GuiaRemisionRepository extends BaseRepository
         $where = "WHERE g.id_empresa = :id_empresa AND g.eliminado = false AND g.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        // Texto libre: las columnas del listado y lo que identifica la guía aunque no sea
+        // columna. El buscador de la vista no sugiere campos; lo escrito se busca en todo.
+        // Decisión del usuario: las columnas Estado y Correo NO entran en el texto libre
+        // (se filtran solo desde el modal de filtros).
         if ($parsed['texto_libre'] !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['c.nombre', 'c.identificacion', 't.nombre', 'g.placa', 'g.motivo_traslado'],
+                [
+                    "CONCAT(g.establecimiento,'-',g.punto_emision,'-',g.secuencial)", // Número
+                    'g.secuencial',
+                    'g.fecha_emision::text',                                          // Emisión
+                    'c.nombre',                                                       // Destinatario
+                    'c.identificacion',                                               // RUC/Cédula
+                    't.nombre',                                                       // Transportista
+                    'g.placa',                                                        // Placa
+                    'g.motivo_traslado',                                              // Motivo
+                    'g.fecha_inicio_transporte::text',                                // F. Inicio
+                    'u.nombre',                                                       // Usuario
+                    // Fuera del listado, pero identifican la guía:
+                    't.identificacion',
+                    'g.clave_acceso',
+                    'g.numero_autorizacion',
+                    'g.num_doc_sustento',
+                    'g.direccion_partida',
+                    'g.direccion_destino',
+                    'g.ruta',
+                    'g.observaciones',
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', grd.codigo_principal, grd.codigo_auxiliar, grd.descripcion), ' ') FROM guias_remision_detalle grd WHERE grd.id_guia_remision = g.id)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -64,19 +89,42 @@ class GuiaRemisionRepository extends BaseRepository
                 'transportista' => 't.nombre',
                 'placa'         => 'g.placa',
                 'motivo'        => 'g.motivo_traslado',
+                'ruc'            => 'c.identificacion',
+                'identificacion' => 'c.identificacion',
+                // Nº completo (001-001-000000123)
+                'numero'         => "CONCAT(g.establecimiento,'-',g.punto_emision,'-',g.secuencial)",
+                'nro'            => "CONCAT(g.establecimiento,'-',g.punto_emision,'-',g.secuencial)",
+                'usuario'        => 'u.nombre',
+                'clave'          => 'g.clave_acceso',
+                'clave_acceso'   => 'g.clave_acceso',
+                'autorizacion'   => 'g.numero_autorizacion',
+                'doc_sustento'   => 'g.num_doc_sustento',
+                'partida'        => 'g.direccion_partida',
+                'destino'        => 'g.direccion_destino',
+                'ruta'           => 'g.ruta',
+                'obs'            => 'g.observaciones',
             ],
             'exacto' => [
                 'estado' => 'g.estado',
-                'correo' => 'g.estado_correo',
+                'correo' => "COALESCE(NULLIF(g.estado_correo,''),'pendiente')",
+                'estado_correo' => "COALESCE(NULLIF(g.estado_correo,''),'pendiente')",
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del buscador.
                 'serie'  => "CONCAT(g.establecimiento,'-',g.punto_emision)",
+                'id_usuario'       => 'g.id_usuario',
+                'id_transportista' => 'g.id_transportista',
+                // ambiente:1 (pruebas) / ambiente:2 (producción)
+                'ambiente'         => 'g.tipo_ambiente',
             ],
             'fecha' => [
                 'fecha'                   => 'g.fecha_emision',
                 'fecha_emision'           => 'g.fecha_emision',
                 'fecha_inicio'            => 'g.fecha_inicio_transporte',
                 'fecha_inicio_transporte' => 'g.fecha_inicio_transporte',
+                'fecha_fin'               => 'g.fecha_fin_transporte',
+                'fecha_fin_transporte'    => 'g.fecha_fin_transporte',
+                'fecha_autorizacion'      => 'g.fecha_autorizacion',
+                'fecha_sustento'          => 'g.fecha_emision_doc_sustento',
             ],
             'numerico' => [
                 'secuencial' => 'g.secuencial::numeric',
@@ -105,6 +153,7 @@ class GuiaRemisionRepository extends BaseRepository
                      FROM guias_remision_cabecera g
                      INNER JOIN clientes      c ON g.id_cliente      = c.id
                      INNER JOIN transportistas t ON g.id_transportista = t.id
+                     LEFT  JOIN usuarios       u ON g.id_usuario       = u.id
                      {$where}";
         $total = $this->query($sqlCount, $params)->fetchColumn();
 
@@ -123,6 +172,94 @@ class GuiaRemisionRepository extends BaseRepository
                 LIMIT {$perPage} OFFSET {$offset}";
 
         return ['rows' => $this->query($sql, $params)->fetchAll(), 'total' => (int) $total];
+    }
+
+    /** Usuarios que han registrado alguna guía en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConGuias(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM guias_remision_cabecera g
+                JOIN usuarios u ON u.id = g.id_usuario
+                WHERE g.id_empresa = :id_empresa AND g.eliminado = false
+                ORDER BY u.nombre";
+        return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Transportistas usados en alguna guía de la empresa (select "Transportista" del modal de filtros). */
+    public function getTransportistasConGuias(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT t.id, t.nombre, t.identificacion
+                FROM guias_remision_cabecera g
+                JOIN transportistas t ON t.id = g.id_transportista
+                WHERE g.id_empresa = :id_empresa AND g.eliminado = false
+                ORDER BY t.nombre";
+        return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las guías (pestaña "Detalles" del modal de filtros):
+     * devuelve cada producto transportado o campo de información adicional que
+     * coincide con el texto, junto con la guía a la que pertenece. Mismo alcance que
+     * el listado (empresa, no eliminadas, ambiente, registros propios por id_usuario).
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "g.id_empresa = :id_empresa AND g.eliminado = false
+                      AND g.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND g.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.codigo_principal', 'd.codigo_auxiliar', 'd.descripcion', 'd.cantidad::text'],
+            $q, $params, 'dt'
+        );
+        $condAdic = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['a.nombre', 'a.valor'],
+            $q, $params, 'ad'
+        );
+        if ($condDet === '' || $condAdic === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT g.id, CONCAT(g.establecimiento,'-',g.punto_emision,'-',g.secuencial) AS numero,
+                           g.fecha_emision, g.estado, c.nombre AS cliente, t.nombre AS transportista
+                    FROM guias_remision_cabecera g
+                    LEFT JOIN clientes c ON c.id = g.id_cliente
+                    LEFT JOIN transportistas t ON t.id = g.id_transportista
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen,
+                           COALESCE(NULLIF(d.codigo_principal,''), d.codigo_auxiliar) AS tipo,
+                           d.descripcion,
+                           d.cantidad,
+                           b.id AS id_guia, b.numero, b.fecha_emision, b.estado, b.cliente, b.transportista
+                    FROM guias_remision_detalle d
+                    JOIN base b ON b.id = d.id_guia_remision
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'ADICIONAL' AS origen,
+                           a.nombre AS tipo,
+                           a.valor AS descripcion,
+                           NULL AS cantidad,
+                           b.id AS id_guia, b.numero, b.fecha_emision, b.estado, b.cliente, b.transportista
+                    FROM guias_remision_adicional a
+                    JOIN base b ON b.id = a.id_guia_remision
+                    WHERE $condAdic
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id_guia DESC, x.origen
+                LIMIT $limit";
+
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

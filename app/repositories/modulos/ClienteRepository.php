@@ -180,8 +180,13 @@ class ClienteRepository extends BaseRepository
      *        llamador usa `OrdenListado` (permite ordenar por varias columnas). Si
      *        viene vacío se arma desde $ordenCol/$ordenDir, que es como siguen
      *        llamando el resto de flujos (API, replicación entre empresas).
+     * @param bool  $busquedaAmplia true solo desde el listado del módulo Clientes (y sus
+     *        exportaciones): el texto libre busca en todas las columnas del listado. Los
+     *        buscadores de cliente de otros módulos (facturas, pedidos, cobros…) llaman
+     *        sin este flag y siguen buscando solo por nombre, identificación, correo y
+     *        teléfono, para que escribir una ciudad o un vendedor no los llene de ruido.
      */
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, bool $soloActivos = false, array $ordenMulti = []): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, bool $soloActivos = false, array $ordenMulti = [], bool $busquedaAmplia = false): array
     {
         $ordenMulti = \App\Helpers\OrdenListado::normalizar(
             $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
@@ -195,8 +200,28 @@ class ClienteRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            $columnasTexto = ['c.nombre', 'c.identificacion', 'c.email', 'c.telefono'];
+            if ($busquedaAmplia) {
+                // Listado del módulo: todas las columnas visibles + lo que identifica al
+                // cliente. Decisión del usuario: Tipo Id. y Estado NO entran en el texto
+                // libre (se filtran desde el modal). Días de visita tampoco: es un array
+                // de días; se filtra con dia_visita / frecuencia / semana_visita.
+                $columnasTexto = [
+                    'c.identificacion',        // Identificación
+                    'c.nombre',                // Razón Social
+                    'c.email',                 // Correo
+                    'c.telefono',              // Teléfono
+                    'c.direccion',             // Dirección
+                    'c.plazo::text',           // Plazo
+                    'p.nombre',                // Provincia
+                    'ciu.nombre',              // Ciudad
+                    'v.nombre',                // Vendedor
+                    'c.observacion_visita',    // Observación de la ruta de visita (ficha)
+                    'ureg.nombre',             // Usuario que registró (ficha)
+                ];
+            }
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['c.nombre', 'c.identificacion', 'c.email', 'c.telefono'],
+                $columnasTexto,
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -256,6 +281,19 @@ class ClienteRepository extends BaseRepository
                 'tipo'              => 'c.tipo_id',
                 'frecuencia'        => 'c.frecuencia_visita',
                 'frecuencia_visita' => 'c.frecuencia_visita',
+                // Selects del modal de filtros (catálogos por id/código).
+                'id_vendedor'       => 'c.id_vendedor',
+                'cod_provincia'     => 'c.provincia',
+                'cod_ciudad'        => "CONCAT(c.provincia, '-', c.ciudad)",
+                'usuario'           => 'c.created_by',
+                // Sí/No calculados.
+                'con_email'         => "CASE WHEN NULLIF(TRIM(COALESCE(c.email, '')), '') IS NULL THEN 'no' ELSE 'si' END",
+                'ubicacion'         => "CASE WHEN c.latitud IS NOT NULL AND c.longitud IS NOT NULL THEN 'si' ELSE 'no' END",
+                'cobro_auto'        => "CASE WHEN c.id_forma_cobro_predeterminada IS NOT NULL THEN 'si' ELSE 'no' END",
+            ],
+            'fecha'    => [
+                'registro'   => 'c.created_at',
+                'created_at' => 'c.created_at',
             ],
             'numerico' => [ 'plazo' => 'c.plazo', 'orden_visita' => 'c.orden_visita' ],
         ]);
@@ -270,6 +308,11 @@ class ClienteRepository extends BaseRepository
                   LEFT JOIN identificador_comprador_vendedor icv ON icv.codigo = c.tipo_id
                   LEFT JOIN provincia p ON p.codigo = c.provincia
                   LEFT JOIN ciudad ciu ON ciu.codigo = c.ciudad AND ciu.cod_prov = c.provincia";
+        if ($busquedaAmplia) {
+            // Usuario que registró: solo lo usa el texto libre amplio (mismo JOIN en el COUNT).
+            $joins .= "
+                  LEFT JOIN usuarios ureg ON ureg.id = c.created_by";
+        }
 
         // Obtener total
         $sqlCount = "SELECT COUNT(*) FROM {$this->table} c $joins $where";
@@ -302,6 +345,43 @@ class ClienteRepository extends BaseRepository
         }
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros del listado: solo los valores que
+     * la empresa realmente usa en sus clientes (no eliminados).
+     *
+     * @return array{vendedores: array, provincias: array, ciudades: array, usuarios: array}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $p = [':id_empresa' => $idEmpresa];
+        $leer = function (string $sql) use ($p): array {
+            $st = $this->db->prepare($sql);
+            $st->execute($p);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        };
+
+        return [
+            'vendedores' => $leer("SELECT DISTINCT v.id, v.nombre
+                                   FROM clientes c JOIN vendedores v ON v.id = c.id_vendedor
+                                   WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                                   ORDER BY v.nombre"),
+            'provincias' => $leer("SELECT DISTINCT p.codigo, p.nombre
+                                   FROM clientes c JOIN provincia p ON p.codigo = c.provincia
+                                   WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                                   ORDER BY p.nombre"),
+            'ciudades'   => $leer("SELECT DISTINCT CONCAT(c.provincia, '-', c.ciudad) AS codigo, ciu.nombre, p.nombre AS provincia
+                                   FROM clientes c
+                                   JOIN ciudad ciu ON ciu.codigo = c.ciudad AND ciu.cod_prov = c.provincia
+                                   LEFT JOIN provincia p ON p.codigo = c.provincia
+                                   WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                                   ORDER BY ciu.nombre, p.nombre"),
+            'usuarios'   => $leer("SELECT DISTINCT u.id, u.nombre
+                                   FROM clientes c JOIN usuarios u ON u.id = c.created_by
+                                   WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                                   ORDER BY u.nombre"),
+        ];
     }
 
     /**

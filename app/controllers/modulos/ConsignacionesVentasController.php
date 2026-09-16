@@ -98,6 +98,8 @@ class ConsignacionesVentasController extends BaseModuloController
             'vendedores'     => $vendedores,
             'responsables'   => $responsables,
             'seriesFiltro'   => $seriesFiltro,
+            // Selects del modal de filtros del listado (solo valores usados por la empresa).
+            'opcionesFiltros' => $this->service->getOpcionesFiltros($idEmpresa),
             'empresa'        => $empresaData,
             'rows'           => $rows,
             'total'          => $total,
@@ -178,6 +180,63 @@ class ConsignacionesVentasController extends BaseModuloController
             'excel_url' => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir"
         ]);
         exit;
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las consignaciones
+     * (productos consignados y documentos relacionados). Cada fila trae además `registro`,
+     * la cabecera con el mismo formato que el data-row del listado, para abrir el modal.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim((string) ($_GET['q'] ?? ''));
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $origenes = [
+            'PRODUCTO' => 'Producto',
+            'FACTURA'  => 'Factura de consignación',
+            'RETORNO'  => 'Retorno',
+            'CAMBIO'   => 'Cambio de producto',
+        ];
+        $camposDetalle = ['origen', 'tipo', 'descripcion', 'extra', 'cantidad', 'monto'];
+
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            // Cabecera tal como la entrega el listado (fecha en d-m-Y, que es lo que espera abrirModalConsignacionVer).
+            $registro = array_diff_key($r, array_flip($camposDetalle));
+            if (!empty($registro['fecha_emision'])) {
+                $registro['fecha_emision'] = date('d-m-Y', strtotime((string) $registro['fecha_emision']));
+            }
+            $descripcion = (string) ($r['descripcion'] ?? '');
+            if ($r['origen'] === 'FACTURA' && $descripcion !== '') {
+                $descripcion = 'Factura SRI ' . $descripcion;
+            }
+            $rows[] = [
+                'origen'      => $origenes[$r['origen']] ?? $r['origen'],
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $descripcion,
+                'extra'       => $r['extra'] ?? '',
+                'cantidad'    => $r['cantidad'] !== null ? number_format((float) $r['cantidad'], 2) : '',
+                'monto'       => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                'id'          => (int) $r['id'],
+                'numero'      => ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? ''),
+                'fecha'       => $registro['fecha_emision'] ?? '',
+                'cliente'     => $r['cliente_nombre'] ?? '',
+                'estado'      => (string) ($r['estado'] ?? ''),
+                'registro'    => $registro,
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     /**

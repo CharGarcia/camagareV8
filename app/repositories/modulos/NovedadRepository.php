@@ -31,8 +31,20 @@ class NovedadRepository extends BaseRepository
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre: las columnas del listado + lo que identifica la novedad.
+            // Decisión del usuario: las columnas Tipo, Afecta a, Motivo (clasificaciones),
+            // Estado y Pago NO entran en el texto libre; se filtran desde el modal.
             $condicion = FiltrosBusqueda::condicionTexto(
-                ['e.nombres_apellidos', 'e.identificacion', 'n.tipo_nombre', 'n.observacion'],
+                [
+                    'e.nombres_apellidos',                                        // Empleado
+                    'e.identificacion',                                           // Identificación
+                    "TO_CHAR(n.fecha, 'DD-MM-YYYY')",                             // Fecha (como se muestra)
+                    'n.fecha::text',
+                    self::exprPeriodoTexto('n'),                                  // Período ("Marzo 2026")
+                    'n.valor::text',                                              // Valor
+                    'n.observacion',
+                    'u.nombre',                                                   // Usuario que registró
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -41,9 +53,28 @@ class NovedadRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (FiltrosModal en la vista). Las viejas se conservan:
+        // viajan en los enlaces de PDF/Excel y en URLs guardadas.
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'texto'    => ['tipo' => 'n.tipo_nombre', 'observacion' => 'n.observacion', 'empleado' => 'e.nombres_apellidos'],
-            'exacto'   => ['estado' => 'n.estado', 'mes' => 'n.periodo_mes', 'anio' => 'n.periodo_anio', 'codigo' => 'n.tipo_codigo'],
+            'texto'    => [
+                'tipo'           => 'n.tipo_nombre',
+                'observacion'    => 'n.observacion',
+                'empleado'       => 'e.nombres_apellidos',
+                'identificacion' => 'e.identificacion',
+            ],
+            'exacto'   => [
+                'estado'    => 'n.estado',
+                'mes'       => 'n.periodo_mes',
+                'anio'      => 'n.periodo_anio',
+                'codigo'    => 'n.tipo_codigo',
+                'aplica_en' => 'n.aplica_en',
+                'motivo'    => 'n.motivo_codigo',
+                'usuario'   => 'n.created_by',
+                // origen:manual / origen:carga (importada desde Excel)
+                'origen'    => "CASE WHEN n.id_carga IS NULL THEN 'manual' ELSE 'carga' END",
+                // pago:pagada / pago:pendiente — mismo criterio que la columna Pago
+                'pago'      => self::exprEstadoPago('n'),
+            ],
             'fecha'    => ['fecha' => 'n.fecha'],
             'numerico' => ['valor' => 'n.valor'],
         ]);
@@ -53,7 +84,8 @@ class NovedadRepository extends BaseRepository
             default    => "n.{$ordenCol}",
         };
 
-        $from = "FROM {$this->table} n JOIN empleados e ON e.id = n.id_empleado {$where}";
+        $from = "FROM {$this->table} n JOIN empleados e ON e.id = n.id_empleado
+                 LEFT JOIN usuarios u ON u.id = n.created_by {$where}";
 
         $stTotal = $this->db->prepare("SELECT COUNT(*) {$from}");
         $stTotal->execute($params);
@@ -71,6 +103,67 @@ class NovedadRepository extends BaseRepository
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
         return ['rows' => $this->anexarEstadoPago($rows, $idEmpresa), 'total' => $total];
+    }
+
+    /** Período de la novedad como se muestra en el listado ("Marzo 2026"), para el texto libre. */
+    private static function exprPeriodoTexto(string $a): string
+    {
+        $casos = '';
+        foreach (\App\models\CatalogoNovedades::MESES as $num => $nombre) {
+            $casos .= ' WHEN ' . (int) $num . " THEN '" . str_replace("'", "''", $nombre) . "'";
+        }
+        return "CONCAT(CASE {$a}.periodo_mes{$casos} END, ' ', {$a}.periodo_anio)";
+    }
+
+    /**
+     * 'pagada' / 'pendiente' en SQL, con el MISMO criterio que la columna Pago
+     * (anexarEstadoPago): migrada como desembolsada o conciliada, o rubro de una línea
+     * de rol cuyo neto quedó cubierto por egresos (ver idsNovedadesPagadas). Solo se
+     * evalúa cuando se usa el filtro `pago:`.
+     */
+    private static function exprEstadoPago(string $a): string
+    {
+        return "CASE WHEN COALESCE({$a}.desembolsado_migrado, false) OR COALESCE({$a}.conciliada_migrada, false)
+                       OR EXISTS (
+                            SELECT 1
+                            FROM rol_detalle_rubro rr
+                            JOIN rol_detalle rd  ON rd.id = rr.id_detalle
+                            JOIN rol_cabecera rc ON rc.id = rd.id_rol
+                            CROSS JOIN LATERAL (
+                                SELECT COALESCE(SUM(ed.monto_pagado), 0) AS pagado
+                                FROM egresos_detalle ed
+                                JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                                WHERE ed.tipo_documento = 'ROL' AND ec.estado != 'anulado'
+                                  AND ec.eliminado = false AND ed.eliminado = false
+                                  AND ed.id_referencia_documento = rd.id
+                            ) pg
+                            WHERE rr.id_novedad = {$a}.id
+                              AND rd.id_empresa = {$a}.id_empresa AND rc.eliminado = false
+                              AND pg.pagado > 0 AND (rd.neto - pg.pagado) <= 0.01
+                       )
+                  THEN 'pagada' ELSE 'pendiente' END";
+    }
+
+    /** Años de período usados por la empresa (select "Año" del modal de filtros). */
+    public function getAniosUsados(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT DISTINCT periodo_anio FROM {$this->table}
+                                  WHERE id_empresa = :id_empresa AND eliminado = false AND periodo_anio IS NOT NULL
+                                  ORDER BY periodo_anio DESC");
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** Usuarios que registraron alguna novedad en la empresa (select "Usuario que registró"). */
+    public function getUsuariosConNovedades(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT DISTINCT u.id, u.nombre
+                                  FROM {$this->table} n
+                                  JOIN usuarios u ON u.id = n.created_by
+                                  WHERE n.id_empresa = :id_empresa AND n.eliminado = false
+                                  ORDER BY u.nombre");
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

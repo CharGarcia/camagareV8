@@ -58,6 +58,18 @@ class AsientoContableService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
     }
 
+    /** Tipos, orígenes y usuarios usados por la empresa (selects del modal de filtros). */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        return $this->repository->getOpcionesFiltroListado($idEmpresa);
+    }
+
+    /** Búsqueda libre dentro de las líneas de los asientos (pestaña Detalles del buscador). */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuario, $limit);
+    }
+
     public function getDetalleAsiento(int $id, int $idEmpresa): array
     {
         return $this->repository->getDetalleAsiento($id, $idEmpresa);

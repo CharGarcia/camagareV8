@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion
-version: 1.15
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion
+version: 1.16
 orden: 45
 estado: activo
 ---
@@ -136,6 +136,54 @@ Si la empresa usa una **plantilla propia** (módulo *Plantillas de Documentos*),
 manda esa plantilla y no este diseño; ahí el usuario emisor es el campo
 `{cg_emitido_por}` y el total de ítems, `{total_items}`.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la consignación:
+fecha, número (serie y secuencial), cliente, RUC o cédula, asesor y
+observaciones. Además busca en el responsable de traslado, los puntos de
+partida y llegada, el total, el usuario que la registró, los **productos
+consignados** (código, nombre, lote y NUP) y los **documentos relacionados**:
+facturas de consignación (su número y el de la factura SRI), retornos y
+cambios de producto. La columna **Estado** no entra en la búsqueda libre: para
+filtrar por ella use la ventana de filtros. Puede escribir varias palabras en
+cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el
+texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo
+girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Consignación** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), fecha de entrega, estado (borrador, emitida, entregada, anulada), serie, Nº consignación, secuencial, con o sin asiento contable, con o sin factura de consignación, usuario que registró |
+| Valores | Total, subtotal e IVA (cada uno con mínimo y máximo) |
+| Cliente | Cliente, RUC / cédula, asesor, responsable de traslado, punto de llegada, observaciones |
+
+Los selectores *Serie*, *Usuario que registró*, *Asesor* y *Responsable de
+traslado* listan solo lo que la empresa ya usó en sus consignaciones. *Con
+factura de consignación* cuenta las facturas que no están anuladas.
+
+**Pestaña Detalles** (lo que hay dentro de la consignación). Es un único cuadro,
+**Buscar libremente dentro de las consignaciones**: escriba un producto, un
+código, un lote, un NUP, una bodega o el número de una factura, retorno o cambio
+relacionado, y aparece la lista de **cada coincidencia** con la consignación a
+la que pertenece (número, fecha, cliente y estado). Un clic en la fila deja el
+listado mostrando solo esa consignación; el ícono de la derecha la abre
+directamente.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último. El PDF y el Excel del listado salen con los
+mismos filtros.
+
 ## Qué habilita cada permiso
 
 - **Ver**: abrir el listado y los documentos, con su PDF, su Excel y el envío
@@ -223,6 +271,19 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.16** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas de la consignación y además en los
+  productos consignados (código, nombre, lote, NUP) y en las facturas, retornos
+  y cambios relacionados, salvo la columna Estado. Los filtros pasan a una
+  **ventana propia** (botón del embudo, se aplican con *Aplicar*) con dos
+  pestañas: **Consignación** (filtros por campo, con criterios nuevos: fecha de
+  entrega, Nº consignación, con/sin asiento, con/sin factura de consignación,
+  usuario, subtotal, IVA, punto de llegada, observaciones, y asesor y
+  responsable de traslado como listas) y **Detalles**, un cuadro de **búsqueda
+  libre dentro de las consignaciones** que dice a qué consignación pertenece
+  cada coincidencia. Los filtros activos se ven como etiquetas dentro del
+  cuadro. Nueva sección *Buscar y filtrar el listado*.
 
 - **1.15** — PDF del documento: se quita la columna **Caducidad**; el ancho
   que se libera lo toma la **Descripción**. La fecha de caducidad se sigue

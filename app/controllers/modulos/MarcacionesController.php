@@ -79,6 +79,8 @@ class MarcacionesController extends BaseModuloController
             'buscar'     => $buscar,
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
+            // Selects del modal de filtros: solo los valores que la empresa realmente usa.
+            'opcionesFiltro' => $this->service->getOpcionesFiltro($idEmpresa),
             'vistaConfig' => $prefsVista,
         ]);
     }

@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, creado por, aprobado por, exportar
-version: 1.3
+etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips
+version: 1.4
 orden: 25
 estado: activo
 ---
@@ -59,26 +59,59 @@ Estado y, dentro de cada estado, Fecha—; el número junto a la flecha indica l
 prioridad de cada una. El orden elegido se conserva para la próxima vez y viaja
 también a los archivos de PDF y Excel.
 
-**Buscar**: escriba texto libre para buscar en el número, el tipo, el estado, la
-observación y el nombre de quien creó o aprobó la carga. Los botones rápidos
-(*Pendientes*, *Aprobadas*, *Rechazadas*, *Entradas*, *Salidas*) filtran de un
-clic, y el buscador admite además filtros por campo:
+**Buscar y filtrar**: ver la sección siguiente, *Buscar y filtrar el listado*.
 
-| Filtro | Ejemplo |
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del listado: número, fecha
+(tal como se ve, por ejemplo *08-07-2026*), cantidad de líneas, creado por,
+aprobado por y observación. Además busca en el motivo del rechazo y en los
+**productos de las líneas** (el código que traía el archivo, el código del
+sistema y el nombre). Las columnas **Tipo** y **Estado** ya no entran en la
+búsqueda libre: para filtrar por ellas use la ventana de filtros. Puede escribir
+varias palabras en cualquier orden y no importan mayúsculas ni tildes. Para
+limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un
+**círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros. Los antiguos botones rápidos (*Pendientes*, *Aprobadas*,
+*Entradas*…) pasan a ser opciones de los selectores de estado y tipo.
+
+**Pestaña Carga:**
+
+| Bloque | Filtros |
 |--------|---------|
-| Estado | `estado:pendiente` |
-| Tipo | `tipo:entrada` |
-| Número | `numero:15` · `numero:10..30` |
-| Fecha | `fecha:2026-01-01..2026-03-31` |
-| Líneas | `lineas:1..50` |
-| Observación o referencia | `observacion:conteo` · `observacion:INV-00123` |
-| Creado por | `creado:"maria perez"` |
-| Aprobado por | `aprobado:lopez` |
+| Carga | Fecha de la carga (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), tipo (entrada / salida / ajuste), estado (pendiente / aprobada / rechazada), N° de carga y líneas (con mínimo y máximo), pendientes con líneas en error, observación o referencia, motivo de rechazo |
+| Personas | Creado por, aprobado por, fecha de aprobación |
+| Líneas | Producto (código o nombre) y bodega: la carga aparece si **alguna** de sus líneas coincide |
 
-Anteponer un guion niega el filtro: `-estado:aprobada` deja fuera las aprobadas.
+Los selectores de *Creado por*, *Aprobado por* y *Bodega* listan solo lo que
+aparece en las cargas de la empresa. *Pendiente con líneas en error* son las
+cargas que muestran el triángulo naranja en la columna Estado.
+
+**Pestaña Detalles** (lo que hay dentro de la carga). Es un único cuadro,
+**Buscar libremente dentro de las cargas**: escriba un código o nombre de
+producto, una bodega, un lote, un NUP, una observación de línea, un mensaje de
+error o una cantidad, y aparece la lista de **cada línea que coincide** con la
+carga a la que pertenece (número, fecha, tipo y estado). Un clic en la fila deja
+el listado mostrando solo esa carga; el ícono de la derecha abre directamente
+su detalle.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último. Quien ya conoce la sintaxis `clave:valor` puede
+seguir escribiéndola (`estado:pendiente`, `numero:10..30`, `creado:"maria perez"`,
+`-estado:aprobada`); los enlaces guardados siguen funcionando.
 
 **Exportar**: los botones **PDF** y **Excel** bajan lo que está en pantalla —con
-la búsqueda y el orden aplicados, y con la columna Observación incluida—.
+la búsqueda, los filtros y el orden aplicados, y con la columna Observación
+incluida—.
 
 ## Aprobación
 
@@ -130,3 +163,4 @@ Antes esta configuración estaba en *Empresa → Inventario*.
 - **1.1** — La configuración de la aprobación se movió al módulo **Aprobaciones**; se agrega monto mínimo.
 - **1.2** — El listado pasa al estándar del sistema: buscador por campos con filtros rápidos, ordenamiento por encabezado (incluido el orden por varias columnas con Shift + clic), paginación sin recargar la página y nueva columna **Observación**, también en el PDF y el Excel. En las cargas migradas esa columna muestra solo la referencia.
 - **1.3** — El detalle de una carga pendiente con errores muestra la lista completa de errores de comprobación y una columna **Motivo** por línea (antes solo se veían al pasar el cursor sobre la X roja). Se documentan los mensajes y cómo corregir cada uno.
+- **1.4** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias; lo que se escribe se busca en las columnas del listado (incluida la fecha), el motivo de rechazo y los productos de las líneas, salvo Tipo y Estado. Los filtros pasan a una **ventana propia** (botón del embudo, se aplican con *Aplicar*) con dos pestañas: **Carga** (criterios nuevos: pendientes con líneas en error, motivo de rechazo, creado por y aprobado por como lista, fecha de aprobación, producto y bodega de las líneas) y **Detalles**, un cuadro de **búsqueda libre dentro de las líneas** de las cargas que dice a qué carga pertenece cada coincidencia. Los botones rápidos pasan a ser opciones de los selectores de estado y tipo. Los filtros activos se ven como etiquetas dentro del cuadro y la tabla se atenúa mientras busca.

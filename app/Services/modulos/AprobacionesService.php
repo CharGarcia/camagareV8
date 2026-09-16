@@ -75,6 +75,12 @@ class AprobacionesService
         return $result;
     }
 
+    /** Módulos y aprobadores usados en la empresa (selects del modal de filtros). */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        return $this->repo->getOpcionesFiltroListado($idEmpresa);
+    }
+
     /** Ids de checkpoint ya configurados en la empresa. */
     public function getTiposConfigurados(int $idEmpresa): array
     {
