@@ -21,7 +21,7 @@ use TCPDF;
  * MODO COMPLETO (`$opciones['completo'] = true`, lo usa la pestaña Consignaciones del
  * Reporte de Inventarios): mismo diseño, pero como ESTADO del documento en vez de
  * comprobante de entrega. La tabla cambia la columna "Acon" (para anotar a mano) por
- * "Saldo", la fila de totales suma también retorno/facturado/cambio/saldo y cierra con
+ * "Saldo", la fila de totales suma también retorno/facturado/saldo y cierra con
  * el resumen del saldo en poder del cliente. No lleva firmas: no es un documento que se entregue para firmar.
  */
 class ConsignacionVentaPdfService
@@ -224,8 +224,9 @@ class ConsignacionVentaPdfService
             if (trim((string)($d['fecha_caducidad'] ?? '')) !== '') $mostrarCad = true;
         }
 
-        // Columnas: sin precios ni subtotales. Cantidad / Retorno / Facturados y una
+        // Columnas: sin precios ni subtotales. Cantidad / Ret / Fact y una
         // columna "Acon" (acondicionamiento) para anotar a mano en la entrega.
+        // La descripción (w = 0) absorbe todo el ancho que no ocupan las demás.
         $cols = [
             ['t' => 'Código',      'w' => 18, 'a' => 'L', 'k' => 'producto_codigo'],
             ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'producto_nombre'],
@@ -235,10 +236,11 @@ class ConsignacionVentaPdfService
         if ($mostrarCad)  $cols[] = ['t' => 'Caducidad', 'w' => 18, 'a' => 'C', 'k' => 'fecha_caducidad'];
         $cols[] = ['t' => 'NUP',        'w' => 16, 'a' => 'L', 'k' => 'nup'];
         $cols[] = ['t' => 'Cantidad',   'w' => 16, 'a' => 'R', 'k' => 'cantidad'];
-        $cols[] = ['t' => 'Retorno',    'w' => 15, 'a' => 'R', 'k' => 'retornado'];
-        $cols[] = ['t' => 'Facturados', 'w' => 17, 'a' => 'R', 'k' => 'facturado'];
-        // Entregado a cambio (Cambios de productos): también sale del saldo consignado.
-        $cols[] = ['t' => 'Cambio',     'w' => 14, 'a' => 'R', 'k' => 'cambiado'];
+        // "Ret" = retornado, "Fact" = facturado (abreviados para dar más ancho a la
+        // descripción). Lo entregado a cambio NO se muestra como columna: sigue
+        // descontándose del saldo por línea y aparece en el resumen final del estado.
+        $cols[] = ['t' => 'Ret',        'w' => 13, 'a' => 'R', 'k' => 'retornado'];
+        $cols[] = ['t' => 'Fact',       'w' => 13, 'a' => 'R', 'k' => 'facturado'];
         // Comprobante de entrega: "Acon" en blanco para anotar el acondicionamiento a mano.
         // Estado completo: en su lugar va el saldo que sigue en poder del cliente.
         $cols[] = $this->completo
@@ -361,7 +363,7 @@ class ConsignacionVentaPdfService
             $pdf->Cell($wAntes, 6, $this->completo ? 'TOTALES' : 'TOTAL ÍTEMS', 1, 0, 'R', true);
             $pdf->Cell($cols[$idxCant]['w'], 6, number_format($totalCant, 2), 1, 0, 'R', true);
             for ($i = $idxCant + 1; $i < count($cols); $i++) {
-                // En el estado completo se suman también retorno, facturado, cambio y saldo,
+                // En el estado completo se suman también retorno, facturado y saldo,
                 // cada uno bajo su columna; en el comprobante esas celdas quedan en blanco.
                 $k   = $cols[$i]['k'];
                 $txt = '';

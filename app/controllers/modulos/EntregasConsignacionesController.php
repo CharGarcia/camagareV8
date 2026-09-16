@@ -4,18 +4,26 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\Helpers\OrdenListado;
 use App\repositories\modulos\EntregasConsignacionesRepository;
 use App\Services\modulos\EntregasConsignacionesService;
 
 /**
- * Resumen de entregas de Consignaciones en Ventas: módulo de SOLO LECTURA (sin
- * crear/actualizar/eliminar) que unifica las evidencias de entrega (GPS + firma)
- * registradas desde la app móvil y las registradas manualmente desde el sistema.
- * El registro/edición de la entrega en sí sigue viviendo en modulos/consignaciones-ventas.
+ * Entregas de Consignaciones en Ventas: módulo de SOLO LECTURA (sin crear/actualizar/
+ * eliminar). Lista las consignaciones PENDIENTES de entregar (por defecto) y, con el
+ * filtro de estado, las ya entregadas con su evidencia (GPS + firma) registrada desde
+ * la app móvil o manualmente desde el sistema. El registro/edición de la entrega en sí
+ * sigue viviendo en modulos/consignaciones-ventas.
  */
 class EntregasConsignacionesController extends BaseModuloController
 {
     private const RUTA_MODULO = 'modulos/entregas-consignaciones';
+
+    private const ORDEN_COL_DEFECTO = 'fecha_emision';
+    private const ORDEN_DIR_DEFECTO = 'DESC';
+
+    /** Nº de columnas de la tabla (colspan de las filas de aviso/carga). */
+    private const NUM_COLUMNAS = 14;
 
     private EntregasConsignacionesService $service;
 
@@ -52,39 +60,49 @@ class EntregasConsignacionesController extends BaseModuloController
 
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
 
-        $buscar   = trim($_GET['b'] ?? '');
-        $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'capturado_en');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
-        $perPage  = 20;
+        $buscar  = trim($_GET['b'] ?? '');
+        $page    = max(1, (int) ($_GET['page'] ?? 1));
+        $orden   = OrdenListado::leer($prefsVista, self::ORDEN_COL_DEFECTO, self::ORDEN_DIR_DEFECTO);
+        $perPage = 20;
 
         $idsResponsables = $this->filtroResponsablesActual();
 
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idsResponsables);
+        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $idsResponsables);
         $rows       = $this->prepararFilas($result['rows']);
         $total      = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
         $resumen = $this->service->getResumen($idEmpresa, $buscar, $idsResponsables);
 
+        // Las filas se renderizan aquí (mismo HTML que searchAjax) para no duplicar el markup en la vista.
+        $rowsHtml = '';
+        if (empty($rows)) {
+            $rowsHtml = $this->filaVacia($result['estado']);
+        } else {
+            foreach ($rows as $r) {
+                $rowsHtml .= $this->filaHtml($r);
+            }
+        }
+
         $anioActual = (int) date('Y');
 
         $this->viewWithLayout('layouts.main', 'modulos.entregas_consignaciones.index', [
-            'titulo'      => 'Entregas de Consignaciones',
-            'perm'        => $perm,
-            'rutaModulo'  => self::RUTA_MODULO,
-            'rows'        => $rows,
-            'total'       => $total,
-            'page'        => $page,
-            'totalPages'  => $totalPages,
-            'perPage'     => $perPage,
-            'buscar'      => $buscar,
-            'ordenCol'    => $ordenCol,
-            'ordenDir'    => $ordenDir,
-            'vistaConfig' => $prefsVista,
-            'resumen'     => $resumen,
-            'anioDesde'   => $anioActual - 5,
-            'anioHasta'   => $anioActual,
+            'titulo'        => 'Entregas de Consignaciones',
+            'perm'          => $perm,
+            'rutaModulo'    => self::RUTA_MODULO,
+            'rowsHtml'      => $rowsHtml,
+            'total'         => $total,
+            'page'          => $page,
+            'totalPages'    => $totalPages,
+            'perPage'       => $perPage,
+            'buscar'        => $buscar,
+            'estadoEntrega' => $result['estado'],
+            'ordenCol'      => OrdenListado::primeraCol($orden, self::ORDEN_COL_DEFECTO),
+            'ordenDir'      => OrdenListado::primeraDir($orden, self::ORDEN_DIR_DEFECTO),
+            'vistaConfig'   => $prefsVista,
+            'resumen'       => $resumen,
+            'anioDesde'     => $anioActual - 5,
+            'anioHasta'     => $anioActual,
         ]);
     }
 
@@ -97,13 +115,12 @@ class EntregasConsignacionesController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
         $buscar     = trim($_GET['b'] ?? $_GET['q'] ?? '');
         $page       = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'capturado_en');
-        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
+        $orden      = OrdenListado::leer($prefsVista, self::ORDEN_COL_DEFECTO, self::ORDEN_DIR_DEFECTO);
         $perPage    = 20;
 
         $idsResponsables = $this->filtroResponsablesActual();
 
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idsResponsables);
+        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $idsResponsables);
         $rows       = $this->prepararFilas($result['rows']);
         $total      = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -113,7 +130,7 @@ class EntregasConsignacionesController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-geo-alt fs-3 d-block mb-2"></i>No se encontraron entregas.</td></tr>';
+            echo $this->filaVacia($result['estado']);
         } else {
             foreach ($rows as $r) {
                 echo $this->filaHtml($r);
@@ -132,17 +149,32 @@ class EntregasConsignacionesController extends BaseModuloController
 
         $resumen = $this->service->getResumen($idEmpresa, $buscar, $idsResponsables);
 
+        $qsOrden = '&orden=' . urlencode(OrdenListado::aCadena($orden));
+
         echo json_encode([
             'ok'         => true,
             'rows'       => $rowsHtml,
             'pagination' => $paginationHtml,
             'info'       => "$from-$to/$total",
             'total'      => $total,
+            'estado'     => $result['estado'],
             'resumen'    => $resumen,
-            'pdf_url'    => BASE_URL . '/' . self::RUTA_MODULO . '/exportPdf?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
-            'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/exportExcel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
+            'pdf_url'    => BASE_URL . '/' . self::RUTA_MODULO . '/exportPdf?b=' . urlencode($buscar) . $qsOrden,
+            'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/exportExcel?b=' . urlencode($buscar) . $qsOrden,
         ]);
         exit;
+    }
+
+    /** Fila de "sin resultados" acorde al estado de entrega filtrado. */
+    private function filaVacia(string $estado): string
+    {
+        $msg = match ($estado) {
+            EntregasConsignacionesRepository::ESTADO_ENTREGADA => 'No se encontraron consignaciones entregadas.',
+            EntregasConsignacionesRepository::ESTADO_TODAS     => 'No se encontraron consignaciones.',
+            default                                            => 'No hay consignaciones pendientes de entregar.',
+        };
+        $icono = $estado === EntregasConsignacionesRepository::ESTADO_PENDIENTE ? 'bi-check2-circle' : 'bi-geo-alt';
+        return '<tr><td colspan="' . self::NUM_COLUMNAS . '" class="text-center py-5 text-muted"><i class="bi ' . $icono . ' fs-3 d-block mb-2"></i>' . $msg . '</td></tr>';
     }
 
     /** Normaliza fechas y agrega firma_url/indicadores calculados a cada fila. */
@@ -150,15 +182,26 @@ class EntregasConsignacionesController extends BaseModuloController
     {
         $base = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
         foreach ($rows as &$r) {
+            $r['pendiente'] = (($r['estado_consignacion'] ?? '') === 'Emitida');
+
             if (!empty($r['fecha_emision'])) {
                 $r['fecha_emision_fmt'] = date('d-m-Y', strtotime($r['fecha_emision']));
+            }
+            if (!empty($r['fecha_entrega'])) {
+                $r['fecha_entrega_fmt'] = date('d-m-Y', strtotime($r['fecha_entrega']));
+                $desde = !empty($r['hora_entrega_desde']) ? substr($r['hora_entrega_desde'], 0, 5) : '';
+                $hasta = !empty($r['hora_entrega_hasta']) ? substr($r['hora_entrega_hasta'], 0, 5) : '';
+                if ($desde !== '' || $hasta !== '') {
+                    $r['fecha_entrega_fmt'] .= ' ' . trim($desde . ($hasta !== '' ? ' - ' . $hasta : ''));
+                }
             }
             if (!empty($r['capturado_en'])) {
                 $r['capturado_en_fmt'] = date('d-m-Y H:i:s', strtotime($r['capturado_en']));
             }
+            $r['dias_espera'] = isset($r['dias_espera']) ? (int) $r['dias_espera'] : null;
             $r['tiene_gps']   = ($r['latitud'] !== null && $r['longitud'] !== null);
             $r['tiene_firma'] = !empty($r['firma_path']);
-            $r['firma_url']   = !empty($r['firma_path'])
+            $r['firma_url']   = !empty($r['firma_path']) && !empty($r['id'])
                 ? $base . '/' . self::RUTA_MODULO . '/firmaEntrega?id=' . (int) $r['id']
                 : null;
         }
@@ -166,33 +209,69 @@ class EntregasConsignacionesController extends BaseModuloController
         return $rows;
     }
 
-    private function badgeCanal(string $canal): string
+    private function badgeEstado(string $estado): string
     {
+        return match ($estado) {
+            'Emitida'   => '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25"><i class="bi bi-hourglass-split me-1"></i>Pendiente</span>',
+            'Entregada' => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check2-circle me-1"></i>Entregada</span>',
+            'Facturada' => '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25"><i class="bi bi-receipt me-1"></i>Facturada</span>',
+            default     => '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">' . htmlspecialchars($estado) . '</span>',
+        };
+    }
+
+    private function badgeCanal(?string $canal): string
+    {
+        if ($canal === null || $canal === '') {
+            return '<span class="text-muted">—</span>';
+        }
         return $canal === 'web'
             ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25"><i class="bi bi-display me-1"></i>Web</span>'
             : '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25"><i class="bi bi-phone me-1"></i>App móvil</span>';
     }
 
-    private function iconoSiNo(bool $si): string
+    private function iconoSiNo(bool $si, bool $aplica = true): string
     {
+        if (!$aplica) {
+            return '<span class="text-muted">—</span>';
+        }
         return $si
             ? '<i class="bi bi-check-circle-fill text-success" title="Sí"></i>'
             : '<i class="bi bi-dash-circle text-muted" title="No"></i>';
+    }
+
+    /** Días en espera: en pendientes resalta las que llevan más tiempo sin entregar. */
+    private function celdaDias(array $r): string
+    {
+        $dias = $r['dias_espera'];
+        if ($dias === null) {
+            return '—';
+        }
+        $clase = '';
+        if (!empty($r['pendiente'])) {
+            $clase = $dias >= 7 ? 'text-danger fw-bold' : ($dias >= 3 ? 'text-warning fw-semibold' : '');
+        }
+        return '<span class="' . $clase . '">' . $dias . '</span>';
     }
 
     private function filaHtml(array $r): string
     {
         $dataJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
         $numero   = htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? ''));
+        $tieneEnt = !empty($r['id']);
 
         return '<tr class="entc-row" role="button" tabindex="0" data-row=\'' . $dataJson . '\' onclick="entcAbrirDetalle(this)">
-                    <td class="ps-3" data-col="capturado_en">' . htmlspecialchars($r['capturado_en_fmt'] ?? '—') . '</td>
+                    <td class="ps-3" data-col="fecha_emision">' . htmlspecialchars($r['fecha_emision_fmt'] ?? '—') . '</td>
                     <td data-col="secuencial" class="fw-bold text-primary">' . $numero . '</td>
                     <td data-col="cliente" class="text-truncate" style="max-width:220px" title="' . htmlspecialchars($r['cliente_nombre'] ?? '') . '">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</td>
+                    <td data-col="direccion" class="text-truncate" style="max-width:220px" title="' . htmlspecialchars($r['cliente_direccion'] ?? '') . '">' . htmlspecialchars($r['cliente_direccion'] ?? '—') . '</td>
                     <td data-col="responsable" class="text-truncate" style="max-width:160px">' . htmlspecialchars($r['responsable_traslado_nombre'] ?? '—') . '</td>
-                    <td data-col="canal" class="text-center">' . $this->badgeCanal((string) ($r['canal'] ?? 'movil')) . '</td>
-                    <td data-col="firma" class="text-center">' . $this->iconoSiNo(!empty($r['tiene_firma'])) . '</td>
-                    <td data-col="gps" class="text-center">' . $this->iconoSiNo(!empty($r['tiene_gps'])) . '</td>
+                    <td data-col="fecha_entrega" class="text-nowrap">' . htmlspecialchars($r['fecha_entrega_fmt'] ?? '—') . '</td>
+                    <td data-col="estado" class="text-center">' . $this->badgeEstado((string) ($r['estado_consignacion'] ?? '')) . '</td>
+                    <td data-col="dias" class="text-center">' . $this->celdaDias($r) . '</td>
+                    <td data-col="capturado_en" class="text-nowrap">' . htmlspecialchars($r['capturado_en_fmt'] ?? '—') . '</td>
+                    <td data-col="canal" class="text-center">' . $this->badgeCanal($r['canal'] ?? null) . '</td>
+                    <td data-col="firma" class="text-center">' . $this->iconoSiNo(!empty($r['tiene_firma']), $tieneEnt) . '</td>
+                    <td data-col="gps" class="text-center">' . $this->iconoSiNo(!empty($r['tiene_gps']), $tieneEnt) . '</td>
                     <td data-col="registrado_por" class="text-truncate" style="max-width:150px">' . htmlspecialchars($r['registrado_por'] ?? '—') . '</td>
                     <td data-col="observaciones" class="text-truncate" style="max-width:220px" title="' . htmlspecialchars($r['observaciones'] ?? '') . '">' . htmlspecialchars($r['observaciones'] ?? '—') . '</td>
                   </tr>';
@@ -204,19 +283,36 @@ class EntregasConsignacionesController extends BaseModuloController
         $idEmpresa  = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
         $buscar     = trim($_GET['b'] ?? '');
-        $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'capturado_en');
-        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+        $orden      = OrdenListado::leer($prefsVista, self::ORDEN_COL_DEFECTO, self::ORDEN_DIR_DEFECTO);
 
         $idsResponsables = $this->filtroResponsablesActual();
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idsResponsables);
-        return $this->prepararFilas($data['rows'] ?? []);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $orden, $idsResponsables);
+        return [
+            'rows'   => $this->prepararFilas($data['rows'] ?? []),
+            'estado' => $data['estado'] ?? EntregasConsignacionesRepository::ESTADO_PENDIENTE,
+        ];
+    }
+
+    /** Subtítulo del reporte según el estado de entrega filtrado. */
+    private function tituloExport(string $estado): string
+    {
+        return match ($estado) {
+            EntregasConsignacionesRepository::ESTADO_ENTREGADA => 'Consignaciones entregadas',
+            EntregasConsignacionesRepository::ESTADO_TODAS     => 'Consignaciones pendientes y entregadas',
+            default                                            => 'Consignaciones pendientes de entregar',
+        };
+    }
+
+    private function estadoTexto(string $estado): string
+    {
+        return $estado === 'Emitida' ? 'Pendiente' : $estado;
     }
 
     public function exportPdf(): void
     {
         $this->requireLeer();
-        $rows = $this->filasParaExport();
+        ['rows' => $rows, 'estado' => $estado] = $this->filasParaExport();
 
         try {
             $empresaModel  = new \App\models\Empresa();
@@ -239,35 +335,44 @@ class EntregasConsignacionesController extends BaseModuloController
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="6mm" backright="6mm">
                 <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
-                <div class="sub">Entregas de Consignaciones en Ventas &mdash; <?= date('d-m-Y H:i:s') ?></div>
+                <div class="sub">Entregas de Consignaciones en Ventas &mdash; <?= htmlspecialchars($this->tituloExport($estado)) ?> &mdash; <?= date('d-m-Y H:i:s') ?></div>
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:12%">Fecha/hora entrega</th>
-                            <th style="width:11%">Consignación</th>
-                            <th style="width:19%">Cliente</th>
-                            <th style="width:14%">Responsable</th>
-                            <th style="width:9%">Canal</th>
-                            <th style="width:6%">Firma</th>
-                            <th style="width:6%">GPS</th>
-                            <th style="width:12%">Registrado por</th>
-                            <th style="width:11%">Observaciones</th>
+                            <th style="width:7%">Emisión</th>
+                            <th style="width:8%">Consignación</th>
+                            <th style="width:14%">Cliente</th>
+                            <th style="width:14%">Dirección</th>
+                            <th style="width:10%">Responsable</th>
+                            <th style="width:9%">Entrega programada</th>
+                            <th style="width:6%">Estado</th>
+                            <th style="width:4%">Días</th>
+                            <th style="width:9%">Fecha/hora entrega</th>
+                            <th style="width:6%">Canal</th>
+                            <th style="width:4%">Firma</th>
+                            <th style="width:4%">GPS</th>
+                            <th style="width:5%">Registrado por</th>
                         </tr>
                     </thead>
                     <tbody>
                     <?php foreach ($rows as $r):
                         $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                        $tieneEnt = !empty($r['id']);
                     ?>
                         <tr>
-                            <td><?= htmlspecialchars($r['capturado_en_fmt'] ?? '—') ?></td>
+                            <td><?= htmlspecialchars($r['fecha_emision_fmt'] ?? '—') ?></td>
                             <td><?= htmlspecialchars($numero) ?></td>
                             <td><?= htmlspecialchars((string) ($r['cliente_nombre'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['cliente_direccion'] ?? '')) ?></td>
                             <td><?= htmlspecialchars((string) ($r['responsable_traslado_nombre'] ?? '—')) ?></td>
-                            <td><?= ($r['canal'] ?? 'movil') === 'web' ? 'Web' : 'App móvil' ?></td>
-                            <td><?= !empty($r['tiene_firma']) ? 'Sí' : 'No' ?></td>
-                            <td><?= !empty($r['tiene_gps']) ? 'Sí' : 'No' ?></td>
+                            <td><?= htmlspecialchars($r['fecha_entrega_fmt'] ?? '—') ?></td>
+                            <td><?= htmlspecialchars($this->estadoTexto((string) ($r['estado_consignacion'] ?? ''))) ?></td>
+                            <td><?= $r['dias_espera'] !== null ? (int) $r['dias_espera'] : '—' ?></td>
+                            <td><?= htmlspecialchars($r['capturado_en_fmt'] ?? '—') ?></td>
+                            <td><?= $tieneEnt ? (($r['canal'] ?? 'movil') === 'web' ? 'Web' : 'App móvil') : '—' ?></td>
+                            <td><?= $tieneEnt ? (!empty($r['tiene_firma']) ? 'Sí' : 'No') : '—' ?></td>
+                            <td><?= $tieneEnt ? (!empty($r['tiene_gps']) ? 'Sí' : 'No') : '—' ?></td>
                             <td><?= htmlspecialchars((string) ($r['registrado_por'] ?? '—')) ?></td>
-                            <td><?= htmlspecialchars((string) ($r['observaciones'] ?? '')) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -290,7 +395,7 @@ class EntregasConsignacionesController extends BaseModuloController
     public function exportExcel(): void
     {
         $this->requireLeer();
-        $rows = $this->filasParaExport();
+        ['rows' => $rows, 'estado' => $estado] = $this->filasParaExport();
 
         try {
             $empresaModel  = new \App\models\Empresa();
@@ -302,26 +407,41 @@ class EntregasConsignacionesController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $headers = ['Fecha/hora entrega', 'Consignación', 'Cliente', 'Responsable', 'Canal', 'Firma', 'GPS', 'Registrado por', 'Observaciones'];
+            $headers = [
+                'Emisión', 'Consignación', 'Cliente', 'Dirección', 'Responsable', 'Entrega programada',
+                'Estado', 'Días', 'Fecha/hora entrega', 'Canal', 'Firma', 'GPS', 'Registrado por', 'Observaciones',
+            ];
 
             $exportData = [];
             foreach ($rows as $r) {
-                $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                $numero   = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                $tieneEnt = !empty($r['id']);
                 $exportData[] = [
-                    (string) ($r['capturado_en_fmt'] ?? '—'),
+                    (string) ($r['fecha_emision_fmt'] ?? '—'),
                     $numero,
                     (string) ($r['cliente_nombre'] ?? ''),
+                    (string) ($r['cliente_direccion'] ?? ''),
                     (string) ($r['responsable_traslado_nombre'] ?? '—'),
-                    ($r['canal'] ?? 'movil') === 'web' ? 'Web' : 'App móvil',
-                    !empty($r['tiene_firma']) ? 'Sí' : 'No',
-                    !empty($r['tiene_gps']) ? 'Sí' : 'No',
+                    (string) ($r['fecha_entrega_fmt'] ?? '—'),
+                    $this->estadoTexto((string) ($r['estado_consignacion'] ?? '')),
+                    $r['dias_espera'] !== null ? (string) $r['dias_espera'] : '—',
+                    (string) ($r['capturado_en_fmt'] ?? '—'),
+                    $tieneEnt ? (($r['canal'] ?? 'movil') === 'web' ? 'Web' : 'App móvil') : '—',
+                    $tieneEnt ? (!empty($r['tiene_firma']) ? 'Sí' : 'No') : '—',
+                    $tieneEnt ? (!empty($r['tiene_gps']) ? 'Sí' : 'No') : '—',
                     (string) ($r['registrado_por'] ?? '—'),
                     (string) ($r['observaciones'] ?? ''),
                 ];
             }
 
             $reportService = new \App\Services\ReportService();
-            $reportService->exportToExcel('Entregas_consignaciones', $headers, $exportData, 'Entregas de Consignaciones', $nombreEmpresa);
+            $reportService->exportToExcel(
+                'Entregas_consignaciones',
+                $headers,
+                $exportData,
+                'Entregas de Consignaciones — ' . $this->tituloExport($estado),
+                $nombreEmpresa
+            );
             exit;
         } catch (\Throwable $e) {
             header('Content-Type: text/html');

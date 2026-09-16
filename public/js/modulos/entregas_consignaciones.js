@@ -2,7 +2,11 @@
  * Módulo Entregas de Consignaciones (solo lectura): tabla + KPIs + modal de detalle
  * (mapa Leaflet + firma), construido a partir del data-row de cada fila — el listado
  * del backend ya trae todo lo necesario, sin AJAX adicional al abrir el detalle.
+ * Por defecto lista las consignaciones PENDIENTES de entregar; con el filtro de estado
+ * se ven también las entregadas (con su evidencia).
  */
+
+const ENTC_NUM_COLUMNAS = 14;
 
 function entcEscHtml(s) {
     const d = document.createElement('div');
@@ -32,7 +36,7 @@ function entcCambiarPagina(p) {
 async function entcCargarGrid() {
     try {
         const tbody = document.getElementById('entc_grid_body');
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${ENTC_NUM_COLUMNAS}" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         const bInput = document.getElementById('b');
         const buscar = bInput ? bInput.value : '';
@@ -58,17 +62,17 @@ async function entcCargarGrid() {
         }
     } catch (e) {
         console.error(e);
-        if (window.Swal) Swal.fire('Error', 'No se pudo cargar la lista de entregas', 'error');
+        if (window.Swal) Swal.fire('Error', 'No se pudo cargar la lista de consignaciones', 'error');
     }
 }
 
 function entcActualizarKpis(resumen) {
     if (!resumen) return;
     const map = {
+        pendientes: resumen.pendientes ?? 0,
         total_entregas: resumen.total_entregas ?? 0,
         total_movil: resumen.total_movil ?? 0,
         total_web: resumen.total_web ?? 0,
-        pendientes: resumen.pendientes ?? 0,
         incompletas: resumen.incompletas ?? 0,
         horas_promedio: (resumen.horas_promedio !== null && resumen.horas_promedio !== undefined) ? `${resumen.horas_promedio}h` : '—',
     };
@@ -81,6 +85,26 @@ function entcActualizarKpis(resumen) {
 // ── Modal de detalle (mapa + firma) ──────────────────────────────────────────
 let _entcMapa = null;
 
+function entcBadgeEstado(estado) {
+    switch (estado) {
+        case 'Emitida':
+            return '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-2"><i class="bi bi-hourglass-split me-1"></i>Pendiente</span>';
+        case 'Entregada':
+            return '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2"><i class="bi bi-check2-circle me-1"></i>Entregada</span>';
+        case 'Facturada':
+            return '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2"><i class="bi bi-receipt me-1"></i>Facturada</span>';
+        default:
+            return `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 ms-2">${entcEscHtml(estado || '—')}</span>`;
+    }
+}
+
+function entcBadgeCanal(canal) {
+    if (!canal) return '';
+    return canal === 'web'
+        ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 ms-2"><i class="bi bi-display me-1"></i>Web</span>'
+        : '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2"><i class="bi bi-phone me-1"></i>App móvil</span>';
+}
+
 function entcAbrirDetalle(trEl) {
     let r;
     try {
@@ -89,20 +113,35 @@ function entcAbrirDetalle(trEl) {
         return;
     }
 
+    const pendiente   = !!r.pendiente;
+    const tieneEntrega = !!r.id;
+
+    document.getElementById('entc_det_titulo').textContent = pendiente ? 'Pendiente de entrega' : 'Entrega';
     document.getElementById('entc_det_numero').textContent = `${r.serie || ''}-${r.secuencial || ''}`;
-    document.getElementById('entc_det_canal_badge').innerHTML = (r.canal || 'movil') === 'web'
-        ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 ms-2"><i class="bi bi-display me-1"></i>Web</span>'
-        : '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2"><i class="bi bi-phone me-1"></i>App móvil</span>';
+    document.getElementById('entc_det_canal_badge').innerHTML = entcBadgeEstado(r.estado_consignacion) + (tieneEntrega ? entcBadgeCanal(r.canal || 'movil') : '');
 
     document.getElementById('entc_det_cliente').textContent = r.cliente_nombre || '—';
-    document.getElementById('entc_det_fecha').textContent = r.capturado_en_fmt || '—';
+    document.getElementById('entc_det_direccion').textContent = r.cliente_direccion || '—';
+    document.getElementById('entc_det_emision').textContent = r.fecha_emision_fmt || '—';
+    document.getElementById('entc_det_programada').textContent = r.fecha_entrega_fmt || '—';
     document.getElementById('entc_det_responsable').textContent = r.responsable_traslado_nombre || '—';
+    document.getElementById('entc_det_dias').textContent = (r.dias_espera !== null && r.dias_espera !== undefined) ? `${r.dias_espera} día(s)` : '—';
+    document.getElementById('entc_det_obs_cons').textContent = r.observaciones_consignacion || '—';
+
+    // Bloque de evidencia: solo tiene sentido cuando existe una entrega registrada.
+    document.getElementById('entc_det_evidencia').style.display = tieneEntrega ? '' : 'none';
+    document.getElementById('entc_det_sin_evidencia').style.display = tieneEntrega ? 'none' : '';
+    document.getElementById('entc_det_sin_evidencia').textContent = pendiente
+        ? 'Esta consignación aún no ha sido entregada: no hay evidencia (GPS/firma) registrada.'
+        : 'Consignación marcada como entregada sin evidencia registrada (GPS/firma).';
+
+    document.getElementById('entc_det_fecha').textContent = r.capturado_en_fmt || '—';
     document.getElementById('entc_det_registrado_por').textContent = r.registrado_por || '—';
     document.getElementById('entc_det_dispositivo').textContent = r.dispositivo_id || '—';
     document.getElementById('entc_det_obs').textContent = r.observaciones || '—';
 
     const lat = parseFloat(r.latitud), lon = parseFloat(r.longitud);
-    const tieneGps = !isNaN(lat) && !isNaN(lon) && (lat !== 0 || lon !== 0);
+    const tieneGps = tieneEntrega && !isNaN(lat) && !isNaN(lon) && (lat !== 0 || lon !== 0);
 
     document.getElementById('entc_det_fila_lat').style.display = tieneGps ? '' : 'none';
     document.getElementById('entc_det_fila_lon').style.display = tieneGps ? '' : 'none';
@@ -129,6 +168,9 @@ function entcAbrirDetalle(trEl) {
     } else {
         mapaDiv.style.display = 'none';
         sinGpsDiv.style.display = '';
+        sinGpsDiv.textContent = pendiente
+            ? 'Pendiente de entrega: el punto de entrega se registrará cuando el repartidor la confirme.'
+            : 'Sin coordenadas GPS registradas para esta entrega.';
         gmapsDiv.style.display = 'none';
     }
 

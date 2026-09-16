@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente
-version: 1.13
+version: 1.14
 orden: 40
 estado: activo
 ---
@@ -122,8 +122,8 @@ fila de **totales** al pie.
 
 La barra superior del detalle tiene un botón **PDF** que descarga el **estado
 completo de la consignación**: el mismo diseño del comprobante de Consignaciones
-de Ventas, pero con las columnas *Retorno*, *Facturados*, *Cambio* y **Saldo**
-llenas por cada línea, una fila de totales y, al cierre, el resumen:
+de Ventas, pero con las columnas *Ret* (retornado), *Fact* (facturado) y
+**Saldo** llenas por cada línea, una fila de totales y, al cierre, el resumen:
 consignado, devuelto, facturado, entregado a cambio y **saldo en poder del
 cliente**. Ese PDF es siempre el documento **entero**, aunque el detalle esté
 filtrado por lote, producto o bodega, y usa el modelo general del sistema aunque
@@ -243,6 +243,10 @@ cuando haga falta.
 
 ## Historial de cambios
 
+- **1.14** — PDF del estado de la consignación: sin la columna *Cambio*;
+  *Retorno* y *Facturados* se abrevian a **Ret** y **Fact** y la Descripción
+  toma el ancho sobrante. Lo entregado a cambio se sigue viendo en el resumen
+  final y sigue descontado del saldo.
 - **1.13** — Pestaña **Consignaciones**: el detalle de una consignación trae un
   botón **PDF** que descarga el estado completo del documento (mismo diseño del
   comprobante de Consignaciones de Ventas) con lo retornado, lo facturado, lo

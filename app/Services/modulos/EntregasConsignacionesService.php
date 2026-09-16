@@ -7,10 +7,11 @@ use App\repositories\ApiUsuarioResponsableTrasladoRepository;
 use App\repositories\modulos\EntregasConsignacionesRepository;
 
 /**
- * Resumen de entregas de Consignaciones en Ventas (módulo de solo lectura). Reutiliza
- * la misma tabla de evidencia (consignaciones_ventas_entregas) que ya alimentan tanto
- * la app móvil (canal='movil') como el marcado manual "Entregada" desde el sistema
- * (canal='web') en ConsignacionVentaService::cambiarEstado().
+ * Entregas de Consignaciones en Ventas (módulo de solo lectura): consignaciones
+ * pendientes de entregar (por defecto) y entregadas. Reutiliza la misma tabla de
+ * evidencia (consignaciones_ventas_entregas) que ya alimentan tanto la app móvil
+ * (canal='movil') como el marcado manual "Entregada" desde el sistema (canal='web')
+ * en ConsignacionVentaService::cambiarEstado().
  */
 class EntregasConsignacionesService
 {
@@ -42,17 +43,19 @@ class EntregasConsignacionesService
         return empty($ids) ? null : $ids;
     }
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?array $idsResponsables): array
+    /**
+     * Listado de consignaciones según su estado de entrega (pendientes por defecto).
+     * $orden: salida de OrdenListado::leer(). Devuelve total, rows y el estado resuelto.
+     */
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, array $orden, ?array $idsResponsables): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idsResponsables);
+        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $idsResponsables);
     }
 
-    /** KPIs de la tarjeta superior: totales por canal, incompletas, tiempo promedio y pendientes. */
+    /** KPIs de la tarjeta superior: pendientes, entregadas (total y por canal), incompletas y tiempo promedio. */
     public function getResumen(int $idEmpresa, string $buscar, ?array $idsResponsables): array
     {
-        $resumen = $this->repository->getResumen($idEmpresa, $buscar, $idsResponsables);
-        $resumen['pendientes'] = $this->repository->getPendientes($idEmpresa, $buscar, $idsResponsables);
-        return $resumen;
+        return $this->repository->getResumen($idEmpresa, $buscar, $idsResponsables);
     }
 
     /**

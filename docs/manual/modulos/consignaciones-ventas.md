@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion
-version: 1.13
+version: 1.14
 orden: 45
 estado: activo
 ---
@@ -124,8 +124,9 @@ montarse sobre la tabla.
 
 Cuando la consignación tiene **muchos productos**, el listado continúa en las
 páginas siguientes y **cada página repite la fila de encabezados** (Código,
-Descripción, Bodega, Lote, Caducidad, NUP, Cantidad, Retorno, Facturados,
-Acon.). Ninguna fila se parte entre dos hojas, y el TOTAL ÍTEMS, las
+Descripción, Bodega, Lote, Caducidad, NUP, Cantidad, Ret, Fact, Acon.).
+*Ret* es lo retornado y *Fact* lo facturado; la columna Descripción ocupa todo
+el ancho que dejan libre las demás. Ninguna fila se parte entre dos hojas, y el TOTAL ÍTEMS, las
 observaciones y las firmas se mantienen completos: si no caben en lo que resta
 de página, pasan enteros a la siguiente.
 
@@ -221,6 +222,10 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.14** — PDF del documento: se quita la columna **Cambio** y las columnas
+  *Retorno* y *Facturados* pasan a llamarse **Ret** y **Fact**; el ancho que
+  se libera lo toma la **Descripción**, que ahora se lee completa con menos
+  cortes de línea. Lo entregado a cambio sigue descontándose del saldo.
 - **1.13** — La pestaña **Resumen** (kardex de la consignación) muestra un
   movimiento **Cambio de producto** por cada unidad que el cliente se quedó como
   reposición en un [Cambio de productos](modulos/cambio-producto-cv); baja del
