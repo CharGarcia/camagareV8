@@ -251,7 +251,7 @@ class CuentasPorCobrarController extends BaseModuloController
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
-            $filtrosTxt    = ['Vista' => 'Por producto (resumen)'] + $this->describirFiltros($idsEmpresa, $filtros);
+            $filtrosTxt    = $this->describirFiltrosPdf($idsEmpresa, $filtros);
             $e = static fn ($v): string => htmlspecialchars((string)$v);
 
             $totalValor = 0.0; $totalSaldo = 0.0; $totalCobrado = 0.0; $totalDocs = 0.0; $totalCant = 0.0;
@@ -294,11 +294,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 table.filtros td.filtro-lbl { width: 12%; font-weight: bold; color: #555; } table.filtros td.filtro-val { width: 88%; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
-            <div class="header">
-                <h2><?= $e($nombreEmpresa) ?></h2>
-                <h3>Cuentas por Cobrar por Producto</h3>
-                <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
-            </div>
+            <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar por Producto') ?>
             <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
                 <?php foreach ($filtrosTxt as $lbl => $val): ?>
                 <tr><td class="filtro-lbl"><?= $e($lbl) ?>:</td><td class="filtro-val"><?= $e($val) ?></td></tr>
@@ -507,7 +503,7 @@ class CuentasPorCobrarController extends BaseModuloController
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
-            $filtrosTxt    = ['Vista' => 'Por cliente (formato mayor)'] + $this->describirFiltros($idsEmpresa, $filtros);
+            $filtrosTxt    = $this->describirFiltrosPdf($idsEmpresa, $filtros);
             $e = static fn ($v): string => htmlspecialchars((string)$v);
 
             // Anchos por columna (table-layout: fixed, deben sumar 100%). La columna del
@@ -609,11 +605,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 table.filtros td.filtro-val { width: 88%; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
-            <div class="header">
-                <h2><?= $e($nombreEmpresa) ?></h2>
-                <h3>Cuentas por Cobrar por Cliente</h3>
-                <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
-            </div>
+            <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar por Cliente') ?>
             <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
                 <?php foreach ($filtrosTxt as $lbl => $val): ?>
                 <tr><td class="filtro-lbl"><?= $e($lbl) ?>:</td><td class="filtro-val"><?= $e($val) ?></td></tr>
@@ -1908,7 +1900,7 @@ $plantillasFiltradas = [];
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
-            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
+            $filtrosTxt    = $this->describirFiltrosPdf($idsEmpresa, $filtros);
 
             // Consolidado: columna "Estab." al inicio; se le resta ancho a "Cliente" para
             // que la suma siga en 100% (table-layout: fixed).
@@ -1968,11 +1960,7 @@ $plantillasFiltradas = [];
                 table.filtros td.filtro-val { width: 88%; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
-            <div class="header">
-                <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
-                <h3>Cuentas por Cobrar</h3>
-                <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
-            </div>
+            <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar') ?>
             <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
                 <?php foreach ($filtrosTxt as $lbl => $val): ?>
                 <tr>
@@ -2177,7 +2165,8 @@ $plantillasFiltradas = [];
     }
 
     /**
-     * Descripción legible de los filtros aplicados (para encabezados de PDF).
+     * Descripción legible de los filtros aplicados (encabezado del Excel; el PDF imprime la
+     * versión acotada de describirFiltrosPdf()).
      * Devuelve etiqueta => valor, con los ids de cliente/vendedor resueltos a nombre.
      */
     private function describirFiltros(int|array $idsEmpresa, array $filtros): array
@@ -2256,6 +2245,24 @@ $plantillasFiltradas = [];
     }
 
     /**
+     * Filtros del recuadro de los PDF: los de describirFiltros() sin Alcance, Tipo de
+     * documento ni Estado, y con Producto y Cliente solo cuando se filtró por ellos (sin
+     * filtro, describirFiltros() los describe como 'Todos'). El Excel conserva la
+     * descripción completa.
+     */
+    private function describirFiltrosPdf(int|array $idsEmpresa, array $filtros): array
+    {
+        $txt = $this->describirFiltros($idsEmpresa, $filtros);
+        unset($txt['Alcance'], $txt['Tipo de documento'], $txt['Estado']);
+        foreach (['Producto', 'Cliente'] as $clave) {
+            if ($txt[$clave] === 'Todos') {
+                unset($txt[$clave]);
+            }
+        }
+        return $txt;
+    }
+
+    /**
      * Texto del filtro Producto para PDF/Excel: productos elegidos (una vez por código) y,
      * si además hay texto libre, se agrega entre comillas.
      */
@@ -2283,6 +2290,59 @@ $plantillasFiltradas = [];
             $partes[] = "\"{$txt}\"";
         }
         return $partes ? implode(', ', $partes) : 'Todos';
+    }
+
+    /**
+     * Encabezado de los PDF del módulo: logo del establecimiento a la izquierda del nombre de
+     * la empresa, con el título del reporte y la fecha de generación. Html2Pdf no admite float
+     * ni flex, así que va en una tabla de tres celdas —logo | textos | celda vacía del mismo
+     * ancho que la del logo— para que el nombre siga centrado en la hoja. Sin logo sale el
+     * encabezado centrado de siempre. Los textos toman los estilos .header de cada PDF.
+     */
+    private function encabezadoPdf(int $idEmpresa, string $nombreEmpresa, string $titulo): string
+    {
+        $textos = '<h2>' . htmlspecialchars($nombreEmpresa) . '</h2>'
+            . '<h3>' . htmlspecialchars($titulo) . '</h3>'
+            . '<p>Generado: ' . date('d-m-Y H:i:s') . '</p>';
+        $logo = $this->logoPdf($idEmpresa);
+        if ($logo === '') {
+            return "<div class=\"header\">{$textos}</div>";
+        }
+        $celda = 'border:none;padding:0;vertical-align:middle;';
+        return '<table style="margin-bottom:10px;"><tr>'
+            . "<td style=\"width:22%;{$celda}\"><img src=\"" . htmlspecialchars($logo) . "\" style=\"max-width:40mm;max-height:18mm;\"></td>"
+            . "<td style=\"width:56%;{$celda}\"><div class=\"header\" style=\"margin-bottom:0;\">{$textos}</div></td>"
+            . "<td style=\"width:22%;{$celda}\"></td>"
+            . '</tr></table>';
+    }
+
+    /**
+     * Ruta en disco del logo del establecimiento principal ('' si no hay). La tabla guarda la
+     * URL pública (empresa_establecimiento.logo_ruta) y se resuelve igual que en los demás PDF
+     * del sistema. Solo se devuelve si es una imagen legible: ante una imagen que no puede
+     * medir, Html2Pdf aborta el PDF entero, y un logo dañado no debe impedir sacar el reporte.
+     */
+    private function logoPdf(int $idEmpresa): string
+    {
+        $ruta = (string)((new \App\models\Empresa())->getEstablecimientos($idEmpresa)[0]['logo_ruta'] ?? '');
+        if ($ruta === '') {
+            return '';
+        }
+        $clean = ltrim($ruta, '/');
+        if (strpos($clean, 'sistema/public/') === 0) {
+            $clean = substr($clean, strlen('sistema/public/'));
+        } elseif (strpos($clean, 'sistema/') === 0) {
+            $clean = substr($clean, strlen('sistema/'));
+        }
+        if (strpos($clean, 'public/') === 0) {
+            $clean = substr($clean, strlen('public/'));
+        }
+        foreach ([MVC_ROOT . '/public/' . $clean, MVC_ROOT . '/' . $clean] as $cand) {
+            if (is_file($cand) && @getimagesize($cand)) {
+                return $cand;
+            }
+        }
+        return '';
     }
 
     /** Etiqueta legible del origen de una fila del listado unificado. */

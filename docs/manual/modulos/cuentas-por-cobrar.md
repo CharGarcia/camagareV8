@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes
-version: 2.12
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, quitar filtros del pdf
+version: 2.13
 orden: 40
 estado: activo
 ---
@@ -149,6 +149,26 @@ En las vistas *Por cliente* y *Por producto* las secciones salen siempre en
 pantalla como en el PDF y el Excel; el orden que elija en las cabeceras acomoda
 los documentos dentro de cada sección.
 
+## El PDF: logo y filtros del encabezado
+
+El PDF, en cualquiera de las vistas (*Detallado*, *Por cliente* y *Por
+producto*), empieza con el **logo de la empresa a la izquierda del nombre**; al
+centro van el nombre de la empresa, el título del reporte y la fecha en que se
+generó. Es el logo del establecimiento principal (el primero activo, normalmente
+el 001), el que se sube en **Empresa**, pestaña **Establecimiento**. Si no hay
+logo cargado, el encabezado sale solo con el nombre, centrado.
+
+Debajo va el recuadro de **filtros aplicados**, reducido a lo que acota la
+cartera:
+
+- **Vendedor** y **Período** aparecen siempre.
+- **Producto** y **Cliente** aparecen solo cuando se filtró por ellos.
+- La vista, el alcance (establecimientos), el tipo de documento y el estado no
+  se imprimen en el PDF.
+
+El **Excel** conserva la descripción completa de los filtros, incluidos la
+vista, el alcance, el tipo de documento y el estado.
+
 ## Filtrar por tipo de documento
 
 El filtro **Documento** permite ver todo junto o solo un tipo:
@@ -276,8 +296,9 @@ esté el listado en ese momento:
   sus documentos con **las mismas columnas de la pantalla** (fecha, n. de
   documento, total, NC, abonos, retenciones, saldo, días y asesor) y, al cierre
   del reporte, el **TOTAL GENERAL**. Cada cliente no lleva fila de subtotal: su
-  saldo ya está en la cabecera de la sección. Arriba se mantienen los filtros
-  aplicados y las tarjetas de resumen.
+  saldo ya está en la cabecera de la sección. Arriba van el logo, los filtros
+  aplicados (ver *El PDF: logo y filtros del encabezado*) y las tarjetas de
+  resumen.
 - **Excel**: una **sección por cliente** (título con su identificación, nombre y
   saldo, en el mismo formato del PDF), sus documentos con esas mismas columnas —más *Origen* y
   *Estado*, que en una hoja de cálculo no estorban— y el **TOTAL GENERAL** al
@@ -335,8 +356,9 @@ Reglas:
   documentos del establecimiento donde existe ese vendedor.
 - Cada establecimiento se filtra por **su propio ambiente** (producción o
   pruebas), no por el de la matriz.
-- En el PDF y el Excel, el encabezado indica *Alcance: Consolidado por RUC* con
-  la lista de establecimientos, y se agrega la columna **Estab.**
+- En el **Excel** el encabezado indica *Alcance: Consolidado por RUC* con la
+  lista de establecimientos (el PDF no imprime el alcance), y en los dos
+  archivos se agrega la columna **Estab.**
 
 ## Un mismo cliente registrado con cédula y con RUC
 
@@ -517,6 +539,11 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
+- **2.13** — El **PDF** (en sus tres vistas) lleva el **logo de la empresa a la
+  izquierda del nombre**. Su recuadro de filtros aplicados se acorta: ya no
+  muestra la vista, el alcance, el tipo de documento ni el estado, y *Producto*
+  y *Cliente* salen solo cuando se filtró por ellos. El Excel no cambia. Nueva
+  sección *El PDF: logo y filtros del encabezado*.
 - **2.12** — El permiso de **Acceso total** ahora se aplica **por vendedor**: sin
   él, el vendedor vinculado al usuario (campo *Usuario del sistema* de su ficha o
   la misma cédula) ve la cartera de sus **clientes asignados** y los documentos
