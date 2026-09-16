@@ -152,7 +152,18 @@ class FiltrosBusqueda
      *     'exacto'    => ['clave' => 'columna_sql', ...],   // = / IN
      *     'fecha'     => ['clave' => 'columna_sql', ...],   // rangos de fecha
      *     'numerico'  => ['clave' => 'columna_sql', ...],   // = / > / < / BETWEEN
+     *     'existe'    => ['clave' => [                        // condición sobre una tabla hija
+     *         'sql'  => 'EXISTS (SELECT 1 FROM ingresos_pagos p WHERE p.id_ingreso = i.id AND {cond})',
+     *         'col'  => 'p.id_forma_cobro',                   // columna de la tabla hija
+     *         'tipo' => 'exacto',                              // texto | exacto | fecha | numerico
+     *     ], ...],
      *   ]
+     *
+     * `existe`: para filtrar la cabecera por algo que vive en un detalle (formas de
+     * cobro, documentos cobrados, etc.). `{cond}` se reemplaza por la condición
+     * armada con las mismas reglas del tipo indicado (ILIKE por palabras, =/IN,
+     * rangos de fecha o numéricos). La negación (`-clave:valor`) niega el EXISTS
+     * completo: "ningún pago con esa forma", no "algún pago con otra forma".
      */
     public static function aplicarFiltros(string &$where, array &$params, array $filtros, array $mapas): void
     {
@@ -160,6 +171,7 @@ class FiltrosBusqueda
         $mapaExacto   = $mapas['exacto']   ?? [];
         $mapaFecha    = $mapas['fecha']    ?? [];
         $mapaNumerico = $mapas['numerico'] ?? [];
+        $mapaExiste   = $mapas['existe']   ?? [];
 
         $i = 0;
         foreach ($filtros as $clave => $f) {
@@ -168,6 +180,10 @@ class FiltrosBusqueda
             $valor = $f['valor'];
             $neg   = $f['neg'];
 
+            if (isset($mapaExiste[$clave])) {
+                self::applyExiste($where, $params, $mapaExiste[$clave], $clave, $i, $op, $valor, $neg);
+                continue;
+            }
             if (isset($mapaTexto[$clave])) {
                 self::applyTexto($where, $params, $mapaTexto[$clave], $clave, $i, $op, $valor, $neg);
                 continue;
@@ -186,6 +202,35 @@ class FiltrosBusqueda
             }
             // Clave desconocida: ignorar silenciosamente
         }
+    }
+
+    /**
+     * Filtro sobre una tabla hija (ver doc de aplicarFiltros, clave 'existe'): arma la
+     * condición interna con el tipo indicado y la incrusta en el `{cond}` del SQL.
+     */
+    private static function applyExiste(string &$where, array &$params, array $cfg, string $clave, int $i, string $op, $valor, bool $neg): void
+    {
+        $sql  = (string) ($cfg['sql'] ?? '');
+        $col  = (string) ($cfg['col'] ?? '');
+        $tipo = (string) ($cfg['tipo'] ?? 'exacto');
+        if ($sql === '' || $col === '' || strpos($sql, '{cond}') === false) {
+            return;
+        }
+
+        // La condición interna se arma sin negación (la negación aplica al EXISTS).
+        $inner = '';
+        switch ($tipo) {
+            case 'texto':    self::applyTexto($inner, $params, $col, $clave, $i, $op, $valor, false);    break;
+            case 'fecha':    self::applyFecha($inner, $params, $col, $clave, $i, $op, $valor, false);    break;
+            case 'numerico': self::applyNumerico($inner, $params, $col, $clave, $i, $op, $valor, false); break;
+            default:         self::applyExacto($inner, $params, $col, $clave, $i, $op, $valor, false);   break;
+        }
+        $inner = trim((string) preg_replace('/^\s*AND\s+/i', '', $inner));
+        if ($inner === '') {
+            return;
+        }
+
+        $where .= ($neg ? ' AND NOT ' : ' AND ') . '(' . str_replace('{cond}', $inner, $sql) . ')';
     }
 
     private static function applyTexto(string &$where, array &$params, string $col, string $clave, int $i, string $op, $valor, bool $neg): void

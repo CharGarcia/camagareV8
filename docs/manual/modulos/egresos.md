@@ -6,7 +6,7 @@ ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: egresos, egreso, pago, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.11
+version: 1.12
 orden: 20
 estado: activo
 ---
@@ -326,6 +326,10 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.12** — Al abrir un egreso guardado con una **serie que ya no se usa para
+  emitir** (por ejemplo, migrados con `001-001` cuando la empresa ya trabaja con
+  `001-101`, o un punto de emisión desactivado), el campo *Serie* mostraba en
+  blanco; ahora muestra la serie original del documento.
 - **1.11** — **Edición completa** de un egreso guardado, sea cual sea su tipo:
   además de fecha y formas de pago, ahora se pueden quitar o agregar documentos
   pagados, cambiar sus montos, el beneficiario, las observaciones y las líneas

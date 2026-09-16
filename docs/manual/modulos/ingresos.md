@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 2.0
+etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 2.2
 orden: 10
 estado: activo
 ---
@@ -191,6 +191,51 @@ la empresa. Al modificarlo, el asiento se regenera; al anularlo, se anula.
 En las líneas de concepto general se puede elegir la cuenta contable por línea,
 cuando el concepto no tiene una cuenta fija.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay dos piezas: el botón **Filtros** y el cuadro de búsqueda.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en **todas las columnas** del ingreso y en
+sus datos relacionados: número, serie, secuencial, fecha, tipo, concepto,
+"Recibo de", cliente, RUC o cédula, observaciones, monto, estado, usuario que
+lo registró y los **números de las facturas o recibos cobrados**. Puede escribir
+varias palabras en cualquier orden (`perez mayo`) y no importan mayúsculas ni
+tildes. Para limpiar, borre el texto o pulse Escape en el cuadro.
+
+**Filtros.** Pulse **Filtros** para abrir la ventana con todos los criterios,
+repartidos en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada
+se aplica hasta ese momento, así que puede combinar varios sin que la tabla se
+recargue a cada paso. Cada pestaña muestra cuántos filtros suyos están activos.
+
+**Pestaña Ingreso** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado, tipo de ingreso, serie, Nº de ingreso, secuencial, monto (mínimo y máximo), concepto de ingreso, con o sin asiento contable, usuario que registró |
+| Tercero | Recibo de, cliente, RUC / cédula, observaciones |
+
+**Pestaña Detalles** (lo que hay dentro del ingreso). Es un único cuadro,
+**Buscar libremente dentro de los ingresos**: escriba un número de factura o
+recibo, una descripción, una cuenta contable, una forma de cobro, una
+referencia, un número de cheque, una operación bancaria o un monto, y aparece
+la lista de **cada línea o pago que coincide** con el ingreso al que pertenece
+(número, fecha, "Recibo de" y estado). Un clic en la fila deja el listado
+mostrando solo ese ingreso; el ícono de la derecha lo abre directamente. Por
+ejemplo, *transferencia* lista todos los pagos por transferencia y en qué
+ingreso están, y *001-001-000000011* muestra en qué ingreso se cobró esa
+factura.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**, delante del texto que escribe. La **×** de la etiqueta quita solo
+ese filtro, y con el cuadro vacío la tecla **Retroceso** quita el último. Pulsar
+la etiqueta vuelve a abrir la ventana para ajustarla. El botón del embudo
+muestra cuántos hay activos, y el botón **Limpiar filtros** de la ventana los
+borra todos de una vez.
+
+La búsqueda libre y los filtros se combinan entre sí, y los botones **PDF** y
+**Excel** del listado exportan exactamente lo que se ve.
+
 ## Ordenar el listado
 
 Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
@@ -243,6 +288,22 @@ deseable; para el contador o el administrador, active el acceso total.
 
 ## Historial de cambios
 
+- **2.2** — Nuevo buscador del listado: el cuadro de búsqueda ya no despliega
+  sugerencias; lo que se escribe se busca **en todas las columnas** (incluidos
+  los números de los documentos cobrados y el usuario que registró). Los
+  filtros pasan a una **ventana propia** (botón *Filtros*, se aplican con
+  *Aplicar*) con dos pestañas: **Ingreso** (filtros por campo de la cabecera,
+  con criterios nuevos como concepto, con/sin asiento y
+  usuario) y **Detalles**, un cuadro de **búsqueda libre dentro de los
+  ingresos** (documentos cobrados y formas de cobro) que lista cada línea o
+  pago que coincide y dice a qué ingreso pertenece. Los filtros activos se ven
+  como etiquetas junto al cuadro. Nueva sección *Buscar y filtrar el listado*.
+- **2.1** — Al abrir un ingreso guardado con una **serie que ya no se usa para
+  emitir** (por ejemplo, migrados con `001-001` cuando la empresa ya trabaja con
+  `001-101`, o un punto de emisión desactivado), el campo *Serie* mostraba en
+  blanco; ahora muestra la serie original del documento. Además, al pulsar
+  *Actualizar* el servidor conserva siempre la serie y el secuencial con que se
+  guardó el ingreso (antes podía reescribirlos con la primera serie del combo).
 - **2.0** — **Edición completa** de un ingreso guardado, sea cual sea su tipo:
   además de fecha, "Recibo de" y formas de cobro, ahora se pueden quitar o
   agregar documentos cobrados, cambiar sus montos, editar las observaciones y

@@ -1206,8 +1206,24 @@
             const fd = new FormData(); fd.append('id', id);
             const res = await fetch(`${RUTA}/generarFacturaAjax`, { method: 'POST', body: fd }); const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'No se pudo generar la factura.');
-            getModal().hide(); await Swal.fire({ icon: 'success', title: 'Factura generada', text: data.msg, timer: 2400, showConfirmButton: false });
+            getModal().hide();
             if (typeof cargarGrid === 'function') cargarGrid();
+            const numFactura = (data.data && data.data.numero_factura) ? String(data.data.numero_factura) : '';
+            const puedeIrAFacturas = !!(window.FACCV_PERM && window.FACCV_PERM.ver_factura_venta && window.RUTA_MODULO_FACTURA_VENTA && numFactura);
+            if (puedeIrAFacturas) {
+                // Solo se ofrece si el usuario puede ver Facturas de Venta (bandera calculada en PHP
+                // con sus permisos). El listado destino se abre ya filtrado por el número generado.
+                const ir = await Swal.fire({
+                    icon: 'success', title: 'Factura generada', html: `${data.msg}<br><br>¿Desea ir al módulo de <b>Facturas de Venta</b> para ver la factura?`,
+                    showCancelButton: true, confirmButtonText: '<i class="bi bi-receipt me-1"></i> Ir a Facturas de Venta', cancelButtonText: 'Quedarme aquí'
+                });
+                if (ir.isConfirmed) {
+                    window.location.href = `${window.RUTA_MODULO_FACTURA_VENTA}?b=${encodeURIComponent(numFactura)}`;
+                    return;
+                }
+            } else {
+                await Swal.fire({ icon: 'success', title: 'Factura generada', text: data.msg, timer: 2400, showConfirmButton: false });
+            }
         } catch (err) { Swal.fire('Error', err.message, 'error'); }
         finally { btn.disabled = false; btn.innerHTML = orig; }
     };

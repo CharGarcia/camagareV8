@@ -605,6 +605,8 @@ window.RI_Consignaciones = {
 
     modalInstance: null,
     docsModalInstance: null,
+    /** Consignación abierta en el modal de detalle (para el PDF del estado completo). */
+    idConsignacionActual: 0,
 
     dibujarCabecera(modo) {
         let th = '<tr class="text-secondary">';
@@ -635,6 +637,9 @@ window.RI_Consignaciones = {
         if (!this.modalInstance) {
             this.modalInstance = new bootstrap.Modal(document.getElementById('ri-cv-modal-detalle'));
         }
+        this.idConsignacionActual = idConsignacion;
+        const btnPdf = document.getElementById('ri-cv-modal-btn-pdf');
+        if (btnPdf) btnPdf.disabled = true;
         const tbody = document.getElementById('ri-cv-modal-tbody');
         const tfoot = document.getElementById('ri-cv-modal-tfoot');
         const aviso = document.getElementById('ri-cv-modal-aviso');
@@ -658,6 +663,7 @@ window.RI_Consignaciones = {
                 }
                 const c = res.cabecera;
                 document.getElementById('ri-cv-modal-secuencial').textContent = c.secuencial || '';
+                if (btnPdf) btnPdf.disabled = false;
                 document.getElementById('ri-cv-modal-fecha').textContent = c.fecha_emision || '';
                 document.getElementById('ri-cv-modal-cliente').textContent = c.cliente + (c.identificacion ? ` (${c.identificacion})` : '');
                 document.getElementById('ri-cv-modal-vendedor').textContent = c.vendedor || '-';
@@ -689,6 +695,14 @@ window.RI_Consignaciones = {
                 console.error(err);
                 tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">Error al cargar el detalle</td></tr>`;
             });
+    },
+
+    /** PDF del ESTADO completo de la consignación abierta en el modal: mismo diseño del
+     *  comprobante de Consignaciones de Ventas, con lo facturado, lo devuelto, los documentos
+     *  que lo explican y el saldo. Siempre el documento entero (no reaplica los filtros). */
+    descargarPdf() {
+        if (!this.idConsignacionActual) return;
+        window.open(BASE_URL + '/' + RUTA_MODULO + '/consignacionPdf?id=' + encodeURIComponent(this.idConsignacionActual), '_blank');
     },
 
     /** Sub-modal (encima del de detalle, que queda fijo/abierto detrás): documentos de

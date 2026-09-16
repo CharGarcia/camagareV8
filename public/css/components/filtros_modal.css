@@ -1,0 +1,181 @@
+/* Componente: buscador de texto libre + botón "Filtros" (modal) + chips de filtros activos.
+ * JS: public/js/components/filtros_modal.js
+ */
+.fm-search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Botón Filtros: solo el ícono del embudo, en el lugar de la lupa; el contador de
+ * filtros activos va como un puntito numerado sobre la esquina del botón. */
+.fm-search .fm-btn { white-space: nowrap; position: relative; }
+.fm-search .fm-btn .fm-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    font-size: 0.58rem;
+    padding: 2px 5px;
+    line-height: 1;
+    z-index: 6;
+}
+
+.fm-search .fm-input-group { max-width: 100%; width: auto; flex-wrap: nowrap; }
+
+/* Caja de búsqueda: un .form-control que contiene los chips de filtros activos y,
+ * a continuación, el input de texto libre (sin borde propio). Si los chips no
+ * caben, la caja crece en alto y los botones del grupo se estiran con ella. */
+.fm-search .fm-input-group > .fm-box {
+    width: var(--fm-w, 320px);
+    flex: 0 0 auto;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    cursor: text;
+    height: auto;
+    min-height: calc(1.5em + .5rem + 2px);
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+.fm-search .fm-box:focus-within {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 .25rem rgba(13, 110, 253, .25);
+    z-index: 5;
+}
+.fm-search .fm-typer {
+    border: 0;
+    outline: 0;
+    padding: 0;
+    background: transparent;
+    flex: 1 1 60px;
+    min-width: 60px;
+    font-size: inherit;
+    line-height: inherit;
+}
+.fm-search .fm-typer:focus { outline: 0; box-shadow: none; }
+
+/* Botones del módulo anexados al grupo (extraId), dentro de <span class="fm-extra">.
+ * No son hijos directos del input-group (y el dropdown de columnas además viene
+ * envuelto en <div class="dropdown">), así que Bootstrap no los une: se pegan a mano
+ * con el mismo tamaño que .input-group-sm. */
+.fm-input-group > .fm-extra { display: flex; }
+.fm-input-group > .fm-extra > .dropdown { display: flex; }
+.fm-input-group > .fm-extra > .btn,
+.fm-input-group > .fm-extra > .dropdown > .btn {
+    font-size: .875rem;
+    padding: .25rem .5rem;
+    border-radius: 0;
+    margin-left: -1px;
+    position: relative;
+    white-space: nowrap;
+}
+.fm-input-group > .fm-extra > :last-child > .btn,
+.fm-input-group > .fm-extra > .btn:last-child {
+    border-top-right-radius: var(--bs-border-radius-sm, .25rem);
+    border-bottom-right-radius: var(--bs-border-radius-sm, .25rem);
+}
+.fm-input-group > .fm-extra .btn:hover,
+.fm-input-group > .fm-extra .btn:focus { z-index: 5; }
+
+.fm-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+}
+
+.fm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #e7f1ff;
+    color: #0d6efd;
+    border: 1px solid #b6d4fe;
+    border-radius: 12px;
+    padding: 1px 8px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.fm-chip .fm-chip-key { font-weight: 600; opacity: 0.85; }
+.fm-chip .fm-chip-x { cursor: pointer; opacity: 0.6; margin-left: 2px; font-weight: 700; }
+.fm-chip .fm-chip-x:hover { opacity: 1; }
+.fm-chip.fm-chip-neg {
+    background: #f8d7da;
+    color: #842029;
+    border-color: #f5c2c7;
+}
+
+/* Modal de filtros */
+.fm-modal .fm-tabs .nav-link { font-size: 0.8rem; padding: 6px 12px; }
+.fm-modal .fm-tabs .fm-tab-count { font-size: 0.62rem; vertical-align: text-top; }
+.fm-modal .fm-grupo {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+    color: #6c757d;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 2px;
+    margin-top: 6px;
+}
+.fm-modal .fm-grupo:first-child { margin-top: 0; }
+.fm-modal .fm-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 2px;
+}
+.fm-modal .form-control, .fm-modal .form-select, .fm-modal .input-group-text { font-size: 0.8rem; }
+.fm-modal .fm-atajos { font-size: 0.72rem; margin-top: 2px; }
+
+/* Búsqueda libre dentro de los registros (busquedaDetalle) */
+.fm-modal .fm-det-scroll { max-height: 260px; overflow: auto; }
+.fm-modal .fm-det-table { font-size: 0.76rem; }
+.fm-modal .fm-det-table th { font-size: 0.7rem; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+.fm-modal .fm-det-table td { padding: 2px 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-modal .fm-det-sep {
+    display: flex; align-items: center; gap: 8px;
+    margin: 12px 0 6px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; color: #6c757d;
+}
+.fm-modal .fm-det-sep::before, .fm-modal .fm-det-sep::after { content: ''; flex: 1; border-top: 1px solid #eee; }
+.fm-modal .fm-atajos .btn-link { font-size: 0.72rem; text-decoration: none; }
+
+/* ── Móvil: el grupo ocupa todo el ancho; el input se estira; los botones del
+ * módulo (columnas, PDF, Excel) bajan a su propia línea, repartidos a lo ancho;
+ * los chips debajo. ── */
+@media (max-width: 767.98px) {
+    .fm-search { width: 100%; flex: 1 1 100%; }
+    .fm-search .fm-input-group { width: 100%; flex-wrap: wrap; }
+    .fm-search .fm-input-group > .fm-box { width: auto; flex: 1 1 auto; }
+    /* La caja cierra su línea (los botones del módulo bajan a la siguiente) */
+    .fm-search .fm-input-group > .fm-box {
+        border-top-right-radius: var(--bs-border-radius-sm, .25rem) !important;
+        border-bottom-right-radius: var(--bs-border-radius-sm, .25rem) !important;
+    }
+    .fm-input-group > .fm-extra {
+        flex: 0 0 100%;
+        margin-top: 6px;
+    }
+    .fm-input-group > .fm-extra > * { flex: 1 1 0; }
+    .fm-input-group > .fm-extra > .dropdown > .btn { width: 100%; }
+    .fm-input-group > .fm-extra > :first-child,
+    .fm-input-group > .fm-extra > :first-child > .btn {
+        margin-left: 0;
+        border-top-left-radius: var(--bs-border-radius-sm, .25rem);
+        border-bottom-left-radius: var(--bs-border-radius-sm, .25rem);
+    }
+    .fm-chip { font-size: 0.72rem; padding: 1px 6px; }
+
+    /* Modal: botones del pie a lo ancho y tabla de coincidencias más baja */
+    .fm-modal .modal-footer { flex-wrap: wrap; gap: 6px; }
+    .fm-modal .modal-footer .btn { flex: 1 1 auto; }
+    .fm-modal .modal-footer .fm-limpiar { flex: 0 0 100%; margin: 0 !important; }
+    .fm-modal .fm-det-scroll { max-height: 200px; }
+    .fm-modal .fm-tabs .nav-link { padding: 6px 8px; }
+}

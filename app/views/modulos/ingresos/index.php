@@ -125,53 +125,99 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorING" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador: texto libre sobre TODAS las columnas (sin sugerencias) + botón
+            // "Filtros" que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de IngresoRepository::getListado().
+            $opcionesSerie = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesConcepto = array_map(fn($c) => ['v' => (string) $c['id'], 'l' => $c['nombre']], $conceptos ?? []);
+            $opcionesFormaCobro = array_map(fn($f) => ['v' => (string) $f['id'], 'l' => $f['nombre']], $formasCobro ?? []);
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            // Dos pestañas: "Ingreso" (filtros por campo de la cabecera) y "Detalles"
+            // (solo la búsqueda libre dentro de los ingresos, ver `busquedaDetalle` abajo;
+            // sin filtros por campo).
+            $tI = 'Ingreso';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento: [Fecha de emisión 6][Estado 3][Tipo 3]
+            //              [Serie 3][Nº ingreso 3][Secuencial 2][Monto 4]
+            //              [Concepto 4][Asiento 4][Usuario 4]
+            //   Tercero:   [Recibo de 3][Cliente 3][RUC 3][Observaciones 3]
+            $filtrosIngresos = [
+                // ── Pestaña Ingreso · Documento ──
+                ['tab' => $tI, 'key' => 'fecha',       'label' => 'Fecha de emisión',   'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tI, 'key' => 'estado',      'label' => 'Estado',             'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'registrado', 'l' => 'Registrado'],
+                    ['v' => 'borrador',   'l' => 'Borrador'],
+                    ['v' => 'anulado',    'l' => 'Anulado'],
+                ]],
+                ['tab' => $tI, 'key' => 'tipo',        'label' => 'Tipo de ingreso',    'icon' => 'bi-tag',             'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'FACTURA_VENTA',     'l' => 'Factura de venta'],
+                    ['v' => 'RECIBO_VENTA',      'l' => 'Recibo de venta'],
+                    ['v' => 'FACTURA_REEMBOLSO', 'l' => 'Factura de reembolso'],
+                    ['v' => 'ANTICIPO_CLIENTE',  'l' => 'Anticipo de cliente'],
+                    ['v' => 'GENERAL',           'l' => 'General / otros conceptos'],
+                ]],
+                ['tab' => $tI, 'key' => 'serie',       'label' => 'Serie',              'icon' => 'bi-upc-scan',        'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tI, 'key' => 'numero',      'label' => 'Nº ingreso',         'icon' => 'bi-hash',            'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tI, 'key' => 'secuencial',  'label' => 'Secuencial',         'icon' => 'bi-123',             'type' => 'text',         'grupo' => 'Documento', 'col' => 2, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tI, 'key' => 'monto',       'label' => 'Monto',              'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Documento', 'col' => 4],
+                ['tab' => $tI, 'key' => 'id_concepto', 'label' => 'Concepto de ingreso','icon' => 'bi-bookmark',        'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesConcepto],
+                ['tab' => $tI, 'key' => 'asiento',     'label' => 'Asiento contable',   'icon' => 'bi-journal-check',   'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con asiento'],
+                    ['v' => 'no', 'l' => 'Sin asiento'],
+                ]],
+                ['tab' => $tI, 'key' => 'usuario',     'label' => 'Usuario que registró','icon' => 'bi-person-gear',    'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesUsuario],
+                // ── Pestaña Ingreso · Tercero ──
+                ['tab' => $tI, 'key' => 'recibo_de',   'label' => 'Recibo de',          'icon' => 'bi-person-badge',    'type' => 'text',         'grupo' => 'Tercero', 'col' => 3],
+                ['tab' => $tI, 'key' => 'cliente',     'label' => 'Cliente',            'icon' => 'bi-person',          'type' => 'text',         'grupo' => 'Tercero', 'col' => 3],
+                ['tab' => $tI, 'key' => 'ruc',         'label' => 'RUC / Cédula',       'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Tercero', 'col' => 3],
+                ['tab' => $tI, 'key' => 'observaciones','label' => 'Observaciones',     'icon' => 'bi-chat-left-text',  'type' => 'text',         'grupo' => 'Tercero', 'col' => 3],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorING"></div>
             <input type="hidden" id="buscarIngreso" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorING',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorING',
                         hiddenInputId: 'buscarIngreso',
-                        fields: [
-                            { key: 'recibo_de', label: 'Recibo de',   icon: 'bi-person-badge',    type: 'text' },
-                            { key: 'cliente',   label: 'Cliente',     icon: 'bi-person',          type: 'text' },
-                            { key: 'ruc',       label: 'RUC',         icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',    label: 'Nº ingreso',  icon: 'bi-hash',            type: 'text' },
-                            { key: 'serie',     label: 'Serie',       icon: 'bi-upc-scan',        type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',             type: 'text' },
-                            { key: 'concepto',  label: 'Concepto',    icon: 'bi-chat-left-text',  type: 'text' },
-                            { key: 'tipo',      label: 'Tipo ingreso',icon: 'bi-tag',             type: 'text' },
-                            { key: 'fecha',     label: 'Fecha',       icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'monto',     label: 'Monto',       icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'estado',    label: 'Estado',      icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'aprobado', l: 'Aprobado' },
-                                { v: 'borrador', l: 'Borrador' },
-                                { v: 'anulado',  l: 'Anulado' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_aprobado',   label: 'Aprobados',  mk: () => ({ key: 'estado', op: '=', value: 'aprobado', display: 'Aprobado' }) },
-                            { id: 'qf_borrador',   label: 'Borradores', mk: () => ({ key: 'estado', op: '=', value: 'borrador', display: 'Borrador' }) },
-                            { id: 'qf_anulado',    label: 'Anulados',   mk: () => ({ key: 'estado', op: '=', value: 'anulado',  display: 'Anulado' }) },
-                            { id: 'qf_hoy',        label: 'Hoy',        mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                            { id: 'qf_mes',        label: 'Este mes',   mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_mes_pasado', label: 'Mes pasado', mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
-                            { id: 'qf_anio',       label: 'Este año',   mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de ingresos',
+                        inputWidth: 420,
+                        extraId: 'fmExtraING',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de los ingresos (líneas cobradas y
+                        // formas de cobro). Cada coincidencia dice a qué ingreso pertenece.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de los ingresos',
+                            placeholder: 'Nº de factura o recibo, descripción, cuenta, forma de cobro, referencia, cheque, monto...',
+                            columns: [
+                                { key: 'origen',         label: 'Tipo' },
+                                { key: 'tipo',           label: 'Detalle' },
+                                { key: 'referencia',     label: 'Nº / Referencia', class: 'font-monospace' },
+                                { key: 'descripcion',    label: 'Descripción' },
+                                { key: 'monto',          label: 'Monto', align: 'end' },
+                                { key: 'numero_ingreso', label: 'Ingreso', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',          label: 'Fecha' },
+                                { key: 'tercero',        label: 'Recibo de' },
+                                { key: 'estado',         label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero_ingreso }),
+                            onOpen: (row, fm) => { fm.hide(); setTimeout(() => abrirModalIngresoVer(row.id_ingreso), 350); },
+                        },
+                        fields: <?= json_encode($filtrosIngresos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
                         onApply: () => window.ING_fetchSearch && window.ING_fetchSearch(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraING" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero_ingreso' => 'Nº Ingreso',
@@ -186,10 +232,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -676,6 +722,38 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
         });
     });
+
+    // Deja el combo de serie apuntando a la serie con la que se GUARDÓ el documento y sincroniza
+    // los hidden (id_establecimiento / establecimiento / punto_emision) con ella, sin pedir al
+    // servidor un secuencial nuevo. El combo solo trae las series con las que se puede emitir hoy
+    // (puntos activos del primer establecimiento con secuencial de Ingresos configurado); si el
+    // documento nació con otra —migrados con 001-001 cuando la empresa ya emite con 001-101, punto
+    // desactivado, otro establecimiento— se agrega una opción temporal (data-temporal) con su serie
+    // real, que abrirModalIngreso() descarta. Sin esto el combo quedaba en blanco y los hidden
+    // seguían apuntando a la primera serie del combo.
+    function seleccionarSerieDocumentoIngreso(ing) {
+        const sel = document.getElementById('m-select-punto');
+        if (!sel) return;
+        sel.querySelectorAll('option[data-temporal]').forEach(o => o.remove());
+
+        const idPunto  = String(ing.id_punto_emision || '');
+        const codEst   = String(ing.establecimiento || '');
+        const codPunto = String(ing.punto_emision || '');
+        let opt = idPunto ? Array.from(sel.options).find(o => o.value === idPunto) : null;
+        if (!opt && codEst && codPunto) {
+            opt = new Option(`${codEst}-${codPunto}`, idPunto);
+            opt.dataset.temporal = '1';
+            opt.dataset.est      = String(ing.id_establecimiento || '');
+            opt.dataset.codEst   = codEst;
+            opt.dataset.codPunto = codPunto;
+            sel.add(opt);
+        }
+        if (!opt) return;
+        sel.value = opt.value;
+        document.getElementById('m-id-establecimiento').value  = opt.dataset.est || '';
+        document.getElementById('m-txt-establecimiento').value = opt.dataset.codEst || '';
+        document.getElementById('m-txt-punto').value           = opt.dataset.codPunto || '';
+    }
 
     function syncIngresoSecuencial(idPunto) {
         const sel = document.getElementById('m-select-punto');
@@ -1836,6 +1914,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
         document.getElementById('ing-bloqueo-aviso')?.classList.add('d-none');
         document.getElementById('formIngresoModal').reset();
+        // Quitar la serie "prestada" que pudo inyectar seleccionarSerieDocumentoIngreso() al abrir
+        // un documento cuyo punto ya no está en el combo: un ingreso NUEVO solo puede emitirse
+        // con las series activas que renderizó el servidor.
+        document.querySelectorAll('#m-select-punto option[data-temporal]').forEach(o => o.remove());
         document.getElementById('m-input-id').value = '';
         document.getElementById('m-input-id-cliente').value = '';
         document.getElementById('m-recibo-de-input').value = '';
@@ -2192,10 +2274,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 _btnCorreo.classList.remove('d-none');
                 _btnCorreo.dataset.email = ing.cliente_email || ing.recibo_cliente_email || '';
                 document.getElementById('m-input-fecha').value = ing.fecha_emision;
-                // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente secuencial
-                if (ing.id_punto_emision) {
-                    document.getElementById('m-select-punto').value = ing.id_punto_emision;
-                }
+                // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente
+                // secuencial (inyecta una opción temporal si esa serie ya no está en el combo).
+                seleccionarSerieDocumentoIngreso(ing);
                 document.getElementById('m-input-secuencial').value = String(ing.secuencial ?? '').padStart(9, '0');
 
                 // Poblar "Recibo de"

@@ -85,7 +85,8 @@ class IngresosController extends BaseModuloController
         // del buscador — a diferencia de $puntos (solo sirve para elegir la
         // serie de un ingreso NUEVO), esto incluye series de cualquier
         // establecimiento y aunque el punto ya no tenga secuencial configurado.
-        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+        $seriesFiltro   = $this->repository->getSeriesDistintas($idEmpresa);
+        $usuariosFiltro = $this->repository->getUsuariosConIngresos($idEmpresa);
 
         $formasCobro = $this->service->getFormasCobro($idEmpresa);
 
@@ -135,6 +136,7 @@ class IngresosController extends BaseModuloController
             'establecimientos'  => $establecimientos,
             'puntos'            => $puntos,
             'seriesFiltro'      => $seriesFiltro,
+            'usuariosFiltro'    => $usuariosFiltro,
             'formasCobro'       => $formasCobro,
             'conceptos'         => $conceptos,
             'comportamientosConPendientes' => $comportamientosConPendientes,
@@ -441,6 +443,47 @@ class IngresosController extends BaseModuloController
 
         echo json_encode(['ok' => true, 'data' => $result['rows']]);
         exit;
+    }
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de los ingresos.
+     * Devuelve cada línea/pago que coincide y el ingreso al que pertenece.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $esDoc = ($r['origen'] === 'DOCUMENTO');
+            $tipo  = $esDoc
+                ? (\App\Helpers\TipoDocumentoHelper::ingresoLabel($r['tipo'] ?? null, $r['tipo'] ?? null, null))
+                : ($r['tipo'] ?? 'Forma de cobro');
+            $rows[] = [
+                'origen'         => $esDoc ? 'Documento cobrado' : 'Forma de cobro',
+                'tipo'           => $tipo,
+                'referencia'     => $r['referencia'] ?? '',
+                'descripcion'    => $r['descripcion'] ?? '',
+                'monto'          => number_format((float) ($r['monto'] ?? 0), 2),
+                'id_ingreso'     => (int) $r['id_ingreso'],
+                'numero_ingreso' => $r['numero_ingreso'] ?? '',
+                'fecha'          => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'tercero'        => $r['tercero'] ?? '',
+                'estado'         => ucfirst((string) ($r['estado'] ?? 'registrado')),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
     public function buscarDocumentosPendientesAjax(): void

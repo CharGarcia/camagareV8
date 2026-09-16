@@ -743,6 +743,37 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         });
     }
 
+    // Deja el combo de serie apuntando a la serie con la que se GUARDÓ el documento y sincroniza
+    // los hidden (id_establecimiento / establecimiento / punto_emision) con ella, sin pedir al
+    // servidor un secuencial nuevo. El combo solo trae las series con las que se puede emitir hoy
+    // (puntos activos del primer establecimiento con secuencial de Egresos configurado); si el
+    // documento nació con otra —migrados con 001-001 cuando la empresa ya emite con 001-101, punto
+    // desactivado, otro establecimiento— se agrega una opción temporal (data-temporal) con su serie
+    // real, que abrirModalEgreso() descarta. Sin esto el combo quedaba en blanco.
+    function seleccionarSerieDocumentoEgreso(e) {
+        const sel = document.getElementById('eg-select-punto');
+        if (!sel) return;
+        sel.querySelectorAll('option[data-temporal]').forEach(o => o.remove());
+
+        const idPunto  = String(e.id_punto_emision || '');
+        const codEst   = String(e.establecimiento || '');
+        const codPunto = String(e.punto_emision || '');
+        let opt = idPunto ? Array.from(sel.options).find(o => o.value === idPunto) : null;
+        if (!opt && codEst && codPunto) {
+            opt = new Option(`${codEst}-${codPunto}`, idPunto);
+            opt.dataset.temporal = '1';
+            opt.dataset.est      = String(e.id_establecimiento || '');
+            opt.dataset.codEst   = codEst;
+            opt.dataset.codPunto = codPunto;
+            sel.add(opt);
+        }
+        if (!opt) return;
+        sel.value = opt.value;
+        document.getElementById('eg-id-establecimiento').value  = opt.dataset.est || '';
+        document.getElementById('eg-txt-establecimiento').value = opt.dataset.codEst || '';
+        document.getElementById('eg-txt-punto').value           = opt.dataset.codPunto || '';
+    }
+
     function syncEgresoSecuencial(id) {
         const s = document.getElementById('eg-select-punto');
         if(!s) return;
@@ -1774,6 +1805,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('modalEgresoTitulo').textContent = 'Registrar Nuevo Egreso';
         document.getElementById('modalEgresoIcono').className = 'bi bi-cash-stack text-primary me-2';
         document.getElementById('formEgresoModal').reset();
+        // Quitar la serie "prestada" que pudo inyectar seleccionarSerieDocumentoEgreso() al abrir
+        // un documento cuyo punto ya no está en el combo: un egreso NUEVO solo puede emitirse
+        // con las series activas que renderizó el servidor.
+        document.querySelectorAll('#eg-select-punto option[data-temporal]').forEach(o => o.remove());
         document.getElementById('eg-input-id').value = '';
         document.getElementById('eg-input-id-sujeto').value = '';
 
@@ -2077,10 +2112,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             _btnCorreoEg.classList.remove('d-none');
             _btnCorreoEg.dataset.email = e.sujeto_email || '';
             document.getElementById('eg-input-fecha').value = e.fecha_emision;
-            // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente secuencial
-            if (e.id_punto_emision) {
-                document.getElementById('eg-select-punto').value = e.id_punto_emision;
-            }
+            // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente
+            // secuencial (inyecta una opción temporal si esa serie ya no está en el combo).
+            seleccionarSerieDocumentoEgreso(e);
             document.getElementById('eg-input-secuencial').value = String(e.secuencial ?? '').padStart(9,'0');
             document.getElementById('eg-input-obs').value = e.observaciones || '';
             const comp = e.tipo_egreso || 'GENERAL';

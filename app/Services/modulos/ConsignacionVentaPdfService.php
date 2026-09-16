@@ -17,6 +17,14 @@ use TCPDF;
  *
  * Cuando la empresa tenga una plantilla activa (módulo Plantillas de Documentos)
  * se usará PlantillasPdfRendererService en su lugar; este es el respaldo estándar.
+ *
+ * MODO COMPLETO (`$opciones['completo'] = true`, lo usa la pestaña Consignaciones del
+ * Reporte de Inventarios): mismo diseño, pero como ESTADO del documento en vez de
+ * comprobante de entrega. La tabla cambia la columna "Acon" (para anotar a mano) por
+ * "Saldo", la fila de totales suma también retorno/facturado/cambio/saldo, debajo se
+ * listan los documentos que explican esas cantidades (retornos y facturas de venta,
+ * `$opciones['retornos']` / `$opciones['facturas']`) y cierra con el resumen del saldo
+ * en poder del cliente. No lleva firmas: no es un documento que se entregue para firmar.
  */
 class ConsignacionVentaPdfService
 {
@@ -26,14 +34,22 @@ class ConsignacionVentaPdfService
     private float $marginR  = 12;
     private float $contentW = 186; // 210 - 12 - 12
 
-    public function generar(array $cabecera, array $detalles, array $empresa, string $outputDest = 'I')
+    /** true = estado completo (con saldo y documentos relacionados); false = comprobante de entrega. */
+    private bool $completo = false;
+
+    /**
+     * @param array $opciones ['completo' => bool, 'retornos' => array, 'facturas' => array].
+     *                        Sin opciones se genera el comprobante de entrega de siempre.
+     */
+    public function generar(array $cabecera, array $detalles, array $empresa, string $outputDest = 'I', array $opciones = [])
     {
         $numero = trim((string)($cabecera['serie'] ?? '') . '-' . (string)($cabecera['secuencial'] ?? ''), '-');
+        $this->completo = !empty($opciones['completo']);
 
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
         $this->pdf->SetAuthor($empresa['nombre'] ?? '');
-        $this->pdf->SetTitle('Consignación en Ventas ' . $numero);
+        $this->pdf->SetTitle('Consignación en Ventas ' . $numero . ($this->completo ? ' - Estado' : ''));
         $this->pdf->SetMargins($this->marginL, 10, $this->marginR);
         $this->pdf->SetAutoPageBreak(true, 15);
         $this->pdf->setPrintHeader(false);
@@ -45,9 +61,18 @@ class ConsignacionVentaPdfService
         $y = $this->dibujarDatosCliente($cabecera, $y + 3);
         $y = $this->dibujarTablaDetalle($detalles, $y + 3);
         $y = $this->dibujarObservaciones(trim((string)($cabecera['observaciones'] ?? '')), $y + 3);
-        $this->dibujarFirmas($cabecera, $empresa, $y);
+        if ($this->completo) {
+            $y = $this->dibujarDocumentosRelacionados(
+                (array)($opciones['retornos'] ?? []),
+                (array)($opciones['facturas'] ?? []),
+                $y + 3
+            );
+            $this->dibujarResumenSaldo($detalles, $y + 3);
+        } else {
+            $this->dibujarFirmas($cabecera, $empresa, $y);
+        }
 
-        $nombre = 'Consignacion_' . ($numero !== '' ? $numero : 'comprobante') . '.pdf';
+        $nombre = 'Consignacion_' . ($numero !== '' ? $numero : 'comprobante') . ($this->completo ? '_estado' : '') . '.pdf';
         if ($outputDest === 'S') {
             return $this->pdf->Output($nombre, 'S');
         }
@@ -99,7 +124,7 @@ class ConsignacionVentaPdfService
 
         $pdf->SetXY($derX, $y0 + 2);
         $pdf->SetFont('helvetica', 'B', 9.5);
-        $pdf->Cell($derW, 5, 'CONSIGNACIÓN EN VENTAS', 0, 1, 'C');
+        $pdf->Cell($derW, 5, $this->completo ? 'ESTADO DE CONSIGNACIÓN' : 'CONSIGNACIÓN EN VENTAS', 0, 1, 'C');
 
         $pdf->SetX($derX);
         $pdf->SetFont('helvetica', '', 8);
@@ -221,7 +246,11 @@ class ConsignacionVentaPdfService
         $cols[] = ['t' => 'Facturados', 'w' => 17, 'a' => 'R', 'k' => 'facturado'];
         // Entregado a cambio (Cambios de productos): también sale del saldo consignado.
         $cols[] = ['t' => 'Cambio',     'w' => 14, 'a' => 'R', 'k' => 'cambiado'];
-        $cols[] = ['t' => 'Acon',       'w' => 12, 'a' => 'C', 'k' => '__acon__'];
+        // Comprobante de entrega: "Acon" en blanco para anotar el acondicionamiento a mano.
+        // Estado completo: en su lugar va el saldo que sigue en poder del cliente.
+        $cols[] = $this->completo
+            ? ['t' => 'Saldo', 'w' => 16, 'a' => 'R', 'k' => 'saldo']
+            : ['t' => 'Acon',  'w' => 12, 'a' => 'C', 'k' => '__acon__'];
 
         $fixed = 0.0;
         foreach ($cols as $c) { $fixed += $c['w']; }
@@ -270,7 +299,7 @@ class ConsignacionVentaPdfService
             foreach ($cols as $c) {
                 $k   = $c['k'];
                 $raw = $d[$k] ?? '';
-                if ($k === 'cantidad') {
+                if ($k === 'cantidad' || $k === 'saldo') {
                     $vals[] = number_format((float)$raw, 2);
                 } elseif (in_array($k, ['retornado', 'facturado', 'cambiado'], true)) {
                     // En blanco cuando es 0: menos ruido visual que repetir "0.00" en cada fila.
@@ -336,15 +365,247 @@ class ConsignacionVentaPdfService
             $pdf->SetXY($mL, $yTot);
             $pdf->SetFont('helvetica', 'B', 7);
             $pdf->SetFillColor(235, 238, 243);
-            $pdf->Cell($wAntes, 6, 'TOTAL ÍTEMS', 1, 0, 'R', true);
+            $pdf->Cell($wAntes, 6, $this->completo ? 'TOTALES' : 'TOTAL ÍTEMS', 1, 0, 'R', true);
             $pdf->Cell($cols[$idxCant]['w'], 6, number_format($totalCant, 2), 1, 0, 'R', true);
             for ($i = $idxCant + 1; $i < count($cols); $i++) {
-                $pdf->Cell($cols[$i]['w'], 6, '', 1, 0, 'C', true);
+                // En el estado completo se suman también retorno, facturado, cambio y saldo,
+                // cada uno bajo su columna; en el comprobante esas celdas quedan en blanco.
+                $k   = $cols[$i]['k'];
+                $txt = '';
+                if ($this->completo && in_array($k, ['retornado', 'facturado', 'cambiado', 'saldo'], true)) {
+                    $sum = 0.0;
+                    foreach ($detalles as $d) { $sum += (float)($d[$k] ?? 0); }
+                    $txt = number_format($sum, 2);
+                }
+                $pdf->Cell($cols[$i]['w'], 6, $txt, 1, 0, $txt !== '' ? 'R' : 'C', true);
             }
             $pdf->SetXY($mL, $yTot + 6);
         }
 
         return $pdf->GetY();
+    }
+
+    /**
+     * Estado completo: documentos que explican lo "Retorno" y "Facturados" de la tabla.
+     * Dos bloques con el mismo formato de tabla: DEVOLUCIONES (retornos Emitida) y
+     * FACTURAS DE VENTA (facturación de consignación en estado facturada, con el número
+     * de la factura de venta). Cada bloque cierra con su total de unidades y valor.
+     */
+    private function dibujarDocumentosRelacionados(array $retornos, array $facturas, float $y): float
+    {
+        $filasRet = [];
+        foreach ($retornos as $r) {
+            $ts = !empty($r['fecha_retorno']) ? strtotime((string)$r['fecha_retorno']) : false;
+            $filasRet[] = [
+                'fecha'     => $ts ? date('d/m/Y', $ts) : '',
+                'documento' => trim((string)($r['serie'] ?? '') . '-' . (string)($r['secuencial'] ?? ''), '-'),
+                'producto'  => trim((string)($r['producto_codigo'] ?? '')) !== ''
+                    ? $r['producto_codigo'] . ' - ' . ($r['producto_nombre'] ?? '')
+                    : (string)($r['producto_nombre'] ?? ''),
+                'lote'      => (string)($r['lote'] ?? ''),
+                'nup'       => (string)($r['nup'] ?? ''),
+                'cantidad'  => (float)($r['cantidad'] ?? 0),
+                'total'     => (float)($r['total'] ?? 0),
+            ];
+        }
+
+        $filasFac = [];
+        foreach ($facturas as $f) {
+            $ts = !empty($f['fecha_emision']) ? strtotime((string)$f['fecha_emision']) : false;
+            // Número real de la factura de venta (establecimiento-punto-secuencial); si ya no
+            // existe, el número que guardó la facturación en su momento.
+            $partes = array_filter([
+                trim((string)($f['establecimiento'] ?? '')),
+                trim((string)($f['punto_emision'] ?? '')),
+                trim((string)($f['secuencial'] ?? '')),
+            ], fn($p) => $p !== '');
+            $doc = count($partes) === 3 ? implode('-', $partes) : trim((string)($f['numero_factura'] ?? ''));
+            $estado = trim((string)($f['estado'] ?? ''));
+            if ($estado !== '' && strcasecmp($estado, 'facturada') !== 0) {
+                $doc .= ' (' . $estado . ')';
+            }
+            $filasFac[] = [
+                'fecha'     => $ts ? date('d/m/Y', $ts) : '',
+                'documento' => $doc !== '' ? $doc : '—',
+                'producto'  => trim((string)($f['producto_codigo'] ?? '')) !== ''
+                    ? $f['producto_codigo'] . ' - ' . ($f['producto_nombre'] ?? '')
+                    : (string)($f['producto_nombre'] ?? ''),
+                'lote'      => (string)($f['lote'] ?? ''),
+                'nup'       => (string)($f['nup'] ?? ''),
+                'cantidad'  => (float)($f['cantidad'] ?? 0),
+                'total'     => (float)($f['total'] ?? 0),
+            ];
+        }
+
+        $y = $this->dibujarBloqueDocumentos('DEVOLUCIONES (RETORNOS)', 'Retorno', $filasRet, 'Sin devoluciones registradas.', $y);
+        return $this->dibujarBloqueDocumentos('FACTURAS DE VENTA', 'Factura', $filasFac, 'Sin facturas registradas.', $y + 3);
+    }
+
+    /** Un bloque (título + tabla + total) de dibujarDocumentosRelacionados(). */
+    private function dibujarBloqueDocumentos(string $titulo, string $etiquetaDoc, array $filas, string $vacio, float $y): float
+    {
+        $pdf = $this->pdf;
+        $mL  = $this->marginL;
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
+
+        $mostrarLote = false; $mostrarNup = false;
+        foreach ($filas as $f) {
+            if (trim($f['lote']) !== '') $mostrarLote = true;
+            if (trim($f['nup']) !== '')  $mostrarNup  = true;
+        }
+
+        $cols = [
+            ['t' => 'Fecha',      'w' => 20, 'a' => 'C', 'k' => 'fecha'],
+            ['t' => $etiquetaDoc, 'w' => 32, 'a' => 'L', 'k' => 'documento'],
+            ['t' => 'Producto',   'w' => 0,  'a' => 'L', 'k' => 'producto'],
+        ];
+        if ($mostrarLote) $cols[] = ['t' => 'Lote', 'w' => 18, 'a' => 'L', 'k' => 'lote'];
+        if ($mostrarNup)  $cols[] = ['t' => 'NUP',  'w' => 18, 'a' => 'L', 'k' => 'nup'];
+        $cols[] = ['t' => 'Cantidad', 'w' => 18, 'a' => 'R', 'k' => 'cantidad'];
+        $cols[] = ['t' => 'Total',    'w' => 22, 'a' => 'R', 'k' => 'total'];
+
+        $fixed = 0.0;
+        foreach ($cols as $c) { $fixed += $c['w']; }
+        $flex = max(28.0, $this->contentW - $fixed);
+        $descIdx = 2;
+        foreach ($cols as $i => &$c) { if ($c['w'] === 0) { $c['w'] = $flex; $descIdx = $i; } }
+        unset($c);
+
+        $dibujarCabecera = function (float $yEnc) use ($pdf, $cols, $mL, $titulo): float {
+            $pdf->SetXY($mL, $yEnc);
+            $pdf->SetFont('helvetica', 'B', 8);
+            $pdf->SetTextColor(60, 70, 90);
+            $pdf->Cell($this->contentW, 5, $titulo, 0, 1, 'L');
+            $pdf->SetX($mL);
+            $pdf->SetFont('helvetica', 'B', 7);
+            $pdf->SetFillColor(60, 70, 90);
+            $pdf->SetTextColor(255, 255, 255);
+            $pdf->SetDrawColor(60, 70, 90);
+            $pdf->SetLineWidth(0.2);
+            foreach ($cols as $c) {
+                $pdf->Cell($c['w'], 6, $c['t'], 1, 0, 'C', true);
+            }
+            $pdf->Ln();
+            $pdf->SetFont('helvetica', '', 6.8);
+            $pdf->SetTextColor(0, 0, 0);
+            return $yEnc + 11;
+        };
+
+        // Título + cabecera + al menos una fila deben caber juntos en la página.
+        if ($y + 17 > $limiteY) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
+        $dibujarCabecera($y);
+
+        if (empty($filas)) {
+            $pdf->SetX($mL);
+            $pdf->SetFillColor(255, 255, 255);
+            $pdf->Cell($this->contentW, 6, $vacio, 1, 1, 'C');
+            return $pdf->GetY();
+        }
+
+        $alt = false;
+        $totCant = 0.0; $totVal = 0.0;
+        foreach ($filas as $f) {
+            $bg = $alt ? [245, 247, 250] : [255, 255, 255];
+            $alt = !$alt;
+            $totCant += $f['cantidad'];
+            $totVal  += $f['total'];
+
+            $vals = [];
+            foreach ($cols as $c) {
+                $k = $c['k'];
+                $vals[] = in_array($k, ['cantidad', 'total'], true) ? number_format((float)$f[$k], 2) : (string)$f[$k];
+            }
+
+            $nLin = max(1, $pdf->getNumLines((string)$vals[$descIdx], $cols[$descIdx]['w']));
+            $h    = max(5.0, $nLin * 4.0);
+            $yRow = $pdf->GetY();
+            if ($yRow + $h > $limiteY) {
+                $pdf->AddPage();
+                $yRow = $dibujarCabecera($pdf->GetY());
+            }
+            $pdf->SetFillColor(...$bg);
+
+            $x = $mL;
+            foreach ($cols as $i => $c) {
+                $pdf->SetXY($x, $yRow);
+                if ($i === $descIdx) {
+                    $pdf->MultiCell($c['w'], $h, $vals[$i], 1, $c['a'], true, 0, '', '', true, 0, false, true, $h, 'M');
+                } else {
+                    $pdf->Cell($c['w'], $h, $vals[$i], 1, 0, $c['a'], true, '', 1);
+                }
+                $x += $c['w'];
+            }
+            $pdf->SetXY($mL, $yRow + $h);
+        }
+
+        // Total del bloque bajo Cantidad y Total.
+        $wAntes = 0.0;
+        for ($i = 0; $i < count($cols) - 2; $i++) { $wAntes += $cols[$i]['w']; }
+        $yTot = $pdf->GetY();
+        if ($yTot + 6 > $limiteY) {
+            $pdf->AddPage();
+            $yTot = $dibujarCabecera($pdf->GetY());
+        }
+        $pdf->SetXY($mL, $yTot);
+        $pdf->SetFont('helvetica', 'B', 7);
+        $pdf->SetFillColor(235, 238, 243);
+        $pdf->Cell($wAntes, 6, 'TOTAL', 1, 0, 'R', true);
+        $pdf->Cell($cols[count($cols) - 2]['w'], 6, number_format($totCant, 2), 1, 0, 'R', true);
+        $pdf->Cell($cols[count($cols) - 1]['w'], 6, number_format($totVal, 2), 1, 0, 'R', true);
+        $pdf->SetXY($mL, $yTot + 6);
+
+        return $pdf->GetY();
+    }
+
+    /**
+     * Estado completo: resumen final del documento — consignado, devuelto, facturado,
+     * entregado a cambio y el SALDO que sigue en poder del cliente
+     * (saldo = consignado − devuelto − facturado − a cambio). Caja a la derecha, como
+     * los totales de una factura.
+     */
+    private function dibujarResumenSaldo(array $detalles, float $y): void
+    {
+        $pdf = $this->pdf;
+        $suma = function (string $k) use ($detalles): float {
+            $t = 0.0;
+            foreach ($detalles as $d) { $t += (float)($d[$k] ?? 0); }
+            return $t;
+        };
+        $filas = [
+            ['Consignado',            $suma('cantidad'),  false],
+            ['Devuelto (retornos)',   $suma('retornado'), false],
+            ['Facturado',             $suma('facturado'), false],
+            ['Entregado a cambio',    $suma('cambiado'),  false],
+            ['SALDO EN PODER DEL CLIENTE', $suma('saldo'), true],
+        ];
+
+        $boxW = 80;
+        $lblW = 52;
+        $rowH = 5.5;
+        $boxH = count($filas) * $rowH + 3;
+        $x    = $this->marginL + $this->contentW - $boxW;
+
+        if ($y + $boxH > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
+
+        $pdf->SetLineWidth(0.2);
+        $pdf->SetDrawColor(120, 120, 120);
+        $pdf->SetFillColor(245, 245, 245);
+        $pdf->RoundedRect($x, $y, $boxW, $boxH, 1.5, '1111', 'DF');
+
+        $yy = $y + 1.5;
+        foreach ($filas as $f) {
+            $pdf->SetXY($x + 2, $yy);
+            $pdf->SetFont('helvetica', $f[2] ? 'B' : '', $f[2] ? 8.5 : 8);
+            $pdf->Cell($lblW, $rowH, $f[0], 0, 0, 'L');
+            $pdf->Cell($boxW - 4 - $lblW, $rowH, number_format($f[1], 2), 0, 0, 'R');
+            $yy += $rowH;
+        }
     }
 
     /**

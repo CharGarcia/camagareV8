@@ -151,8 +151,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.FACCV_PERM = {
         crear: <?= (!empty($perm['crear']) || !empty($perm['todo'])) ? 'true' : 'false' ?>,
         actualizar: <?= (!empty($perm['actualizar']) || !empty($perm['todo'])) ? 'true' : 'false' ?>,
-        eliminar: <?= (!empty($perm['eliminar']) || !empty($perm['todo'])) ? 'true' : 'false' ?>
+        eliminar: <?= (!empty($perm['eliminar']) || !empty($perm['todo'])) ? 'true' : 'false' ?>,
+        // Tras "Generar factura" se ofrece ir a Facturas de Venta solo si el usuario
+        // puede ver ese módulo (solo UX: el destino valida su propio permiso al entrar).
+        ver_factura_venta: <?= \App\Helpers\Permisos::puedeVer('modulos/factura-venta') ? 'true' : 'false' ?>
     };
+    window.RUTA_MODULO_FACTURA_VENTA = '<?= rtrim($base, '/') ?>/modulos/factura-venta';
     window.EMPRESA_CONFIG = {
         facturacion_inventario: <?= (($empresa['facturacion_inventario'] ?? true) === 'true' || ($empresa['facturacion_inventario'] ?? true) === true) ? 'true' : 'false' ?>,
         decimales_precio: <?= (int) ($empresa['decimales_precio'] ?? 2) ?>,

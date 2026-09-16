@@ -717,6 +717,15 @@ $riSubtitulo = count($riNombres) > 1
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
+                <!-- Barra de acciones del documento (misma regla que el modal de Facturas de Venta) -->
+                <div class="d-flex gap-1 align-items-center flex-wrap border-bottom pb-2 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="ri-cv-modal-btn-pdf" disabled
+                            title="Descargar PDF del estado de la consignación: cantidades facturadas, devueltas, documentos relacionados y saldo"
+                            onclick="window.RI_Consignaciones.descargarPdf();">
+                        <i class="bi bi-file-earmark-pdf"></i>
+                    </button>
+                    <span class="small text-muted ms-1">PDF del estado completo (facturado, devuelto y saldo)</span>
+                </div>
                 <div class="row g-2 mb-3 small">
                     <div class="col-md-3"><span class="text-muted">Fecha:</span> <span id="ri-cv-modal-fecha" class="fw-bold"></span></div>
                     <div class="col-md-4"><span class="text-muted">Cliente:</span> <span id="ri-cv-modal-cliente" class="fw-bold"></span></div>

@@ -42,6 +42,12 @@ class IngresoService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuario, $ordenMulti);
     }
 
+    /** Búsqueda libre dentro de los ingresos (líneas cobradas y formas de cobro). */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuario, $limit);
+    }
+
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $ingreso = $this->repository->getPorId($id, $idEmpresa);
@@ -237,6 +243,20 @@ class IngresoService
 
     public function actualizar(int $id, array $data): void
     {
+        // 0. La identidad del documento (serie y secuencial) NO se edita: se conserva la que ya
+        // tiene en BD, venga lo que venga del navegador. El combo de serie del modal solo lista
+        // las series con las que se puede emitir hoy; un ingreso guardado con otra (migrados con
+        // 001-001, punto desactivado, otro establecimiento) llegaba aquí con id_punto_emision
+        // vacío y establecimiento/punto_emision de la primera serie del combo, y updateCabecera()
+        // se los reescribía en silencio.
+        $original = $this->getPorId($id, (int) $data['id_empresa']);
+        if (!$original) {
+            throw new \Exception('No se encontró el registro a actualizar.');
+        }
+        foreach (['id_establecimiento', 'id_punto_emision', 'establecimiento', 'punto_emision', 'secuencial', 'numero_ingreso'] as $campo) {
+            $data[$campo] = $original[$campo] ?? null;
+        }
+
         // 1. Validar Secuencial (excluyendo el ID actual)
         $this->validarSecuencial($data, $id);
 
@@ -253,10 +273,6 @@ class IngresoService
             $idEmpresa = (int) $data['id_empresa'];
             $idUsuario = (int) $data['id_usuario'];
 
-            $original = $this->getPorId($id, $idEmpresa);
-            if (!$original) {
-                throw new \Exception('No se encontró el registro a actualizar.');
-            }
             if ($original['estado'] === 'anulado') {
                 throw new \Exception('No se puede editar un ingreso anulado.');
             }

@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones
-version: 1.12
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente
+version: 1.13
 orden: 40
 estado: activo
 ---
@@ -119,6 +119,18 @@ documento completo. El N° de consignación acepta tanto el secuencial solo
 Al hacer clic en una fila se abre el detalle con sus líneas de producto:
 producto, bodega, lote, NUP, consignado, retornado, facturado y saldo, con una
 fila de **totales** al pie.
+
+La barra superior del detalle tiene un botón **PDF** que descarga el **estado
+completo de la consignación**: el mismo diseño del comprobante de Consignaciones
+de Ventas, pero con las columnas *Retorno*, *Facturados*, *Cambio* y **Saldo**
+llenas por cada línea, una fila de totales, debajo la lista de **devoluciones
+(retornos)** y de **facturas de venta** que explican esas cantidades (fecha,
+número, producto, lote, NUP, cantidad y total) y, al cierre, el resumen:
+consignado, devuelto, facturado, entregado a cambio y **saldo en poder del
+cliente**. Ese PDF es siempre el documento **entero**, aunque el detalle esté
+filtrado por lote, producto o bodega, y usa el modelo general del sistema aunque
+la empresa tenga una plantilla de diseño activa para la consignación. Se descarga
+sin firmas: es un estado del documento, no un comprobante de entrega.
 
 Si hay filtros de línea activos, el detalle muestra **solo las líneas que
 coinciden** — así los totales del detalle cuadran con los de la fila del
@@ -233,6 +245,11 @@ cuando haga falta.
 
 ## Historial de cambios
 
+- **1.13** — Pestaña **Consignaciones**: el detalle de una consignación trae un
+  botón **PDF** que descarga el estado completo del documento (mismo diseño del
+  comprobante de Consignaciones de Ventas) con lo retornado, lo facturado, lo
+  entregado a cambio y el saldo por línea, la lista de retornos y facturas de
+  venta relacionados y el resumen del saldo en poder del cliente.
 - **1.12** — Pestaña **Consignaciones**: el saldo descuenta también lo entregado
   **a cambio** (Cambios de productos); nueva columna *A cambio* en el detalle,
   los totales y el Excel. El consignado que resta la pestaña Existencias aplica

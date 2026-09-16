@@ -27,6 +27,91 @@ class IngresoRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /**
+     * Búsqueda libre DENTRO de los ingresos (pestaña "Detalles" del modal de filtros):
+     * devuelve cada línea de documento cobrado y cada forma de cobro que coincide con
+     * el texto, junto con el ingreso al que pertenece. Mismo alcance que el listado
+     * (empresa, no eliminados, ambiente, registros propios si aplica).
+     *
+     * @return array<int, array{origen:string, tipo:?string, referencia:?string, descripcion:?string, monto:?string,
+     *                          id_ingreso:int, numero_ingreso:?string, fecha_emision:?string, estado:?string, tercero:?string}>
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "i.id_empresa = :id_empresa AND i.eliminado = false
+                      AND i.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND i.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.numero_documento', 'd.descripcion', 'd.tipo_documento', 'd.monto_documento::text', 'd.monto_cobrado::text', 'pc.codigo', 'pc.nombre'],
+            $q, $params, 'dt'
+        );
+        $condPago = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['fp.nombre', 'p.referencia', 'p.numero_cheque', 'p.observaciones', 'p.tipo_operacion_bancaria', 'p.monto::text', 'p.fecha_cobro::text'],
+            $q, $params, 'pg'
+        );
+        if ($condDet === '' || $condPago === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT i.id, i.numero_ingreso, i.fecha_emision, i.estado,
+                           COALESCE(NULLIF(i.recibo_de, ''), c.nombre) AS tercero
+                    FROM ingresos_cabecera i
+                    LEFT JOIN clientes c ON c.id = i.id_cliente
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'DOCUMENTO' AS origen,
+                           d.tipo_documento AS tipo,
+                           d.numero_documento AS referencia,
+                           d.descripcion,
+                           d.monto_cobrado AS monto,
+                           b.id AS id_ingreso, b.numero_ingreso, b.fecha_emision, b.estado, b.tercero
+                    FROM ingresos_detalle d
+                    JOIN base b ON b.id = d.id_ingreso
+                    LEFT JOIN plan_cuentas pc ON pc.id = d.id_cuenta_contable
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'PAGO' AS origen,
+                           fp.nombre AS tipo,
+                           NULLIF(CONCAT_WS(' ', p.tipo_operacion_bancaria, p.referencia, p.numero_cheque), '') AS referencia,
+                           p.observaciones AS descripcion,
+                           p.monto,
+                           b.id AS id_ingreso, b.numero_ingreso, b.fecha_emision, b.estado, b.tercero
+                    FROM ingresos_pagos p
+                    JOIN base b ON b.id = p.id_ingreso
+                    LEFT JOIN empresa_formas_pago fp ON fp.id = p.id_forma_cobro
+                    WHERE $condPago
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id_ingreso DESC, x.origen
+                LIMIT $limit";
+
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que han registrado algún ingreso en la empresa (filtro "Usuario" del modal de filtros). */
+    public function getUsuariosConIngresos(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM ingresos_cabecera i
+                JOIN usuarios u ON u.id = i.id_usuario
+                WHERE i.id_empresa = :id_empresa AND i.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function query(string $sql, array $params = []): \PDOStatement
     {
         $st = $this->db->prepare($sql);
@@ -66,8 +151,28 @@ class IngresoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre: TODAS las columnas del listado y sus relacionadas (el
+            // buscador de la vista ya no sugiere campos; lo que se escribe se busca en
+            // todo). Los documentos cobrados viven en el detalle: se agregan como una
+            // sola cadena por ingreso.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['i.numero_ingreso', 'i.recibo_de', 'c.nombre', 'c.identificacion', 'i.observaciones'],
+                [
+                    'i.numero_ingreso',
+                    'i.secuencial',
+                    "CONCAT(i.establecimiento,'-',i.punto_emision)",
+                    'i.fecha_emision::text',
+                    'i.tipo_ingreso',
+                    'eic.nombre',
+                    'i.recibo_de',
+                    'c.nombre',
+                    'c.identificacion',
+                    'rc.nombre',
+                    'i.observaciones',
+                    'i.monto_total::text',
+                    'i.estado',
+                    'u.nombre',
+                    "(SELECT STRING_AGG(d.numero_documento, ' ') FROM ingresos_detalle d WHERE d.id_ingreso = i.id)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -76,6 +181,9 @@ class IngresoRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (public/js/components/filtros_modal.js, en la
+        // vista). Las claves se conservan aunque cambie la UI porque también viajan
+        // en los enlaces de PDF/Excel.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
                 'recibo_de'      => 'i.recibo_de',
@@ -87,15 +195,24 @@ class IngresoRepository extends BaseRepository
                 'nro'            => 'i.numero_ingreso',
                 'concepto'       => 'i.observaciones',
                 'obs'            => 'i.observaciones',
+                'observaciones'  => 'i.observaciones',
             ],
             'exacto'   => [
-                'estado' => 'i.estado',
-                'tipo'   => 'i.tipo_ingreso',
+                'estado'      => 'i.estado',
+                'tipo'        => 'i.tipo_ingreso',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del buscador.
-                'serie'  => "CONCAT(i.establecimiento,'-',i.punto_emision)",
+                'serie'       => "CONCAT(i.establecimiento,'-',i.punto_emision)",
+                'id_concepto' => 'i.id_ingreso_concepto',
+                'usuario'     => 'i.id_usuario',
+                // asiento:si / asiento:no
+                'asiento'     => "CASE WHEN i.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
             ],
-            'fecha'    => [ 'fecha' => 'i.fecha_emision', 'fecha_emision' => 'i.fecha_emision' ],
+            'fecha'    => [
+                'fecha'         => 'i.fecha_emision',
+                'fecha_emision' => 'i.fecha_emision',
+                'registro'      => 'i.created_at',
+            ],
             'numerico' => [
                 'monto' => 'i.monto_total',
                 'total' => 'i.monto_total',
@@ -105,6 +222,36 @@ class IngresoRepository extends BaseRepository
                 // en '=', nunca hace substring).
                 'secuencial' => 'i.secuencial::numeric',
             ],
+            // Lo que vive en las tablas hijas (formas de cobro y documentos cobrados):
+            // el ingreso entra si ALGÚN pago/detalle cumple la condición.
+            'existe'   => [
+                'forma_cobro'    => ['tipo' => 'exacto', 'col' => 'p.id_forma_cobro',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_pagos p WHERE p.id_ingreso = i.id AND {cond})'],
+                'tipo_operacion' => ['tipo' => 'exacto', 'col' => 'p.tipo_operacion_bancaria',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_pagos p WHERE p.id_ingreso = i.id AND {cond})'],
+                'referencia'     => ['tipo' => 'texto',  'col' => "CONCAT(COALESCE(p.referencia,''),' ',COALESCE(p.numero_cheque,''))",
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_pagos p WHERE p.id_ingreso = i.id AND {cond})'],
+                'fecha_cobro'    => ['tipo' => 'fecha',  'col' => 'p.fecha_cobro',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_pagos p WHERE p.id_ingreso = i.id AND {cond})'],
+                'pago_monto'     => ['tipo' => 'numerico', 'col' => 'p.monto',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_pagos p WHERE p.id_ingreso = i.id AND {cond})'],
+                'pago_obs'       => ['tipo' => 'texto',  'col' => 'p.observaciones',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_pagos p WHERE p.id_ingreso = i.id AND {cond})'],
+                'documento'      => ['tipo' => 'texto',  'col' => 'd.numero_documento',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_detalle d WHERE d.id_ingreso = i.id AND {cond})'],
+                'tipo_doc'       => ['tipo' => 'exacto', 'col' => 'd.tipo_documento',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_detalle d WHERE d.id_ingreso = i.id AND {cond})'],
+                'det_descripcion'=> ['tipo' => 'texto',  'col' => 'd.descripcion',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_detalle d WHERE d.id_ingreso = i.id AND {cond})'],
+                'det_cuenta'     => ['tipo' => 'texto',  'col' => "CONCAT(COALESCE(pc.codigo,''),' ',COALESCE(pc.nombre,''))",
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_detalle d LEFT JOIN plan_cuentas pc ON pc.id = d.id_cuenta_contable WHERE d.id_ingreso = i.id AND {cond})'],
+                'det_monto_doc'  => ['tipo' => 'numerico', 'col' => 'd.monto_documento',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_detalle d WHERE d.id_ingreso = i.id AND {cond})'],
+                'det_monto_cobrado' => ['tipo' => 'numerico', 'col' => 'd.monto_cobrado',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_detalle d WHERE d.id_ingreso = i.id AND {cond})'],
+                'det_saldo'      => ['tipo' => 'numerico', 'col' => 'd.saldo_actual',
+                                     'sql' => 'EXISTS (SELECT 1 FROM ingresos_detalle d WHERE d.id_ingreso = i.id AND {cond})'],
+            ],
         ]);
 
         if ($idUsuario !== null) {
@@ -112,7 +259,15 @@ class IngresoRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        $sqlCount = "SELECT COUNT(*) FROM ingresos_cabecera i LEFT JOIN clientes c ON i.id_cliente = c.id $where";
+        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan
+        // c, rc, u y eic.
+        $sqlCount = "SELECT COUNT(*)
+                     FROM ingresos_cabecera i
+                     LEFT JOIN clientes c  ON i.id_cliente       = c.id
+                     LEFT JOIN clientes rc ON i.id_recibo_cliente = rc.id
+                     LEFT JOIN usuarios u  ON i.id_usuario       = u.id
+                     LEFT JOIN empresa_opciones_ingreso_egreso eic ON i.id_ingreso_concepto = eic.id
+                     $where";
         $total = (int) $this->query($sqlCount, $params)->fetchColumn();
 
         // Una o varias columnas (Shift+clic en el listado), siempre validadas contra

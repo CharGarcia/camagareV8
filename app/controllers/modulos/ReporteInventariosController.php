@@ -1044,6 +1044,77 @@ class ReporteInventariosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * PDF del ESTADO completo de una consignación (botón del modal de detalle): el mismo
+     * diseño del comprobante de Consignaciones de Ventas, pero con las cantidades
+     * retornadas/facturadas/a cambio, el saldo por línea, los documentos que las explican
+     * (retornos y facturas de venta) y el resumen del saldo en poder del cliente.
+     * Siempre es el documento COMPLETO (no reaplica los filtros de línea del listado):
+     * es un estado del documento, no de la búsqueda. Usa el modelo general aunque la
+     * empresa tenga una plantilla de diseño activa: la plantilla no conoce los bloques
+     * de documentos relacionados ni el resumen del saldo.
+     */
+    public function consignacionPdf(): void
+    {
+        $this->requireLeer();
+        $this->requirePestana('consignaciones');
+
+        $idEmpresa      = (int) $_SESSION['id_empresa'];
+        $idConsignacion = (int) ($_REQUEST['id'] ?? 0);
+        if ($idConsignacion <= 0) {
+            http_response_code(400);
+            echo 'Consignación no válida.';
+            exit;
+        }
+
+        try {
+            $service = new \App\Services\modulos\ConsignacionVentaService(
+                new \App\repositories\modulos\ConsignacionVentaRepository(),
+                new \App\Rules\modulos\ConsignacionVentaRules(),
+                new LogSistemaService()
+            );
+            $cons = $service->getDetalleCompleto($idConsignacion, $idEmpresa);
+            if (!$cons) {
+                http_response_code(404);
+                echo 'No se encontró la consignación o no pertenece a esta empresa.';
+                exit;
+            }
+
+            // Mismas fuentes que el PDF de Consignaciones de Ventas; el saldo se calcula
+            // por línea igual que en la pestaña (consignado − retornado − facturado − a cambio).
+            $retornado = $service->getRetornadoPorLinea($idConsignacion, $idEmpresa);
+            $facturado = $service->getFacturadoPorLinea($idConsignacion, $idEmpresa);
+            $cambiado  = $service->getCambiadoPorLinea($idConsignacion, $idEmpresa);
+            $detalles  = $cons['detalles'] ?? [];
+            foreach ($detalles as &$d) {
+                $idDet = (int) ($d['id'] ?? 0);
+                $d['retornado'] = (float) ($retornado[$idDet] ?? 0);
+                $d['facturado'] = (float) ($facturado[$idDet] ?? 0);
+                $d['cambiado']  = (float) ($cambiado[$idDet] ?? 0);
+                $d['saldo']     = (float) ($d['cantidad'] ?? 0) - $d['retornado'] - $d['facturado'] - $d['cambiado'];
+            }
+            unset($d);
+
+            $empresaModel = new Empresa();
+            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+            if (!empty($establecimientos[0]['logo_ruta'])) {
+                $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+            }
+
+            (new \App\Services\modulos\ConsignacionVentaPdfService())->generar($cons, $detalles, $empresa, 'D', [
+                'completo' => true,
+                'retornos' => $this->repository->getRetornosDeConsignacion($idEmpresa, $idConsignacion),
+                'facturas' => $this->repository->getFacturasDeConsignacion($idEmpresa, $idConsignacion),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500);
+            echo 'Error al generar el PDF: ' . $e->getMessage();
+        }
+        exit;
+    }
+
     // ────────────────────────────────────────────────────────────────
     // AUTOCOMPLETAR
     // ────────────────────────────────────────────────────────────────
