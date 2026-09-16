@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: carga de inventario, ajuste masivo, entrada masiva, salida masiva, conteo fisico, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, creado por, aprobado por, exportar
-version: 1.2
+etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, creado por, aprobado por, exportar
+version: 1.3
 orden: 25
 estado: activo
 ---
@@ -101,9 +101,32 @@ Antes esta configuración estaba en *Empresa → Inventario*.
   ninguna fila se pudo interpretar.
 - **"La cantidad debe ser mayor a cero"**: revise las filas en cero o negativas.
 - **La carga no afecta el stock**: puede estar pendiente de aprobación.
+- **"La carga no está comprobada: corrija las líneas con error antes de aprobar"**
+  (o el botón **Aprobar** aparece deshabilitado y la carga tiene el triángulo
+  naranja en el listado): al importar, cada fila del archivo se comprobó contra
+  la empresa y al menos una falló. Abra la carga desde el listado: arriba de la
+  tabla se muestra la **lista completa de errores**, con el número de fila del
+  Excel (la fila 1 es el encabezado, así que "Fila 5" es la quinta fila del
+  archivo), y en cada línea con X roja la columna **Motivo** dice qué falló.
+  Los motivos posibles son:
+
+  | Mensaje | Causa | Cómo corregirlo |
+  |---------|-------|-----------------|
+  | *Falta el código del producto* | La celda de código está vacía | Escriba el código principal del producto |
+  | *El producto con código "X" no existe en la empresa* | El código no coincide con ninguno de la hoja **Productos** de la plantilla (se compara exacto, sin espacios al inicio o al final) | Copie el código tal como aparece en la hoja **Productos**, o cree primero el producto en el módulo Productos |
+  | *El código "X" corresponde a un servicio y no puede cargarse al inventario* | El producto existe pero es de tipo servicio | Quite la fila o cambie el producto a tipo bien |
+  | *Falta la bodega* | La celda de bodega está vacía | Escriba el nombre de la bodega |
+  | *La bodega "X" no existe en la empresa* | El nombre no coincide con ninguna bodega activa de la empresa (no distingue mayúsculas, pero debe ser el nombre completo) | Use el nombre exacto de la hoja **Bodegas** de la plantilla |
+  | *La cantidad debe ser mayor a cero* | La celda está vacía, en cero, negativa o con texto | Escriba una cantidad numérica mayor a cero |
+
+  Las líneas de una carga **no se editan** desde el sistema: corrija el archivo,
+  **elimine** la carga pendiente (botón Eliminar del detalle) e impórtela de
+  nuevo. Las líneas correctas no se aplican al stock hasta que toda la carga se
+  apruebe, así que eliminarla no deja movimientos a medias.
 
 ## Historial de cambios
 
 - **1.0** — Versión inicial.
 - **1.1** — La configuración de la aprobación se movió al módulo **Aprobaciones**; se agrega monto mínimo.
 - **1.2** — El listado pasa al estándar del sistema: buscador por campos con filtros rápidos, ordenamiento por encabezado (incluido el orden por varias columnas con Shift + clic), paginación sin recargar la página y nueva columna **Observación**, también en el PDF y el Excel. En las cargas migradas esa columna muestra solo la referencia.
+- **1.3** — El detalle de una carga pendiente con errores muestra la lista completa de errores de comprobación y una columna **Motivo** por línea (antes solo se veían al pasar el cursor sobre la X roja). Se documentan los mensajes y cómo corregir cada uno.

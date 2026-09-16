@@ -362,8 +362,22 @@ async function CI_verDetalle(id) {
                 <td class="text-end">${parseFloat(d.cantidad || 0)}</td>
                 <td class="text-end">$ ${parseFloat(d.costo_unitario || 0).toFixed(2)}</td>
                 <td class="text-center">${ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger" title="' + esc(d.error_linea) + '"></i>'}</td>
+                <td class="text-danger">${ok ? '' : esc(d.error_linea || 'Línea con error')}</td>
             </tr>`;
         }).join('');
+
+        // Errores de comprobación de la carga (una línea por fila con problema).
+        // Antes solo se veían al pasar el cursor sobre la X roja; aquí se listan
+        // completos, para que el usuario sepa qué corregir en el archivo.
+        let alertaErrores = '';
+        if (!validada && c.estado === 'pendiente') {
+            const lista = String(c.errores_validacion || '').split('\n').map(s => s.trim()).filter(Boolean);
+            alertaErrores = `<div class="alert alert-warning py-2 px-3 small mb-3">
+                <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>La carga tiene líneas con error y no se puede aprobar.</div>
+                ${lista.length ? `<ul class="mb-1 ps-3">${lista.map(x => '<li>' + esc(x) + '</li>').join('')}</ul>` : ''}
+                <div class="text-muted">Las líneas no se pueden editar aquí: corrija el archivo (código del producto, nombre de la bodega o cantidad), <strong>elimine</strong> esta carga e impórtela de nuevo. El número de fila corresponde al Excel (la fila 1 es el encabezado).</div>
+            </div>`;
+        }
 
         const estadoTxt = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' }[c.estado] || c.estado;
         document.getElementById('ci-detalle-cuerpo').innerHTML = `
@@ -375,10 +389,11 @@ async function CI_verDetalle(id) {
                 ${c.observacion ? `<div class="col-12"><div class="text-muted" style="font-size:.65rem;">Observación</div><div>${esc(c.observacion)}</div></div>` : ''}
                 ${c.motivo_rechazo ? `<div class="col-12"><div class="text-muted" style="font-size:.65rem;">Motivo rechazo</div><div class="text-danger">${esc(c.motivo_rechazo)}</div></div>` : ''}
             </div>
+            ${alertaErrores}
             <div class="table-responsive">
                 <table class="table table-sm mb-0" style="font-size:.78rem;">
-                    <thead class="table-light"><tr><th>Producto</th><th>Bodega</th><th class="text-end">Cantidad</th><th class="text-end">Costo</th><th class="text-center">OK</th></tr></thead>
-                    <tbody>${filas || '<tr><td colspan="5" class="text-center text-muted">Sin líneas</td></tr>'}</tbody>
+                    <thead class="table-light"><tr><th>Producto</th><th>Bodega</th><th class="text-end">Cantidad</th><th class="text-end">Costo</th><th class="text-center">OK</th><th>Motivo</th></tr></thead>
+                    <tbody>${filas || '<tr><td colspan="6" class="text-center text-muted">Sin líneas</td></tr>'}</tbody>
                 </table>
             </div>`;
 
