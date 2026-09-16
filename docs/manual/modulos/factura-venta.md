@@ -205,11 +205,14 @@ búsqueda y los botones de columnas, PDF y Excel.
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en **todas las columnas** de la factura y
 en sus datos relacionados: número, secuencial, fecha, cliente, RUC o cédula,
-vendedor, usuario, observaciones, subtotal, descuento, IVA, ICE, propina,
-total, estado, estado de correo, clave de acceso, guía de remisión, placa y los
-**códigos y descripciones de los productos vendidos**. Puede escribir varias
-palabras en cualquier orden y no importan mayúsculas ni tildes. Para limpiar,
-borre el texto o pulse Escape en el cuadro.
+subtotal, descuento, IVA, ICE, propina, total, **saldo**, vendedor,
+observaciones, usuario, estado de correo, **estado de pago** y estado. Las
+columnas calculadas también cuentan: escribir *pagada*, *abonada* o *pendiente*
+filtra por lo que muestra el badge, aunque no sea un dato guardado. Además
+busca en la clave de acceso, la guía de remisión, la placa y los **códigos y
+descripciones de los productos vendidos**. Puede escribir varias palabras en
+cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el
+texto o pulse Escape en el cuadro.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica

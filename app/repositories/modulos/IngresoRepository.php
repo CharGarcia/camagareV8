@@ -171,6 +171,10 @@ class IngresoRepository extends BaseRepository
                     'i.monto_total::text',
                     'i.estado',
                     'u.nombre',
+                    // Columna "Tipo" del listado: se arma con el tipo_documento del
+                    // detalle (o el concepto, ya incluido arriba), así que escribir
+                    // "factura" o "recibo" encuentra lo que se ve en esa columna.
+                    "(SELECT STRING_AGG(DISTINCT d.tipo_documento, ' ') FROM ingresos_detalle d WHERE d.id_ingreso = i.id)",
                     "(SELECT STRING_AGG(d.numero_documento, ' ') FROM ingresos_detalle d WHERE d.id_ingreso = i.id)",
                 ],
                 $parsed['texto_libre'],

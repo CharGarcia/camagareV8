@@ -86,27 +86,53 @@ class FacturaVentaRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
-        // Texto libre: TODAS las columnas del listado y sus relacionadas (el buscador
-        // de la vista no sugiere campos; lo escrito se busca en todo). Los productos
-        // vendidos viven en el detalle: se agregan como una sola cadena por factura.
+        // Abonos (cobros + notas de crédito + retenciones) y saldo, con la regla
+        // compartida de AbonosVentaSql (enlace por dígitos; retención repartida por
+        // línea si sustenta varias facturas). Los usan el texto libre (columnas Saldo
+        // y Estado pago del listado), el filtro "estado de pago" y el numérico "saldo".
+        $sqlAbonos =
+            "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
+            . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
+            . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
+            . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
+            . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
+            . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
+        $saldo = "(v.importe_total - $sqlAbonos)";
+        // Estado de pago como TEXTO, para que el texto libre encuentre "pagada",
+        // "abonada" o "pendiente" igual que se lee el badge del listado.
+        $estadoPagoTexto = "CASE WHEN v.estado = 'anulado' THEN 'anulado'
+                                 WHEN $saldo <= 0.01 THEN 'pagada'
+                                 WHEN $sqlAbonos > 0 THEN 'abonada'
+                                 ELSE 'pendiente' END";
+        // IVA: no es columna, se deduce de los totales (misma fórmula que la vista).
+        $ivaCalc = '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))';
+
+        // Texto libre: TODAS las columnas del listado (incluidas las calculadas: IVA,
+        // Saldo y Estado de pago) y sus relacionadas. El buscador de la vista no
+        // sugiere campos; lo escrito se busca en todo. Los productos vendidos viven
+        // en el detalle: se agregan como una sola cadena por factura.
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)",
+                    "CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)", // Nº Factura
                     'v.secuencial',
-                    'v.fecha_emision::text',
-                    'c.nombre',
-                    'c.identificacion',
-                    'ven.nombre',
-                    'u.nombre',
-                    'v.observaciones',
-                    'v.total_sin_impuestos::text',
-                    'v.total_descuento::text',
-                    'v.total_ice::text',
-                    'v.propina::text',
-                    'v.importe_total::text',
-                    'v.estado',
-                    'v.estado_correo',
+                    'v.fecha_emision::text',                                          // Fecha
+                    'c.nombre',                                                       // Cliente
+                    'c.identificacion',                                               // Identificación
+                    'v.total_sin_impuestos::text',                                    // Subtotal
+                    'v.total_descuento::text',                                        // Descuento
+                    "$ivaCalc::text",                                                 // IVA
+                    'v.total_ice::text',                                              // ICE
+                    'v.propina::text',                                                // Propina
+                    'v.importe_total::text',                                          // Total
+                    "ROUND($saldo, 2)::text",                                         // Saldo
+                    'ven.nombre',                                                     // Vendedor
+                    'v.observaciones',                                                // Observaciones
+                    'u.nombre',                                                       // Usuario
+                    'v.estado_correo',                                                // Estado correo
+                    $estadoPagoTexto,                                                 // Estado pago
+                    'v.estado',                                                       // Estado
+                    // Fuera del listado, pero identifican la factura:
                     'v.clave_acceso',
                     'v.guia_remision',
                     'v.placa',
@@ -120,19 +146,6 @@ class FacturaVentaRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
-
-        // Abonos (cobros + notas de crédito + retenciones) y saldo, con la regla
-        // compartida de AbonosVentaSql (enlace por dígitos; retención repartida por
-        // línea si sustenta varias facturas). Los usan el filtro "estado de pago" y
-        // el filtro numérico "saldo".
-        $sqlAbonos =
-            "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
-            . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
-            . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
-            . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
-            . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
-            . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
-        $saldo = "(v.importe_total - $sqlAbonos)";
 
         // ── Filtro especial: estado de pago (campo CALCULADO, no es columna) ──────
         // Sintaxis: pago:pendiente | pago:abonada | pago:pagada (acepta sinónimos
