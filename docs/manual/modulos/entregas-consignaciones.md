@@ -6,7 +6,7 @@ ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: entregas, entrega, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas
-version: 1.4
+version: 1.5
 orden: 0
 estado: activo
 ---
@@ -17,8 +17,10 @@ pendientes de entregar** (estado *Emitida*): es la cola de trabajo del
 repartidor. Con el selector de estado también se pueden ver las ya entregadas,
 con la evidencia que registró el repartidor desde la app móvil (GPS y firma del
 cliente) o la que quedó al marcarlas manualmente como "Entregada" desde el
-sistema. Es de **solo lectura**: no crea, edita ni elimina nada; el registro de
-la entrega en sí sigue haciéndose en Consignaciones en Ventas o en la app.
+sistema. Desde aquí el usuario puede **marcar cada pendiente como entregada**
+(botón *Entregar* de la fila o del detalle), con la misma evidencia que deja el
+marcado manual en Consignaciones en Ventas. No crea, edita ni elimina
+consignaciones.
 
 ## Qué es y para qué sirve
 
@@ -54,7 +56,14 @@ hasta que se entrega.
    dirección, entrega programada, responsable, días en espera) y, si ya fue
    entregada, la evidencia: mapa con el punto de entrega, firma de recepción y
    quién y cuándo la registró.
-5. Use los botones **PDF** / **Excel** para exportar el listado con el filtro
+5. Para **registrar una entrega**, pulse el botón **Entregar** (columna
+   *Acciones*) de la fila pendiente, o abra el detalle y use **Marcar como
+   entregada**. Se pide confirmación con una observación opcional (p. ej. quién
+   recibió); el navegador solicita la ubicación (si se deniega o no hay GPS, la
+   entrega se registra igual, solo con fecha/hora y usuario). Al confirmar, la
+   consignación pasa a *Entregada*, desaparece de la lista de pendientes y queda
+   su evidencia con canal **Web**.
+6. Use los botones **PDF** / **Excel** para exportar el listado con el filtro
    actual aplicado (el reporte indica si contiene pendientes, entregadas o todas).
 
 ## Campos del listado
@@ -75,6 +84,7 @@ hasta que se entrega.
 | GPS | Si existe ubicación (latitud/longitud) capturada. |
 | Registrado por | Usuario que quedó como autor de la evidencia. |
 | Observaciones | Nota libre de la entrega, si la hay. |
+| Acciones | Botón **Entregar** en las pendientes (solo con permiso *Modificar*). |
 
 Los campos de evidencia (Fecha/hora entrega, Canal, Firma, GPS, Registrado
 por, Observaciones) se muestran vacíos ("—") en las consignaciones pendientes.
@@ -99,9 +109,17 @@ parte.
 
 ## Permisos
 
-Módulo de solo lectura: solo existe el permiso **Ver**. El alcance de lo que se
-ve **no** lo define el flag "acceso total" del permiso, sino el **vínculo del
-usuario con responsables de traslado** que se administra en
+- **Ver**: abrir el módulo, listar, ver el detalle, exportar y ver firmas.
+- **Modificar** (`u`): habilita el botón **Entregar** / **Marcar como
+  entregada**. Sin este permiso el módulo es de solo lectura. El
+  superadministrador (nivel 3) lo tiene siempre; al resto hay que asignárselo
+  en `/config/permisos-modulos`, submódulo *Entrega de consignaciones*.
+- *Crear* y *Eliminar* no se usan: desde aquí no se crean ni eliminan
+  consignaciones.
+
+El alcance de lo que se ve —y de lo que se puede marcar— **no** lo define el
+flag "acceso total" del permiso, sino el **vínculo del usuario con
+responsables de traslado** que se administra en
 `config/usuarios-sistema` (ficha del usuario, pestaña *Responsables de
 traslado*; tabla `usuarios_responsables_traslado`, la misma que usa la app
 móvil de entregas):
@@ -124,10 +142,22 @@ igual que una que no existe.
 
 ## Reglas de negocio
 
-- No se puede crear, editar ni eliminar nada desde aquí: la fuente de verdad son
+- La única escritura del módulo es **marcar una pendiente como entregada**. Usa
+  exactamente el mismo flujo que el selector de estado de
+  [Consignaciones en Ventas](consignaciones-ventas.md): pasa la consignación a
+  *Entregada*, crea la evidencia con canal *Web* (fecha/hora, usuario,
+  ubicación del navegador si la hay y la observación escrita) y deja el rastro
+  en `log_sistema`. Si la consignación ya tenía una evidencia (p. ej. de la app
+  móvil), no se duplica: solo se apunta a ella.
+- Solo se puede marcar una consignación en estado *Emitida*. Si otra persona
+  la entregó mientras tanto (desde la app o desde Consignaciones en Ventas), el
+  botón responde con el estado actual y la lista se refresca.
+- Una consignación con **factura asociada** (generada en vivo) no admite el
+  cambio de estado, igual que en Consignaciones en Ventas.
+- No se crean ni eliminan consignaciones desde aquí: la fuente de verdad son
   `consignaciones_ventas` (estado) y `consignaciones_ventas_entregas`
-  (evidencia), alimentadas por
-  [Consignaciones en Ventas](consignaciones-ventas.md) y por la app móvil.
+  (evidencia), alimentadas por Consignaciones en Ventas, por este módulo y por
+  la app móvil.
 - **Pendiente** = consignación en estado *Emitida*, el mismo criterio que usa
   la app móvil para armar la lista del repartidor. Las consignaciones en
   *Borrador* o *Anulada* no aparecen en ningún estado del filtro.
@@ -157,10 +187,23 @@ igual que una que no existe.
   `config/usuarios-sistema` a qué responsables de traslado está vinculado el
   usuario: si tiene vínculos, solo ve las de esos responsables. Para que vea
   todas, quítele los vínculos (o hágalo nivel 3).
+- **No aparece el botón "Entregar"**: el usuario no tiene el permiso
+  *Modificar* en el submódulo *Entrega de consignaciones*
+  (`/config/permisos-modulos`), o la fila no está pendiente.
+- **"Solo se puede marcar la entrega de una consignación pendiente"**: alguien
+  la entregó (o cambió su estado) después de que se cargó la lista; refresque.
 - **La firma no carga en el detalle**: la entrega no tiene `firma_path` (las
   entregas registradas manualmente desde la web nunca tienen firma).
 
 ## Historial de cambios
+
+- **1.5** — El usuario puede **marcar cada consignación pendiente como
+  entregada** desde el módulo: botón *Entregar* en la fila (columna *Acciones*)
+  y *Marcar como entregada* en el detalle. Pide confirmación con observación
+  opcional, captura la ubicación del navegador y reutiliza el mismo flujo de
+  "Entregada" de Consignaciones en Ventas (evidencia canal *Web* + auditoría).
+  Requiere el permiso **Modificar** del submódulo; respeta el alcance por
+  responsable de traslado y solo admite consignaciones en estado *Emitida*.
 
 - **1.4** — El listado pasa a ser de **consignaciones**, no de evidencias, y
   **por defecto muestra solo las pendientes de entregar** (estado *Emitida*).

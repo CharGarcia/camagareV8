@@ -4,11 +4,16 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\ApiUsuarioResponsableTrasladoRepository;
+use App\repositories\modulos\ConsignacionVentaRepository;
 use App\repositories\modulos\EntregasConsignacionesRepository;
+use App\Rules\modulos\ConsignacionVentaRules;
+use App\Services\LogSistemaService;
+use Exception;
 
 /**
- * Entregas de Consignaciones en Ventas (módulo de solo lectura): consignaciones
- * pendientes de entregar (por defecto) y entregadas. Reutiliza la misma tabla de
+ * Entregas de Consignaciones en Ventas: consignaciones pendientes de entregar (por
+ * defecto) y entregadas. Su única escritura es marcarEntregada(), que delega en
+ * ConsignacionVentaService::cambiarEstado(). Reutiliza la misma tabla de
  * evidencia (consignaciones_ventas_entregas) que ya alimentan tanto la app móvil
  * (canal='movil') como el marcado manual "Entregada" desde el sistema (canal='web')
  * en ConsignacionVentaService::cambiarEstado().
@@ -77,6 +82,36 @@ class EntregasConsignacionesService
             return false;
         }
         return in_array($idResponsable, array_map('intval', $idsResponsables), true);
+    }
+
+    /**
+     * Marca una consignación PENDIENTE como entregada desde el módulo web. La única
+     * acción de escritura del módulo: valida el alcance por responsable de traslado
+     * (mismo criterio que el listado) y que la consignación siga en 'Emitida', y delega
+     * en ConsignacionVentaService::cambiarEstado(), que es quien crea la evidencia
+     * (canal 'web', GPS del navegador si lo hay, usuario, hora, observación) dentro de
+     * su transacción y deja el rastro en log_sistema.
+     *
+     * @param array $datosEntrega latitud, longitud, precision_m, observaciones (opcionales).
+     */
+    public function marcarEntregada(int $idConsignacion, int $idEmpresa, int $idUsuario, ?array $idsResponsables, array $datosEntrega): void
+    {
+        $cvRepo = new ConsignacionVentaRepository();
+
+        // Fuera del alcance del usuario: misma respuesta que una consignación inexistente.
+        if (!$cvRepo->perteneceAResponsables($idConsignacion, $idEmpresa, $idsResponsables)) {
+            throw new Exception('Consignación no encontrada.');
+        }
+        $cab = $cvRepo->find($idConsignacion, $idEmpresa);
+        if (!$cab) {
+            throw new Exception('Consignación no encontrada.');
+        }
+        if (($cab['estado'] ?? '') !== 'Emitida') {
+            throw new Exception('Solo se puede marcar la entrega de una consignación pendiente (estado Emitida). Estado actual: ' . ($cab['estado'] ?? '—') . '.');
+        }
+
+        $cvService = new ConsignacionVentaService($cvRepo, new ConsignacionVentaRules(), new LogSistemaService());
+        $cvService->cambiarEstado($idConsignacion, $idEmpresa, $idUsuario, 'Entregada', $datosEntrega);
     }
 
     /** Ruta relativa de la firma de una entrega (validando empresa), o null. Anti path-traversal: solo storage/entregas/. */

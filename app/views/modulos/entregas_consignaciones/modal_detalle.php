@@ -62,6 +62,8 @@
             </div>
             <div class="modal-footer bg-light border-top p-2">
                 <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal"><i class="bi bi-x-lg me-1"></i> Cerrar</button>
+                <!-- Solo visible en consignaciones pendientes y con permiso Actualizar (lo controla el JS) -->
+                <button type="button" class="btn btn-success btn-sm px-3" id="entc_det_btn_entregar" style="display:none;" onclick="entcMarcarEntregadaDesdeModal()"><i class="bi bi-check2-circle me-1"></i> Marcar como entregada</button>
             </div>
         </div>
     </div>

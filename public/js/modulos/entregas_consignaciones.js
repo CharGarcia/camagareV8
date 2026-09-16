@@ -6,7 +6,7 @@
  * se ven también las entregadas (con su evidencia).
  */
 
-const ENTC_NUM_COLUMNAS = 14;
+const ENTC_NUM_COLUMNAS = 15;
 
 function entcEscHtml(s) {
     const d = document.createElement('div');
@@ -80,6 +80,91 @@ function entcActualizarKpis(resumen) {
         const el = document.querySelector(`[data-kpi="${key}"]`);
         if (el) el.textContent = map[key];
     });
+}
+
+// ── Marcar entrega (única acción de escritura del módulo) ────────────────────
+let _entcDetalleActual = null;
+
+// Ubicación del navegador (GPS). Nunca rechaza: si el usuario deniega o el dispositivo
+// no tiene GPS, resuelve null y la entrega se registra solo con hora + usuario
+// (mismo comportamiento que consObtenerUbicacion() en Consignaciones en Ventas).
+function entcObtenerUbicacion() {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({
+                lat: pos.coords.latitude,
+                lon: pos.coords.longitude,
+                precision: (pos.coords.accuracy != null) ? Math.round(pos.coords.accuracy) : null,
+            }),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        );
+    });
+}
+
+/**
+ * Confirma y registra la entrega de una consignación pendiente: pide una observación
+ * opcional, captura la ubicación del navegador y llama a marcarEntregadaAjax. Al terminar
+ * recarga el listado (la fila desaparece de "Pendientes") y cierra el modal si estaba abierto.
+ */
+async function entcMarcarEntregada(idConsignacion, numero) {
+    if (!idConsignacion) return;
+
+    const c = await Swal.fire({
+        title: `¿Marcar ${numero || 'la consignación'} como entregada?`,
+        html: '<div class="small text-muted mb-2">Se registrará la entrega con la ubicación actual, la fecha/hora y su usuario.</div>',
+        input: 'textarea',
+        inputLabel: 'Observación (opcional)',
+        inputPlaceholder: 'Ej.: recibió el guardia, se dejó en bodega…',
+        inputAttributes: { maxlength: 500, rows: 3 },
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-geo-alt me-1"></i> Sí, registrar entrega',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#198754',
+    });
+    if (!c.isConfirmed) return;
+
+    Swal.fire({ title: 'Registrando entrega…', text: 'Obteniendo ubicación', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const ubic = await entcObtenerUbicacion();
+
+    try {
+        const fd = new FormData();
+        fd.append('id', idConsignacion);
+        fd.append('observaciones', (c.value || '').trim());
+        if (ubic) {
+            fd.append('latitud', ubic.lat);
+            fd.append('longitud', ubic.lon);
+            if (ubic.precision != null) fd.append('precision_m', ubic.precision);
+        }
+        const res  = await fetch(`${RUTA_MODULO_ENTC}/marcarEntregadaAjax`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'No se pudo registrar la entrega');
+
+        const modalEl = document.getElementById('modalEntregaDetalle');
+        const modal = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+        if (modal) modal.hide();
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Entrega registrada',
+            text: ubic ? 'Con ubicación GPS.' : 'Sin ubicación GPS (no disponible o denegada).',
+            timer: 1600,
+            showConfirmButton: false,
+        });
+        entcCargarGrid();
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', e.message || 'No se pudo registrar la entrega', 'error');
+    }
+}
+
+/** Botón del pie del modal de detalle: usa la consignación que está abierta. */
+function entcMarcarEntregadaDesdeModal() {
+    const r = _entcDetalleActual;
+    if (!r || !r.pendiente) return;
+    entcMarcarEntregada(parseInt(r.id_consignacion, 10), `${r.serie || ''}-${r.secuencial || ''}`);
 }
 
 // ── Modal de detalle (mapa + firma) ──────────────────────────────────────────
@@ -173,6 +258,11 @@ function entcAbrirDetalle(trEl) {
             : 'Sin coordenadas GPS registradas para esta entrega.';
         gmapsDiv.style.display = 'none';
     }
+
+    // Botón "Marcar como entregada" del pie: solo en pendientes y con permiso Actualizar.
+    _entcDetalleActual = r;
+    const btnEntregar = document.getElementById('entc_det_btn_entregar');
+    if (btnEntregar) btnEntregar.style.display = (pendiente && window.ENTC_PUEDE_MARCAR) ? '' : 'none';
 
     const modalEl = document.getElementById('modalEntregaDetalle');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);

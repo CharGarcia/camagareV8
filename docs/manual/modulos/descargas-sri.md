@@ -6,7 +6,7 @@ ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
 etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri
-version: 1.6
+version: 1.7
 orden: 50
 estado: activo
 ---
@@ -94,8 +94,31 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
   completo. Con la actualización de base de datos aplicada, los datos se guardan
   completos (hasta 300 caracteres); sin ella, la dirección se guarda recortada
   pero la factura se registra igual.
+- **La compra muestra IVA en el listado pero la línea del detalle dice 0%**: el
+  XML del emisor es inconsistente. Algunos proveedores (por ejemplo los recaudos
+  de BANECUADOR) declaran en los totales del comprobante un IVA del 15% y en la
+  única línea del detalle ponen tarifa 0%. El SRI lo autoriza igual porque el
+  total del comprobante cuadra con los totales, no con el detalle. El sistema lo
+  resuelve así al registrar la compra:
+  - Si el comprobante tiene **una sola línea** y **una sola tarifa** en los
+    totales, la línea se registra con el IVA de los totales (tarifa, base y
+    valor), que es lo que el proveedor cobró y lo que cuadra con el total. La
+    compra queda con una observación que lo explica.
+  - Si tiene **varias líneas o varias tarifas**, no hay forma de saber a qué
+    línea pertenece la diferencia: el detalle se guarda tal como vino y la
+    compra queda con una observación pidiendo revisar las tarifas antes de
+    declarar. Corríjalas desde el modal de *Compras*.
+  Las compras registradas antes de este cambio no se corrigen solas; hay que
+  editar la tarifa de la línea en *Compras*.
 
 ## Historial de cambios
+
+- **1.7** — Al registrar una compra desde el SRI, si el IVA de los totales del
+  comprobante no coincide con el del detalle, el sistema corrige la línea desde
+  los totales cuando el caso es inequívoco (una línea, una tarifa) y, si no,
+  deja una observación en la compra. Antes el IVA de esos comprobantes no
+  entraba en la Declaración de IVA ni en el Reporte de Compras. Ver *Errores
+  frecuentes*.
 
 - **1.6** — Un comprobante ya no se queda sin registrar porque un dato del emisor
   (dirección, razón social, nombre comercial o descripción de un ítem) venga más

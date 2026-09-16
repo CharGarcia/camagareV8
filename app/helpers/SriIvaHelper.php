@@ -46,4 +46,25 @@ class SriIvaHelper
         $pct = (int) round((float) $porcentaje);
         return self::MAPA_PORCENTAJE[$pct] ?? '0';
     }
+
+    /**
+     * Inversa de codigoPorcentaje(): tarifa (%) a partir del codigoPorcentaje del SRI.
+     *
+     * Los códigos sin tarifa fija en el mapa (1 tarifa 0 histórica, 6 No objeto,
+     * 7 Exento) devuelven 0. El código 8 (tarifa diferenciada) no tiene un
+     * porcentaje único, así que devuelve null y el llamador debe deducirlo de
+     * valor/base. Cualquier código desconocido también devuelve null.
+     */
+    public static function porcentajeDesdeCodigo(string $codigo): ?float
+    {
+        $codigo = trim($codigo);
+        if (in_array($codigo, ['1', '6', '7'], true)) {
+            return 0.0;
+        }
+        if ($codigo === '8') {
+            return null;
+        }
+        $inverso = array_flip(self::MAPA_PORCENTAJE);
+        return isset($inverso[$codigo]) ? (float) $inverso[$codigo] : null;
+    }
 }

@@ -702,7 +702,10 @@ class ConsignacionVentaService
                         'capturado_en'    => date('Y-m-d H:i:s'),
                         'dispositivo_id'  => null,
                         'canal'           => 'web',
-                        'observaciones'   => 'Entrega registrada manualmente desde el sistema.',
+                        // Observación opcional del usuario (p. ej. desde Entregas de Consignaciones).
+                        'observaciones'   => (isset($datosEntrega['observaciones']) && trim((string) $datosEntrega['observaciones']) !== '')
+                            ? trim((string) $datosEntrega['observaciones'])
+                            : 'Entrega registrada manualmente desde el sistema.',
                         'created_by'      => $idUsuario,
                     ]);
                     $this->repository->updateEntregaConfirmada($id, $idEmpresa, (int) $res['id']);

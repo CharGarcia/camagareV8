@@ -994,6 +994,19 @@ class ComprasRepository extends BaseRepository
      * NO forman parte de importe_total —que es el valor declarado al SRI— pero sí del
      * saldo por pagar. El desglose vive en compras_adicional; aquí solo el total.
      */
+    /**
+     * Escribe SOLO las observaciones de la cabecera. Lo usa la carga desde el SRI
+     * para dejar constancia de una inconsistencia del XML (p. ej. IVA de cabecera
+     * distinto al del detalle) sin tocar el resto del documento.
+     */
+    public function updateObservaciones(int $idCompra, string $observaciones): void
+    {
+        $this->query(
+            "UPDATE compras_cabecera SET observaciones = ? WHERE id = ?",
+            [$observaciones, $idCompra]
+        );
+    }
+
     public function updateTotalTerceros(int $idCompra, float $total): void
     {
         $this->query(

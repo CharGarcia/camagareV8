@@ -9,6 +9,7 @@
 /** @var int $perPage */
 /** @var string $buscar */
 /** @var string $estadoEntrega  pendiente | entregada | todas (resuelto del filtro `estado:`) */
+/** @var bool $puedeMarcar    Permiso Actualizar: muestra el botón "Entregar" en las pendientes */
 /** @var string $ordenCol */
 /** @var string $ordenDir */
 /** @var array $vistaConfig */
@@ -233,6 +234,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'gps'            => 'GPS',
                     'registrado_por' => 'Registrado por',
                     'observaciones'  => 'Observaciones',
+                    'acciones'       => 'Acciones',
                 ], $vistaConfig ?? [], basename($rutaModulo)); ?>
 
                 <a id="entc_pdf_url" class="btn btn-outline-danger pdf-export-btn" href="<?= $urlBaseEnt ?>/exportPdf?b=<?= urlencode($buscar) ?><?= $qsOrden ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
@@ -268,6 +270,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="text-center" data-col="gps">GPS</th>
                         <th data-col="registrado_por">Registrado por</th>
                         <th data-col="observaciones">Observaciones</th>
+                        <th class="text-center pe-3" data-col="acciones">Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="entc_grid_body">
@@ -283,6 +286,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/entregas_consignaciones.js?v=<?= asset_ver('/js/modulos/entregas_consignaciones.js') ?>"></script>
 <script>
     window.RUTA_MODULO_ENTC = '<?= $urlBaseEnt ?>';
+    window.ENTC_PUEDE_MARCAR = <?= !empty($puedeMarcar) ? 'true' : 'false' ?>;
     let g_ordenCol = '<?= addslashes($ordenCol) ?>';
     let g_ordenDir = '<?= addslashes($ordenDir) ?>';
     let g_paginaActual = <?= (int) $page ?>;

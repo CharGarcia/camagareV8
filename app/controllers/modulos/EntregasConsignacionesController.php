@@ -9,11 +9,11 @@ use App\repositories\modulos\EntregasConsignacionesRepository;
 use App\Services\modulos\EntregasConsignacionesService;
 
 /**
- * Entregas de Consignaciones en Ventas: módulo de SOLO LECTURA (sin crear/actualizar/
- * eliminar). Lista las consignaciones PENDIENTES de entregar (por defecto) y, con el
- * filtro de estado, las ya entregadas con su evidencia (GPS + firma) registrada desde
- * la app móvil o manualmente desde el sistema. El registro/edición de la entrega en sí
- * sigue viviendo en modulos/consignaciones-ventas.
+ * Entregas de Consignaciones en Ventas. Lista las consignaciones PENDIENTES de entregar
+ * (por defecto) y, con el filtro de estado, las ya entregadas con su evidencia (GPS +
+ * firma) registrada desde la app móvil o manualmente desde el sistema. Única escritura:
+ * marcarEntregadaAjax() (permiso Actualizar), que marca una pendiente como Entregada
+ * reutilizando el mismo flujo de modulos/consignaciones-ventas. No crea ni elimina nada.
  */
 class EntregasConsignacionesController extends BaseModuloController
 {
@@ -23,9 +23,12 @@ class EntregasConsignacionesController extends BaseModuloController
     private const ORDEN_DIR_DEFECTO = 'DESC';
 
     /** Nº de columnas de la tabla (colspan de las filas de aviso/carga). */
-    private const NUM_COLUMNAS = 14;
+    private const NUM_COLUMNAS = 15;
 
     private EntregasConsignacionesService $service;
+
+    /** Cache por petición: ¿el usuario puede marcar entregas (permiso Actualizar del módulo)? */
+    private ?bool $puedeMarcar = null;
 
     public function __construct()
     {
@@ -97,6 +100,7 @@ class EntregasConsignacionesController extends BaseModuloController
             'perPage'       => $perPage,
             'buscar'        => $buscar,
             'estadoEntrega' => $result['estado'],
+            'puedeMarcar'   => $this->puedeMarcar(),
             'ordenCol'      => OrdenListado::primeraCol($orden, self::ORDEN_COL_DEFECTO),
             'ordenDir'      => OrdenListado::primeraDir($orden, self::ORDEN_DIR_DEFECTO),
             'vistaConfig'   => $prefsVista,
@@ -163,6 +167,67 @@ class EntregasConsignacionesController extends BaseModuloController
             'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/exportExcel?b=' . urlencode($buscar) . $qsOrden,
         ]);
         exit;
+    }
+
+    /**
+     * Marca una consignación pendiente como entregada (única acción de escritura del
+     * módulo). Requiere el permiso Actualizar del submódulo. Recibe por POST: id de la
+     * consignación, latitud/longitud/precision_m capturadas por el navegador (opcionales)
+     * y una observación opcional. El alcance por responsable y el estado los valida el
+     * service; la evidencia y la auditoría las crea ConsignacionVentaService::cambiarEstado().
+     */
+    public function marcarEntregadaAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $id = (int) ($_POST['id'] ?? 0);
+            if ($id <= 0) {
+                throw new \Exception('ID no válido.');
+            }
+
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            $datosEntrega = [
+                'latitud'       => $_POST['latitud']       ?? null,
+                'longitud'      => $_POST['longitud']      ?? null,
+                'precision_m'   => $_POST['precision_m']   ?? null,
+                'observaciones' => trim((string) ($_POST['observaciones'] ?? '')),
+            ];
+
+            $this->service->marcarEntregada($id, $idEmpresa, $idUsuario, $this->filtroResponsablesActual(), $datosEntrega);
+            echo json_encode(['ok' => true, 'msg' => 'Entrega registrada.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** ¿Puede el usuario marcar entregas? Permiso Actualizar del submódulo (nivel 3 siempre). */
+    private function puedeMarcar(): bool
+    {
+        if ($this->puedeMarcar === null) {
+            $this->puedeMarcar = !empty($this->getPermisos()['actualizar']);
+        }
+        return $this->puedeMarcar;
+    }
+
+    /** Botón "Marcar entregada" de la fila: solo en pendientes y con permiso. */
+    private function celdaAcciones(array $r): string
+    {
+        if (empty($r['pendiente']) || !$this->puedeMarcar()) {
+            return '';
+        }
+        $id     = (int) ($r['id_consignacion'] ?? 0);
+        $numero = htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? ''), ENT_QUOTES, 'UTF-8');
+        return '<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 text-nowrap"
+                        title="Marcar como entregada"
+                        onclick="event.stopPropagation(); entcMarcarEntregada(' . $id . ', \'' . $numero . '\')">
+                    <i class="bi bi-check2-circle me-1"></i>Entregar
+                </button>';
     }
 
     /** Fila de "sin resultados" acorde al estado de entrega filtrado. */
@@ -274,6 +339,7 @@ class EntregasConsignacionesController extends BaseModuloController
                     <td data-col="gps" class="text-center">' . $this->iconoSiNo(!empty($r['tiene_gps']), $tieneEnt) . '</td>
                     <td data-col="registrado_por" class="text-truncate" style="max-width:150px">' . htmlspecialchars($r['registrado_por'] ?? '—') . '</td>
                     <td data-col="observaciones" class="text-truncate" style="max-width:220px" title="' . htmlspecialchars($r['observaciones'] ?? '') . '">' . htmlspecialchars($r['observaciones'] ?? '—') . '</td>
+                    <td data-col="acciones" class="text-center pe-3">' . $this->celdaAcciones($r) . '</td>
                   </tr>';
     }
 

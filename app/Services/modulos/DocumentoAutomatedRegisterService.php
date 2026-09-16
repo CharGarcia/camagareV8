@@ -20,6 +20,7 @@ use App\Services\modulos\RetencionVentaService;
 use App\Rules\modulos\RetencionCompraRules;
 use App\Services\LogSistemaService;
 use App\Helpers\RubrosTerceros;
+use App\Helpers\SriIvaHelper;
 use App\core\Database;
 use Exception;
 use SimpleXMLElement;
@@ -688,6 +689,19 @@ class DocumentoAutomatedRegisterService
                 }
             }
 
+            // 1.7 IVA de cabecera vs. detalle. Hay emisores (BANECUADOR, p. ej.) cuyo
+            // XML declara en <totalConImpuestos> un IVA (código 4 = 15%, valor > 0) y en
+            // la única línea del detalle pone codigoPorcentaje 0 / tarifa 0 / valor 0.
+            // El SRI lo autoriza igual (cuadra importeTotal contra la cabecera), pero el
+            // sistema guarda el detalle tal cual y ese IVA desaparece de la Declaración
+            // de IVA y del Reporte de Compras, que suman compras_detalle_impuestos.
+            // Ver resolverAjusteIvaDetalle(): cuando el caso es inequívoco (una línea,
+            // una sola tarifa en cabecera) el detalle se registra con el IVA de la
+            // cabecera; si no, se deja una observación en la compra para revisarla.
+            $ajusteIva = isset($xml->detalles->detalle)
+                ? $this->resolverAjusteIvaDetalle($xml, $info)
+                : null;
+
             // 2. Detalles
             if (isset($xml->detalles->detalle)) {
                 foreach ($xml->detalles->detalle as $d) {
@@ -704,17 +718,42 @@ class DocumentoAutomatedRegisterService
 
                     // 3. Impuestos por detalle
                     if (isset($d->impuestos->impuesto)) {
+                        $ivaCorregido = false;
                         foreach ($d->impuestos->impuesto as $imp) {
-                            $this->compraRepo->insertImpuesto([
+                            $fila = [
                                 'id_compra_detalle' => $idDetalle,
                                 'codigo_impuesto' => (string)$imp->codigo,
                                 'codigo_porcentaje' => (string)$imp->codigoPorcentaje,
                                 'tarifa' => (float)$imp->tarifa,
                                 'base_imponible' => (float)$imp->baseImponible,
                                 'valor' => (float)$imp->valor
-                            ]);
+                            ];
+                            // Caso inequívoco: la única línea de IVA del único detalle
+                            // se reemplaza por lo que declara la cabecera.
+                            if ($ajusteIva !== null && $ajusteIva['modo'] === 'corregir'
+                                && $fila['codigo_impuesto'] === '2' && !$ivaCorregido) {
+                                $fila = array_merge($fila, $ajusteIva['impuesto']);
+                                $ivaCorregido = true;
+                            }
+                            $this->compraRepo->insertImpuesto($fila);
                         }
+                        // El detalle no traía ninguna fila de IVA pero la cabecera sí.
+                        if ($ajusteIva !== null && $ajusteIva['modo'] === 'corregir' && !$ivaCorregido) {
+                            $this->compraRepo->insertImpuesto(array_merge(
+                                ['id_compra_detalle' => $idDetalle, 'codigo_impuesto' => '2'],
+                                $ajusteIva['impuesto']
+                            ));
+                        }
+                    } elseif ($ajusteIva !== null && $ajusteIva['modo'] === 'corregir') {
+                        $this->compraRepo->insertImpuesto(array_merge(
+                            ['id_compra_detalle' => $idDetalle, 'codigo_impuesto' => '2'],
+                            $ajusteIva['impuesto']
+                        ));
                     }
+                }
+
+                if ($ajusteIva !== null) {
+                    $this->compraRepo->updateObservaciones($idCompra, $ajusteIva['observacion']);
                 }
             } elseif ($codDoc === '05' && isset($xml->motivos->motivo)) {
                 // Nota de Débito de compra: a diferencia de una factura, el XML no trae
@@ -1000,6 +1039,102 @@ class DocumentoAutomatedRegisterService
     {
         $cod = trim((string) ($d->codigoAuxiliar ?? ''));
         return $cod !== '' ? $cod : trim((string) ($d->codigoAdicional ?? ''));
+    }
+
+    /**
+     * Compara el IVA (código 2) que declara la cabecera del comprobante en
+     * <totalConImpuestos> con el que suman las líneas de <detalles>.
+     *
+     * Devuelve null cuando coinciden (diferencia de hasta un centavo, que es el
+     * redondeo normal línea a línea) o cuando la cabecera no trae IVA. Si no
+     * coinciden devuelve un ajuste con:
+     *  - modo 'corregir' + 'impuesto' (codigo_porcentaje, tarifa, base_imponible,
+     *    valor) cuando hay UNA sola línea de detalle y UNA sola fila de IVA en la
+     *    cabecera: no hay ambigüedad sobre a qué línea pertenece ese IVA, así que
+     *    la línea se registra con lo que declara la cabecera (que es lo que cuadra
+     *    con importeTotal y lo que el proveedor cobró).
+     *  - modo 'observar' en el resto (varias líneas o varias tarifas): no se puede
+     *    repartir el IVA con certeza, el detalle se guarda tal como vino y queda
+     *    una observación en la compra para revisarla a mano.
+     * En ambos casos trae 'observacion' con el texto que se deja en la cabecera.
+     *
+     * Caso real que lo motivó: facturas de recaudo de BANECUADOR con cabecera
+     * codigoPorcentaje 4 (15%) / IVA 0.08 y detalle codigoPorcentaje 0 / IVA 0.00.
+     */
+    private function resolverAjusteIvaDetalle(SimpleXMLElement $xml, ?SimpleXMLElement $info): ?array
+    {
+        if ($info === null || !isset($info->totalConImpuestos->totalImpuesto)) {
+            return null;
+        }
+
+        $cabecera = [];
+        foreach ($info->totalConImpuestos->totalImpuesto as $t) {
+            if ((string) $t->codigo !== '2') {
+                continue;
+            }
+            $cabecera[] = [
+                'codigo_porcentaje' => trim((string) $t->codigoPorcentaje),
+                'base'              => (float) $t->baseImponible,
+                'valor'             => (float) $t->valor,
+            ];
+        }
+        if ($cabecera === []) {
+            return null;
+        }
+        $ivaCab = round(array_sum(array_column($cabecera, 'valor')), 2);
+
+        $ivaDet = 0.0;
+        $nDet   = 0;
+        foreach ($xml->detalles->detalle as $d) {
+            $nDet++;
+            if (!isset($d->impuestos->impuesto)) {
+                continue;
+            }
+            foreach ($d->impuestos->impuesto as $imp) {
+                if ((string) $imp->codigo === '2') {
+                    $ivaDet += (float) $imp->valor;
+                }
+            }
+        }
+        $ivaDet = round($ivaDet, 2);
+
+        if (abs($ivaCab - $ivaDet) <= 0.01) {
+            return null;
+        }
+
+        $obs = sprintf(
+            'XML del SRI inconsistente: la cabecera declara IVA %s y el detalle suma IVA %s.',
+            number_format($ivaCab, 2, '.', ''),
+            number_format($ivaDet, 2, '.', '')
+        );
+
+        if ($nDet === 1 && count($cabecera) === 1) {
+            $c      = $cabecera[0];
+            $tarifa = SriIvaHelper::porcentajeDesdeCodigo($c['codigo_porcentaje']);
+            if ($tarifa === null) {
+                $tarifa = $c['base'] > 0 ? round($c['valor'] / $c['base'] * 100, 2) : 0.0;
+            }
+            return [
+                'modo'     => 'corregir',
+                'impuesto' => [
+                    'codigo_porcentaje' => $c['codigo_porcentaje'],
+                    'tarifa'            => $tarifa,
+                    'base_imponible'    => $c['base'],
+                    'valor'             => $c['valor'],
+                ],
+                'observacion' => $obs . sprintf(
+                    ' La línea se registró con el IVA de la cabecera (%s%%, base %s, IVA %s), que es el que cuadra con el total del comprobante.',
+                    number_format($tarifa, 2, '.', ''),
+                    number_format($c['base'], 2, '.', ''),
+                    number_format($c['valor'], 2, '.', '')
+                ),
+            ];
+        }
+
+        return [
+            'modo'        => 'observar',
+            'observacion' => $obs . ' El detalle se registró tal como vino en el XML; revise la tarifa de IVA de cada línea antes de declarar.',
+        ];
     }
 
     private function handleLiquidacion(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, string $ambiente, bool $esGastoPersonal = false): array
