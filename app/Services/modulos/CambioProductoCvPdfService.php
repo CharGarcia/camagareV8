@@ -29,7 +29,7 @@ class CambioProductoCvPdfService
     {
         $numero = trim(((string)($cabecera['serie'] ?? '')) . '-' . ((string)($cabecera['secuencial'] ?? '')), '-');
 
-        // Origen de cada línea (factura / cambio / consignación / bodega): el cambio se hace
+        // Origen de cada línea (factura de consignación / cambio / consignación / bodega): el cambio se hace
         // por unidad y NUP, así que el documento dice de dónde sale cada una.
         foreach ($detalles as &$d) { $d['origen_label'] = self::etiquetaOrigen($d); }
         unset($d);
@@ -173,7 +173,7 @@ class CambioProductoCvPdfService
     {
         $tipo = strtoupper((string)($d['origen_tipo'] ?? ''));
         $num  = trim((string)($d['origen_numero'] ?? ''));
-        $nombres = ['FACTURA' => 'Factura', 'CAMBIO' => 'Cambio', 'CONSIGNACION' => 'Consignación'];
+        $nombres = ['FACTURA' => 'Fact. consig.', 'CAMBIO' => 'Cambio', 'CONSIGNACION' => 'Consignación'];
         if (!isset($nombres[$tipo])) {
             return 'Bodega';
         }

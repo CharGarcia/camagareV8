@@ -11,7 +11,8 @@ use PDO;
  *
  * Un cambio agrupa, por cliente y en un solo documento:
  *   - líneas de DEVOLUCIÓN (tipo_linea='devolucion') → entrada de inventario. Su
- *     origen es una línea de factura de venta (ventas_detalle) o una línea de
+ *     origen es una línea de FACTURA DE CONSIGNACIÓN (consignaciones_facturas_detalles,
+ *     módulo Facturación de consignaciones, estado 'facturada') o una línea de
  *     ENTREGA de un cambio anterior (encadenado). Se controla el saldo.
  *   - líneas de ENTREGA (tipo_linea='entrega') → salida de inventario (catálogo).
  */
@@ -123,7 +124,7 @@ class CambioProductoCvRepository extends BaseRepository
         return ['total' => $total, 'rows' => $rows];
     }
 
-    // ─── LÍNEAS DISPONIBLES PARA DEVOLVER (origen factura + cambios previos) ────
+    // ─── LÍNEAS DISPONIBLES PARA DEVOLVER (facturas de consignación + cambios previos) ────
 
     /**
      * Número "desnudo" de lo que teclea el usuario para buscar un documento por su
@@ -140,7 +141,8 @@ class CambioProductoCvRepository extends BaseRepository
 
     /**
      * Líneas que pueden devolverse, con saldo pendiente (> 0):
-     *   (a) líneas de facturas de venta (ventas_detalle) → origen_tipo 'FACTURA';
+     *   (a) líneas de facturas de consignación 'facturada' (consignaciones_facturas_detalles)
+     *       → origen_tipo 'FACTURA' (no facturas de venta directas);
      *   (b) líneas de ENTREGA de cambios previos Emitida → origen_tipo 'CAMBIO'.
      *
      * saldo = cantidad_origen − Σ(devuelto en cambios Emitida que referencian esa línea).
@@ -211,7 +213,10 @@ class CambioProductoCvRepository extends BaseRepository
 
         $sql = "
             SELECT * FROM (
-                -- (a) Líneas de facturas de venta
+                -- (a) Líneas de FACTURAS DE CONSIGNACIÓN (módulo Facturación de consignaciones,
+                --     consignaciones_facturas en estado 'facturada'). NO se ofrecen facturas de
+                --     venta directas: lo que se cambia es mercadería que salió en consignación
+                --     y ya se facturó.
                 SELECT
                     'FACTURA'          AS origen_tipo,
                     vc.id              AS id_origen,
@@ -228,25 +233,26 @@ class CambioProductoCvRepository extends BaseRepository
                     p.inventariable,
                     p.tipo_produccion,
                     d.precio_unitario,
-                    NULL::integer      AS id_impuesto,
-                    COALESCE((SELECT MAX(vdi.tarifa) FROM ventas_detalle_impuestos vdi WHERE vdi.id_venta_detalle = d.id), 0) AS porcentaje_impuesto,
-                    d.numero_lote      AS lote,
+                    d.id_impuesto,
+                    COALESCE(d.porcentaje_impuesto, 0) AS porcentaje_impuesto,
+                    d.lote             AS lote,
                     d.nup              AS nup,
                     d.fecha_caducidad,
                     d.id_bodega,
                     b.nombre           AS bodega_nombre,
                     d.cantidad         AS cantidad_origen,
                     " . $devuelto('FACTURA', 'd.id') . " AS cantidad_devuelta
-                FROM ventas_detalle d
-                INNER JOIN ventas_cabecera vc ON vc.id = d.id_venta
+                FROM consignaciones_facturas_detalles d
+                INNER JOIN consignaciones_facturas vc ON vc.id = d.id_consignacion_factura
                 INNER JOIN clientes c ON c.id = vc.id_cliente
                 INNER JOIN productos p ON p.id = d.id_producto
                 LEFT JOIN bodegas b ON b.id = d.id_bodega
                 WHERE vc.id_empresa = :e AND vc.eliminado = false
-                  AND LOWER(COALESCE(vc.estado,'')) = 'autorizado'
+                  AND vc.estado = 'facturada'
+                  AND COALESCE(d.eliminado, false) = false
                   {$filtroCliFac}
                   AND COALESCE(p.tipo_produccion,'01') = '01'   -- solo bienes/productos, no servicios
-                  " . $filtroQ('p.nombre', 'p.codigo', $numFactura, 'vc.secuencial', 'd.nup', 'd.numero_lote') . "
+                  " . $filtroQ('p.nombre', 'p.codigo', $numFactura, 'vc.secuencial', 'd.nup', 'd.lote') . "
 
                 UNION ALL
 
@@ -335,15 +341,16 @@ class CambioProductoCvRepository extends BaseRepository
         return $cantidad - $devuelto;
     }
 
-    /** Cantidad original de la línea de origen (factura o entrega de cambio previo). */
+    /** Cantidad original de la línea de origen (factura de consignación o entrega de cambio previo). */
     private function getCantidadOrigen(string $origenTipo, int $idOrigenDetalle, int $idEmpresa): float
     {
-        if ($origenTipo === 'FACTURA') {
+        if ($origenTipo === 'FACTURA') { // factura de consignación
             $sql = "SELECT d.cantidad
-                    FROM ventas_detalle d
-                    INNER JOIN ventas_cabecera v ON v.id = d.id_venta
+                    FROM consignaciones_facturas_detalles d
+                    INNER JOIN consignaciones_facturas v ON v.id = d.id_consignacion_factura
                     WHERE d.id = :id AND v.id_empresa = :e AND v.eliminado = false
-                      AND LOWER(COALESCE(v.estado,'')) = 'autorizado'";
+                      AND COALESCE(d.eliminado, false) = false
+                      AND v.estado = 'facturada'";
         } else { // CAMBIO
             $sql = "SELECT e.cantidad
                     FROM cambios_producto_cv_detalles e
@@ -364,20 +371,21 @@ class CambioProductoCvRepository extends BaseRepository
      */
     public function getDatosLineaOrigen(string $origenTipo, int $idOrigenDetalle, int $idEmpresa): ?array
     {
-        if ($origenTipo === 'FACTURA') {
+        if ($origenTipo === 'FACTURA') { // factura de consignación
             $sql = "SELECT v.id AS id_origen, v.id_cliente,
                            (COALESCE(v.establecimiento,'') || '-' || COALESCE(v.punto_emision,'') || '-' || COALESCE(v.secuencial,'')) AS doc_numero,
                            d.id_producto,
                            d.precio_unitario,
-                           NULL::integer AS id_impuesto,
-                           COALESCE((SELECT MAX(vdi.tarifa) FROM ventas_detalle_impuestos vdi WHERE vdi.id_venta_detalle = d.id), 0) AS porcentaje_impuesto,
-                           d.id_bodega, d.numero_lote AS lote, d.nup, d.fecha_caducidad,
+                           d.id_impuesto,
+                           COALESCE(d.porcentaje_impuesto, 0) AS porcentaje_impuesto,
+                           d.id_bodega, d.lote, d.nup, d.fecha_caducidad,
                            p.nombre AS producto_nombre, p.inventariable, p.tipo_produccion
-                    FROM ventas_detalle d
-                    INNER JOIN ventas_cabecera v ON v.id = d.id_venta
+                    FROM consignaciones_facturas_detalles d
+                    INNER JOIN consignaciones_facturas v ON v.id = d.id_consignacion_factura
                     INNER JOIN productos p ON p.id = d.id_producto
                     WHERE d.id = :id AND v.id_empresa = :e AND v.eliminado = false
-                      AND LOWER(COALESCE(v.estado,'')) = 'autorizado'";
+                      AND COALESCE(d.eliminado, false) = false
+                      AND v.estado = 'facturada'";
         } else { // CAMBIO
             $sql = "SELECT e.id_cambio AS id_origen, cx.id_cliente,
                            (COALESCE(cx.serie,'') || '-' || COALESCE(cx.secuencial,'')) AS doc_numero,
@@ -798,7 +806,7 @@ class CambioProductoCvRepository extends BaseRepository
 
     /**
      * Detalles del cambio con el número del documento de origen de cada línea
-     * (factura / cambio previo para las devoluciones, consignación para las entregas
+     * (factura de consignación / cambio previo para las devoluciones, consignación para las entregas
      * tomadas de una consignación).
      */
     public function getDetalles(int $idCambio, int $idEmpresa): array
@@ -816,7 +824,7 @@ class CambioProductoCvRepository extends BaseRepository
             FROM cambios_producto_cv_detalles d
             INNER JOIN productos p ON p.id = d.id_producto
             LEFT JOIN bodegas b ON b.id = d.id_bodega
-            LEFT JOIN ventas_cabecera vo        ON d.origen_tipo = 'FACTURA'      AND vo.id  = d.id_origen
+            LEFT JOIN consignaciones_facturas vo ON d.origen_tipo = 'FACTURA'      AND vo.id  = d.id_origen
             LEFT JOIN cambios_producto_cv co    ON d.origen_tipo = 'CAMBIO'       AND co.id  = d.id_origen
             LEFT JOIN consignaciones_ventas cvo ON d.origen_tipo = 'CONSIGNACION' AND cvo.id = d.id_origen
             WHERE d.id_cambio = :id AND d.id_empresa = :e AND (d.eliminado = false OR d.eliminado IS NULL)

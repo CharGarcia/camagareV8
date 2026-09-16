@@ -107,7 +107,7 @@
                             <span id="cam_dev_info" class="small text-muted"></span>
                         </div>
                         <div class="position-relative mb-2" id="cam_dev_search_wrap">
-                            <input type="text" id="cam_dev_busqueda" class="form-control form-control-sm" placeholder="NUP, lote, N° de factura o de cambio, código o nombre del producto… (sin cliente busca en todos y lo fija con el ítem elegido)" oninput="camBuscarLineas(this.value)" onfocus="camBuscarLineas(this.value, true)" autocomplete="off">
+                            <input type="text" id="cam_dev_busqueda" class="form-control form-control-sm" placeholder="NUP, lote, N° de factura de consignación o de cambio, código o nombre del producto… (sin cliente busca en todos y lo fija con el ítem elegido)" oninput="camBuscarLineas(this.value)" onfocus="camBuscarLineas(this.value, true)" autocomplete="off">
                             <div id="cam_dev_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1075; max-height:320px; overflow:auto;"></div>
                         </div>
                         <div class="table-responsive border rounded-3 bg-white" style="max-height:26vh; overflow:auto;">
@@ -507,7 +507,7 @@
 
     /**
      * Quita las líneas que dependen del cliente: todas las devoluciones (vienen de SUS
-     * facturas/cambios) y las entregas tomadas de una consignación (de SU consignación).
+     * facturas de consignación/cambios) y las entregas tomadas de una consignación (de SU consignación).
      * Las entregas desde bodega/catálogo no dependen del cliente y se conservan.
      */
     function camQuitarLineasDelCliente() {
@@ -556,7 +556,7 @@
         return f ? String(f).slice(0, 10).split('-').reverse().join('-') : '';
     }
     function camLabelOrigen(t) {
-        return t === 'CAMBIO' ? 'Cambio' : (t === 'CONSIGNACION' ? 'Consignación' : (t === 'FACTURA' ? 'Factura' : 'Bodega'));
+        return t === 'CAMBIO' ? 'Cambio' : (t === 'CONSIGNACION' ? 'Consignación' : (t === 'FACTURA' ? 'Fact. consig.' : 'Bodega'));
     }
     function camBadgeOrigen(t, texto) {
         const cls = t === 'CAMBIO' ? 'bg-info' : (t === 'CONSIGNACION' ? 'bg-warning' : (t === 'FACTURA' ? 'bg-secondary' : 'bg-primary'));
@@ -567,7 +567,7 @@
     }
 
     /**
-     * Fija el cliente del cambio a partir de una línea (factura, cambio previo o
+     * Fija el cliente del cambio a partir de una línea (factura de consignación, cambio previo o
      * consignación) cuando todavía no hay cliente: así se puede empezar por el NUP o
      * por el número del documento. Devuelve false si la línea es de OTRO cliente.
      */
@@ -636,7 +636,7 @@
     }
 
     // ─── Devoluciones (buscar líneas de origen y agregar) ─────────────────────
-    // Busca por NUP, lote, número de factura / cambio (completo o solo el secuencial) o
+    // Busca por NUP, lote, número de factura de consignación / cambio (completo o solo el secuencial) o
     // producto. Con cliente fijado acota a ese cliente (y con el campo vacío lista todo lo
     // pendiente del cliente); sin cliente busca en todos y el ítem elegido fija el cliente.
     window.camBuscarLineas = function (q, desdeFocus) {

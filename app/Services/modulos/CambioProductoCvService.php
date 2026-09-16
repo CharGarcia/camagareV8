@@ -16,7 +16,7 @@ use Exception;
  *
  * Un cambio registra, en un solo documento y por cliente:
  *   - DEVOLUCIONES → ENTRADA de inventario (el cliente regresa mercadería de una
- *     factura o de un cambio anterior). Se copia "tal cual" del origen y se valida saldo.
+ *     factura de consignación o de un cambio anterior). Se copia "tal cual" del origen y se valida saldo.
  *   - ENTREGAS → SALIDA de inventario (el cliente recibe otros productos a cambio),
  *     desde bodega (catálogo / existencias por lote y NUP) o tomadas de una
  *     CONSIGNACIÓN que el cliente ya tiene (origen_tipo 'CONSIGNACION': consume el saldo
@@ -113,7 +113,7 @@ class CambioProductoCvService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
-    /** Líneas a devolver (facturas + cambios previos). $idCliente null = todos los clientes. */
+    /** Líneas a devolver (facturas de consignación + cambios previos). $idCliente null = todos los clientes. */
     public function getLineasDisponiblesCliente(int $idEmpresa, ?int $idCliente, string $q, ?int $excluirCambio = null): array
     {
         return $this->repository->getLineasDisponiblesCliente($idEmpresa, $idCliente, $q, $excluirCambio);
@@ -250,7 +250,7 @@ class CambioProductoCvService
                 // El ítem se localiza por NUP o número de documento sin fijar antes el cliente:
                 // el documento de origen debe ser del cliente del cambio.
                 if ((int) ($origen['id_cliente'] ?? 0) !== $idCliente) {
-                    $docOri = ($origenTipo === 'CAMBIO' ? 'El cambio ' : 'La factura ') . ($origen['doc_numero'] ?? '');
+                    $docOri = ($origenTipo === 'CAMBIO' ? 'El cambio ' : 'La factura de consignación ') . ($origen['doc_numero'] ?? '');
                     throw new Exception("{$docOri} pertenece a otro cliente: no se puede devolver en este cambio.");
                 }
 

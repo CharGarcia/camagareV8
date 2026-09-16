@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: cambio de producto, cambios de productos, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo
-version: 1.2
+etiquetas: cambio de producto, cambios de productos, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo
+version: 1.3
 orden: 47
 estado: activo
 ---
@@ -15,7 +15,7 @@ Un **cambio de productos** registra, en un solo documento y para un solo
 cliente, dos cosas a la vez: los productos que el cliente **devuelve** (por
 ejemplo, uno que salió con falla) y los productos que **recibe a cambio**. Es el
 documento de garantías, reposiciones y canjes. Se relaciona con
-[Facturas de venta](modulos/factura-venta) (de ahí salen los ítems que se
+[Facturación de consignaciones](modulos/facturacion-cv) (de ahí salen los ítems que se
 devuelven), con [Consignaciones](modulos/consignacion-venta) y
 [Retornos de consignación](modulos/retornos-cv) (de una consignación puede
 salir lo que se entrega a cambio) y con Inventario y Contabilidad.
@@ -27,7 +27,9 @@ El cambio se hace **por unidad**: cada ítem tiene su lote y su **NUP** (número
 producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
 
 - **Productos que devuelve** → vuelven al inventario (entrada a la bodega de
-  la que salieron). Vienen de una **factura de venta autorizada** o de un
+  la que salieron). Vienen de una **factura de consignación** (documento del
+  módulo *Facturación de consignaciones* en estado *facturada*; no de facturas
+  de venta directas) o de un
   **cambio anterior** (lo que se entregó en un cambio se puede volver a cambiar).
 - **Productos que entrega a cambio** → salen hacia el cliente. Pueden tomarse
   de **tres sitios**: de una **consignación** que el cliente ya tiene en su
@@ -51,7 +53,8 @@ producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
 1. Pulse **Nuevo**. La fecha, la serie y el número se proponen solos.
 2. **Busque lo que el cliente devuelve** en el buscador de la primera tabla.
    No hace falta elegir antes el cliente: escriba el **NUP**, el **lote**, el
-   **número de la factura** (completo `001-001-000000123` o solo `123`) o el
+   **número de la factura de consignación** (completo `001-001-000000123` o
+   solo `123`) o el
    nombre del producto. El resultado se agrupa por documento y muestra **cada
    ítem por separado**; pulse el ítem que se devuelve (o **Agregar todos**).
    El cliente del cambio queda fijado con el de ese documento.
@@ -75,7 +78,7 @@ producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
 5. Revise el resumen (total devuelto, total entregado, diferencia) y pulse
    **Guardar**. El documento se emite, mueve el inventario y genera el asiento.
 
-Al abrir un cambio ya guardado, cada línea muestra de dónde salió: *Factura
+Al abrir un cambio ya guardado, cada línea muestra de dónde salió: *Fact. consig.
 001-001-000000123*, *Cambio 001-001-000000004*, *Consignación 001-001-000000012*
 o *Bodega*.
 
@@ -86,9 +89,9 @@ o *Bodega*.
 | Fecha | Sí | Fecha del cambio. Con numeración por periodo, cambiarla recalcula el número. |
 | Serie | Sí | Punto de emisión con el secuencial *Cambios de productos* configurado. |
 | Secuencial | Automático | Vista previa; el número definitivo lo asigna el sistema al guardar. |
-| Cliente | Sí | Se fija solo con el primer ítem agregado (factura, cambio o consignación) o se elige a mano. Backspace en el campo lo limpia junto con las líneas que dependen de él. |
+| Cliente | Sí | Se fija solo con el primer ítem agregado (factura de consignación, cambio o consignación) o se elige a mano. Backspace en el campo lo limpia junto con las líneas que dependen de él. |
 | Motivo / Observaciones | No | Texto libre. |
-| Productos que devuelve | Sí (al menos uno) | Ítems de facturas autorizadas o de cambios anteriores con saldo pendiente. |
+| Productos que devuelve | Sí (al menos uno) | Ítems de facturas de consignación (estado *facturada*) o de cambios anteriores con saldo pendiente. |
 | Productos que entrega a cambio | No | Ítems desde consignación, existencias o catálogo. |
 | Estado | Solo al editar | Borrador, Emitida o Anulada. |
 
@@ -104,7 +107,7 @@ o *Bodega*.
 
 ## Reglas de negocio
 
-- **Saldo de lo devuelto**: cada ítem de factura o de cambio anterior tiene un
+- **Saldo de lo devuelto**: cada ítem de factura de consignación o de cambio anterior tiene un
   saldo = cantidad original − lo ya devuelto en cambios emitidos. No se puede
   devolver más que ese saldo, y el sistema lo revalida al guardar y al volver a
   emitir.
@@ -153,7 +156,8 @@ o *Bodega*.
 - **"El documento … pertenece a otro cliente"**: el cambio ya tiene un cliente
   distinto. Quite el cliente actual (Backspace en el campo Cliente) o registre
   otro cambio.
-- **No aparece la factura**: solo se ofrecen facturas **autorizadas**, ítems
+- **No aparece la factura**: solo se ofrecen **facturas de consignación** en
+  estado **facturada** (las de venta directa no salen aquí), ítems
   que sean bienes (no servicios) y con saldo pendiente de devolver.
 - **No aparece la consignación**: debe estar en estado **Entregada**, ser del
   mismo cliente del cambio y tener saldo (no retornado, no facturado, no
@@ -166,6 +170,11 @@ o *Bodega*.
   la pestaña Asiento contable.
 
 ## Historial de cambios
+
+- **1.3** — Lo que se devuelve se busca en las **facturas de consignación**
+  (módulo Facturación de consignaciones, estado *facturada*), ya no en las
+  facturas de venta directas. Lote, NUP, bodega, precio e IVA se copian de
+  esa factura.
 
 - **1.2** — Lo entregado a cambio desde una consignación descuenta el saldo de
   esa línea en Retornos, Facturación de consignaciones, el resumen de la

@@ -15,7 +15,7 @@ use Exception;
  * Cambios de productos (`modulos/cambio-producto-cv`).
  *
  * Registra el cambio de productos de un cliente: lo que DEVUELVE (entrada de
- * inventario, desde una factura de venta o un cambio anterior) y lo que RECIBE a
+ * inventario, desde una factura de consignación o un cambio anterior) y lo que RECIBE a
  * cambio (salida de inventario). La diferencia de valor es informativa.
  */
 class CambioProductoCvController extends BaseModuloController
@@ -746,7 +746,7 @@ class CambioProductoCvController extends BaseModuloController
             // Búsqueda estándar del sistema: todas las palabras en cualquier orden y
             // sin distinguir tildes (ClienteRepository::buscarAutocomplete). Aquí se
             // buscan también los clientes inactivos: el cambio puede venir de una
-            // factura antigua de un cliente que ya se dio de baja.
+            // factura de consignación antigua de un cliente que ya se dio de baja.
             $rows = (new \App\repositories\modulos\ClienteRepository())
                 ->buscarAutocomplete($idEmpresa, $q, 15, false);
             echo json_encode(['ok' => true, 'data' => $rows]);
@@ -758,7 +758,7 @@ class CambioProductoCvController extends BaseModuloController
     }
 
     /**
-     * Líneas disponibles para devolver (factura + cambios previos, con saldo), una por ítem.
+     * Líneas disponibles para devolver (facturas de consignación + cambios previos, con saldo), una por ítem.
      * Con `id_cliente` acota a ese cliente (y admite `q` vacío: todo lo pendiente del cliente);
      * sin cliente busca entre todos por NUP, lote, número de documento o producto, y el
      * navegador fija el cliente del cambio con el de la línea que se agregue.
