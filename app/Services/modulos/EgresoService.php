@@ -227,38 +227,8 @@ class EgresoService
 
         try {
             // Revalidar, DENTRO de la transacción y con el documento bloqueado, que cada
-            // documento (Compra/Liquidación/Rol/Anticipo/Préstamo/Décimo) todavía tiene
-            // saldo suficiente: el "saldo_anterior" que mandó el navegador puede estar
-            // desactualizado si, mientras el modal seguía abierto, otro egreso ya pagó
-            // parte (o todo) el mismo documento (CLAUDE.md §8). Se agrupa por documento
-            // porque el pago "por ítems" manda varias líneas para un mismo id_referencia
-            // (una por ítem): hay que sumarlas antes de comparar contra el saldo real, no
-            // validar cada línea por separado.
-            $idEmpresaChk = (int) $data['id_empresa'];
-            $montoPorDoc = [];
-            $numeroPorDoc = [];
-            foreach ($data['detalles'] ?? [] as $det) {
-                $tipoDoc = $det['tipo_documento'] ?? '';
-                if ($tipoDoc === 'MANUAL' || empty($det['id_referencia_documento'])) {
-                    continue;
-                }
-                $clave = $tipoDoc . ':' . (int) $det['id_referencia_documento'];
-                $montoPorDoc[$clave] = ($montoPorDoc[$clave] ?? 0) + (float) ($det['monto_pagado'] ?? 0);
-                $numeroPorDoc[$clave] ??= $det['numero_documento'] ?? $det['id_referencia_documento'];
-            }
-            foreach ($montoPorDoc as $clave => $montoTotalDoc) {
-                [$tipoDoc, $idRef] = explode(':', $clave, 2);
-                $idRef = (int) $idRef;
-                $this->repository->lockDocumentoPago($tipoDoc, $idRef, $idEmpresaChk);
-                $saldoReal = $this->repository->getSaldoPendienteDocumento($tipoDoc, $idRef, $idEmpresaChk);
-                if ($montoTotalDoc > $saldoReal + 0.01) {
-                    throw new \Exception(
-                        "El documento " . $numeroPorDoc[$clave] .
-                        " ya no tiene saldo suficiente (disponible: $" . number_format($saldoReal, 2) .
-                        "). Es posible que otro egreso lo haya pagado mientras tanto; cierre y vuelva a abrir la búsqueda de documentos pendientes."
-                    );
-                }
-            }
+            // documento todavía tiene saldo suficiente (ver validarSaldoDocumentos).
+            $this->validarSaldoDocumentos($data['detalles'] ?? [], (int) $data['id_empresa']);
 
             // Insertar Cabecera
             $idEgreso = $this->repository->insertCabecera($data);
@@ -414,15 +384,26 @@ class EgresoService
         }
     }
 
+    /**
+     * Edita un egreso ya guardado. Nació reescribiendo solo las formas de pago (de ahí el
+     * nombre, que se conserva porque lo invoca EgresosController::actualizarPagosAjax); hoy,
+     * cuando el navegador manda `detalles` en $extraData, reescribe también documentos /
+     * otros conceptos, beneficiario, observaciones y total — para CUALQUIER tipo de egreso,
+     * no solo GENERAL/ANTICIPO. Serie, secuencial y concepto de cabecera no cambian al editar.
+     *
+     * Única puerta: el periodo contable (el de la fecha original y, si cambia, el de destino).
+     * Un egreso anulado tampoco se edita.
+     */
     public function actualizarPagos(int $id, array $pagos, int $idEmpresa, int $idUsuario, ?string $fechaEmision = null, array $extraData = []): void
     {
         $egreso = $this->repository->getPorId($id, $idEmpresa);
         if (!$egreso) throw new \Exception("Egreso no encontrado.");
-        if ($egreso['estado'] === 'anulado') throw new \Exception("No se pueden modificar los pagos de un egreso anulado.");
+        if ($egreso['estado'] === 'anulado') throw new \Exception("No se puede editar un egreso anulado.");
 
         if ($fechaEmision && strtotime($fechaEmision) > strtotime(date('Y-m-d'))) {
             throw new \Exception("La fecha de emisión no puede ser posterior a la fecha actual.");
         }
+        $fechaFinal = $fechaEmision ?: $egreso['fecha_emision'];
 
         foreach ($pagos as $idx => $p) {
             if (!empty($p['fecha_cobro']) && strtotime($p['fecha_cobro']) > strtotime('+1 year')) {
@@ -432,26 +413,53 @@ class EgresoService
 
         // 1. Validar Periodo Contable de la fecha original
         $this->periodosService->validarFechaPermitida(
-            $egreso['fecha_emision'], 
-            $idEmpresa, 
-            'No se pueden actualizar pagos porque el periodo contable original está cerrado.'
+            $egreso['fecha_emision'],
+            $idEmpresa,
+            'No se puede modificar el egreso porque el periodo contable original está cerrado.'
         );
 
         // 2. Si la fecha cambia, validar periodo contable de destino
         if ($fechaEmision && $fechaEmision !== $egreso['fecha_emision']) {
             $this->periodosService->validarFechaPermitida(
-                $fechaEmision, 
-                $idEmpresa, 
+                $fechaEmision,
+                $idEmpresa,
                 'No se puede cambiar a la nueva fecha porque el periodo contable de destino está cerrado.'
             );
         }
 
-        // Validar consistencia: suma de pagos debe igualar monto_total (que puede variar si es general)
-        $sumaNuevosPagos = array_reduce($pagos, fn($carry, $p) => $carry + (float)($p['monto'] ?? 0), 0.0);
-        $montoTotal = !empty($extraData['es_general']) ? (float)($extraData['monto_total'] ?? 0) : (float)$egreso['monto_total'];
-        
-        if (abs($sumaNuevosPagos - $montoTotal) > 0.01) {
-            throw new \Exception("Inconsistencia: la suma de las formas de pago ($" . number_format($sumaNuevosPagos, 2) . ") no coincide con el total del egreso ($" . number_format($montoTotal, 2) . ").");
+        // 3. Edición completa (detalle + beneficiario + observaciones + total). `es_general`
+        //    es la bandera histórica de la UI vieja; hoy basta con que lleguen los detalles.
+        $editaDetalle   = !empty($extraData['es_general']) || (isset($extraData['detalles']) && is_array($extraData['detalles']));
+        $detallesNuevos = $editaDetalle ? array_values($extraData['detalles'] ?? []) : [];
+        $payload        = null;
+
+        if ($editaDetalle) {
+            // Total desde el detalle (no del navegador) y mismas reglas de negocio que al
+            // registrar, armadas sobre la cabecera guardada: serie, secuencial, concepto y
+            // tipo no cambian al editar, así que se toman tal cual están en BD.
+            $montoTotal = round(array_reduce($detallesNuevos, fn($c, $d) => $c + (float) ($d['monto_pagado'] ?? 0), 0.0), 2);
+            $payload = array_merge($egreso, [
+                'fecha_emision' => $fechaFinal,
+                'tipo_sujeto'   => $extraData['tipo_sujeto'] ?? $egreso['tipo_sujeto'],
+                'id_proveedor'  => !empty($extraData['id_proveedor']) ? (int) $extraData['id_proveedor'] : null,
+                'id_empleado'   => !empty($extraData['id_empleado']) ? (int) $extraData['id_empleado'] : null,
+                'observaciones' => $extraData['observaciones'] ?? null,
+                'detalles'      => $detallesNuevos,
+                'pagos'         => $pagos,
+                'monto_total'   => $montoTotal,
+            ]);
+            $this->rules->validar($payload);
+            $this->validarFechaVsDocumentos($payload);
+        } else {
+            // Solo formas de pago (y fecha): el total del egreso no cambia.
+            $montoTotal      = (float) $egreso['monto_total'];
+            $sumaNuevosPagos = array_reduce($pagos, fn($carry, $p) => $carry + (float) ($p['monto'] ?? 0), 0.0);
+            if (abs($sumaNuevosPagos - $montoTotal) > 0.01) {
+                throw new \Exception("Inconsistencia: la suma de las formas de pago ($" . number_format($sumaNuevosPagos, 2) . ") no coincide con el total del egreso ($" . number_format($montoTotal, 2) . ").");
+            }
+            if (empty($pagos)) {
+                throw new \Exception("Debe registrar al menos una forma de pago (salida de dinero).");
+            }
         }
 
         $db = Database::getConnection();
@@ -480,20 +488,24 @@ class EgresoService
             $datosAnteriores = ['pagos' => $pagosViejos];
             $datosNuevos     = ['pagos' => $pagos];
 
-            // 3. SI ES GENERAL, ACTUALIZAR DETALLES, SUJETO Y MONTOS EN LA CABECERA
-            if (!empty($extraData['es_general'])) {
-                $datosAnteriores['detalles'] = $this->repository->getDetalles($id);
-                $datosAnteriores['tipo_sujeto'] = $egreso['tipo_sujeto'];
-                $datosAnteriores['id_proveedor'] = $egreso['id_proveedor'];
-                $datosAnteriores['id_empleado'] = $egreso['id_empleado'];
+            // 3. EDICIÓN COMPLETA: reescribir detalle, beneficiario, observaciones y total
+            if ($editaDetalle) {
+                // Saldo REAL de cada documento, con candado y excluyendo este mismo egreso
+                // (su pago anterior no debe descontarse del saldo disponible: se está
+                // reemplazando). Igual que al registrar, dentro de la transacción.
+                $this->validarSaldoDocumentos($detallesNuevos, $idEmpresa, $id);
+
+                $datosAnteriores['detalles']      = $this->repository->getDetalles($id);
+                $datosAnteriores['tipo_sujeto']   = $egreso['tipo_sujeto'];
+                $datosAnteriores['id_proveedor']  = $egreso['id_proveedor'];
+                $datosAnteriores['id_empleado']   = $egreso['id_empleado'];
                 $datosAnteriores['observaciones'] = $egreso['observaciones'];
-                $datosAnteriores['monto_total'] = $egreso['monto_total'];
+                $datosAnteriores['monto_total']   = $egreso['monto_total'];
 
                 // 3.1. Eliminar detalles viejos lógicamente
                 $this->repository->query("UPDATE egresos_detalle SET eliminado = TRUE WHERE id_egreso = ? AND eliminado = FALSE", [$id]);
 
                 // 3.2. Registrar nuevos detalles
-                $detallesNuevos = $extraData['detalles'] ?? [];
                 foreach ($detallesNuevos as $det) {
                     $det['id_egreso'] = $id;
                     $this->repository->insertDetalle($det);
@@ -501,20 +513,20 @@ class EgresoService
 
                 // 3.3. Actualizar datos expandidos en cabecera
                 $this->repository->query(
-                    "UPDATE egresos_cabecera 
-                     SET tipo_sujeto = ?, 
-                         id_proveedor = ?, 
-                         id_empleado = ?, 
-                         observaciones = ?, 
-                         monto_total = ?, 
-                         updated_at = CURRENT_TIMESTAMP, 
-                         updated_by = ? 
+                    "UPDATE egresos_cabecera
+                     SET tipo_sujeto = ?,
+                         id_proveedor = ?,
+                         id_empleado = ?,
+                         observaciones = ?,
+                         monto_total = ?,
+                         updated_at = CURRENT_TIMESTAMP,
+                         updated_by = ?
                      WHERE id = ? AND id_empresa = ?",
                     [
-                        $extraData['tipo_sujeto'] ?? 'PROVEEDOR',
-                        !empty($extraData['id_proveedor']) ? (int)$extraData['id_proveedor'] : null,
-                        !empty($extraData['id_empleado']) ? (int)$extraData['id_empleado'] : null,
-                        $extraData['observaciones'] ?? null,
+                        $payload['tipo_sujeto'],
+                        $payload['id_proveedor'],
+                        $payload['id_empleado'],
+                        $payload['observaciones'],
                         $montoTotal,
                         $idUsuario,
                         $id,
@@ -522,18 +534,18 @@ class EgresoService
                     ]
                 );
 
-                $datosNuevos['detalles'] = $detallesNuevos;
-                $datosNuevos['tipo_sujeto'] = $extraData['tipo_sujeto'];
-                $datosNuevos['id_proveedor'] = $extraData['id_proveedor'] ?? null;
-                $datosNuevos['id_empleado'] = $extraData['id_empleado'] ?? null;
-                $datosNuevos['observaciones'] = $extraData['observaciones'] ?? null;
-                $datosNuevos['monto_total'] = $montoTotal;
+                $datosNuevos['detalles']      = $detallesNuevos;
+                $datosNuevos['tipo_sujeto']   = $payload['tipo_sujeto'];
+                $datosNuevos['id_proveedor']  = $payload['id_proveedor'];
+                $datosNuevos['id_empleado']   = $payload['id_empleado'];
+                $datosNuevos['observaciones'] = $payload['observaciones'];
+                $datosNuevos['monto_total']   = $montoTotal;
             }
 
             // 4. Si la fecha cambió, actualizarla en la cabecera
             if ($fechaEmision && $fechaEmision !== $egreso['fecha_emision']) {
                 $this->repository->query(
-                    "UPDATE egresos_cabecera SET fecha_emision = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ? AND id_empresa = ?", 
+                    "UPDATE egresos_cabecera SET fecha_emision = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ? AND id_empresa = ?",
                     [$fechaEmision, $idUsuario, $id, $idEmpresa]
                 );
                 $datosAnteriores['fecha_emision'] = $egreso['fecha_emision'];
@@ -559,14 +571,60 @@ class EgresoService
             throw $e;
         }
 
-        // Regenerar el asiento contable fuera de la transacción. Se pasan los detalles (con su
-        // cuenta contable por línea) cuando el egreso es GENERAL, para que el asiento las refleje.
+        // Fuera de la transacción (igual que en registrar()/anular(): un fallo aquí no debe
+        // revertir la edición ya confirmada):
+        //  - regenerar el asiento contable con las cuentas por línea del detalle nuevo;
+        //  - resincronizar nómina: si el egreso pagaba (o pasa a pagar) roles semanales/
+        //    quincenas, anticipos o préstamos, el rol afectado se regenera con lo realmente
+        //    pagado. Las consultas de sincronizarNominaMensual() no filtran `eliminado`, así
+        //    que cubren tanto los documentos que se quitaron como los que se agregaron.
         if (!$inTrans) {
             $this->generarAsientoContableSeguro($id, [
                 'id_empresa' => $idEmpresa,
                 'usuario_id' => $idUsuario,
-                'detalles'   => $extraData['detalles'] ?? [],
+                'detalles'   => $detallesNuevos,
             ]);
+            if ($editaDetalle) {
+                $this->sincronizarNominaMensual($id, $idEmpresa, $idUsuario);
+            }
+        }
+    }
+
+    /**
+     * Revalida, contra el saldo REAL del documento (no el "saldo_anterior" que mandó el
+     * navegador), que cada documento (Compra/Liquidación/Rol/Anticipo/Préstamo/Décimo)
+     * todavía alcanza para el monto pagado: mientras el modal seguía abierto, otro egreso
+     * pudo haber pagado parte (o todo) del mismo documento (CLAUDE.md §8). Se agrupa por
+     * documento porque el pago "por ítems" manda varias líneas para un mismo
+     * id_referencia_documento (una por ítem): hay que sumarlas antes de comparar.
+     * Llamar DENTRO de la transacción, antes de escribir. $excluirEgresoId excluye el
+     * propio egreso (al editar) para no descontar su pago anterior del saldo disponible.
+     */
+    private function validarSaldoDocumentos(array $detalles, int $idEmpresa, ?int $excluirEgresoId = null): void
+    {
+        $montoPorDoc  = [];
+        $numeroPorDoc = [];
+        foreach ($detalles as $det) {
+            $tipoDoc = $det['tipo_documento'] ?? '';
+            if ($tipoDoc === 'MANUAL' || empty($det['id_referencia_documento'])) {
+                continue;
+            }
+            $clave = $tipoDoc . ':' . (int) $det['id_referencia_documento'];
+            $montoPorDoc[$clave] = ($montoPorDoc[$clave] ?? 0) + (float) ($det['monto_pagado'] ?? 0);
+            $numeroPorDoc[$clave] ??= $det['numero_documento'] ?? $det['id_referencia_documento'];
+        }
+        foreach ($montoPorDoc as $clave => $montoTotalDoc) {
+            [$tipoDoc, $idRef] = explode(':', $clave, 2);
+            $idRef = (int) $idRef;
+            $this->repository->lockDocumentoPago($tipoDoc, $idRef, $idEmpresa);
+            $saldoReal = $this->repository->getSaldoPendienteDocumento($tipoDoc, $idRef, $idEmpresa, $excluirEgresoId);
+            if ($montoTotalDoc > $saldoReal + 0.01) {
+                throw new \Exception(
+                    "El documento " . $numeroPorDoc[$clave] .
+                    " ya no tiene saldo suficiente (disponible: $" . number_format($saldoReal, 2) .
+                    "). Es posible que otro egreso lo haya pagado mientras tanto; cierre y vuelva a abrir la búsqueda de documentos pendientes."
+                );
+            }
         }
     }
 
@@ -666,6 +724,16 @@ class EgresoService
             $idEmpresa,
             "La fecha $fecha corresponde a un periodo contable cerrado. No se pueden registrar transacciones en ese periodo."
         );
+    }
+
+    /**
+     * Versión booleana (sin excepción) para que el modal sepa, al ABRIR el registro, si
+     * debe mostrarse en solo lectura porque su periodo contable está cerrado — en vez de
+     * dejar editar y fallar recién al guardar. Misma regla que aplica actualizarPagos()/anular().
+     */
+    public function esPeriodoCerrado(?string $fecha, int $idEmpresa): bool
+    {
+        return $this->periodosService->esFechaEnPeriodoCerrado($fecha, $idEmpresa);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

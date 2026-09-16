@@ -480,6 +480,48 @@ class ReporteVentasRepository extends BaseRepository
                 AND CONCAT({$aliasFactura}.establecimiento, '-', {$aliasFactura}.punto_emision, '-', {$aliasFactura}.secuencial) = {$aliasNc}.num_doc_modificado";
     }
 
+    /**
+     * Alcance del usuario (§6, ver App\Helpers\AlcanceRegistros). Devuelve la
+     * condición a concatenar al WHERE, o cadena vacía si ve toda la empresa:
+     *
+     *  - Modo VENDEDOR (`id_vendedor_filtro`): el documento es de un cliente
+     *    asignado a ese vendedor (`clientes.id_vendedor`) O lleva ese vendedor.
+     *    Las notas de crédito no registran vendedor (ver fuente()): se toma el de
+     *    la factura que modifican, igual que el filtro Vendedor de la pantalla.
+     *  - Modo REGISTROS PROPIOS (`id_usuario_filtro`): `id_usuario` del documento
+     *    (la misma columna que filtran Factura de Venta, Recibo de Venta y NC).
+     *
+     * Los placeholders del IN se repiten dentro del mismo SQL (cliente y documento);
+     * en este proyecto eso es seguro (ver memoria pdo-placeholders-repetidos).
+     */
+    private function condAlcanceUsuario(array $filtros, array $f, string $alias, array &$params): string
+    {
+        $idsVend = \App\Helpers\AlcanceRegistros::idsVendedor($filtros);
+        if ($idsVend) {
+            $ph = [];
+            foreach ($idsVend as $i => $id) {
+                $ph[] = ":alc_v{$i}";
+                $params[":alc_v{$i}"] = $id;
+            }
+            $in = implode(',', $ph);
+            $porCliente = "EXISTS (SELECT 1 FROM clientes alc_c
+                                   WHERE alc_c.id = {$alias}.id_cliente AND alc_c.id_vendedor IN ({$in}))";
+            $porDoc = $f['vendedor']
+                ? "{$alias}.id_vendedor IN ({$in})"
+                : "EXISTS (SELECT 1 FROM ventas_cabecera alc_fv
+                           WHERE " . $this->condicionFacturaDeNc($alias, 'alc_fv') . "
+                             AND alc_fv.id_vendedor IN ({$in}))";
+            return " AND ({$porCliente} OR {$porDoc})";
+        }
+
+        $idUsuario = \App\Helpers\AlcanceRegistros::idUsuario($filtros);
+        if ($idUsuario <= 0) {
+            return '';
+        }
+        $params[':id_usuario_filtro'] = $idUsuario;
+        return " AND {$alias}.id_usuario = :id_usuario_filtro";
+    }
+
     private function buildWhereYParams(int|array $idEmpresa, array $filtros, string $aliasVenta, string $aliasDetalle = null, bool $filtrarEstado = true): array
     {
         $f = $this->fuente($filtros);
@@ -494,6 +536,15 @@ class ReporteVentasRepository extends BaseRepository
         }
 
         $params = [];
+
+        // Alcance del usuario (§6): si NO tiene acceso total ('t') en el módulo, el
+        // reporte se limita a su cartera (vendedor vinculado) o, si no es vendedor, a
+        // los documentos que él registró. Lo resuelve el controller con
+        // App\Helpers\AlcanceRegistros y viaja dentro de los filtros: NUNCA llega del
+        // cliente. Al vivir aquí lo heredan el detallado, todas las agrupaciones, las
+        // tarjetas de estadísticas, el resumen de estados, el neto "Facturas − NC", el
+        // PDF, el Excel y la API móvil.
+        $where .= $this->condAlcanceUsuario($filtros, $f, $aliasVenta, $params);
 
         if (!empty($filtros['fecha_desde'])) {
             $where .= " AND {$aliasVenta}.fecha_emision >= :fecha_desde";
@@ -877,21 +928,25 @@ class ReporteVentasRepository extends BaseRepository
     /**
      * Autocompletado: descripciones distintas de los ítems del documento.
      */
-    public function buscarItems(int $idEmpresa, string $q, string $tipoDocumento = 'FACTURA', int $limit = 15): array
+    public function buscarItems(int $idEmpresa, string $q, string $tipoDocumento = 'FACTURA', int $limit = 15, array $alcance = []): array
     {
         $f = $this->fuente(['tipo_documento' => $tipoDocumento]);
+        // Alcance del usuario (§6): las sugerencias salen solo de los documentos que el
+        // usuario puede ver en el reporte (misma condición que buildWhereYParams).
+        $params = [':ie' => $idEmpresa, ':q' => '%' . $q . '%'];
+        $propio = $this->condAlcanceUsuario($alcance, $f, 'v', $params);
         // Busca por nombre (descripción) o por código de línea, igual que el filtro
         // producto_texto del reporte (ver buildWhereYParams: descripcion OR codigo_principal).
         $sql = "SELECT DISTINCT TRIM(d.descripcion) AS descripcion, TRIM(COALESCE(d.codigo_principal, '')) AS codigo
                 FROM {$f['det']} d
                 JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
-                WHERE v.id_empresa = :ie AND v.eliminado = false
+                WHERE v.id_empresa = :ie AND v.eliminado = false{$propio}
                   AND d.descripcion IS NOT NULL AND TRIM(d.descripcion) <> ''
                   AND (d.descripcion ILIKE :q OR d.codigo_principal ILIKE :q)
                 ORDER BY descripcion
                 LIMIT {$limit}";
         $st = $this->db->prepare($sql);
-        $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%']);
+        $st->execute($params);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
         // valor = lo que queda escrito en el buscador al elegir: siempre el nombre
         // (descripción), igual que si el usuario lo hubiera tecleado a mano — así el
@@ -911,19 +966,22 @@ class ReporteVentasRepository extends BaseRepository
     /**
      * Autocompletado: info adicional (nombre/valor distintos del documento).
      */
-    public function buscarInfoAdicional(int $idEmpresa, string $q, string $tipoDocumento = 'FACTURA', int $limit = 15): array
+    public function buscarInfoAdicional(int $idEmpresa, string $q, string $tipoDocumento = 'FACTURA', int $limit = 15, array $alcance = []): array
     {
         $f = $this->fuente(['tipo_documento' => $tipoDocumento]);
+        // Alcance del usuario (§6), igual que buscarItems().
+        $params = [':ie' => $idEmpresa, ':q' => '%' . $q . '%'];
+        $propio = $this->condAlcanceUsuario($alcance, $f, 'v', $params);
         $sql = "SELECT DISTINCT va.nombre, va.valor
                 FROM {$f['adic']} va
                 JOIN {$f['cab']} v ON v.id = va.{$f['fk_adic']}
-                WHERE v.id_empresa = :ie AND v.eliminado = false
+                WHERE v.id_empresa = :ie AND v.eliminado = false{$propio}
                   AND COALESCE(va.valor, '') <> ''
                   AND (va.nombre ILIKE :q OR va.valor ILIKE :q)
                 ORDER BY va.nombre, va.valor
                 LIMIT {$limit}";
         $st = $this->db->prepare($sql);
-        $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%']);
+        $st->execute($params);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
         return array_map(fn($r) => [
             'valor' => $r['valor'],

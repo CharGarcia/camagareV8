@@ -338,6 +338,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     </div>
                 </div>
 
+                <!-- Aviso de solo lectura (periodo contable cerrado): lo muestra abrirModalIngresoVer() -->
+                <div id="ing-bloqueo-aviso" class="alert alert-warning small rounded-0 border-0 border-bottom mb-0 py-2 px-3 d-none" role="alert">
+                    <i class="bi bi-lock-fill me-1"></i><span id="ing-bloqueo-aviso-texto"></span>
+                </div>
+
                 <!-- Pestañas Principales del Modal -->
                 <div class="d-flex align-items-center bg-light px-3 pt-2">
                     <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsModalIngreso" role="tablist">
@@ -738,6 +743,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const existe = [...selGen.options].some(o => o.value !== '' && o.value == id);
             selGen.value = existe ? id : '';
         }
+    }
+
+    /**
+     * Modo edición de un ingreso guardado: el concepto de cabecera no cambia (define el
+     * tipo del documento y su asiento), pero el botón del concepto ACTIVO queda habilitado
+     * para poder agregar más documentos pendientes del mismo tipo — un nuevo clic sobre el
+     * concepto ya seleccionado reabre el buscador (ver ingOnClickConceptoBtn). El resto de
+     * botones y el selector de conceptos generales quedan bloqueados.
+     */
+    function setConceptoBotonesModoEdicion() {
+        const idActual = document.getElementById('m-select-concepto').value;
+        document.querySelectorAll('.concepto-ingreso-btn').forEach(btn => {
+            const comp = btn.dataset.comportamiento || 'GENERAL';
+            const activoConDocs = btn.dataset.id == idActual && ['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp);
+            btn.disabled = !activoConDocs;
+        });
+        const selGen = document.getElementById('m-select-concepto-general');
+        if (selGen) selGen.disabled = true;
     }
 
     function setConceptoBotonesDisabled(disabled) {
@@ -1399,7 +1422,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     function renderDocsPendientesIngreso() {
-        const esHistorico = !!document.getElementById('m-input-id').value;
+        // Solo lectura únicamente si el ingreso está anulado o su periodo contable está
+        // cerrado (esIngresoModoLectura). Al EDITAR un ingreso guardado sí se pueden quitar
+        // documentos, cambiar los montos cobrados y agregar otros: el servidor reescribe el
+        // detalle completo y revalida el saldo real de cada documento excluyendo este ingreso.
+        const esHistorico = esIngresoModoLectura;
         const tbody = document.getElementById('m-tbody-docs-pendientes');
         tbody.innerHTML = '';
 
@@ -1807,6 +1834,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
             btnGuardar.classList.remove('d-none');
         }
+        document.getElementById('ing-bloqueo-aviso')?.classList.add('d-none');
         document.getElementById('formIngresoModal').reset();
         document.getElementById('m-input-id').value = '';
         document.getElementById('m-input-id-cliente').value = '';
@@ -2141,15 +2169,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 }
                 const ing = res.data;
                 const esAnulado = (ing.estado === 'anulado');
-                esIngresoModoLectura = esAnulado; // Propagar estado globalmente
+                // Periodo contable cerrado (lo calcula el servidor con la misma regla que
+                // aplica al guardar/anular): el modal abre en solo lectura y avisa el motivo,
+                // en vez de dejar editar y rechazar recién al pulsar Actualizar.
+                const periodoCerrado = (ing.periodo_cerrado === true || ing.periodo_cerrado === 't' || ing.periodo_cerrado === 1 || ing.periodo_cerrado === '1');
+                const soloLectura = esAnulado || periodoCerrado;
+                esIngresoModoLectura = soloLectura; // Propagar estado globalmente
 
                 abrirModalIngreso(); // Resets all, variables and resets fields to enabled
+                esIngresoModoLectura = soloLectura; // abrirModalIngreso() lo reinicia a false
                 document.getElementById('tab-ingreso-cnt-li')?.classList.remove('d-none'); // Registro guardado: sí mostrar Asiento contable
-                
+
                 // Cambiar estética según estado
-                document.getElementById('modalIngresoTitulo').textContent = esAnulado ? `Ver Ingreso #${ing.numero_ingreso}` : `Editar Ingreso #${ing.numero_ingreso}`;
+                document.getElementById('modalIngresoTitulo').textContent = soloLectura ? `Ver Ingreso #${ing.numero_ingreso}` : `Editar Ingreso #${ing.numero_ingreso}`;
                 const iconEl = document.getElementById('modalIngresoIcono');
-                if (iconEl) iconEl.className = esAnulado ? 'bi bi-eye text-primary me-2' : 'bi bi-pencil-square text-primary me-2';
+                if (iconEl) iconEl.className = soloLectura ? 'bi bi-eye text-primary me-2' : 'bi bi-pencil-square text-primary me-2';
                 
                 document.getElementById('m-input-id').value = ing.id;
                 document.getElementById('btnPdfIngreso').classList.remove('d-none');
@@ -2176,10 +2210,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 sincronizarBotonesConcepto(ing.id_ingreso_concepto);
                 document.getElementById('m-input-observaciones').value = ing.observaciones || '';
 
-                const isModuloLinked = ['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp);
-
-                if (esAnulado) {
-                    // Modo estrictamente solo lectura si ya fue anulado
+                if (soloLectura) {
+                    // Modo estrictamente solo lectura: anulado o periodo contable cerrado
                     document.getElementById('m-select-concepto').disabled = true;
                     setConceptoBotonesDisabled(true);
                     document.getElementById('m-recibo-de-input').disabled = true;
@@ -2188,33 +2220,38 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     document.getElementById('m-select-punto').disabled = true;
 
                     document.getElementById('btnGuardarIngreso').classList.add('d-none');
-                    document.getElementById('m-container-footer-ver').classList.add('d-none');
-                    document.getElementById('modalIngresoTitulo').innerHTML += ' <span class="badge bg-danger ms-2">ANULADO</span>';
+                    document.getElementById('m-container-footer-ver').classList.add('d-none'); // sin Anular
+                    if (esAnulado) {
+                        document.getElementById('modalIngresoTitulo').innerHTML += ' <span class="badge bg-danger ms-2">ANULADO</span>';
+                    }
+                    if (periodoCerrado) {
+                        document.getElementById('modalIngresoTitulo').innerHTML += ' <span class="badge bg-warning text-dark ms-2">PERIODO CERRADO</span>';
+                        const aviso = document.getElementById('ing-bloqueo-aviso');
+                        const avisoTxt = document.getElementById('ing-bloqueo-aviso-texto');
+                        if (avisoTxt) avisoTxt.textContent = esAnulado
+                            ? 'Este ingreso está anulado y su periodo contable está cerrado: es de solo lectura.'
+                            : 'El periodo contable de este ingreso está cerrado: es de solo lectura, no puede editarse ni anularse. Para corregirlo, reabra el periodo en Contabilidad → Periodos Contables o registre el ajuste en un periodo abierto.';
+                        aviso?.classList.remove('d-none');
+                    }
                 } else {
-                    // NO ESTÁ ANULADO: Habilitar botón "Actualizar"
+                    // EDITABLE (periodo abierto y no anulado): todo se puede corregir —fecha,
+                    // "Recibo de", observaciones, documentos cobrados y sus montos, otros
+                    // conceptos y formas de cobro— salvo la identidad del documento: serie,
+                    // secuencial y concepto de cabecera. El servidor vuelve a validar el
+                    // periodo (original y nuevo) y el saldo real de cada documento al guardar.
                     const btnGuardar = document.getElementById('btnGuardarIngreso');
                     btnGuardar.classList.remove('d-none');
                     btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Actualizar';
                     document.getElementById('m-container-footer-ver').classList.remove('d-none');
-                    
-                    // Siempre bloqueados en modo edición histórica
+
                     document.getElementById('m-select-punto').disabled = true;
                     document.getElementById('m-select-concepto').disabled = true;
-                    setConceptoBotonesDisabled(true);
+                    setConceptoBotonesModoEdicion(); // solo el concepto activo, para agregar más documentos del mismo tipo
                     document.getElementById('m-input-secuencial').disabled = true;
-                    
-                    // Siempre permitidos en modo edición no anulado
-                    document.getElementById('m-input-fecha').disabled = false;
 
-                    if (isModuloLinked) {
-                        // REGLA DE NEGOCIO: Si está relacionado a un módulo, solo se puede editar fecha, recibo_de y pagos.
-                        document.getElementById('m-input-observaciones').disabled = true;
-                        document.getElementById('m-recibo-de-input').disabled = false;
-                    } else {
-                        // REGLA DE NEGOCIO: Si es general (sin módulo), SÍ permite corregir todo.
-                        document.getElementById('m-input-observaciones').disabled = false;
-                        document.getElementById('m-recibo-de-input').disabled = false;
-                    }
+                    document.getElementById('m-input-fecha').disabled = false;
+                    document.getElementById('m-input-observaciones').disabled = false;
+                    document.getElementById('m-recibo-de-input').disabled = false;
                 }
 
                 // Hidratar Pagos para render dinámico
@@ -2304,13 +2341,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 renderPagos();
                 recalcularTotales();
 
-                // Si está anulado, forzar desactivación de inputs tras renderizado dinámico
-                if (esAnulado) {
+                // Solo lectura (anulado o periodo cerrado): forzar desactivación de inputs tras renderizado dinámico
+                if (soloLectura) {
                     document.querySelectorAll('.chk-sel-doc, .input-monto-cobrar').forEach(el => el.disabled = true);
                 }
 
-                // Bloquear adición de cobros si está anulado
-                if (esAnulado) {
+                // Bloquear adición de cobros en solo lectura
+                if (soloLectura) {
                     document.getElementById('m-add-cobro-forma').disabled = true;
                     document.getElementById('m-add-cobro-monto').disabled = true;
                     document.getElementById('m-add-cobro-ref').disabled = true;

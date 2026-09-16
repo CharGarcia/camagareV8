@@ -6,7 +6,7 @@ ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: retorno, retornos, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion
-version: 1.9
+version: 1.10
 orden: 46
 estado: activo
 ---
@@ -50,10 +50,14 @@ es siempre de un solo cliente.
 
 No hace falta devolver todo de una vez: se pueden registrar varios retornos
 parciales sobre la misma consignación. El sistema lleva el **saldo** de lo que
-sigue en poder del cliente.
+sigue en poder del cliente:
 
-Ese saldo es el dato clave: cuadra siempre lo entregado con lo vendido más lo
-devuelto.
+`saldo = consignado − retornado − facturado − entregado a cambio`
+
+Ese saldo es el dato clave: cuadra siempre lo entregado con lo vendido, lo
+devuelto y lo que el cliente se quedó como reposición en un
+[Cambio de productos](modulos/cambio-producto-cv). Una unidad consignada que se
+entregó a cambio ya es del cliente y **no aparece** para retornar.
 
 ## Exportar
 
@@ -152,6 +156,9 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.10** — El saldo pendiente de retornar descuenta también lo que el cliente
+  recibió **a cambio** desde la consignación (módulo Cambios de productos):
+  esas unidades ya no se ofrecen en el buscador ni en la grilla.
 - **1.9** — El PDF de un retorno con muchos productos ya no sale troceado. Al
   pasar de unas 45 líneas el documento se partía en decenas de hojas con un solo
   dato cada una (60 productos llegaban a producir 74 páginas). Además, las

@@ -6,7 +6,7 @@ ruta_modulo: modulos/responsables-traslados
 tipo: modulo
 visibilidad: todos
 etiquetas: responsables de traslado, responsable de entrega, repartidor, chofer, conductor, entregador, asesor, mensajero, transportista interno, pedidos, consignaciones, entregas, app movil, usuarios vinculados, quien ve las entregas
-version: 1.1
+version: 1.2
 orden: 62
 estado: activo
 ---
@@ -29,8 +29,8 @@ edita y da de baja.
 - Permite **desactivar** a quien ya no hace entregas, sin borrar el histórico.
 - Es la lista de la que se eligen los responsables que se vinculan a un usuario de
   la **app móvil** (pestaña *Responsables de traslado* en la ficha del usuario):
-  un repartidor sin acceso total solo ve, en su teléfono, las entregas de los
-  responsables que se le hayan vinculado.
+  un usuario vinculado ve, en el módulo Entregas de Consignaciones y en su
+  teléfono, solo las entregas de los responsables que se le hayan vinculado.
 
 No confundir con **Transportistas**: el transportista es la empresa o persona
 externa que figura en la **guía de remisión** ante el SRI. El responsable de
@@ -77,19 +77,21 @@ filtros con `clave:valor`:
 En el modal de cada responsable hay una segunda pestaña, **Usuarios vinculados**.
 Responde a la pregunta *"¿qué usuarios ven las entregas de este responsable?"*.
 
-Sirve para el módulo **Entregas de Consignaciones** (app móvil y web). El sistema
-mira el permiso de **acceso total** del usuario en ese módulo:
+Sirve para el módulo **Entregas de Consignaciones**, tanto en la **web** como
+en la **app móvil**. Manda el vínculo, no el permiso de acceso total:
 
-- **Con** acceso total → ve **todas** las entregas de la empresa, sin importar los
-  vínculos.
-- **Sin** acceso total → ve **solo** las entregas de los responsables que tenga
-  vinculados.
-- **Sin acceso total y sin ningún vínculo → no ve ninguna entrega.** Es la causa
-  más común de "al repartidor no le aparece nada en el celular".
+- **Superadministrador (nivel 3)** → ve **todas** las entregas de la empresa.
+- **Con uno o más vínculos** → ve **solo** las entregas de los responsables que
+  tenga vinculados, aunque tenga acceso total en el módulo.
+- **Sin ningún vínculo** → ve **todas** las entregas de la empresa.
+
+Es decir: vincular a un usuario sirve para **acotar** lo que ve. Un repartidor al
+que "le aparecen entregas de otros" en el celular es un usuario sin vínculos.
 
 Por eso el listado tiene la columna **Usuarios**: muestra cuántos hay vinculados y
 marca con un triángulo ámbar (⚠ 0) a los responsables **activos** que no tienen
-ninguno. En los inactivos no avisa, porque ya no se usan.
+ninguno: sus entregas solo las ven quienes ven todo (usuarios sin vínculo y
+superadministradores). En los inactivos no avisa, porque ya no se usan.
 
 En la tabla de la pestaña, la columna **App móvil** indica con un visto verde si
 ese usuario tiene habilitado el acceso desde el teléfono. Si aparece un guion gris,
@@ -174,7 +176,7 @@ activa.
 | **Pedidos** | Selector *Responsable de entrega* (obligatorio al guardar un pedido). El botón + crea uno sin salir del pedido |
 | **Consignaciones de Venta** | Selector *Responsable de traslado*, y sale impreso en el documento |
 | **Retornos de consignación** y **Cambios de producto** | Heredan el responsable del documento de origen |
-| **Entregas de Consignaciones** (app móvil) | Un usuario sin acceso total solo ve las entregas de los responsables que tenga vinculados (pestaña *Usuarios vinculados*) |
+| **Entregas de Consignaciones** (web y app móvil) | Un usuario vinculado solo ve las entregas de sus responsables; sin vínculo ve todas; nivel 3 siempre todas (pestaña *Usuarios vinculados*) |
 | **Usuarios del sistema** | Administra el mismo vínculo desde la ficha del usuario; los cambios hechos en cualquiera de los dos sitios se ven en el otro |
 | **Reporte de Pedidos** y **Reporte de Inventarios** | Muestran y permiten filtrar por responsable |
 
@@ -195,9 +197,12 @@ validaciones que este módulo: son el mismo proceso por dentro.
   **acceso total**.
 - **El menú muestra la opción pero al entrar dice que no tiene permiso**: falta
   asignar el submódulo en `/config/permisos-modulos`.
-- **Al repartidor no le aparece ninguna entrega en el celular**: no tiene *acceso
-  total* en Entregas de Consignaciones y no está vinculado a ningún responsable.
-  Búsquelo en el listado por la columna **Usuarios** (⚠ 0) y vincúlelo.
+- **Al repartidor le aparecen entregas de otros en el celular**: no está
+  vinculado a ningún responsable, así que ve todas las de la empresa. Vincúlelo
+  al suyo desde la pestaña *Usuarios vinculados* o desde su ficha de usuario.
+- **Al repartidor no le aparece ninguna entrega en el celular**: está vinculado
+  a un responsable que no tiene consignaciones pendientes, o al responsable
+  equivocado. Revise sus vínculos en la ficha del usuario.
 - **"El usuario no tiene asignada esta empresa"**: solo se puede vincular a quien
   ya trabaje en la empresa activa. Asígnesela en Configuración → Usuarios del
   sistema y vuelva a intentarlo.
@@ -208,6 +213,11 @@ validaciones que este módulo: son el mismo proceso por dentro.
   falta vincularlo: ya ve todas las entregas).
 
 ## Historial de cambios
+
+- **1.2** — En el módulo web **Entregas de Consignaciones** el alcance lo define
+  el vínculo, no el permiso: un usuario vinculado ve solo lo de sus responsables;
+  sin vínculo (o nivel 3) ve todas las entregas. La misma regla rige en la app
+  móvil.
 
 - **1.1** — Pestaña *Usuarios vinculados* en el modal (vista inversa del vínculo de
   Usuarios del sistema, editable solo con perfil de administrador) y columna

@@ -7,9 +7,11 @@
  *
  * Permiso separado de "Consignación venta" (modulos/consignaciones-ventas) a
  * propósito: un repartidor puede tener SOLO 'modulos/entregas-consignaciones'
- * asignado, sin ver/crear consignaciones. Sin "acceso total" (t) ve únicamente las
- * consignaciones cuyo responsable de traslado está vinculado a él (tabla
- * usuarios_responsables_traslado) — no es el filtro de "creado por mí" habitual.
+ * asignado, sin ver/crear consignaciones. El alcance lo define el vínculo con
+ * responsables de traslado (config/usuarios-sistema, tabla
+ * usuarios_responsables_traslado), no el flag "acceso total": vinculado ve solo
+ * las consignaciones de sus responsables; sin vínculo (o nivel 3) ve todas. Misma
+ * regla que el módulo web (EntregasConsignacionesService::resolverFiltroResponsables).
  */
 
 declare(strict_types=1);
@@ -17,11 +19,12 @@ declare(strict_types=1);
 namespace App\controllers\api\v1;
 
 use App\controllers\api\ApiBaseController;
-use App\repositories\ApiUsuarioResponsableTrasladoRepository;
 use App\repositories\modulos\ConsignacionVentaRepository;
+use App\repositories\modulos\EntregasConsignacionesRepository;
 use App\Rules\modulos\ConsignacionVentaRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\ConsignacionVentaService;
+use App\Services\modulos\EntregasConsignacionesService;
 use Exception;
 
 class EntregasController extends ApiBaseController
@@ -160,7 +163,7 @@ class EntregasController extends ApiBaseController
      * Corta si la consignación no es de los responsables del usuario.
      *
      * pendientes() ya filtra el listado, pero obtener() y registrar() reciben un id
-     * suelto: sin esto, un repartidor sin "acceso total" podía leer el detalle
+     * suelto: sin esto, un repartidor vinculado a responsables podía leer el detalle
      * completo de cualquier consignación de la empresa (cliente, dirección, productos,
      * precios) y marcarla como entregada con su firma y su GPS, solo probando ids.
      * Responde el mismo 404 que una consignación inexistente: quien no puede verla
@@ -170,7 +173,7 @@ class EntregasController extends ApiBaseController
     {
         $idsResponsables = $this->resolverFiltroResponsables();
         if ($idsResponsables === null) {
-            return;     // acceso total (t)
+            return;     // nivel 3 o usuario sin vínculo: ve todas
         }
 
         $pertenece = (new ConsignacionVentaRepository())->perteneceAResponsables(
@@ -183,15 +186,18 @@ class EntregasController extends ApiBaseController
         }
     }
 
-    /** null = ver todas (acceso total); array (posiblemente vacío) = solo esos responsables. */
+    /**
+     * null = ver todas (nivel 3 o usuario sin vínculo); array = solo esos responsables.
+     * Delegado al service del módulo web para que ambos canales apliquen la misma regla.
+     */
     private function resolverFiltroResponsables(): ?array
     {
-        $perm = $this->getPermisos();
-        if (!empty($perm['todo'])) {
-            return null;
-        }
-        $repo = new ApiUsuarioResponsableTrasladoRepository();
-        return $repo->getIdsResponsablesDeUsuario((int) $_SESSION['id_usuario'], (int) $_SESSION['id_empresa']);
+        $svc = new EntregasConsignacionesService(new EntregasConsignacionesRepository());
+        return $svc->resolverFiltroResponsables(
+            (int) $_SESSION['id_usuario'],
+            (int) $_SESSION['id_empresa'],
+            (int) ($_SESSION['nivel'] ?? 1)
+        );
     }
 
     /** Decodifica la firma (PNG en base64, con o sin prefijo data:) y la guarda en disco. */

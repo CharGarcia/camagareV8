@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco
-version: 1.10
+version: 1.11
 orden: 60
 estado: activo
 ---
@@ -24,6 +24,29 @@ Cada movimiento del banco necesita:
 | Movimiento a clasificar | Obligatorio |
 | Cuenta bancaria | Obligatoria |
 | Tipo de transacción | Debe ser uno de los válidos |
+
+### Beneficiario / Cliente
+
+La columna **Beneficiario / Cliente** del listado (y la misma línea en el
+encabezado del modal al hacer clic en un movimiento) muestra quién está detrás
+de cada movimiento, sea cual sea su tipo:
+
+- En un **ingreso** (depósito, transferencia o cheque recibido): el cliente que
+  pagó. Si el ingreso se registró sin cliente de catálogo, se muestra el nombre
+  escrito en "Recibí de".
+- En un **egreso**: el beneficiario escrito en el cheque; si no lo hay, el
+  proveedor o el empleado al que se le pagó, o el beneficiario libre del egreso.
+
+En el modal, la etiqueta dice **Cliente**, **Proveedor** o **Empleado** según el
+tipo de tercero del movimiento.
+
+### Ingresos y egresos anulados no aparecen
+
+Un ingreso o egreso **anulado** (o eliminado) no se muestra en el listado, no
+entra en el saldo acumulado ni en el resumen del período, y tampoco aparece
+entre los cheques posfechados o en circulación. Esto vale aunque, por algún
+error al anular, su asiento contable haya quedado sin anular: el módulo mira el
+estado del documento de origen, no solo el del asiento.
 
 ### Qué se puede editar aquí y qué no
 
@@ -207,6 +230,13 @@ mayor contable, sin ninguna acción adicional.
 
 ## Historial de cambios
 
+- **1.11** — La columna **Beneficiario** pasa a llamarse **Beneficiario /
+  Cliente** y se llena en todos los movimientos, no solo en los cheques: en un
+  ingreso muestra el cliente que pagó (o el "Recibí de"), en un egreso el
+  beneficiario, proveedor o empleado. El modal del movimiento muestra la misma
+  línea, con la etiqueta Cliente / Proveedor / Empleado según corresponda. Los
+  ingresos y egresos **anulados o eliminados** ya no aparecen en el listado ni
+  suman al saldo, aunque su asiento haya quedado sin anular.
 - **1.10** — Cambio de criterio en el saldo: un cheque solo se descuenta (o
   suma, si es recibido) cuando está registrado como **cobrado**. Mientras no
   tenga Fecha Banco no afecta saldos; cuando la tiene, cuenta en el período de

@@ -336,6 +336,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     </div>
                 </div>
 
+                <!-- Aviso de solo lectura (periodo contable cerrado): lo muestra abrirModalEgresoVer() -->
+                <div id="eg-bloqueo-aviso" class="alert alert-warning small rounded-0 border-0 border-bottom mb-0 py-2 px-3 d-none" role="alert">
+                    <i class="bi bi-lock-fill me-1"></i><span id="eg-bloqueo-aviso-texto"></span>
+                </div>
+
                 <!-- Pestañas Principales -->
                 <div class="d-flex align-items-center bg-light px-3 pt-2">
                     <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsModalEgreso" role="tablist">
@@ -647,6 +652,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     let pagosEgreso = [];
     let pagosAnuladosEgreso = []; // cheques anulados: solo historial, no se editan ni cuentan en el total
     let esEgresoAnulado = false;
+    let esEgresoSoloLectura = false; // anulado O periodo contable cerrado: nada del egreso se edita
     const EGR_URL = '<?= BASE_URL ?>/<?= $rutaModulo ?>';
 
     // ── Modal secundario: selección de documentos pendientes de pago ──────────
@@ -797,6 +803,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.querySelectorAll('.concepto-egreso-btn').forEach(btn => { btn.disabled = disabled; });
         const selGen = document.getElementById('eg-select-concepto-general');
         if (selGen) selGen.disabled = disabled;
+    }
+
+    /**
+     * Modo edición de un egreso guardado: el concepto de cabecera no cambia (define el tipo
+     * del documento y su asiento), pero el botón del concepto ACTIVO queda habilitado para
+     * poder agregar más documentos pendientes del mismo tipo — un nuevo clic sobre el
+     * concepto ya seleccionado reabre el buscador (ver egOnClickConceptoBtn). El resto de
+     * botones y el selector de conceptos generales quedan bloqueados.
+     */
+    function setConceptoEgresoBotonesModoEdicion() {
+        const idActual = document.getElementById('eg-select-concepto').value;
+        document.querySelectorAll('.concepto-egreso-btn').forEach(btn => {
+            const comp = btn.dataset.comportamiento || 'GENERAL';
+            const activoConDocs = btn.dataset.id == idActual && ['COMPRA', 'LIQUIDACION', 'ROL', 'QUINCENA', 'PRESTAMO'].includes(comp);
+            btn.disabled = !activoConDocs;
+        });
+        const selGen = document.getElementById('eg-select-concepto-general');
+        if (selGen) selGen.disabled = true;
     }
 
     function seleccionarConceptoGeneralEgreso(id) {
@@ -1376,7 +1400,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 }
                 if (!txtRef.trim()) txtRef = '-';
 
-                const btnTrash = esEgresoAnulado ? '' : `<button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="pagosEgreso.splice(${i},1);renderPagosEgreso();"><i class="bi bi-trash"></i></button>`;
+                const btnTrash = esEgresoSoloLectura ? '' : `<button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="pagosEgreso.splice(${i},1);renderPagosEgreso();"><i class="bi bi-trash"></i></button>`;
                 // Imprimir cheque: solo para pagos con cheque YA guardados (con id de BD).
                 const btnChq = (p.tipo_operacion_bancaria === 'CHEQUE' && p.id_pago)
                     ? `<button type="button" class="btn btn-link btn-sm text-success p-0 ms-1 align-baseline" title="Imprimir cheque" onclick="imprimirChequeIndividual(${p.id_pago})"><i class="bi bi-printer"></i></button>`
@@ -1398,11 +1422,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         // Fecha real en que el banco lo hizo efectivo (Fecha Banco de Control Bancario).
                         const fechaCobro = p.fecha_banco ? ' el ' + fmtFechaCorta(p.fecha_banco) : '';
                         badgeCobrado = ` <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="Cobrado: el banco lo hizo efectivo (conciliado en Control Bancario)"><i class="bi bi-check-circle-fill"></i> Cobrado${fechaCobro}</span>`;
-                    } else if (!esEgresoAnulado) {
-                        badgeCobrado = ` <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25" title="Aún no se registra la Fecha Banco en Control Bancario: el cheque sigue en circulación"><i class="bi bi-hourglass-split"></i> No cobrado</span>`;
+                    } else if (!esEgresoSoloLectura) {
+                        badgeCobrado =` <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25" title="Aún no se registra la Fecha Banco en Control Bancario: el cheque sigue en circulación"><i class="bi bi-hourglass-split"></i> No cobrado</span>`;
                     }
-                    if (!p.conciliado && !esEgresoAnulado) {
-                        btnEditFecha  = `<button type="button" class="btn btn-link btn-sm text-primary p-0 ms-1 align-baseline" title="Editar fecha de cobro" onclick="editarFechaCobroCheque(${p.id_pago}, '${p.fecha_cobro || ''}', ${i})"><i class="bi bi-calendar-event"></i></button>`;
+                    if (!p.conciliado && !esEgresoSoloLectura) {
+                        btnEditFecha  =`<button type="button" class="btn btn-link btn-sm text-primary p-0 ms-1 align-baseline" title="Editar fecha de cobro" onclick="editarFechaCobroCheque(${p.id_pago}, '${p.fecha_cobro || ''}', ${i})"><i class="bi bi-calendar-event"></i></button>`;
                         btnEditNombre = `<button type="button" class="btn btn-link btn-sm text-secondary p-0 ms-1 align-baseline" title="Nombre a imprimir en el cheque" onclick="editarNombreCheque(${p.id_pago}, ${i})"><i class="bi bi-person-gear"></i></button>`;
                         btnAnular     = `<button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1 align-baseline" title="Anular este cheque" onclick="anularChequeEgreso(${p.id_pago}, ${i})"><i class="bi bi-ban"></i></button>`;
                     }
@@ -1765,6 +1789,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (esNuevo) document.getElementById('tab-egreso-gen-btn')?.click();
 
         esEgresoAnulado = false;
+        esEgresoSoloLectura = false;
+        document.getElementById('eg-bloqueo-aviso')?.classList.add('d-none');
         const btnG = document.getElementById('btnGuardarEgreso');
         btnG.classList.remove('d-none');
         btnG.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
@@ -1806,6 +1832,87 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         m.show();
     }
 
+    /**
+     * Arma el detalle del egreso (documentos pendientes + "otros conceptos") a partir del
+     * estado del modal, con las mismas validaciones tanto al REGISTRAR como al EDITAR un
+     * egreso guardado. Devuelve null si algo no cuadra (ya avisó al usuario con Swal).
+     */
+    function egConstruirDetalles() {
+        // Documentos pendientes (Compra/Liquidación/Nómina) y "Otros conceptos" (líneas
+        // manuales) se combinan en el mismo egreso: ya no son excluyentes.
+        const docsSel = docsEgreso.filter(d => d.seleccionado && d.pagado > 0);
+        const manualCon = manualEgreso.filter(m => m.desc.trim() !== '' || m.monto > 0);
+
+        if (docsSel.length === 0 && manualCon.length === 0) {
+            Swal.fire('Atención', 'Agregue al menos un documento pendiente o un concepto/ítem manual.', 'warning');
+            return null;
+        }
+
+        if (manualCon.some(m => m.monto <= 0)) {
+            Swal.fire('Atención', 'Todos los montos en la cuadrícula de "Otros conceptos" deben ser superiores a cero.', 'warning');
+            return null;
+        }
+
+        // Validar que ningún abono de documento supere el límite permitido
+        const invalido = docsSel.find(s => s.pagado > s.pendiente + 0.01);
+        if (invalido) {
+            Swal.fire('Monto Inválido', `El monto a pagar ($${invalido.pagado.toFixed(2)}) en el documento ${invalido.numero} no puede superar su saldo pendiente de $${invalido.pendiente.toFixed(2)}.`, 'warning');
+            return null;
+        }
+
+        // Si se mezcla un documento de módulo con líneas manuales, cada línea manual debe
+        // traer SU PROPIA cuenta contable: si no, heredaría por defecto la cuenta "oficial"
+        // del último concepto tocado (p. ej. Cuentas por Pagar de la compra), clasificando
+        // mal un gasto que no tiene nada que ver con esa cartera.
+        if (docsSel.length > 0 && manualCon.length > 0) {
+            const sinCuenta = manualCon.find(m => !m.id_cuenta);
+            if (sinCuenta) {
+                Swal.fire('Falta cuenta contable', `Indique la cuenta contable de la línea "${sinCuenta.desc || 'Otros conceptos'}": al combinarla con un documento (compra, liquidación, etc.) no se puede asumir una cuenta por defecto.`, 'warning');
+                return null;
+            }
+        }
+
+        const detalles = [];
+
+        manualCon.forEach(m => {
+            detalles.push({ tipo_documento: 'MANUAL', descripcion: m.desc, monto_documento: m.monto, saldo_anterior: m.monto, monto_pagado: m.monto, saldo_actual: 0, id_cuenta_contable: m.id_cuenta || null });
+        });
+
+        docsSel.forEach(s => {
+            if (Array.isArray(s.items) && s.items.length > 0) {
+                // Un renglón por ítem pagado (mismo documento; el saldo se calcula por SUMA)
+                s.items.forEach(it => {
+                    if ((it.pagado || 0) <= 0) return;
+                    const tItem = it.total || it.pagado;
+                    detalles.push({
+                        tipo_documento: s.tipo_bd,
+                        id_referencia_documento: s.id,
+                        numero_documento: s.numero,
+                        fecha_documento: s.fecha || '',
+                        descripcion: `${s.numero} · ${it.desc}`,
+                        monto_documento: tItem,
+                        saldo_anterior: tItem,
+                        monto_pagado: it.pagado,
+                        saldo_actual: Math.max(0, tItem - it.pagado)
+                    });
+                });
+            } else {
+                detalles.push({
+                    tipo_documento: s.tipo_bd,
+                    id_referencia_documento: s.id,
+                    numero_documento: s.numero,
+                    fecha_documento: s.fecha || '',
+                    monto_documento: s.total,
+                    saldo_anterior: s.pendiente,
+                    monto_pagado: s.pagado,
+                    saldo_actual: s.pendiente - s.pagado
+                });
+            }
+        });
+
+        return { detalles, docsSel };
+    }
+
     async function guardarEgreso() {
         const tS = document.getElementById('eg-select-tipo-sujeto').value;
         const inputFec = document.getElementById('eg-input-fecha').value;
@@ -1845,70 +1952,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         if (!data.id_egreso_concepto) { Swal.fire('Requerido', 'Debe seleccionar el Concepto del Egreso.', 'warning'); return; }
 
-        // Documentos pendientes (Compra/Liquidación/Nómina) y "Otros conceptos" (líneas
-        // manuales) se combinan en el mismo egreso: ya no son excluyentes.
-        const docsSel = docsEgreso.filter(d => d.seleccionado && d.pagado > 0);
-        const manualCon = manualEgreso.filter(m => m.desc.trim() !== '' || m.monto > 0);
-
-        if (docsSel.length === 0 && manualCon.length === 0) {
-            Swal.fire('Atención', 'Agregue al menos un documento pendiente o un concepto/ítem manual.', 'warning');
-            return;
-        }
-
-        // Validar que ningún abono de documento supere el límite permitido
-        const invalido = docsSel.find(s => s.pagado > s.pendiente + 0.01);
-        if (invalido) {
-            Swal.fire('Monto Inválido', `El monto a pagar ($${invalido.pagado.toFixed(2)}) en el documento ${invalido.numero} no puede superar su saldo pendiente de $${invalido.pendiente.toFixed(2)}.`, 'warning');
-            return;
-        }
-
-        // Si se mezcla un documento de módulo con líneas manuales, cada línea manual debe
-        // traer SU PROPIA cuenta contable: si no, heredaría por defecto la cuenta "oficial"
-        // del último concepto tocado (p. ej. Cuentas por Pagar de la compra), clasificando
-        // mal un gasto que no tiene nada que ver con esa cartera.
-        if (docsSel.length > 0 && manualCon.length > 0) {
-            const sinCuenta = manualCon.find(m => !m.id_cuenta);
-            if (sinCuenta) {
-                Swal.fire('Falta cuenta contable', `Indique la cuenta contable de la línea "${sinCuenta.desc || 'Otros conceptos'}": al combinarla con un documento (compra, liquidación, etc.) no se puede asumir una cuenta por defecto.`, 'warning');
-                return;
-            }
-        }
-
-        manualCon.forEach(m => {
-            data.detalles.push({ tipo_documento: 'MANUAL', descripcion: m.desc, monto_documento: m.monto, saldo_anterior: m.monto, monto_pagado: m.monto, saldo_actual: 0, id_cuenta_contable: m.id_cuenta || null });
-        });
-
-        docsSel.forEach(s => {
-            if (Array.isArray(s.items) && s.items.length > 0) {
-                // Un renglón por ítem pagado (mismo documento; el saldo se calcula por SUMA)
-                s.items.forEach(it => {
-                    if ((it.pagado || 0) <= 0) return;
-                    const tItem = it.total || it.pagado;
-                    data.detalles.push({
-                        tipo_documento: s.tipo_bd,
-                        id_referencia_documento: s.id,
-                        numero_documento: s.numero,
-                        fecha_documento: s.fecha || '',
-                        descripcion: `${s.numero} · ${it.desc}`,
-                        monto_documento: tItem,
-                        saldo_anterior: tItem,
-                        monto_pagado: it.pagado,
-                        saldo_actual: Math.max(0, tItem - it.pagado)
-                    });
-                });
-            } else {
-                data.detalles.push({
-                    tipo_documento: s.tipo_bd,
-                    id_referencia_documento: s.id,
-                    numero_documento: s.numero,
-                    fecha_documento: s.fecha || '',
-                    monto_documento: s.total,
-                    saldo_anterior: s.pendiente,
-                    monto_pagado: s.pagado,
-                    saldo_actual: s.pendiente - s.pagado
-                });
-            }
-        });
+        const construido = egConstruirDetalles();
+        if (!construido) return;
+        const docsSel = construido.docsSel;
+        data.detalles = construido.detalles;
 
         data.monto_total = data.detalles.reduce((a,b)=>a+b.monto_pagado,0);
         const sumPag = pagosEgreso.reduce((a,b)=>a+b.monto,0);
@@ -2015,7 +2062,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if(!res.ok) return alert(res.mensaje);
             const e = res.data;
             abrirModalEgreso(false);
-            document.getElementById('modalEgresoTitulo').textContent = `Ver Egreso #${e.numero_egreso}`;
+            // Periodo contable cerrado (lo calcula el servidor con la misma regla que aplica al
+            // guardar/anular): el modal abre en solo lectura y avisa el motivo, en vez de dejar
+            // editar y rechazar recién al pulsar Actualizar.
+            const periodoCerrado = (e.periodo_cerrado === true || e.periodo_cerrado === 't' || e.periodo_cerrado === 1 || e.periodo_cerrado === '1');
+            esEgresoAnulado     = (e.estado === 'anulado');
+            esEgresoSoloLectura = esEgresoAnulado || periodoCerrado;
+            document.getElementById('modalEgresoTitulo').textContent = esEgresoSoloLectura ? `Ver Egreso #${e.numero_egreso}` : `Editar Egreso #${e.numero_egreso}`;
+            document.getElementById('modalEgresoIcono').className = esEgresoSoloLectura ? 'bi bi-eye text-primary me-2' : 'bi bi-pencil-square text-primary me-2';
             document.getElementById('eg-input-id').value = e.id;
             document.getElementById('btnPdfEgreso').classList.remove('d-none');
             document.getElementById('btnExcelEgreso').classList.remove('d-none');
@@ -2138,38 +2192,47 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 anulado_cheque_at: p.anulado_cheque_at
             }));
 
-            esEgresoAnulado = (e.estado === 'anulado');
-            
             const btnGuardar = document.getElementById('btnGuardarEgreso');
-            
-            if (esEgresoAnulado) {
+
+            if (esEgresoSoloLectura) {
+                // Modo estrictamente solo lectura: anulado o periodo contable cerrado
                 setControlesGeneralesHabilitados(false);
+                setConceptoEgresoBotonesDisabled(true);
                 btnGuardar.classList.add('d-none');
-                document.getElementById('modalEgresoTitulo').innerHTML += ' <span class="badge bg-danger ms-2">ANULADO</span>';
                 setPagosControlesHabilitados(false);
                 document.getElementById('eg-input-fecha').disabled = true;
+                if (esEgresoAnulado) {
+                    document.getElementById('modalEgresoTitulo').innerHTML += ' <span class="badge bg-danger ms-2">ANULADO</span>';
+                }
+                if (periodoCerrado) {
+                    document.getElementById('modalEgresoTitulo').innerHTML += ' <span class="badge bg-warning text-dark ms-2">PERIODO CERRADO</span>';
+                    const aviso    = document.getElementById('eg-bloqueo-aviso');
+                    const avisoTxt = document.getElementById('eg-bloqueo-aviso-texto');
+                    if (avisoTxt) avisoTxt.textContent = esEgresoAnulado
+                        ? 'Este egreso está anulado y su periodo contable está cerrado: es de solo lectura.'
+                        : 'El periodo contable de este egreso está cerrado: es de solo lectura, no puede editarse ni anularse. Para corregirlo, reabra el periodo en Contabilidad → Periodos Contables o registre el ajuste en un periodo abierto.';
+                    aviso?.classList.remove('d-none');
+                }
             } else {
-                // NO ESTÁ ANULADO: Habilitar botón "Actualizar"
+                // EDITABLE (periodo abierto y no anulado), para CUALQUIER tipo de egreso: fecha,
+                // beneficiario, observaciones, documentos pagados y sus montos, otros conceptos y
+                // formas de pago. Solo queda fija la identidad del documento: serie, secuencial y
+                // concepto de cabecera. El servidor vuelve a validar el periodo (original y nuevo)
+                // y el saldo real de cada documento al guardar.
                 btnGuardar.classList.remove('d-none');
                 btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Actualizar';
                 btnGuardar.onclick = () => actualizarPagosEgreso();
                 setPagosControlesHabilitados(true);
-                
-                if (['GENERAL', 'ANTICIPO_PROVEEDOR'].includes(comp)) {
-                    // Regla del Usuario: Para egresos generales, permitir modificar todo EXCEPTO concepto, serie y secuencial
-                    document.getElementById('eg-select-punto').disabled = true;
-                    document.getElementById('eg-select-concepto').disabled = true;
-                    document.getElementById('eg-input-secuencial').disabled = true;
 
-                    document.getElementById('eg-select-tipo-sujeto').disabled = false; // SÍ modificar tipo de sujeto
-                    document.getElementById('eg-search-input').disabled = false;      // SÍ buscar/cambiar sujeto
-                    document.getElementById('eg-input-obs').disabled = false;          // SÍ cambiar observaciones
-                    document.getElementById('eg-input-fecha').disabled = false;        // SÍ cambiar fecha
-                } else {
-                    // Para egresos ligados a módulos (COMPRA/LIQUIDACION), mantener bloqueo clásico estricto
-                    setControlesGeneralesHabilitados(false);
-                    document.getElementById('eg-input-fecha').disabled = false; // ¡Fecha sí es modificable!
-                }
+                document.getElementById('eg-select-punto').disabled = true;
+                document.getElementById('eg-select-concepto').disabled = true;
+                document.getElementById('eg-input-secuencial').disabled = true;
+                setConceptoEgresoBotonesModoEdicion(); // solo el concepto activo, para agregar más documentos del mismo tipo
+
+                document.getElementById('eg-select-tipo-sujeto').disabled = false;
+                document.getElementById('eg-search-input').disabled = false;
+                document.getElementById('eg-input-obs').disabled = false;
+                document.getElementById('eg-input-fecha').disabled = false;
             }
 
             // Render único (ambos bloques: documentos + otros conceptos), ya con
@@ -2178,7 +2241,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             renderPagosEgreso();
             recalcEgresoTot();
 
-            if(e.estado !== 'anulado') document.getElementById('eg-footer-ver-extra').classList.remove('d-none');
+            // Anular solo cuando se puede editar (no anulado y periodo abierto).
+            if (!esEgresoSoloLectura) document.getElementById('eg-footer-ver-extra').classList.remove('d-none');
 
             // Cargar el asiento contable generado para este egreso
             cargarAsientoContableEgreso(e.id);
@@ -2254,11 +2318,35 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             return;
         }
 
+        // Edición completa, para CUALQUIER tipo de egreso: beneficiario, observaciones,
+        // documentos pagados / otros conceptos (mismo armado y validaciones que al registrar)
+        // y formas de pago. El servidor (EgresoService::actualizarPagos) reescribe el detalle,
+        // revalida periodo contable y saldo real de cada documento, y regenera el asiento.
+        const valSujeto = document.getElementById('eg-input-id-sujeto').value;
+        if (!valSujeto) {
+            Swal.fire('Requerido', 'Debe seleccionar un Beneficiario (Proveedor/Empleado) válido.', 'warning');
+            return;
+        }
+
+        const construido = egConstruirDetalles();
+        if (!construido) return;
+
+        // La fecha de emisión no puede ser anterior a la de los documentos que paga
+        for (const d of construido.docsSel) {
+            if (d.fecha && inputFecEdit < d.fecha) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Fecha inválida',
+                    html: `La fecha de emisión del egreso no puede ser anterior a la fecha del documento <strong>${d.numero}</strong> (${d.fecha.split('-').reverse().join('/')}).`
+                });
+                return;
+            }
+        }
+
+        const montoTotal = construido.detalles.reduce((a, b) => a + b.monto_pagado, 0);
         const sumPag = pagosEgreso.reduce((a, b) => a + b.monto, 0);
-        const totalEg = parseFloat(document.getElementById('eg-final-total').innerText.replace('$ ', '')) || 0;
-        
-        if (Math.abs(sumPag - totalEg) > 0.01) {
-            Swal.fire('Inconsistencia', 'La suma de las formas de pago ($' + sumPag.toFixed(2) + ') no coincide con el total del egreso ($' + totalEg.toFixed(2) + ').', 'error');
+        if (Math.abs(sumPag - montoTotal) > 0.01) {
+            Swal.fire('Inconsistencia', 'La suma de las formas de pago ($' + sumPag.toFixed(2) + ') no coincide con el total del egreso ($' + montoTotal.toFixed(2) + ').', 'error');
             return;
         }
 
@@ -2267,10 +2355,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Actualizando...';
 
-        const comp = document.getElementById('eg-input-tipo-egreso').value;
+        const ts = document.getElementById('eg-select-tipo-sujeto').value;
         const payload = {
             id: id,
-            fecha_emision: document.getElementById('eg-input-fecha').value,
+            fecha_emision: inputFecEdit,
+            tipo_sujeto: ts,
+            id_proveedor: ts === 'PROVEEDOR' ? valSujeto : null,
+            id_empleado: ts === 'EMPLEADO' ? valSujeto : null,
+            observaciones: document.getElementById('eg-input-obs').value,
+            detalles: construido.detalles,
+            monto_total: montoTotal,
             pagos: pagosEgreso.map(p => ({
                 id_forma_pago: p.id_forma,
                 monto: p.monto,
@@ -2281,54 +2375,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 beneficiario_cheque: p.beneficiario_cheque
             }))
         };
-
-        // Si es egreso general o anticipo a proveedor (entrada manual), integramos y validamos datos extendidos
-        if (['GENERAL', 'ANTICIPO_PROVEEDOR'].includes(comp)) {
-            const valSujeto = document.getElementById('eg-input-id-sujeto').value;
-            if (!valSujeto) {
-                Swal.fire('Requerido', 'Debe seleccionar un Beneficiario (Proveedor/Empleado) válido.', 'warning');
-                btn.disabled = false;
-                btn.innerHTML = oldHtml;
-                return;
-            }
-
-            // Filtrar conceptos en blanco
-            const finalDets = manualEgreso.filter(d => d.desc.trim() !== '' || d.monto > 0);
-            if (finalDets.length === 0) {
-                Swal.fire('Requerido', 'Debe registrar al menos un concepto y monto válido.', 'warning');
-                btn.disabled = false;
-                btn.innerHTML = oldHtml;
-                return;
-            }
-
-            // Validar montos positivos
-            if (finalDets.some(d => d.monto <= 0)) {
-                Swal.fire('Atención', 'Todos los montos en la cuadrícula deben ser superiores a cero.', 'warning');
-                btn.disabled = false;
-                btn.innerHTML = oldHtml;
-                return;
-            }
-
-            const ts = document.getElementById('eg-select-tipo-sujeto').value;
-            payload.es_general = true;
-            payload.tipo_sujeto = ts;
-            payload.id_proveedor = ts === 'PROVEEDOR' ? valSujeto : null;
-            payload.id_empleado = ts === 'EMPLEADO' ? valSujeto : null;
-            payload.observaciones = document.getElementById('eg-input-obs').value;
-            
-            payload.detalles = finalDets.map(d => ({
-                tipo_documento: 'MANUAL',
-                descripcion: d.desc,
-                monto_documento: d.monto,
-                saldo_anterior: d.monto,
-                monto_pagado: d.monto,
-                saldo_actual: 0,
-                id_cuenta_contable: d.id_cuenta || null
-            }));
-
-            // Recalcular el monto_total de los conceptos para enviarlo a la API
-            payload.monto_total = payload.detalles.reduce((a, b) => a + b.monto_pagado, 0);
-        }
 
         fetch(`${EGR_URL}/actualizarPagosAjax`, {
             method: 'POST',

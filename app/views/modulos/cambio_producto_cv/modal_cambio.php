@@ -107,8 +107,8 @@
                             <span id="cam_dev_info" class="small text-muted"></span>
                         </div>
                         <div class="position-relative mb-2" id="cam_dev_search_wrap">
-                            <input type="text" id="cam_dev_busqueda" class="form-control form-control-sm" placeholder="Buscar producto facturado o cambiado..." oninput="camBuscarLineas(this.value)" autocomplete="off" disabled>
-                            <div id="cam_dev_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1075; max-height:240px; overflow:auto;"></div>
+                            <input type="text" id="cam_dev_busqueda" class="form-control form-control-sm" placeholder="NUP, lote, N° de factura o de cambio, código o nombre del producto… (sin cliente busca en todos y lo fija con el ítem elegido)" oninput="camBuscarLineas(this.value)" onfocus="camBuscarLineas(this.value, true)" autocomplete="off">
+                            <div id="cam_dev_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1075; max-height:320px; overflow:auto;"></div>
                         </div>
                         <div class="table-responsive border rounded-3 bg-white" style="max-height:26vh; overflow:auto;">
                             <table class="table table-sm table-hover mb-0 align-middle" id="tablaCamDev">
@@ -137,24 +137,26 @@
                             <span id="cam_ent_info" class="small text-muted"></span>
                         </div>
                         <div class="position-relative mb-2" id="cam_ent_search_wrap">
-                            <input type="text" id="cam_ent_busqueda" class="form-control form-control-sm" placeholder="Buscar producto del catálogo..." oninput="camBuscarProductos(this.value)" autocomplete="off">
-                            <div id="cam_ent_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1075; max-height:240px; overflow:auto;"></div>
+                            <input type="text" id="cam_ent_busqueda" class="form-control form-control-sm" placeholder="N° de consignación, NUP, lote, código o nombre del producto… (consignaciones del cliente, existencias por bodega y catálogo)" oninput="camBuscarEntregas(this.value)" onfocus="camBuscarEntregas(this.value, true)" autocomplete="off">
+                            <div id="cam_ent_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1075; max-height:320px; overflow:auto;"></div>
                         </div>
                         <div class="table-responsive border rounded-3 bg-white" style="max-height:26vh; overflow:auto;">
                             <table class="table table-sm table-hover mb-0 align-middle" id="tablaCamEnt">
                                 <thead class="table-light">
                                     <tr class="small">
+                                        <th style="width:130px">Origen</th>
                                         <th>Producto</th>
-                                        <th style="width:150px">Bodega</th>
-                                        <th class="text-end" style="width:110px">Precio</th>
-                                        <th class="text-end" style="width:70px">IVA %</th>
-                                        <th class="text-end" style="width:100px">Cantidad</th>
+                                        <th style="width:140px">Bodega</th>
+                                        <th style="width:160px">Lote / NUP</th>
+                                        <th class="text-end" style="width:100px">Precio</th>
+                                        <th class="text-end" style="width:65px">IVA %</th>
+                                        <th class="text-end" style="width:90px">Cantidad</th>
                                         <th class="text-end" style="width:90px">Total</th>
                                         <th style="width:34px"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="cam_ent_body">
-                                    <tr><td colspan="7" class="text-center text-muted py-3">Busque un producto del catálogo para entregar.</td></tr>
+                                    <tr><td colspan="9" class="text-center text-muted py-3">Busque por N° de consignación, NUP, lote o producto lo que se entrega a cambio.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -242,20 +244,18 @@
     }
     function vaciarEnt() {
         document.getElementById('cam_ent_body').innerHTML =
-            '<tr class="cam-ent-empty"><td colspan="7" class="text-center text-muted py-3">Busque un producto del catálogo para entregar.</td></tr>';
+            '<tr class="cam-ent-empty"><td colspan="9" class="text-center text-muted py-3">Busque por N° de consignación, NUP, lote o producto lo que se entrega a cambio.</td></tr>';
         document.getElementById('cam_ent_info').textContent = '';
     }
 
     function setCamposEditables(editable) {
+        // Los dos buscadores funcionan también SIN cliente: el ítem se localiza por NUP,
+        // lote o número de documento y el cliente del cambio se fija con el ítem elegido.
         ['cam_select_serie','cam_fecha_cambio','cam_cliente_busqueda','cam_motivo','cam_observaciones',
          'cam_dev_busqueda','cam_ent_busqueda'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.disabled = !editable;
         });
-        // La búsqueda de devoluciones requiere además un cliente seleccionado.
-        if (editable && !document.getElementById('cam_id_cliente').value) {
-            document.getElementById('cam_dev_busqueda').disabled = true;
-        }
         document.getElementById('btnGuardarCambio').classList.toggle('d-none', !editable);
     }
 
@@ -498,14 +498,23 @@
         document.getElementById('cam_cliente_email').value = '';
         document.getElementById('cam_clientes_dropdown').classList.add('d-none');
         clearTimeout(camClientesTimer);
-        vaciarDev();
-        const busqDev = document.getElementById('cam_dev_busqueda');
-        busqDev.value = '';
-        busqDev.disabled = true;
+        camQuitarLineasDelCliente();
+        document.getElementById('cam_dev_busqueda').value = '';
         document.getElementById('cam_dev_dropdown').classList.add('d-none');
         camRecalcular();
     }
     window.camLimpiarCliente = camLimpiarCliente;
+
+    /**
+     * Quita las líneas que dependen del cliente: todas las devoluciones (vienen de SUS
+     * facturas/cambios) y las entregas tomadas de una consignación (de SU consignación).
+     * Las entregas desde bodega/catálogo no dependen del cliente y se conservan.
+     */
+    function camQuitarLineasDelCliente() {
+        vaciarDev();
+        document.querySelectorAll('#cam_ent_body tr[data-key^="CONSIGNACION-"]').forEach(tr => tr.remove());
+        if (!document.querySelector('#cam_ent_body tr[data-prod]')) vaciarEnt();
+    }
 
     // Con un cliente ya fijado el input muestra una etiqueta ("identificación — nombre"):
     // Backspace/Delete limpian TODA la selección de una vez, no letra por letra
@@ -518,13 +527,15 @@
     });
 
     function camSeleccionarCliente(c) {
+        const prev = document.getElementById('cam_id_cliente').value;
         document.getElementById('cam_id_cliente').value = c.id;
         document.getElementById('cam_cliente_email').value = c.email || '';
         document.getElementById('cam_cliente_busqueda').value = (c.identificacion || '') + ' — ' + (c.nombre || '');
         document.getElementById('cam_clientes_dropdown').classList.add('d-none');
-        // Al cambiar de cliente, se limpian las devoluciones (dependen del cliente).
-        vaciarDev();
-        document.getElementById('cam_dev_busqueda').disabled = false;
+        // Al CAMBIAR de cliente se limpian las líneas que dependen de él (devoluciones y
+        // entregas desde consignación). Si el cliente se fija por primera vez a partir de un
+        // ítem buscado por NUP / número, no hay nada que limpiar.
+        if (prev && String(prev) !== String(c.id)) camQuitarLineasDelCliente();
         camRecalcular();
     }
 
@@ -537,47 +548,140 @@
         });
     });
 
+    // ─── Helpers compartidos por los dos buscadores ───────────────────────────
+    function camSwal(opts) {
+        return Swal.fire(Object.assign({ target: document.getElementById('modalCambio') }, opts));
+    }
+    function camFechaCorta(f) {
+        return f ? String(f).slice(0, 10).split('-').reverse().join('-') : '';
+    }
+    function camLabelOrigen(t) {
+        return t === 'CAMBIO' ? 'Cambio' : (t === 'CONSIGNACION' ? 'Consignación' : (t === 'FACTURA' ? 'Factura' : 'Bodega'));
+    }
+    function camBadgeOrigen(t, texto) {
+        const cls = t === 'CAMBIO' ? 'bg-info' : (t === 'CONSIGNACION' ? 'bg-warning' : (t === 'FACTURA' ? 'bg-secondary' : 'bg-primary'));
+        return `<span class="badge ${cls} bg-opacity-25 text-dark">${esc(texto != null ? texto : camLabelOrigen(t))}</span>`;
+    }
+    function camLoteNup(l) {
+        return [l.lote, l.nup].filter(Boolean).join(' / ') || '—';
+    }
+
+    /**
+     * Fija el cliente del cambio a partir de una línea (factura, cambio previo o
+     * consignación) cuando todavía no hay cliente: así se puede empezar por el NUP o
+     * por el número del documento. Devuelve false si la línea es de OTRO cliente.
+     */
+    function camAsegurarClienteDeLinea(l) {
+        if (!l.id_cliente) return true; // existencias / catálogo: no dependen del cliente
+        const actual = document.getElementById('cam_id_cliente').value;
+        if (!actual) {
+            camSeleccionarCliente({ id: l.id_cliente, nombre: l.cliente_nombre, identificacion: l.cliente_identificacion, email: l.cliente_email });
+            return true;
+        }
+        if (String(actual) !== String(l.id_cliente)) {
+            camSwal({
+                icon: 'warning', title: 'Es de otro cliente',
+                html: `El documento <strong>${esc(l.doc_numero || '')}</strong> pertenece a <strong>${esc(l.cliente_nombre || 'otro cliente')}</strong>.<br>Un cambio es de un solo cliente: quite el cliente actual (Backspace en el campo Cliente) o registre otro cambio.`
+            });
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Pinta un dropdown AGRUPADO POR DOCUMENTO (factura / cambio / consignación): una
+     * cabecera por documento con "Agregar todos" y, debajo, cada ítem del documento por
+     * separado (el cambio se hace por unidad / NUP, así que cada uno se agrega solo).
+     * opts: { mostrarCliente, existe(l) → bool, onAdd(l, silencioso) }
+     */
+    function camRenderGrupos(dd, rows, opts) {
+        const grupos = new Map();
+        rows.forEach(l => {
+            const g = l.origen_tipo + '-' + l.id_origen;
+            if (!grupos.has(g)) grupos.set(g, { tipo: l.origen_tipo, numero: l.doc_numero, fecha: l.doc_fecha, cliente: l.cliente_nombre, items: [] });
+            grupos.get(g).items.push(l);
+        });
+        grupos.forEach(g => {
+            const head = document.createElement('div');
+            head.className = 'list-group-item py-1 bg-light d-flex align-items-center gap-2 flex-wrap';
+            head.innerHTML = `${camBadgeOrigen(g.tipo)}
+                <span class="small fw-semibold">${esc(g.numero || '')}</span>
+                <span class="small text-muted">${camFechaCorta(g.fecha)}</span>
+                ${opts.mostrarCliente && g.cliente ? `<span class="small text-muted">· ${esc(g.cliente)}</span>` : ''}
+                <span class="small text-muted ms-auto">${g.items.length} ítem(s)</span>`;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-outline-primary btn-sm py-0 px-1';
+            btn.style.fontSize = '.7rem';
+            btn.innerHTML = '<i class="bi bi-plus-lg"></i> Agregar todos';
+            btn.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); g.items.forEach(l => opts.onAdd(l, true)); dd.classList.add('d-none'); };
+            head.appendChild(btn);
+            dd.appendChild(head);
+
+            g.items.forEach(l => {
+                const ya = opts.existe(l);
+                const a = document.createElement('a');
+                a.href = '#';
+                a.className = 'list-group-item list-group-item-action py-1 ps-4' + (ya ? ' text-muted' : '');
+                a.innerHTML = `<i class="bi bi-plus-circle text-primary me-1"></i>
+                    <span class="small fw-semibold">${esc(l.producto_codigo ? l.producto_codigo + ' · ' : '')}${esc(l.producto_nombre)}</span>
+                    <span class="small text-muted ms-1">Lote/NUP: ${esc(camLoteNup(l))}</span>
+                    <span class="small text-success ms-1">Saldo: ${fmt(l.saldo_pendiente, DEC_C)}</span>
+                    ${l.bodega_nombre ? `<span class="small text-muted ms-1">· ${esc(l.bodega_nombre)}</span>` : ''}
+                    ${ya ? '<span class="badge bg-secondary bg-opacity-10 text-secondary ms-1">ya agregada</span>' : ''}`;
+                a.onclick = (ev) => { ev.preventDefault(); opts.onAdd(l, false); dd.classList.add('d-none'); };
+                dd.appendChild(a);
+            });
+        });
+    }
+
     // ─── Devoluciones (buscar líneas de origen y agregar) ─────────────────────
-    window.camBuscarLineas = function (q) {
+    // Busca por NUP, lote, número de factura / cambio (completo o solo el secuencial) o
+    // producto. Con cliente fijado acota a ese cliente (y con el campo vacío lista todo lo
+    // pendiente del cliente); sin cliente busca en todos y el ítem elegido fija el cliente.
+    window.camBuscarLineas = function (q, desdeFocus) {
         clearTimeout(camDevTimer);
         const dd = document.getElementById('cam_dev_dropdown');
         const idCliente = document.getElementById('cam_id_cliente').value;
-        if (!idCliente) { dd.classList.add('d-none'); return; }
-        if (!q || q.length < 2) { dd.classList.add('d-none'); return; }
+        q = (q || '').trim();
+        if (!q && !idCliente) { dd.classList.add('d-none'); return; }
+        if (q && q.length < 2 && !idCliente) { dd.classList.add('d-none'); return; }
         camDevTimer = setTimeout(async () => {
             const excl = document.getElementById('cam_id').value || 0;
-            const res = await fetch(`${RUTA}/buscarLineasOrigenAjax?id_cliente=${idCliente}&excluir=${excl}&q=${encodeURIComponent(q)}`);
+            const res = await fetch(`${RUTA}/buscarLineasOrigenAjax?id_cliente=${idCliente || 0}&excluir=${excl}&q=${encodeURIComponent(q)}`);
             const data = await res.json();
             dd.innerHTML = '';
-            (data.data || []).forEach(l => {
-                const ori = (l.origen_tipo === 'CAMBIO' ? 'Cambio' : 'Factura') + ' ' + (l.doc_numero || '');
-                const a = document.createElement('a');
-                a.href = '#'; a.className = 'list-group-item list-group-item-action py-1';
-                a.innerHTML = `<span class="badge ${l.origen_tipo === 'CAMBIO' ? 'bg-info' : 'bg-secondary'} bg-opacity-25 text-dark small me-1">${esc(ori)}</span>
-                               <span class="small fw-semibold">${esc(l.producto_codigo ? l.producto_codigo + ' · ' : '')}${esc(l.producto_nombre)}</span>
-                               <span class="small text-success ms-1">Saldo: ${fmt(l.saldo_pendiente, DEC_C)}</span>`;
-                a.onclick = (ev) => { ev.preventDefault(); camAgregarDevolucion(l); dd.classList.add('d-none'); document.getElementById('cam_dev_busqueda').value=''; };
-                dd.appendChild(a);
-            });
-            if (!data.data || !data.data.length) {
-                dd.innerHTML = '<span class="list-group-item small text-muted">Sin líneas con saldo pendiente.</span>';
+            if (!data.ok) {
+                dd.innerHTML = `<span class="list-group-item small text-danger">${esc(data.error || 'No se pudo buscar.')}</span>`;
+                dd.classList.remove('d-none');
+                return;
+            }
+            const rows = data.data || [];
+            if (!rows.length) {
+                dd.innerHTML = '<span class="list-group-item small text-muted">Sin ítems con saldo pendiente para esa búsqueda.</span>';
+            } else {
+                camRenderGrupos(dd, rows, {
+                    mostrarCliente: !idCliente,
+                    existe: (l) => !!document.querySelector(`#cam_dev_body tr[data-key="${l.origen_tipo}-${l.id_origen_detalle}"]`),
+                    onAdd: (l, silencioso) => { camAgregarDevolucion(l, silencioso); document.getElementById('cam_dev_busqueda').value = ''; }
+                });
             }
             dd.classList.remove('d-none');
-        }, 300);
+        }, desdeFocus ? 0 : 300);
     };
 
-    function camAgregarDevolucion(l) {
+    function camAgregarDevolucion(l, silencioso) {
+        if (!camAsegurarClienteDeLinea(l)) return;
         const key = l.origen_tipo + '-' + l.id_origen_detalle;
         if (document.querySelector(`#cam_dev_body tr[data-key="${key}"]`)) {
-            Swal.fire({ icon: 'info', title: 'Ya agregada', text: 'Esa línea ya está en la lista.', timer: 1200, showConfirmButton: false, target: document.getElementById('modalCambio') });
+            if (!silencioso) camSwal({ icon: 'info', title: 'Ya agregada', text: 'Esa línea ya está en la lista.', timer: 1200, showConfirmButton: false });
             return;
         }
         const empty = document.querySelector('#cam_dev_body .cam-dev-empty');
         if (empty) empty.parentElement.removeChild(empty);
 
         const saldo = num(l.saldo_pendiente);
-        const ori = (l.origen_tipo === 'CAMBIO' ? 'Cambio' : 'Factura') + ' ' + (l.doc_numero || '');
-        const loteNup = [l.lote, l.nup].filter(Boolean).join(' / ') || '—';
+        const ori = camLabelOrigen(l.origen_tipo) + ' ' + (l.doc_numero || '');
         const tr = document.createElement('tr');
         tr.setAttribute('data-key', key);
         tr.dataset.origenTipo = l.origen_tipo;
@@ -586,9 +690,9 @@
         tr.dataset.precio = num(l.precio_unitario);
         tr.dataset.porc = num(l.porcentaje_impuesto);
         tr.innerHTML = `
-            <td class="small"><span class="badge ${l.origen_tipo === 'CAMBIO' ? 'bg-info' : 'bg-secondary'} bg-opacity-25 text-dark">${esc(ori)}</span></td>
+            <td class="small">${camBadgeOrigen(l.origen_tipo, ori)}</td>
             <td class="small">${esc(l.producto_codigo ? l.producto_codigo + ' · ' : '')}${esc(l.producto_nombre)}</td>
-            <td class="small">${esc(loteNup)}</td>
+            <td class="small">${esc(camLoteNup(l))}</td>
             <td class="text-end small">${fmt(saldo, DEC_C)}</td>
             <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-dev-cant" min="0" max="${saldo}" step="any" value="${saldo}" oninput="camOnCantDev(this)" style="height:26px;font-size:.8rem;"></td>
             <td class="text-end small cam-dev-total">0.00</td>
@@ -609,54 +713,131 @@
         camRecalcular();
     };
 
-    // ─── Entregas (buscar producto de catálogo y agregar) ─────────────────────
-    window.camBuscarProductos = function (q) {
+    // ─── Entregas (consignación del cliente, existencias por bodega o catálogo) ─
+    // Un solo buscador con tres grupos: (1) líneas de consignaciones ENTREGADAS con saldo
+    // en poder del cliente, por N° de consignación, NUP, lote o producto (cada ítem se
+    // agrega por separado, o "Agregar todos"); (2) existencias en bodega por lote / NUP;
+    // (3) productos del catálogo aunque no tengan stock registrado.
+    window.camBuscarEntregas = function (q, desdeFocus) {
         clearTimeout(camEntTimer);
         const dd = document.getElementById('cam_ent_dropdown');
-        if (!q || q.length < 2) { dd.classList.add('d-none'); return; }
+        const idCliente = document.getElementById('cam_id_cliente').value;
+        q = (q || '').trim();
+        if (!q && !idCliente) { dd.classList.add('d-none'); return; }
+        if (q && q.length < 2 && !idCliente) { dd.classList.add('d-none'); return; }
         camEntTimer = setTimeout(async () => {
-            const res = await fetch(`${RUTA}/buscarProductosAjax?q=${encodeURIComponent(q)}`);
+            const excl = document.getElementById('cam_id').value || 0;
+            const res = await fetch(`${RUTA}/buscarEntregasAjax?id_cliente=${idCliente || 0}&excluir=${excl}&q=${encodeURIComponent(q)}`);
             const data = await res.json();
             dd.innerHTML = '';
-            (data.data || []).forEach(p => {
-                const a = document.createElement('a');
-                a.href = '#'; a.className = 'list-group-item list-group-item-action py-1';
-                a.innerHTML = `<span class="small fw-semibold">${esc(p.codigo ? p.codigo + ' · ' : '')}${esc(p.nombre)}</span>`;
-                a.onclick = (ev) => { ev.preventDefault(); camAgregarEntrega(p); dd.classList.add('d-none'); document.getElementById('cam_ent_busqueda').value=''; };
-                dd.appendChild(a);
-            });
-            if (!data.data || !data.data.length) {
-                dd.innerHTML = '<span class="list-group-item small text-muted">Sin resultados.</span>';
+            if (!data.ok) {
+                dd.innerHTML = `<span class="list-group-item small text-danger">${esc(data.error || 'No se pudo buscar.')}</span>`;
+                dd.classList.remove('d-none');
+                return;
+            }
+            const consig = data.consignaciones || [], inv = data.inventario || [], cat = data.catalogo || [];
+            const limpiar = () => { document.getElementById('cam_ent_busqueda').value = ''; };
+
+            if (consig.length) {
+                camRenderGrupos(dd, consig, {
+                    mostrarCliente: !idCliente,
+                    existe: (l) => !!document.querySelector(`#cam_ent_body tr[data-key="CONSIGNACION-${l.id_origen_detalle}"]`),
+                    onAdd: (l, silencioso) => { camAgregarEntregaFila(Object.assign({ tipo: 'CONSIGNACION' }, l), silencioso); limpiar(); }
+                });
+            }
+            if (inv.length) {
+                const head = document.createElement('div');
+                head.className = 'list-group-item py-1 bg-light d-flex align-items-center gap-2';
+                head.innerHTML = `${camBadgeOrigen('BODEGA', 'Existencias en bodega')} <span class="small text-muted ms-auto">${inv.length} ítem(s)</span>`;
+                dd.appendChild(head);
+                inv.forEach(r => {
+                    const a = document.createElement('a');
+                    a.href = '#'; a.className = 'list-group-item list-group-item-action py-1 ps-4';
+                    a.innerHTML = `<i class="bi bi-plus-circle text-primary me-1"></i>
+                        <span class="small fw-semibold">${esc(r.producto_codigo ? r.producto_codigo + ' · ' : '')}${esc(r.producto_nombre)}</span>
+                        <span class="small text-muted ms-1">· ${esc(r.bodega_nombre || '')}</span>
+                        <span class="small text-muted ms-1">Lote/NUP: ${esc(camLoteNup(r))}</span>
+                        <span class="small text-success ms-1">Stock: ${fmt(r.stock, DEC_C)}</span>`;
+                    a.onclick = (ev) => { ev.preventDefault(); camAgregarEntregaFila(Object.assign({ tipo: 'INVENTARIO' }, r), false); dd.classList.add('d-none'); limpiar(); };
+                    dd.appendChild(a);
+                });
+            }
+            if (cat.length) {
+                const head = document.createElement('div');
+                head.className = 'list-group-item py-1 bg-light d-flex align-items-center gap-2';
+                head.innerHTML = `${camBadgeOrigen('BODEGA', 'Catálogo')} <span class="small text-muted ms-auto">${cat.length} producto(s)</span>`;
+                dd.appendChild(head);
+                cat.forEach(p => {
+                    const a = document.createElement('a');
+                    a.href = '#'; a.className = 'list-group-item list-group-item-action py-1 ps-4';
+                    a.innerHTML = `<i class="bi bi-plus-circle text-primary me-1"></i><span class="small fw-semibold">${esc(p.codigo ? p.codigo + ' · ' : '')}${esc(p.nombre)}</span>`;
+                    a.onclick = (ev) => { ev.preventDefault(); camAgregarEntregaFila({ tipo: 'CATALOGO', id_producto: p.id, producto_codigo: p.codigo, producto_nombre: p.nombre }, false); dd.classList.add('d-none'); limpiar(); };
+                    dd.appendChild(a);
+                });
+            }
+            if (!consig.length && !inv.length && !cat.length) {
+                dd.innerHTML = '<span class="list-group-item small text-muted">Sin resultados: ni consignaciones con saldo, ni existencias, ni productos del catálogo.</span>';
             }
             dd.classList.remove('d-none');
-        }, 300);
+        }, desdeFocus ? 0 : 300);
     };
 
-    async function camAgregarEntrega(p) {
-        if (document.querySelector(`#cam_ent_body tr[data-prod="${p.id}"]`)) {
-            Swal.fire({ icon: 'info', title: 'Ya agregado', text: 'Ese producto ya está en la lista.', timer: 1200, showConfirmButton: false, target: document.getElementById('modalCambio') });
+    /**
+     * Agrega una fila de entrega. o.tipo:
+     *  - 'CONSIGNACION': línea de consignación del cliente (bodega, lote y NUP fijos; el
+     *    máximo es el saldo en poder del cliente; precio e IVA los de la consignación).
+     *  - 'INVENTARIO': existencia en bodega (bodega, lote y NUP precargados, editables).
+     *  - 'CATALOGO': producto suelto (todo editable).
+     */
+    async function camAgregarEntregaFila(o, silencioso) {
+        const esConsig = o.tipo === 'CONSIGNACION';
+        if (esConsig && !camAsegurarClienteDeLinea(o)) return;
+
+        const key = esConsig
+            ? `CONSIGNACION-${o.id_origen_detalle}`
+            : `${o.tipo}-${o.id_producto}-${o.id_bodega || 0}-${o.lote || ''}-${o.nup || ''}`;
+        if (document.querySelector(`#cam_ent_body tr[data-key="${CSS.escape(key)}"]`)) {
+            if (!silencioso) camSwal({ icon: 'info', title: 'Ya agregado', text: 'Ese ítem ya está en la lista.', timer: 1200, showConfirmButton: false });
             return;
         }
         const empty = document.querySelector('#cam_ent_body .cam-ent-empty');
         if (empty) empty.parentElement.removeChild(empty);
 
-        // Precios de lista
-        let precio = 0;
-        try {
-            const res = await fetch(`${RUTA}/getPreciosAjax?id_producto=${p.id}`);
-            const data = await res.json();
-            const precios = (data.ok && data.data) ? data.data : [];
-            if (precios.length) precio = num(precios[0].precio);
-        } catch (e) {}
+        // Precio: el de la consignación, o el primer precio de lista del producto.
+        let precio = esConsig ? num(o.precio_unitario) : 0;
+        const iva  = esConsig ? num(o.porcentaje_impuesto) : 0;
+        if (!esConsig) {
+            try {
+                const res = await fetch(`${RUTA}/getPreciosAjax?id_producto=${o.id_producto}`);
+                const data = await res.json();
+                const precios = (data.ok && data.data) ? data.data : [];
+                if (precios.length) precio = num(precios[0].precio);
+            } catch (e) {}
+        }
 
+        const saldo   = esConsig ? num(o.saldo_pendiente) : 0;
+        const cantIni = esConsig ? saldo : 1;
         const tr = document.createElement('tr');
-        tr.setAttribute('data-prod', p.id);
+        tr.setAttribute('data-key', key);
+        tr.setAttribute('data-prod', o.id_producto);
+        tr.dataset.origenTipo = esConsig ? 'CONSIGNACION' : '';
+        tr.dataset.idOrigenDetalle = esConsig ? o.id_origen_detalle : '';
+        tr.dataset.saldo = esConsig ? saldo : '';
+        tr.dataset.caducidad = o.fecha_caducidad ? String(o.fecha_caducidad).slice(0, 10) : '';
+        const origenCell = esConsig
+            ? `${camBadgeOrigen('CONSIGNACION')}<div class="text-muted" style="font-size:.7rem">${esc(o.doc_numero || '')}</div>`
+            : camBadgeOrigen('BODEGA', o.tipo === 'INVENTARIO' ? 'Existencias' : 'Catálogo');
         tr.innerHTML = `
-            <td class="small">${esc(p.codigo ? p.codigo + ' · ' : '')}${esc(p.nombre)}</td>
-            <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" style="height:26px;font-size:.78rem;">${bodegaOptions('')}</select></td>
+            <td class="small">${origenCell}</td>
+            <td class="small">${esc(o.producto_codigo ? o.producto_codigo + ' · ' : '')}${esc(o.producto_nombre)}</td>
+            <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" ${esConsig ? 'disabled title="La bodega es la de la consignación"' : ''} style="height:26px;font-size:.78rem;">${bodegaOptions(o.id_bodega || '')}</select></td>
+            <td class="p-0"><div class="d-flex gap-1">
+                <input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(o.lote || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;width:50%;">
+                <input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(o.nup || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;width:50%;">
+            </div></td>
             <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-precio" min="0" step="any" value="${precio}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
-            <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-iva" min="0" step="any" value="0" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
-            <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" step="any" value="1" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
+            <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-iva" min="0" step="any" value="${iva}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
+            <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" ${esConsig ? `max="${saldo}"` : ''} step="any" value="${cantIni}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
             <td class="text-end small cam-ent-total">0.00</td>
             <td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'ent')" title="Quitar"><i class="bi bi-x-lg"></i></button></td>`;
         document.getElementById('cam_ent_body').appendChild(tr);
@@ -667,7 +848,11 @@
         const tr = inp.closest('tr');
         const precio = num(tr.querySelector('.cam-ent-precio').value);
         const iva = num(tr.querySelector('.cam-ent-iva').value);
-        const cant = num(tr.querySelector('.cam-ent-cant').value);
+        const cantInp = tr.querySelector('.cam-ent-cant');
+        let cant = num(cantInp.value);
+        // Desde consignación no se puede entregar más que el saldo en poder del cliente.
+        const saldo = num(tr.dataset.saldo);
+        if (tr.dataset.saldo !== '' && saldo > 0 && cant > saldo) { cant = saldo; cantInp.value = saldo; }
         const total = cant * precio * (1 + iva / 100);
         tr.querySelector('.cam-ent-total').textContent = fmt(total, 2);
         camRecalcular();
@@ -737,7 +922,6 @@
                 document.querySelector('#cam_ent_body .cam-ent-empty')?.remove();
                 ents.forEach(d => camPintarEntExistente(d, editable));
             }
-            if (editable) document.getElementById('cam_dev_busqueda').disabled = false;
             camRecalcular();
         } catch (err) {
             console.error('Error cargando detalle del cambio:', err);
@@ -748,8 +932,8 @@
     }
 
     function camPintarDevExistente(d, editable) {
-        const ori = (d.origen_tipo === 'CAMBIO' ? 'Cambio' : 'Factura');
-        const loteNup = [d.lote, d.nup].filter(Boolean).join(' / ') || '—';
+        const ori = camLabelOrigen(d.origen_tipo) + (d.origen_numero ? ' ' + d.origen_numero : '');
+        const loteNup = camLoteNup(d);
         const saldoRef = num(d.cantidad); // en edición el máximo real se revalida en el server
         const tr = document.createElement('tr');
         tr.setAttribute('data-key', d.origen_tipo + '-' + d.id_origen_detalle);
@@ -762,7 +946,7 @@
             ? `<input type="number" class="form-control form-control-sm text-end cam-dev-cant" min="0" step="any" value="${num(d.cantidad)}" oninput="camOnCantDev(this)" style="height:26px;font-size:.8rem;">`
             : `<span class="cam-dev-cant-ro">${fmt(d.cantidad, DEC_C)}</span>`;
         tr.innerHTML = `
-            <td class="small"><span class="badge ${d.origen_tipo === 'CAMBIO' ? 'bg-info' : 'bg-secondary'} bg-opacity-25 text-dark">${esc(ori)}</span></td>
+            <td class="small">${camBadgeOrigen(d.origen_tipo, ori)}</td>
             <td class="small">${esc(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${esc(d.producto_nombre)}</td>
             <td class="small">${esc(loteNup)}</td>
             <td class="text-end small">${editable ? '—' : fmt(d.cantidad, DEC_C)}</td>
@@ -775,13 +959,29 @@
     }
 
     function camPintarEntExistente(d, editable) {
+        const esConsig = (d.origen_tipo === 'CONSIGNACION');
         const tr = document.createElement('tr');
         tr.setAttribute('data-prod', d.id_producto);
+        tr.setAttribute('data-key', esConsig
+            ? `CONSIGNACION-${d.id_origen_detalle}`
+            : `GUARDADA-${d.id || ''}-${d.id_producto}-${d.id_bodega || 0}-${d.lote || ''}-${d.nup || ''}`);
+        tr.dataset.origenTipo = esConsig ? 'CONSIGNACION' : '';
+        tr.dataset.idOrigenDetalle = esConsig ? (d.id_origen_detalle || '') : '';
+        tr.dataset.saldo = ''; // en edición el máximo real se revalida en el server
+        tr.dataset.caducidad = d.fecha_caducidad ? String(d.fecha_caducidad).slice(0, 10) : '';
+        const origenCell = esConsig
+            ? `${camBadgeOrigen('CONSIGNACION')}<div class="text-muted" style="font-size:.7rem">${esc(d.origen_numero || '')}</div>`
+            : camBadgeOrigen('BODEGA');
         const total = num(d.cantidad) * num(d.precio_unitario) * (1 + num(d.porcentaje_impuesto) / 100);
         if (editable) {
             tr.innerHTML = `
+                <td class="small">${origenCell}</td>
                 <td class="small">${esc(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${esc(d.producto_nombre)}</td>
-                <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" style="height:26px;font-size:.78rem;">${bodegaOptions(d.id_bodega)}</select></td>
+                <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" ${esConsig ? 'disabled title="La bodega es la de la consignación"' : ''} style="height:26px;font-size:.78rem;">${bodegaOptions(d.id_bodega)}</select></td>
+                <td class="p-0"><div class="d-flex gap-1">
+                    <input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(d.lote || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;width:50%;">
+                    <input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(d.nup || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;width:50%;">
+                </div></td>
                 <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-precio" min="0" step="any" value="${num(d.precio_unitario)}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
                 <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-iva" min="0" step="any" value="${num(d.porcentaje_impuesto)}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
                 <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" step="any" value="${num(d.cantidad)}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
@@ -792,8 +992,10 @@
         } else {
             const bod = (camBodegas.find(b => String(b.id) === String(d.id_bodega)) || {}).nombre || (d.bodega_nombre || '—');
             tr.innerHTML = `
+                <td class="small">${origenCell}</td>
                 <td class="small">${esc(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${esc(d.producto_nombre)}</td>
                 <td class="small">${esc(bod)}</td>
+                <td class="small">${esc(camLoteNup(d))}</td>
                 <td class="text-end small">${fmt(d.precio_unitario, DEC_P)}</td>
                 <td class="text-end small">${fmt(d.porcentaje_impuesto, 2)}</td>
                 <td class="text-end small">${fmt(d.cantidad, DEC_C)}</td>
@@ -835,7 +1037,13 @@
                 cantidad: c,
                 precio_unitario: num(tr.querySelector('.cam-ent-precio').value),
                 porcentaje_impuesto: num(tr.querySelector('.cam-ent-iva').value),
-                id_bodega: parseInt(tr.querySelector('.cam-ent-bodega').value || 0, 10)
+                id_bodega: parseInt(tr.querySelector('.cam-ent-bodega').value || 0, 10),
+                // Desde consignación: el servidor toma producto/bodega/lote/NUP de esa línea.
+                origen_tipo: tr.dataset.origenTipo || '',
+                id_origen_detalle: tr.dataset.idOrigenDetalle ? parseInt(tr.dataset.idOrigenDetalle, 10) : null,
+                lote: (tr.querySelector('.cam-ent-lote')?.value || '').trim(),
+                nup: (tr.querySelector('.cam-ent-nup')?.value || '').trim(),
+                fecha_caducidad: tr.dataset.caducidad || ''
             });
         });
 

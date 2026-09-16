@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion
-version: 1.12
+version: 1.13
 orden: 45
 estado: activo
 ---
@@ -221,6 +221,11 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.13** — La pestaña **Resumen** (kardex de la consignación) muestra un
+  movimiento **Cambio de producto** por cada unidad que el cliente se quedó como
+  reposición en un [Cambio de productos](modulos/cambio-producto-cv); baja del
+  saldo igual que una facturación. El PDF y el Excel del documento tienen la
+  columna **Cambio** junto a *Retorno* y *Facturados*.
 - **1.12** — El PDF de una consignación con muchos productos ya no sale
   troceado. A partir de unas 18 líneas, el documento se partía en decenas de
   hojas con un solo dato cada una (25 productos llegaban a producir 23 páginas,

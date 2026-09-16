@@ -413,12 +413,15 @@ class ConsignacionesVentasController extends BaseModuloController
             $detalles = $cons['detalles'] ?? [];
             $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
 
-            // Cantidad retornada y facturada por línea (columnas "Retorno" y "Facturados" del PDF).
+            // Cantidad retornada, facturada y entregada a cambio por línea (columnas "Retorno",
+            // "Facturados" y "Cambio" del PDF).
             $retornado = $this->service->getRetornadoPorLinea($id, $idEmpresa);
             $facturado = $this->service->getFacturadoPorLinea($id, $idEmpresa);
+            $cambiado  = $this->service->getCambiadoPorLinea($id, $idEmpresa);
             foreach ($detalles as &$d) {
                 $d['retornado'] = $retornado[(int)($d['id'] ?? 0)] ?? 0;
                 $d['facturado'] = $facturado[(int)($d['id'] ?? 0)] ?? 0;
+                $d['cambiado']  = $cambiado[(int)($d['id'] ?? 0)] ?? 0;
             }
             unset($d);
 
@@ -455,12 +458,15 @@ class ConsignacionesVentasController extends BaseModuloController
             $detalles = $cons['detalles'] ?? [];
             $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
 
-            // Cantidad retornada y facturada por línea (mismas columnas "Retorno" y "Facturados" del PDF).
+            // Cantidad retornada, facturada y entregada a cambio por línea (mismas columnas
+            // "Retorno", "Facturados" y "Cambio" del PDF).
             $retornado = $this->service->getRetornadoPorLinea($id, $idEmpresa);
             $facturado = $this->service->getFacturadoPorLinea($id, $idEmpresa);
+            $cambiado  = $this->service->getCambiadoPorLinea($id, $idEmpresa);
             foreach ($detalles as &$d) {
                 $d['retornado'] = $retornado[(int)($d['id'] ?? 0)] ?? 0;
                 $d['facturado'] = $facturado[(int)($d['id'] ?? 0)] ?? 0;
+                $d['cambiado']  = $cambiado[(int)($d['id'] ?? 0)] ?? 0;
             }
             unset($d);
 
@@ -473,11 +479,11 @@ class ConsignacionesVentasController extends BaseModuloController
             $sheet->setTitle('Consignacion');
 
             $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
-            $sheet->mergeCells('A1:H1');
+            $sheet->mergeCells('A1:I1');
             $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
 
             $sheet->setCellValue('A2', 'CONSIGNACIÓN EN VENTAS N.° ' . ($numero !== '' ? $numero : '—'));
-            $sheet->mergeCells('A2:H2');
+            $sheet->mergeCells('A2:I2');
             $sheet->getStyle('A2')->getFont()->setBold(true);
 
             $fecha = !empty($cons['fecha_emision']) ? date('d-m-Y', strtotime((string)$cons['fecha_emision'])) : '';
@@ -489,14 +495,14 @@ class ConsignacionesVentasController extends BaseModuloController
             $sheet->setCellValue('D5', 'Estado: ' . ucfirst((string)($cons['estado'] ?? '')));
 
             $headerRow = 7;
-            $headers = ['Código', 'Descripción', 'Bodega', 'Lote', 'NUP', 'Cantidad', 'Retorno', 'Facturados'];
+            $headers = ['Código', 'Descripción', 'Bodega', 'Lote', 'NUP', 'Cantidad', 'Retorno', 'Facturados', 'Cambio'];
             $col = 'A';
             foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
             $headerStyle = [
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
             ];
-            $sheet->getStyle('A' . $headerRow . ':H' . $headerRow)->applyFromArray($headerStyle);
+            $sheet->getStyle('A' . $headerRow . ':I' . $headerRow)->applyFromArray($headerStyle);
 
             $row = $headerRow + 1;
             foreach ($detalles as $d) {
@@ -508,10 +514,11 @@ class ConsignacionesVentasController extends BaseModuloController
                 $sheet->setCellValue('F' . $row, (float)($d['cantidad'] ?? 0));
                 $sheet->setCellValue('G' . $row, (float)($d['retornado'] ?? 0));
                 $sheet->setCellValue('H' . $row, (float)($d['facturado'] ?? 0));
+                $sheet->setCellValue('I' . $row, (float)($d['cambiado'] ?? 0));
                 $row++;
             }
             if ($row > $headerRow + 1) {
-                $sheet->getStyle('F' . ($headerRow + 1) . ':H' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle('F' . ($headerRow + 1) . ':I' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
             }
 
             $obs = trim((string)($cons['observaciones'] ?? ''));
@@ -570,8 +577,12 @@ class ConsignacionesVentasController extends BaseModuloController
             $detalles  = $cons['detalles'] ?? [];
             $empresa   = $this->cargarEmpresaParaPdf($idEmpresa);
             $retornado = $this->service->getRetornadoPorLinea($id, $idEmpresa);
+            $facturado = $this->service->getFacturadoPorLinea($id, $idEmpresa);
+            $cambiado  = $this->service->getCambiadoPorLinea($id, $idEmpresa);
             foreach ($detalles as &$d) {
                 $d['retornado'] = $retornado[(int)($d['id'] ?? 0)] ?? 0;
+                $d['facturado'] = $facturado[(int)($d['id'] ?? 0)] ?? 0;
+                $d['cambiado']  = $cambiado[(int)($d['id'] ?? 0)] ?? 0;
             }
             unset($d);
 

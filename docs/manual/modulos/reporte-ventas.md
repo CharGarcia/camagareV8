@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas
-version: 1.5
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes
+version: 1.6
 orden: 10
 estado: activo
 ---
@@ -144,6 +144,40 @@ ordenando. Funciona en el detallado y en todas las agrupaciones: por ejemplo,
   variante* por cantidad vendida, y *Por fecha* / *Por mes* por el periodo.
 - El orden elegido **se recuerda** para la próxima vez que abra el reporte.
 
+## Quién ve qué: el permiso de Acceso total
+
+El reporte respeta el permiso **Acceso total** del módulo (*Configuración →
+Permisos por módulo*), con la misma regla que Cuentas por Cobrar:
+
+- **Con acceso total** (o siendo superadministrador): se ven todas las ventas de
+  la empresa (y del grupo, en consolidado).
+- **Sin acceso total y el usuario es un vendedor**: ve **su cartera**, es decir
+  las ventas a los **clientes que tiene asignados** (campo *Vendedor* de la ficha
+  del cliente) y, además, las ventas **emitidas a su nombre** aunque el cliente
+  esté asignado a otro asesor o a ninguno. Las notas de crédito, que no llevan
+  vendedor, toman el de la factura que modifican.
+- **Sin acceso total y el usuario no es vendedor** (un cajero, un digitador): ve
+  solo los documentos que **él registró** — las facturas, los recibos de venta y
+  las notas de crédito que emitió.
+- En los dos casos, lo que no sale en la tabla tampoco entra en las tarjetas de
+  arriba, en el resumen de estados, en ninguna agrupación (*Por cliente*, *Por
+  producto*, *Por mes*…), en el neto *Facturas − NC*, ni en el PDF y el Excel:
+  todo parte del mismo filtro. Los buscadores de *Producto* e *Información
+  adicional* solo sugieren valores tomados de esos documentos. El resumen de
+  ventas de la **app móvil** aplica la misma regla.
+
+**Cómo sabe el sistema qué vendedor es el usuario.** Se resuelve en este orden:
+primero el campo **Usuario del sistema** de la ficha del vendedor (módulo
+Vendedores), que es lo que el administrador declaró a mano; si no está, la
+**cédula del usuario** contra la identificación del vendedor (también calza si
+uno tiene el RUC de persona natural y el otro la cédula). En consolidado por
+RUC se busca el vendedor en cada establecimiento. El filtro *Vendedor* de la
+pantalla es independiente de esto: sirve para acotar, no cambia quién ve qué.
+
+Para usuarios sin vendedor, una advertencia sobre documentos antiguos: los que
+se **migraron** desde el sistema anterior quedaron a nombre del usuario que
+corrió la migración, así que solo él (o alguien con acceso total) los verá.
+
 ## Exportar
 
 El reporte se exporta a **PDF** y **Excel**, con las mismas filas, los mismos
@@ -158,13 +192,27 @@ cuando se va a seguir analizando por fuera.
 - **Falta una venta**: compruebe su fecha de emisión y que no esté anulada. Si
   está en borrador, elija *Con borradores*.
 - **No veo las ventas de otros vendedores**: sin el permiso de *acceso total*
-  cada usuario ve solo lo que registró.
+  un vendedor ve solo su cartera (clientes asignados y ventas a su nombre) y
+  quien no es vendedor solo lo que registró (ver *Quién ve qué: el permiso de
+  Acceso total*). Si un vendedor no ve nada, revise que su ficha tenga el
+  *Usuario del sistema* o la misma cédula que su usuario, y que sus clientes lo
+  tengan asignado. Si a un usuario sin vendedor le faltan documentos
+  **antiguos**, suele ser porque se migraron a nombre de otro usuario.
 - **El Excel salió en otro orden**: se exporta con el orden que estaba marcado en
   la pantalla; si cambió la agrupación después de ordenar, revise la flecha de la
   cabecera antes de descargar.
 
 ## Historial de cambios
 
+- **1.6** — El reporte respeta el permiso de **Acceso total**: sin él, el
+  vendedor vinculado al usuario (campo *Usuario del sistema* de su ficha o la
+  misma cédula) ve las ventas de sus **clientes asignados** y las emitidas a su
+  nombre; quien no es vendedor ve solo lo que él registró. Aplica en la tabla,
+  las tarjetas, el resumen de estados, todas las agrupaciones, el PDF, el Excel,
+  los buscadores de Producto/Información adicional y el resumen de la app móvil.
+  Antes el permiso no cambiaba nada: cualquiera con permiso de ver el reporte
+  veía las ventas de toda la empresa. Nueva sección *Quién ve qué: el permiso de
+  Acceso total*.
 - **1.5** — En la agrupación **Por cliente**, la columna *Nro Facturas* se
   reemplazó por **Saldo x Cobrar**: lo que queda pendiente de los documentos del
   reporte, con el mismo cálculo de Cuentas por Cobrar. Aplica en pantalla, en el

@@ -353,6 +353,32 @@ class AsientoContableService
                 }
             }
 
+            // ── Documento cuya contabilidad ya vino de la migración ───────────────────
+            // Si el documento apunta (por su columna de enlace) a un asiento MIGRADO vivo,
+            // su contabilidad es el diario histórico del sistema anterior y no debe recibir
+            // un asiento automático: lo duplicaría. Se comprueba acá, sobre el propio
+            // documento y no sobre `migracion_mysql_map`, para cubrir de una vez todos los
+            // caminos que insertan (sincronizador, generación al abrir un módulo, guardado del
+            // documento, regenerar desde Asientos o desde Auditoría) y también a los
+            // documentos que el mapa no protege: los NATIVOS que la migración solo enlazó
+            // (vinculado = true) y los que perdieron su fila del mapa.
+            if ($idAsiento === 0 && $idRefOrigen !== null && $moduloOrigen !== 'manual') {
+                $doc = \App\Helpers\DocumentoOrigenAsiento::paraModulo($moduloOrigen);
+                $idMigrado = $doc !== null
+                    ? $this->repository->getAsientoMigradoDeDocumento($doc['tabla'], $doc['col_asiento'], $idRefOrigen, $idEmpresa)
+                    : null;
+                if ($idMigrado !== null) {
+                    if ($edicionManual) {
+                        throw new \Exception('Este documento ya tiene su asiento migrado del sistema anterior (asiento #'
+                            . $idMigrado . '); corríjalo desde ese asiento en lugar de registrar uno nuevo.');
+                    }
+                    error_log("[AsientoContable] {$moduloOrigen} #{$idRefOrigen} (empresa {$idEmpresa}): "
+                        . "no se genera asiento automático, el documento ya está enlazado al asiento migrado #{$idMigrado}.");
+                    if ($managedTransaction) $pdo->commit();
+                    return $idMigrado;
+                }
+            }
+
             // ── Asiento corregido a mano: la corrección manda sobre el builder ────────
             // Regeneración automática (un module service reguardando el documento, o el
             // sincronizador) sobre un asiento que alguien editó desde una pantalla: se deja

@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.9
+etiquetas: ingresos, cobro, cobrar, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 2.0
 orden: 10
 estado: activo
 ---
@@ -94,12 +94,43 @@ nombre del concepto elegido.
 | Formas de cobro | Al menos una, con monto mayor a cero |
 | Total | Mayor a cero |
 
+## Editar un ingreso ya guardado
+
+Al abrir un ingreso desde el listado, el modal se titula **Editar Ingreso** y
+permite corregir prácticamente todo, sea cual sea su tipo (cobro de factura,
+recibo de venta, reembolso, anticipo u otro concepto):
+
+- La **fecha de emisión** y el campo **Recibo de**.
+- Las **observaciones**.
+- Los **documentos cobrados**: quitar uno, cambiar el monto cobrado o agregar
+  otro documento pendiente del mismo tipo (el botón del concepto activo en la
+  barra superior vuelve a abrir el buscador). Al editar, el buscador y los
+  saldos ya descuentan lo que este mismo ingreso cobraba, así que el saldo
+  disponible es el real.
+- Las líneas de **Otros conceptos**, con su cuenta contable.
+- Las **formas de cobro**.
+
+Lo único que no cambia es la **identidad del documento**: la serie, el
+secuencial y el concepto de cabecera (el que define el tipo del ingreso y su
+asiento). Si el concepto está mal, anule el ingreso y registre uno nuevo.
+
+Al pulsar **Actualizar** el sistema vuelve a validar el cuadre, el saldo real de
+cada documento (por si otro ingreso lo cobró mientras tanto), el periodo
+contable y regenera el asiento contable con los datos nuevos. El cambio queda en
+el historial de auditoría con los datos anteriores y los nuevos.
+
 ## El periodo contable manda
 
 No se puede **registrar, modificar ni anular** un ingreso si su periodo contable
 está cerrado. El sistema lo comprueba en las tres operaciones, y en la
 modificación valida tanto el periodo original como el nuevo si se cambia la
 fecha.
+
+Cuando el periodo de la fecha del ingreso ya está cerrado, el modal **abre en
+solo lectura**: muestra la etiqueta **PERIODO CERRADO** junto al número y un
+aviso amarillo con el motivo, todos los campos quedan bloqueados y no aparecen
+los botones **Actualizar** ni **Anular**. Así el bloqueo se ve al abrir, y no
+recién al intentar guardar.
 
 Si necesita corregir un ingreso de un periodo cerrado, hay que reabrir el periodo
 desde Periodos Contables (con el criterio del contador) o registrar el ajuste en
@@ -212,6 +243,14 @@ deseable; para el contador o el administrador, active el acceso total.
 
 ## Historial de cambios
 
+- **2.0** — **Edición completa** de un ingreso guardado, sea cual sea su tipo:
+  además de fecha, "Recibo de" y formas de cobro, ahora se pueden quitar o
+  agregar documentos cobrados, cambiar sus montos, editar las observaciones y
+  las líneas de "Otros conceptos" (antes, los ingresos que cobraban facturas
+  tenían los documentos y las observaciones bloqueados). La única puerta es el
+  **periodo contable**: si está cerrado, el modal abre en **solo lectura** con
+  la etiqueta *PERIODO CERRADO* y un aviso del motivo, sin botones Actualizar
+  ni Anular. Nueva sección *Editar un ingreso ya guardado*.
 - **1.9** — El listado se puede **ordenar por hasta tres columnas a la vez**:
   Shift+clic en el título de la segunda columna la encadena a la primera (por
   ejemplo *Recibí de* y, dentro de cada uno, la *Fecha*). Cada encabezado activo

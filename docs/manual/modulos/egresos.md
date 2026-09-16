@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.10
+etiquetas: egresos, egreso, pago, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.11
 orden: 20
 estado: activo
 ---
@@ -108,12 +108,50 @@ el nombre del concepto elegido.
 | Todos los montos mayores a cero | Ni líneas ni pagos en cero |
 | El detalle debe cuadrar con lo pagado | Ambos totales tienen que ser iguales |
 
+## Editar un egreso ya guardado
+
+Al abrir un egreso desde el listado, el modal se titula **Editar Egreso** y
+permite corregir prácticamente todo, sea cual sea su tipo (pago de compra,
+liquidación, nómina, anticipo o gasto general):
+
+- La **fecha de emisión**.
+- El **beneficiario** (tipo Proveedor/Empleado y la persona).
+- Las **observaciones**.
+- Los **documentos pagados**: quitar uno, cambiar el monto pagado o agregar
+  otro documento pendiente del mismo tipo (el botón del concepto activo en la
+  barra superior vuelve a abrir el buscador). Al editar, el buscador y los
+  saldos ya descuentan lo que este mismo egreso pagaba, así que el saldo
+  disponible es el real.
+- Las líneas de **Otros conceptos**, con su cuenta contable.
+- Las **formas de pago** (los cheques ya anulados se conservan como historial).
+
+Lo único que no cambia es la **identidad del documento**: la serie, el
+secuencial y el concepto de cabecera (el que define el tipo del egreso y su
+asiento). Si el concepto está mal, anule el egreso y registre uno nuevo.
+
+Al pulsar **Actualizar** el sistema aplica las mismas reglas que al registrar
+(cuadre, montos, cuenta contable por línea cuando se mezclan conceptos), vuelve
+a comprobar el saldo real de cada documento (por si otro egreso lo pagó
+mientras tanto) y el periodo contable, regenera el asiento contable y, si el
+egreso paga nómina (roles semanales/quincenas, anticipos o préstamos),
+resincroniza el rol afectado con lo realmente pagado. El cambio queda en el
+historial de auditoría con los datos anteriores y los nuevos.
+
 ## El periodo contable manda
 
-No se puede **registrar ni anular** un egreso si su periodo contable está
-cerrado. Para corregir algo de un periodo cerrado hay que reabrirlo desde
-Periodos Contables, con el criterio del contador, o registrar el ajuste en un
-periodo abierto.
+No se puede **registrar, modificar ni anular** un egreso si su periodo contable
+está cerrado. En la modificación se valida tanto el periodo original como el
+nuevo si se cambia la fecha.
+
+Cuando el periodo de la fecha del egreso ya está cerrado, el modal **abre en
+solo lectura**: muestra la etiqueta **PERIODO CERRADO** junto al número y un
+aviso amarillo con el motivo, todos los campos quedan bloqueados y no aparecen
+los botones **Actualizar** ni **Anular** (tampoco los de editar o anular un
+cheque). Así el bloqueo se ve al abrir, y no recién al intentar guardar.
+
+Para corregir algo de un periodo cerrado hay que reabrirlo desde Periodos
+Contables, con el criterio del contador, o registrar el ajuste en un periodo
+abierto.
 
 ## Anular, no eliminar
 
@@ -288,6 +326,14 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.11** — **Edición completa** de un egreso guardado, sea cual sea su tipo:
+  además de fecha y formas de pago, ahora se pueden quitar o agregar documentos
+  pagados, cambiar sus montos, el beneficiario, las observaciones y las líneas
+  de "Otros conceptos" (antes, los egresos ligados a Compra, Liquidación o
+  Nómina solo permitían tocar la fecha y las formas de pago). La única puerta
+  es el **periodo contable**: si está cerrado, el modal abre en **solo lectura**
+  con la etiqueta *PERIODO CERRADO* y un aviso del motivo, sin botones
+  Actualizar ni Anular. Nueva sección *Editar un egreso ya guardado*.
 - **1.10** — El listado se puede **ordenar por hasta tres columnas a la vez**:
   Shift+clic en el título de la segunda columna la encadena a la primera (por
   ejemplo *Beneficiario* y, dentro de cada uno, la *Fecha*). Cada encabezado

@@ -200,7 +200,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         'tipo' => 'Tipo',
                         'cheque' => 'Cheque',
                         'fecha_cheque' => 'Fecha Cheque',
-                        'beneficiario_cheque' => 'Beneficiario',
+                        'beneficiario_cheque' => 'Beneficiario / Cliente',
                         'documento' => 'Documento Ref.',
                         'tercero' => 'Tercero',
                         'glosa' => 'Glosa',
@@ -238,7 +238,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                             <th class="sortable-header" role="button" data-sort="tipo_transaccion" data-col="tipo">Tipo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="sortable-header" role="button" data-sort="numero_cheque" data-col="cheque">Cheque <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="sortable-header" role="button" data-sort="fecha_cheque" data-col="fecha_cheque">Fecha Cheque <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                            <th class="sortable-header" role="button" data-sort="beneficiario_cheque" data-col="beneficiario_cheque">Beneficiario <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" role="button" data-sort="beneficiario_cheque" data-col="beneficiario_cheque">Beneficiario / Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="sortable-header" role="button" data-sort="documento_referencia" data-col="documento">Documento Ref. <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="sortable-header" role="button" data-sort="nombre_entidad" data-col="tercero">Tercero <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="sortable-header" role="button" data-sort="referencia_detalle" data-col="glosa">Glosa <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
@@ -282,6 +282,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <div class="col-6"><span class="text-muted">Comprobante:</span> <span id="cbm-info-comprobante" class="fw-bold"></span></div>
                         <div class="col-12" id="cbm-info-establecimiento-wrap" style="display:none;"><span class="text-muted">Establecimiento:</span> <span id="cbm-info-establecimiento" class="fw-bold text-info"></span></div>
                         <div class="col-12"><span class="text-muted">Glosa:</span> <span id="cbm-info-glosa"></span></div>
+                        <!-- Cliente que pagó (ingreso) o beneficiario/proveedor/empleado al que se le pagó (egreso). -->
+                        <div class="col-12"><span class="text-muted" id="cbm-info-beneficiario-label">Beneficiario / Cliente:</span> <span id="cbm-info-beneficiario" class="fw-bold"></span></div>
                         <div class="col-6"><span class="text-muted">Monto:</span> <span id="cbm-info-monto" class="fw-bold"></span></div>
                         <!-- Solo cuando el movimiento viene de un documento (ver JS). -->
                         <div class="col-6 cbm-info-doc" style="display:none;"><span class="text-muted">Tipo:</span> <span id="cbm-info-tipo" class="fw-bold"></span></div>

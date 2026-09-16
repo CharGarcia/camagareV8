@@ -17,7 +17,10 @@ use Exception;
  * Un cambio registra, en un solo documento y por cliente:
  *   - DEVOLUCIONES → ENTRADA de inventario (el cliente regresa mercadería de una
  *     factura o de un cambio anterior). Se copia "tal cual" del origen y se valida saldo.
- *   - ENTREGAS → SALIDA de inventario (el cliente recibe otros productos a cambio).
+ *   - ENTREGAS → SALIDA de inventario (el cliente recibe otros productos a cambio),
+ *     desde bodega (catálogo / existencias por lote y NUP) o tomadas de una
+ *     CONSIGNACIÓN que el cliente ya tiene (origen_tipo 'CONSIGNACION': consume el saldo
+ *     de esa línea de consignación y no mueve stock, porque ya salió con la consignación).
  *
  * La diferencia de valor (entregado − devuelto) es informativa. Inventario y
  * asiento contable (a costo) van ligados al estado 'Emitida'.
@@ -110,9 +113,22 @@ class CambioProductoCvService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
-    public function getLineasDisponiblesCliente(int $idEmpresa, int $idCliente, string $q, ?int $excluirCambio = null): array
+    /** Líneas a devolver (facturas + cambios previos). $idCliente null = todos los clientes. */
+    public function getLineasDisponiblesCliente(int $idEmpresa, ?int $idCliente, string $q, ?int $excluirCambio = null): array
     {
         return $this->repository->getLineasDisponiblesCliente($idEmpresa, $idCliente, $q, $excluirCambio);
+    }
+
+    /** Líneas de consignaciones entregadas con saldo en poder del cliente, para entregarlas a cambio. */
+    public function getLineasConsignacionDisponibles(int $idEmpresa, string $q, ?int $idCliente, ?int $excluirCambio = null): array
+    {
+        return $this->repository->getLineasConsignacionDisponibles($idEmpresa, $q, $idCliente, $excluirCambio);
+    }
+
+    /** Existencias por bodega / lote / NUP que coinciden con la búsqueda (entrega desde bodega). */
+    public function buscarInventario(int $idEmpresa, string $q, int $limite = 30): array
+    {
+        return $this->repository->buscarInventario($idEmpresa, $q, $limite);
     }
 
     public function getDetalleCompleto(int $id, int $idEmpresa): ?array
@@ -186,8 +202,8 @@ class CambioProductoCvService
             $numero = $num['serie'] . '-' . $num['secuencial'];
             $this->ultimoNumeroGenerado = $numero;
 
-            $totDev = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['devoluciones'] ?? [], 'devolucion', true, $numero, null);
-            $totEnt = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['entregas'] ?? [], 'entrega', true, $numero, null);
+            $totDev = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['devoluciones'] ?? [], 'devolucion', true, $numero, (int) $data['id_cliente']);
+            $totEnt = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['entregas'] ?? [], 'entrega', true, $numero, (int) $data['id_cliente']);
 
             $this->repository->updateCabecera($idCambio, $idEmpresa, [
                 'subtotal_devuelto'  => round($totDev, 6),
@@ -215,7 +231,7 @@ class CambioProductoCvService
      * Inserta las líneas de un lado (devolucion|entrega). Si $aplicaInventario, mueve stock.
      * Devuelve el total monetario del lado.
      */
-    private function procesarLineas(int $idCambio, int $idEmpresa, int $idUsuario, array $empresaConfig, array $lineas, string $tipoLinea, bool $aplicaInventario, string $numero, ?array $unused): float
+    private function procesarLineas(int $idCambio, int $idEmpresa, int $idUsuario, array $empresaConfig, array $lineas, string $tipoLinea, bool $aplicaInventario, string $numero, int $idCliente): float
     {
         $total = 0.0;
 
@@ -230,6 +246,12 @@ class CambioProductoCvService
                 $origen = $this->repository->getDatosLineaOrigen($origenTipo, $idOrigenDet, $idEmpresa);
                 if (!$origen) {
                     throw new Exception("La línea de origen #{$idOrigenDet} ({$origenTipo}) no existe o no está disponible.");
+                }
+                // El ítem se localiza por NUP o número de documento sin fijar antes el cliente:
+                // el documento de origen debe ser del cliente del cambio.
+                if ((int) ($origen['id_cliente'] ?? 0) !== $idCliente) {
+                    $docOri = ($origenTipo === 'CAMBIO' ? 'El cambio ' : 'La factura ') . ($origen['doc_numero'] ?? '');
+                    throw new Exception("{$docOri} pertenece a otro cliente: no se puede devolver en este cambio.");
                 }
 
                 $saldo = $this->repository->getSaldoLineaOrigen($origenTipo, $idOrigenDet, $idEmpresa);
@@ -258,7 +280,47 @@ class CambioProductoCvService
                     'inventariable'     => $origen['inventariable'] ?? null,
                     'tipo_produccion'   => $origen['tipo_produccion'] ?? null,
                 ];
-            } else { // entrega
+            } elseif (strtoupper((string) ($det['origen_tipo'] ?? '')) === 'CONSIGNACION') {
+                // Entrega tomada de una CONSIGNACIÓN que el cliente ya tiene en su poder:
+                // producto, bodega, lote y NUP son los de esa línea (autoritativo, no se confía
+                // en el navegador); precio e IVA se pueden ajustar en pantalla. Consume el saldo
+                // de la consignación y NO mueve stock (la mercadería ya salió de bodega con la
+                // consignación; ver moverInventarioLinea).
+                $idOrigenDet = (int) ($det['id_origen_detalle'] ?? 0);
+                $origen = $this->repository->getDatosLineaConsignacion($idOrigenDet, $idEmpresa);
+                if (!$origen) {
+                    throw new Exception("La línea de consignación #{$idOrigenDet} no existe o la consignación ya no está Entregada.");
+                }
+                if ((int) ($origen['id_cliente'] ?? 0) !== $idCliente) {
+                    throw new Exception("La consignación {$origen['doc_numero']} es de otro cliente: no se puede entregar desde ella en este cambio.");
+                }
+
+                $saldo = $this->repository->getSaldoLineaConsignacion($idOrigenDet, $idEmpresa, $idCambio);
+                if ($cant > $saldo + 1e-9) {
+                    $nombre = $origen['producto_nombre'] ?? 'Producto';
+                    throw new Exception("No puede entregar {$cant} de \"{$nombre}\" desde la consignación {$origen['doc_numero']}: el saldo en poder del cliente es {$saldo}.");
+                }
+
+                $precio  = isset($det['precio_unitario']) ? (float) $det['precio_unitario'] : (float) $origen['precio_unitario'];
+                $porcImp = isset($det['porcentaje_impuesto']) ? (float) $det['porcentaje_impuesto'] : (float) ($origen['porcentaje_impuesto'] ?? 0);
+
+                $linea = [
+                    'tipo_linea'        => 'entrega',
+                    'origen_tipo'       => 'CONSIGNACION',
+                    'id_origen'         => (int) $origen['id_origen'],
+                    'id_origen_detalle' => $idOrigenDet,
+                    'id_producto'       => (int) $origen['id_producto'],
+                    'precio_unitario'   => $precio,
+                    'id_impuesto'       => $origen['id_impuesto'] ?? null,
+                    'porcentaje_impuesto' => $porcImp,
+                    'id_bodega'         => (int) ($origen['id_bodega'] ?? 0),
+                    'lote'              => $origen['lote'] ?? null,
+                    'nup'               => $origen['nup'] ?? null,
+                    'fecha_caducidad'   => $origen['fecha_caducidad'] ?? null,
+                    'inventariable'     => $origen['inventariable'] ?? null,
+                    'tipo_produccion'   => $origen['tipo_produccion'] ?? null,
+                ];
+            } else { // entrega desde bodega (catálogo / existencias)
                 $idProducto = (int) ($det['id_producto'] ?? 0);
                 $prod = $this->repository->getProductoParaEntrega($idProducto, $idEmpresa);
                 if (!$prod) {
@@ -278,9 +340,9 @@ class CambioProductoCvService
                     'id_impuesto'       => empty($det['id_impuesto']) ? null : (int) $det['id_impuesto'],
                     'porcentaje_impuesto' => $porcImp,
                     'id_bodega'         => $idBodega,
-                    'lote'              => $det['lote'] ?? null,
-                    'nup'               => $det['nup'] ?? null,
-                    'fecha_caducidad'   => $det['fecha_caducidad'] ?? null,
+                    'lote'              => (isset($det['lote']) && trim((string) $det['lote']) !== '') ? trim((string) $det['lote']) : null,
+                    'nup'               => (isset($det['nup']) && trim((string) $det['nup']) !== '') ? trim((string) $det['nup']) : null,
+                    'fecha_caducidad'   => (isset($det['fecha_caducidad']) && $det['fecha_caducidad'] !== '') ? $det['fecha_caducidad'] : null,
                     'inventariable'     => $prod['inventariable'] ?? null,
                     'tipo_produccion'   => $prod['tipo_produccion'] ?? null,
                 ];
@@ -354,8 +416,8 @@ class CambioProductoCvService
             $this->repository->deleteDetalles($id, $idEmpresa);
 
             $numero = ($cab['serie'] ?? '') . '-' . ($cab['secuencial'] ?? '');
-            $totDev = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['devoluciones'] ?? [], 'devolucion', false, $numero, null);
-            $totEnt = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['entregas'] ?? [], 'entrega', false, $numero, null);
+            $totDev = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['devoluciones'] ?? [], 'devolucion', false, $numero, (int) $data['id_cliente']);
+            $totEnt = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['entregas'] ?? [], 'entrega', false, $numero, (int) $data['id_cliente']);
 
             $this->repository->updateCabecera($id, $idEmpresa, [
                 'fecha_cambio'       => $data['fecha_cambio'],
@@ -450,12 +512,17 @@ class CambioProductoCvService
             if ($wasActive && !$willActive) {
                 $this->reversarInventario($id, $idEmpresa, $idUsuario, $empresaConfig, "Reverso por cambio a {$nuevoEstado} del Cambio {$numero}");
             } elseif (!$wasActive && $willActive) {
-                // Revalidar saldo de las devoluciones (excluyendo este cambio) antes de re-aplicar.
+                // Revalidar saldo (excluyendo este cambio) antes de re-aplicar: devoluciones
+                // contra su origen y entregas tomadas de una consignación contra su saldo.
                 foreach ($detalles as $det) {
-                    if (($det['tipo_linea'] ?? '') !== 'devolucion') continue;
                     $cant = (float) $det['cantidad'];
                     if ($cant <= 0) continue;
-                    $saldo = $this->repository->getSaldoLineaOrigen((string) $det['origen_tipo'], (int) $det['id_origen_detalle'], $idEmpresa, $id);
+                    $esDev    = (($det['tipo_linea'] ?? '') === 'devolucion');
+                    $esConsig = !$esDev && strtoupper((string) ($det['origen_tipo'] ?? '')) === 'CONSIGNACION';
+                    if (!$esDev && !$esConsig) continue;
+                    $saldo = $esDev
+                        ? $this->repository->getSaldoLineaOrigen((string) $det['origen_tipo'], (int) $det['id_origen_detalle'], $idEmpresa, $id)
+                        : $this->repository->getSaldoLineaConsignacion((int) $det['id_origen_detalle'], $idEmpresa, $id);
                     if ($cant > $saldo + 1e-9) {
                         $nombre = $det['producto_nombre'] ?? 'Producto';
                         throw new Exception("No se puede volver a Emitir: \"{$nombre}\" supera el saldo disponible ({$saldo}).");
@@ -642,6 +709,12 @@ class CambioProductoCvService
         $cant = (float) $det['cantidad'];
         $idBodega = (int) ($det['id_bodega'] ?? 0);
         if ($cant <= 0 || $idBodega <= 0) return;
+
+        // Entrega tomada de una consignación: la mercadería ya salió de bodega con la
+        // consignación (kardex CONSIGNACION_VENTA) y está en poder del cliente. Aquí solo
+        // se consume el saldo de esa consignación; volver a dar salida duplicaría la baja
+        // de stock (y el reverso al anular, la subiría de más).
+        if (($det['tipo_linea'] ?? '') === 'entrega' && strtoupper((string) ($det['origen_tipo'] ?? '')) === 'CONSIGNACION') return;
 
         if (!$this->afectaInventario($det, $empresaConfig)) return;
 

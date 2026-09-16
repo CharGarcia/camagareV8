@@ -590,7 +590,8 @@ class ReporteInventariosController extends BaseModuloController
             $totalProductos = (float) ($r['total_productos'] ?? 0);
             $tituloTotal = 'Consignado ' . number_format($totalProductos, 2)
                 . ' · Retornado ' . number_format((float) ($r['total_retornado'] ?? 0), 2)
-                . ' · Facturado ' . number_format((float) ($r['total_facturado'] ?? 0), 2);
+                . ' · Facturado ' . number_format((float) ($r['total_facturado'] ?? 0), 2)
+                . ' · A cambio ' . number_format((float) ($r['total_cambiado'] ?? 0), 2);
 
             return '<tr class="ri-cv-row" style="cursor:pointer;" onclick="window.RI_Consignaciones.verDetalle(' . (int) ($r['id_consignacion'] ?? 0) . ')" title="Ver detalle de productos">'
                 . '<td class="small">' . date('d-m-Y', strtotime($r['fecha_emision'] ?? '')) . '<br><small class="text-muted">' . htmlspecialchars($r['secuencial'] ?? '') . '</small></td>'
@@ -657,6 +658,11 @@ class ReporteInventariosController extends BaseModuloController
                 . ' title="Ver facturas que explican esta cantidad">' . number_format($facturado, 2) . '</a></td>'
             : '<td class="text-end small">' . number_format($facturado, 2) . '</td>';
 
+        // Entregado a cambio (Cambios de productos Emitida): sale del saldo igual que lo facturado.
+        $cambiado   = (float) ($r['cantidad_cambiada'] ?? 0);
+        $tdCambiado = '<td class="text-end small"' . ($cambiado > 0 ? ' title="Entregado al cliente a cambio de otro producto (módulo Cambios de productos)"' : '') . '>'
+            . number_format($cambiado, 2) . '</td>';
+
         return '<tr>'
             . '<td class="small">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
@@ -665,6 +671,7 @@ class ReporteInventariosController extends BaseModuloController
             . '<td class="text-end small">' . number_format((float) ($r['cantidad_consignada'] ?? 0), 2) . '</td>'
             . $tdRetornado
             . $tdFacturado
+            . $tdCambiado
             . '<td class="text-end small fw-bold">' . number_format((float) ($r['saldo'] ?? 0), 2) . '</td>'
             . '</tr>';
     }
@@ -926,9 +933,10 @@ class ReporteInventariosController extends BaseModuloController
                     'consignado' => number_format($suma('cantidad_consignada'), 2),
                     'retornado'  => number_format($suma('cantidad_retornada'), 2),
                     'facturado'  => number_format($suma('cantidad_facturada'), 2),
+                    'cambiado'   => number_format($suma('cantidad_cambiada'), 2),
                     'saldo'      => number_format($suma('saldo'), 2),
                 ],
-                'rows' => $this->renderRows($lineas, fn($r) => $this->filaConsignacionDetalleLinea($r), 8),
+                'rows' => $this->renderRows($lineas, fn($r) => $this->filaConsignacionDetalleLinea($r), 9),
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -1237,7 +1245,7 @@ class ReporteInventariosController extends BaseModuloController
                 };
                 if ($modo === 'NINGUNO') {
                     $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Asesor', 'Responsable de traslado',
-                                'Producto', 'Bodega', 'Lote', 'NUP', 'Consignado', 'Retornado', 'Facturado', 'Saldo', 'Valor a costo'];
+                                'Producto', 'Bodega', 'Lote', 'NUP', 'Consignado', 'Retornado', 'Facturado', 'A cambio', 'Saldo', 'Valor a costo'];
                     $data = array_map(fn($r) => [
                         date('d-m-Y', strtotime($r['fecha_emision'])), $r['secuencial'] ?? '',
                         $r['cliente_nombre'] ?? '', $r['cliente_identificacion'] ?? '',
@@ -1245,6 +1253,7 @@ class ReporteInventariosController extends BaseModuloController
                         $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? '',
                         $r['numero_lote'] ?? '-', $r['nup'] ?? '-',
                         (float) $r['cantidad_consignada'], (float) $r['cantidad_retornada'], (float) $r['cantidad_facturada'],
+                        (float) ($r['cantidad_cambiada'] ?? 0),
                         (float) $r['saldo'], (float) $r['valor_saldo'],
                     ], $rows);
                 } else {

@@ -445,7 +445,50 @@ class ControlBancarioRepository extends BaseRepository
                   AND COALESCE(ep2.estado_cheque, 'vigente') <> 'anulado'
                 ORDER BY ep2.id
                 LIMIT 1
-            ) ep ON TRUE";
+            ) ep ON TRUE
+            LEFT JOIN ingresos_cabecera icb ON icb.id = ip.id_ingreso
+            LEFT JOIN clientes clib ON clib.id = icb.id_cliente
+            LEFT JOIN egresos_cabecera ecb ON ecb.id = ep.id_egreso";
+    }
+
+    /**
+     * Beneficiario / cliente del movimiento, en orden de preferencia: el beneficiario
+     * escrito en el cheque del egreso; la entidad de la línea del asiento (cliente,
+     * proveedor o empleado); y, si la línea del banco no lleva entidad (asientos
+     * antiguos o migrados) o el ingreso se registró sin cliente de catálogo, el cliente
+     * o el "Recibí de" de la cabecera del ingreso, o el beneficiario libre del egreso.
+     * Requiere los alias cli/prov de la consulta que lo usa y los de joinsDerivado().
+     */
+    private function sqlBeneficiario(?string $emp = 'emp'): string
+    {
+        $empleado = $emp !== null ? "{$emp}.nombres_apellidos, " : '';
+        return "COALESCE(NULLIF(ep.beneficiario_cheque, ''), cli.nombre, prov.razon_social, {$empleado}
+                         clib.nombre, NULLIF(icb.recibo_de, ''), NULLIF(ecb.beneficiario_nombre, ''))";
+    }
+
+    /**
+     * Un ingreso/egreso ANULADO (o eliminado) no es un movimiento del banco, aunque su
+     * asiento siga 'contabilizado' (la anulación del asiento corre fuera de la
+     * transacción del documento y puede fallar en silencio; los migrados tampoco traen
+     * siempre el asiento anulado). Se excluye por el documento de origen del asiento, no
+     * por el enlace ip/ep, para que aplique también a asientos sin línea de pago enlazada.
+     * Requiere el alias `ac` (asientos_contables_cabecera).
+     */
+    private function sqlExcluirOrigenAnulado(): string
+    {
+        return "
+              AND NOT EXISTS (
+                    SELECT 1 FROM ingresos_cabecera icx
+                    WHERE UPPER(ac.tipo_comprobante) = 'INGRESOS'
+                      AND icx.id = ac.id_referencia_origen
+                      AND (icx.eliminado = TRUE OR COALESCE(icx.estado, '') = 'anulado')
+              )
+              AND NOT EXISTS (
+                    SELECT 1 FROM egresos_cabecera ecx
+                    WHERE UPPER(ac.tipo_comprobante) = 'EGRESOS'
+                      AND ecx.id = ac.id_referencia_origen
+                      AND (ecx.eliminado = TRUE OR COALESCE(ecx.estado, '') = 'anulado')
+              )";
     }
 
     /**
@@ -548,8 +591,9 @@ class ControlBancarioRepository extends BaseRepository
                     ad.haber,
                     ad.tipo_entidad,
                     ad.id_entidad,
-                    COALESCE(cli.nombre, prov.razon_social, emp.nombres_apellidos) AS nombre_entidad,
-                    COALESCE(NULLIF(ep.beneficiario_cheque, ''), cli.nombre, prov.razon_social, emp.nombres_apellidos) AS beneficiario_cheque,
+                    COALESCE(cli.nombre, prov.razon_social, emp.nombres_apellidos,
+                             clib.nombre, NULLIF(icb.recibo_de, ''), NULLIF(ecb.beneficiario_nombre, '')) AS nombre_entidad,
+                    {$this->sqlBeneficiario('emp')} AS beneficiario_cheque,
                     {$this->selectDerivado()}
                 FROM asientos_contables_detalle ad
                 INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
@@ -563,7 +607,8 @@ class ControlBancarioRepository extends BaseRepository
                   AND ac.eliminado = FALSE
                   AND ad.eliminado = FALSE
                   AND ad.id_cuenta_contable = :id_cuenta_contable
-                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  {$this->sqlExcluirOrigenAnulado()}";
     }
 
     /** Parámetros que espera baseContable(). */
@@ -729,7 +774,7 @@ class ControlBancarioRepository extends BaseRepository
                     ad.documento_referencia,
                     ad.debe,
                     ad.haber,
-                    COALESCE(NULLIF(ep.beneficiario_cheque, ''), cli.nombre, prov.razon_social, empb.nombres_apellidos) AS nombre_entidad,
+                    {$this->sqlBeneficiario('empb')} AS nombre_entidad,
                     (egc.id_empleado IS NOT NULL) AS es_empleado,
                     fp.id AS id_forma_pago,
                     fp.nombre AS forma_pago_nombre,
@@ -747,7 +792,8 @@ class ControlBancarioRepository extends BaseRepository
                   AND ac.estado = 'contabilizado'
                   AND ac.eliminado = FALSE
                   AND ad.eliminado = FALSE
-                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  {$this->sqlExcluirOrigenAnulado()}";
 
         $params = [':id_empresa' => $idEmpresa];
 
@@ -856,7 +902,7 @@ class ControlBancarioRepository extends BaseRepository
                     ad.documento_referencia,
                     ad.debe,
                     ad.haber,
-                    COALESCE(cli.nombre, prov.razon_social) AS nombre_entidad,
+                    {$this->sqlBeneficiario(null)} AS nombre_entidad,
                     {$this->selectDerivado()}
                 FROM asientos_contables_detalle ad
                 INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
@@ -869,7 +915,8 @@ class ControlBancarioRepository extends BaseRepository
                   AND ac.eliminado = FALSE
                   AND ad.eliminado = FALSE
                   AND ad.id_cuenta_contable = :id_cuenta
-                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  {$this->sqlExcluirOrigenAnulado()}";
     }
 
     /**
@@ -1094,7 +1141,8 @@ class ControlBancarioRepository extends BaseRepository
                   AND ac.eliminado = FALSE
                   AND ad.eliminado = FALSE
                   AND ad.id_cuenta_contable = :id_cuenta
-                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  {$this->sqlExcluirOrigenAnulado()}";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa, ':id_cuenta' => $idCuentaContable]);
         return $saldoInicial + (float) $st->fetchColumn();

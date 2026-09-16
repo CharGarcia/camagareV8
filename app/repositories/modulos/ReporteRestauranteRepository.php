@@ -316,6 +316,77 @@ class ReporteRestauranteRepository extends BaseRepository
         return $st->fetch(PDO::FETCH_ASSOC) ?: ['cantidad_documentos' => 0, 'cantidad_comandas' => 0, 'total_vendido' => 0];
     }
 
+    /**
+     * Servicio y propina voluntaria de las ventas que entran en el reporte, para
+     * el bloque "resumen por forma de pago" de la tirilla —el mismo que manda el
+     * correo del cierre de caja (CajaSesionRepository::getPropinasDelTurno()),
+     * solo que acotado por los filtros del reporte y no por turno—. Las dos
+     * viajan en sitios distintos del comprobante, así que se suman aparte:
+     *   · **Servicio** (el recargo del local): campo `propina` de la factura o
+     *     recibo que generó cada grupo de cobro. Cada documento se cuenta una
+     *     sola vez aunque lo alcancen varias líneas de la CTE.
+     *   · **Propina voluntaria** del cliente: líneas de comanda cuyo producto es
+     *     el configurado como propina en algún establecimiento de la empresa.
+     *     Ya están dentro del "total vendido" (la CTE las incluye como una línea
+     *     más); aquí solo se dice cuánto de ese total es propina.
+     *
+     * @return array{servicio: float, voluntaria: float}
+     */
+    public function getPropinas(int $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteVentas($idEmpresa, $filtros);
+        $condComanda = $this->condComanda($filtros, $params);
+        $params[':e3'] = $idEmpresa;
+
+        $sql = $cte . ",
+            docs AS (
+                SELECT DISTINCT g2.id_documento, g2.tipo_documento
+                FROM ventas
+                JOIN comandas c ON c.id = ventas.id_comanda
+                JOIN comanda_grupos_cobro g2 ON g2.id = ventas.id_grupo
+                WHERE g2.id_documento IS NOT NULL {$condComanda}
+            )
+            SELECT
+                COALESCE((SELECT SUM(v.propina)
+                            FROM docs d
+                            JOIN ventas_cabecera v ON v.id = d.id_documento
+                           WHERE d.tipo_documento = 'FACTURA'
+                             AND v.eliminado = false AND v.estado <> 'anulado'), 0)
+              + COALESCE((SELECT SUM(r.propina)
+                            FROM docs d
+                            JOIN recibos_venta_cabecera r ON r.id = d.id_documento
+                           WHERE d.tipo_documento = 'RECIBO'
+                             AND r.eliminado = false AND r.estado <> 'anulado'), 0) AS servicio,
+                COALESCE((SELECT SUM(ventas.monto)
+                            FROM ventas
+                            JOIN comandas c ON c.id = ventas.id_comanda
+                            JOIN comanda_detalle cd ON cd.id = ventas.id_linea
+                           WHERE cd.id_producto IN (
+                                     SELECT ee.id_producto_propina
+                                       FROM empresa_establecimiento ee
+                                      WHERE ee.id_empresa = :e3
+                                        AND ee.id_producto_propina IS NOT NULL
+                                 ) {$condComanda}), 0) AS voluntaria
+        ";
+
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable $e) {
+            // Mismo criterio defensivo que el cierre de caja: si falta la columna
+            // de propina por una migración pendiente, la tirilla sale igual sin
+            // este par de líneas en vez de romperse.
+            error_log('[ReporteRestaurante] No se pudieron sumar servicio/propina: ' . $e->getMessage());
+            $r = [];
+        }
+
+        return [
+            'servicio'   => round((float) ($r['servicio'] ?? 0), 2),
+            'voluntaria' => round((float) ($r['voluntaria'] ?? 0), 2),
+        ];
+    }
+
     /** Mesas de la empresa (para el filtro). */
     public function getMesas(int $idEmpresa): array
     {

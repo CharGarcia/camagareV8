@@ -206,7 +206,8 @@ class RetornoCvRepository extends BaseRepository
                           AND cfd.eliminado = false
                           AND cf.eliminado = false
                           AND cf.estado = 'facturada'
-                    ), 0) AS cantidad_facturada
+                    ), 0) AS cantidad_facturada,
+                    COALESCE((" . CambioProductoCvRepository::sqlEntregadoEnCambios('cvd.id') . "), 0) AS cantidad_cambiada
                 FROM consignaciones_ventas_detalles cvd
                 INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
                 INNER JOIN productos p ON p.id = cvd.id_producto
@@ -217,15 +218,17 @@ class RetornoCvRepository extends BaseRepository
                   AND cv.estado = 'Entregada'
                   AND cvd.eliminado = false
             ) t
-            WHERE (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada) > 0
+            WHERE (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada - t.cantidad_cambiada) > 0
             ORDER BY t.fecha_emision DESC, t.id_consignacion DESC, t.id_consignacion_detalle ASC
         ";
         $st = $this->db->prepare($sql);
         $st->execute($params);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
+        // saldo = consignado − retornado − facturado − entregado a cambio (Cambios de productos Emitida)
         foreach ($rows as &$r) {
-            $r['saldo_pendiente'] = (float) $r['cantidad_consignada'] - (float) $r['cantidad_retornada'] - (float) $r['cantidad_facturada'];
+            $r['saldo_pendiente'] = (float) $r['cantidad_consignada'] - (float) $r['cantidad_retornada']
+                - (float) $r['cantidad_facturada'] - (float) $r['cantidad_cambiada'];
         }
         unset($r);
 
@@ -283,7 +286,7 @@ class RetornoCvRepository extends BaseRepository
                             INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
                             WHERE cfd.id_consignacion_detalle = cvd.id
                               AND cfd.eliminado = false AND cf.eliminado = false AND cf.estado = 'facturada'
-                      ), 0)) > 0
+                      ), 0) - COALESCE((" . CambioProductoCvRepository::sqlEntregadoEnCambios('cvd.id') . "), 0)) > 0
               )
             ORDER BY cv.fecha_emision DESC, cv.id DESC
             LIMIT 15
@@ -341,7 +344,13 @@ class RetornoCvRepository extends BaseRepository
         $stFact->execute([':id' => $idConsignacionDetalle]);
         $facturado = (float) $stFact->fetchColumn();
 
-        return (float) $cantidad - $retornado - $facturado;
+        // Entregado a cambio desde esta línea (Cambios de productos Emitida): ya está en
+        // poder del cliente como suyo, no vuelve por retorno.
+        $stCam = $this->db->prepare("SELECT COALESCE((" . CambioProductoCvRepository::sqlEntregadoEnCambios(':id') . "), 0)");
+        $stCam->execute([':id' => $idConsignacionDetalle]);
+        $cambiado = (float) $stCam->fetchColumn();
+
+        return (float) $cantidad - $retornado - $facturado - $cambiado;
     }
 
     // ─── CRUD ─────────────────────────────────────────────────────────────────

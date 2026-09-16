@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte-restaurante
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte restaurante, comandas, mesas, platos mas vendidos, anulaciones, consumo, rotacion de mesas, forma de pago, filtro forma de pago, tirilla, imprimir tirilla, enviar por correo, pdf, excel, resumen por forma de pago, cuanto entro en efectivo, cuadrar caja, cierre de turno, sin forma de pago registrada
-version: 1.3
+version: 1.4
 orden: 70
 estado: activo
 ---
@@ -77,9 +77,25 @@ lo que se está viendo.
 
 La **tirilla** resume cada fila en dos líneas —el concepto y, debajo, su dato
 secundario (ubicación, categoría, número de comandas) con el importe a la
-derecha—, porque en 58 u 80 mm no caben las columnas de la pantalla. Al pie van
-las comandas, los documentos y el total. Lleva la leyenda *"Reporte interno — sin
-validez tributaria"*: es para la caja, no para el cliente.
+derecha—, porque en 58 u 80 mm no caben las columnas de la pantalla. Lleva la
+leyenda *"Reporte interno — sin validez tributaria"*: es para la caja, no para el
+cliente.
+
+Debajo del detalle, **en cualquier vista**, la tirilla imprime el bloque
+**Resumen por forma de pago**, el mismo que llega por correo al cerrar la caja:
+una línea por forma de pago con su tipo, cuántos cobros y cuánto entró; el
+**Total cobrado**; y, aparte, el **Servicio** (el recargo del local) y la
+**Propina voluntaria** (la que dejó el cliente). Las dos propinas ya están dentro
+del total: son un *"de esto, tanto se reparte al personal"*, no se suman encima.
+Si la vista activa ya es *Resumen por forma de pago*, el detalle es esa misma
+tabla, así que el bloque solo repite el total y las propinas.
+
+A diferencia del correo del cierre, aquí **no hay "contado" ni "diferencia"**:
+el reporte se filtra por fechas, no por turno de caja, así que no existe un
+arqueo contra qué cuadrar. Por lo mismo, el total cuadra con el *Total vendido*
+del reporte y no necesariamente con el cierre de caja de ese día.
+
+Al pie van las comandas, los documentos y el total.
 
 El **correo** se abre con el **correo de la empresa** ya escrito (el de *Empresa →
 Datos generales*), y se puede cambiar o añadir más separándolos con comas. El
@@ -102,6 +118,9 @@ documentos y total— y el PDF va adjunto.
 
 ## Historial de cambios
 
+- **1.4** — La **tirilla** imprime, en cualquier vista, el bloque **Resumen por
+  forma de pago** igual al del correo del cierre de caja: cobros y total por
+  forma de pago, total cobrado, servicio y propina voluntaria.
 - **1.3** — La ventana de la tirilla ya no desaparece al cancelar la
   impresión: antes el navegador avisaba igual al imprimir que al cancelar y la
   ventana desaparecía a los 2 segundos, obligando a pedir la tirilla otra vez.

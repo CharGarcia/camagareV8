@@ -853,6 +853,22 @@ class ConsignacionVentaService
         }
     }
 
+    /**
+     * Cantidad entregada a cambio por línea de consignación (Cambios de productos Emitida):
+     * [id_consignacion_detalle => cantidad]. Esa unidad pasó a ser del cliente como reposición
+     * de otra devuelta, así que sale del saldo igual que una facturación.
+     */
+    public function getCambiadoPorLinea(int $idConsignacion, int $idEmpresa): array
+    {
+        try {
+            $cambioRepo = new \App\repositories\modulos\CambioProductoCvRepository();
+            return $cambioRepo->getEntregadoPorConsignacion($idConsignacion, $idEmpresa);
+        } catch (\Throwable $e) {
+            // Tablas de cambios inexistentes (migración pendiente): sin datos.
+            return [];
+        }
+    }
+
     /** Evidencias de entrega (GPS + firma) registradas desde la app móvil, para la pestaña Entrega. */
     public function getEntregasDeConsignacion(int $idConsignacion, int $idEmpresa): array
     {

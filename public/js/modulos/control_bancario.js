@@ -472,6 +472,13 @@
         document.getElementById('cbm-info-fecha').textContent = fmtDateDisplay(row.fecha_asiento);
         document.getElementById('cbm-info-comprobante').textContent = row.numero_comprobante || 'S/N';
         document.getElementById('cbm-info-glosa').textContent = row.referencia_detalle || row.concepto || '';
+        // Quién está detrás del movimiento: la etiqueta sigue al tipo de entidad de la línea
+        // (Cliente / Proveedor / Empleado); si no viene, la genérica. El nombre sale del
+        // beneficiario del cheque o, si no hay, del tercero del asiento/documento.
+        const ETIQUETA_ENTIDAD = { cliente: 'Cliente', proveedor: 'Proveedor', empleado: 'Empleado' };
+        document.getElementById('cbm-info-beneficiario-label').textContent =
+            (ETIQUETA_ENTIDAD[row.tipo_entidad] || 'Beneficiario / Cliente') + ':';
+        document.getElementById('cbm-info-beneficiario').textContent = row.beneficiario_cheque || row.nombre_entidad || '—';
         const monto = parseFloat(row.debe) > 0 ? row.debe : row.haber;
         document.getElementById('cbm-info-monto').textContent = '$' + Number(monto || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

@@ -217,8 +217,10 @@ class ConsignacionVentaPdfService
         if ($mostrarCad)  $cols[] = ['t' => 'Caducidad', 'w' => 18, 'a' => 'C', 'k' => 'fecha_caducidad'];
         $cols[] = ['t' => 'NUP',        'w' => 16, 'a' => 'L', 'k' => 'nup'];
         $cols[] = ['t' => 'Cantidad',   'w' => 16, 'a' => 'R', 'k' => 'cantidad'];
-        $cols[] = ['t' => 'Retorno',    'w' => 16, 'a' => 'R', 'k' => 'retornado'];
-        $cols[] = ['t' => 'Facturados', 'w' => 18, 'a' => 'R', 'k' => 'facturado'];
+        $cols[] = ['t' => 'Retorno',    'w' => 15, 'a' => 'R', 'k' => 'retornado'];
+        $cols[] = ['t' => 'Facturados', 'w' => 17, 'a' => 'R', 'k' => 'facturado'];
+        // Entregado a cambio (Cambios de productos): también sale del saldo consignado.
+        $cols[] = ['t' => 'Cambio',     'w' => 14, 'a' => 'R', 'k' => 'cambiado'];
         $cols[] = ['t' => 'Acon',       'w' => 12, 'a' => 'C', 'k' => '__acon__'];
 
         $fixed = 0.0;
@@ -270,7 +272,7 @@ class ConsignacionVentaPdfService
                 $raw = $d[$k] ?? '';
                 if ($k === 'cantidad') {
                     $vals[] = number_format((float)$raw, 2);
-                } elseif (in_array($k, ['retornado', 'facturado'], true)) {
+                } elseif (in_array($k, ['retornado', 'facturado', 'cambiado'], true)) {
                     // En blanco cuando es 0: menos ruido visual que repetir "0.00" en cada fila.
                     $vals[] = ((float)$raw != 0.0) ? number_format((float)$raw, 2) : '';
                 } elseif ($k === 'fecha_caducidad') {

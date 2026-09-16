@@ -51,8 +51,8 @@ class EntregasConsignacionesRepository extends BaseRepository
 
     /**
      * Arma el WHERE + params compartido por getListado()/getResumen(), aplicando:
-     * multiempresa + soft-delete, filtro "solo mis responsables" (repartidor sin
-     * acceso total), buscador de texto libre y sintaxis clave:valor (FiltrosBusqueda).
+     * multiempresa + soft-delete, filtro "solo mis responsables" (usuario vinculado
+     * a responsables de traslado en config/usuarios-sistema), buscador de texto libre y sintaxis clave:valor (FiltrosBusqueda).
      *
      * $idsResponsables: null = ve todas las entregas; array (aunque vacío) = solo
      * las de esos responsables_traslado.

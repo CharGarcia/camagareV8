@@ -6,7 +6,7 @@ ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: entregas, entrega, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas
-version: 1.2
+version: 1.3
 orden: 0
 estado: activo
 ---
@@ -31,9 +31,9 @@ Ventas, pero a nivel de listado y con filtros propios.
 
 - Debe existir al menos una consignación marcada como "Entregada" (desde la app
   móvil o manualmente) para que aparezcan filas en el listado.
-- Si un usuario no tiene el permiso de **acceso total** en este módulo, debe
-  estar vinculado como responsable de traslado (ver más abajo, sección
-  Permisos) para poder ver alguna entrega.
+- Si un usuario debe ver **solo las entregas de ciertos repartidores**, vincúlelo
+  a esos responsables de traslado desde `config/usuarios-sistema` (ver más
+  abajo, sección Permisos). Sin vínculo ve todas las entregas de la empresa.
 
 ## Cómo se usa
 
@@ -74,21 +74,27 @@ Ventas, pero a nivel de listado y con filtros propios.
 
 ## Permisos
 
-Módulo de solo lectura: solo existe el permiso **Ver**. Lo que cambia con
-**acceso total** es el alcance de lo que se ve:
+Módulo de solo lectura: solo existe el permiso **Ver**. El alcance de lo que se
+ve **no** lo define el flag "acceso total" del permiso, sino el **vínculo del
+usuario con responsables de traslado** que se administra en
+`config/usuarios-sistema` (ficha del usuario, pestaña *Responsables de
+traslado*; tabla `usuarios_responsables_traslado`, la misma que usa la app
+móvil de entregas):
 
-- **Con acceso total**: ve las entregas de toda la empresa.
-- **Sin acceso total**: ve solo las entregas de los responsables de traslado a
-  los que está vinculado (tabla `usuarios_responsables_traslado`, la misma que
-  usa la app móvil de entregas). Si no está vinculado a ningún responsable, no
-  ve ninguna fila.
+- **Superadministrador (nivel 3)**: ve todas las entregas de la empresa, esté o
+  no vinculado.
+- **Usuario vinculado a uno o más responsables**: ve solo las entregas de las
+  consignaciones de esos responsables, aunque tenga "acceso total" en el
+  módulo.
+- **Usuario sin ningún vínculo**: ve todas las entregas de la empresa.
 
 Ese alcance vale para todo lo que sirve el módulo, **incluida la imagen de la
 firma** de una entrega: si la entrega no es de uno de sus responsables, la
 firma no se muestra aunque se pida por su enlace directo.
 
-El mismo alcance rige en la **app móvil**: sin acceso total, el repartidor solo
-puede abrir y registrar la entrega de las consignaciones de sus responsables.
+El mismo alcance rige en la **app móvil** (`api/v1/entregas`): el repartidor
+vinculado solo puede ver, abrir y registrar la entrega de las consignaciones
+de sus responsables; sin vínculo (o nivel 3) puede con todas.
 Una consignación fuera de su alcance responde *«Consignación no encontrada»*,
 igual que una que no existe.
 
@@ -112,13 +118,22 @@ igual que una que no existe.
 
 ## Errores frecuentes
 
-- **"No se encontraron entregas" con datos que sí existen**: revise si el
-  usuario tiene acceso total; si no lo tiene, debe estar vinculado como
-  responsable de traslado a las consignaciones que busca ver.
+- **"No se encontraron entregas" con datos que sí existen**: revise en
+  `config/usuarios-sistema` a qué responsables de traslado está vinculado el
+  usuario: si tiene vínculos, solo ve las entregas de esos responsables. Para
+  que vea todas, quítele los vínculos (o hágalo nivel 3).
 - **La firma no carga en el detalle**: la entrega no tiene `firma_path` (las
   entregas registradas manualmente desde la web nunca tienen firma).
 
 ## Historial de cambios
+
+- **1.3** — El alcance del listado, los KPIs, las exportaciones y la firma ya
+  no depende del flag "acceso total" sino del **vínculo con responsables de
+  traslado** de `config/usuarios-sistema`: nivel 3 y usuarios sin vínculo ven
+  todas las entregas de la empresa; usuarios vinculados, solo las de sus
+  responsables. Antes, un usuario sin acceso total y sin vínculo no veía nada.
+  La misma regla aplica en la app móvil (listado, detalle y registro de la
+  entrega).
 
 - **1.2** — En la **app móvil**, abrir una consignación y registrar su entrega
   respetan el alcance por responsable de traslado, igual que el listado: antes,

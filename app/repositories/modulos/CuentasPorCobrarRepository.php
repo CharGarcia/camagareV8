@@ -193,34 +193,73 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // REGISTROS PROPIOS (§6)
+    // ALCANCE DEL USUARIO (§6, ver App\Helpers\AlcanceRegistros)
     //
-    // Si el usuario NO tiene acceso total ('t') en el módulo, la cartera se limita
-    // a los documentos que él registró. El id lo resuelve el controller desde el
-    // permiso (CuentasPorCobrarController::idUsuarioFiltro()) y viaja dentro de los
-    // filtros: NUNCA llega del cliente.
-    //
-    // Cada fuente guarda al creador en su propia columna: las facturas y los recibos
-    // en `id_usuario` —la misma que filtran sus módulos de origen, Factura de Venta y
-    // Recibo de Venta, para que las tres pantallas coincidan— y los saldos iniciales
-    // en `created_by` (su tabla no tiene `id_usuario`).
+    // Si el usuario NO tiene acceso total ('t') en el módulo, la cartera se limita:
+    //   - Modo VENDEDOR (`id_vendedor_filtro`): a los documentos de los clientes
+    //     asignados a ese vendedor (`clientes.id_vendedor`) y a los emitidos a su
+    //     nombre (`id_vendedor` del documento). Los saldos iniciales no llevan
+    //     vendedor: entran solo por el cliente.
+    //   - Modo REGISTROS PROPIOS (`id_usuario_filtro`, el usuario no es vendedor):
+    //     a los documentos que él registró. Cada fuente guarda al creador en su
+    //     propia columna: facturas y recibos en `id_usuario` —la misma que filtran
+    //     Factura de Venta y Recibo de Venta— y saldos iniciales en `created_by`.
+    // Lo resuelve el controller desde el permiso y la sesión
+    // (CuentasPorCobrarController::alcanceUsuario()) y viaja dentro de los filtros:
+    // NUNCA llega del cliente.
     // ─────────────────────────────────────────────────────────────────────
 
     /**
-     * Devuelve " AND {alias}.{columna} = :{ph}" cuando hay filtro de registros
-     * propios, o cadena vacía si el usuario ve toda la empresa.
+     * Devuelve la condición a concatenar al WHERE (" AND (...)"), o cadena vacía
+     * si el usuario ve toda la empresa.
      *
-     * Cada llamada usa su propio placeholder ($ph): varias consultas combinan más
-     * de un WHERE en el mismo SQL y PDO no admite repetir un nombre de parámetro.
+     * Cada llamada usa su propio prefijo de placeholder ($ph): varias consultas
+     * combinan más de un WHERE en el mismo SQL. Dentro de una misma condición el
+     * IN del vendedor se repite (cliente y documento); en este proyecto eso es
+     * seguro (ver memoria pdo-placeholders-repetidos).
+     *
+     * @param bool $docTieneVendedor false para tablas sin `id_vendedor` (saldos iniciales).
      */
-    private function condUsuarioPropio(array $filtros, string $alias, string $columna, string $ph, array &$params): string
+    private function condAlcanceUsuario(array $filtros, string $alias, string $columna, string $ph, array &$params, bool $docTieneVendedor = true): string
     {
-        $idUsuario = (int) ($filtros['id_usuario_filtro'] ?? 0);
+        // Modo VENDEDOR: cartera del asesor = clientes asignados a él + documentos a su nombre.
+        $idsVend = \App\Helpers\AlcanceRegistros::idsVendedor($filtros);
+        if ($idsVend) {
+            $in = [];
+            foreach ($idsVend as $i => $id) {
+                $in[] = ":{$ph}_v{$i}";
+                $params[":{$ph}_v{$i}"] = $id;
+            }
+            $in = implode(',', $in);
+            $cond = "EXISTS (SELECT 1 FROM clientes {$ph}_c
+                             WHERE {$ph}_c.id = {$alias}.id_cliente AND {$ph}_c.id_vendedor IN ({$in}))";
+            if ($docTieneVendedor) {
+                $cond .= " OR {$alias}.id_vendedor IN ({$in})";
+            }
+            return " AND ({$cond})";
+        }
+
+        // Modo REGISTROS PROPIOS: el usuario no es vendedor, ve lo que él registró.
+        $idUsuario = \App\Helpers\AlcanceRegistros::idUsuario($filtros);
         if ($idUsuario <= 0) {
             return '';
         }
         $params[":{$ph}"] = $idUsuario;
         return " AND {$alias}.{$columna} = :{$ph}";
+    }
+
+    /**
+     * Vendedor asignado a un cliente (`clientes.id_vendedor`), o null. Para las
+     * acciones por id sobre saldos iniciales, cuya consulta no trae al cliente.
+     */
+    public function getIdVendedorDeCliente(int $idCliente, int $idEmpresa): ?int
+    {
+        $st = $this->db->prepare(
+            "SELECT id_vendedor FROM clientes WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false"
+        );
+        $st->execute([':id' => $idCliente, ':id_empresa' => $idEmpresa]);
+        $v = $st->fetchColumn();
+        return $v ? (int) $v : null;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -433,7 +472,7 @@ class CuentasPorCobrarRepository extends BaseRepository
     {
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
-        $where .= $this->condUsuarioPropio($filtros, "s", "created_by", "prop_si_stats", $params);
+        $where .= $this->condAlcanceUsuario($filtros, "s", "created_by", "prop_si_stats", $params, false);
 
         if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
@@ -555,7 +594,7 @@ class CuentasPorCobrarRepository extends BaseRepository
     {
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
-        $where .= $this->condUsuarioPropio($filtros, 's', 'created_by', 'prop_si_ant', $params);
+        $where .= $this->condAlcanceUsuario($filtros, 's', 'created_by', 'prop_si_ant', $params, false);
 
         if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
@@ -619,7 +658,7 @@ class CuentasPorCobrarRepository extends BaseRepository
               AND v.eliminado  = false
               AND v.estado NOT IN ('anulado','facturado')
               AND {$this->condAmbiente('v', $idsEmpresa)}"
-              . $this->condUsuarioPropio($filtros, 'v', 'id_usuario', 'prop_rec', $params);
+              . $this->condAlcanceUsuario($filtros, 'v', 'id_usuario', 'prop_rec', $params);
 
         $saldoExpr = "(v.importe_total - COALESCE(cb.total_cobrado, 0))";
 
@@ -813,6 +852,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 c.email          AS cliente_email,
                 c.telefono       AS cliente_telefono,
                 c.identificacion AS cliente_ruc,
+                c.id_vendedor    AS cliente_id_vendedor, -- alcance por vendedor (§6)
                 COALESCE(cb.total_cobrado, 0)                   AS total_cobrado,
                 0                                               AS total_retenido,
                 0                                               AS total_nc,
@@ -1050,6 +1090,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 c.email          AS cliente_email,
                 c.telefono       AS cliente_telefono,
                 c.identificacion AS cliente_ruc,
+                c.id_vendedor    AS cliente_id_vendedor, -- alcance por vendedor (§6)
                 COALESCE(cb.total_cobrado, 0)                                                                                AS total_cobrado,
                 COALESCE(rt.total_retenido, 0)                                                                               AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                                                     AS total_nc,
@@ -1381,7 +1422,7 @@ class CuentasPorCobrarRepository extends BaseRepository
 
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($this->idsEmpresa($idsEmpresa), 'si_emp', $params)}) AND s.eliminado = false";
-        $where .= $this->condUsuarioPropio($filtros, 's', 'created_by', 'prop_si', $params);
+        $where .= $this->condAlcanceUsuario($filtros, 's', 'created_by', 'prop_si', $params, false);
         [$fCob, $fRet, $fNc] = $this->corteSaldoInicialCxc($filtros, $params);
 
         if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
@@ -1446,7 +1487,7 @@ class CuentasPorCobrarRepository extends BaseRepository
               AND v.eliminado  = false
               AND v.estado    IN ('autorizado','autorizada')
               AND {$this->condAmbiente('v', $idsEmpresa)}"
-              . $this->condUsuarioPropio($filtros, 'v', 'id_usuario', 'prop_fac', $params);
+              . $this->condAlcanceUsuario($filtros, 'v', 'id_usuario', 'prop_fac', $params);
 
         // Filtro de estado CxC
         $estado = $filtros['estado'] ?? 'PENDIENTES';

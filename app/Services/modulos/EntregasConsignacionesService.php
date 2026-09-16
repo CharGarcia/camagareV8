@@ -22,17 +22,24 @@ class EntregasConsignacionesService
     }
 
     /**
-     * Ids de responsables_traslado a los que restringir la vista (repartidor sin
-     * "acceso total" solo ve las entregas de los responsables que representa).
+     * Ids de responsables_traslado a los que restringir la vista. El alcance lo
+     * define el vínculo usuario <-> responsable de traslado que se administra en
+     * config/usuarios-sistema (tabla usuarios_responsables_traslado), no el flag
+     * "acceso total" del permiso:
+     *   - Nivel 3 (superadministrador): ve todas las entregas de la empresa.
+     *   - Usuario vinculado a uno o más responsables: solo las entregas de esos
+     *     responsables (aunque tenga "acceso total" en el módulo).
+     *   - Usuario sin ningún vínculo: ve todas las entregas de la empresa.
      * @return int[]|null null = ve todas.
      */
-    public function resolverFiltroResponsables(int $idUsuario, int $idEmpresa, bool $accesoTotal): ?array
+    public function resolverFiltroResponsables(int $idUsuario, int $idEmpresa, int $nivel): ?array
     {
-        if ($accesoTotal) {
+        if ($nivel >= 3) {
             return null;
         }
         $repo = new ApiUsuarioResponsableTrasladoRepository();
-        return $repo->getIdsResponsablesDeUsuario($idUsuario, $idEmpresa);
+        $ids  = $repo->getIdsResponsablesDeUsuario($idUsuario, $idEmpresa);
+        return empty($ids) ? null : $ids;
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?array $idsResponsables): array
@@ -50,8 +57,9 @@ class EntregasConsignacionesService
 
     /**
      * ¿Esta entrega entra en lo que el usuario puede ver? Mismo criterio que el
-     * listado: con acceso total ($idsResponsables = null) ve todas; si no, solo
-     * las de las consignaciones de sus responsables de traslado.
+     * listado: sin restricción ($idsResponsables = null: nivel 3 o usuario sin
+     * vínculo) ve todas; si no, solo las de las consignaciones de sus
+     * responsables de traslado.
      */
     public function puedeVerEntrega(int $idEntrega, int $idEmpresa, ?array $idsResponsables): bool
     {

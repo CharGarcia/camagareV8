@@ -196,6 +196,19 @@ miran los documentos **creados en este sistema**.
 Si un documento migrado necesita asiento por alguna razón puntual, se registra a
 mano desde su pestaña *Asiento contable*.
 
+**Documentos que ya tienen su asiento migrado.** Cuando la migración de
+contabilidad trae el diario del sistema anterior, deja cada documento enlazado a
+su asiento histórico (es el asiento que se ve en la pestaña *Asiento contable*
+del documento). Un documento así **nunca recibe un asiento automático**, sin
+importar cómo haya llegado al sistema: ni por la generación en masa, ni al
+abrir el módulo, ni al guardar el documento, ni desde **Regenerar** en Asientos
+Contables o en Auditoría Contable. Esto cubre también a los documentos que ya
+existían en este sistema antes de migrar (por ejemplo, facturas descargadas del
+SRI) y que la migración solo enlazó con su asiento histórico: si su contabilidad
+ya vino del sistema anterior, no se vuelve a generar. Al intentar guardar a mano
+un asiento nuevo sobre uno de estos documentos, el sistema avisa cuál es el
+asiento migrado para corregirlo ahí.
+
 **Cómo saber si un documento es migrado.** Se creó en bloque el día de la
 migración (todos los de esa carga comparten fecha y hora de creación) y su fecha
 de emisión es anterior. La generación en masa nunca lo incluye, así que si
@@ -270,6 +283,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.15** — Un documento que ya está enlazado a su asiento migrado del sistema anterior no vuelve a recibir asiento automático por ninguna vía (generación en masa, apertura del módulo, guardado del documento, Regenerar en Asientos o Auditoría). Antes solo se protegían los documentos que la migración había insertado; los que ya existían y solo se enlazaron (p. ej. facturas descargadas del SRI) recibían un segundo asiento y quedaban duplicados.
 - **1.14** — Los documentos migrados ya no se revisan: se retiran el aviso azul de "migrados sin asiento" y el botón **Generar asientos a los migrados**. Lo que vino de la migración sin asiento queda así; solo se revisan los documentos creados en este sistema.
 - **1.13** — El aviso al abrir el módulo indica el módulo y los números de los documentos migrados sin asiento, no solo la cantidad.
 - **1.12** — Las consignaciones migradas (y sus retornos, cambios y facturaciones) quedan fuera del aviso de migrados sin asiento y del botón de generar: el sistema anterior no las contabilizaba.

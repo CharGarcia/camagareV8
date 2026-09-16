@@ -731,11 +731,12 @@ $riSubtitulo = count($riNombres) > 1
                             <tr class="text-secondary">
                                 <th>Producto</th><th>Bodega</th><th>Lote</th><th>NUP</th>
                                 <th class="text-end">Consignado</th><th class="text-end">Retornado</th><th class="text-end">Facturado</th>
+                                <th class="text-end" title="Entregado al cliente a cambio de otro producto (Cambios de productos)">A cambio</th>
                                 <th class="text-end">Saldo</th>
                             </tr>
                         </thead>
                         <tbody id="ri-cv-modal-tbody">
-                            <tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                            <tr><td colspan="9" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
                         </tbody>
                         <tfoot id="ri-cv-modal-tfoot"></tfoot>
                     </table>

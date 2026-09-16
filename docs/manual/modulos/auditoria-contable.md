@@ -51,4 +51,5 @@ aparecerán como "documentos sin asiento".
 
 ## Historial de cambios
 
+- **1.1** — **Regenerar** ya no toca los documentos cuya contabilidad vino de la migración aunque el documento haya existido antes de migrar (la migración solo lo enlazó a su asiento histórico): se avisa que su contabilidad es la del histórico migrado. Al anular asientos duplicados o regenerar, nunca se suelta el enlace del documento con su asiento migrado.
 - **1.0** — Versión inicial.

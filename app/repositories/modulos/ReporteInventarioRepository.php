@@ -182,7 +182,8 @@ class ReporteInventarioRepository extends BaseRepository
                 SELECT cvd.id_empresa, cvd.id_producto, cvd.id_bodega,
                        SUM(cvd.cantidad
                            - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
-                           - COALESCE((" . $this->sqlFacturadoCv() . "), 0)) AS consignado
+                           - COALESCE((" . $this->sqlFacturadoCv() . "), 0)
+                           - COALESCE((" . $this->sqlCambiadoCv() . "), 0)) AS consignado
                 FROM consignaciones_ventas_detalles cvd
                 INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
                 WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
@@ -451,7 +452,8 @@ class ReporteInventarioRepository extends BaseRepository
                     SELECT cvd.id_empresa, cvd.id_producto, cvd.id_bodega{$selCvGroup},
                            SUM(cvd.cantidad
                                - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
-                               - COALESCE((" . $this->sqlFacturadoCv() . "), 0)) AS consignado
+                               - COALESCE((" . $this->sqlFacturadoCv() . "), 0)
+                               - COALESCE((" . $this->sqlCambiadoCv() . "), 0)) AS consignado
                     FROM consignaciones_ventas_detalles cvd
                     INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
                     WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
@@ -865,6 +867,14 @@ class ReporteInventarioRepository extends BaseRepository
                   AND cfd.eliminado = false AND cf.eliminado = false AND cf.estado = 'facturada'";
     }
 
+    /** Cantidad ENTREGADA A CAMBIO desde una línea de consignación (Cambios de productos Emitida):
+     *  la unidad pasó a ser del cliente como reposición, así que sale del saldo consignado igual
+     *  que una facturación. Misma definición que Retornos y Facturación CV. Ver nota en sqlRetornadoCv(). */
+    private function sqlCambiadoCv(): string
+    {
+        return \App\repositories\modulos\CambioProductoCvRepository::sqlEntregadoEnCambios('cvd.id') . " ";
+    }
+
     /** Último costo unitario registrado en el kardex para la línea (documento + producto).
      *  Depende del índice idx_kardex_referencia (id_empresa, referencia_tipo, referencia_id,
      *  id_producto) WHERE eliminado = false: sin él cada línea recorre TODOS los movimientos
@@ -968,6 +978,7 @@ class ReporteInventarioRepository extends BaseRepository
                        cvd.cantidad AS cantidad_consignada,
                        COALESCE(ret.total, 0) AS cantidad_retornada,
                        COALESCE(fac.total, 0) AS cantidad_facturada,
+                       COALESCE(cam.total, 0) AS cantidad_cambiada,
                        COALESCE(kar.costo_unitario, 0) AS costo_unitario
                 FROM consignaciones_ventas_detalles cvd
                 INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
@@ -981,6 +992,7 @@ class ReporteInventarioRepository extends BaseRepository
                 LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
                 LEFT JOIN LATERAL (" . $this->sqlRetornadoCv() . ") ret ON true
                 LEFT JOIN LATERAL (" . $this->sqlFacturadoCv() . ") fac ON true
+                LEFT JOIN LATERAL (SELECT (" . $this->sqlCambiadoCv() . ") AS total) cam ON true
                 LEFT JOIN LATERAL (" . $this->sqlCostoKardexCv() . ") kar ON true
                 WHERE {$where}
             ) base
@@ -989,9 +1001,10 @@ class ReporteInventarioRepository extends BaseRepository
 
     private function wrapSaldoConsignacion(string $baseSql): string
     {
+        // saldo = consignado − retornado − facturado − entregado a cambio
         return "
-            SELECT t.*, (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada) AS saldo,
-                   (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada) * t.costo_unitario AS valor_saldo
+            SELECT t.*, (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada - t.cantidad_cambiada) AS saldo,
+                   (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada - t.cantidad_cambiada) * t.costo_unitario AS valor_saldo
             FROM ({$baseSql}) t
         ";
     }
@@ -1033,6 +1046,7 @@ class ReporteInventarioRepository extends BaseRepository
                        SUM(s.cantidad_consignada) AS total_productos,
                        SUM(s.cantidad_retornada) AS total_retornado,
                        SUM(s.cantidad_facturada) AS total_facturado,
+                       SUM(s.cantidad_cambiada) AS total_cambiado,
                        SUM(s.saldo) AS saldo, SUM(s.valor_saldo) AS valor_saldo
                 FROM ({$base}) s
                 GROUP BY s.id_consignacion

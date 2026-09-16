@@ -51,6 +51,17 @@ class CambioProductoCvRules
         }
 
         foreach ($entregas as $idx => $det) {
+            $origen = strtoupper((string) ($det['origen_tipo'] ?? ''));
+            if ($origen === 'CONSIGNACION') {
+                // Tomada de una consignación: el producto lo determina la línea de consignación.
+                if (empty($det['id_origen_detalle'])) {
+                    throw new Exception("Hay una línea de entrega desde consignación sin la línea de origen en la fila " . ($idx + 1) . ".");
+                }
+                continue;
+            }
+            if ($origen !== '') {
+                throw new Exception("Origen de entrega no válido en la fila " . ($idx + 1) . ".");
+            }
             if (empty($det['id_producto'])) {
                 throw new Exception("Hay una línea de entrega sin producto en la fila " . ($idx + 1) . ".");
             }

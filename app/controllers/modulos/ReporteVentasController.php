@@ -97,7 +97,26 @@ class ReporteVentasController extends BaseModuloController
                 'SOLO'    => 'SOLO',
                 default   => 'EXCLUIR',
             },
+            // El alcance del usuario (§6: `id_vendedor_filtro` / `id_usuario_filtro`)
+            // lo agrega resolverAlcance(), que ya conoce las empresas del reporte.
         ];
+    }
+
+    /**
+     * Alcance del usuario (§6, ver App\Helpers\AlcanceRegistros): sin acceso
+     * total ('t'), el vendedor vinculado al usuario ve su cartera (clientes
+     * asignados + documentos a su nombre); si no es vendedor, solo lo que él
+     * registró. Se resuelve del permiso y la sesión, nunca de la petición. Al ir
+     * en los filtros lo heredan el listado, las estadísticas, el resumen de
+     * estados y las exportaciones, que parten del mismo arreglo.
+     */
+    private function alcanceUsuario(array $idsEmpresa): array
+    {
+        return \App\Helpers\AlcanceRegistros::resolver(
+            $this->getPermisos(),
+            (int) ($_SESSION['id_usuario'] ?? 0),
+            $idsEmpresa
+        );
     }
 
     /** Texto del selector "Borradores" para el encabezado del PDF/Excel ('' si es el por defecto). */
@@ -130,6 +149,9 @@ class ReporteVentasController extends BaseModuloController
             }
         }
         $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
+        // Alcance del usuario (§6): se resuelve aquí porque en consolidado el vendedor
+        // vinculado es uno por establecimiento.
+        $filtros = array_merge($filtros, $this->alcanceUsuario($idsEmpresa));
         if ($consolidado) {
             if (!empty($filtros['id_cliente'])) {
                 $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string) $filtros['id_cliente']);
@@ -398,7 +420,7 @@ class ReporteVentasController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q    = trim($_GET['q'] ?? '');
         $tipo = $_GET['tipo_documento'] ?? 'FACTURA';
-        echo json_encode(['ok' => true, 'data' => $this->repository->buscarItems($idEmpresa, $q, $tipo)]);
+        echo json_encode(['ok' => true, 'data' => $this->repository->buscarItems($idEmpresa, $q, $tipo, 15, $this->alcanceUsuario([$idEmpresa]))]);
         exit;
     }
 
@@ -410,7 +432,7 @@ class ReporteVentasController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q    = trim($_GET['q'] ?? '');
         $tipo = $_GET['tipo_documento'] ?? 'FACTURA';
-        echo json_encode(['ok' => true, 'data' => $this->repository->buscarInfoAdicional($idEmpresa, $q, $tipo)]);
+        echo json_encode(['ok' => true, 'data' => $this->repository->buscarInfoAdicional($idEmpresa, $q, $tipo, 15, $this->alcanceUsuario([$idEmpresa]))]);
         exit;
     }
 

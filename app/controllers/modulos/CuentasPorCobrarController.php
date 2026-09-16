@@ -688,6 +688,9 @@ class CuentasPorCobrarController extends BaseModuloController
             }
         }
         $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
+        // Alcance del usuario (§6): se resuelve aquí porque en consolidado el vendedor
+        // vinculado es uno por establecimiento.
+        $filtros = array_merge($filtros, $this->alcanceUsuario($idsEmpresa));
         if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
             $filtros['id_cliente'] = $this->repo->expandirClientesPorIdentificacion($raw, $idsEmpresa);
@@ -776,6 +779,9 @@ class CuentasPorCobrarController extends BaseModuloController
                 'id_cliente'  => $filtros['id_cliente'] ?? '',
                 'fecha_desde' => $filtros['fecha_desde'] ?? '',
                 'fecha_hasta' => $filtros['fecha_hasta'] ?? '',
+                // Alcance del usuario (§6): el mismo que aplican facturas y recibos
+                'id_vendedor_filtro' => $filtros['id_vendedor_filtro'] ?? [],
+                'id_usuario_filtro'  => $filtros['id_usuario_filtro'] ?? null,
             ]);
         }
 
@@ -1379,9 +1385,9 @@ $plantillasFiltradas = [];
                 ? $this->repo->getReciboParaCobro($id, $idEmpresa)
                 : $this->repo->getFacturaParaCobro($id, $idEmpresa);
             if (!$doc) { $noEncontrados++; continue; }
-            // Registros propios (§6): sin acceso total, un documento de otro usuario
-            // se omite del envío (se cuenta como no encontrado, no corta el lote).
-            if (!$this->esRegistroPropio($doc, 'id_usuario')) { $noEncontrados++; continue; }
+            // Alcance del usuario (§6): sin acceso total, un documento fuera de su
+            // cartera se omite del envío (se cuenta como no encontrado, no corta el lote).
+            if (!$this->dentroAlcance($doc, 'id_usuario', $idEmpresa)) { $noEncontrados++; continue; }
 
             $saldo = (float)($doc['saldo'] ?? 0);
             if ($saldo <= 0.001) { $sinSaldo++; continue; }
@@ -2066,76 +2072,108 @@ $plantillasFiltradas = [];
             // Vacío = el orden por defecto (alfabético por cliente).
             'orden_col'   => trim((string)($_REQUEST['orden_col'] ?? '')),
             'orden_dir'   => strtoupper(trim((string)($_REQUEST['orden_dir'] ?? ''))) === 'DESC' ? 'DESC' : 'ASC',
-            // Registros propios (§6): se resuelve del permiso, nunca de la petición.
+            // El alcance del usuario (§6: `id_vendedor_filtro` / `id_usuario_filtro`)
+            // lo agrega resolverAlcance(), que ya conoce las empresas del listado.
             // Al ir en los filtros lo heredan el listado, las tarjetas, el gráfico de
             // antigüedad y las exportaciones, que parten de este mismo arreglo.
-            'id_usuario_filtro' => $this->idUsuarioFiltro(),
         ];
     }
 
     /**
-     * Registros propios (§6): el id del usuario cuando NO tiene acceso total ('t')
-     * en este módulo, o null cuando ve toda la empresa (incluido el nivel 3, que
-     * `Permisos::porRuta()` devuelve siempre con 'todo').
-     *
-     * Con filtro activo la cartera se limita a lo que él registró: facturas y
-     * recibos por `id_usuario` y saldos iniciales por `created_by` (ver
-     * CuentasPorCobrarRepository::condUsuarioPropio()).
+     * Alcance del usuario (§6, ver App\Helpers\AlcanceRegistros): sin acceso
+     * total ('t'), el vendedor vinculado al usuario ve su cartera (clientes
+     * asignados + documentos a su nombre); si no es vendedor, solo lo que él
+     * registró. Se resuelve del permiso y la sesión, nunca de la petición, una
+     * sola vez por combinación de empresas (index, listado, guardas por id…).
      */
-    private function idUsuarioFiltro(): ?int
+    private array $alcanceCache = [];
+
+    private function alcanceUsuario(array $idsEmpresa): array
     {
-        $perm = $this->getPermisos();
-        return empty($perm['todo']) ? (int) ($_SESSION['id_usuario'] ?? 0) : null;
+        $k = implode(',', array_map('intval', $idsEmpresa));
+        return $this->alcanceCache[$k] ??= \App\Helpers\AlcanceRegistros::resolver(
+            $this->getPermisos(),
+            (int) ($_SESSION['id_usuario'] ?? 0),
+            $idsEmpresa
+        );
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // REGISTROS PROPIOS EN LAS ACCIONES POR ID
+    // ALCANCE DEL USUARIO EN LAS ACCIONES POR ID
     //
     // El filtro del listado oculta los documentos ajenos, pero cada acción recibe
     // un id suelto: sin este guard se llegaría por id a un documento que la tabla
-    // no muestra. requireRegistroPropio() corta con 403 y deja pasar al nivel 3 y
-    // a quien tenga acceso total.
+    // no muestra. requireDentroAlcance() corta con 403 y deja pasar al nivel 3 y
+    // a quien tenga acceso total (mismo criterio que el listado: cartera del
+    // vendedor vinculado o, si no es vendedor, registros propios).
     //
     // Devuelven el documento ya leído (o null si no existe, para que el llamador
     // responda su propio "no encontrado"), así la acción no repite la consulta.
     // ─────────────────────────────────────────────────────────────────────
 
-    /** Factura de venta del cobro: creador en `id_usuario` (igual que Factura de Venta). */
+    /**
+     * Factura de venta del cobro. La consulta trae `id_vendedor` y
+     * `cliente_id_vendedor` (modo vendedor) e `id_usuario` (registros propios).
+     */
     private function facturaPropiaOCortar(int $idVenta, int $idEmpresa): ?array
     {
         $factura = $this->repo->getFacturaParaCobro($idVenta, $idEmpresa);
-        $this->requireRegistroPropio($factura, 'id_usuario');
+        $this->requireDentroAlcance($factura, 'id_usuario', $idEmpresa);
         return $factura;
     }
 
-    /** Recibo de venta: creador en `id_usuario` (igual que Recibo de Venta). */
+    /** Recibo de venta: mismas columnas que la factura. */
     private function reciboPropioOCortar(int $idRecibo, int $idEmpresa): ?array
     {
         $recibo = $this->repo->getReciboParaCobro($idRecibo, $idEmpresa);
-        $this->requireRegistroPropio($recibo, 'id_usuario');
+        $this->requireDentroAlcance($recibo, 'id_usuario', $idEmpresa);
         return $recibo;
     }
 
-    /** Saldo inicial CxC: su tabla no tiene `id_usuario`, el creador es `created_by`. */
+    /**
+     * Saldo inicial CxC: no lleva vendedor (entra solo por el cliente asignado) y
+     * su tabla no tiene `id_usuario`, el creador es `created_by`.
+     */
     private function saldoInicialPropioOCortar(int $idSaldo, int $idEmpresa): ?array
     {
         $saldo = (new \App\repositories\modulos\SaldosInicialesRepository())->getCxcPorId($idSaldo, $idEmpresa);
-        $this->requireRegistroPropio($saldo, 'created_by');
+        $vCli  = null;
+        if ($saldo && \App\Helpers\AlcanceRegistros::idsVendedor($this->alcanceUsuario([$idEmpresa]))) {
+            $vCli = $this->repo->getIdVendedorDeCliente((int) ($saldo['id_cliente'] ?? 0), $idEmpresa);
+        }
+        $this->requireDentroAlcance($saldo, 'created_by', $idEmpresa, $vCli);
         return $saldo;
     }
 
     /**
-     * Variante que NO corta, para los procesos por lote (envío masivo de correos):
-     * un documento ajeno se omite y se cuenta como "no encontrado", igual que uno
+     * ¿El documento cae dentro del alcance del usuario en esa empresa? Variante
+     * que NO corta, para los procesos por lote (envío masivo de correos): un
+     * documento ajeno se omite y se cuenta como "no encontrado", igual que uno
      * que ya no existe; abortar el lote entero con 403 sería peor para el usuario.
      */
-    private function esRegistroPropio(?array $registro, string $campo): bool
+    private function dentroAlcance(?array $registro, string $campoCreador, int $idEmpresa, ?int $idVendedorCliente = null): bool
     {
-        $filtro = $this->idUsuarioFiltro();
-        if ($filtro === null || $registro === null) {
-            return true; // ve toda la empresa (o no hay registro que validar)
+        if ($registro === null) {
+            return true; // no hay registro que validar
         }
-        return (int) ($registro[$campo] ?? 0) === $filtro;
+        return \App\Helpers\AlcanceRegistros::incluye(
+            $this->alcanceUsuario([$idEmpresa]), $registro, $campoCreador, $idVendedorCliente
+        );
+    }
+
+    /** Corta con 403 si el documento queda fuera del alcance (deja pasar al nivel 3 y al acceso total). */
+    private function requireDentroAlcance(?array $registro, string $campoCreador, int $idEmpresa, ?int $idVendedorCliente = null): void
+    {
+        if ($this->dentroAlcance($registro, $campoCreador, $idEmpresa, $idVendedorCliente)) {
+            return;
+        }
+        $msg = 'No tiene permiso sobre este registro: no pertenece a su cartera.';
+        if ($this->esAjaxRequest()) {
+            $this->json(['ok' => false, 'error' => $msg], 403);
+        }
+        http_response_code(403);
+        echo $msg;
+        exit;
     }
 
     /**
@@ -2370,9 +2408,7 @@ HTML;
         $filtros = [
             'estado'     => $_GET['estado']     ?? 'TODOS',
             'id_cliente' => $_GET['id_cliente'] ?? '',
-            // Registros propios (§6): sin acceso total, solo los que él cargó
-            'id_usuario_filtro' => $this->idUsuarioFiltro(),
-        ];
+        ] + $this->alcanceUsuario([$idEmpresa]); // Alcance del usuario (§6)
         $filas = $this->repo->getSaldosInicialesCxc($idEmpresa, $filtros);
         $this->jsonSuccess(['filas' => $filas]);
     }

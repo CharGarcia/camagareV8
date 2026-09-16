@@ -77,7 +77,8 @@ class ConsignacionFacturaRepository extends BaseRepository
                     p.tipo_produccion,
                     b.nombre  AS bodega_nombre,
                     COALESCE(( " . $this->sqlRetornado('cvd.id') . " ), 0) AS cantidad_retornada,
-                    COALESCE(( " . $this->sqlFacturado('cvd.id') . " ), 0) AS cantidad_facturada
+                    COALESCE(( " . $this->sqlFacturado('cvd.id') . " ), 0) AS cantidad_facturada,
+                    COALESCE(( " . $this->sqlCambiado('cvd.id') . " ), 0) AS cantidad_cambiada
                 FROM consignaciones_ventas_detalles cvd
                 INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
                 INNER JOIN productos p ON p.id = cvd.id_producto
@@ -88,17 +89,19 @@ class ConsignacionFacturaRepository extends BaseRepository
                   AND cv.estado = 'Entregada'
                   AND cvd.eliminado = false
             ) t
-            WHERE (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada) > 0
+            WHERE (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada - t.cantidad_cambiada) > 0
             ORDER BY t.id_consignacion_detalle ASC
         ";
         $st = $this->db->prepare($sql);
         $st->execute([':idc' => $idConsignacion, ':e' => $idEmpresa]);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
+        // saldo = consignado − retornado − facturado − entregado a cambio
         foreach ($rows as &$r) {
             $r['saldo_facturable'] = (float) $r['cantidad_consignada']
                 - (float) $r['cantidad_retornada']
-                - (float) $r['cantidad_facturada'];
+                - (float) $r['cantidad_facturada']
+                - (float) $r['cantidad_cambiada'];
         }
         unset($r);
 
@@ -134,7 +137,11 @@ class ConsignacionFacturaRepository extends BaseRepository
         $stFac->execute($params);
         $facturado = (float) $stFac->fetchColumn();
 
-        return (float) $cantidad - $retornado - $facturado;
+        $stCam = $this->db->prepare("SELECT COALESCE((" . $this->sqlCambiado(':id') . "), 0)");
+        $stCam->execute([':id' => $idConsignacionDetalle]);
+        $cambiado = (float) $stCam->fetchColumn();
+
+        return (float) $cantidad - $retornado - $facturado - $cambiado;
     }
 
     /** Cantidad facturada (docs 'facturada') por línea de consignación. */
@@ -180,6 +187,18 @@ class ConsignacionFacturaRepository extends BaseRepository
                   AND cfd.eliminado = false
                   AND cf.eliminado = false AND cf.estado = 'facturada'
                   $excSql";
+    }
+
+    /**
+     * Subconsulta de cantidad ENTREGADA A CAMBIO desde una línea de consignación (Cambios de
+     * productos Emitida): esa unidad ya es del cliente, no se puede facturar ni retornar.
+     * Vive en CambioProductoCvRepository para que los cuatro módulos que calculan el saldo
+     * (Retornos, Facturación CV, kardex de la consignación y Reporte de inventarios) usen
+     * exactamente la misma definición.
+     */
+    private function sqlCambiado(string $idExpr): string
+    {
+        return CambioProductoCvRepository::sqlEntregadoEnCambios($idExpr);
     }
 
     // ─── LISTADO ──────────────────────────────────────────────────────────────
@@ -288,7 +307,8 @@ class ConsignacionFacturaRepository extends BaseRepository
                     WHERE cvd.id_consignacion = cv.id AND cvd.eliminado = false
                       AND (cvd.cantidad
                            - COALESCE(( " . $this->sqlRetornado('cvd.id') . " ), 0)
-                           - COALESCE(( " . $this->sqlFacturado('cvd.id') . " ), 0)) > 0
+                           - COALESCE(( " . $this->sqlFacturado('cvd.id') . " ), 0)
+                           - COALESCE(( " . $this->sqlCambiado('cvd.id') . " ), 0)) > 0
               )
             ORDER BY cv.fecha_emision DESC, cv.id DESC
             LIMIT 15
@@ -396,11 +416,12 @@ class ConsignacionFacturaRepository extends BaseRepository
     public function getDetalles(int $idDoc, int $idEmpresa): array
     {
         // saldo_facturable = cantidad de la línea de consignación − retornado − facturado
-        // (docs 'facturada'). Para editar un borrador es el máximo permitido por línea.
+        // (docs 'facturada') − entregado a cambio. Para editar un borrador es el máximo por línea.
         $saldoExpr = "(
             (SELECT cvd2.cantidad FROM consignaciones_ventas_detalles cvd2 WHERE cvd2.id = cfd.id_consignacion_detalle)
             - COALESCE(( " . $this->sqlRetornado('cfd.id_consignacion_detalle') . " ), 0)
             - COALESCE(( " . $this->sqlFacturado('cfd.id_consignacion_detalle') . " ), 0)
+            - COALESCE(( " . $this->sqlCambiado('cfd.id_consignacion_detalle') . " ), 0)
         )";
         $sql = "SELECT cfd.*, p.nombre AS producto_nombre, p.codigo AS producto_codigo,
                        p.inventariable, p.tipo_produccion,

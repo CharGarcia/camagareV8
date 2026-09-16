@@ -337,19 +337,62 @@ class AuditoriaContableRepository extends BaseRepository
                                    AND mm.vinculado IS NOT TRUE) ";
     }
 
-    /** ¿Este documento lo insertó la migración desde MySQL? (no debe regenerarse) */
+    /**
+     * ¿La contabilidad de este documento vino de la migración desde MySQL? (no debe regenerarse)
+     * Dos señales, cualquiera basta:
+     *  - lo INSERTÓ la migración (fila en migracion_mysql_map con vinculado IS NOT TRUE), o
+     *  - está ENLAZADO a un asiento migrado vivo (id_asiento_contable → modulo_origen='migracion').
+     * La segunda cubre a los documentos nativos que la migración solo enlazó por número
+     * (vinculado = true) y a los que perdieron su fila del mapa: regenerarlos anularía el
+     * asiento histórico y crearía uno automático encima. Mismo criterio que
+     * AsientoContableService::guardarAsiento() y SincronizadorAsientosService.
+     */
     public function esDocumentoMigrado(string $origen, int $idDocumento): bool
     {
         $entidad = $this->origenes[$origen]['entidad_mig'] ?? null;
-        if ($entidad === null || !$this->tieneMapaMigracion()) {
+        if ($entidad !== null && $this->tieneMapaMigracion()) {
+            $st = $this->db->prepare(
+                "SELECT 1 FROM migracion_mysql_map
+                 WHERE entidad = :ent AND id_destino = :id AND vinculado IS NOT TRUE LIMIT 1"
+            );
+            $st->execute([':ent' => $entidad, ':id' => $idDocumento]);
+            if ($st->fetchColumn() !== false) {
+                return true;
+            }
+        }
+
+        $tabla   = $this->getTablaOrigen($origen);
+        $columna = $this->columnaEnlaceAsiento($origen);
+        if ($tabla === null || $columna === null) {
             return false;
         }
         $st = $this->db->prepare(
-            "SELECT 1 FROM migracion_mysql_map
-             WHERE entidad = :ent AND id_destino = :id AND vinculado IS NOT TRUE LIMIT 1"
+            "SELECT 1
+               FROM {$tabla} t
+               JOIN asientos_contables_cabecera am ON am.id = t.{$columna}
+              WHERE t.id = :id
+                AND am.modulo_origen = 'migracion'
+                AND am.eliminado = false
+                AND am.estado <> 'anulado'
+              LIMIT 1"
         );
-        $st->execute([':ent' => $entidad, ':id' => $idDocumento]);
+        $st->execute([':id' => $idDocumento]);
         return $st->fetchColumn() !== false;
+    }
+
+    /**
+     * Columna del documento que apunta a su asiento, o null si el origen no tiene enlace.
+     * La mayoría de módulos enlazan por 'id_asiento_contable' (tiene_id_asiento=true); dos
+     * SÍ tienen enlace pero con otro nombre de columna: nomina usa rol_cabecera.id_asiento y
+     * FACTURACION_CV usa consignaciones_facturas.id_asiento_reingreso.
+     */
+    private function columnaEnlaceAsiento(string $origen): ?string
+    {
+        return match ($origen) {
+            'nomina'         => 'id_asiento',
+            'FACTURACION_CV' => 'id_asiento_reingreso',
+            default          => !empty($this->origenes[$origen]['tiene_id_asiento']) ? 'id_asiento_contable' : null,
+        };
     }
 
     /**
@@ -1569,22 +1612,24 @@ class AuditoriaContableRepository extends BaseRepository
         if ($tabla === null) {
             return;
         }
-        // La mayoría de módulos enlazan por 'id_asiento_contable' (tiene_id_asiento=true); dos
-        // SÍ tienen enlace pero con otro nombre de columna — antes se trataban como "sin enlace"
-        // (tiene_id_asiento=false) y por eso su documento quedaba huérfano al anular su asiento
-        // desde aquí (Auditoría Contable): nomina usa rol_cabecera.id_asiento, y FACTURACION_CV
-        // usa consignaciones_facturas.id_asiento_reingreso.
-        $columna = match ($origen) {
-            'nomina'         => 'id_asiento',
-            'FACTURACION_CV' => 'id_asiento_reingreso',
-            default          => !empty($this->origenes[$origen]['tiene_id_asiento']) ? 'id_asiento_contable' : null,
-        };
+        // Antes nomina y FACTURACION_CV se trataban como "sin enlace" (tiene_id_asiento=false)
+        // y por eso su documento quedaba huérfano al anular su asiento desde aquí (Auditoría
+        // Contable); ver columnaEnlaceAsiento().
+        $columna = $this->columnaEnlaceAsiento($origen);
         if ($columna === null) {
             return;
         }
+        // Nunca se suelta un enlace que apunta a un asiento MIGRADO vivo: aquí solo se anulan
+        // asientos del módulo (modulo_origen = origen), y si el documento sigue enlazado al
+        // histórico migrado, ese enlace es justamente lo que impide que se le genere otro asiento.
         $sql = "UPDATE {$tabla} SET {$columna} = NULL,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id AND id_empresa = :emp";
+                WHERE id = :id AND id_empresa = :emp
+                  AND NOT EXISTS (SELECT 1 FROM asientos_contables_cabecera am
+                                   WHERE am.id = {$tabla}.{$columna}
+                                     AND am.modulo_origen = 'migracion'
+                                     AND am.eliminado = false
+                                     AND am.estado <> 'anulado')";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $idDocumento, ':emp' => $idEmpresa]);
     }

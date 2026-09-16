@@ -159,6 +159,63 @@ class AsientoContableRepository
         $stmt->execute([':e' => $idEmpresa, ':t' => strtolower(trim($tipoComprobante))]);
     }
 
+    /**
+     * Asiento MIGRADO (modulo_origen = 'migracion', vivo) al que ya apunta el documento por su
+     * columna de enlace (`documento.id_asiento_contable`, o `id_asiento_reingreso` en
+     * facturaciones de consignación). Es la señal de que la contabilidad de ese documento vino
+     * del diario histórico del sistema anterior: si existe, el documento NO debe recibir un
+     * asiento automático (lo duplicaría), tenga o no fila en `migracion_mysql_map`.
+     *
+     * Se mira el ENLACE del documento y no `asientos.id_referencia_origen`, porque todos los
+     * asientos migrados comparten modulo_origen='migracion' y ese id colisiona entre módulos
+     * (la factura 5 y la nota de crédito 5 apuntarían al mismo asiento).
+     *
+     * $tabla y $colAsiento salen del mapa fijo DocumentoOrigenAsiento (literales del código,
+     * nunca entrada de usuario); igualmente se validan como identificadores antes de interpolar.
+     *
+     * @return int|null id del asiento migrado vivo, o null si el documento no apunta a uno.
+     */
+    public function getAsientoMigradoDeDocumento(string $tabla, string $colAsiento, int $idDocumento, int $idEmpresa): ?int
+    {
+        if (!preg_match('/^[a-z_]+$/', $tabla) || !preg_match('/^[a-z_]+$/', $colAsiento) || $idDocumento <= 0) {
+            return null;
+        }
+        $pdo = \App\core\Database::getConnection();
+
+        // Se comprueba que la columna exista ANTES de consultarla: este método corre dentro de
+        // la transacción de guardarAsiento(), y en PostgreSQL un error de "columna inexistente"
+        // (base con la migración de esquema pendiente) abortaría toda la transacción aunque se
+        // capture la excepción. Se cachea por proceso: el catálogo no cambia durante la petición.
+        static $columnaExiste = [];
+        $clave = $tabla . '.' . $colAsiento;
+        if (!array_key_exists($clave, $columnaExiste)) {
+            $stc = $pdo->prepare(
+                "SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = current_schema() AND table_name = :t AND column_name = :c LIMIT 1"
+            );
+            $stc->execute([':t' => $tabla, ':c' => $colAsiento]);
+            $columnaExiste[$clave] = $stc->fetchColumn() !== false;
+        }
+        if (!$columnaExiste[$clave]) {
+            return null;
+        }
+
+        $sql = "SELECT a.id
+                  FROM {$tabla} t
+                  JOIN asientos_contables_cabecera a ON a.id = t.{$colAsiento}
+                 WHERE t.id = :id_doc
+                   AND t.id_empresa = :id_empresa
+                   AND a.id_empresa = :id_empresa
+                   AND a.modulo_origen = 'migracion'
+                   AND a.eliminado = false
+                   AND a.estado <> 'anulado'
+                 LIMIT 1";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':id_doc' => $idDocumento, ':id_empresa' => $idEmpresa]);
+        $id = $stmt->fetchColumn();
+        return $id ? (int) $id : null;
+    }
+
     public function getAsientoPorOrigen(string $moduloOrigen, int $idReferenciaOrigen, int $idEmpresa): ?array
     {
         $sql = "SELECT id FROM asientos_contables_cabecera

@@ -567,6 +567,11 @@ class AsientoBuilderService
      * del producto en su bodega (excluyendo los movimientos de este mismo cambio).
      * Reutiliza las cuentas del concepto 'ventas_factura' (Inventario + Costo de Ventas).
      *
+     * Las entregas tomadas de una CONSIGNACIÓN (origen_tipo 'CONSIGNACION') no salen de
+     * Inventario sino de Mercadería en consignación —la mercadería ya estaba en poder del
+     * cliente—: Debe Costo de Ventas / Haber Mercadería en consignación (cuenta del
+     * concepto 'consignacion_venta', la misma que usan Consignaciones y Retornos CV).
+     *
      * @return array<int,array> Líneas del asiento o [] si el neto es ~0 o faltan cuentas.
      */
     public function generarAsientoCambioProductoCv(int $idEmpresa, int $idCambio): array
@@ -574,10 +579,12 @@ class AsientoBuilderService
         $db = \App\core\Database::getConnection();
 
         // 1. Costo de cada lado, al costo promedio del producto/bodega (sin este cambio).
+        //    Las entregas se separan según salgan de bodega o de una consignación.
         $st = $db->prepare(
             "SELECT
                 COALESCE(SUM(CASE WHEN cd.tipo_linea = 'devolucion' THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_dev,
-                COALESCE(SUM(CASE WHEN cd.tipo_linea = 'entrega'    THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_ent
+                COALESCE(SUM(CASE WHEN cd.tipo_linea = 'entrega' AND COALESCE(cd.origen_tipo, '') <> 'CONSIGNACION' THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_ent,
+                COALESCE(SUM(CASE WHEN cd.tipo_linea = 'entrega' AND COALESCE(cd.origen_tipo, '') =  'CONSIGNACION' THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_ent_consig
              FROM cambios_producto_cv_detalles cd
              LEFT JOIN LATERAL (
                 SELECT CASE WHEN SUM(k.cantidad) > 0
@@ -591,10 +598,12 @@ class AsientoBuilderService
              WHERE cd.id_cambio = :id AND cd.eliminado = false"
         );
         $st->execute([':e' => $idEmpresa, ':id' => $idCambio]);
-        $row = $st->fetch(\PDO::FETCH_ASSOC) ?: ['costo_dev' => 0, 'costo_ent' => 0];
+        $row = $st->fetch(\PDO::FETCH_ASSOC) ?: ['costo_dev' => 0, 'costo_ent' => 0, 'costo_ent_consig' => 0];
 
-        $invNet = round((float) $row['costo_dev'] - (float) $row['costo_ent'], 2);
-        if (abs($invNet) < 0.005) {
+        $invNet   = round((float) $row['costo_dev'] - (float) $row['costo_ent'], 2); // Inventario: + reingreso, − salida desde bodega
+        $consNet  = round(-(float) ($row['costo_ent_consig'] ?? 0), 2);              // Mercadería en consignación: − entregado desde consignación
+        $costoNet = round(-($invNet + $consNet), 2);                                  // Costo de ventas: contrapartida (cuadra por construcción)
+        if (abs($invNet) < 0.005 && abs($consNet) < 0.005) {
             return [];
         }
 
@@ -617,28 +626,58 @@ class AsientoBuilderService
             }
         }
 
-        // 3. Neto por cuenta (Inventario vs Costo de Ventas).
-        $invDebe  = max($invNet, 0.0);
-        $invHaber = max(-$invNet, 0.0);
+        // 2b. Cuenta "Mercadería en consignación" del concepto 'consignacion_venta' (solo si
+        //     hay entregas tomadas de una consignación). Si no está configurada queda en 0 y
+        //     el usuario la completa en la vista previa, como cualquier otra cuenta faltante.
+        $cuentaConsignacion = null;
+        if (abs($consNet) >= 0.005) {
+            foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'consignacion_venta') as $r) {
+                if (empty($r['id_cuenta'])) continue;
+                $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']   ?? '');
+                $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '');
+                if (str_contains($codigo, 'CONSIGNACION') || str_contains($codigo, 'MERCADERIA') || str_contains($concepto, 'consignaci')) {
+                    $cuentaConsignacion = [
+                        'id_cuenta'     => (int) $r['id_cuenta'],
+                        'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                        'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+                    ];
+                    break;
+                }
+            }
+        }
 
-        return [
-            [
+        // 3. Neto por cuenta: Inventario, Mercadería en consignación y Costo de Ventas.
+        $lineas = [];
+        if (abs($invNet) >= 0.005) {
+            $lineas[] = [
                 'id_cuenta_contable' => $cuentaInventario['id_cuenta']     ?? 0,
                 'cuenta_codigo'      => $cuentaInventario['cuenta_codigo'] ?? '',
                 'cuenta_nombre'      => $cuentaInventario['cuenta_nombre'] ?? '',
-                'debe'               => round($invDebe, 2),
-                'haber'              => round($invHaber, 2),
+                'debe'               => round(max($invNet, 0.0), 2),
+                'haber'              => round(max(-$invNet, 0.0), 2),
                 'referencia_detalle' => 'Inventario (cambio de productos)',
-            ],
-            [
-                'id_cuenta_contable' => $cuentaCosto['id_cuenta']     ?? 0,
-                'cuenta_codigo'      => $cuentaCosto['cuenta_codigo'] ?? '',
-                'cuenta_nombre'      => $cuentaCosto['cuenta_nombre'] ?? '',
-                'debe'               => round($invHaber, 2),
-                'haber'              => round($invDebe, 2),
-                'referencia_detalle' => 'Costo de ventas (cambio de productos)',
-            ],
+            ];
+        }
+        if (abs($consNet) >= 0.005) {
+            $lineas[] = [
+                'id_cuenta_contable' => $cuentaConsignacion['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaConsignacion['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaConsignacion['cuenta_nombre'] ?? '',
+                'debe'               => round(max($consNet, 0.0), 2),
+                'haber'              => round(max(-$consNet, 0.0), 2),
+                'referencia_detalle' => 'Mercadería en consignación (entregado a cambio)',
+            ];
+        }
+        $lineas[] = [
+            'id_cuenta_contable' => $cuentaCosto['id_cuenta']     ?? 0,
+            'cuenta_codigo'      => $cuentaCosto['cuenta_codigo'] ?? '',
+            'cuenta_nombre'      => $cuentaCosto['cuenta_nombre'] ?? '',
+            'debe'               => round(max($costoNet, 0.0), 2),
+            'haber'              => round(max(-$costoNet, 0.0), 2),
+            'referencia_detalle' => 'Costo de ventas (cambio de productos)',
         ];
+
+        return $lineas;
     }
 
     /**

@@ -9,6 +9,10 @@
  * @var array  $resumen      Filtros aplicados, etiqueta => valor
  * @var array  $filas        [['concepto','detalle','total'], …]
  * @var array  $stats        cantidad_comandas, cantidad_documentos, total_vendido
+ * @var array  $arqueo       Resumen por forma de pago, como el del correo del
+ *                           cierre de caja: formas_pago (filas concepto/detalle/
+ *                           total, vacío si la vista activa ya es esa), total y
+ *                           propinas (servicio, voluntaria)
  * @var int    $anchoTirilla 58 u 80, lo usa el partial de estilos
  */
 $e   = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
@@ -61,6 +65,40 @@ $fmt = fn($v) => number_format((float) $v, 2);
         <?php endif; ?>
         </tbody>
     </table>
+
+    <?php
+    // Resumen por forma de pago: el mismo bloque que manda el correo del cierre
+    // de caja (forma, cobros, cobrado; total; servicio y propina voluntaria),
+    // acotado a los filtros del reporte. Sin "contado" ni "diferencia": el
+    // reporte no está atado a un turno, así que no hay arqueo contra qué cuadrar.
+    $arqueoFormas = $arqueo['formas_pago'] ?? [];
+    $propinas     = $arqueo['propinas'] ?? [];
+    ?>
+    <?php if (!empty($filas)): ?>
+        <hr class="sep">
+        <div class="center bold">RESUMEN POR FORMA DE PAGO</div>
+        <?php if (!empty($arqueoFormas)): ?>
+            <table class="t-detalle"><colgroup><col><col class="col-num"></colgroup>
+                <tbody>
+                <?php foreach ($arqueoFormas as $f): ?>
+                    <tr><td colspan="2"><?= $e($f['concepto']) ?></td></tr>
+                    <tr>
+                        <td class="sub"><?= $e($f['detalle']) ?></td>
+                        <td class="num"><?= '$' . $fmt($f['total']) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+        <?php // Va como t-detalle y no como t-totales: esa clase pone en negrita la
+              // ÚLTIMA fila, y aquí la fila fuerte es la primera (el total). ?>
+        <table class="t-detalle"><colgroup><col><col class="col-num"></colgroup>
+            <?php if (!empty($arqueoFormas)): ?><tr><td colspan="2"><hr></td></tr><?php endif; ?>
+            <tr class="bold"><td>Total cobrado</td><td class="num">$<?= $fmt($arqueo['total'] ?? 0) ?></td></tr>
+            <tr><td class="sub">Servicio</td><td class="num sub">$<?= $fmt($propinas['servicio'] ?? 0) ?></td></tr>
+            <tr><td class="sub">Propina voluntaria</td><td class="num sub">$<?= $fmt($propinas['voluntaria'] ?? 0) ?></td></tr>
+        </table>
+    <?php endif; ?>
 
     <hr class="sep">
     <table class="t-totales"><colgroup><col><col class="col-num"></colgroup>

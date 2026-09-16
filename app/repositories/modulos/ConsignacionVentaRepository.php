@@ -299,6 +299,23 @@ class ConsignacionVentaRepository extends BaseRepository
                 INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura AND cf.eliminado = false AND cf.estado = 'facturada'
                 INNER JOIN productos p ON p.id = cfd.id_producto
                 WHERE cfd.id_consignacion = :id3 AND cfd.id_empresa = :e3 AND (cfd.eliminado = false OR cfd.eliminado IS NULL)
+
+                UNION ALL
+
+                -- 4. Entregado a cambio (Cambios de productos Emitida): la unidad consignada pasó
+                --    a ser del cliente como reposición de otra devuelta. Sale del saldo igual que
+                --    una facturación, sin mover stock (ya había salido con la consignación).
+                SELECT cd.id_origen_detalle, cc.fecha_cambio, 4, cd.id,
+                       'Cambio de producto',
+                       (cc.serie || '-' || cc.secuencial), cc.estado,
+                       cd.id_producto, p.nombre, p.codigo,
+                       cd.lote, cd.nup,
+                       0, cd.cantidad, -cd.cantidad
+                FROM cambios_producto_cv_detalles cd
+                INNER JOIN cambios_producto_cv cc ON cc.id = cd.id_cambio AND cc.eliminado = false AND cc.estado = 'Emitida'
+                INNER JOIN productos p ON p.id = cd.id_producto
+                WHERE cd.tipo_linea = 'entrega' AND cd.origen_tipo = 'CONSIGNACION'
+                  AND cd.id_origen = :id4 AND cd.id_empresa = :e4 AND cd.eliminado = false
             ) t
             ORDER BY t.orden ASC, t.fecha ASC, t.orden_id ASC
         ";
@@ -307,6 +324,7 @@ class ConsignacionVentaRepository extends BaseRepository
             ':id1' => $idConsignacion, ':e1' => $idEmpresa,
             ':id2' => $idConsignacion, ':e2' => $idEmpresa,
             ':id3' => $idConsignacion, ':e3' => $idEmpresa,
+            ':id4' => $idConsignacion, ':e4' => $idEmpresa,
         ]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }

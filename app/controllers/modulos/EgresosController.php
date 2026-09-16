@@ -389,6 +389,9 @@ class EgresosController extends BaseModuloController
             exit;
         }
 
+        // El modal decide con esto si abre en solo lectura (periodo contable cerrado).
+        $egreso['periodo_cerrado'] = $this->service->esPeriodoCerrado($egreso['fecha_emision'] ?? null, $idEmpresa);
+
         echo json_encode(['ok' => true, 'data' => $egreso]);
         exit;
     }
@@ -590,7 +593,7 @@ class EgresosController extends BaseModuloController
 
             $this->service->actualizarPagos($id, $pagos, $idEmpresa, $idUsuario, $fechaEmision, $data);
 
-            echo json_encode(['ok' => true, 'mensaje' => 'Formas de pago actualizadas con éxito.']);
+            echo json_encode(['ok' => true, 'mensaje' => 'Egreso actualizado correctamente.']);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

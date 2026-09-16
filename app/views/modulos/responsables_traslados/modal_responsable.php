@@ -115,8 +115,9 @@
                 <div class="tab-pane fade px-3 py-3" id="rt-pane-usuarios">
                     <p class="text-muted small mb-3">
                         Los usuarios vinculados aquí ven, en el módulo <strong>Entregas de Consignaciones</strong>,
-                        las consignaciones asignadas a este responsable. Solo aplica a quienes
-                        <strong>no</strong> tienen "acceso total" en ese módulo: con acceso total ven todas.
+                        las consignaciones asignadas a este responsable (y a los demás que tengan vinculados).
+                        Un usuario <strong>sin ningún vínculo</strong> ve todas las entregas de la empresa, igual que el
+                        superadministrador. Aplica igual en la web y en la app móvil del repartidor.
                     </p>
 
                     <div id="rt-usuarios-editor" class="row g-2 mb-3 d-none">

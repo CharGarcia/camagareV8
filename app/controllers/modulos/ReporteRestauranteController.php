@@ -340,6 +340,15 @@ class ReporteRestauranteController extends BaseModuloController
         $rows  = $this->getRows($idEmpresa, $filtros);
         $stats = $this->repository->getEstadisticas($idEmpresa, $filtros);
 
+        // Resumen por forma de pago, como el que manda el correo del cierre de
+        // caja: sale en toda vista, con los mismos filtros. Si la vista activa ya
+        // es la de forma de pago, el detalle de arriba es esa misma tabla, así
+        // que en la tirilla solo se repiten el total y las propinas.
+        $esVistaFormaPago = $filtros['ver_por'] === 'FORMA_PAGO';
+        $formasPago = $esVistaFormaPago
+            ? $rows
+            : $this->repository->getVentasPorFormaPago($idEmpresa, $filtros);
+
         $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
 
         $this->view('modulos/reporte_restaurante/tirilla', [
@@ -348,6 +357,11 @@ class ReporteRestauranteController extends BaseModuloController
             'resumen'       => $this->resumenFiltros($idEmpresa, $filtros),
             'filas'         => $this->armarFilasTirilla($rows, $filtros['ver_por']),
             'stats'         => $stats,
+            'arqueo'        => [
+                'formas_pago'      => $esVistaFormaPago ? [] : $this->armarFilasTirilla($formasPago, 'FORMA_PAGO'),
+                'total'            => round(array_sum(array_map(fn($r) => (float) ($r['total'] ?? 0), $formasPago)), 2),
+                'propinas'         => $this->repository->getPropinas($idEmpresa, $filtros),
+            ],
             'anchoTirilla'  => (new \App\Services\modulos\ConfiguracionRestauranteService())
                 ->getAnchoTirilla($idEmpresa),
         ]);

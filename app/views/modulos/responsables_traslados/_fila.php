@@ -17,8 +17,8 @@ $rowData = htmlspecialchars(json_encode($r, JSON_FLAGS), ENT_QUOTES, 'UTF-8');
 $fecha   = !empty($r['created_at']) ? date('d-m-Y H:i:s', strtotime((string) $r['created_at'])) : '-';
 
 // Usuarios vinculados. Un responsable ACTIVO sin ningún usuario vinculado es el
-// caso que conviene ver de un vistazo: si ese repartidor entra a la app móvil sin
-// "acceso total" en Entregas, no le aparece ninguna entrega.
+// caso que conviene ver de un vistazo: sus entregas solo las ven los usuarios sin
+// vínculo (que ven todas) y el superadministrador; nadie las tiene "en exclusiva".
 $nUsuarios = (int) ($r['usuarios_vinculados'] ?? 0);
 $avisoSinUsuarios = ($nUsuarios === 0 && $estado === 'activo');
 ?>
@@ -31,9 +31,9 @@ $avisoSinUsuarios = ($nUsuarios === 0 && $estado === 'activo');
     <td class="text-center" data-col="usuarios_vinculados">
         <?php if ($nUsuarios > 0): ?>
             <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25"
-                  title="<?= $nUsuarios ?> usuario(s) ven las entregas de este responsable en la app móvil"><?= $nUsuarios ?></span>
+                  title="<?= $nUsuarios ?> usuario(s) ven solo las entregas de este responsable (web y app móvil)"><?= $nUsuarios ?></span>
         <?php elseif ($avisoSinUsuarios): ?>
-            <span class="text-warning" title="Ningún usuario vinculado: si este repartidor usa la app móvil sin acceso total, no verá ninguna entrega">
+            <span class="text-warning" title="Ningún usuario vinculado: sus entregas solo las ven los usuarios sin vínculo (que ven todas) y el superadministrador">
                 <i class="bi bi-exclamation-triangle"></i> 0
             </span>
         <?php else: ?>

@@ -29,6 +29,11 @@ class CambioProductoCvPdfService
     {
         $numero = trim(((string)($cabecera['serie'] ?? '')) . '-' . ((string)($cabecera['secuencial'] ?? '')), '-');
 
+        // Origen de cada línea (factura / cambio / consignación / bodega): el cambio se hace
+        // por unidad y NUP, así que el documento dice de dónde sale cada una.
+        foreach ($detalles as &$d) { $d['origen_label'] = self::etiquetaOrigen($d); }
+        unset($d);
+
         $devoluciones = array_values(array_filter($detalles, fn($d) => ($d['tipo_linea'] ?? '') === 'devolucion'));
         $entregas     = array_values(array_filter($detalles, fn($d) => ($d['tipo_linea'] ?? '') === 'entrega'));
 
@@ -159,7 +164,23 @@ class CambioProductoCvPdfService
         return $y + $boxH;
     }
 
-    /** Tabla: Código | Descripción | Lote | Cantidad | P.Unit | Total. */
+    /**
+     * Etiqueta del origen de una línea del cambio (también la usa el Excel):
+     * "Factura 001-001-000000123", "Cambio 001-001-000000004",
+     * "Consignación 001-001-000000012" o "Bodega" (entrega desde existencias / catálogo).
+     */
+    public static function etiquetaOrigen(array $d): string
+    {
+        $tipo = strtoupper((string)($d['origen_tipo'] ?? ''));
+        $num  = trim((string)($d['origen_numero'] ?? ''));
+        $nombres = ['FACTURA' => 'Factura', 'CAMBIO' => 'Cambio', 'CONSIGNACION' => 'Consignación'];
+        if (!isset($nombres[$tipo])) {
+            return 'Bodega';
+        }
+        return trim($nombres[$tipo] . ' ' . $num);
+    }
+
+    /** Tabla: Origen | Código | Descripción | Lote | NUP | Cantidad | P.Unit | Total. */
     private function dibujarTablaDetalle(string $titulo, array $detalles, float $y): float
     {
         $pdf = $this->pdf;
@@ -179,12 +200,14 @@ class CambioProductoCvPdfService
         $y = $pdf->GetY();
 
         $cols = [
-            ['t' => 'Código',      'w' => 26, 'a' => 'L', 'k' => 'producto_codigo'],
+            ['t' => 'Origen',      'w' => 30, 'a' => 'L', 'k' => 'origen_label'],
+            ['t' => 'Código',      'w' => 20, 'a' => 'L', 'k' => 'producto_codigo'],
             ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'producto_nombre'],
-            ['t' => 'Lote',        'w' => 26, 'a' => 'L', 'k' => 'lote'],
-            ['t' => 'Cant.',       'w' => 18, 'a' => 'R', 'k' => 'cantidad'],
-            ['t' => 'P.Unit',      'w' => 22, 'a' => 'R', 'k' => 'precio_unitario'],
-            ['t' => 'Total',       'w' => 24, 'a' => 'R', 'k' => 'total'],
+            ['t' => 'Lote',        'w' => 20, 'a' => 'L', 'k' => 'lote'],
+            ['t' => 'NUP',         'w' => 22, 'a' => 'L', 'k' => 'nup'],
+            ['t' => 'Cant.',       'w' => 14, 'a' => 'R', 'k' => 'cantidad'],
+            ['t' => 'P.Unit',      'w' => 19, 'a' => 'R', 'k' => 'precio_unitario'],
+            ['t' => 'Total',       'w' => 21, 'a' => 'R', 'k' => 'total'],
         ];
 
         $fixed = 0.0;
@@ -192,7 +215,7 @@ class CambioProductoCvPdfService
         $flex = max(30.0, $this->contentW - $fixed);
         foreach ($cols as &$c) { if ($c['w'] === 0) { $c['w'] = $flex; } }
         unset($c);
-        $descIdx = 1;
+        $descIdx = 2;
 
         // Encabezado de la tabla. Se encapsula porque hay que repetirlo al inicio de
         // cada página cuando el detalle no cabe en una sola.

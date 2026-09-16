@@ -166,7 +166,10 @@ class ControlBancarioController extends BaseModuloController
                 $glosa = $r['referencia_detalle'] ?: $r['concepto'] ?: '';
                 $esCheque = ($r['tipo_transaccion'] === 'CHEQUE');
                 $fechaCheque = ($esCheque && !empty($r['fecha_cheque'])) ? date('d-m-Y', strtotime($r['fecha_cheque'])) : '';
-                $beneficiarioCheque = $esCheque ? (string) ($r['beneficiario_cheque'] ?? '') : '';
+                // Beneficiario / cliente de todo movimiento, no solo del cheque: en un ingreso
+                // por depósito o transferencia es el cliente que pagó; en un egreso, a quién se
+                // le pagó (beneficiario del cheque, proveedor o empleado).
+                $beneficiario = (string) ($r['beneficiario_cheque'] ?? '');
 
                 $badgeDireccion = '';
                 if ($r['tipo_transaccion'] === 'CHEQUE' && !empty($r['cheque_direccion'])) {
@@ -215,7 +218,7 @@ class ControlBancarioController extends BaseModuloController
                         <td data-col="tipo"><span class="badge bg-light text-dark border">' . htmlspecialchars($tipoLabel) . '</span></td>
                         <td data-col="cheque">' . ($esCheque ? htmlspecialchars((string) ($r['numero_cheque'] ?? '')) : '') . $badgeDireccion . '</td>
                         <td data-col="fecha_cheque">' . $fechaCheque . '</td>
-                        <td data-col="beneficiario_cheque" class="text-truncate" style="max-width:160px">' . htmlspecialchars($beneficiarioCheque) . '</td>
+                        <td data-col="beneficiario_cheque" class="text-truncate" style="max-width:160px">' . htmlspecialchars($beneficiario) . '</td>
                         <td data-col="documento" class="text-truncate" style="max-width:140px">' . htmlspecialchars((string) ($r['documento_referencia'] ?? '')) . '</td>
                         <td data-col="tercero" class="text-truncate" style="max-width:160px">' . $badgeEst . htmlspecialchars((string) ($r['nombre_entidad'] ?? '')) . '</td>
                         <td data-col="glosa" class="text-truncate text-muted" style="max-width:220px">' . htmlspecialchars((string) $glosa) . '</td>

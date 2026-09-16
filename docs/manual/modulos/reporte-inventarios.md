@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones
-version: 1.11
+version: 1.12
 orden: 40
 estado: activo
 ---
@@ -137,6 +137,11 @@ un botón para **imprimir el PDF** de cada uno.
   de consignación. Si la factura no está en estado *facturada*, se indica su
   estado debajo del número.
 
+La columna **A cambio** es lo que el cliente se quedó como reposición en un
+[Cambio de productos](modulos/cambio-producto-cv): también baja del saldo
+(`saldo = consignado − retornado − facturado − a cambio`), aunque no abre
+documentos al hacer clic.
+
 El PDF se abre en el módulo dueño del documento, así que el botón **solo
 aparece si el usuario tiene permiso de ver** sobre **Facturas de Venta** o
 **Retornos CV**, según el caso; si no lo tiene, la columna PDF no se muestra.
@@ -228,6 +233,10 @@ cuando haga falta.
 
 ## Historial de cambios
 
+- **1.12** — Pestaña **Consignaciones**: el saldo descuenta también lo entregado
+  **a cambio** (Cambios de productos); nueva columna *A cambio* en el detalle,
+  los totales y el Excel. El consignado que resta la pestaña Existencias aplica
+  el mismo descuento.
 - **1.11** — Las pestañas se muestran según el acceso del usuario a otros módulos: **Existencias, Movimientos, Valorización y Auditoría** solo si puede ver **Inventario**, y **Consignaciones** solo si puede ver **Consignaciones de Ventas**. El reporte abre en la primera pestaña permitida y, sin ninguna, muestra un aviso. Nueva sección *Permisos*.
 - **1.10** — Pestaña **Consignaciones**: al buscar ya se ve en pantalla lo que se
   buscó. El listado agrega las columnas **Lote** y **NUP**, "Productos" pasa a

@@ -363,8 +363,9 @@ $rowsHtml = $rowsHtml ?? '';
                     </div>
                     <div class="tab-pane fade" id="pane-responsables" role="tabpanel">
                         <p class="text-muted small mb-2">
-                            Solo aplica a usuarios que hacen entregas desde la app móvil sin "Acceso total" en el módulo Entregas:
-                            verán únicamente las consignaciones de los responsables de traslado vinculados aquí.
+                            Define qué entregas ve el usuario en <strong>Entregas de Consignaciones</strong>: si tiene responsables vinculados aquí,
+                            ve únicamente las consignaciones de esos responsables; si no tiene ninguno, ve todas las de la empresa
+                            (el superadministrador siempre ve todas). Aplica igual en la web y en la app móvil del repartidor.
                         </p>
                         <div class="row g-2 mb-3">
                             <div class="col-md-5">

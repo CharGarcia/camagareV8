@@ -401,6 +401,9 @@ class IngresosController extends BaseModuloController
             exit;
         }
 
+        // El modal decide con esto si abre en solo lectura (periodo contable cerrado).
+        $ingreso['periodo_cerrado'] = $this->service->esPeriodoCerrado($ingreso['fecha_emision'] ?? null, $idEmpresa);
+
         echo json_encode(['ok' => true, 'data' => $ingreso]);
         exit;
     }

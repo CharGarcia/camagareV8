@@ -30,13 +30,17 @@ class EntregasConsignacionesController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
-    /** Ids de responsables_traslado a los que restringir, según permiso "todo" del usuario. */
-    private function filtroResponsablesActual(array $perm): ?array
+    /**
+     * Ids de responsables_traslado a los que restringir el listado (null = todas).
+     * Manda el vínculo usuario <-> responsable de config/usuarios-sistema: nivel 3
+     * y usuarios sin vínculo ven todo; usuarios vinculados, solo lo suyo.
+     */
+    private function filtroResponsablesActual(): ?array
     {
         return $this->service->resolverFiltroResponsables(
             (int) $_SESSION['id_usuario'],
             (int) $_SESSION['id_empresa'],
-            !empty($perm['todo'])
+            (int) ($_SESSION['nivel'] ?? 1)
         );
     }
 
@@ -54,7 +58,7 @@ class EntregasConsignacionesController extends BaseModuloController
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
         $perPage  = 20;
 
-        $idsResponsables = $this->filtroResponsablesActual($perm);
+        $idsResponsables = $this->filtroResponsablesActual();
 
         $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idsResponsables);
         $rows       = $this->prepararFilas($result['rows']);
@@ -97,8 +101,7 @@ class EntregasConsignacionesController extends BaseModuloController
         $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
         $perPage    = 20;
 
-        $perm            = $this->getPermisos();
-        $idsResponsables = $this->filtroResponsablesActual($perm);
+        $idsResponsables = $this->filtroResponsablesActual();
 
         $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idsResponsables);
         $rows       = $this->prepararFilas($result['rows']);
@@ -204,8 +207,7 @@ class EntregasConsignacionesController extends BaseModuloController
         $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'capturado_en');
         $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
 
-        $perm            = $this->getPermisos();
-        $idsResponsables = $this->filtroResponsablesActual($perm);
+        $idsResponsables = $this->filtroResponsablesActual();
 
         $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idsResponsables);
         return $this->prepararFilas($data['rows'] ?? []);
@@ -338,7 +340,7 @@ class EntregasConsignacionesController extends BaseModuloController
 
         // Sin acceso total, la firma solo se sirve si la entrega es de uno de los
         // responsables del usuario — igual que el listado, que ya la oculta.
-        $idsResponsables = $this->filtroResponsablesActual($this->getPermisos());
+        $idsResponsables = $this->filtroResponsablesActual();
         if ($idEntrega > 0 && !$this->service->puedeVerEntrega($idEntrega, $idEmpresa, $idsResponsables)) {
             http_response_code(404);
             echo 'Firma no encontrada';

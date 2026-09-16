@@ -500,6 +500,16 @@ class IngresoService
     }
 
     /**
+     * Versión booleana (sin excepción) para que el modal sepa, al ABRIR el registro, si
+     * debe mostrarse en solo lectura porque su periodo contable está cerrado — en vez de
+     * dejar editar y fallar recién al guardar. Misma regla que aplica actualizar()/anular().
+     */
+    public function esPeriodoCerrado(?string $fecha, int $idEmpresa): bool
+    {
+        return $this->periodosService->esFechaEnPeriodoCerrado($fecha, $idEmpresa);
+    }
+
+    /**
      * Valida que la fecha de emisión no sea anterior a la fecha de ningún documento en el detalle.
      */
     private function validarFechaVsDocumentos(array $data): void

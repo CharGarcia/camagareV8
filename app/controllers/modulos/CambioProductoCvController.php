@@ -582,29 +582,33 @@ class CambioProductoCvController extends BaseModuloController
                 $sheet->getStyle('A' . $row)->getFont()->setBold(true);
                 $row++;
 
-                $headers = ['Código', 'Descripción', 'Lote', 'Cantidad', 'P. Unitario', 'Total'];
+                // Origen (factura / cambio / consignación de la que sale la línea) y NUP:
+                // el cambio se hace por unidad, así que el documento debe decir cuál.
+                $headers = ['Origen', 'Código', 'Descripción', 'Lote', 'NUP', 'Cantidad', 'P. Unitario', 'Total'];
                 $col = 'A';
                 foreach ($headers as $h) { $sheet->setCellValue($col . $row, $h); $col++; }
-                $sheet->getStyle('A' . $row . ':F' . $row)->applyFromArray($headerStyle);
+                $sheet->getStyle('A' . $row . ':H' . $row)->applyFromArray($headerStyle);
                 $row++;
 
                 $inicio = $row;
                 if (empty($filas)) {
                     $sheet->setCellValue('A' . $row, 'Sin productos.');
-                    $sheet->mergeCells('A' . $row . ':F' . $row);
+                    $sheet->mergeCells('A' . $row . ':H' . $row);
                     $row++;
                 } else {
                     foreach ($filas as $d) {
-                        $sheet->setCellValueExplicit('A' . $row, (string)($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                        $sheet->setCellValueExplicit('B' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                        $sheet->setCellValueExplicit('C' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                        $sheet->setCellValue('D' . $row, (float)($d['cantidad'] ?? 0));
-                        $sheet->setCellValue('E' . $row, (float)($d['precio_unitario'] ?? 0));
-                        $sheet->setCellValue('F' . $row, (float)($d['total'] ?? 0));
+                        $sheet->setCellValueExplicit('A' . $row, \App\Services\modulos\CambioProductoCvPdfService::etiquetaOrigen($d), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValueExplicit('B' . $row, (string)($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValueExplicit('C' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValueExplicit('D' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValueExplicit('E' . $row, (string)($d['nup'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValue('F' . $row, (float)($d['cantidad'] ?? 0));
+                        $sheet->setCellValue('G' . $row, (float)($d['precio_unitario'] ?? 0));
+                        $sheet->setCellValue('H' . $row, (float)($d['total'] ?? 0));
                         $row++;
                     }
                 }
-                $sheet->getStyle('D' . $inicio . ':F' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle('F' . $inicio . ':H' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
                 $row++;
             };
 
@@ -753,7 +757,12 @@ class CambioProductoCvController extends BaseModuloController
         exit;
     }
 
-    /** Líneas del cliente disponibles para devolver (factura + cambios previos, con saldo). */
+    /**
+     * Líneas disponibles para devolver (factura + cambios previos, con saldo), una por ítem.
+     * Con `id_cliente` acota a ese cliente (y admite `q` vacío: todo lo pendiente del cliente);
+     * sin cliente busca entre todos por NUP, lote, número de documento o producto, y el
+     * navegador fija el cliente del cambio con el de la línea que se agregue.
+     */
     public function buscarLineasOrigenAjax(): void
     {
         $this->requireLeer();
@@ -764,10 +773,60 @@ class CambioProductoCvController extends BaseModuloController
             $idCliente = (int) ($_GET['id_cliente'] ?? 0);
             $q         = trim($_GET['q'] ?? '');
             $excluir   = (int) ($_GET['excluir'] ?? 0);
-            if ($idCliente <= 0) throw new Exception("Cliente no válido.");
+            if ($idCliente <= 0 && $q === '') throw new Exception("Indique un NUP, un número de documento o un producto, o seleccione el cliente.");
 
-            $rows = $this->service->getLineasDisponiblesCliente($idEmpresa, $idCliente, $q, $excluir > 0 ? $excluir : null);
+            $rows = $this->service->getLineasDisponiblesCliente($idEmpresa, $idCliente > 0 ? $idCliente : null, $q, $excluir > 0 ? $excluir : null);
             echo json_encode(['ok' => true, 'data' => $rows]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Qué se puede ENTREGAR a cambio, en una sola respuesta con tres grupos:
+     *  - `consignaciones`: líneas de consignaciones Entregadas con saldo en poder del
+     *    cliente (por número de consignación, cliente, NUP, lote o producto);
+     *  - `inventario`: existencias por bodega / lote / NUP que coinciden con la búsqueda;
+     *  - `catalogo`: productos del catálogo (bienes), aunque no tengan stock registrado.
+     * Con `id_cliente` las consignaciones se acotan a ese cliente.
+     */
+    public function buscarEntregasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idCliente = (int) ($_GET['id_cliente'] ?? 0);
+            $q         = trim($_GET['q'] ?? '');
+            $excluir   = (int) ($_GET['excluir'] ?? 0);
+            if ($idCliente <= 0 && $q === '') throw new Exception("Indique un número de consignación, un NUP, un lote o un producto.");
+
+            $consignaciones = $this->service->getLineasConsignacionDisponibles($idEmpresa, $q, $idCliente > 0 ? $idCliente : null, $excluir > 0 ? $excluir : null);
+
+            $inventario = [];
+            $catalogo   = [];
+            if ($q !== '') {
+                $inventario = $this->service->buscarInventario($idEmpresa, $q, 30);
+
+                $repo = new ProductoRepository();
+                $res  = $repo->getListado($idEmpresa, $q, 1, 15, 'nombre', 'ASC', null, null, true);
+                foreach (($res['rows'] ?? []) as $p) {
+                    // Solo bienes/productos, no servicios.
+                    if ((string)($p['tipo_produccion'] ?? '01') === '02') continue;
+                    $catalogo[] = [
+                        'id'              => (int) $p['id'],
+                        'codigo'          => $p['codigo'] ?? '',
+                        'nombre'          => $p['nombre'] ?? '',
+                        'inventariable'   => $p['inventariable'] ?? null,
+                        'tipo_produccion' => $p['tipo_produccion'] ?? '01',
+                    ];
+                }
+            }
+
+            echo json_encode(['ok' => true, 'consignaciones' => $consignaciones, 'inventario' => $inventario, 'catalogo' => $catalogo]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

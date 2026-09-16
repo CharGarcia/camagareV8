@@ -53,6 +53,13 @@ class ReporteVentasController extends ApiBaseController
             'estado' => 'TODOS',
             'buscar_info' => '',
         ];
+        // Alcance del usuario (§6), igual que la web: sin acceso total ('t') el
+        // vendedor vinculado ve su cartera; si no es vendedor, solo lo que registró.
+        $filtros = array_merge($filtros, \App\Helpers\AlcanceRegistros::resolver(
+            $this->getPermisos(),
+            (int) ($_SESSION['id_usuario'] ?? 0),
+            [$idEmpresa]
+        ));
 
         $repo = new ReporteVentasRepository();
 

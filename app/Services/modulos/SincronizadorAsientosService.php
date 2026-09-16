@@ -222,8 +222,23 @@ class SincronizadorAsientosService
 
         // $entidad e $idExpr son literales del código (no entrada de usuario) → seguros de interpolar.
         return function (string $entidad, string $idExpr) use ($tieneMapMig): string {
-            if (!$tieneMapMig) { return ''; }
-            return " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm WHERE mm.entidad = '{$entidad}' AND mm.id_destino = {$idExpr} AND mm.vinculado IS NOT TRUE) ";
+            $sql = '';
+            if ($tieneMapMig) {
+                $sql .= " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm WHERE mm.entidad = '{$entidad}' AND mm.id_destino = {$idExpr} AND mm.vinculado IS NOT TRUE) ";
+            }
+            // Segunda condición, independiente del mapa: el documento ya está ENLAZADO a un
+            // asiento migrado vivo (documento.id_asiento_contable → modulo_origen = 'migracion').
+            // El mapa no cubre a los documentos NATIVOS que la migración solo enlazó por número
+            // (vinculado = true) ni a los que perdieron su fila del mapa; pero si su contabilidad
+            // ya vino del histórico, tampoco deben entrar a las ramas que regeneran documentos con
+            // asiento (costeo pendiente / sin fila de seguimiento en Facturas, Recibos y NC).
+            // Mismo criterio que AsientoContableService::guardarAsiento(), que además corta a
+            // cualquier otro camino de generación. Todos los $idExpr son "alias.id".
+            $aliasDoc = preg_replace('/\.id$/', '', $idExpr);
+            if ($aliasDoc !== null && $aliasDoc !== '' && $aliasDoc !== $idExpr) {
+                $sql .= " AND NOT EXISTS (SELECT 1 FROM asientos_contables_cabecera am WHERE am.id = {$aliasDoc}.id_asiento_contable AND am.modulo_origen = 'migracion' AND am.eliminado = false AND am.estado <> 'anulado') ";
+            }
+            return $sql;
         };
     }
 

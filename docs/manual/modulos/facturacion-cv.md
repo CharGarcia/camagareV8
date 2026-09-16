@@ -6,7 +6,7 @@ ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: facturacion de consignacion, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura
-version: 1.6
+version: 1.7
 orden: 47
 estado: activo
 ---
@@ -29,8 +29,12 @@ factura de venta. Sirve para:
 - Facturar **solo una parte** de lo consignado (el resto queda con saldo).
 - Ajustar el **precio** y aplicar **descuentos** antes de emitir la factura.
 
-El saldo facturable de cada línea es `consignado − retornado − facturado`, y solo
-descuenta documentos ya **facturados**: un borrador no reserva saldo.
+El saldo facturable de cada línea es
+`consignado − retornado − facturado − entregado a cambio`, y solo descuenta
+documentos ya **facturados**: un borrador no reserva saldo. Lo *entregado a
+cambio* es lo que el cliente se quedó como reposición en un
+[Cambio de productos](modulos/cambio-producto-cv): ya es suyo y no se factura
+por aquí.
 
 ## Requisitos previos
 
@@ -180,6 +184,9 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.7** — El saldo facturable descuenta también lo entregado **a cambio**
+  desde la consignación (módulo Cambios de productos), en el buscador, en el
+  sub-modal *Cargar consignación* y al revalidar un borrador.
 - **1.6** — La factura generada ya lleva en su información adicional las **Observaciones** del documento y, según la configuración de la empresa, el **Vendedor** y el **Cajero**. Antes las observaciones solo se veían en el PDF del sistema y no viajaban en el comprobante.
 
 - **1.5** — El PDF de una facturación con muchos productos ya no sale troceado.

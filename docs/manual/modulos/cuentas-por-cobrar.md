@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen
-version: 2.11
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes
+version: 2.12
 orden: 40
 estado: activo
 ---
@@ -90,21 +90,36 @@ Permisos por módulo*):
 
 - **Con acceso total** (o siendo superadministrador): se ve la cartera completa
   de la empresa.
-- **Sin acceso total**: cada usuario ve **solo los documentos que él registró**
-  — las facturas y los recibos de venta que emitió y los saldos iniciales que
-  cargó. Lo que no sale en la tabla tampoco entra en las tarjetas de arriba, en
-  el gráfico de antigüedad, en las vistas *Por cliente* y *Por producto*, ni en
-  el PDF y el Excel: todo parte del mismo listado.
-- Tampoco se puede llegar a un documento ajeno por otras vías: registrar un
-  cobro, ver el historial o mandar el recordatorio por correo o WhatsApp de un
-  documento de otro usuario responde *No tiene permiso sobre este registro: lo
-  creó otro usuario*. En el **envío masivo**, los documentos ajenos que hubieran
-  quedado seleccionados simplemente se omiten.
+- **Sin acceso total y el usuario es un vendedor**: ve **su cartera**, es decir
+  los documentos de los **clientes que tiene asignados** (campo *Vendedor* de la
+  ficha del cliente) y, además, los documentos **emitidos a su nombre** aunque el
+  cliente esté asignado a otro asesor o a ninguno. Los saldos iniciales no llevan
+  vendedor: entran solo si el cliente es suyo.
+- **Sin acceso total y el usuario no es vendedor** (un cajero, un digitador): ve
+  solo los documentos que **él registró** — las facturas y los recibos de venta
+  que emitió y los saldos iniciales que cargó.
+- En los dos casos, lo que no sale en la tabla tampoco entra en las tarjetas de
+  arriba, en el gráfico de antigüedad, en las vistas *Por cliente* y *Por
+  producto*, ni en el PDF y el Excel: todo parte del mismo listado. Tampoco se
+  puede llegar a un documento ajeno por otras vías: registrar un cobro, ver el
+  historial o mandar el recordatorio por correo o WhatsApp responde *No tiene
+  permiso sobre este registro: no pertenece a su cartera*. En el **envío
+  masivo**, los documentos ajenos que hubieran quedado seleccionados simplemente
+  se omiten.
 
-Dos advertencias sobre documentos antiguos: los que se **migraron** desde el
-sistema anterior quedaron a nombre del usuario que corrió la migración, así que
-solo él (o alguien con acceso total) los verá; y un saldo inicial cargado sin
-usuario registrado no aparece para nadie que no tenga acceso total.
+**Cómo sabe el sistema qué vendedor es el usuario.** Se resuelve en este orden:
+primero el campo **Usuario del sistema** de la ficha del vendedor (módulo
+Vendedores), que es lo que el administrador declaró a mano; si no está, la
+**cédula del usuario** contra la identificación del vendedor (también calza si
+uno tiene el RUC de persona natural y el otro la cédula). En consolidado por
+RUC se busca el vendedor en cada establecimiento. El filtro *Vendedor* de la
+pantalla es independiente de esto: sirve para acotar, no cambia quién ve qué.
+
+Dos advertencias para usuarios sin vendedor: los documentos que se **migraron**
+desde el sistema anterior quedaron a nombre del usuario que corrió la
+migración, así que solo él (o alguien con acceso total) los verá; y un saldo
+inicial cargado sin usuario registrado no aparece para nadie que no tenga
+acceso total.
 
 ## Ordenar el listado
 
@@ -489,15 +504,27 @@ Y dos casos que el reporte **no** descuenta a propósito:
   de la factura), que la NC no esté anulada y que se haya emitido desde el
   **mismo establecimiento** que la factura.
 - **No veo las facturas de otro vendedor**: sin el permiso de *acceso total*,
-  cada usuario ve solo los documentos que él registró (ver *Quién ve qué: el
-  permiso de Acceso total*). Si faltan documentos **antiguos**, suele ser porque
-  se migraron a nombre del usuario que corrió la migración.
+  un vendedor ve solo su cartera (clientes asignados y documentos a su nombre) y
+  quien no es vendedor solo lo que él registró (ver *Quién ve qué: el permiso de
+  Acceso total*). Si un vendedor no ve nada, revise que su ficha tenga el
+  *Usuario del sistema* o la misma cédula que su usuario, y que los clientes
+  tengan asignado el vendedor. Si faltan documentos **antiguos** a un usuario
+  sin vendedor, suele ser porque se migraron a nombre de quien corrió la
+  migración.
 - **Una serie no aparece en el modal de cobro**: está **inactiva**. Solo se
   ofrecen los puntos de emisión activos; actívela en Empresa, pestaña Puntos de
   Emisión (ver *Serie del cobro: solo puntos de emisión activos*).
 
 ## Historial de cambios
 
+- **2.12** — El permiso de **Acceso total** ahora se aplica **por vendedor**: sin
+  él, el vendedor vinculado al usuario (campo *Usuario del sistema* de su ficha o
+  la misma cédula) ve la cartera de sus **clientes asignados** y los documentos
+  emitidos a su nombre, en la tabla, las tarjetas, la antigüedad, las vistas
+  agrupadas, el PDF, el Excel, el cobro, el historial y los envíos. Quien no es
+  vendedor sigue viendo solo lo que él registró. Antes (2.9) se miraba solo quién
+  registró el documento, así que un asesor no veía las facturas de sus clientes
+  hechas por caja. Sección *Quién ve qué* actualizada.
 - **2.11** — Se quitó la fila **SUBTOTAL** de cada cliente en la vista *Por
   cliente*: su saldo ya aparece en la línea del cliente y en la cabecera de la
   sección del PDF y el Excel. El **TOTAL GENERAL** del listado se mantiene.
