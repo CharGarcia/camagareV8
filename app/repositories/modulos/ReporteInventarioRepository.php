@@ -143,56 +143,84 @@ class ReporteInventarioRepository extends BaseRepository
     }
 
     /**
-     * Base: una fila por producto×bodega, con costo unitario (último movimiento) y estado
-     * calculado. El universo de pares producto×bodega sale de UNION(productos_bodegas activos,
-     * pares con movimiento real en inventario_kardex) — no solo de productos_bodegas — para que
-     * un producto con historial de kardex nunca desaparezca de Existencias (con saldo cero o
-     * negativo incluido) aunque su fila en productos_bodegas esté ausente o eliminada (caché
-     * desincronizado; ver docs/manual/modulos/reporte-inventarios.md, pestaña Auditoría).
-     * productos_bodegas (pb) queda como LEFT JOIN solo para leer stock_minimo/stock_maximo.
+     * Filtros de Existencias que se pueden aplicar ANTES de agregar, para que buscar un
+     * producto, una bodega o una categoría no agregue igual el kardex de toda la empresa
+     * (medido: 1 producto tardaba lo mismo que el listado completo, 1,1 s; 1 categoría,
+     * 2,6 s). No reemplazan al WHERE de buildWhereExistencias(), que se sigue aplicando
+     * fuera tal cual: solo recortan lo que se lee, así que el resultado no cambia.
      *
-     * RENDIMIENTO — por qué CTEs agregados y no subconsultas en el SELECT:
-     * stock, costo y consignado se calculaban con tres subconsultas correlacionadas, una
-     * por cada uno de esos tres datos y POR CADA FILA del resultado. Con 2.000 productos ×
-     * 5 bodegas son 10.000 filas → 30.000 subconsultas, cada una entrando otra vez al
-     * kardex: 12,5 s para el listado (y 15 s para Valorización, que usa esta misma base).
-     * Aquí se agrega UNA vez todo el kardex de la empresa (y una vez las consignaciones) y
-     * el resultado se cruza por LEFT JOIN. Los CTE van MATERIALIZED a propósito: kardex_agg
-     * se usa dos veces (para el universo de pares y para el stock) y sin materializar
-     * PostgreSQL lo calcularía dos veces.
+     * @return array{0: string, 1: string} [condiciones sin alias para inventario_kardex y
+     *                                      productos_bodegas, condiciones con alias cvd]
+     */
+    private function condicionesExistenciasAntesDeAgregar(array $filtros): array
+    {
+        $sinAlias = '';
+        $cvd = '';
+        if (!empty($filtros['id_bodega'])) {
+            $sinAlias .= ' AND id_bodega = :id_bodega';
+            $cvd      .= ' AND cvd.id_bodega = :id_bodega';
+        }
+        if (!empty($filtros['id_producto'])) {
+            $sinAlias .= ' AND id_producto = :id_producto';
+            $cvd      .= ' AND cvd.id_producto = :id_producto';
+        }
+        $deProducto = [];
+        if (!empty($filtros['id_categoria'])) {
+            $deProducto[] = 'fp.id_categoria = :id_categoria';
+        }
+        if (!empty($filtros['id_marca'])) {
+            $deProducto[] = 'fp.id_marca = :id_marca';
+        }
+        if (!empty($filtros['buscar'])) {
+            $deProducto[] = '(fp.nombre ILIKE :buscar OR fp.codigo ILIKE :buscar)';
+        }
+        if ($deProducto) {
+            $productos = 'SELECT fp.id FROM productos fp WHERE fp.id_empresa = :id_empresa AND ' . implode(' AND ', $deProducto);
+            $sinAlias .= " AND id_producto IN ({$productos})";
+            $cvd      .= " AND cvd.id_producto IN ({$productos})";
+        }
+        return [$sinAlias, $cvd];
+    }
+
+    /**
+     * Base: una fila por producto×bodega, con costo unitario (último movimiento) y estado
+     * calculado. El universo de pares producto×bodega es la unión de productos_bodegas
+     * activos y los pares con movimiento real en inventario_kardex — no solo
+     * productos_bodegas — para que un producto con historial de kardex nunca desaparezca de
+     * Existencias (con saldo cero o negativo incluido) aunque su fila en productos_bodegas
+     * esté ausente o eliminada (caché desincronizado; ver
+     * docs/manual/modulos/reporte-inventarios.md, pestaña Auditoría).
+     *
+     * RENDIMIENTO (medido con 300.000 movimientos, 2.000 productos × 5 bodegas y 20.000
+     * líneas de consignación; ver el historial del manual, v1.15):
+     *  - El kardex se agrega UNA vez y se cruza con productos_bodegas por FULL JOIN. Antes
+     *    era un CTE MATERIALIZED usado dos veces (UNION + LEFT JOIN): sin estadísticas, con
+     *    un filtro de bodega el planificador estimaba una fila y cruzaba 2.000 × 2.000 pares
+     *    en bucle anidado. El FULL JOIN solo admite hash/merge y da el mismo universo: cada
+     *    lado tiene un único par por producto×bodega (GROUP BY de un lado, UNIQUE
+     *    (id_producto, id_bodega) del otro).
+     *  - Último costo con MAX(ARRAY[fecha, id, costo])[3]: elige la misma fila que
+     *    "ORDER BY fecha_movimiento DESC, id DESC" (el id desempata) sin ordenar cada grupo;
+     *    ARRAY_AGG(… ORDER BY …) volcaba el ordenamiento a disco.
+     *  - Los filtros de producto/bodega/categoría/marca se aplican antes de agregar
+     *    (condicionesExistenciasAntesDeAgregar()).
+     *  - El consignado se agrega por línea con joins (cteConsignadoPorGrupo()), no con tres
+     *    subconsultas por cada línea de consignación.
      *
      * $fechaCorte (opcional): si viene, el saldo/costo/consignado se calculan "a esa fecha"
      * (solo movimientos/consignaciones hasta ese día), en vez del saldo corriente de hoy.
      */
-    private function baseExistencias(string $where, bool $conFechaCorte = false): string
+    private function baseExistencias(string $where, array $filtros, bool $conFechaCorte = false): string
     {
         $condCorteKardex = $conFechaCorte ? " AND fecha_movimiento <= :fecha_corte" : "";
         $condCorteCv     = $conFechaCorte ? " AND cv.fecha_emision <= :fecha_corte" : "";
+        [$condPrevias, $condPreviasCvd] = $this->condicionesExistenciasAntesDeAgregar($filtros);
 
         return "
-            WITH kardex_agg AS MATERIALIZED (
-                SELECT id_empresa, id_producto, id_bodega,
-                       SUM(cantidad) AS stock_actual,
-                       (ARRAY_AGG(costo_unitario ORDER BY fecha_movimiento DESC, id DESC))[1] AS costo_unitario
-                FROM inventario_kardex
-                WHERE id_empresa = :id_empresa AND eliminado = false{$condCorteKardex}
-                GROUP BY id_empresa, id_producto, id_bodega
-            ),
-            consignado_agg AS (
-                SELECT cvd.id_empresa, cvd.id_producto, cvd.id_bodega,
-                       SUM(cvd.cantidad
-                           - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
-                           - COALESCE((" . $this->sqlFacturadoCv() . "), 0)
-                           - COALESCE((" . $this->sqlCambiadoCv() . "), 0)) AS consignado
-                FROM consignaciones_ventas_detalles cvd
-                INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
-                WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
-                  AND cv.eliminado = false{$condCorteCv}
-                GROUP BY cvd.id_empresa, cvd.id_producto, cvd.id_bodega
-            )
+            WITH " . $this->cteConsignadoPorGrupo('consignado_agg', [], $condCorteCv, $condPreviasCvd) . "
             SELECT * FROM (
-                SELECT u.id_producto, u.id_bodega, COALESCE(pb.stock_minimo, 0) AS stock_minimo,
-                       COALESCE(pb.stock_maximo, 0) AS stock_maximo,
+                SELECT u.id_producto, u.id_bodega, COALESCE(u.stock_minimo, 0) AS stock_minimo,
+                       COALESCE(u.stock_maximo, 0) AS stock_maximo,
                        p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                        p.id_categoria, COALESCE(cat.nombre, 'Sin categoría') AS categoria_nombre,
                        p.id_marca, COALESCE(mar.nombre, 'Sin marca') AS marca_nombre,
@@ -200,23 +228,33 @@ class ReporteInventarioRepository extends BaseRepository
                        -- Stock en vivo (suma del kardex), no el pb.stock_actual cacheado: ese
                        -- puede desincronizarse si algo toca productos_bodegas sin pasar por el
                        -- kardex — mismo motivo que el Saldo de Movimientos.
-                       COALESCE(ka.stock_actual, 0) AS stock_actual,
-                       COALESCE(ka.costo_unitario, 0) AS costo_unitario,
+                       COALESCE(u.stock_actual, 0) AS stock_actual,
+                       COALESCE(u.costo_unitario, 0) AS costo_unitario,
                        COALESCE(ca.consignado, 0) AS consignado
                 FROM (
-                    SELECT id_empresa, id_producto, id_bodega FROM productos_bodegas
-                    WHERE id_empresa = :id_empresa AND eliminado = false
-                    UNION
-                    SELECT id_empresa, id_producto, id_bodega FROM kardex_agg
+                    SELECT CAST(:id_empresa AS integer) AS id_empresa,
+                           COALESCE(ka.id_producto, pb.id_producto) AS id_producto,
+                           COALESCE(ka.id_bodega, pb.id_bodega) AS id_bodega,
+                           pb.stock_minimo, pb.stock_maximo,
+                           ka.stock_actual, ka.costo_unitario
+                    FROM (
+                        SELECT id_producto, id_bodega,
+                               SUM(cantidad) AS stock_actual,
+                               (MAX(ARRAY[EXTRACT(EPOCH FROM fecha_movimiento), id, costo_unitario]))[3] AS costo_unitario
+                        FROM inventario_kardex
+                        WHERE id_empresa = :id_empresa AND eliminado = false{$condCorteKardex}{$condPrevias}
+                        GROUP BY id_producto, id_bodega
+                    ) ka
+                    FULL JOIN (
+                        SELECT id_producto, id_bodega, stock_minimo, stock_maximo
+                        FROM productos_bodegas
+                        WHERE id_empresa = :id_empresa AND eliminado = false{$condPrevias}
+                    ) pb ON pb.id_producto = ka.id_producto AND pb.id_bodega = ka.id_bodega
                 ) u
                 INNER JOIN productos p ON p.id = u.id_producto AND p.id_empresa = u.id_empresa
                 INNER JOIN bodegas b ON b.id = u.id_bodega
-                LEFT JOIN productos_bodegas pb ON pb.id_producto = u.id_producto
-                    AND pb.id_bodega = u.id_bodega AND pb.id_empresa = u.id_empresa AND pb.eliminado = false
                 LEFT JOIN categorias cat ON cat.id = p.id_categoria
                 LEFT JOIN marcas mar ON mar.id = p.id_marca
-                LEFT JOIN kardex_agg ka ON ka.id_producto = u.id_producto
-                    AND ka.id_bodega = u.id_bodega AND ka.id_empresa = u.id_empresa
                 LEFT JOIN consignado_agg ca ON ca.id_producto = u.id_producto
                     AND ca.id_bodega = u.id_bodega AND ca.id_empresa = u.id_empresa
                 WHERE {$where}
@@ -253,7 +291,7 @@ class ReporteInventarioRepository extends BaseRepository
         if ($conFechaCorte) {
             $params[':fecha_corte'] = $filtros['fecha_corte'];
         }
-        $sql = "SELECT * FROM (" . $this->wrapValorYEstado($this->baseExistencias($where, $conFechaCorte)) . ") e WHERE 1=1";
+        $sql = "SELECT * FROM (" . $this->wrapValorYEstado($this->baseExistencias($where, $filtros, $conFechaCorte)) . ") e WHERE 1=1";
         if (!empty($filtros['estado_stock'])) {
             $sql .= " AND e.estado_stock = :estado_stock";
             $params[':estado_stock'] = $filtros['estado_stock'];
@@ -284,7 +322,7 @@ class ReporteInventarioRepository extends BaseRepository
         if ($conFechaCorte) {
             $params[':fecha_corte'] = $filtros['fecha_corte'];
         }
-        $base = $this->wrapValorYEstado($this->baseExistencias($where, $conFechaCorte));
+        $base = $this->wrapValorYEstado($this->baseExistencias($where, $filtros, $conFechaCorte));
 
         $whereConsignado = '';
         if (($filtros['consignado'] ?? '') === 'CON') {
@@ -448,6 +486,9 @@ class ReporteInventarioRepository extends BaseRepository
         }
         $orden = 'producto_nombre ASC, bodega_nombre ASC' . ($ordenExtra ? ', ' . implode(', ', $ordenExtra) : '');
 
+        // El consignado va con las subconsultas por línea y NO con cteConsignadoPorGrupo(): se
+        // cruza fila a fila del kardex con IS NOT DISTINCT FROM y, con la forma agrupada, el
+        // planificador estimaba mal ese cruce (medido: 4,8 s → 9 s). Ver sqlRetornadoCv().
         $sql = "WITH consignado_desglose AS (
                     SELECT cvd.id_empresa, cvd.id_producto, cvd.id_bodega{$selCvGroup},
                            SUM(cvd.cantidad
@@ -507,7 +548,7 @@ class ReporteInventarioRepository extends BaseRepository
                     COUNT(*) FILTER (WHERE estado_stock = 'QUIEBRE') AS en_quiebre,
                     COUNT(*) FILTER (WHERE estado_stock = 'ALERTA')  AS en_alerta,
                     COUNT(*) FILTER (WHERE estado_stock = 'EXCESO')  AS en_exceso
-                FROM (" . $this->wrapValorYEstado($this->baseExistencias($where, $conFechaCorte)) . ") e";
+                FROM (" . $this->wrapValorYEstado($this->baseExistencias($where, $filtros, $conFechaCorte)) . ") e";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -526,86 +567,139 @@ class ReporteInventarioRepository extends BaseRepository
     // PESTAÑA 2 — MOVIMIENTOS (Kardex)
     // ════════════════════════════════════════════════════════════════════
 
+    /**
+     * tipo_ambiente de la empresa, con la misma expresión que usaba la subconsulta del
+     * filtro (si la empresa no existe queda NULL y no coincide ningún movimiento).
+     * Va como parámetro y no como "(SELECT … FROM empresas)" dentro del WHERE: con la
+     * subconsulta el planificador no conoce el valor, supone 0,5 % de coincidencias y
+     * planifica para cientos de filas donde hay decenas de miles.
+     */
+    private function tipoAmbienteEmpresa(int $idEmpresa): ?string
+    {
+        static $cache = [];
+        if (!array_key_exists($idEmpresa, $cache)) {
+            $st = $this->db->prepare("SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id");
+            $st->execute([':id' => $idEmpresa]);
+            $valor = $st->fetchColumn();
+            $cache[$idEmpresa] = $valor === false ? null : $valor;
+        }
+        return $cache[$idEmpresa];
+    }
+
+    /**
+     * Filtros de Movimientos, separados en dos grupos:
+     *  - los del propio movimiento (columnas de inventario_kardex, alias k), que van en el
+     *    CTE de cteMovimientos() y deciden cuánto kardex se lee;
+     *  - los de producto/bodega (alias p, b, y el buscador que mezcla k/p/b), que se
+     *    aplican al cruzar con productos y bodegas.
+     * Los dos se aplican ANTES del saldo corrido, igual que antes: la ventana ve
+     * exactamente las mismas filas. Categoría y marca además se adelantan al CTE (como
+     * lista de productos) para no materializar todo el periodo y descartarlo después.
+     *
+     * @return array{0: string, 1: string, 2: array} [condiciones del kardex, condiciones de producto/bodega, parámetros]
+     */
     private function buildWhereMovimientos(int $idEmpresa, array $filtros): array
     {
-        $where = "k.id_empresa = :id_empresa AND k.eliminado = false
-                   AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
-        $params = [':id_empresa' => $idEmpresa];
+        $whereKardex = "k.id_empresa = :id_empresa AND k.eliminado = false AND k.tipo_ambiente = :tipo_ambiente";
+        $whereFuera  = "true";
+        $params = [':id_empresa' => $idEmpresa, ':tipo_ambiente' => $this->tipoAmbienteEmpresa($idEmpresa)];
 
         if (!empty($filtros['fecha_desde'])) {
-            $where .= " AND k.fecha_movimiento >= :fecha_desde";
+            $whereKardex .= " AND k.fecha_movimiento >= :fecha_desde";
             $params[':fecha_desde'] = $filtros['fecha_desde'] . ' 00:00:00';
         }
         if (!empty($filtros['fecha_hasta'])) {
-            $where .= " AND k.fecha_movimiento <= :fecha_hasta";
+            $whereKardex .= " AND k.fecha_movimiento <= :fecha_hasta";
             $params[':fecha_hasta'] = $filtros['fecha_hasta'] . ' 23:59:59';
         }
         if (!empty($filtros['id_bodega'])) {
-            $where .= " AND k.id_bodega = :id_bodega";
+            $whereKardex .= " AND k.id_bodega = :id_bodega";
             $params[':id_bodega'] = (int) $filtros['id_bodega'];
         }
         if (!empty($filtros['id_producto'])) {
-            $where .= " AND k.id_producto = :id_producto";
+            $whereKardex .= " AND k.id_producto = :id_producto";
             $params[':id_producto'] = (int) $filtros['id_producto'];
         }
+        $deProducto = [];
         if (!empty($filtros['id_categoria'])) {
-            $where .= " AND p.id_categoria = :id_categoria";
+            $whereFuera  .= " AND p.id_categoria = :id_categoria";
+            $deProducto[] = "fp.id_categoria = :id_categoria";
             $params[':id_categoria'] = (int) $filtros['id_categoria'];
         }
         if (!empty($filtros['id_marca'])) {
-            $where .= " AND p.id_marca = :id_marca";
+            $whereFuera  .= " AND p.id_marca = :id_marca";
+            $deProducto[] = "fp.id_marca = :id_marca";
             $params[':id_marca'] = (int) $filtros['id_marca'];
         }
+        if ($deProducto) {
+            $whereKardex .= " AND k.id_producto IN (SELECT fp.id FROM productos fp WHERE " . implode(' AND ', $deProducto) . ")";
+        }
         if (!empty($filtros['tipo_movimiento'])) {
-            $where .= " AND k.tipo_movimiento = :tipo_movimiento";
+            $whereKardex .= " AND k.tipo_movimiento = :tipo_movimiento";
             $params[':tipo_movimiento'] = $filtros['tipo_movimiento'];
         }
         if (!empty($filtros['referencia_tipo'])) {
-            $where .= " AND k.referencia_tipo = :referencia_tipo";
+            $whereKardex .= " AND k.referencia_tipo = :referencia_tipo";
             $params[':referencia_tipo'] = $filtros['referencia_tipo'];
         }
         if (!empty($filtros['id_usuario'])) {
-            $where .= " AND k.created_by = :id_usuario";
+            $whereKardex .= " AND k.created_by = :id_usuario";
             $params[':id_usuario'] = (int) $filtros['id_usuario'];
         }
         if (!empty($filtros['numero_lote'])) {
-            $where .= " AND k.numero_lote ILIKE :numero_lote";
+            $whereKardex .= " AND k.numero_lote ILIKE :numero_lote";
             $params[':numero_lote'] = '%' . $filtros['numero_lote'] . '%';
         }
         if (!empty($filtros['nup'])) {
-            $where .= " AND k.nup ILIKE :nup";
+            $whereKardex .= " AND k.nup ILIKE :nup";
             $params[':nup'] = '%' . $filtros['nup'] . '%';
         }
         if (!empty($filtros['fecha_caducidad_desde'])) {
-            $where .= " AND k.fecha_caducidad >= :fecha_caducidad_desde";
+            $whereKardex .= " AND k.fecha_caducidad >= :fecha_caducidad_desde";
             $params[':fecha_caducidad_desde'] = $filtros['fecha_caducidad_desde'];
         }
         if (!empty($filtros['fecha_caducidad_hasta'])) {
-            $where .= " AND k.fecha_caducidad <= :fecha_caducidad_hasta";
+            $whereKardex .= " AND k.fecha_caducidad <= :fecha_caducidad_hasta";
             $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
         }
         if (!empty($filtros['observaciones'])) {
-            $where .= " AND k.observaciones ILIKE :observaciones";
+            $whereKardex .= " AND k.observaciones ILIKE :observaciones";
             $params[':observaciones'] = '%' . $filtros['observaciones'] . '%';
         }
         if (!empty($filtros['buscar'])) {
-            $where .= " AND (p.nombre ILIKE :buscar OR p.codigo ILIKE :buscar OR b.nombre ILIKE :buscar OR k.observaciones ILIKE :buscar)";
+            $whereFuera .= " AND (p.nombre ILIKE :buscar OR p.codigo ILIKE :buscar OR b.nombre ILIKE :buscar OR k.observaciones ILIKE :buscar)";
             $params[':buscar'] = '%' . $filtros['buscar'] . '%';
         }
 
-        return [$where, $params];
+        return [$whereKardex, $whereFuera, $params];
     }
 
-    private function fromMovimientos(string $where): string
+    /**
+     * Movimientos que pasan los filtros propios del kardex, en un CTE MATERIALIZED SIN
+     * joins. Cuando el kardex se cruzaba directo con productos, el planificador lo recorría
+     * entero por idx_kardex_empresa_producto (orden útil para el cruce y el saldo) leyendo
+     * al azar toda la empresa para quedarse con el año: 5,1 s el año en curso, que es la
+     * búsqueda con la que arranca la pestaña. Aislado, elige el recorrido por fecha: 0,8 s
+     * (y "Por mes" de 4,7 s a 0,4 s). El CTE se llama k para que las expresiones de
+     * agrupación (k.fecha_movimiento, k.tipo_movimiento…) sigan valiendo.
+     */
+    private function cteMovimientos(string $whereKardex): string
     {
-        return "FROM inventario_kardex k
+        return "WITH k AS MATERIALIZED (
+                    SELECT k.id, k.id_producto, k.id_bodega, k.fecha_movimiento, k.tipo_movimiento,
+                           k.referencia_tipo, k.referencia_id, k.cantidad, k.costo_unitario, k.costo_total,
+                           k.numero_lote, k.fecha_caducidad, k.nup, k.observaciones
+                    FROM inventario_kardex k
+                    WHERE {$whereKardex}
+                )";
+    }
+
+    private function fromMovimientos(string $whereFuera): string
+    {
+        return "FROM k
                  INNER JOIN productos p ON p.id = k.id_producto
                  INNER JOIN bodegas b ON b.id = k.id_bodega
-                 LEFT JOIN usuarios u ON u.id = k.created_by
-                 LEFT JOIN unidades_medida um ON um.id = k.id_medida
-                 LEFT JOIN categorias cat ON cat.id = p.id_categoria
-                 LEFT JOIN marcas mar ON mar.id = p.id_marca
-                 WHERE {$where}";
+                 WHERE {$whereFuera}";
     }
 
     /**
@@ -614,12 +708,12 @@ class ReporteInventarioRepository extends BaseRepository
      * OJO con el coste: el saldo corrido es una función de ventana sobre TODAS las filas
      * que cumplen el filtro, así que se calcula entero antes de aplicar el LIMIT — el tope
      * recorta lo que se envía, no lo que se lee. Lo que de verdad abarata esta consulta es
-     * el filtro de fechas (medido: 2,6 s sin filtro vs 0,12 s acotando a un mes), y por eso
-     * la pestaña arranca con un año seleccionado en vez de "Todos".
+     * el filtro de fechas, y por eso la pestaña arranca con un año seleccionado en vez de
+     * "Todos".
      */
     public function getMovimientosDetalle(int $idEmpresa, array $filtros, ?int $limite = null): array
     {
-        list($where, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
+        list($whereKardex, $whereFuera, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
         // El "Saldo" NO se lee de k.stock_posterior (es un valor cacheado en cada fila que
         // puede quedar desincronizado si algo externo toca productos_bodegas sin pasar por
         // el kardex). En su lugar se calcula en vivo: suma corrida de "cantidad" (entradas
@@ -627,7 +721,8 @@ class ReporteInventarioRepository extends BaseRepository
         // filas que cumplen los filtros actuales. Nota: si se filtra por rango de fechas, el
         // saldo corrido arranca desde la primera fila visible en ese rango, no desde el inicio
         // absoluto del historial (igual que una suma acumulada sobre un rango filtrado).
-        $sql = "SELECT k.id, k.fecha_movimiento, k.tipo_movimiento, k.referencia_tipo, k.referencia_id,
+        $sql = $this->cteMovimientos($whereKardex) . "
+                SELECT k.id, k.fecha_movimiento, k.tipo_movimiento, k.referencia_tipo, k.referencia_id,
                        k.cantidad, k.costo_unitario, k.costo_total,
                        SUM(k.cantidad) OVER (
                            PARTITION BY k.id_producto, k.id_bodega
@@ -636,9 +731,8 @@ class ReporteInventarioRepository extends BaseRepository
                        ) AS saldo,
                        k.numero_lote, k.fecha_caducidad, k.nup, k.observaciones,
                        p.codigo AS producto_codigo, p.nombre AS producto_nombre,
-                       b.nombre AS bodega_nombre, u.nombre AS usuario_nombre,
-                       um.abreviatura AS medida_abreviatura
-                " . $this->fromMovimientos($where) . "
+                       b.nombre AS bodega_nombre
+                " . $this->fromMovimientos($whereFuera) . "
                 ORDER BY p.nombre ASC, b.nombre ASC, k.fecha_movimiento ASC, k.id ASC"
                 . ($limite !== null ? ' LIMIT ' . ((int) $limite + 1) : '');
 
@@ -654,14 +748,15 @@ class ReporteInventarioRepository extends BaseRepository
 
     private function getMovimientosAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabelExpr, string $orderBy): array
     {
-        list($where, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
-        $sql = "SELECT {$campoId} AS id_grupo, MAX({$campoLabelExpr}) AS nombre_grupo,
+        list($whereKardex, $whereFuera, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
+        $sql = $this->cteMovimientos($whereKardex) . "
+                SELECT {$campoId} AS id_grupo, MAX({$campoLabelExpr}) AS nombre_grupo,
                        COUNT(*) AS cantidad_movimientos,
                        SUM(CASE WHEN k.cantidad > 0 THEN k.cantidad ELSE 0 END) AS total_entradas,
                        SUM(CASE WHEN k.cantidad < 0 THEN ABS(k.cantidad) ELSE 0 END) AS total_salidas,
                        SUM(k.cantidad) AS saldo_neto,
                        SUM(k.costo_total) AS costo_total
-                " . $this->fromMovimientos($where) . "
+                " . $this->fromMovimientos($whereFuera) . "
                 GROUP BY {$campoId}
                 ORDER BY {$orderBy}";
 
@@ -707,13 +802,14 @@ class ReporteInventarioRepository extends BaseRepository
 
     public function getMovimientosKpis(int $idEmpresa, array $filtros): array
     {
-        list($where, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
-        $sql = "SELECT
+        list($whereKardex, $whereFuera, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
+        $sql = $this->cteMovimientos($whereKardex) . "
+                SELECT
                     COUNT(*) AS total_movimientos,
                     COALESCE(SUM(CASE WHEN k.cantidad > 0 THEN k.cantidad ELSE 0 END), 0) AS total_entradas,
                     COALESCE(SUM(CASE WHEN k.cantidad < 0 THEN ABS(k.cantidad) ELSE 0 END), 0) AS total_salidas,
                     COALESCE(SUM(k.cantidad), 0) AS saldo_neto
-                " . $this->fromMovimientos($where);
+                " . $this->fromMovimientos($whereFuera);
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -731,29 +827,44 @@ class ReporteInventarioRepository extends BaseRepository
      * Años con movimientos de kardex (alimenta el <select> "Año" de la pestaña
      * Movimientos; se ejecuta en cada carga del módulo).
      *
-     * El "SELECT DISTINCT EXTRACT(YEAR …)" obligaba a leer todos los
-     * movimientos de la empresa y calcular la función en cada fila: ~265 ms
-     * con 600.000 filas, y creciendo cada año. Aquí se salta de año en año
-     * por el índice (loose index scan): tantos saltos como años tenga el
-     * histórico. Medido en ~0,4 ms con esas mismas 600.000 filas. Requiere
-     * idx_kardex_empresa_fecha — ver
-     * database/indices_reporte_inventarios_arranque.sql.
+     * Con idx_kardex_empresa_fecha se salta de año en año por el índice (loose index
+     * scan): tantos saltos como años tenga el histórico, ~1 ms. Dos detalles medidos:
+     *  - "id_empresa BETWEEN :e AND :e" + "ORDER BY id_empresa, fecha_movimiento" en vez de
+     *    "id_empresa = :e ORDER BY fecha_movimiento": con la igualdad el planificador trata
+     *    id_empresa como constante, cualquier índice por fecha le sirve para el orden, y
+     *    elegía idx_kardex_fecha (solo fecha, sin empresa), que recorre los movimientos de
+     *    TODAS las empresas hasta dar con el primero de esta (88 ms en la prueba, y crece con
+     *    el volumen de las demás empresas). Así el único índice que da ese orden es el
+     *    compuesto.
+     *  - Sin ese índice el salto no tiene atajo y cada paso relee toda la empresa: ahí se usa
+     *    el DISTINCT de una sola pasada (mismo resultado). Ver
+     *    database/20260916_reporte_inventarios_indices_ajuste.sql.
      */
     public function getAniosMovimientos(int $idEmpresa): array
     {
+        if (!$this->indiceExiste('idx_kardex_empresa_fecha')) {
+            $st = $this->db->prepare("SELECT DISTINCT EXTRACT(YEAR FROM fecha_movimiento)::int AS anio
+                                        FROM inventario_kardex
+                                       WHERE id_empresa = :id_empresa AND eliminado = false
+                                         AND fecha_movimiento IS NOT NULL
+                                       ORDER BY anio DESC");
+            $st->execute([':id_empresa' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_COLUMN) ?: [date('Y')];
+        }
+
         $sql = "WITH RECURSIVE saltos AS (
                     (SELECT fecha_movimiento AS f
                        FROM inventario_kardex
-                      WHERE id_empresa = :id_empresa AND eliminado = false
+                      WHERE id_empresa BETWEEN :id_empresa AND :id_empresa AND eliminado = false
                         AND fecha_movimiento IS NOT NULL
-                      ORDER BY fecha_movimiento
+                      ORDER BY id_empresa, fecha_movimiento
                       LIMIT 1)
                     UNION ALL
                     SELECT (SELECT k.fecha_movimiento
                               FROM inventario_kardex k
-                             WHERE k.id_empresa = :id_empresa AND k.eliminado = false
+                             WHERE k.id_empresa BETWEEN :id_empresa AND :id_empresa AND k.eliminado = false
                                AND k.fecha_movimiento >= date_trunc('year', s.f) + interval '1 year'
-                             ORDER BY k.fecha_movimiento
+                             ORDER BY k.id_empresa, k.fecha_movimiento
                              LIMIT 1)
                       FROM saltos s
                      WHERE s.f IS NOT NULL
@@ -774,7 +885,7 @@ class ReporteInventarioRepository extends BaseRepository
     private function getValorizacionAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabel): array
     {
         list($where, $params) = $this->buildWhereExistencias($idEmpresa, $filtros);
-        $base = $this->wrapValorYEstado($this->baseExistencias($where));
+        $base = $this->wrapValorYEstado($this->baseExistencias($where, $filtros));
 
         $sql = "SELECT {$campoId} AS id_grupo, MAX({$campoLabel}) AS nombre_grupo,
                        SUM(stock_actual) AS stock_actual,
@@ -818,14 +929,14 @@ class ReporteInventarioRepository extends BaseRepository
                     COALESCE(SUM(valor_total), 0) AS valor_total,
                     COUNT(DISTINCT id_producto) AS total_productos,
                     COUNT(DISTINCT id_categoria) AS total_categorias
-                FROM (" . $this->wrapValorYEstado($this->baseExistencias($where)) . ") e
+                FROM (" . $this->wrapValorYEstado($this->baseExistencias($where, $filtros)) . ") e
                 WHERE valor_total > 0";
         $st = $this->db->prepare($sql);
         $st->execute($params);
         $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
 
         $sqlTop = "SELECT producto_nombre, valor_total
-                   FROM (" . $this->wrapValorYEstado($this->baseExistencias($where)) . ") e
+                   FROM (" . $this->wrapValorYEstado($this->baseExistencias($where, $filtros)) . ") e
                    ORDER BY valor_total DESC LIMIT 1";
         $stTop = $this->db->prepare($sqlTop);
         $stTop->execute($params);
@@ -844,50 +955,113 @@ class ReporteInventarioRepository extends BaseRepository
     // PESTAÑA 4 — CONSIGNACIONES (saldo vigente en poder de clientes)
     // ════════════════════════════════════════════════════════════════════
 
-    /** Cantidad retornada activa de una línea de consignación (mismo criterio que ConsignacionFacturaRepository).
-     *  Va como LEFT JOIN LATERAL, no como subconsulta en el SELECT: el saldo se usa dos veces
-     *  (unidades y valor a costo) y, al aplanar la vista, Postgres re-ejecutaba la subconsulta
-     *  una vez por cada uso — el doble de trabajo por cada línea del reporte. */
+    // Retornado, facturado y entregado a cambio de una línea de consignación. Cada uno tiene
+    // dos formas con el MISMO criterio (las condiciones de vigencia de abajo):
+    //  - agrupada por línea para muchas líneas a la vez (subconsulta con los ids de esas
+    //    líneas), cruzada con LEFT JOIN: la usan Existencias y Consignaciones. Antes eran
+    //    subconsultas correlacionadas, tres o cuatro búsquedas por cada línea (~20.000 por
+    //    Mostrar en la prueba de carga). Filtrar por "id IN (líneas)" en vez de por empresa
+    //    mantiene exactamente el criterio anterior;
+    //  - correlacionada con cvd.id: la usa solo el desglose por lote/caducidad, que cruza el
+    //    consignado fila a fila del kardex y con la forma agrupada el planificador estimaba
+    //    mal ese cruce (medido: 4,8 s → 9 s). Ahí se deja como estaba.
+
+    /** Retorno vigente (mismo criterio que ConsignacionFacturaRepository). */
+    private const COND_RETORNO_VIGENTE = "rcd.eliminado = false AND rc.eliminado = false AND rc.estado = 'Emitida'";
+    /** Facturación vigente (documentos 'facturada'). */
+    private const COND_FACTURA_VIGENTE = "cfd.eliminado = false AND cf.eliminado = false AND cf.estado = 'facturada'";
+
+    /** Cantidad retornada activa por línea de consignación, para las líneas de $idsLineas. */
+    private function sqlRetornadoPorLinea(string $idsLineas): string
+    {
+        return "SELECT rcd.id_consignacion_detalle AS id, SUM(rcd.cantidad) AS total
+                FROM retornos_cv_detalles rcd
+                INNER JOIN retornos_cv rc ON rc.id = rcd.id_retorno
+                WHERE rcd.id_consignacion_detalle IN ({$idsLineas})
+                  AND " . self::COND_RETORNO_VIGENTE . "
+                GROUP BY rcd.id_consignacion_detalle";
+    }
+
+    /** Cantidad facturada por línea de consignación, para las líneas de $idsLineas. */
+    private function sqlFacturadoPorLinea(string $idsLineas): string
+    {
+        return "SELECT cfd.id_consignacion_detalle AS id, SUM(cfd.cantidad) AS total
+                FROM consignaciones_facturas_detalles cfd
+                INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
+                WHERE cfd.id_consignacion_detalle IN ({$idsLineas})
+                  AND " . self::COND_FACTURA_VIGENTE . "
+                GROUP BY cfd.id_consignacion_detalle";
+    }
+
+    /** Cantidad retornada activa de UNA línea (correlacionada con cvd.id). */
     private function sqlRetornadoCv(): string
     {
         return "SELECT SUM(rcd.cantidad) AS total
                 FROM retornos_cv_detalles rcd
                 INNER JOIN retornos_cv rc ON rc.id = rcd.id_retorno
                 WHERE rcd.id_consignacion_detalle = cvd.id
-                  AND rcd.eliminado = false AND rc.eliminado = false AND rc.estado = 'Emitida'";
+                  AND " . self::COND_RETORNO_VIGENTE;
     }
 
-    /** Cantidad facturada (docs 'facturada') de una línea de consignación. Ver nota en sqlRetornadoCv(). */
+    /** Cantidad facturada de UNA línea (correlacionada con cvd.id). */
     private function sqlFacturadoCv(): string
     {
         return "SELECT SUM(cfd.cantidad) AS total
                 FROM consignaciones_facturas_detalles cfd
                 INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
                 WHERE cfd.id_consignacion_detalle = cvd.id
-                  AND cfd.eliminado = false AND cf.eliminado = false AND cf.estado = 'facturada'";
+                  AND " . self::COND_FACTURA_VIGENTE;
     }
 
-    /** Cantidad ENTREGADA A CAMBIO desde una línea de consignación (Cambios de productos Emitida):
-     *  la unidad pasó a ser del cliente como reposición, así que sale del saldo consignado igual
-     *  que una facturación. Misma definición que Retornos y Facturación CV. Ver nota en sqlRetornadoCv(). */
+    /** Cantidad entregada a cambio de UNA línea (correlacionada con cvd.id). */
     private function sqlCambiadoCv(): string
     {
         return \App\repositories\modulos\CambioProductoCvRepository::sqlEntregadoEnCambios('cvd.id') . " ";
     }
 
-    /** Último costo unitario registrado en el kardex para la línea (documento + producto).
-     *  Depende del índice idx_kardex_referencia (id_empresa, referencia_tipo, referencia_id,
-     *  id_producto) WHERE eliminado = false: sin él cada línea recorre TODOS los movimientos
-     *  del producto en la empresa y el reporte se vuelve inusable. */
-    private function sqlCostoKardexCv(): string
+    /** Cantidad ENTREGADA A CAMBIO por línea (Cambios de productos Emitida): la unidad pasó a ser
+     *  del cliente como reposición, así que sale del saldo consignado igual que una facturación.
+     *  La definición vive en CambioProductoCvRepository, junto a la versión por línea que usan
+     *  Retornos y Facturación CV. */
+    private function sqlCambiadoPorLinea(string $idsLineas): string
     {
-        return "SELECT k.costo_unitario
-                FROM inventario_kardex k
-                WHERE k.id_empresa = cv.id_empresa AND k.referencia_tipo = 'CONSIGNACION_VENTA'
-                  AND k.referencia_id = cv.id AND k.id_producto = cvd.id_producto
-                  AND k.eliminado = false
-                ORDER BY k.fecha_movimiento DESC, k.id DESC
-                LIMIT 1";
+        return \App\repositories\modulos\CambioProductoCvRepository::sqlEntregadoEnCambiosPorLinea($idsLineas);
+    }
+
+    /**
+     * Dos CTE: "{nombre}_lineas" (líneas de consignación vigentes de la empresa, hasta la
+     * fecha de corte y con los filtros previos) y "{nombre}" (saldo consignado agrupado por
+     * id_empresa + producto + bodega + las $columnasLinea pedidas: lote, nup,
+     * fecha_caducidad). Lo usan Existencias (por producto×bodega) y su desglose por
+     * lote/caducidad; comparten así una sola definición del saldo en poder del cliente.
+     *
+     * Devuelve el texto de los CTE sin la palabra WITH.
+     */
+    private function cteConsignadoPorGrupo(string $nombre, array $columnasLinea, string $condCorteCv, string $condCvd): string
+    {
+        $columnas = '';
+        foreach ($columnasLinea as $columna) {
+            $columnas .= ', l.' . $columna;
+        }
+        $idsLineas = "SELECT id FROM {$nombre}_lineas";
+
+        return "{$nombre}_lineas AS MATERIALIZED (
+                    SELECT cvd.id, cvd.id_empresa, cvd.id_producto, cvd.id_bodega, cvd.cantidad,
+                           cvd.lote, cvd.nup, cvd.fecha_caducidad
+                    FROM consignaciones_ventas_detalles cvd
+                    INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+                    WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
+                      AND cv.eliminado = false{$condCorteCv}{$condCvd}
+                ),
+                {$nombre} AS (
+                    SELECT l.id_empresa, l.id_producto, l.id_bodega{$columnas},
+                           SUM(l.cantidad - COALESCE(ret.total, 0) - COALESCE(fac.total, 0) - COALESCE(cam.total, 0)) AS consignado
+                    FROM {$nombre}_lineas l
+                    LEFT JOIN (" . $this->sqlRetornadoPorLinea($idsLineas) . ") ret ON ret.id = l.id
+                    LEFT JOIN (" . $this->sqlFacturadoPorLinea($idsLineas) . ") fac ON fac.id = l.id
+                    LEFT JOIN (" . $this->sqlCambiadoPorLinea($idsLineas) . ") cam ON cam.id = l.id
+                    GROUP BY l.id_empresa, l.id_producto, l.id_bodega{$columnas}
+                )";
     }
 
     private function buildWhereConsignaciones(int $idEmpresa, array $filtros): array
@@ -961,40 +1135,68 @@ class ReporteInventarioRepository extends BaseRepository
         return [$where, $params];
     }
 
-    /** Base: una fila por línea de consignación, con saldo y valor a costo calculados. */
+    /**
+     * Base: una fila por línea de consignación, con saldo y valor a costo calculados.
+     *
+     * Las líneas que cumplen el filtro se resuelven primero (CTE "lineas") y retornado,
+     * facturado, entregado a cambio y costo se agregan una sola vez para todas ellas.
+     * Antes eran cuatro LATERAL por línea; el del costo, además, quedaba a merced del
+     * planificador: con idx_kardex_stock_por_bodega creado dejaba de usar
+     * idx_kardex_referencia y recorría todos los movimientos del producto por cada línea
+     * (45 s el listado; 0,5 s así).
+     */
     private function baseConsignaciones(string $where): string
     {
+        $idsLineas = "SELECT id_detalle FROM lineas";
+
         return "
             SELECT * FROM (
-                SELECT cv.id AS id_consignacion, cv.secuencial, cv.fecha_emision, cv.estado,
-                       cv.id_cliente, COALESCE(c.nombre, '-') AS cliente_nombre,
+                WITH lineas AS MATERIALIZED (
+                    SELECT cv.id AS id_consignacion, cv.secuencial, cv.fecha_emision, cv.estado,
+                           cv.id_cliente, cv.id_vendedor, cv.id_responsable_traslado,
+                           cvd.id AS id_detalle, cvd.id_producto, cvd.id_bodega, cvd.lote, cvd.nup,
+                           cvd.cantidad
+                    FROM consignaciones_ventas_detalles cvd
+                    INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+                    WHERE {$where}
+                )
+                SELECT l.id_consignacion, l.secuencial, l.fecha_emision, l.estado,
+                       l.id_cliente, COALESCE(c.nombre, '-') AS cliente_nombre,
                        COALESCE(c.identificacion, '') AS cliente_identificacion,
-                       cv.id_vendedor, COALESCE(v.nombre, '-') AS vendedor_nombre,
-                       cv.id_responsable_traslado, COALESCE(rt.nombre, '-') AS responsable_traslado_nombre,
-                       cvd.id AS id_detalle, cvd.id_producto,
+                       l.id_vendedor, COALESCE(v.nombre, '-') AS vendedor_nombre,
+                       l.id_responsable_traslado, COALESCE(rt.nombre, '-') AS responsable_traslado_nombre,
+                       l.id_detalle, l.id_producto,
                        COALESCE(p.codigo, '') AS producto_codigo, COALESCE(p.nombre, '-') AS producto_nombre,
-                       cvd.id_bodega, COALESCE(bo.nombre, '-') AS bodega_nombre,
-                       COALESCE(cvd.lote, '-') AS numero_lote, COALESCE(cvd.nup, '-') AS nup,
-                       cvd.cantidad AS cantidad_consignada,
+                       l.id_bodega, COALESCE(bo.nombre, '-') AS bodega_nombre,
+                       COALESCE(l.lote, '-') AS numero_lote, COALESCE(l.nup, '-') AS nup,
+                       l.cantidad AS cantidad_consignada,
                        COALESCE(ret.total, 0) AS cantidad_retornada,
                        COALESCE(fac.total, 0) AS cantidad_facturada,
                        COALESCE(cam.total, 0) AS cantidad_cambiada,
                        COALESCE(kar.costo_unitario, 0) AS costo_unitario
-                FROM consignaciones_ventas_detalles cvd
-                INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+                FROM lineas l
                 -- productos y clientes van con LEFT JOIN a propósito: con INNER, una
                 -- consignación cuyo producto o cliente ya no exista en su tabla desaparecía
                 -- del reporte sin ningún aviso (y su saldo dejaba de sumar en los totales).
-                LEFT JOIN productos p ON p.id = cvd.id_producto
-                LEFT JOIN bodegas bo ON bo.id = cvd.id_bodega
-                LEFT JOIN clientes c ON c.id = cv.id_cliente
-                LEFT JOIN vendedores v ON v.id = cv.id_vendedor
-                LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
-                LEFT JOIN LATERAL (" . $this->sqlRetornadoCv() . ") ret ON true
-                LEFT JOIN LATERAL (" . $this->sqlFacturadoCv() . ") fac ON true
-                LEFT JOIN LATERAL (SELECT (" . $this->sqlCambiadoCv() . ") AS total) cam ON true
-                LEFT JOIN LATERAL (" . $this->sqlCostoKardexCv() . ") kar ON true
-                WHERE {$where}
+                LEFT JOIN productos p ON p.id = l.id_producto
+                LEFT JOIN bodegas bo ON bo.id = l.id_bodega
+                LEFT JOIN clientes c ON c.id = l.id_cliente
+                LEFT JOIN vendedores v ON v.id = l.id_vendedor
+                LEFT JOIN responsables_traslado rt ON rt.id = l.id_responsable_traslado
+                LEFT JOIN (" . $this->sqlRetornadoPorLinea($idsLineas) . ") ret ON ret.id = l.id_detalle
+                LEFT JOIN (" . $this->sqlFacturadoPorLinea($idsLineas) . ") fac ON fac.id = l.id_detalle
+                LEFT JOIN (" . $this->sqlCambiadoPorLinea($idsLineas) . ") cam ON cam.id = l.id_detalle
+                -- Último costo del kardex de la consignación para ese producto: la misma fila que
+                -- ORDER BY fecha_movimiento DESC, id DESC (el id desempata), sin ordenar.
+                LEFT JOIN (
+                    SELECT k.referencia_id, k.id_producto,
+                           (MAX(ARRAY[EXTRACT(EPOCH FROM k.fecha_movimiento), k.id, k.costo_unitario]))[3] AS costo_unitario
+                    FROM inventario_kardex k
+                    WHERE k.id_empresa = :id_empresa AND k.referencia_tipo = 'CONSIGNACION_VENTA'
+                      AND k.eliminado = false
+                      AND k.referencia_id IN (SELECT id_consignacion FROM lineas)
+                    GROUP BY k.referencia_id, k.id_producto
+                ) kar ON kar.referencia_id = l.id_consignacion AND kar.id_producto = l.id_producto
             ) base
         ";
     }

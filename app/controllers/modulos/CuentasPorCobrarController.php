@@ -54,9 +54,15 @@ class CuentasPorCobrarController extends BaseModuloController
 
         $anios        = $this->repo->getAniosDisponibles($idEmpresa);
         $tieneWA      = $this->repo->tieneWhatsappConfigurado($idEmpresa);
-        // Catálogo para el filtro Vendedor (incluye inactivos: pueden tener cartera pendiente)
-        $vendedores   = (new \App\repositories\modulos\VendedorRepository())
-            ->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC')['rows'] ?? [];
+        // Catálogo para el filtro Vendedor (incluye inactivos: pueden tener cartera pendiente).
+        // Restringido (§6): el filtro queda fijo en su propio vendedor (o vacío si no es
+        // vendedor) y el catálogo de asesores no se manda al HTML.
+        $alcance      = $this->alcanceUsuario([$idEmpresa]);
+        $vendedorFijo = \App\Helpers\AlcanceRegistros::restringe($alcance);
+        $vendedores   = $vendedorFijo
+            ? \App\Helpers\AlcanceRegistros::vendedorPropio($alcance, $idEmpresa, (int) $_SESSION['id_usuario'])
+            : ((new \App\repositories\modulos\VendedorRepository())
+                ->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC')['rows'] ?? []);
         $prefsVista   = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
 
         // Consolidado por RUC (fase 1, SOLO LECTURA): el selector de alcance aparece únicamente
@@ -74,6 +80,7 @@ class CuentasPorCobrarController extends BaseModuloController
             'anios'       => $anios,
             'tieneWA'     => $tieneWA,
             'vendedores'  => $vendedores,
+            'vendedorFijo' => $vendedorFijo,
             // Orden guardado por el usuario al hacer clic en las cabeceras. Si la columna
             // no es de este módulo, el repositorio la descarta y usa su orden por defecto.
             'ordenCol'    => (string) ($prefsVista['__ordenCol__'] ?? ''),
@@ -681,8 +688,11 @@ class CuentasPorCobrarController extends BaseModuloController
         }
         $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
         // Alcance del usuario (§6): se resuelve aquí porque en consolidado el vendedor
-        // vinculado es uno por establecimiento.
-        $filtros = array_merge($filtros, $this->alcanceUsuario($idsEmpresa));
+        // vinculado es uno por establecimiento. A un usuario restringido no se le aplica
+        // el filtro Vendedor de la pantalla: su alcance ya lo limita a su vendedor.
+        $filtros = \App\Helpers\AlcanceRegistros::limpiarFiltroVendedor(
+            array_merge($filtros, $this->alcanceUsuario($idsEmpresa))
+        );
         if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
             $filtros['id_cliente'] = $this->repo->expandirClientesPorIdentificacion($raw, $idsEmpresa);
@@ -2068,11 +2078,13 @@ $plantillasFiltradas = [];
     }
 
     /**
-     * Alcance del usuario (§6, ver App\Helpers\AlcanceRegistros): sin acceso
-     * total ('t'), el vendedor vinculado al usuario ve su cartera (clientes
-     * asignados + documentos a su nombre); si no es vendedor, solo lo que él
-     * registró. Se resuelve del permiso y la sesión, nunca de la petición, una
-     * sola vez por combinación de empresas (index, listado, guardas por id…).
+     * Alcance del usuario (§6, ver App\Helpers\AlcanceRegistros): los niveles 2
+     * y 3 y quien tenga acceso total ('t') ven todo; en el nivel 1 sin acceso
+     * total, el vendedor vinculado al usuario ve solo lo de su vendedor (lo que
+     * lleva su nombre y, sin vendedor, lo de sus clientes) y, si no es vendedor,
+     * solo lo que él registró. Se resuelve del nivel, el permiso y la sesión,
+     * nunca de la petición, una sola vez por combinación de empresas (index,
+     * listado, guardas por id…).
      */
     private array $alcanceCache = [];
 
@@ -2091,8 +2103,8 @@ $plantillasFiltradas = [];
     //
     // El filtro del listado oculta los documentos ajenos, pero cada acción recibe
     // un id suelto: sin este guard se llegaría por id a un documento que la tabla
-    // no muestra. requireDentroAlcance() corta con 403 y deja pasar al nivel 3 y
-    // a quien tenga acceso total (mismo criterio que el listado: cartera del
+    // no muestra. requireDentroAlcance() corta con 403 y deja pasar a los niveles 2
+    // y 3 y a quien tenga acceso total (mismo criterio que el listado: lo de su
     // vendedor vinculado o, si no es vendedor, registros propios).
     //
     // Devuelven el documento ya leído (o null si no existe, para que el llamador
@@ -2149,7 +2161,7 @@ $plantillasFiltradas = [];
         );
     }
 
-    /** Corta con 403 si el documento queda fuera del alcance (deja pasar al nivel 3 y al acceso total). */
+    /** Corta con 403 si el documento queda fuera del alcance (deja pasar a los niveles 2 y 3 y al acceso total). */
     private function requireDentroAlcance(?array $registro, string $campoCreador, int $idEmpresa, ?int $idVendedorCliente = null): void
     {
         if ($this->dentroAlcance($registro, $campoCreador, $idEmpresa, $idVendedorCliente)) {
@@ -2201,7 +2213,11 @@ $plantillasFiltradas = [];
         }
 
         $vendedorTxt = 'Todos';
-        if (!empty($filtros['id_vendedor'])) {
+        if (\App\Helpers\AlcanceRegistros::idsVendedor($filtros)) {
+            // Restringido a su vendedor: el filtro de pantalla no aplica (ver resolverAlcance()).
+            $propio = \App\Helpers\AlcanceRegistros::vendedorPropio($filtros, $idEmpresa, (int) ($_SESSION['id_usuario'] ?? 0));
+            $vendedorTxt = $propio[0]['nombre'] ?? 'Su vendedor';
+        } elseif (!empty($filtros['id_vendedor'])) {
             $v = (new \App\repositories\modulos\VendedorRepository())->findById((int)$filtros['id_vendedor'], $idEmpresa);
             $vendedorTxt = $v['nombre'] ?? ('#' . (int)$filtros['id_vendedor']);
         }

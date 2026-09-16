@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.12
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
+version: 1.14
 orden: 20
 estado: activo
 ---
@@ -274,6 +274,54 @@ Cada egreso genera su asiento automáticamente según la configuración contable
 la empresa; al anularlo, el asiento se anula. En las líneas de concepto general
 se puede elegir la cuenta contable línea por línea.
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas del egreso y en sus datos
+relacionados: número, serie, secuencial, fecha, beneficiario (proveedor,
+empleado u otro), RUC o cédula del beneficiario, observaciones, monto, usuario
+que lo registró y los **números de los documentos pagados** (compras,
+liquidaciones, roles…). Las columnas **Tipo** y **Estado** no entran en la
+búsqueda libre: para filtrar por ellas use la ventana de filtros. Puede escribir
+varias palabras en cualquier orden y no importan mayúsculas ni tildes. Para
+limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un
+**círculo girando** al final del cuadro y la tabla se ve atenuada; cuando
+desaparece, el listado ya muestra el resultado.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Egreso** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado, tipo de egreso, serie, Nº de egreso, secuencial, monto (mínimo y máximo), concepto de egreso, con o sin asiento contable, usuario que registró |
+| Beneficiario | Tipo de beneficiario (proveedor, empleado u otro), beneficiario, RUC / cédula, observaciones |
+
+El selector *Tipo de egreso* lista solo los tipos que la empresa ya usó.
+
+**Pestaña Detalles** (lo que hay dentro del egreso). Es un único cuadro,
+**Buscar libremente dentro de los egresos**: escriba un número de compra o de
+rol, una descripción, una cuenta contable, una forma de pago, una referencia,
+un número de cheque, el beneficiario del cheque o un monto, y aparece la lista
+de **cada documento o pago que coincide** con el egreso al que pertenece
+(número, fecha, beneficiario y estado). Un clic en la fila deja el listado
+mostrando solo ese egreso; el ícono de la derecha lo abre directamente. Por
+ejemplo, *cheque 22* muestra en qué egreso se giró ese cheque.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** de la etiqueta quita solo ese filtro, y con el cuadro vacío
+la tecla **Retroceso** quita el último. Pulsar la etiqueta vuelve a abrir la
+ventana. El embudo muestra cuántos hay activos.
+
+La búsqueda libre y los filtros se combinan entre sí, y los botones **PDF** y
+**Excel** del listado exportan exactamente lo que se ve.
+
 ## Ordenar el listado
 
 Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
@@ -326,6 +374,22 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.14** — Corregido: sin **acceso total**, el listado mostraba los egresos de
+  toda la empresa, aunque esta guía (sección *Permisos*) ya decía que cada usuario
+  ve solo los que registró. Ahora el listado, la búsqueda y la exportación a PDF
+  y Excel muestran únicamente los egresos creados por el usuario. Con acceso total
+  (y el superadministrador) se sigue viendo toda la empresa.
+- **1.13** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas del egreso (incluidos el RUC del
+  beneficiario, el usuario y los números de los documentos pagados), salvo Tipo
+  y Estado. Los filtros pasan a una **ventana propia** (botón del embudo, se
+  aplican con *Aplicar*) con dos pestañas: **Egreso** (filtros por campo, con
+  criterios nuevos: tipo de egreso como lista, concepto, con/sin asiento,
+  usuario, tipo de beneficiario, beneficiario y RUC) y **Detalles**, un cuadro
+  de **búsqueda libre dentro de los egresos** (documentos pagados y formas de
+  pago, incluidos cheques) que dice a qué egreso pertenece cada coincidencia.
+  Corregido el filtro de estado, que ofrecía "Aprobado", un valor que los
+  egresos no usan. Nueva sección *Buscar y filtrar el listado*.
 - **1.12** — Al abrir un egreso guardado con una **serie que ya no se usa para
   emitir** (por ejemplo, migrados con `001-001` cuando la empresa ya trabaja con
   `001-101`, o un punto de emisión desactivado), el campo *Serie* mostraba en

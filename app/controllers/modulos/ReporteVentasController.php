@@ -37,8 +37,14 @@ class ReporteVentasController extends BaseModuloController
         // Obtener los años disponibles para el filtro
         $anios = $this->repository->getAniosDisponibles($idEmpresa);
 
-        // Vendedores activos de la empresa para el selector del filtro
-        $vendedores = (new \App\repositories\modulos\VendedorRepository())->getVendedoresActivos($idEmpresa);
+        // Vendedores activos de la empresa para el selector del filtro. Restringido (§6):
+        // el filtro queda fijo en su propio vendedor (o vacío si no es vendedor) y el
+        // catálogo de asesores no se manda al HTML.
+        $alcance      = $this->alcanceUsuario([$idEmpresa]);
+        $vendedorFijo = \App\Helpers\AlcanceRegistros::restringe($alcance);
+        $vendedores   = $vendedorFijo
+            ? \App\Helpers\AlcanceRegistros::vendedorPropio($alcance, $idEmpresa, (int) $_SESSION['id_usuario'])
+            : (new \App\repositories\modulos\VendedorRepository())->getVendedoresActivos($idEmpresa);
 
         // Consolidado por establecimientos (mismo selector que Cuentas por Cobrar/Pagar): solo
         // aparece si la empresa activa es la matriz del grupo RUC y el usuario tiene acceso a
@@ -60,6 +66,7 @@ class ReporteVentasController extends BaseModuloController
             'tarifasIva'  => $tarifasIva,
             'anios'       => $anios,
             'vendedores'  => $vendedores,
+            'vendedorFijo' => $vendedorFijo,
             'puedeConsolidar'  => !empty($idsConsolidado),
             'establecimientos' => $establecimientos,
             'fullWidth'   => true,
@@ -103,10 +110,12 @@ class ReporteVentasController extends BaseModuloController
     }
 
     /**
-     * Alcance del usuario (§6, ver App\Helpers\AlcanceRegistros): sin acceso
-     * total ('t'), el vendedor vinculado al usuario ve su cartera (clientes
-     * asignados + documentos a su nombre); si no es vendedor, solo lo que él
-     * registró. Se resuelve del permiso y la sesión, nunca de la petición. Al ir
+     * Alcance del usuario (§6, ver App\Helpers\AlcanceRegistros): los niveles 2
+     * y 3 y quien tenga acceso total ('t') ven todo; en el nivel 1 sin acceso
+     * total, el vendedor vinculado al usuario ve solo lo de su vendedor (lo que
+     * lleva su nombre y, sin vendedor, lo de sus clientes) y, si no es vendedor,
+     * solo lo que él registró. Se resuelve del nivel, el permiso y la sesión,
+     * nunca de la petición. Al ir
      * en los filtros lo heredan el listado, las estadísticas, el resumen de
      * estados y las exportaciones, que parten del mismo arreglo.
      */
@@ -150,8 +159,11 @@ class ReporteVentasController extends BaseModuloController
         }
         $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
         // Alcance del usuario (§6): se resuelve aquí porque en consolidado el vendedor
-        // vinculado es uno por establecimiento.
-        $filtros = array_merge($filtros, $this->alcanceUsuario($idsEmpresa));
+        // vinculado es uno por establecimiento. A un usuario restringido no se le aplica
+        // el filtro Vendedor de la pantalla: su alcance ya lo limita a su vendedor.
+        $filtros = \App\Helpers\AlcanceRegistros::limpiarFiltroVendedor(
+            array_merge($filtros, $this->alcanceUsuario($idsEmpresa))
+        );
         if ($consolidado) {
             if (!empty($filtros['id_cliente'])) {
                 $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string) $filtros['id_cliente']);

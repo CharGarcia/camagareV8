@@ -484,10 +484,12 @@ class ReporteVentasRepository extends BaseRepository
      * Alcance del usuario (§6, ver App\Helpers\AlcanceRegistros). Devuelve la
      * condición a concatenar al WHERE, o cadena vacía si ve toda la empresa:
      *
-     *  - Modo VENDEDOR (`id_vendedor_filtro`): el documento es de un cliente
-     *    asignado a ese vendedor (`clientes.id_vendedor`) O lleva ese vendedor.
-     *    Las notas de crédito no registran vendedor (ver fuente()): se toma el de
-     *    la factura que modifican, igual que el filtro Vendedor de la pantalla.
+     *  - Modo VENDEDOR (`id_vendedor_filtro`): solo lo de su vendedor. Manda el
+     *    vendedor del documento; si no tiene (NULL o 0), el asignado a su cliente
+     *    (`clientes.id_vendedor`). Un documento a nombre de otro vendedor queda
+     *    fuera aunque el cliente sea suyo. Las notas de crédito no registran
+     *    vendedor (ver fuente()): manda el de la factura que modifican y, si esa
+     *    factura no tiene o no se encuentra, el del cliente de la nota.
      *  - Modo REGISTROS PROPIOS (`id_usuario_filtro`): `id_usuario` del documento
      *    (la misma columna que filtran Factura de Venta, Recibo de Venta y NC).
      *
@@ -504,14 +506,15 @@ class ReporteVentasRepository extends BaseRepository
                 $params[":alc_v{$i}"] = $id;
             }
             $in = implode(',', $ph);
-            $porCliente = "EXISTS (SELECT 1 FROM clientes alc_c
-                                   WHERE alc_c.id = {$alias}.id_cliente AND alc_c.id_vendedor IN ({$in}))";
-            $porDoc = $f['vendedor']
-                ? "{$alias}.id_vendedor IN ({$in})"
-                : "EXISTS (SELECT 1 FROM ventas_cabecera alc_fv
-                           WHERE " . $this->condicionFacturaDeNc($alias, 'alc_fv') . "
-                             AND alc_fv.id_vendedor IN ({$in}))";
-            return " AND ({$porCliente} OR {$porDoc})";
+            $clienteSuyo = "EXISTS (SELECT 1 FROM clientes alc_c
+                                    WHERE alc_c.id = {$alias}.id_cliente AND alc_c.id_vendedor IN ({$in}))";
+            if ($f['vendedor']) {
+                return " AND ({$alias}.id_vendedor IN ({$in})
+                              OR (COALESCE({$alias}.id_vendedor, 0) = 0 AND {$clienteSuyo}))";
+            }
+            $factura = "SELECT 1 FROM ventas_cabecera alc_fv WHERE " . $this->condicionFacturaDeNc($alias, 'alc_fv');
+            return " AND (EXISTS ({$factura} AND alc_fv.id_vendedor IN ({$in}))
+                          OR (NOT EXISTS ({$factura} AND COALESCE(alc_fv.id_vendedor, 0) <> 0) AND {$clienteSuyo}))";
         }
 
         $idUsuario = \App\Helpers\AlcanceRegistros::idUsuario($filtros);
@@ -537,9 +540,9 @@ class ReporteVentasRepository extends BaseRepository
 
         $params = [];
 
-        // Alcance del usuario (§6): si NO tiene acceso total ('t') en el módulo, el
-        // reporte se limita a su cartera (vendedor vinculado) o, si no es vendedor, a
-        // los documentos que él registró. Lo resuelve el controller con
+        // Alcance del usuario (§6): si es de nivel 1 y NO tiene acceso total ('t') en
+        // el módulo, el reporte se limita a su cartera (vendedor vinculado) o, si no es
+        // vendedor, a los documentos que él registró. Los niveles 2 y 3 ven todo. Lo resuelve el controller con
         // App\Helpers\AlcanceRegistros y viaja dentro de los filtros: NUNCA llega del
         // cliente. Al vivir aquí lo heredan el detallado, todas las agrupaciones, las
         // tarjetas de estadísticas, el resumen de estados, el neto "Facturas − NC", el

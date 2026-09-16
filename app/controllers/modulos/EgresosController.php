@@ -46,8 +46,10 @@ class EgresosController extends BaseModuloController
         $perPage  = 20;
 
         $perm = $this->getPermisos();
+        // Registros propios (CLAUDE.md §6): sin acceso total, solo los egresos que creó.
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden, $idUsuarioFiltro);
         $totalPages = (int) ceil($result['total'] / $perPage);
 
         $empresaModel = new Empresa();
@@ -68,7 +70,9 @@ class EgresosController extends BaseModuloController
         // del buscador — a diferencia de $puntos (solo sirve para elegir la
         // serie de un egreso NUEVO), esto incluye series de cualquier
         // establecimiento y aunque el punto ya no tenga secuencial configurado.
-        $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
+        $seriesFiltro   = $this->repository->getSeriesDistintas($idEmpresa);
+        $tiposFiltro    = $this->repository->getTiposEgresoDistintos($idEmpresa);
+        $usuariosFiltro = $this->repository->getUsuariosConEgresos($idEmpresa);
 
         // Usamos repositorio auxiliar para formas de pago si no es un método directo en EgresoRepository
         // O simplemente instanciamos el IngresoRepo que ya tiene el getFormasCobro genérico.
@@ -120,6 +124,8 @@ class EgresosController extends BaseModuloController
             'establecimientos'  => $establecimientos,
             'puntos'            => $puntos,
             'seriesFiltro'      => $seriesFiltro,
+            'tiposFiltro'       => $tiposFiltro,
+            'usuariosFiltro'    => $usuariosFiltro,
             'formasPago'        => $formasPago,
             'conceptos'         => $conceptos,
             'comportamientosConPendientes' => $comportamientosConPendientes,
@@ -141,7 +147,11 @@ class EgresosController extends BaseModuloController
         $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
         $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
 
-        return $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $orden);
+        // PDF/Excel exportan lo mismo que ve el usuario: sin acceso total, solo lo suyo.
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        return $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $orden, $idUsuarioFiltro);
     }
 
     /** Exporta a Excel el listado de Egresos (con los mismos filtros/orden del buscador). */
@@ -305,6 +315,47 @@ class EgresosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de los egresos.
+     * Devuelve cada documento pagado / forma de pago que coincide y el egreso al que
+     * pertenece.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $rows = [];
+        foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $esDoc = ($r['origen'] === 'DOCUMENTO');
+            $rows[] = [
+                'origen'        => $esDoc ? 'Documento pagado' : 'Forma de pago',
+                'tipo'          => $esDoc
+                    ? \App\Helpers\TipoDocumentoHelper::egresoLabel($r['tipo'] ?? null, $r['tipo'] ?? null, null)
+                    : ($r['tipo'] ?? 'Forma de pago'),
+                'referencia'    => $r['referencia'] ?? '',
+                'descripcion'   => $r['descripcion'] ?? '',
+                'monto'         => number_format((float) ($r['monto'] ?? 0), 2),
+                'id_egreso'     => (int) $r['id_egreso'],
+                'numero_egreso' => $r['numero_egreso'] ?? '',
+                'fecha'         => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'beneficiario'  => $r['beneficiario'] ?? '',
+                'estado'        => ucfirst((string) ($r['estado'] ?? 'registrado')),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
+    }
+
     public function searchAjax(): void
     {
         $this->requireLeer();
@@ -319,7 +370,10 @@ class EgresosController extends BaseModuloController
         $ordenDir   = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage    = 20;
 
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden, $idUsuarioFiltro);
         $rows       = $result['rows'];
         $total      = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;

@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente
-version: 1.14
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente
+version: 1.15
 orden: 40
 estado: activo
 ---
@@ -53,6 +53,24 @@ que está en poder de clientes siempre se pueden comparar en la misma fila.
 Cada pestaña tiene, junto al botón **Mostrar**, un botón con un icono de goma
 de borrar que devuelve todos sus filtros al valor inicial. No vuelve a consultar
 solo: deja la tabla en blanco para que elija los filtros nuevos y pulse Mostrar.
+
+## Ordenar por columna en Existencias
+
+Con *Agrupar por* en **Detallado**, un clic en el encabezado de una columna
+ordena el listado por esa columna y un segundo clic invierte el orden. La tabla
+se vuelve a pedir con el nuevo orden sin recargar la página y sin perder los
+filtros elegidos.
+
+## Mientras se genera el reporte
+
+Una búsqueda larga (un año de movimientos, todas las existencias, una
+exportación) no deja esperando al resto del sistema: mientras carga se puede
+abrir otro módulo en otra pestaña del navegador o usar los buscadores de
+producto y cliente.
+
+Si se vuelve a pulsar **Mostrar** —o se cambia Detalle, Año o Mes— antes de que
+termine la búsqueda anterior, esa anterior se descarta y la tabla muestra solo
+el resultado de la última.
 
 ## Cómo se calcula el stock (saldo en vivo)
 
@@ -240,9 +258,32 @@ cuando haga falta.
   pestañas. Se corrigió para migraciones nuevas; las empresas ya migradas antes
   de la corrección necesitan el script de reparación
   `database/migrations/20260730_backfill_productos_bodegas_migracion.sql`.
+- **El módulo tarda en abrir** (la página demora antes de mostrarse): falta
+  ejecutar `database/20260916_reporte_inventarios_indices_ajuste.sql` en esa
+  base. Sin sus índices el reporte funciona y da los mismos datos, pero llenar
+  los selectores Usuario y Año recorre el kardex completo de la empresa.
 
 ## Historial de cambios
 
+- **1.15** — **El reporte abre y busca mucho más rápido.** Medido sobre 1,8
+  millones de movimientos de kardex (una empresa con 300.000, entre otras 100
+  empresas) y 20.000 líneas de consignación, con resultados idénticos a la
+  versión anterior: Movimientos del año en curso de 5,1 s a 0,8 s (*Por mes*, de
+  4,7 s a 0,4 s); Existencias de 2,0 s a 1,3 s, y filtrando **dejan de recalcular
+  la empresa entera** (1 categoría: de 2,6 s a 0,06 s; 1 producto: de 1,1 s a
+  0,01 s); Valorización y el valor de inventario de *Índices financieros*, de 1,3 s
+  a 1,0 s; Consignaciones, de 1,1 s a 0,5 s. Otros cambios que se notan: ordenar
+  una columna de Existencias ya no recarga la página ni borra el resultado;
+  mientras un reporte o una exportación se genera, el usuario puede seguir
+  usando el sistema en otra pestaña (antes todo quedaba esperando a que
+  terminara); si se pulsa Mostrar varias veces, gana siempre la última búsqueda;
+  y la respuesta de cada búsqueda viaja comprimida y sin una copia de los datos
+  que la pantalla no usaba (5.000 filas: de 7 MB a unos cientos de KB).
+  **Requiere ejecutar** `database/20260916_reporte_inventarios_indices_ajuste.sql`,
+  que **reemplaza** al SQL de las versiones 1.7 y 1.9: crea los índices de los
+  selectores Usuario y Año y **quita** `idx_kardex_stock_por_bodega`, que con el
+  código anterior dejaba la pestaña Consignaciones en ~45 s. Sin ese SQL el
+  reporte funciona igual, solo que tarda más en abrir.
 - **1.14** — PDF del estado de la consignación: sin la columna *Cambio*;
   *Retorno* y *Facturados* se abrevian a **Ret** y **Fact** y la Descripción
   toma el ancho sobrante. Lo entregado a cambio se sigue viendo en el resumen
@@ -284,7 +325,8 @@ cuando haga falta.
   arranca con un año seleccionado en vez de *Todos*. **Requiere ejecutar**
   `database/20260914_indices_reporte_inventarios_arranque.sql`, que ahora trae
   un tercer índice (el del stock por producto y bodega); sin él el reporte da
-  los mismos números, pero más despacio.
+  los mismos números, pero más despacio. *(Ese SQL quedó reemplazado en la
+  versión 1.15: su tercer índice resultó dañino.)*
 - **1.8** — **Existencias**: nuevo selector **Detalle** (En general / Por
   lotes / Por caducidad / Lote + caducidad) como primer filtro. Antes, las
   opciones *Por Lote*, *Por NUP* y *Por Caducidad* de **Agrupar por** hacían
@@ -307,8 +349,9 @@ cuando haga falta.
   espera antes de ver nada, creciendo cada mes. Ahora esos selectores se
   resuelven por índice (1,3 ms en la misma prueba) y la página ya no descarga
   una librería de gráficos externa que no usaba. **Requiere ejecutar**
-  `database/20260914_indices_reporte_inventarios_arranque.sql`; sin él el
-  reporte funciona igual, solo que sin la mejora de velocidad. La misma
+  `database/20260914_indices_reporte_inventarios_arranque.sql` *(reemplazado en
+  la versión 1.15)*; sin él el reporte funciona igual, solo que sin la mejora de
+  velocidad. La misma
   corrección acelera la apertura del módulo **Inventario**, que llenaba dos
   de esos selectores de la misma forma.
 - **1.6** — Pestaña **Consignaciones** mucho más rápida. El cálculo del saldo

@@ -653,9 +653,24 @@ class InventarioRepository extends BaseRepository
      * existen, no como filas hay. Medido en ~0,8 ms con esas mismas 600.000
      * filas. Requiere idx_kardex_referencia (id_empresa, referencia_tipo, …)
      * WHERE eliminado = false — ver database/indices_reporte_consignaciones.sql.
+     *
+     * SIN ese índice el salto no tiene atajo: cada paso relee todos los
+     * movimientos de la empresa, y con ~10 tipos queda muy por encima del
+     * DISTINCT. Por eso, si el índice no existe (SQL aún no aplicado en esa
+     * base), se usa el DISTINCT de una sola pasada. Mismo resultado.
      */
     public function getTiposReferencia(int $idEmpresa): array
     {
+        if (!$this->indiceExiste('idx_kardex_referencia')) {
+            $st = $this->db->prepare("SELECT DISTINCT referencia_tipo
+                                        FROM inventario_kardex
+                                       WHERE id_empresa = :e AND eliminado = false
+                                         AND referencia_tipo IS NOT NULL
+                                       ORDER BY referencia_tipo ASC");
+            $st->execute([':e' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_COLUMN);
+        }
+
         $sql = "WITH RECURSIVE tipos AS (
                     (SELECT referencia_tipo
                        FROM inventario_kardex
@@ -692,10 +707,24 @@ class InventarioRepository extends BaseRepository
      * un puñado de usuarios. Se resuelve primero la lista de created_by
      * distintos con un loose index scan (~1 ms) y recién ahí se cruza contra
      * usuarios. Requiere idx_kardex_empresa_usuario — ver
-     * database/indices_reporte_inventarios_arranque.sql.
+     * database/20260916_reporte_inventarios_indices_ajuste.sql.
+     *
+     * Sin ese índice cada salto relee toda la empresa (medido: 2,4 s con 300.000
+     * movimientos y 6 usuarios, contra 0,4 s de una sola pasada), así que en una
+     * base donde el SQL todavía no se aplicó se usa la pasada única.
      */
     public function getUsuariosConMovimientos(int $idEmpresa): array
     {
+        if (!$this->indiceExiste('idx_kardex_empresa_usuario')) {
+            $st = $this->db->prepare("SELECT u.id, u.nombre
+                                        FROM usuarios u
+                                       WHERE u.id IN (SELECT created_by FROM inventario_kardex
+                                                       WHERE id_empresa = :e AND eliminado = false)
+                                       ORDER BY u.nombre ASC");
+            $st->execute([':e' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        }
+
         $sql = "WITH RECURSIVE autores AS (
                     (SELECT created_by
                        FROM inventario_kardex

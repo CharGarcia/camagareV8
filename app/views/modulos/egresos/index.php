@@ -123,52 +123,108 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorEGR" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar: texto libre (sin sugerencias), embudo que abre el modal de
+            // filtros y chips dentro de la caja. Las claves (key) deben existir en los mapas
+            // de EgresoRepository::getListado().
+            $etiquetasTipoEgreso = [
+                'COMPRA'                  => 'Compra',
+                'LIQUIDACION'             => 'Liquidación de compra',
+                'IMPORTACION_FACTURA'     => 'Importación',
+                'ROL'                     => 'Rol de pago',
+                'QUINCENA'                => 'Quincena',
+                'PRESTAMO'                => 'Préstamo',
+                'ANTICIPO'                => 'Anticipo',
+                'DECLARACION_IVA'         => 'Declaración de IVA',
+                'DECLARACION_RETENCIONES' => 'Declaración de retenciones',
+                'SALDO_INICIAL'           => 'Saldo inicial',
+                'PAGO'                    => 'Pago',
+                'GENERAL'                 => 'General / otros conceptos',
+            ];
+            $opcionesSerie    = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            $opcionesTipo     = array_map(fn($t) => ['v' => $t, 'l' => $etiquetasTipoEgreso[$t] ?? ucfirst(strtolower(str_replace('_', ' ', $t)))], $tiposFiltro ?? []);
+            $opcionesConcepto = array_map(fn($c) => ['v' => (string) $c['id'], 'l' => $c['nombre']], $conceptos ?? []);
+            $opcionesUsuario  = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $tE = 'Egreso';
+            // Orden pensado en filas de 12 columnas (mismo diseño que Ingresos):
+            //   Documento:    [Fecha de emisión 6][Estado 3][Tipo 3]
+            //                 [Serie 3][Nº egreso 3][Secuencial 2][Monto 4]
+            //                 [Concepto 4][Asiento 4][Usuario 4]
+            //   Beneficiario: [Tipo de beneficiario 3][Beneficiario 3][RUC 3][Observaciones 3]
+            $filtrosEgresos = [
+                ['tab' => $tE, 'key' => 'fecha',       'label' => 'Fecha de emisión',   'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tE, 'key' => 'estado',      'label' => 'Estado',             'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'registrado', 'l' => 'Registrado'],
+                    ['v' => 'borrador',   'l' => 'Borrador'],
+                    ['v' => 'anulado',    'l' => 'Anulado'],
+                ]],
+                ['tab' => $tE, 'key' => 'tipo',        'label' => 'Tipo de egreso',     'icon' => 'bi-tag',             'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesTipo],
+                ['tab' => $tE, 'key' => 'serie',       'label' => 'Serie',              'icon' => 'bi-upc-scan',        'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tE, 'key' => 'numero',      'label' => 'Nº egreso',          'icon' => 'bi-hash',            'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tE, 'key' => 'secuencial',  'label' => 'Secuencial',         'icon' => 'bi-123',             'type' => 'text',         'grupo' => 'Documento', 'col' => 2, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tE, 'key' => 'monto',       'label' => 'Monto',              'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Documento', 'col' => 4],
+                ['tab' => $tE, 'key' => 'id_concepto', 'label' => 'Concepto de egreso', 'icon' => 'bi-bookmark',        'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesConcepto],
+                ['tab' => $tE, 'key' => 'asiento',     'label' => 'Asiento contable',   'icon' => 'bi-journal-check',   'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con asiento'],
+                    ['v' => 'no', 'l' => 'Sin asiento'],
+                ]],
+                ['tab' => $tE, 'key' => 'usuario',     'label' => 'Usuario que registró','icon' => 'bi-person-gear',    'type' => 'select',       'grupo' => 'Documento', 'col' => 4, 'options' => $opcionesUsuario],
+                // Beneficiario
+                ['tab' => $tE, 'key' => 'sujeto',      'label' => 'Tipo de beneficiario','icon' => 'bi-people',         'type' => 'select',       'grupo' => 'Beneficiario', 'col' => 3, 'options' => [
+                    ['v' => 'proveedor', 'l' => 'Proveedor'],
+                    ['v' => 'empleado',  'l' => 'Empleado'],
+                    ['v' => 'otro',      'l' => 'Otro'],
+                ]],
+                ['tab' => $tE, 'key' => 'beneficiario','label' => 'Beneficiario',       'icon' => 'bi-person-badge',    'type' => 'text',         'grupo' => 'Beneficiario', 'col' => 3],
+                ['tab' => $tE, 'key' => 'ruc',         'label' => 'RUC / Cédula',       'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Beneficiario', 'col' => 3],
+                ['tab' => $tE, 'key' => 'observaciones','label' => 'Observaciones',     'icon' => 'bi-chat-left-text',  'type' => 'text',         'grupo' => 'Beneficiario', 'col' => 3],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorEGR"></div>
             <input type="hidden" id="buscarEgreso" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorEGR',
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorEGR',
                         hiddenInputId: 'buscarEgreso',
-                        fields: [
-                            { key: 'proveedor', label: 'Proveedor',  icon: 'bi-building',        type: 'text' },
-                            { key: 'empleado',  label: 'Empleado',   icon: 'bi-person-badge',    type: 'text' },
-                            { key: 'numero',    label: 'Nº egreso',  icon: 'bi-hash',            type: 'text' },
-                            { key: 'concepto',  label: 'Concepto',   icon: 'bi-chat-left-text',  type: 'text' },
-                            { key: 'tipo',      label: 'Tipo egreso', icon: 'bi-tag',            type: 'text' },
-                            { key: 'fecha',     label: 'Fecha',      icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'monto',     label: 'Monto',      icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'estado',    label: 'Estado',     icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'aprobado', l: 'Aprobado' },
-                                { v: 'borrador', l: 'Borrador' },
-                                { v: 'anulado',  l: 'Anulado' },
-                            ]},
-                            { key: 'serie',     label: 'Serie',       icon: 'bi-upc-scan', type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial', label: 'Secuencial', icon: 'bi-123',      type: 'text' },
-                        ],
-                        quickFilters: [
-                            { id: 'qf_aprobado',   label: 'Aprobados',  mk: () => ({ key: 'estado', op: '=', value: 'aprobado', display: 'Aprobado' }) },
-                            { id: 'qf_borrador',   label: 'Borradores', mk: () => ({ key: 'estado', op: '=', value: 'borrador', display: 'Borrador' }) },
-                            { id: 'qf_anulado',    label: 'Anulados',   mk: () => ({ key: 'estado', op: '=', value: 'anulado',  display: 'Anulado' }) },
-                            { id: 'qf_hoy',        label: 'Hoy',        mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                            { id: 'qf_mes',        label: 'Este mes',   mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_mes_pasado', label: 'Mes pasado', mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
-                            { id: 'qf_anio',       label: 'Este año',   mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de egresos',
+                        inputWidth: 420,
+                        extraId: 'fmExtraEGR',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de los egresos (documentos
+                        // pagados y formas de pago). Cada coincidencia dice a qué egreso pertenece.
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de los egresos',
+                            placeholder: 'Nº de compra o rol, descripción, cuenta, forma de pago, referencia, cheque, monto...',
+                            columns: [
+                                { key: 'origen',        label: 'Tipo' },
+                                { key: 'tipo',          label: 'Detalle' },
+                                { key: 'referencia',    label: 'Nº / Referencia', class: 'font-monospace' },
+                                { key: 'descripcion',   label: 'Descripción' },
+                                { key: 'monto',         label: 'Monto', align: 'end' },
+                                { key: 'numero_egreso', label: 'Egreso', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',         label: 'Fecha' },
+                                { key: 'beneficiario',  label: 'Beneficiario' },
+                                { key: 'estado',        label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero_egreso }),
+                            onOpen: (row, fm) => { fm.hide(); setTimeout(() => abrirModalEgresoVer(row.id_egreso), 350); },
+                        },
+                        fields: <?= json_encode($filtrosEgresos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyEgresos',   // se atenúa mientras se busca
                         onApply: () => window.EGR_fetchSearch && window.EGR_fetchSearch(1),
                     }).init();
                 });
             </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraEGR" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero_egreso' => 'Nº Egreso',
@@ -183,10 +239,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i>
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i>
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -2482,7 +2538,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     window.EGR_fetchSearch = async function(p = 1) {
         const b = document.getElementById('buscarEgreso').value.trim();
-        document.getElementById('tbodyEgresos').innerHTML = '<tr><td colspan="7" class="text-center py-5"><span class="spinner-border text-primary"></span></td></tr>';
+        // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa en vez de
+        // vaciarse, así no salta de alto. Se aplica aquí también para que paginar y
+        // ordenar (que llaman a esta función directo) muestren que se está cargando.
+        const tbody = document.getElementById('tbodyEgresos');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
             const orden = window.CMG_ordenParam(window.currentSorts || []);
             const res = await (await fetch(`${EGR_URL}/searchAjax?b=${encodeURIComponent(b)}&page=${p}&orden=${encodeURIComponent(orden)}`)).json();
@@ -2500,6 +2560,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // el motor global; aquí solo se le pide que se refresque.
             if (EGR_sorter) EGR_sorter.refreshIcons();
         } catch(e){ console.error(e); }
+        finally { if (tbody) tbody.classList.remove('fm-cargando-target'); }
     }
 
     document.addEventListener('DOMContentLoaded', () => {

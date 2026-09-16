@@ -74,13 +74,20 @@
                 <!-- Vendedor (asignado en la factura / recibo; los saldos iniciales no tienen vendedor) -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor</label>
-                    <select id="cxc-vendedor" name="id_vendedor" class="form-select form-select-sm shadow-none border" style="width:135px;"
-                            onchange="CXC_recargar()">
-                        <option value="" selected>Todos</option>
-                        <?php foreach (($vendedores ?? []) as $v): ?>
-                            <option value="<?php echo (int)$v['id']; ?>"><?php echo htmlspecialchars($v['nombre']); ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                    <?php if (!empty($vendedorFijo)): ?>
+                        <?php // Usuario restringido (§6): solo su propio vendedor; el servidor ignora el filtro. ?>
+                        <input type="text" class="form-control form-control-sm shadow-none border bg-light" style="width:135px;" disabled
+                               title="<?php echo !empty($vendedores) ? 'Solo puedes consultar los documentos de tu vendedor' : 'No tienes un vendedor vinculado: ves solo lo que registraste'; ?>"
+                               value="<?php echo htmlspecialchars($vendedores[0]['nombre'] ?? 'Sin vendedor vinculado'); ?>">
+                    <?php else: ?>
+                        <select id="cxc-vendedor" name="id_vendedor" class="form-select form-select-sm shadow-none border" style="width:135px;"
+                                onchange="CXC_recargar()">
+                            <option value="" selected>Todos</option>
+                            <?php foreach (($vendedores ?? []) as $v): ?>
+                                <option value="<?php echo (int)$v['id']; ?>"><?php echo htmlspecialchars($v['nombre']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    <?php endif; ?>
                 </div>
 
                 <?php if (!empty($puedeConsolidar)): ?>

@@ -217,11 +217,12 @@ class ConsignacionVentaPdfService
         $pdf = $this->pdf;
         $mL  = $this->marginL;
 
-        // ¿Mostrar columnas de lote/caducidad? Solo si alguna línea las tiene.
-        $mostrarLote = false; $mostrarCad = false;
+        // ¿Mostrar la columna de lote? Solo si alguna línea lo tiene.
+        // La caducidad NO se imprime: aunque la línea la tenga registrada, ese ancho
+        // se lo queda la descripción, que es lo que se lee al entregar/recibir.
+        $mostrarLote = false;
         foreach ($detalles as $d) {
-            if (trim((string)($d['lote'] ?? '')) !== '') $mostrarLote = true;
-            if (trim((string)($d['fecha_caducidad'] ?? '')) !== '') $mostrarCad = true;
+            if (trim((string)($d['lote'] ?? '')) !== '') { $mostrarLote = true; break; }
         }
 
         // Columnas: sin precios ni subtotales. Cantidad / Ret / Fact y una
@@ -233,7 +234,6 @@ class ConsignacionVentaPdfService
             ['t' => 'Bodega',      'w' => 22, 'a' => 'L', 'k' => 'bodega_nombre'],
         ];
         if ($mostrarLote) $cols[] = ['t' => 'Lote',      'w' => 16, 'a' => 'L', 'k' => 'lote'];
-        if ($mostrarCad)  $cols[] = ['t' => 'Caducidad', 'w' => 18, 'a' => 'C', 'k' => 'fecha_caducidad'];
         $cols[] = ['t' => 'NUP',        'w' => 16, 'a' => 'L', 'k' => 'nup'];
         $cols[] = ['t' => 'Cantidad',   'w' => 16, 'a' => 'R', 'k' => 'cantidad'];
         // "Ret" = retornado, "Fact" = facturado (abreviados para dar más ancho a la
@@ -299,9 +299,6 @@ class ConsignacionVentaPdfService
                 } elseif (in_array($k, ['retornado', 'facturado', 'cambiado'], true)) {
                     // En blanco cuando es 0: menos ruido visual que repetir "0.00" en cada fila.
                     $vals[] = ((float)$raw != 0.0) ? number_format((float)$raw, 2) : '';
-                } elseif ($k === 'fecha_caducidad') {
-                    $ts = $raw ? strtotime((string)$raw) : false;
-                    $vals[] = $ts ? date('d/m/Y', $ts) : (string)$raw;
                 } elseif ($k === '__acon__') {
                     $vals[] = ''; // columna en blanco para anotar el acondicionamiento
                 } else {

@@ -81,6 +81,34 @@ class ReporteInventariosController extends BaseModuloController
         $this->repository = new ReporteInventarioRepository();
     }
 
+    /**
+     * Suelta el candado del archivo de sesión. PHP lo mantiene tomado durante toda la
+     * petición, así que mientras corre un "Mostrar" o una exportación de varios segundos,
+     * cualquier otra petición del mismo usuario (abrir otro módulo, el buscador de
+     * productos, los contadores del navbar) queda esperando en fila. Llamarlo solo en
+     * acciones de lectura y DESPUÉS de los guards: $_SESSION se sigue pudiendo leer, pero
+     * lo que se escriba después ya no se guarda.
+     */
+    private function liberarSesion(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+    }
+
+    /**
+     * Comprime con gzip la respuesta JSON si el navegador lo acepta. Un "Mostrar" con 5.000
+     * filas son ~5 MB de HTML y la configuración por defecto de Apache no comprime
+     * application/json: comprimido baja a unos cientos de KB. Si ya hay compresión de PHP
+     * activa, no se apila otra.
+     */
+    private function comprimirRespuesta(): void
+    {
+        if (!headers_sent() && extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
+            ob_start('ob_gzhandler');
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────
     // INDEX
     // ────────────────────────────────────────────────────────────────
@@ -250,6 +278,8 @@ class ReporteInventariosController extends BaseModuloController
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $tab = $this->normalizarPestana($_REQUEST['tab'] ?? 'existencias');
             $this->requirePestana($tab);
+            $this->liberarSesion();
+            $this->comprimirRespuesta();
 
             $resultado = match ($tab) {
                 'movimientos'    => $this->generarMovimientos($idEmpresa),
@@ -297,13 +327,14 @@ class ReporteInventariosController extends BaseModuloController
         // Sin KPIs: la pantalla no muestra ninguno en esta pestaña y calcularlos obligaba
         // a repetir la consulta completa en cada Mostrar (medido: 14,5 s con 10.000 pares producto×bodega). El único
         // indicador que sí se usa, el de Auditoría, se cuenta en PHP sobre las filas ya traídas.
+        // Sin rawData por lo mismo: el front-end nunca lo lee y duplicaba la respuesta
+        // (5.000 filas: 7 MB con él, 4,7 MB sin él, antes de comprimir).
 
         $colSpan = self::colSpanExistencias($modo);
 
         return [
             'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $colSpan)
                             . ($hayMas ? self::filaTopeAlcanzado($limite, $colSpan) : ''),
-            'rawData'    => $rows,
             'agrupacion' => $modo,
             'tope'       => $hayMas ? $limite : null,
         ];
@@ -337,7 +368,6 @@ class ReporteInventariosController extends BaseModuloController
         return [
             'rows'       => $this->renderRows($rows, fn($r) => $this->filaMovimientos($r, $modo), $colSpan)
                             . ($hayMas ? self::filaTopeAlcanzado($limite, $colSpan) : ''),
-            'rawData'    => $rows,
             'agrupacion' => $modo,
             'tope'       => $hayMas ? $limite : null,
         ];
@@ -360,7 +390,6 @@ class ReporteInventariosController extends BaseModuloController
 
         return [
             'rows'       => $this->renderRows($rows, fn($r) => $this->filaValorizacion($r), 5),
-            'rawData'    => $rows,
             'agrupacion' => $modo,
         ];
     }
@@ -398,7 +427,6 @@ class ReporteInventariosController extends BaseModuloController
         return [
             'rows'       => $this->renderRows($rows, fn($r) => $this->filaAuditoria($r), 6)
                             . ($hayMas ? self::filaTopeAlcanzado($limite, 6) : ''),
-            'rawData'    => $rows,
             // Este sí lo lee la pantalla (el contador de discrepancias), y no cuesta una
             // consulta aparte: sale de las filas ya traídas. Con tope, es "al menos N".
             'kpis'       => ['total_discrepancias' => count($rows)],
@@ -888,6 +916,7 @@ class ReporteInventariosController extends BaseModuloController
     {
         $this->requireLeer();
         $this->requirePestana('consignaciones');
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         try {
@@ -1011,6 +1040,7 @@ class ReporteInventariosController extends BaseModuloController
     {
         $this->requireLeer();
         $this->requirePestana('consignaciones');
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         try {
@@ -1058,6 +1088,7 @@ class ReporteInventariosController extends BaseModuloController
     {
         $this->requireLeer();
         $this->requirePestana('consignaciones');
+        $this->liberarSesion();
 
         $idEmpresa      = (int) $_SESSION['id_empresa'];
         $idConsignacion = (int) ($_REQUEST['id'] ?? 0);
@@ -1117,6 +1148,7 @@ class ReporteInventariosController extends BaseModuloController
     public function getProductosAjax(): void
     {
         $this->requireLeer();
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
@@ -1132,6 +1164,7 @@ class ReporteInventariosController extends BaseModuloController
     public function getClientesAjax(): void
     {
         $this->requireLeer();
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
@@ -1159,6 +1192,7 @@ class ReporteInventariosController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $tab = $this->normalizarPestana($_REQUEST['tab'] ?? 'existencias');
         $this->requirePestana($tab);
+        $this->liberarSesion();
 
         [$headers, $exportData, $titulo] = $this->datosExport($idEmpresa, $tab);
 
@@ -1180,6 +1214,7 @@ class ReporteInventariosController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $tab = $this->normalizarPestana($_REQUEST['tab'] ?? 'existencias');
         $this->requirePestana($tab);
+        $this->liberarSesion();
 
         [$headers, $exportData, $titulo] = $this->datosExport($idEmpresa, $tab);
 

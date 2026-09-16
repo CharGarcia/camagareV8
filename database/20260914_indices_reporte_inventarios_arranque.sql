@@ -1,4 +1,10 @@
 -- ============================================================================
+--  ⛔ REEMPLAZADO el 16-09-2026 por 20260916_reporte_inventarios_indices_ajuste.sql
+--     NO EJECUTAR ESTE ARCHIVO. Su tercer índice (idx_kardex_stock_por_bodega)
+--     resultó dañino: con el código anterior al 16-09 dejaba la pestaña
+--     Consignaciones en ~45 s. Quedó comentado abajo; el archivo nuevo crea los
+--     otros dos y quita ese si ya existe.
+-- ============================================================================
 --  20260914_indices_reporte_inventarios_arranque.sql
 --  Tres índices para el Reporte de Inventarios (modulos/reporte_inventarios) y el
 --  módulo Inventario (modulos/inventario): dos para que la PANTALLA INICIAL deje de
@@ -123,7 +129,9 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kardex_empresa_fecha ON public.inven
 --    lleva id_bodega, así que obliga a reordenar todo el resultado.
 --    Las columnas del INCLUDE evitan bajar a la tabla (index-only scan).
 --    Medido: Auditoría 4,9 s -> 1,3 s. Es el más grande de los tres.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kardex_stock_por_bodega ON public.inventario_kardex (id_empresa, id_producto, id_bodega) INCLUDE (cantidad, costo_unitario, fecha_movimiento, id) WHERE eliminado = false;
+--    ⛔ DESACTIVADO el 16-09-2026: le quitaba el plan a idx_kardex_referencia en la
+--    pestaña Consignaciones (1,1 s -> 45 s). Ver 20260916_reporte_inventarios_indices_ajuste.sql.
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kardex_stock_por_bodega ON public.inventario_kardex (id_empresa, id_producto, id_bodega) INCLUDE (cantidad, costo_unitario, fecha_movimiento, id) WHERE eliminado = false;
 
 
 -- ============================================================================
@@ -191,5 +199,5 @@ ANALYZE public.inventario_kardex;
 -- ============================================================================
 -- CREATE INDEX IF NOT EXISTS idx_kardex_empresa_usuario ON public.inventario_kardex (id_empresa, created_by) WHERE eliminado = false;
 -- CREATE INDEX IF NOT EXISTS idx_kardex_empresa_fecha   ON public.inventario_kardex (id_empresa, fecha_movimiento) WHERE eliminado = false;
--- CREATE INDEX IF NOT EXISTS idx_kardex_stock_por_bodega ON public.inventario_kardex (id_empresa, id_producto, id_bodega) INCLUDE (cantidad, costo_unitario, fecha_movimiento, id) WHERE eliminado = false;
+-- (idx_kardex_stock_por_bodega desactivado el 16-09-2026: ver el encabezado)
 -- ANALYZE public.inventario_kardex;

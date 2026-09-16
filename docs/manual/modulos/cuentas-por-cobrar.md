@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, quitar filtros del pdf
-version: 2.13
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, quitar filtros del pdf, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos
+version: 2.14
 orden: 40
 estado: activo
 ---
@@ -83,21 +83,24 @@ nombre o en la identificación, así que `1716782832001` también sirve.
 Basta con escribir **dos letras** para que aparezca la lista. Al elegir un
 cliente queda como una etiqueta y se pueden elegir varios.
 
-## Quién ve qué: el permiso de Acceso total
+## Quién ve qué: nivel del usuario y permiso de Acceso total
 
-La cartera respeta el permiso **Acceso total** del módulo (*Configuración →
-Permisos por módulo*):
+La cartera respeta el nivel del usuario y el permiso **Acceso total** del módulo
+(*Configuración → Permisos por módulo*), con la misma regla que el Reporte de
+Ventas y el Reporte de Ventas por Vendedor:
 
-- **Con acceso total** (o siendo superadministrador): se ve la cartera completa
-  de la empresa.
-- **Sin acceso total y el usuario es un vendedor**: ve **su cartera**, es decir
-  los documentos de los **clientes que tiene asignados** (campo *Vendedor* de la
-  ficha del cliente) y, además, los documentos **emitidos a su nombre** aunque el
-  cliente esté asignado a otro asesor o a ninguno. Los saldos iniciales no llevan
-  vendedor: entran solo si el cliente es suyo.
-- **Sin acceso total y el usuario no es vendedor** (un cajero, un digitador): ve
-  solo los documentos que **él registró** — las facturas y los recibos de venta
-  que emitió y los saldos iniciales que cargó.
+- **Administradores (nivel 2) y superadministradores (nivel 3)**: ven la cartera
+  completa de la empresa, tengan o no marcado *Acceso total*.
+- **Usuarios de nivel 1 con acceso total**: también ven la cartera completa.
+- **Nivel 1 sin acceso total y el usuario es un vendedor**: ve **solo lo de su
+  vendedor**, es decir los documentos que llevan **su nombre** en el campo
+  *Vendedor* y, si un documento no tiene vendedor, los de los **clientes que tiene
+  asignados** (campo *Vendedor* de la ficha del cliente). Nunca ve los que llevan
+  el nombre de otro vendedor, aunque el cliente sea suyo. Los saldos iniciales no
+  llevan vendedor: entran si el cliente es suyo.
+- **Nivel 1 sin acceso total y el usuario no es vendedor** (un cajero, un
+  digitador): ve solo los documentos que **él registró** — las facturas y los
+  recibos de venta que emitió y los saldos iniciales que cargó.
 - En los dos casos, lo que no sale en la tabla tampoco entra en las tarjetas de
   arriba, en el gráfico de antigüedad, en las vistas *Por cliente* y *Por
   producto*, ni en el PDF y el Excel: todo parte del mismo listado. Tampoco se
@@ -106,14 +109,19 @@ Permisos por módulo*):
   permiso sobre este registro: no pertenece a su cartera*. En el **envío
   masivo**, los documentos ajenos que hubieran quedado seleccionados simplemente
   se omiten.
+- A estos usuarios **el filtro *Vendedor* les queda fijo**: el vendedor ve su
+  propio nombre y quien no es vendedor ve *Sin vendedor vinculado*. No pueden
+  elegir otro, y el sistema ignora cualquier otro vendedor que se le envíe. En el
+  encabezado del Excel y del PDF, *Vendedor* muestra su nombre.
 
 **Cómo sabe el sistema qué vendedor es el usuario.** Se resuelve en este orden:
 primero el campo **Usuario del sistema** de la ficha del vendedor (módulo
 Vendedores), que es lo que el administrador declaró a mano; si no está, la
 **cédula del usuario** contra la identificación del vendedor (también calza si
 uno tiene el RUC de persona natural y el otro la cédula). En consolidado por
-RUC se busca el vendedor en cada establecimiento. El filtro *Vendedor* de la
-pantalla es independiente de esto: sirve para acotar, no cambia quién ve qué.
+RUC se busca el vendedor en cada establecimiento. Para quien ve la cartera
+completa, el filtro *Vendedor* de la pantalla sirve para acotar y no cambia quién
+ve qué.
 
 Dos advertencias para usuarios sin vendedor: los documentos que se **migraron**
 desde el sistema anterior quedaron a nombre del usuario que corrió la
@@ -187,7 +195,9 @@ tipo es cada fila.
 El filtro **Vendedor** deja ver solo la cartera de un vendedor: las facturas y
 los recibos de venta que tienen a ese vendedor asignado en el documento. La
 lista muestra todos los vendedores de la empresa, incluidos los inactivos,
-porque un vendedor dado de baja puede seguir teniendo cartera pendiente.
+porque un vendedor dado de baja puede seguir teniendo cartera pendiente. A un
+usuario de nivel 1 sin *Acceso total* no le aparece la lista: el filtro queda fijo
+en su propio vendedor (ver *Quién ve qué*).
 
 Las tarjetas superiores, el gráfico de antigüedad y las exportaciones a PDF y
 Excel respetan el filtro, igual que el de tipo de documento y el de cliente.
@@ -525,20 +535,37 @@ Y dos casos que el reporte **no** descuenta a propósito:
   el módulo de Notas de Crédito el **documento modificado** (debe ser el número
   de la factura), que la NC no esté anulada y que se haya emitido desde el
   **mismo establecimiento** que la factura.
-- **No veo las facturas de otro vendedor**: sin el permiso de *acceso total*,
-  un vendedor ve solo su cartera (clientes asignados y documentos a su nombre) y
-  quien no es vendedor solo lo que él registró (ver *Quién ve qué: el permiso de
-  Acceso total*). Si un vendedor no ve nada, revise que su ficha tenga el
-  *Usuario del sistema* o la misma cédula que su usuario, y que los clientes
-  tengan asignado el vendedor. Si faltan documentos **antiguos** a un usuario
-  sin vendedor, suele ser porque se migraron a nombre de quien corrió la
-  migración.
+- **No veo las facturas de otro vendedor**: un usuario de nivel 1 sin el permiso
+  de *acceso total* ve solo lo de su vendedor (documentos a su nombre y, sin
+  vendedor, los de sus clientes) si es vendedor, y solo lo que él registró si no
+  lo es (ver *Quién ve qué: nivel del usuario y permiso de Acceso total*). Si un
+  vendedor no ve nada, revise que su ficha tenga el *Usuario del sistema* o la
+  misma cédula que su usuario, y que los documentos lleven su nombre. Si faltan
+  documentos **antiguos** a un usuario sin vendedor, suele ser porque se migraron
+  a nombre de quien corrió la migración.
+- **Un vendedor no ve una factura de su cliente**: si la factura lleva el nombre
+  de otro vendedor, es de ese vendedor y no le aparece, aunque el cliente esté
+  asignado a él.
+- **Un vendedor ve la cartera de todos**: revise el nivel de su usuario (los
+  niveles 2 y 3 ven la cartera completa) y que no tenga marcado *Acceso total*
+  en este módulo.
 - **Una serie no aparece en el modal de cobro**: está **inactiva**. Solo se
   ofrecen los puntos de emisión activos; actívela en Empresa, pestaña Puntos de
   Emisión (ver *Serie del cobro: solo puntos de emisión activos*).
 
 ## Historial de cambios
 
+- **2.14** — Los **administradores (nivel 2)** ven la cartera completa aunque no
+  tengan marcado *Acceso total*, igual que el superadministrador, y pueden
+  cobrar, ver el historial y notificar cualquier documento. El permiso sigue
+  decidiendo solo para los usuarios de nivel 1. El vendedor sin acceso total pasa
+  a ver **solo lo de su vendedor**: los documentos a su nombre y, si no tienen
+  vendedor, los de sus clientes asignados; ya no ve ni puede cobrar los documentos
+  de sus clientes emitidos a nombre de otro vendedor. A estos usuarios el **filtro
+  Vendedor** les aparece fijo en su nombre, también en el encabezado del Excel y
+  del PDF. Es la misma regla del Reporte de Ventas y del Reporte de Ventas por
+  Vendedor, que ahora comparten los tres módulos. Sección *Quién ve qué*
+  actualizada.
 - **2.13** — El **PDF** (en sus tres vistas) lleva el **logo de la empresa a la
   izquierda del nombre**. Su recuadro de filtros aplicados se acorta: ya no
   muestra la vista, el alcance, el tipo de documento ni el estado, y *Producto*

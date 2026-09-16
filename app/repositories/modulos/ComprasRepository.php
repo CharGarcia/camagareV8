@@ -112,14 +112,44 @@ class ComprasRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
+        // Abonos de la compra (pagos de Egresos + notas de crédito + retenciones), con
+        // las MISMAS subconsultas que las columnas Saldo y Pago del listado (ver el
+        // SELECT más abajo y el cálculo en la vista/controller). Los usan el texto
+        // libre (columna Saldo), el filtro "pago:" y los numéricos "saldo:" y "retenido:".
+        $sqlPagado    = "(SELECT COALESCE(SUM(ed.monto_pagado), 0) FROM egresos_detalle ed INNER JOIN egresos_cabecera ec ON ed.id_egreso = ec.id WHERE ed.tipo_documento = 'COMPRA' AND ed.id_referencia_documento = c.id AND ed.eliminado = false AND ec.estado != 'anulado' AND ec.eliminado = false)";
+        $sqlNc        = "(SELECT COALESCE(SUM(nc.importe_total), 0) FROM compras_cabecera nc WHERE nc.tipo_comprobante = '04' AND nc.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AND nc.id_proveedor = c.id_proveedor AND nc.id_empresa = c.id_empresa AND nc.eliminado = false)";
+        $sqlRetenido  = "(SELECT COALESCE(SUM(r.total_retenido), 0) FROM retencion_compra_cabecera r WHERE r.id_compra = c.id AND r.eliminado = false AND r.estado != 'anulada')";
+        $sqlAbonos    = "($sqlPagado + $sqlNc + $sqlRetenido)";
+        // Igual que la vista: saldo nunca negativo y las notas de crédito (04) no
+        // tienen saldo por pagar.
+        $saldo        = "(CASE WHEN c.tipo_comprobante = '04' THEN 0 ELSE GREATEST(0, c.importe_total - $sqlAbonos) END)";
+        $ivaCalc      = '(c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0) - COALESCE(c.total_ice, 0))';
+
+        // Texto libre: las columnas del listado (incluidas las calculadas IVA y Saldo)
+        // y sus relacionadas. El buscador de la vista no sugiere campos; lo escrito se
+        // busca en todo. Los productos comprados viven en el detalle: se agregan como
+        // una sola cadena por compra.
+        // Decisión del usuario (igual que en Ingresos, Egresos y Facturas): las
+        // columnas de clasificación y de estado NO entran en el texto libre — Tipo,
+        // Sustento, Pago y Estado se filtran solo desde el modal de filtros.
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)",
-                    'p.razon_social',
-                    'p.identificacion',
+                    "CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)", // N° Comprobante
+                    'c.secuencial_prov',
+                    'c.fecha_emision::text',                                                        // Fecha
+                    'p.razon_social',                                                               // Proveedor
+                    'p.identificacion',                                                             // RUC
+                    'c.total_sin_impuestos::text',                                                  // Subtotal
+                    "$ivaCalc::text",                                                               // IVA
+                    'c.importe_total::text',                                                        // Total
+                    "ROUND($saldo, 2)::text",                                                       // Saldo
+                    // Fuera del listado, pero identifican la compra:
                     'c.numero_autorizacion',
                     'c.observaciones',
+                    'u.nombre',
+                    'c.documento_modificado',
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', cd.codigo_principal, cd.codigo_auxiliar, cd.descripcion), ' ') FROM compras_detalle cd WHERE cd.id_compra = c.id)",
                 ],
                 $textoLibre,
                 $params,
@@ -127,6 +157,33 @@ class ComprasRepository extends BaseRepository
             );
             if ($condicion !== '') {
                 $where .= " AND {$condicion}";
+            }
+        }
+
+        // ── Filtro especial: estado de pago (campo CALCULADO, no es columna) ──────
+        // pago:pendiente | pago:abonada | pago:pagada (acepta lista). Misma regla que
+        // el badge de la columna Pago: la NC (04) siempre cuenta como pagada.
+        $pagoFiltro = $filtros['estado_pago'] ?? $filtros['pago'] ?? null;
+        unset($filtros['estado_pago'], $filtros['pago']);
+        if ($pagoFiltro !== null) {
+            $valores = is_array($pagoFiltro['valor']) ? $pagoFiltro['valor'] : [$pagoFiltro['valor']];
+            $conds = [];
+            foreach ($valores as $val) {
+                $v2 = strtolower(trim((string) $val));
+                if (in_array($v2, ['pagada', 'pagado', 'pagadas'], true)) {
+                    $conds[] = "(c.tipo_comprobante = '04' OR $saldo <= 0.01)";
+                } elseif (in_array($v2, ['abonada', 'abonado', 'abonadas', 'parcial'], true)) {
+                    $conds[] = "(c.tipo_comprobante <> '04' AND $saldo > 0.01 AND $sqlAbonos > 0)";
+                } elseif (in_array($v2, ['pendiente', 'pendientes'], true)) {
+                    $conds[] = "(c.tipo_comprobante <> '04' AND $saldo > 0.01 AND $sqlAbonos <= 0)";
+                }
+            }
+            if ($conds) {
+                $cond = '(' . implode(' OR ', $conds) . ')';
+                if (!empty($pagoFiltro['neg'])) {
+                    $cond = "NOT $cond";
+                }
+                $where .= " AND $cond";
             }
         }
 
@@ -142,6 +199,7 @@ class ComprasRepository extends BaseRepository
                 'observacion'    => 'c.observaciones',
                 'usuario'        => 'u.nombre',
                 'sustento'       => 'st.nombre',
+                'documento_modificado' => 'c.documento_modificado',
             ],
             'exacto' => [
                 'tipo_comprobante' => 'c.tipo_comprobante',
@@ -153,6 +211,17 @@ class ComprasRepository extends BaseRepository
                 // diferencia de los documentos que emite esta empresa, en Compras
                 // la numeración es la del comprobante del proveedor.
                 'serie'            => "CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov)",
+                // Claves del modal de filtros (public/js/components/filtros_modal.js).
+                'id_sustento'      => 'c.id_sustento_tributario',
+                'id_usuario'       => 'c.created_by',
+                'tipo_registro'    => 'c.tipo_registro',       // electronico / fisica / migrado
+                'deducible'        => 'c.deducible',           // declaracion_iva / gasto_personal
+                // asiento:si / asiento:no
+                'asiento'          => "CASE WHEN c.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
+                'orden_compra'     => "CASE WHEN c.id_orden_compra IS NULL THEN 'no' ELSE 'si' END",
+                'retencion'        => "CASE WHEN EXISTS (SELECT 1 FROM retencion_compra_cabecera rx WHERE rx.id_compra = c.id AND rx.eliminado = false AND rx.estado != 'anulada') THEN 'si' ELSE 'no' END",
+                // Booleano en BD; ::text lo hace robusto si viniera como texto migrado.
+                'parte_relacionada' => "CASE WHEN COALESCE(c.parte_relacionada::text, '') IN ('true', 't', '1', 'si', 'SI', 'S') THEN 'si' ELSE 'no' END",
             ],
             'fecha' => [
                 'fecha'          => 'c.fecha_emision',
@@ -163,6 +232,10 @@ class ComprasRepository extends BaseRepository
                 'monto'    => 'c.importe_total',
                 'total'    => 'c.importe_total',
                 'subtotal' => 'c.total_sin_impuestos',
+                'iva'      => $ivaCalc,
+                'descuento' => 'COALESCE(c.total_descuento, 0)',
+                'saldo'    => $saldo,
+                'retenido' => $sqlRetenido,
                 // Comparación numérica exacta (no substring), igual que en los
                 // demás módulos: "298" encuentra "000000298" sin escribir ceros.
                 // A diferencia del secuencial propio (siempre numérico, generado
@@ -287,6 +360,132 @@ class ComprasRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return $st->fetchAll();
+    }
+
+    /** Sustentos tributarios REALMENTE usados en compras de la empresa (select "Sustento" del modal de filtros). */
+    public function getSustentosUsados(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT st.id, st.codigo, st.nombre
+                FROM compras_cabecera c
+                JOIN sustento_tributario st ON st.id = c.id_sustento_tributario
+                WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                ORDER BY st.codigo";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Usuarios que han registrado alguna compra en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConCompras(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM compras_cabecera c
+                JOIN usuarios u ON u.id = c.created_by
+                WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de las compras (pestaña "Detalles" del modal de filtros):
+     * devuelve cada producto comprado, forma de pago SRI, dato de información
+     * adicional y comprobante de reembolso de terceros que coincide con el texto,
+     * junto con la compra a la que pertenece. Mismo alcance que el listado (empresa,
+     * no eliminadas, ambiente) y registros propios cuando no hay acceso total.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa, ':tipo_ambiente' => $this->getTipoAmbienteEmpresa($idEmpresa)];
+        $whereBase = "c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = :tipo_ambiente";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND c.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.codigo_principal', 'd.codigo_auxiliar', 'd.descripcion', 'd.cantidad::text', 'd.precio_unitario::text', 'd.precio_total_sin_impuesto::text'],
+            $q, $params, 'dt'
+        );
+        $condPago = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['fp.nombre', 'cp.forma_pago', 'cp.total::text', 'cp.plazo::text', 'cp.unidad_tiempo'],
+            $q, $params, 'pg'
+        );
+        $condAdic = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['a.nombre', 'a.valor'],
+            $q, $params, 'ad'
+        );
+        $condReem = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['rt.razon_social_proveedor_reembolso', 'rt.identificacion_proveedor_reembolso',
+             "CONCAT(rt.estab_doc_reembolso,'-',rt.pto_emi_doc_reembolso,'-',rt.secuencial_doc_reembolso)",
+             'rt.numero_autorizacion_doc_reemb'],
+            $q, $params, 'rb'
+        );
+        if ($condDet === '' || $condPago === '' || $condAdic === '' || $condReem === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT c.id, c.establecimiento_prov, c.punto_emision_prov, c.secuencial_prov,
+                           c.fecha_emision, c.estado, p.razon_social AS proveedor
+                    FROM compras_cabecera c
+                    INNER JOIN proveedores p ON p.id = c.id_proveedor
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'PRODUCTO' AS origen,
+                           COALESCE(NULLIF(d.codigo_principal, ''), d.codigo_auxiliar) AS tipo,
+                           d.descripcion,
+                           d.cantidad,
+                           d.precio_total_sin_impuesto AS monto,
+                           b.*
+                    FROM compras_detalle d
+                    JOIN base b ON b.id = d.id_compra
+                    WHERE $condDet
+                    UNION ALL
+                    SELECT 'PAGO' AS origen,
+                           COALESCE(fp.nombre, cp.forma_pago) AS tipo,
+                           CASE WHEN COALESCE(cp.plazo, 0) > 0
+                                THEN CONCAT_WS(' ', cp.plazo::text, NULLIF(cp.unidad_tiempo, ''))
+                                ELSE 'Contado' END AS descripcion,
+                           NULL AS cantidad,
+                           cp.total AS monto,
+                           b.*
+                    FROM compras_pagos cp
+                    JOIN base b ON b.id = cp.id_compra
+                    LEFT JOIN formas_pago_sri fp ON fp.codigo = cp.forma_pago
+                    WHERE $condPago
+                    UNION ALL
+                    SELECT 'ADICIONAL' AS origen,
+                           a.nombre AS tipo,
+                           a.valor AS descripcion,
+                           NULL AS cantidad,
+                           NULL AS monto,
+                           b.*
+                    FROM compras_adicional a
+                    JOIN base b ON b.id = a.id_compra
+                    WHERE $condAdic
+                    UNION ALL
+                    SELECT 'REEMBOLSO' AS origen,
+                           CONCAT(rt.estab_doc_reembolso,'-',rt.pto_emi_doc_reembolso,'-',rt.secuencial_doc_reembolso) AS tipo,
+                           NULLIF(CONCAT_WS(' · ', NULLIF(rt.razon_social_proveedor_reembolso, ''), NULLIF(rt.identificacion_proveedor_reembolso, '')), '') AS descripcion,
+                           NULL AS cantidad,
+                           (COALESCE(rt.base_imponible_total, 0) + COALESCE(rt.impuesto_total, 0)) AS monto,
+                           b.*
+                    FROM compras_reembolso_terceros rt
+                    JOIN base b ON b.id = rt.id_compra
+                    WHERE rt.eliminado = false AND $condReem
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id DESC, x.origen
+                LIMIT $limit";
+
+        return $this->query($sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     /**

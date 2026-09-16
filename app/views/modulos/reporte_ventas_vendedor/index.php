@@ -17,23 +17,6 @@
 
 <div class="container-fluid pt-0 pb-3 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
 
-    <?php if (!empty($vendedorRestringido)): ?>
-        <?php if ((int) $vendedorRestringido['id'] > 0): ?>
-            <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center gap-2">
-                <i class="bi bi-info-circle"></i>
-                Estás viendo únicamente las ventas asignadas a ti como asesor
-                (<strong><?= htmlspecialchars($vendedorRestringido['nombre']) ?></strong>).
-            </div>
-        <?php else: ?>
-            <div class="alert alert-warning py-2 px-3 small mb-3 d-flex align-items-center gap-2">
-                <i class="bi bi-exclamation-triangle"></i>
-                Este reporte muestra únicamente tus ventas como asesor, pero no hay ningún vendedor registrado
-                con tu cédula, así que no hay resultados. Pide a un administrador que registre tu vendedor
-                (catálogo Vendedores) con la misma cédula de tu usuario.
-            </div>
-        <?php endif; ?>
-    <?php endif; ?>
-
     <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
     <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
         <div class="card-header bg-white border-bottom py-2 px-3">
@@ -111,10 +94,11 @@
 
                     <div style="flex:1 1 170px;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;"><i class="bi bi-person-badge me-1"></i>Vendedor</label>
-                        <?php if (!empty($vendedorRestringido)): ?>
-                            <input type="hidden" name="id_vendedor" value="<?= (int) $vendedorRestringido['id'] ?>">
+                        <?php if (!empty($vendedorFijo)): ?>
+                            <?php // Usuario restringido (§6): solo su propio vendedor; el servidor ignora el filtro. ?>
                             <input type="text" class="form-control form-control-sm shadow-none border bg-light w-100" disabled
-                                   value="<?= (int) $vendedorRestringido['id'] > 0 ? htmlspecialchars($vendedorRestringido['nombre']) : 'Sin vendedor vinculado' ?>">
+                                   title="<?= !empty($vendedores) ? 'Solo puedes consultar las ventas de tu vendedor' : 'No tienes un vendedor vinculado: ves solo lo que registraste' ?>"
+                                   value="<?= htmlspecialchars($vendedores[0]['nombre'] ?? 'Sin vendedor vinculado') ?>">
                         <?php else: ?>
                             <select name="id_vendedor" id="rvv-id-vendedor" class="form-select form-select-sm shadow-none border w-100" onchange="window.RVV_generarReporte()">
                                 <option value="">Todos</option>

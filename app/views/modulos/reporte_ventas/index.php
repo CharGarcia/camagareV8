@@ -133,14 +133,23 @@
                     <div style="flex:1 1 150px;min-width:0;">
                         <label class="form-label small fw-bold mb-1 text-muted text-uppercase d-flex align-items-center" style="font-size:.65rem;">
                             <i class="bi bi-person-badge me-1"></i>Vendedor
-                            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_id_vendedor', 'id_vendedor') ?>
+                            <?php if (empty($vendedorFijo)): ?>
+                                <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_id_vendedor', 'id_vendedor') ?>
+                            <?php endif; ?>
                         </label>
-                        <select name="id_vendedor" id="rv_id_vendedor" class="form-select form-select-sm shadow-none border w-100" onchange="window.RV_generarReporte()">
-                            <option value="" selected>Todos</option>
-                            <?php foreach (($vendedores ?? []) as $vd): ?>
-                                <option value="<?= (int)$vd['id'] ?>"><?= htmlspecialchars($vd['nombre']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                        <?php if (!empty($vendedorFijo)): ?>
+                            <?php // Usuario restringido (§6): solo su propio vendedor; el servidor ignora el filtro. ?>
+                            <input type="text" class="form-control form-control-sm shadow-none border bg-light w-100" disabled
+                                   title="<?= !empty($vendedores) ? 'Solo puedes consultar las ventas de tu vendedor' : 'No tienes un vendedor vinculado: ves solo lo que registraste' ?>"
+                                   value="<?= htmlspecialchars($vendedores[0]['nombre'] ?? 'Sin vendedor vinculado') ?>">
+                        <?php else: ?>
+                            <select name="id_vendedor" id="rv_id_vendedor" class="form-select form-select-sm shadow-none border w-100" onchange="window.RV_generarReporte()">
+                                <option value="" selected>Todos</option>
+                                <?php foreach (($vendedores ?? []) as $vd): ?>
+                                    <option value="<?= (int)$vd['id'] ?>"><?= htmlspecialchars($vd['nombre']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php endif; ?>
                     </div>
 
                     <div class="position-relative" style="flex:1 1 180px;min-width:0;">

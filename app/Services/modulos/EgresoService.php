@@ -40,9 +40,16 @@ class EgresoService
      * @param array $ordenMulti Criterios de orden múltiple (ver App\Helpers\OrdenListado).
      *        Vacío = se ordena por $ordenCol/$ordenDir, como siempre.
      */
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', array $ordenMulti = []): array
+    /** @param ?int $idUsuario Registros propios: null = toda la empresa (acceso total). */
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', array $ordenMulti = [], ?int $idUsuario = null): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $ordenMulti);
+        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $ordenMulti, $idUsuario);
+    }
+
+    /** Búsqueda libre dentro de los egresos (documentos pagados y formas de pago). */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuario, $limit);
     }
 
     /**

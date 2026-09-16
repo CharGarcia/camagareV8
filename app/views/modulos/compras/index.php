@@ -119,66 +119,131 @@ $to         = $to         ?? 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= asset_ver('/css/components/filtros_busqueda.css') ?>">
-            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= asset_ver('/js/components/filtros_busqueda.js') ?>"></script>
-            <div id="fbBuscadorCompras" style="width: 480px;"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar: texto libre (sin sugerencias), embudo que abre el modal de
+            // filtros y chips dentro de la caja. Las claves (key) deben existir en los mapas
+            // de ComprasRepository::getListado().
+            $opcionesSerie    = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
+            // Solo los tipos y sustentos que esta empresa realmente usó en Compras: no se
+            // ofrecen filtros que nunca van a traer resultados.
+            $opcionesTipo     = array_map(fn($tc) => ['v' => $tc['codigo_comprobante'], 'l' => $tc['codigo_comprobante'] . ' - ' . trim((string) $tc['comprobante'])], $tiposComprobanteUsados ?? []);
+            $opcionesSustento = array_map(fn($s) => ['v' => (string) $s['id'], 'l' => $s['codigo'] . ' - ' . $s['nombre']], $sustentosFiltro ?? []);
+            $opcionesUsuario  = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $siNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $tC = 'Compra';
+            // Orden pensado en filas de 12 columnas:
+            //   Documento: [Fecha de emisión 6][Fecha de registro 6]
+            //              [Estado 3][Estado de pago 3][Tipo de comprobante 3][Tipo de registro 3]
+            //              [Serie 3][Nº comprobante 3][Secuencial 2][Nº autorización 4]
+            //              [Sustento 6][Deducible 3][Documento modificado 3]
+            //              [Asiento 3][Orden de compra 3][Retención 3][Parte relacionada 3]
+            //   Valores:   [Total 4][Subtotal 4][IVA 4]
+            //              [Descuento 4][Saldo pendiente 4][Valor retenido 4]
+            //   Proveedor: [Proveedor 4][RUC 4][Usuario 4]
+            //              [Observaciones 12]
+            $filtrosCompras = [
+                ['tab' => $tC, 'key' => 'fecha',          'label' => 'Fecha de emisión',   'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
+                ['tab' => $tC, 'key' => 'fecha_registro', 'label' => 'Fecha de registro',  'icon' => 'bi-calendar-plus',   'type' => 'date_range',   'grupo' => 'Documento', 'col' => 6],
+                ['tab' => $tC, 'key' => 'estado',         'label' => 'Estado',             'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'registrado',           'l' => 'Registrado'],
+                    ['v' => 'pendiente_aprobacion', 'l' => 'Pendiente de aprobación'],
+                    ['v' => 'rechazada',            'l' => 'Rechazada'],
+                    ['v' => 'anulado',              'l' => 'Anulado'],
+                    ['v' => 'borrador',             'l' => 'Borrador'],
+                ]],
+                ['tab' => $tC, 'key' => 'pago',           'label' => 'Estado de pago',     'icon' => 'bi-wallet2',         'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                    ['v' => 'abonada',   'l' => 'Abonada'],
+                    ['v' => 'pagada',    'l' => 'Pagada'],
+                ]],
+                ['tab' => $tC, 'key' => 'tipo',           'label' => 'Tipo de comprobante','icon' => 'bi-file-earmark',    'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesTipo],
+                ['tab' => $tC, 'key' => 'tipo_registro',  'label' => 'Tipo de registro',   'icon' => 'bi-cloud-download',  'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'electronico', 'l' => 'Electrónico (XML del SRI)'],
+                    ['v' => 'fisica',      'l' => 'Física (registro manual)'],
+                    ['v' => 'migrado',     'l' => 'Migrado'],
+                ]],
+                ['tab' => $tC, 'key' => 'serie',          'label' => 'Serie del proveedor','icon' => 'bi-upc-scan',        'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
+                ['tab' => $tC, 'key' => 'numero',         'label' => 'Nº comprobante',     'icon' => 'bi-hash',            'type' => 'text',         'grupo' => 'Documento', 'col' => 3, 'placeholder' => '001-001-000000123'],
+                ['tab' => $tC, 'key' => 'secuencial',     'label' => 'Secuencial',         'icon' => 'bi-123',             'type' => 'text',         'grupo' => 'Documento', 'col' => 2, 'placeholder' => 'Sin ceros'],
+                ['tab' => $tC, 'key' => 'autorizacion',   'label' => 'Nº autorización',    'icon' => 'bi-shield-check',    'type' => 'text',         'grupo' => 'Documento', 'col' => 4],
+                ['tab' => $tC, 'key' => 'id_sustento',    'label' => 'Sustento tributario','icon' => 'bi-file-earmark-text','type' => 'select',      'grupo' => 'Documento', 'col' => 6, 'options' => $opcionesSustento],
+                ['tab' => $tC, 'key' => 'deducible',      'label' => 'Deducible',          'icon' => 'bi-receipt-cutoff',  'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'declaracion_iva', 'l' => 'Declaración de IVA'],
+                    ['v' => 'gasto_personal',  'l' => 'Gasto personal'],
+                ]],
+                ['tab' => $tC, 'key' => 'documento_modificado', 'label' => 'Documento modificado', 'icon' => 'bi-arrow-return-left', 'type' => 'text', 'grupo' => 'Documento', 'col' => 3, 'placeholder' => 'Nº de la factura (NC)'],
+                ['tab' => $tC, 'key' => 'asiento',        'label' => 'Asiento contable',   'icon' => 'bi-journal-check',   'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $siNo('Con asiento', 'Sin asiento')],
+                ['tab' => $tC, 'key' => 'orden_compra',   'label' => 'Orden de compra',    'icon' => 'bi-clipboard-check', 'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $siNo('Con orden de compra', 'Sin orden de compra')],
+                ['tab' => $tC, 'key' => 'retencion',      'label' => 'Retención',          'icon' => 'bi-percent',         'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $siNo('Con retención', 'Sin retención')],
+                ['tab' => $tC, 'key' => 'parte_relacionada', 'label' => 'Parte relacionada', 'icon' => 'bi-diagram-2',    'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $siNo('Sí', 'No')],
+                // Valores
+                ['tab' => $tC, 'key' => 'monto',     'label' => 'Total',           'icon' => 'bi-currency-dollar', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'subtotal',  'label' => 'Subtotal',        'icon' => 'bi-receipt',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'iva',       'label' => 'IVA',             'icon' => 'bi-percent',         'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'descuento', 'label' => 'Descuento',       'icon' => 'bi-tag',             'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'saldo',     'label' => 'Saldo pendiente', 'icon' => 'bi-wallet',          'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                ['tab' => $tC, 'key' => 'retenido',  'label' => 'Valor retenido',  'icon' => 'bi-scissors',        'type' => 'number_range', 'grupo' => 'Valores', 'col' => 4],
+                // Proveedor
+                ['tab' => $tC, 'key' => 'proveedor',   'label' => 'Proveedor',            'icon' => 'bi-building',       'type' => 'text',   'grupo' => 'Proveedor', 'col' => 4],
+                ['tab' => $tC, 'key' => 'ruc',         'label' => 'RUC / Cédula',         'icon' => 'bi-card-text',      'type' => 'text',   'grupo' => 'Proveedor', 'col' => 4],
+                ['tab' => $tC, 'key' => 'id_usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select', 'grupo' => 'Proveedor', 'col' => 4, 'options' => $opcionesUsuario],
+                ['tab' => $tC, 'key' => 'obs',         'label' => 'Observaciones',        'icon' => 'bi-chat-left-text', 'type' => 'text',   'grupo' => 'Proveedor', 'col' => 12],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorCompras"></div>
             <input type="hidden" id="inputBuscarCompras" value="<?= htmlspecialchars($buscar) ?>">
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                    if (!window.FiltrosBusqueda) return;
-                    new FiltrosBusqueda({
-                        containerId: 'fbBuscadorCompras',
+                    if (!window.FiltrosModal) return;
+                    // Se guarda la instancia: el acceso "N pendientes de aprobación" del
+                    // título aplica su filtro a través de ella (CMG_filtrarPendientesAprobacion).
+                    window.CMG_filtros = new FiltrosModal({
+                        containerId: 'fmBuscadorCompras',
                         hiddenInputId: 'inputBuscarCompras',
-                        placeholder: 'Buscar...',
-                        fields: [
-                            { key: 'proveedor',      label: 'Proveedor',         icon: 'bi-building',        type: 'text' },
-                            { key: 'ruc',            label: 'RUC',               icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',         label: 'Nº comprobante',    icon: 'bi-hash',            type: 'text' },
-                            { key: 'serie',          label: 'Serie',             icon: 'bi-upc-scan',        type: 'select', options: [
-                                <?php foreach ($seriesFiltro as $s): ?>
-                                { v: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>', l: '<?= $s['establecimiento'] ?>-<?= $s['punto_emision'] ?>' },
-                                <?php endforeach; ?>
-                            ]},
-                            { key: 'secuencial',     label: 'Secuencial',        icon: 'bi-123',             type: 'text' },
-                            { key: 'autorizacion',   label: 'Nº autorización',   icon: 'bi-shield-check',    type: 'text' },
-                            { key: 'usuario',        label: 'Usuario',           icon: 'bi-person-circle',   type: 'text' },
-                            { key: 'observacion',    label: 'Observaciones',     icon: 'bi-chat-text',       type: 'text' },
-                            { key: 'sustento',       label: 'Sustento tributario', icon: 'bi-file-earmark-text', type: 'text' },
-                            { key: 'fecha',          label: 'Fecha emisión',     icon: 'bi-calendar-event',  type: 'date_range' },
-                            { key: 'fecha_registro', label: 'Fecha registro',    icon: 'bi-calendar-plus',   type: 'date_range' },
-                            { key: 'monto',          label: 'Monto total',       icon: 'bi-currency-dollar', type: 'number_range' },
-                            { key: 'subtotal',       label: 'Subtotal',          icon: 'bi-receipt',         type: 'number_range' },
-                            // Solo los tipos que esta empresa realmente tiene registrados en
-                            // Compras (getTiposComprobanteUsados) — no el catálogo completo ni
-                            // la lista acotada del selector de creación, para no ofrecer filtros
-                            // que nunca van a traer resultados.
-                            { key: 'tipo',           label: 'Tipo comprobante',  icon: 'bi-file-earmark',    type: 'select', options: <?= json_encode(array_map(
-                                fn($tc) => ['v' => $tc['codigo_comprobante'], 'l' => $tc['codigo_comprobante'] . ' - ' . $tc['comprobante']],
-                                $tiposComprobanteUsados ?? []
-                            ), JSON_UNESCAPED_UNICODE) ?> },
-                            { key: 'estado',         label: 'Estado',            icon: 'bi-flag',            type: 'select', options: [
-                                { v: 'registrado',           l: 'Registrado' },
-                                { v: 'pendiente_aprobacion', l: 'Pendiente de aprobación' },
-                                { v: 'rechazada',            l: 'Rechazada' },
-                                { v: 'anulado',              l: 'Anulado' },
-                            ]},
-                        ],
-                        quickFilters: [
-                            { id: 'qf_hoy',        label: 'Hoy',         mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
-                            { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
-                            { id: 'qf_mes_pasado', label: 'Mes pasado',  mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
-                            { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
-                            { id: 'qf_pend_aprob', label: 'Pend. aprobación', mk: () => ({ key: 'estado', op: '=', value: 'pendiente_aprobacion', display: 'Pendiente de aprobación' }) },
-                        ],
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de compras',
+                        inputWidth: 420,
+                        extraId: 'fmExtraCompras',   // columnas + PDF + Excel, pegados al final del grupo
+                        // Pestaña Detalles: búsqueda libre dentro de las compras (productos,
+                        // formas de pago, información adicional y reembolsos de terceros).
+                        busquedaDetalle: {
+                            tab: 'Detalles',
+                            url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
+                            label: 'Buscar libremente dentro de las compras',
+                            placeholder: 'Producto, código, forma de pago, plazo, información adicional, reembolso...',
+                            columns: [
+                                { key: 'origen',           label: 'Tipo' },
+                                { key: 'tipo',             label: 'Código / Forma / Nº' },
+                                { key: 'descripcion',      label: 'Descripción' },
+                                { key: 'cantidad',         label: 'Cant.', align: 'end' },
+                                { key: 'monto',            label: 'Valor', align: 'end' },
+                                { key: 'numero',           label: 'Compra', class: 'font-monospace fw-semibold' },
+                                { key: 'fecha',            label: 'Fecha' },
+                                { key: 'proveedor_nombre', label: 'Proveedor' },
+                                { key: 'estado',           label: 'Estado' },
+                            ],
+                            onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
+                            onOpen: (row, fm) => {
+                                fm.hide();
+                                // abrirModalCompra lee la compra del data-row de la fila.
+                                setTimeout(() => window.abrirModalCompra({ dataset: { row: JSON.stringify(row) } }), 350);
+                            },
+                        },
+                        fields: <?= json_encode($filtrosCompras, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyCompras',   // se atenúa mientras se busca
                         onApply: () => window.CMG_fetchSearch && window.CMG_fetchSearch(1),
-                    }).init();
+                    });
+                    window.CMG_filtros.init();
                 });
             </script>
             <?php /* form de compatibilidad para no romper marcado existente */ ?>
             <form id="frmBuscarCompras" class="d-none" onsubmit="return false;">
             </form>
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraCompras" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'secuencial_prov'  => 'N° Comprobante',
@@ -197,9 +262,9 @@ $to         = $to         ?? 0;
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
                 <a id="btnExportPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
-                    class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+                    class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
-                    class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                    class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
             </div>
         </div>
         <div class="d-flex align-items-center gap-3">
@@ -311,6 +376,12 @@ $to         = $to         ?? 0;
 
     /** Atajo del badge del título: deja el listado solo con las pendientes. */
     window.CMG_filtrarPendientesAprobacion = function () {
+        // Con el buscador estándar el filtro se aplica por el componente: así aparece
+        // como chip en la caja (y se puede quitar) y conserva el texto ya escrito.
+        if (window.CMG_filtros) {
+            window.CMG_filtros.aplicarFiltro({ key: 'estado', op: '=', value: 'pendiente_aprobacion' }, false);
+            return;
+        }
         const input = document.getElementById('inputBuscarCompras');
         if (!input) return;
         input.value = 'estado:pendiente_aprobacion';
@@ -355,6 +426,10 @@ $to         = $to         ?? 0;
             const term = input ? input.value.trim() : '';
             const orden = window.CMG_ordenParam(window.CMG_currentSorts || []);
             const uri = `${window.CMG_urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar y ordenar, que llaman a esta función directo.
+            const tbody = document.getElementById('tbodyCompras');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -373,6 +448,8 @@ $to         = $to         ?? 0;
                 }
             } catch (e) {
                 console.error('Error búsqueda compras:', e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
             }
         };
 

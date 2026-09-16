@@ -205,6 +205,10 @@ class ComprasController extends BaseModuloController
         // acotada del selector de creación — ver getTiposComprobanteModal()).
         $tiposComprobanteUsados = $this->repository->getTiposComprobanteUsados($idEmpresa);
 
+        // Usuarios que registraron compras, para el filtro "Usuario" del modal.
+        $usuariosFiltro  = $this->repository->getUsuariosConCompras($idEmpresa);
+        $sustentosFiltro = $this->repository->getSustentosUsados($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/compras/index', [
             'titulo'             => 'Compras',
             'perm'               => $perm,
@@ -235,6 +239,8 @@ class ComprasController extends BaseModuloController
             'puntos'             => $puntos,
             'seriesFiltro'       => $seriesFiltro,
             'tiposComprobanteUsados' => $tiposComprobanteUsados,
+            'usuariosFiltro'     => $usuariosFiltro,
+            'sustentosFiltro'    => $sustentosFiltro,
             'establecimientos'   => $establecimientos,
             'sucursal_principal' => !empty($establecimientos) ? $establecimientos[0] : null,
             'tiposComprobante'   => $this->getTiposComprobanteModal(),
@@ -252,6 +258,55 @@ class ComprasController extends BaseModuloController
     // ─────────────────────────────────────────────────────────────────────────
     // SEARCH AJAX
     // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Pestaña "Detalles" del modal de filtros: búsqueda libre dentro de las compras
+     * (productos, formas de pago SRI, información adicional y reembolsos de terceros).
+     * Devuelve cada coincidencia y la compra a la que pertenece.
+     */
+    public function buscarDetallesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q         = trim($_GET['q'] ?? '');
+        if (mb_strlen($q) < 2) {
+            echo json_encode(['rows' => []]);
+            return;
+        }
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        $origenes = [
+            'PRODUCTO'  => 'Producto',
+            'PAGO'      => 'Forma de pago',
+            'ADICIONAL' => 'Info. adicional',
+            'REEMBOLSO' => 'Reembolso',
+        ];
+        $rows = [];
+        foreach ($this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
+            $rows[] = [
+                'origen'      => $origenes[$r['origen']] ?? $r['origen'],
+                'tipo'        => $r['tipo'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+                'cantidad'    => $r['cantidad'] !== null ? rtrim(rtrim(number_format((float) $r['cantidad'], 4, '.', ''), '0'), '.') : '',
+                'monto'       => $r['monto'] !== null ? number_format((float) $r['monto'], 2) : '',
+                // Datos de la compra: el modal de la vista (abrirModalCompra) los lee
+                // del data-row de la fila, así que se devuelven con los mismos nombres.
+                'id'                   => (int) $r['id'],
+                'establecimiento_prov' => $r['establecimiento_prov'] ?? '',
+                'punto_emision_prov'   => $r['punto_emision_prov'] ?? '',
+                'secuencial_prov'      => $r['secuencial_prov'] ?? '',
+                'proveedor_nombre'     => $r['proveedor'] ?? '',
+                'numero'      => ($r['establecimiento_prov'] ?? '') . '-' . ($r['punto_emision_prov'] ?? '') . '-' . ($r['secuencial_prov'] ?? ''),
+                'fecha'       => !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'estado'      => strip_tags(self::badgeEstado($r['estado'] ?? null)),
+            ];
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
+    }
 
     public function searchAjax(): void
     {

@@ -86,12 +86,23 @@ function RI_colores(n) {
     return Array.from({ length: n }, (_, i) => RI_PALETA[i % RI_PALETA.length]);
 }
 
+// Última búsqueda de cada pestaña. Si se vuelve a pulsar Mostrar (o se cambia Detalle,
+// Año o Mes) antes de que responda la anterior, esa anterior se cancela y su respuesta se
+// ignora: si no, la que llegara última pisaría la tabla aunque fuera la más vieja.
+const RI_busquedas = {};
+
 function RI_fetchGenerar(tab, params, onOk, onError) {
     params.set('tab', tab);
+    if (RI_busquedas[tab]) RI_busquedas[tab].abort();
+    const control = new AbortController();
+    RI_busquedas[tab] = control;
+    const vigente = () => RI_busquedas[tab] === control;
+
     fetch(BASE_URL + '/' + RUTA_MODULO + '/generarAjax', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
         body: params.toString(),
+        signal: control.signal,
     })
     .then(async response => {
         const text = await response.text();
@@ -99,10 +110,16 @@ function RI_fetchGenerar(tab, params, onOk, onError) {
         catch (e) { throw new Error(text.substring(0, 200)); }
     })
     .then(res => {
+        if (!vigente()) return;
         if (res.ok) onOk(res);
         else onError(res.error || 'Ocurrió un error al generar el reporte');
     })
-    .catch(err => { console.error(err); onError(err.message); });
+    .catch(err => {
+        if (err.name === 'AbortError' || !vigente()) return;
+        console.error(err);
+        onError(err.message);
+    })
+    .finally(() => { if (vigente()) delete RI_busquedas[tab]; });
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -365,10 +382,13 @@ window.RI_Existencias = {
         document.getElementById('ri-ex-thead').innerHTML = th;
 
         if (modo === 'NINGUNO' && typeof window.CMG_initSort === 'function') {
+            // reload:false porque el callback ya repinta la tabla. Sin él, CMG_initSort
+            // guardaba el orden y RECARGABA la página: la consulta recién lanzada se perdía,
+            // la tabla volvía vacía y había que pulsar Mostrar otra vez.
             window.CMG_initSort('reporte_inventarios_existencias', (col, dir) => {
                 this.orden = col; this.dir = dir;
                 this.generar();
-            }, { container: '#ri-ex-thead', col: this.orden, dir: this.dir });
+            }, { container: '#ri-ex-thead', col: this.orden, dir: this.dir, reload: false });
         }
         if (typeof window.initResizableColumns === 'function') {
             window.initResizableColumns();

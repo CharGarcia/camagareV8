@@ -304,6 +304,65 @@ class ReporteVentasVendedorRepository extends BaseRepository
     }
 
     /**
+     * Cruce de una nota de crédito con la factura que modifica: num_doc_modificado
+     * = establecimiento-punto-secuencial de la factura, en la misma empresa. Mismo
+     * criterio que el JOIN de vendedor de fuente(); lo comparten el filtro Vendedor
+     * y el alcance del usuario.
+     */
+    private function condicionFacturaDeNc(string $aliasNc, string $aliasFactura): string
+    {
+        return "{$aliasFactura}.id_empresa = {$aliasNc}.id_empresa
+                AND {$aliasFactura}.eliminado = false
+                AND {$aliasNc}.cod_doc_modificado = '01'
+                AND CONCAT({$aliasFactura}.establecimiento,'-',{$aliasFactura}.punto_emision,'-',{$aliasFactura}.secuencial) = {$aliasNc}.num_doc_modificado";
+    }
+
+    /**
+     * Alcance del usuario (§6, ver App\Helpers\AlcanceRegistros), mismo criterio
+     * que ReporteVentasRepository. Devuelve la condición a concatenar al WHERE, o
+     * cadena vacía si ve todas las ventas de la empresa:
+     *
+     *  - Modo VENDEDOR (`id_vendedor_filtro`): solo lo de su vendedor. Manda el
+     *    vendedor del documento; si no tiene (NULL o 0), el asignado a su cliente
+     *    (`clientes.id_vendedor`). Un documento a nombre de otro vendedor queda
+     *    fuera aunque el cliente sea suyo. La nota de crédito no tiene vendedor
+     *    propio (ver fuente()): manda el de la factura que modifica y, si esa
+     *    factura no tiene o no se encuentra, el del cliente de la nota.
+     *  - Modo REGISTROS PROPIOS (`id_usuario_filtro`): `id_usuario` del documento.
+     *
+     * Los placeholders del IN se repiten dentro del mismo SQL (cliente y documento);
+     * en este proyecto eso es seguro (ver memoria pdo-placeholders-repetidos).
+     */
+    private function condAlcanceUsuario(array $filtros, array $f, string $alias, array &$params): string
+    {
+        $idsVend = \App\Helpers\AlcanceRegistros::idsVendedor($filtros);
+        if ($idsVend) {
+            $ph = [];
+            foreach ($idsVend as $i => $id) {
+                $ph[] = ":alc_v{$i}";
+                $params[":alc_v{$i}"] = $id;
+            }
+            $in = implode(',', $ph);
+            $clienteSuyo = "EXISTS (SELECT 1 FROM clientes alc_c
+                                    WHERE alc_c.id = {$alias}.id_cliente AND alc_c.id_vendedor IN ({$in}))";
+            if ($f['vendedor'] === true) {
+                return " AND ({$alias}.id_vendedor IN ({$in})
+                              OR (COALESCE({$alias}.id_vendedor, 0) = 0 AND {$clienteSuyo}))";
+            }
+            $factura = "SELECT 1 FROM ventas_cabecera alc_fv WHERE " . $this->condicionFacturaDeNc($alias, 'alc_fv');
+            return " AND (EXISTS ({$factura} AND alc_fv.id_vendedor IN ({$in}))
+                          OR (NOT EXISTS ({$factura} AND COALESCE(alc_fv.id_vendedor, 0) <> 0) AND {$clienteSuyo}))";
+        }
+
+        $idUsuario = \App\Helpers\AlcanceRegistros::idUsuario($filtros);
+        if ($idUsuario <= 0) {
+            return '';
+        }
+        $params[':id_usuario_filtro'] = $idUsuario;
+        return " AND {$alias}.id_usuario = :id_usuario_filtro";
+    }
+
+    /**
      * Construye las condiciones WHERE a partir de los filtros. Es auto-contenido
      * (no requiere que la consulta que llama agregue joins extra al FROM), incluso
      * para el filtro de vendedor sobre notas de crédito (usa un EXISTS contra la
@@ -326,6 +385,13 @@ class ReporteVentasVendedorRepository extends BaseRepository
 
         $params = [':id_empresa' => $idEmpresa];
 
+        // Alcance del usuario (§6): lo resuelve el controller con
+        // App\Helpers\AlcanceRegistros y viaja dentro de los filtros, NUNCA desde la
+        // petición. Al vivir aquí lo heredan todas las agrupaciones, el detallado,
+        // las estadísticas, el resumen de estados, el neto "Facturas − NC", el
+        // detalle por vendedor y las exportaciones.
+        $where .= $this->condAlcanceUsuario($filtros, $f, $aliasVenta, $params);
+
         if (!empty($filtros['fecha_desde'])) {
             $where .= " AND {$aliasVenta}.fecha_emision >= :fecha_desde";
             $params[':fecha_desde'] = $filtros['fecha_desde'] . ' 00:00:00';
@@ -341,10 +407,7 @@ class ReporteVentasVendedorRepository extends BaseRepository
             } elseif ($f['vendedor'] === 'resuelto') {
                 $where .= " AND EXISTS (
                     SELECT 1 FROM ventas_cabecera vorigf
-                    WHERE vorigf.id_empresa = {$aliasVenta}.id_empresa
-                      AND vorigf.eliminado = false
-                      AND {$aliasVenta}.cod_doc_modificado = '01'
-                      AND CONCAT(vorigf.establecimiento,'-',vorigf.punto_emision,'-',vorigf.secuencial) = {$aliasVenta}.num_doc_modificado
+                    WHERE " . $this->condicionFacturaDeNc($aliasVenta, 'vorigf') . "
                       AND vorigf.id_vendedor = :id_vendedor
                 )";
             } else {
@@ -415,9 +478,8 @@ class ReporteVentasVendedorRepository extends BaseRepository
      * su subtotal, la NC que la afecta (si tiene), el total neto y el SALDO
      * pendiente. Es el "drill-down" que se abre al hacer clic en una fila de la
      * agrupación Vendedor. $idVendedor > 0 filtra a ese vendedor; 0 significa
-     * "Sin vendedor asignado" (id_vendedor IS NULL); cualquier otro valor (p. ej.
-     * el sentinel -1 de un usuario restringido sin vendedor vinculado) no devuelve
-     * nada.
+     * "Sin vendedor asignado" (id_vendedor IS NULL); un valor negativo no devuelve
+     * nada. El alcance del usuario llega en $filtros, como en el resto del reporte.
      */
     public function getDocumentosPorVendedor(int $idEmpresa, int $idVendedor, array $filtros): array
     {

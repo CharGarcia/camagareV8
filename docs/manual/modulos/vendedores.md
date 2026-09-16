@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/vendedores
 tipo: modulo
 visibilidad: todos
-etiquetas: vendedores, vendedor, comercial, agente, asesor, comision, ventas por vendedor, importar vendedores, carga masiva, excel, vincular usuario con vendedor, usuario del sistema, que el asesor vea solo sus ventas, quien es cada vendedor
-version: 1.2
+etiquetas: vendedores, vendedor, comercial, agente, asesor, comision, ventas por vendedor, importar vendedores, carga masiva, excel, vincular usuario con vendedor, usuario del sistema, que el asesor vea solo sus ventas, quien es cada vendedor, cartera del vendedor, clientes asignados
+version: 1.3
 orden: 50
 estado: activo
 ---
@@ -30,9 +30,11 @@ la ficha del vendedor permite decirlo (campo **Usuario del sistema**).
 ## Usuario del sistema (para que el asesor vea solo sus ventas)
 
 El campo **Usuario del sistema** dice qué cuenta de usuario *es* este vendedor.
-Se usa en el **Reporte de Ventas por Vendedor**
-(`modulos/reporte_ventas_vendedor`), donde los usuarios de **nivel 1** ven
-únicamente las ventas asignadas a su propio vendedor.
+Se usa en el **Reporte de Ventas**, el **Reporte de Ventas por Vendedor** y
+**Cuentas por Cobrar**: un usuario de **nivel 1** sin el permiso *Acceso
+total* en esos módulos ve únicamente lo de su vendedor, es decir los documentos
+que llevan su nombre y, si un documento no tiene vendedor, los de los clientes
+que tiene asignados. El filtro *Vendedor* le aparece fijo en su nombre.
 
 - La lista ofrece los usuarios **asignados a la empresa activa** y activos.
 - Un usuario solo puede ser **un** vendedor dentro de la misma empresa: si ya
@@ -71,6 +73,10 @@ la guía *Importar datos desde Excel*.
 
 ## Historial de cambios
 
+- **1.3** — El apartado *Usuario del sistema* explica dónde se usa ese vínculo:
+  en el Reporte de Ventas, el Reporte de Ventas por Vendedor y Cuentas por
+  Cobrar, para que el usuario de nivel 1 sin *Acceso total* vea solo lo de su
+  vendedor.
 - **1.2** — Nuevo campo **Usuario del sistema** en la ficha del vendedor: indica
   qué cuenta de usuario es ese asesor, para que en el Reporte de Ventas por
   Vendedor vea únicamente sus ventas. Un usuario no puede ser dos vendedores de

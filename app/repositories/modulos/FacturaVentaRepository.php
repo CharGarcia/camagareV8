@@ -33,16 +33,6 @@ class FacturaVentaRepository extends BaseRepository
      */
     private function mapaOrden(): array
     {
-        // Suma de abonos (cobros + notas de crédito + retenciones) para ordenar por
-        // el ESTADO DE PAGO calculado. Mismas subconsultas que la columna/badge.
-        $sqlAbonosOrden =
-            "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
-            . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
-            . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
-            . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
-            . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
-            . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
-
         return [
             'id'                  => 'v.id',
             'fecha_emision'       => 'v.fecha_emision',
@@ -63,10 +53,12 @@ class FacturaVentaRepository extends BaseRepository
             'usuario_nombre'      => 'u.nombre',
             // Calculadas: el IVA no es una columna y el estado de pago se deduce de
             // cuánto se ha abonado (1 sin cobrar, 2 parcial, 3 pagada, 4 anulada).
+            // ab.abonos sale del LEFT JOIN LATERAL que arma getListado() (alias "ab",
+            // ver ahí) — la fórmula de abonos ya no se repite aquí.
             'iva'                 => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
             'estado_pago'         => "CASE WHEN v.estado = 'anulado' THEN 4 "
-                                     . "WHEN (v.importe_total - $sqlAbonosOrden) <= 0.01 THEN 3 "
-                                     . "WHEN $sqlAbonosOrden > 0 THEN 2 ELSE 1 END",
+                                     . "WHEN (v.importe_total - ab.abonos) <= 0.01 THEN 3 "
+                                     . "WHEN ab.abonos > 0 THEN 2 ELSE 1 END",
         ];
     }
 
@@ -90,14 +82,16 @@ class FacturaVentaRepository extends BaseRepository
         // compartida de AbonosVentaSql (enlace por dígitos; retención repartida por
         // línea si sustenta varias facturas). Los usan el texto libre (columnas Saldo
         // y Estado pago del listado), el filtro "estado de pago" y el numérico "saldo".
-        $sqlAbonos =
-            "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
-            . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
-            . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
-            . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
-            . "+ " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " "
-            . "+ " . AbonosVentaSql::subRetenidoFactura('v') . ")";
-        $saldo = "(v.importe_total - $sqlAbonos)";
+        //
+        // Antes esta fórmula (3 subconsultas correlacionadas: cobros + NC + retención)
+        // se repetía como texto en varios sitios de la misma consulta (texto libre,
+        // filtro pago:, ORDER BY de mapaOrden()) — Postgres la recalculaba una vez por
+        // cada aparición, no una sola vez por fila. Ahora se calcula UNA vez por fila
+        // en el LEFT JOIN LATERAL "ab" (armado más abajo, junto al resto de columnas
+        // de abonos que ya se mostraban en el listado: total_cobrado/nc/nd/retención),
+        // y $sqlAbonos/$saldo solo referencian ese alias.
+        $sqlAbonos = 'ab.abonos';
+        $saldo = '(v.importe_total - ab.abonos)';
         // IVA: no es columna, se deduce de los totales (misma fórmula que la vista).
         $ivaCalc = '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))';
 
@@ -241,10 +235,33 @@ class FacturaVentaRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
+        // LATERAL de abonos: calcula UNA sola vez por factura lo que antes se repetía
+        // como texto en el WHERE (texto libre, filtro pago:/saldo:) y en el ORDER BY
+        // (mapaOrden(), estado_pago) — cada aparición anterior era una reevaluación
+        // completa de las 3 subconsultas correlacionadas de AbonosVentaSql. De paso
+        // reemplaza las 4 subconsultas sueltas que ya traía el SELECT para las
+        // columnas Total cobrado/NC/ND/Retención: antes de este cambio esas 4 también
+        // se evaluaban aparte de la del texto libre/orden, aunque fueran el mismo dato.
+        $lateralAbonos = "LEFT JOIN LATERAL (
+                SELECT x.total_cobrado, x.total_nc, x.total_nd, x.total_retencion,
+                       (x.total_cobrado + x.total_nc + x.total_retencion) AS abonos
+                FROM (
+                    SELECT
+                        (SELECT COALESCE(SUM(ind.monto_cobrado), 0) FROM ingresos_detalle ind INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' AND inc.estado != 'anulado' AND inc.eliminado = false) AS total_cobrado,
+                        " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " AS total_nc,
+                        " . AbonosVentaSql::subNotasFactura('nota_debito_cabecera', 'v') . " AS total_nd,
+                        " . AbonosVentaSql::subRetenidoFactura('v') . " AS total_retencion
+                ) x
+            ) ab ON true";
+
+        // El COUNT solo necesita el LATERAL cuando el WHERE realmente lo referencia
+        // (texto libre, filtro pago:/saldo:); si no, se queda tan barato como antes.
+        $joinAbonosCount = (strpos($where, 'ab.') !== false) ? $lateralAbonos : '';
         $sqlCount = "SELECT COUNT(*) FROM ventas_cabecera v
                      INNER JOIN clientes   c   ON v.id_cliente  = c.id
                      LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
                      LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id
+                     $joinAbonosCount
                      $where";
         $total = $this->query($sqlCount, $params)->fetchColumn();
 
@@ -269,14 +286,15 @@ class FacturaVentaRepository extends BaseRepository
                        c.identificacion AS cliente_ruc,
                        ven.nombre      AS vendedor_nombre,
                        u.nombre        AS usuario_nombre,
-                       (SELECT COALESCE(SUM(ind.monto_cobrado), 0) FROM ingresos_detalle ind INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' AND inc.estado != 'anulado' AND inc.eliminado = false) AS total_cobrado,
-                       " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " AS total_nc,
-                       " . AbonosVentaSql::subNotasFactura('nota_debito_cabecera', 'v') . " AS total_nd,
-                       " . AbonosVentaSql::subRetenidoFactura('v') . " AS total_retencion
+                       ab.total_cobrado,
+                       ab.total_nc,
+                       ab.total_nd,
+                       ab.total_retencion
                 FROM ventas_cabecera v
                 INNER JOIN clientes  c   ON v.id_cliente  = c.id
                 LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
                 LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id
+                $lateralAbonos
                 $where
                 $orderBy
                 " . ($perPage > 0 ? "LIMIT $perPage OFFSET $offset" : "");

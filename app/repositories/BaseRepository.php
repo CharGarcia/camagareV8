@@ -157,6 +157,34 @@ abstract class BaseRepository
     }
 
     /**
+     * ¿Existe este índice y el planificador puede usarlo? Mismo propósito que
+     * tablaExiste(), para consultas que solo convienen con un índice concreto:
+     * un "loose index scan" es instantáneo con su índice y, sin él, relee la
+     * tabla entera en cada salto (peor que el DISTINCT al que reemplaza).
+     *
+     * Exige indisvalid: un CREATE INDEX CONCURRENTLY que falló a mitad deja el
+     * índice creado pero inválido, y el planificador lo ignora. Cachea por proceso.
+     */
+    protected function indiceExiste(string $indice): bool
+    {
+        static $cache = [];
+        if (isset($cache[$indice])) {
+            return $cache[$indice];
+        }
+
+        try {
+            $st = $this->db->prepare(
+                "SELECT EXISTS (SELECT 1 FROM pg_index WHERE indexrelid = to_regclass(:i) AND indisvalid)"
+            );
+            $st->execute([':i' => 'public.' . $indice]);
+            $cache[$indice] = (bool) $st->fetchColumn();
+        } catch (\Throwable $e) {
+            $cache[$indice] = false;
+        }
+        return $cache[$indice];
+    }
+
+    /**
      * Capa un valor de texto al largo real de la columna VARCHAR donde se va a
      * guardar.
      *

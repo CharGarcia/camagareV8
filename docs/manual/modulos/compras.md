@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos
-version: 2.11
+etiquetas: compras, compra, factura de compra, buscar compra, buscador, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos
+version: 2.12
 orden: 20
 estado: activo
 ---
@@ -305,6 +305,55 @@ Desde la compra guardada se puede generar el **PDF** del documento, exportarlo a
 inicio del formulario (solo visibles si la compra es un comprobante electrónico
 con XML guardado).
 
+## Buscar y filtrar el listado
+
+Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
+búsqueda y los botones de columnas, PDF y Excel.
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo, sin menús ni sugerencias. Busca en las columnas de la compra: N°
+comprobante, secuencial, fecha, proveedor, RUC, subtotal, IVA, total y
+**saldo**. Además busca en el número de autorización, las observaciones, el
+usuario que la registró, el documento modificado de las notas de crédito y los
+**códigos y descripciones de los productos comprados**. Las columnas **Tipo**,
+**Sustento**, **Pago** y **Estado** no entran en la búsqueda libre: para
+filtrar por ellas use la ventana de filtros. Puede escribir varias palabras en
+cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el
+texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo
+girando** al final del cuadro y la tabla se ve atenuada.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
+hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
+Limpiar filtros.
+
+**Pestaña Compra** (datos de la cabecera):
+
+| Bloque | Filtros |
+|--------|---------|
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), fecha de registro, estado, estado de pago (pendiente / abonada / pagada), tipo de comprobante, tipo de registro (electrónico, física o migrado), serie del proveedor, N° comprobante, secuencial, N° autorización, sustento tributario, deducible (declaración de IVA o gasto personal), documento modificado, con o sin asiento contable, con o sin orden de compra, con o sin retención, parte relacionada |
+| Valores | Total, subtotal, IVA, descuento, saldo pendiente y valor retenido (cada uno con mínimo y máximo) |
+| Proveedor | Proveedor, RUC / cédula, usuario que registró, observaciones |
+
+Los selectores *Tipo de comprobante* y *Sustento tributario* listan solo lo que
+la empresa ya usó. El *estado de pago* y el *saldo pendiente* se calculan con la
+misma regla que las columnas Pago y Saldo: pagos de Egresos, notas de crédito y
+retenciones; las notas de crédito cuentan siempre como pagadas.
+
+**Pestaña Detalles** (lo que hay dentro de la compra). Es un único cuadro,
+**Buscar libremente dentro de las compras**: escriba un producto, un código,
+una forma de pago SRI, un plazo, un dato de la información adicional o un
+comprobante de reembolso de terceros, y aparece la lista de **cada línea que
+coincide** con la compra a la que pertenece (número, fecha, proveedor y estado).
+Un clic en la fila deja el listado mostrando solo esa compra; el ícono de la
+derecha la abre directamente. Por ejemplo, *extra* lista todas las compras
+donde aparece ese producto.
+
+**Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
+búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
+**Retroceso** quita el último. El aviso *N pendientes de aprobación* del título
+también aplica su filtro como etiqueta, que se puede quitar igual.
+
 ## Ordenar el listado
 
 Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
@@ -422,6 +471,18 @@ Dos cosas que conviene tener claras:
 
 ## Historial de cambios
 
+- **2.12** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
+  lo que se escribe se busca en las columnas de la compra (incluidos IVA, saldo
+  y los productos comprados), salvo Tipo, Sustento, Pago y Estado. Los filtros
+  pasan a una **ventana propia** (botón del embudo, se aplican con *Aplicar*)
+  con dos pestañas: **Compra** (filtros por campo, con criterios nuevos: estado
+  de pago, tipo de registro, deducible, sustento como lista, documento
+  modificado, con/sin asiento, orden de compra y retención, parte relacionada,
+  IVA, descuento, saldo pendiente, valor retenido y usuario como lista) y
+  **Detalles**, un cuadro de **búsqueda libre dentro de las compras**
+  (productos, formas de pago, información adicional y reembolsos de terceros)
+  que dice a qué compra pertenece cada coincidencia. Los filtros activos se ven
+  como etiquetas dentro del cuadro. Nueva sección *Buscar y filtrar el listado*.
 - **2.11** — El listado se puede **ordenar por hasta tres columnas a la vez**:
   Shift+clic en el título de la segunda columna la encadena a la primera (por
   ejemplo *Proveedor* y, dentro de cada proveedor, la *Fecha*). Cada encabezado

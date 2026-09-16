@@ -37,6 +37,105 @@ class EgresoRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /** Tipos de egreso REALMENTE usados en la empresa (select "Tipo de egreso" del modal de filtros). */
+    public function getTiposEgresoDistintos(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT tipo_egreso
+                FROM egresos_cabecera
+                WHERE id_empresa = :id_empresa AND eliminado = false AND tipo_egreso IS NOT NULL AND tipo_egreso != ''
+                ORDER BY tipo_egreso";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    /** Usuarios que han registrado algún egreso en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConEgresos(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT u.id, u.nombre
+                FROM egresos_cabecera e
+                JOIN usuarios u ON u.id = e.created_by
+                WHERE e.id_empresa = :id_empresa AND e.eliminado = false
+                ORDER BY u.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Búsqueda libre DENTRO de los egresos (pestaña "Detalles" del modal de filtros):
+     * devuelve cada documento pagado y cada forma de pago que coincide con el texto,
+     * junto con el egreso al que pertenece. Mismo alcance que el listado (empresa, no
+     * eliminados, ambiente) y registros propios cuando el usuario no tiene acceso total.
+     */
+    public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBase = "e.id_empresa = :id_empresa AND e.eliminado = false
+                      AND e.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $whereBase .= " AND e.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['d.numero_documento', 'd.descripcion', 'd.tipo_documento', 'd.monto_documento::text', 'd.monto_pagado::text', 'pc.codigo', 'pc.nombre'],
+            $q, $params, 'dt'
+        );
+        // Sin estado_cheque: casi todos son "vigente" y buscarlo solo mete ruido (mismo
+        // criterio que el listado: los estados se filtran, no se buscan).
+        $condPago = \App\Helpers\FiltrosBusqueda::condicionTexto(
+            ['fp.nombre', 'ep.referencia', 'ep.numero_cheque', 'ep.beneficiario_cheque', 'ep.tipo_operacion_bancaria',
+             'ep.monto::text', 'ep.fecha_cobro::text'],
+            $q, $params, 'pg'
+        );
+        if ($condDet === '' || $condPago === '') {
+            return [];
+        }
+
+        $limit = max(1, min(200, $limit));
+        $sql = "WITH base AS (
+                    SELECT e.id, e.numero_egreso, e.fecha_emision, e.estado,
+                           COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre) AS beneficiario
+                    FROM egresos_cabecera e
+                    LEFT JOIN proveedores p ON p.id = e.id_proveedor
+                    LEFT JOIN empleados emp ON emp.id = e.id_empleado
+                    WHERE $whereBase
+                )
+                SELECT * FROM (
+                    SELECT 'DOCUMENTO' AS origen,
+                           d.tipo_documento AS tipo,
+                           d.numero_documento AS referencia,
+                           d.descripcion,
+                           d.monto_pagado AS monto,
+                           b.id AS id_egreso, b.numero_egreso, b.fecha_emision, b.estado, b.beneficiario
+                    FROM egresos_detalle d
+                    JOIN base b ON b.id = d.id_egreso
+                    LEFT JOIN plan_cuentas pc ON pc.id = d.id_cuenta_contable
+                    WHERE d.eliminado = FALSE AND $condDet
+                    UNION ALL
+                    SELECT 'PAGO' AS origen,
+                           fp.nombre AS tipo,
+                           NULLIF(CONCAT_WS(' ', NULLIF(ep.tipo_operacion_bancaria, ''), NULLIF(ep.referencia, ''), NULLIF(ep.numero_cheque, '')), '') AS referencia,
+                           NULLIF(CONCAT_WS(' · ', NULLIF(ep.beneficiario_cheque, ''),
+                                  CASE WHEN ep.estado_cheque IS NOT NULL AND ep.estado_cheque <> 'vigente' THEN 'Cheque ' || ep.estado_cheque END), '') AS descripcion,
+                           ep.monto,
+                           b.id AS id_egreso, b.numero_egreso, b.fecha_emision, b.estado, b.beneficiario
+                    FROM egresos_pagos ep
+                    JOIN base b ON b.id = ep.id_egreso
+                    LEFT JOIN empresa_formas_pago fp ON fp.id = ep.id_forma_pago
+                    WHERE ep.eliminado = FALSE AND $condPago
+                ) x
+                ORDER BY x.fecha_emision DESC, x.id_egreso DESC, x.origen
+                LIMIT $limit";
+
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function query(string $sql, array $params = []): \PDOStatement
     {
         $st = $this->db->prepare($sql);
@@ -66,7 +165,13 @@ class EgresoRepository extends BaseRepository
      * @param array $ordenMulti Criterios de orden [['col'=>…,'dir'=>…], …] cuando el
      *        llamador usa `OrdenListado`. Vacío = se ordena por $ordenCol/$ordenDir.
      */
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', array $ordenMulti = []): array
+    /**
+     * @param ?int $idUsuario Registros propios (CLAUDE.md §6): si el usuario NO tiene
+     *        acceso total, el controller manda su id y solo se listan los egresos que él
+     *        creó (`created_by`). null = toda la empresa. Va al final, después de
+     *        $ordenMulti, para no mover la posición de los argumentos existentes.
+     */
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', array $ordenMulti = [], ?int $idUsuario = null): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
@@ -75,8 +180,28 @@ class EgresoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Texto libre: las columnas del listado y sus relacionadas (el buscador de
+            // la vista no sugiere campos; lo que se escribe se busca en todo). Los
+            // documentos pagados viven en el detalle: se agregan como una sola cadena
+            // por egreso.
+            // Decisión del usuario (igual que en Ingresos y Facturas): las columnas
+            // Tipo y Estado NO entran en el texto libre; se filtran desde el modal.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['e.numero_egreso', 'p.razon_social', 'emp.nombres_apellidos', 'e.beneficiario_nombre', 'e.observaciones'],
+                [
+                    'e.numero_egreso',                                    // Nº Egreso
+                    'e.secuencial',
+                    "CONCAT(e.establecimiento,'-',e.punto_emision)",      // Serie
+                    'e.fecha_emision::text',                              // Fecha
+                    'p.razon_social',                                     // Beneficiario
+                    'emp.nombres_apellidos',
+                    'e.beneficiario_nombre',
+                    'p.identificacion',                                   // RUC / cédula del beneficiario
+                    'emp.identificacion',
+                    'e.observaciones',                                    // Observaciones
+                    'e.monto_total::text',                                // Monto
+                    'u.nombre',                                           // Usuario que registró
+                    "(SELECT STRING_AGG(d.numero_documento, ' ') FROM egresos_detalle d WHERE d.id_egreso = e.id AND d.eliminado = FALSE)",
+                ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -85,21 +210,37 @@ class EgresoRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Claves del modal de filtros (public/js/components/filtros_modal.js, en la
+        // vista). Se conservan las antiguas (proveedor, empleado, concepto…) porque
+        // también viajan en los enlaces de PDF/Excel.
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
-                'proveedor' => 'p.razon_social',
-                'empleado'  => 'emp.nombres_apellidos',
-                'numero'    => 'e.numero_egreso',
-                'nro'       => 'e.numero_egreso',
-                'concepto'  => 'e.observaciones',
-                'obs'       => 'e.observaciones',
+                'proveedor'     => 'p.razon_social',
+                'empleado'      => 'emp.nombres_apellidos',
+                // Beneficiario = lo que muestra la columna del listado.
+                'beneficiario'  => "COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, '')",
+                'ruc'           => "COALESCE(p.identificacion, emp.identificacion, '')",
+                'identificacion' => "COALESCE(p.identificacion, emp.identificacion, '')",
+                'numero'        => 'e.numero_egreso',
+                'nro'           => 'e.numero_egreso',
+                'concepto'      => 'e.observaciones',
+                'obs'           => 'e.observaciones',
+                'observaciones' => 'e.observaciones',
             ],
             'exacto'   => [
-                'estado' => 'e.estado',
-                'tipo'   => 'e.tipo_egreso',
+                'estado'       => 'e.estado',
+                'tipo'         => 'e.tipo_egreso',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del buscador.
-                'serie'  => "CONCAT(e.establecimiento,'-',e.punto_emision)",
+                'serie'        => "CONCAT(e.establecimiento,'-',e.punto_emision)",
+                // sujeto:proveedor / empleado / otro
+                'sujeto'       => "CASE WHEN e.id_proveedor IS NOT NULL THEN 'proveedor'
+                                        WHEN e.id_empleado IS NOT NULL THEN 'empleado'
+                                        ELSE 'otro' END",
+                'id_concepto'  => 'e.id_egreso_concepto',
+                'usuario'      => 'e.created_by',
+                // asiento:si / asiento:no
+                'asiento'      => "CASE WHEN e.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
             ],
             'fecha'    => [ 'fecha' => 'e.fecha_emision', 'fecha_emision' => 'e.fecha_emision' ],
             'numerico' => [
@@ -113,9 +254,20 @@ class EgresoRepository extends BaseRepository
             ],
         ]);
 
-        $sqlCount = "SELECT COUNT(*) FROM egresos_cabecera e 
-                     LEFT JOIN proveedores p ON e.id_proveedor = p.id 
-                     LEFT JOIN empleados emp ON e.id_empleado = emp.id 
+        // Registros propios: sin acceso total, solo los egresos que creó el usuario.
+        // En egresos_cabecera el creador está en created_by (no hay id_usuario). Se
+        // agrega al WHERE compartido, así aplica igual al COUNT y a la consulta.
+        if ($idUsuario !== null) {
+            $where .= " AND e.created_by = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan
+        // p, emp y u.
+        $sqlCount = "SELECT COUNT(*) FROM egresos_cabecera e
+                     LEFT JOIN proveedores p ON e.id_proveedor = p.id
+                     LEFT JOIN empleados emp ON e.id_empleado = emp.id
+                     LEFT JOIN usuarios u ON e.created_by = u.id
                      $where";
         $total = (int) $this->query($sqlCount, $params)->fetchColumn();
 

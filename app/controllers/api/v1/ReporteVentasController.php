@@ -53,8 +53,9 @@ class ReporteVentasController extends ApiBaseController
             'estado' => 'TODOS',
             'buscar_info' => '',
         ];
-        // Alcance del usuario (§6), igual que la web: sin acceso total ('t') el
-        // vendedor vinculado ve su cartera; si no es vendedor, solo lo que registró.
+        // Alcance del usuario (§6), igual que la web: en el nivel 1 sin acceso total
+        // ('t') el vendedor vinculado ve solo lo de su vendedor; si no es vendedor,
+        // solo lo que registró. Los niveles 2 y 3 ven todo.
         $filtros = array_merge($filtros, \App\Helpers\AlcanceRegistros::resolver(
             $this->getPermisos(),
             (int) ($_SESSION['id_usuario'] ?? 0),

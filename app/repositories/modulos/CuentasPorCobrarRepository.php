@@ -195,16 +195,18 @@ class CuentasPorCobrarRepository extends BaseRepository
     // ─────────────────────────────────────────────────────────────────────
     // ALCANCE DEL USUARIO (§6, ver App\Helpers\AlcanceRegistros)
     //
-    // Si el usuario NO tiene acceso total ('t') en el módulo, la cartera se limita:
-    //   - Modo VENDEDOR (`id_vendedor_filtro`): a los documentos de los clientes
-    //     asignados a ese vendedor (`clientes.id_vendedor`) y a los emitidos a su
-    //     nombre (`id_vendedor` del documento). Los saldos iniciales no llevan
-    //     vendedor: entran solo por el cliente.
+    // Si el usuario es de nivel 1 y NO tiene acceso total ('t') en el módulo, la
+    // cartera se limita (los niveles 2 y 3 ven siempre toda la empresa):
+    //   - Modo VENDEDOR (`id_vendedor_filtro`): a los documentos de su vendedor. Manda
+    //     el `id_vendedor` del documento y, si no tiene, el asignado al cliente
+    //     (`clientes.id_vendedor`); los que llevan otro vendedor quedan fuera aunque
+    //     el cliente sea suyo. Los saldos iniciales no llevan vendedor: entran solo
+    //     por el cliente.
     //   - Modo REGISTROS PROPIOS (`id_usuario_filtro`, el usuario no es vendedor):
     //     a los documentos que él registró. Cada fuente guarda al creador en su
     //     propia columna: facturas y recibos en `id_usuario` —la misma que filtran
     //     Factura de Venta y Recibo de Venta— y saldos iniciales en `created_by`.
-    // Lo resuelve el controller desde el permiso y la sesión
+    // Lo resuelve el controller desde el nivel, el permiso y la sesión
     // (CuentasPorCobrarController::alcanceUsuario()) y viaja dentro de los filtros:
     // NUNCA llega del cliente.
     // ─────────────────────────────────────────────────────────────────────
@@ -222,7 +224,9 @@ class CuentasPorCobrarRepository extends BaseRepository
      */
     private function condAlcanceUsuario(array $filtros, string $alias, string $columna, string $ph, array &$params, bool $docTieneVendedor = true): string
     {
-        // Modo VENDEDOR: cartera del asesor = clientes asignados a él + documentos a su nombre.
+        // Modo VENDEDOR: solo lo de su vendedor. Manda el vendedor del documento; si no
+        // tiene (NULL o 0), el asignado al cliente. Los saldos iniciales no llevan
+        // vendedor: entran solo por el cliente.
         $idsVend = \App\Helpers\AlcanceRegistros::idsVendedor($filtros);
         if ($idsVend) {
             $in = [];
@@ -231,12 +235,13 @@ class CuentasPorCobrarRepository extends BaseRepository
                 $params[":{$ph}_v{$i}"] = $id;
             }
             $in = implode(',', $in);
-            $cond = "EXISTS (SELECT 1 FROM clientes {$ph}_c
-                             WHERE {$ph}_c.id = {$alias}.id_cliente AND {$ph}_c.id_vendedor IN ({$in}))";
-            if ($docTieneVendedor) {
-                $cond .= " OR {$alias}.id_vendedor IN ({$in})";
+            $clienteSuyo = "EXISTS (SELECT 1 FROM clientes {$ph}_c
+                                    WHERE {$ph}_c.id = {$alias}.id_cliente AND {$ph}_c.id_vendedor IN ({$in}))";
+            if (!$docTieneVendedor) {
+                return " AND {$clienteSuyo}";
             }
-            return " AND ({$cond})";
+            return " AND ({$alias}.id_vendedor IN ({$in})
+                          OR (COALESCE({$alias}.id_vendedor, 0) = 0 AND {$clienteSuyo}))";
         }
 
         // Modo REGISTROS PROPIOS: el usuario no es vendedor, ve lo que él registró.

@@ -8,21 +8,23 @@ use App\repositories\modulos\VendedorRepository;
 
 /**
  * Alcance de registros por usuario (§6) en los reportes comerciales (Reporte de
- * Ventas, Cuentas por Cobrar): resuelve QUÉ documentos puede ver quien consulta
- * cuando NO tiene el permiso de acceso total ('t') en el módulo.
+ * Ventas, Reporte de Ventas por Vendedor, Cuentas por Cobrar): resuelve QUÉ
+ * documentos puede ver quien consulta cuando es de nivel 1 y NO tiene el permiso
+ * de acceso total ('t') en el módulo.
  *
  * La regla, en orden:
- *   1. Acceso total (o nivel 3, que `Permisos::porRuta()` devuelve siempre con
- *      'todo'): sin restricción, ve toda la empresa.
+ *   1. Nivel 2 (administrador) o 3 (superadministrador), o acceso total: sin
+ *      restricción, ve toda la empresa. El nivel 2 no depende de 't': en estos
+ *      reportes el administrador ve siempre todo, igual que el superadministrador.
  *   2. El usuario es un VENDEDOR (asesor): se resuelve con
  *      `VendedorRepository::getPorUsuario()` — vínculo explícito de la ficha del
  *      vendedor ("Usuario del sistema") o coincidencia de la cédula del usuario
- *      con la identificación del vendedor. Entonces ve su CARTERA: los
- *      documentos de los clientes que tiene asignados (`clientes.id_vendedor`)
- *      y, además, los documentos emitidos a su nombre (`id_vendedor` del
- *      documento), aunque el cliente esté asignado a otro asesor o a ninguno.
- *      En consolidado se resuelve un vendedor por establecimiento (la tabla es
- *      por empresa) y se juntan todos.
+ *      con la identificación del vendedor. Entonces ve SOLO LO DE SU VENDEDOR:
+ *      cada documento es del vendedor que lleva (`id_vendedor` del documento) y,
+ *      si no lleva ninguno, del vendedor asignado a su cliente
+ *      (`clientes.id_vendedor`). Nunca ve documentos a nombre de otro vendedor,
+ *      aunque el cliente sea suyo. En consolidado se resuelve un vendedor por
+ *      establecimiento (la tabla es por empresa) y se juntan todos.
  *   3. Sin vendedor vinculado (un cajero, un digitador): ve solo los documentos
  *      que él mismo registró (`id_usuario` / `created_by`), como el resto de
  *      los módulos del sistema.
@@ -31,6 +33,9 @@ use App\repositories\modulos\VendedorRepository;
  *   - `id_vendedor_filtro`: int[]  (vacío = no aplica)
  *   - `id_usuario_filtro`:  ?int   (null = no aplica)
  * Solo una de las dos está activa a la vez. NUNCA se leen de la petición.
+ *
+ * Un documento "sin vendedor" es `id_vendedor` NULL o 0: los repositorios lo
+ * comparan con COALESCE(id_vendedor, 0) = 0.
  */
 final class AlcanceRegistros
 {
@@ -43,7 +48,7 @@ final class AlcanceRegistros
      */
     public static function resolver(array $perm, int $idUsuario, array $idsEmpresa): array
     {
-        if (!empty($perm['todo']) || $idUsuario <= 0) {
+        if ((int) ($_SESSION['nivel'] ?? 1) >= 2 || !empty($perm['todo']) || $idUsuario <= 0) {
             return self::SIN_RESTRICCION;
         }
 
@@ -81,6 +86,35 @@ final class AlcanceRegistros
     }
 
     /**
+     * Quita el filtro Vendedor de la pantalla a un usuario restringido: su alcance
+     * ya lo limita a su vendedor (o a sus registros), así un id de otro vendedor
+     * enviado a mano no cambia nada, y no se pierden los documentos sin vendedor
+     * de sus clientes, que el filtro por `id_vendedor` del documento dejaría fuera.
+     * Llamar después de agregar el alcance a los filtros.
+     */
+    public static function limpiarFiltroVendedor(array $filtros): array
+    {
+        if (self::restringe($filtros)) {
+            $filtros['id_vendedor'] = '';
+        }
+        return $filtros;
+    }
+
+    /**
+     * Opciones del filtro Vendedor para un usuario restringido: solo su propio
+     * vendedor en la empresa activa (0 o 1 fila con `id` y `nombre`). Quien no es
+     * vendedor no tiene opciones. Sin restricción no se usa: ahí va el catálogo.
+     */
+    public static function vendedorPropio(array $alcance, int $idEmpresa, int $idUsuario): array
+    {
+        if (!self::idsVendedor($alcance)) {
+            return [];
+        }
+        $v = (new VendedorRepository())->getPorUsuario($idEmpresa, $idUsuario);
+        return $v ? [['id' => (int) $v['id'], 'nombre' => (string) $v['nombre']]] : [];
+    }
+
+    /**
      * ¿Un documento ya leído cae dentro del alcance? Para las acciones por id
      * (cobrar, historial, correo…), que sin esto llegarían a un documento que el
      * listado oculta.
@@ -94,10 +128,10 @@ final class AlcanceRegistros
     {
         $idsVend = self::idsVendedor($filtros);
         if ($idsVend) {
+            // Manda el vendedor del documento; solo si no tiene, el de su cliente.
             $vDoc = (int) ($registro['id_vendedor'] ?? 0);
-            $vCli = $idVendedorCliente ?? (int) ($registro['cliente_id_vendedor'] ?? 0);
-            return ($vDoc > 0 && in_array($vDoc, $idsVend, true))
-                || ($vCli > 0 && in_array($vCli, $idsVend, true));
+            $vDueno = $vDoc > 0 ? $vDoc : ($idVendedorCliente ?? (int) ($registro['cliente_id_vendedor'] ?? 0));
+            return $vDueno > 0 && in_array($vDueno, $idsVend, true);
         }
         $idUsuario = self::idUsuario($filtros);
         if ($idUsuario > 0) {

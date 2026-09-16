@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion
-version: 1.14
+version: 1.15
 orden: 45
 estado: activo
 ---
@@ -124,9 +124,11 @@ montarse sobre la tabla.
 
 Cuando la consignación tiene **muchos productos**, el listado continúa en las
 páginas siguientes y **cada página repite la fila de encabezados** (Código,
-Descripción, Bodega, Lote, Caducidad, NUP, Cantidad, Ret, Fact, Acon.).
+Descripción, Bodega, Lote, NUP, Cantidad, Ret, Fact, Acon.).
 *Ret* es lo retornado y *Fact* lo facturado; la columna Descripción ocupa todo
-el ancho que dejan libre las demás. Ninguna fila se parte entre dos hojas, y el TOTAL ÍTEMS, las
+el ancho que dejan libre las demás. La **fecha de caducidad no se imprime** en
+el comprobante aunque la línea la tenga registrada: ese espacio lo aprovecha la
+Descripción. La caducidad sigue visible en el modal del documento. Ninguna fila se parte entre dos hojas, y el TOTAL ÍTEMS, las
 observaciones y las firmas se mantienen completos: si no caben en lo que resta
 de página, pasan enteros a la siguiente.
 
@@ -222,6 +224,9 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.15** — PDF del documento: se quita la columna **Caducidad**; el ancho
+  que se libera lo toma la **Descripción**. La fecha de caducidad se sigue
+  guardando y mostrando en el modal, solo deja de imprimirse.
 - **1.14** — PDF del documento: se quita la columna **Cambio** y las columnas
   *Retorno* y *Facturados* pasan a llamarse **Ret** y **Fact**; el ancho que
   se libera lo toma la **Descripción**, que ahora se lee completa con menos

@@ -6,7 +6,7 @@ ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo
-version: 1.1
+version: 1.2
 orden: 20
 estado: activo
 ---
@@ -66,6 +66,12 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Historial de cambios
 
+- **1.2** — Si la base todavía no tiene los índices de los selectores "Origen" y
+  "Usuario", el módulo ya no abre **más lento** que antes de la versión 1.1: la
+  búsqueda por índice sin su índice releía el kardex una vez por cada usuario
+  (medido: 2,4 s con 300.000 movimientos), y ahora en ese caso se hace una sola
+  pasada. **Requiere ejecutar** `database/20260916_reporte_inventarios_indices_ajuste.sql`,
+  que reemplaza al SQL de la versión 1.1; con él los selectores cargan en ~1 ms.
 - **1.1** — El módulo **abre más rápido**. Los selectores "Origen" y
   "Usuario" del filtro se llenaban recorriendo todos los movimientos de
   kardex de la empresa; ahora se resuelven por índice. **Requiere ejecutar**

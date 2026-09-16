@@ -427,6 +427,25 @@ class CambioProductoCvRepository extends BaseRepository
     }
 
     /**
+     * Lo mismo que sqlEntregadoEnCambios(), pero agrupado por línea de consignación para
+     * MUCHAS líneas a la vez: devuelve (id, total) para las líneas de $idsSubquery (una
+     * subconsulta que lista ids de consignaciones_ventas_detalles). Pensada para cruzarse
+     * con LEFT JOIN en reportes: una subconsulta correlacionada por línea cuesta una
+     * búsqueda por cada fila del reporte (Reporte de Inventarios: ~20.000 por Mostrar).
+     * Mismo criterio que la versión por línea: si cambia uno, cambia el otro.
+     */
+    public static function sqlEntregadoEnCambiosPorLinea(string $idsSubquery): string
+    {
+        return "SELECT cd.id_origen_detalle AS id, SUM(cd.cantidad) AS total
+                FROM cambios_producto_cv_detalles cd
+                INNER JOIN cambios_producto_cv cc ON cc.id = cd.id_cambio
+                WHERE cd.tipo_linea = 'entrega' AND cd.origen_tipo = 'CONSIGNACION'
+                  AND cd.id_origen_detalle IN ($idsSubquery)
+                  AND cd.eliminado = false AND cc.eliminado = false AND cc.estado = 'Emitida'
+                GROUP BY cd.id_origen_detalle";
+    }
+
+    /**
      * Cantidad entregada a cambio por cada línea de UNA consignación (cambios Emitida):
      * [id_consignacion_detalle => cantidad]. Alimenta las columnas "Cambio" del PDF, el
      * Excel y el modal de la consignación (mismo patrón que getRetornadoPorConsignacion).

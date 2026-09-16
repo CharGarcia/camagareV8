@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/reporte_ventas_vendedor
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, subtotal sin impuestos, subtotal nc, total documentos por asesor, cuantas facturas hizo cada vendedor, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor, solo mis ventas, cada asesor ve lo suyo, el vendedor no debe ver las ventas de otros, mis comisiones
-version: 1.5
+etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, subtotal sin impuestos, subtotal nc, total documentos por asesor, cuantas facturas hizo cada vendedor, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor, solo mis ventas, cada asesor ve lo suyo, el vendedor no debe ver las ventas de otros, mis comisiones, acceso total, permiso de ver todos, registros propios, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, filtro vendedor fijo, no ver ventas de otros vendedores
+version: 1.6
 orden: 0
 estado: activo
 ---
@@ -49,9 +49,10 @@ incluye Recibos de Venta.
    ya viene con el **mes en curso** (del 1 al último día del mes); elija *Todos*
    en Año o Mes para ver todo el histórico.
 4. Opcionalmente filtrar por Vendedor (uno específico o "Todos"), Marca,
-   Categoría o Producto (buscador con autocompletado). A los usuarios de
-   **nivel 1 (asesor)** el filtro Vendedor les llega fijo en su propio nombre:
-   solo ven sus ventas (ver *Permisos*).
+   Categoría o Producto (buscador con autocompletado). Estos filtros solo
+   acotan: no cambian qué ventas puede ver cada usuario. A un asesor sin
+   *Acceso total* el filtro Vendedor le aparece fijo en su propio nombre (ver
+   *Quién ve qué*).
 5. Hacer clic en **Aplicar y Generar**.
 6. Exportar a **PDF** o **Excel**, o usar **Correo** para enviar el PDF del
    reporte (con los filtros actuales) a un destinatario.
@@ -133,29 +134,40 @@ en Facturas de Venta y en Cuentas por Cobrar:
 |-------|-------------|---------------|
 | Tipo de Documento | No (por defecto Ventas Netas) | Si se resta la nota de crédito del subtotal de la factura, o se ve cada documento por separado |
 | Agrupar Por | No (por defecto Vendedor) | El nivel de detalle de las filas del reporte |
-| Vendedor | No | Un asesor específico o todos. En los usuarios de nivel 1 no es editable: queda fijo en su propio vendedor |
+| Vendedor | No | Un asesor específico o todos. A un usuario de nivel 1 sin *Acceso total* no le deja elegir: muestra fijo su propio vendedor (o *Sin vendedor vinculado*) |
 | Marca / Categoría / Producto | No | Acotan el reporte a lo vendido de ese producto/marca/categoría |
 | Fecha Desde / Hasta | No | Rango de fechas de emisión a incluir |
 
-## Permisos
+## Quién ve qué: nivel del usuario y permiso de Acceso total
 
 Para entrar al reporte se necesita el permiso de **Ver** (`r`) del submódulo,
-como en cualquier módulo. Lo que cada quien alcanza a ver dentro del reporte,
-en cambio, **lo decide el nivel del usuario**, no el permiso *Acceso total (t)*:
+como en cualquier módulo. Lo que cada quien ve dentro del reporte sigue la
+misma regla que **Reporte de Ventas** y **Cuentas por Cobrar**:
 
-| Nivel | Qué ve |
+| Usuario | Qué ve |
 |---|---|
-| **3 — Superadministrador** | Las ventas de todos los asesores |
-| **2 — Administrador** | Las ventas de todos los asesores |
-| **1 — Usuario (asesor)** | Únicamente las ventas asignadas a su propio vendedor |
+| **Nivel 3 — Superadministrador** | Todas las ventas de la empresa |
+| **Nivel 2 — Administrador** | Todas las ventas de la empresa, tenga o no marcado *Acceso total* |
+| **Nivel 1 con Acceso total** | Todas las ventas de la empresa |
+| **Nivel 1 sin Acceso total, que es vendedor** | **Solo lo de su vendedor**: las ventas que llevan **su nombre** en el campo *Vendedor* y, si una venta no tiene vendedor, las de los **clientes que tiene asignados** (campo *Vendedor* de la ficha del cliente). Nunca las que llevan el nombre de otro vendedor, aunque el cliente sea suyo |
+| **Nivel 1 sin Acceso total, que no es vendedor** (un cajero, un digitador) | Solo los documentos que **él registró** |
 
-Al usuario de nivel 1 se le fuerza el filtro a su propio vendedor en todo el
-módulo —la tabla, las tarjetas de totales, el detalle al hacer clic en una
-fila, el PDF, el Excel y el envío por correo—, comparando contra el campo
-Vendedor de la factura (`ventas_cabecera.id_vendedor`), sin importar qué
-usuario haya facturado o tecleado el documento. El filtro Vendedor se muestra
-fijo (no puede elegir otro) y aparece un aviso explicándolo. Marcarle *Acceso
-total* en `/config/permisos-modulos` **no** cambia esto.
+- La regla se aplica en todo el módulo: la tabla, las tarjetas de totales, el
+  resumen de estados, todas las agrupaciones, el detalle al hacer clic en una
+  fila, el PDF, el Excel y el envío por correo.
+- Las notas de crédito no llevan vendedor: cuentan para el vendedor de la
+  factura que modifican y, si esa factura no tiene vendedor o no se encuentra,
+  para el vendedor asignado al cliente de la nota.
+- **El filtro *Vendedor* queda fijo** para estos usuarios: el vendedor muestra
+  su propio nombre y quien no es vendedor ve *Sin vendedor vinculado*. No
+  pueden elegir otro, y el sistema ignora cualquier otro vendedor que se le
+  envíe.
+- En la vista **Por Vendedor**, un asesor ve su propia fila y, si tiene ventas
+  sin vendedor de sus clientes, la fila *Sin vendedor asignado*. Nunca ve filas
+  de otros vendedores.
+- Para que un asesor vea solo lo suyo, su usuario debe ser de **nivel 1** y
+  **no** tener marcado *Acceso total* en este submódulo (*Configuración →
+  Permisos por módulo*).
 
 **Cómo se sabe qué vendedor es cada usuario.** Por dos vías, en este orden:
 
@@ -172,10 +184,15 @@ total* en `/config/permisos-modulos` **no** cambia esto.
 No se usa el correo a propósito: es común que varios usuarios compartan el
 correo de la empresa y el cruce le entregaría a un asesor las ventas de otro.
 
-Si un usuario de nivel 1 no tiene vendedor por ninguna de las dos vías, el
-reporte sale **vacío** —con un aviso— en vez de mostrarle datos de otros. La
-solución es abrir su vendedor en **Vendedores** y elegirlo en *Usuario del
-sistema* (o corregirle la identificación para que sea su cédula).
+Si un usuario de nivel 1 sin Acceso total no tiene vendedor por ninguna de las
+dos vías, el reporte lo trata como alguien que **no es vendedor** y le muestra
+solo los documentos que él registró. Para que vea las ventas de su vendedor,
+abrir su vendedor en **Vendedores** y elegirlo en *Usuario del sistema* (o
+corregirle la identificación para que sea su cédula).
+
+Para usuarios sin vendedor, una advertencia sobre documentos antiguos: los que
+se **migraron** desde el sistema anterior quedaron a nombre del usuario que
+corrió la migración, así que solo él (o alguien con acceso total) los verá.
 
 ## Reglas de negocio
 
@@ -206,7 +223,10 @@ sistema* (o corregirle la identificación para que sea su cédula).
   misma fórmula de saldo, con corte por fecha y antigüedad de cartera.
 - **Ingresos / Cobros**, **Retenciones en Ventas** y **Notas de Débito**:
   alimentan el saldo pendiente de cada factura.
-- **Vendedores** (`modulos/vendedores`): catálogo de asesores.
+- **Vendedores** (`modulos/vendedores`): catálogo de asesores. Su campo
+  *Usuario del sistema* dice qué vendedor es cada usuario.
+- **Clientes** (`modulos/clientes`): el campo *Vendedor* de la ficha decide a
+  qué asesor corresponden las ventas del cliente que no tienen vendedor.
 - **Facturas de Venta** y **Notas de Crédito** (ventas): fuente de los datos.
 - **Productos, Marcas y Categorías**: catálogos usados para filtrar/agrupar.
 - **Configuración de Correo** de la empresa: usada para el envío del reporte.
@@ -218,18 +238,28 @@ sistema* (o corregirle la identificación para que sea su cédula).
   documento modificado no coincide con ninguna factura de la empresa).
 - **El correo no se envía**: revisar que la empresa tenga configurado el
   correo de envío de documentos en `/config`.
-- **Un asesor no ve ninguna venta (reporte vacío) aunque sí facturó**: si es un
-  usuario de nivel 1, abrir su ficha en **Vendedores** y comprobar que el campo
-  *Usuario del sistema* apunte a su cuenta (o que la identificación sea su
-  cédula), y que las facturas tengan a ese vendedor asignado en el campo
-  Vendedor. Ojo: no basta con que él haya hecho la factura; cuenta el vendedor
-  asignado en el documento.
-- **Un asesor ve las ventas de todos**: revisar el nivel de su usuario en
-  Configuración → Usuarios. Los niveles 2 y 3 ven todo el reporte por
-  definición; para limitarlo a lo suyo, su usuario debe ser de nivel 1.
+- **Un asesor no ve sus ventas**: abrir su ficha en **Vendedores** y comprobar
+  que el campo *Usuario del sistema* apunte a su cuenta (o que la
+  identificación sea su cédula); sin eso el sistema no lo reconoce como
+  vendedor y solo le muestra lo que él registró. Revisar también que las
+  facturas lleven su nombre en el campo Vendedor: una venta a su cliente
+  emitida a nombre de otro vendedor no le aparece.
+- **Un asesor ve las ventas de todos**: revisar dos cosas. El nivel de su
+  usuario en *Configuración → Usuarios* (los niveles 2 y 3 ven todo el reporte)
+  y que no tenga marcado *Acceso total* en este submódulo (*Configuración →
+  Permisos por módulo*).
 
 ## Historial de cambios
 
+- **1.6** — Lo que ve cada usuario sigue ahora la **misma regla que Reporte de
+  Ventas y Cuentas por Cobrar**. Los niveles 2 y 3 siguen viendo todas las
+  ventas. El nivel 1 vuelve a depender del permiso *Acceso total*: con él ve
+  todo; sin él, si es vendedor, ve **solo lo de su vendedor** —las ventas con
+  su nombre y, las que no tienen vendedor, las de sus clientes asignados— y, si
+  no lo es, solo lo que registró. Antes el nivel 1 veía únicamente las facturas
+  con su nombre, aunque tuviera acceso total, y el reporte salía vacío si no
+  tenía vendedor. El filtro Vendedor sigue fijo para estos usuarios. Nueva
+  sección *Quién ve qué*.
 - **1.5** — El reporte abre con el **mes actual** precargado: Año y Mes en
   curso seleccionados y Fecha Desde/Hasta del 1 al último día del mes. Antes
   abría con *Todos* y sin fechas, cargando todo el histórico.
