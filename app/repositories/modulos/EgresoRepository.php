@@ -188,18 +188,20 @@ class EgresoRepository extends BaseRepository
             // Tipo y Estado NO entran en el texto libre; se filtran desde el modal.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
+                    // Rendimiento: monto y fecha solo se comparan si la palabra tiene
+                    // dígitos (ver FiltrosBusqueda::condicionTexto).
                     'e.numero_egreso',                                    // Nº Egreso
                     'e.secuencial',
                     "CONCAT(e.establecimiento,'-',e.punto_emision)",      // Serie
-                    'e.fecha_emision::text',                              // Fecha
                     'p.razon_social',                                     // Beneficiario
                     'emp.nombres_apellidos',
                     'e.beneficiario_nombre',
                     'p.identificacion',                                   // RUC / cédula del beneficiario
                     'emp.identificacion',
                     'e.observaciones',                                    // Observaciones
-                    'e.monto_total::text',                                // Monto
                     'u.nombre',                                           // Usuario que registró
+                    ['sql' => 'e.fecha_emision', 'si' => \App\Helpers\FiltrosBusqueda::SI_DIGITOS], // Fecha
+                    ['sql' => 'e.monto_total', 'si' => \App\Helpers\FiltrosBusqueda::SI_DIGITOS],   // Monto
                     "(SELECT STRING_AGG(d.numero_documento, ' ') FROM egresos_detalle d WHERE d.id_egreso = e.id AND d.eliminado = FALSE)",
                 ],
                 $parsed['texto_libre'],
@@ -262,15 +264,6 @@ class EgresoRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan
-        // p, emp y u.
-        $sqlCount = "SELECT COUNT(*) FROM egresos_cabecera e
-                     LEFT JOIN proveedores p ON e.id_proveedor = p.id
-                     LEFT JOIN empleados emp ON e.id_empleado = emp.id
-                     LEFT JOIN usuarios u ON e.created_by = u.id
-                     $where";
-        $total = (int) $this->query($sqlCount, $params)->fetchColumn();
-
         // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
         // MAPA_ORDEN, con e.id como desempate para que las filas empatadas no bailen
         // entre páginas.
@@ -284,7 +277,27 @@ class EgresoRepository extends BaseRepository
             'e.id DESC'
         );
 
-        $sql = "SELECT e.*,
+        // Rendimiento (2026-09-16): conteo + página en UNA consulta, y los tipos del
+        // detalle (subconsulta por fila) calculados solo para las filas de la página.
+        // Ver App\Helpers\ListadoPaginado.
+        $joins = "LEFT JOIN proveedores p ON e.id_proveedor = p.id
+                LEFT JOIN empleados emp ON e.id_empleado = emp.id
+                LEFT JOIN usuarios u ON e.created_by = u.id
+                LEFT JOIN empresa_opciones_ingreso_egreso ec ON e.id_egreso_concepto = ec.id";
+
+        return \App\Helpers\ListadoPaginado::consultar(
+            fn(string $sql, array $p) => $this->query($sql, $p)->fetchAll(PDO::FETCH_ASSOC),
+            [
+                'tabla'       => 'egresos_cabecera',
+                'alias'       => 'e',
+                'joinsFiltro' => $joins,
+                'joinsFinal'  => $joins,
+                'where'       => $where,
+                'orderBy'     => $orderBy,
+                'perPage'     => $perPage,
+                'conBusqueda' => trim($buscar) !== '',   // sin buscar: forma liviana (ids por índice + COUNT aparte)
+                'offset'      => $offset,
+                'select'      => "e.*,
                        COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, 'N/A') AS sujeto_nombre,
                        COALESCE(p.identificacion, emp.identificacion, '') AS sujeto_ruc,
                        u.nombre AS usuario_nombre,
@@ -294,22 +307,10 @@ class EgresoRepository extends BaseRepository
                            FROM egresos_detalle ed
                            WHERE ed.id_egreso = e.id AND ed.eliminado = FALSE
                            ORDER BY t
-                       ) sub) AS tipos_detalle
-                FROM egresos_cabecera e
-                LEFT JOIN proveedores p ON e.id_proveedor = p.id
-                LEFT JOIN empleados emp ON e.id_empleado = emp.id
-                LEFT JOIN usuarios u ON e.created_by = u.id
-                LEFT JOIN empresa_opciones_ingreso_egreso ec ON e.id_egreso_concepto = ec.id
-                $where
-                $orderBy";
-
-        if ($perPage > 0) {
-            $sql .= " LIMIT $perPage OFFSET $offset";
-        }
-
-        $rows = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
-
-        return ['rows' => $rows, 'total' => $total];
+                       ) sub) AS tipos_detalle",
+            ],
+            $params
+        );
     }
 
     /**
@@ -617,6 +618,9 @@ class EgresoRepository extends BaseRepository
 
     public function getDocumentosPendientesProveedor(int $idProveedor, int $idEmpresa): array
     {
+        // Solo compras que se pueden pagar: ni pendientes de aprobación, ni rechazadas, ni anuladas.
+        $compraPagable = \App\Helpers\TiposComprobanteCompra::sqlCompraPagable('c.estado');
+
         // Calcular acumulado pagado previamente en egresos registrados
         $sql = "WITH pagado AS (
                     SELECT d.tipo_documento, d.id_referencia_documento, SUM(d.monto_pagado) as total_pagado
@@ -658,6 +662,7 @@ class EgresoRepository extends BaseRepository
                   AND c.id_empresa = :id_empresa
                   AND c.eliminado = FALSE
                   AND COALESCE(c.tipo_comprobante, '01') NOT IN ('04','05')
+                  AND {$compraPagable}
                   AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                   AND (c.importe_total + COALESCE(c.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
                 UNION ALL
@@ -842,6 +847,14 @@ class EgresoRepository extends BaseRepository
         }
 
         if ($tipo === 'COMPRA') {
+            // El listado solo ofrece compras que se pueden pagar. Al recalcular el saldo de UN
+            // documento (getSaldoPendienteDocumento, $soloId) no se filtra el estado: el guardado
+            // lo valida aparte con un mensaje claro (EgresoService::validarSaldoDocumentos) y la
+            // edición de un egreso que ya pagaba esa compra debe seguir encontrando su saldo.
+            $filtroPagable = $soloId === null
+                ? ' AND ' . \App\Helpers\TiposComprobanteCompra::sqlCompraPagable('cb.estado')
+                : '';
+
             $filtroBusq = '';
             if ($q !== '') {
                 $filtroBusq = " AND (
@@ -924,6 +937,7 @@ class EgresoRepository extends BaseRepository
                     WHERE cb.id_empresa = :id_empresa
                       AND cb.eliminado = FALSE
                       AND COALESCE(cb.tipo_comprobante, '01') NOT IN ('04','05')
+                      $filtroPagable
                       AND cb.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (cb.importe_total + COALESCE(cb.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
                       $filtroBusq
@@ -1228,6 +1242,20 @@ class EgresoRepository extends BaseRepository
             }
         }
         return 0.0;
+    }
+
+    /**
+     * Estado de una compra de la empresa, para validar si se puede pagar
+     * (EgresoRules::validarCompraPagable). null si no existe o fue eliminada.
+     */
+    public function getEstadoCompra(int $idCompra, int $idEmpresa): ?string
+    {
+        $row = $this->query(
+            "SELECT COALESCE(estado, '') AS estado FROM compras_cabecera
+              WHERE id = :id AND id_empresa = :id_empresa AND eliminado = FALSE",
+            [':id' => $idCompra, ':id_empresa' => $idEmpresa]
+        )->fetch(PDO::FETCH_ASSOC);
+        return $row ? (string) $row['estado'] : null;
     }
 
     public function getUltimoNumeroCheque(int $idFormaPago): ?string

@@ -188,6 +188,8 @@ class FacturaVentaController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q         = trim($_GET['q'] ?? '');
@@ -223,6 +225,10 @@ class FacturaVentaController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario (la búsqueda
+        // siguiente al seguir tecleando, el sondeo del navbar) esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa  = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
@@ -3481,5 +3487,13 @@ class FacturaVentaController extends BaseModuloController
                 <td class="text-center" data-col="estado_pago">' . $estadoPagoBadge . '</td>
                 <td class="text-center pe-3" data-col="estado">' . $estadoBadge . '</td>
               </tr>';
+    }
+
+    /** Libera el candado de la sesión PHP (lectura de $_SESSION sigue disponible). */
+    private function liberarSesion(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
     }
 }

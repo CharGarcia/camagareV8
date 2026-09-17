@@ -93,6 +93,14 @@ class NotaCreditoService
 
             $idNC = $this->repository->insertCabecera($data);
 
+            // La nota de crédito devuelve stock solo si la facturación del establecimiento lo
+            // descuenta: con «La facturación afecta al inventario» apagada, la venta no sacó nada.
+            $invService = new \App\Services\modulos\InventarioService(
+                new \App\repositories\modulos\InventarioRepository(),
+                $this->logService
+            );
+            $devuelveStock = $invService->facturacionAfectaInventario((int) ($data['id_establecimiento'] ?? 0));
+
             foreach ($data['detalles'] as $det) {
                 $det['id_nota_credito'] = $idNC;
                 $idDetalle = $this->repository->insertDetalle($det);
@@ -105,11 +113,7 @@ class NotaCreditoService
                 }
 
                 // Lógica de Inventario: Reintegrar stock si es una NC de Venta
-                if (!empty($det['id_producto']) && !empty($data['id_bodega'])) {
-                    $invService = new \App\Services\modulos\InventarioService(
-                        new \App\repositories\modulos\InventarioRepository(),
-                        $this->logService
-                    );
+                if ($devuelveStock && !empty($det['id_producto']) && !empty($data['id_bodega'])) {
                     $invService->registrarEntradaPorNC([
                         'id_empresa'      => $data['id_empresa'],
                         'id_producto'     => $det['id_producto'],
@@ -307,6 +311,7 @@ class NotaCreditoService
                 $this->logService
             );
             $invService->revertirMovimientosPorReferencia('nota_credito', $id, (int)$data['id_empresa'], (int)$data['id_usuario']);
+            $devuelveStock = $invService->facturacionAfectaInventario((int) ($data['id_establecimiento'] ?? 0));
 
             $this->repository->deleteDetalles($id);
 
@@ -322,7 +327,7 @@ class NotaCreditoService
                 }
 
                 // Registrar nuevos movimientos de inventario
-                if (!empty($det['id_producto']) && !empty($data['id_bodega'])) {
+                if ($devuelveStock && !empty($det['id_producto']) && !empty($data['id_bodega'])) {
                     $invService->registrarEntradaPorNC([
                         'id_empresa'      => $data['id_empresa'],
                         'id_producto'     => $det['id_producto'],

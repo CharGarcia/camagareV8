@@ -56,6 +56,45 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
     .carga-row:hover {
         background-color: rgba(0, 0, 0, .04);
     }
+
+    /* Modal de detalle: no crece con las líneas. El diálogo se queda dentro del alto de
+       la ventana (modal-dialog-scrollable) y la lista de líneas hace su propio scroll
+       vertical con el encabezado fijo. La clase de la lista NO lleva "-scroll": en esta
+       página (app-shell) app.css le forzaría altura 100% y le quitaría el tope. */
+    #ci-modal-detalle .modal-body {
+        display: flex;
+        flex-direction: column;
+    }
+
+    #ci-modal-detalle .ci-det-cuerpo {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    #ci-modal-detalle .ci-det-lineas {
+        flex: 0 1 auto;
+        min-height: 0;
+        max-height: 55vh;
+        overflow: auto;
+    }
+
+    #ci-modal-detalle .ci-det-lineas thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f8f9fa;
+        box-shadow: 0 1px 0 #dee2e6;
+        white-space: nowrap;
+    }
+
+    /* Tablet y móvil: el modal ocupa toda la pantalla y la lista usa todo el alto libre. */
+    @media (max-width: 991.98px) {
+        #ci-modal-detalle .ci-det-lineas {
+            max-height: none;
+        }
+    }
 </style>
 
 <div class="cargas-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -234,9 +273,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                 <h6 class="modal-title fw-bold"><i class="bi bi-upload me-2"></i>Importar carga de inventario</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form id="ci-form-importar">
+            <?php // novalidate: los avisos (p. ej. que falta el archivo) salen con SweetAlert, no con la burbuja del navegador. ?>
+            <form id="ci-form-importar" novalidate>
                 <div class="modal-body">
-                    <div id="ci-importar-msg"></div>
                     <div class="row g-3">
                         <div class="col-md-5">
                             <label class="form-label small fw-bold">Tipo de movimiento</label>
@@ -276,19 +315,26 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
 
 <!-- Modal: Detalle -->
 <div class="modal fade" id="ci-modal-detalle" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
         <div class="modal-content">
             <div class="modal-header py-2">
                 <h6 class="modal-title fw-bold"><i class="bi bi-box-seam me-2"></i>Carga de inventario <span id="ci-det-numero"></span></h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body position-relative">
+            <div class="modal-body p-0 position-relative">
                 <div id="ci-modal-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
                     <div class="spinner-border text-primary mb-2" role="status"></div>
                     <div class="small text-muted">Cargando información de la carga...</div>
                 </div>
-                <div id="ci-detalle-msg"></div>
-                <div id="ci-detalle-cuerpo" class="small text-muted text-center py-4"></div>
+
+                <!-- Barra de acciones del documento -->
+                <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap flex-shrink-0">
+                    <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="CI_exportarDetalle('pdf')" title="Descargar PDF de las líneas"><i class="bi bi-file-earmark-pdf"></i></button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="CI_exportarDetalle('excel')" title="Descargar Excel de las líneas"><i class="bi bi-file-earmark-excel"></i></button>
+                    <span id="ci-det-resumen" class="ms-auto small text-muted"></span>
+                </div>
+
+                <div id="ci-detalle-cuerpo" class="ci-det-cuerpo p-3"></div>
             </div>
             <div class="modal-footer py-2 d-flex justify-content-between">
                 <div>
@@ -314,6 +360,7 @@ const CI_ES_APROBADOR  = <?= !empty($esAprobador) ? 'true' : 'false' ?>;
 const CI_ES_SUPERADMIN = <?= !empty($esSuperAdmin) ? 'true' : 'false' ?>;
 const CI_ID_USUARIO    = <?= (int) ($idUsuarioActual ?? 0) ?>;
 const CI_APROBADORES   = <?= json_encode(array_values($aprobadoresNombres ?? []), JSON_UNESCAPED_UNICODE) ?>;
+const CI_PER_PAGE      = <?= $perPage ?>;
 let CI_currentSort = '<?= $ordenCol ?>';
 let CI_currentDir  = '<?= $ordenDir ?>';
 // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que lee
@@ -322,6 +369,42 @@ let CI_currentSorts = <?= $ordenJson ?? '[]' ?>;
 let CI_currentPage = <?= $page ?>;
 let CI_cargaActual = null;
 let CI_sorter = null;
+
+/** Escapa texto para insertarlo en HTML (también dentro de atributos). */
+const CI_esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Booleano de PostgreSQL tal como llega en el JSON (true, 't' o '1'). */
+const CI_bool = v => v === true || v === 't' || v === '1' || v === 1;
+
+/**
+ * Todos los avisos del módulo van con SweetAlert.
+ * - modalId: si el aviso sale con un modal abierto, se monta dentro de él; montado en
+ *   el body, el foco del modal de Bootstrap no deja escribir en el aviso (p. ej. el
+ *   motivo del rechazo).
+ * - heightAuto:false: la página usa app-shell (html/body al 100% de alto) y
+ *   SweetAlert lo cambiaría mientras el aviso está abierto.
+ */
+function CI_aviso(opciones, modalId = null) {
+    return Swal.fire({
+        confirmButtonText: 'Aceptar',
+        confirmButtonColor: '#0d6efd',
+        cancelButtonText: 'Cancelar',
+        heightAuto: false,
+        target: (modalId && document.getElementById(modalId)) || 'body',
+        ...opciones,
+    });
+}
+
+/** Aviso de "en proceso" (sin botones) mientras corre una petición al servidor. */
+function CI_avisoProceso(titulo, html, modalId = null) {
+    CI_aviso({
+        title: titulo,
+        html: html || '',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+    }, modalId);
+}
 
 /**
  * Refresca el listado por AJAX (búsqueda, orden y paginación) sin recargar la
@@ -339,6 +422,9 @@ window.CI_buscar = async function (p = 1) {
         const resp = await fetch(uri);
         const data = await resp.json();
         if (!data.ok) return;
+        // Si la página quedó vacía (p. ej. al eliminar la única carga de la última
+        // página), se muestra la anterior en vez de "No hay cargas".
+        if (p > 1 && data.total <= (p - 1) * CI_PER_PAGE) return await CI_buscar(p - 1);
         CI_currentPage = p;
         document.getElementById('ci-tbody').innerHTML = data.rows;
         document.getElementById('ci-pagination').innerHTML = data.pagination;
@@ -357,161 +443,264 @@ window.CI_buscar = async function (p = 1) {
 };
 
 function CI_abrirImportar() {
-    document.getElementById('ci-importar-msg').innerHTML = '';
     document.getElementById('ci-form-importar').reset();
-    new bootstrap.Modal(document.getElementById('ci-modal-importar')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('ci-modal-importar')).show();
 }
 
 document.getElementById('ci-form-importar').addEventListener('submit', async function (e) {
     e.preventDefault();
-    const msg = document.getElementById('ci-importar-msg');
-    msg.innerHTML = '';
+    const archivo = this.querySelector('input[name=archivo]').files[0];
+    if (!archivo) {
+        CI_aviso({ icon: 'warning', title: 'Falta el archivo', text: 'Seleccione el archivo Excel con las líneas de la carga.' }, 'ci-modal-importar');
+        return;
+    }
+
     const btn = this.querySelector('button[type=submit]');
     btn.disabled = true;
+    // Mientras el servidor lee el archivo y comprueba cada línea contra los productos y
+    // bodegas de la empresa (con archivos grandes tarda unos segundos).
+    CI_avisoProceso('Cargando archivo…',
+        `Importando <b>${CI_esc(archivo.name)}</b> y comprobando cada línea.<br><span class="small text-muted">No cierre esta ventana.</span>`,
+        'ci-modal-importar');
+
+    let json;
     try {
         const res = await fetch(`${CI_URL}/importarAjax`, { method: 'POST', body: new FormData(this) });
-        const json = await res.json();
-        if (json.ok) {
-            const d = json.data;
-            let extra = '';
-            if (!d.validada) {
-                extra = `<div class="mt-2 small"><strong>Líneas con error (no se podrá aprobar hasta corregir):</strong><ul class="mb-0">${(d.errores || []).map(x => '<li>' + x + '</li>').join('')}</ul></div>`;
-            }
-            const estadoTxt = d.estado === 'aprobada' ? 'aplicada al inventario' : 'creada como pendiente';
-            msg.innerHTML = `<div class="alert alert-${d.validada ? 'success' : 'warning'} py-2 px-3 small mb-0">Carga #${d.numero} ${estadoTxt}.${extra}</div>`;
-            setTimeout(() => window.location.reload(), d.validada ? 1200 : 3000);
-        } else {
-            msg.innerHTML = `<div class="alert alert-danger py-2 px-3 small mb-0">${json.mensaje || 'Error al importar'}</div>`;
-            btn.disabled = false;
-        }
+        json = await res.json();
     } catch (err) {
-        msg.innerHTML = `<div class="alert alert-danger py-2 px-3 small mb-0">Error de conexión con el servidor.</div>`;
+        json = { ok: false, mensaje: 'No se pudo comunicar con el servidor. Intente de nuevo.' };
+    } finally {
         btn.disabled = false;
     }
+
+    if (!json.ok) {
+        CI_aviso({ icon: 'error', title: 'No se pudo importar', text: json.mensaje || json.error || 'Error al importar el archivo.' }, 'ci-modal-importar');
+        return;
+    }
+
+    // La carga ya quedó registrada: se cierra el formulario, se refresca el listado sin
+    // recargar la página (conserva búsqueda, filtros y orden) y se informa el resultado.
+    bootstrap.Modal.getInstance(document.getElementById('ci-modal-importar'))?.hide();
+    CI_buscar(1);
+    const r = await CI_aviso(CI_resultadoImportacion(json.data));
+    if (r.isConfirmed) CI_verDetalle(json.data.id);
 });
+
+/** Opciones del aviso que resume una importación recién registrada. */
+function CI_resultadoImportacion(d) {
+    const n = Number(d.lineas) || 0;
+    const registradas = n === 1 ? 'Se registró 1 línea' : `Se registraron ${n} líneas`;
+    const botones = {
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-list-ul me-1"></i>Ver líneas',
+        cancelButtonText: 'Cerrar',
+    };
+
+    if (!d.validada) {
+        const errores = d.errores || [];
+        return {
+            ...botones,
+            icon: 'warning',
+            title: `Carga #${d.numero} registrada con errores`,
+            width: 640,
+            html: `<div class="text-start small">
+                <p class="mb-2">${errores.length} de ${n} ${n === 1 ? 'línea' : 'líneas'} no ${errores.length === 1 ? 'pasó' : 'pasaron'} la comprobación.
+                    La carga quedó <b>pendiente</b> y no se podrá aprobar hasta corregirlas:</p>
+                <ul class="mb-2 ps-3 text-danger" style="max-height:220px;overflow:auto;">${errores.map(x => `<li>${CI_esc(x)}</li>`).join('')}</ul>
+                <p class="mb-0 text-muted">Las líneas no se editan en el sistema: corrija el archivo (la fila 1 es el encabezado),
+                    elimine esta carga e impórtela de nuevo.</p>
+            </div>`,
+        };
+    }
+    if (d.estado === 'aprobada') {
+        return { ...botones, icon: 'success', title: `Carga #${d.numero} aplicada al inventario`, text: `${registradas} y el stock ya se actualizó.` };
+    }
+    const quien = CI_APROBADORES.length ? ` por ${CI_APROBADORES.join(', ')}` : '';
+    return {
+        ...botones,
+        icon: 'success',
+        title: `Carga #${d.numero} registrada`,
+        text: `${registradas}. Queda pendiente de aprobación${quien}; el stock se actualiza al aprobarla.`,
+    };
+}
 
 async function CI_verDetalle(id) {
     CI_cargaActual = null;
-    document.getElementById('ci-detalle-msg').innerHTML = '';
-    document.getElementById('ci-detalle-cuerpo').innerHTML = '';
+    const cuerpo = document.getElementById('ci-detalle-cuerpo');
+    cuerpo.innerHTML = '';
     document.getElementById('ci-det-numero').textContent = '';
-    ['ci-btn-aprobar', 'ci-btn-rechazar', 'ci-btn-eliminar'].forEach(b => { const el = document.getElementById(b); if (el) el.classList.add('d-none'); });
-    new bootstrap.Modal(document.getElementById('ci-modal-detalle')).show();
-    document.getElementById('ci-modal-loader')?.classList.remove('d-none');
+    document.getElementById('ci-det-resumen').innerHTML = '';
+    ['ci-btn-aprobar', 'ci-btn-rechazar', 'ci-btn-eliminar'].forEach(b => document.getElementById(b)?.classList.add('d-none'));
+    const modalEl = document.getElementById('ci-modal-detalle');
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    const loader = document.getElementById('ci-modal-loader');
+    loader?.classList.remove('d-none');
 
+    let json;
     try {
         const res = await fetch(`${CI_URL}/getDetalleAjax?id=${id}`);
-        const json = await res.json();
-        if (!json.ok) { document.getElementById('ci-detalle-cuerpo').innerHTML = `<div class="text-danger">${json.mensaje}</div>`; return; }
-        const c = json.data;
-        CI_cargaActual = c;
-        document.getElementById('ci-det-numero').textContent = '#' + c.numero;
-
-        const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const validada = c.validada === true || c.validada === 't' || c.validada === '1';
-        let filas = (c.detalle || []).map(d => {
-            const ok = d.linea_valida === true || d.linea_valida === 't' || d.linea_valida === '1';
-            return `<tr>
-                <td>${esc(d.producto_nombre || d.cod_producto_raw || '—')}</td>
-                <td>${esc(d.bodega_nombre || d.cod_bodega_raw || '—')}</td>
-                <td class="text-end">${parseFloat(d.cantidad || 0)}</td>
-                <td class="text-end">$ ${parseFloat(d.costo_unitario || 0).toFixed(2)}</td>
-                <td class="text-center">${ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger" title="' + esc(d.error_linea) + '"></i>'}</td>
-                <td class="text-danger">${ok ? '' : esc(d.error_linea || 'Línea con error')}</td>
-            </tr>`;
-        }).join('');
-
-        // Errores de comprobación de la carga (una línea por fila con problema).
-        // Antes solo se veían al pasar el cursor sobre la X roja; aquí se listan
-        // completos, para que el usuario sepa qué corregir en el archivo.
-        let alertaErrores = '';
-        if (!validada && c.estado === 'pendiente') {
-            const lista = String(c.errores_validacion || '').split('\n').map(s => s.trim()).filter(Boolean);
-            alertaErrores = `<div class="alert alert-warning py-2 px-3 small mb-3">
-                <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>La carga tiene líneas con error y no se puede aprobar.</div>
-                ${lista.length ? `<ul class="mb-1 ps-3">${lista.map(x => '<li>' + esc(x) + '</li>').join('')}</ul>` : ''}
-                <div class="text-muted">Las líneas no se pueden editar aquí: corrija el archivo (código del producto, nombre de la bodega o cantidad), <strong>elimine</strong> esta carga e impórtela de nuevo. El número de fila corresponde al Excel (la fila 1 es el encabezado).</div>
-            </div>`;
-        }
-
-        const estadoTxt = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' }[c.estado] || c.estado;
-        document.getElementById('ci-detalle-cuerpo').innerHTML = `
-            <div class="row g-2 small mb-3">
-                <div class="col-md-3"><div class="text-muted" style="font-size:.65rem;">Fecha</div><div class="fw-bold">${c.fecha ? c.fecha.split('-').reverse().join('-') : '-'}</div></div>
-                <div class="col-md-3"><div class="text-muted" style="font-size:.65rem;">Tipo</div><div class="fw-bold text-capitalize">${esc(c.tipo_movimiento)}</div></div>
-                <div class="col-md-3"><div class="text-muted" style="font-size:.65rem;">Estado</div><div class="fw-bold">${estadoTxt}</div></div>
-                <div class="col-md-3"><div class="text-muted" style="font-size:.65rem;">Comprobada</div><div class="fw-bold ${validada ? 'text-success' : 'text-danger'}">${validada ? 'Sí' : 'No'}</div></div>
-                ${c.observacion ? `<div class="col-12"><div class="text-muted" style="font-size:.65rem;">Observación</div><div>${esc(c.observacion)}</div></div>` : ''}
-                ${c.motivo_rechazo ? `<div class="col-12"><div class="text-muted" style="font-size:.65rem;">Motivo rechazo</div><div class="text-danger">${esc(c.motivo_rechazo)}</div></div>` : ''}
-            </div>
-            ${alertaErrores}
-            <div class="table-responsive">
-                <table class="table table-sm mb-0" style="font-size:.78rem;">
-                    <thead class="table-light"><tr><th>Producto</th><th>Bodega</th><th class="text-end">Cantidad</th><th class="text-end">Costo</th><th class="text-center">OK</th><th>Motivo</th></tr></thead>
-                    <tbody>${filas || '<tr><td colspan="6" class="text-center text-muted">Sin líneas</td></tr>'}</tbody>
-                </table>
-            </div>`;
-
-        // Botones según estado + segregación de funciones.
-        if (c.estado === 'pendiente') {
-            const esCreador = String(c.created_by) === String(CI_ID_USUARIO);
-            const puedeAprobar = CI_ES_APROBADOR && (CI_ES_SUPERADMIN || !esCreador);
-            const btnAp = document.getElementById('ci-btn-aprobar');
-            const btnRe = document.getElementById('ci-btn-rechazar');
-            if (btnAp) {
-                if (puedeAprobar) { btnAp.classList.remove('d-none'); btnAp.disabled = !validada; btnAp.title = validada ? '' : 'La carga tiene líneas con error'; }
-                else btnAp.classList.add('d-none');
-            }
-            if (btnRe) {
-                if (puedeAprobar) btnRe.classList.remove('d-none');
-                else btnRe.classList.add('d-none');
-            }
-            if (!puedeAprobar) {
-                const quien = CI_APROBADORES.length ? CI_APROBADORES.join(', ') : 'un usuario autorizado (configúrelos en Empresa → Inventario)';
-                document.getElementById('ci-detalle-msg').innerHTML = `<div class="alert alert-info py-2 px-3 small mb-2"><i class="bi bi-hourglass-split me-1"></i>Pendiente de aprobación por: <strong>${quien}</strong>.</div>`;
-            }
-        }
-        if (c.estado !== 'aprobada') {
-            const btnEl = document.getElementById('ci-btn-eliminar');
-            if (btnEl) btnEl.classList.remove('d-none');
-        }
+        json = await res.json();
     } catch (err) {
-        document.getElementById('ci-detalle-cuerpo').innerHTML = '<div class="text-danger">Error de conexión.</div>';
+        json = { ok: false, mensaje: 'No se pudo comunicar con el servidor. Intente de nuevo.' };
     } finally {
-        document.getElementById('ci-modal-loader')?.classList.add('d-none');
+        loader?.classList.add('d-none');
     }
+    if (!json.ok) {
+        await CI_aviso({ icon: 'error', title: 'No se pudo abrir la carga', text: json.mensaje || json.error || 'Carga no encontrada.' }, 'ci-modal-detalle');
+        bootstrap.Modal.getInstance(modalEl)?.hide();
+        return;
+    }
+
+    const c = json.data;
+    CI_cargaActual = c;
+    document.getElementById('ci-det-numero').textContent = '#' + c.numero;
+
+    const validada = CI_bool(c.validada);
+    const detalle  = c.detalle || [];
+    const conError = detalle.filter(d => !CI_bool(d.linea_valida)).length;
+    // Segregación de funciones: quien registró la carga no la aprueba (salvo super admin).
+    const esCreador    = String(c.created_by) === String(CI_ID_USUARIO);
+    const puedeAprobar = c.estado === 'pendiente' && CI_ES_APROBADOR && (CI_ES_SUPERADMIN || !esCreador);
+
+    // Resumen junto a los botones de exportar: la lista de líneas hace su propio scroll.
+    document.getElementById('ci-det-resumen').innerHTML = `${detalle.length} ${detalle.length === 1 ? 'línea' : 'líneas'}`
+        + (conError ? ` · <span class="text-danger fw-semibold">${conError} con error</span>` : '');
+
+    // Líneas en el orden del archivo. El motivo lleva la fila del Excel (fila 1 =
+    // encabezado), con la misma numeración de la comprobación al importar.
+    const filas = detalle.map((d, i) => {
+        const ok       = CI_bool(d.linea_valida);
+        const producto = d.producto_nombre || '—';
+        const bodega   = d.bodega_nombre || d.cod_bodega_raw || '—';
+        return `<tr>
+            <td class="ps-2 text-nowrap">${CI_esc(d.producto_codigo || d.cod_producto_raw || '—')}</td>
+            <td class="text-truncate" style="max-width:280px" title="${CI_esc(producto)}">${CI_esc(producto)}</td>
+            <td class="text-truncate" style="max-width:160px" title="${CI_esc(bodega)}">${CI_esc(bodega)}</td>
+            <td class="text-end text-nowrap">${parseFloat(d.cantidad || 0)}</td>
+            <td class="text-end text-nowrap">$ ${parseFloat(d.costo_unitario || 0).toFixed(2)}</td>
+            <td class="text-center">${ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>'}</td>
+            <td class="pe-2 text-danger" style="min-width:220px">${ok ? '' : `Fila ${i + 2}: ${CI_esc(d.error_linea || 'Línea con error')}`}</td>
+        </tr>`;
+    }).join('');
+
+    const campo = (etiqueta, valor, col = 'col-6 col-md-3', claseValor = 'fw-bold') =>
+        `<div class="${col}"><div class="text-muted" style="font-size:.65rem;">${etiqueta}</div><div class="${claseValor}">${valor}</div></div>`;
+    const estadoTxt = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' }[c.estado] || CI_esc(c.estado);
+    const aprobadores = CI_APROBADORES.length ? CI_esc(CI_APROBADORES.join(', ')) : 'un usuario autorizado (configúrelos en el módulo Aprobaciones)';
+
+    cuerpo.innerHTML = `
+        <div class="row g-2 small mb-3 flex-shrink-0">
+            ${campo('Fecha', c.fecha ? CI_esc(c.fecha.split('-').reverse().join('-')) : '-')}
+            ${campo('Tipo', CI_esc(c.tipo_movimiento), undefined, 'fw-bold text-capitalize')}
+            ${campo('Estado', estadoTxt)}
+            ${campo('Comprobada', validada ? 'Sí' : 'No', undefined, `fw-bold ${validada ? 'text-success' : 'text-danger'}`)}
+            ${c.observacion ? campo('Observación', CI_esc(c.observacion), 'col-12', '') : ''}
+            ${c.motivo_rechazo ? campo('Motivo rechazo', CI_esc(c.motivo_rechazo), 'col-12', 'text-danger') : ''}
+            ${c.estado === 'pendiente' && !puedeAprobar ? campo('Pendiente de aprobación por', aprobadores, 'col-12') : ''}
+        </div>
+        ${c.estado === 'pendiente' && !validada ? `<div class="small text-danger mb-2 flex-shrink-0">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>No se puede aprobar mientras haya líneas con error: corrija el archivo,
+            <strong>elimine</strong> esta carga e impórtela de nuevo.
+        </div>` : ''}
+        <div class="ci-det-lineas border rounded-3">
+            <table class="table table-sm table-hover mb-0 align-middle" style="font-size:.78rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-2">Código</th>
+                        <th>Producto</th>
+                        <th>Bodega</th>
+                        <th class="text-end">Cantidad</th>
+                        <th class="text-end">Costo</th>
+                        <th class="text-center">OK</th>
+                        <th class="pe-2">Motivo</th>
+                    </tr>
+                </thead>
+                <tbody>${filas || '<tr><td colspan="7" class="text-center text-muted py-3">Sin líneas</td></tr>'}</tbody>
+            </table>
+        </div>`;
+
+    const btnAp = document.getElementById('ci-btn-aprobar');
+    if (btnAp && puedeAprobar) {
+        btnAp.classList.remove('d-none');
+        btnAp.disabled = !validada;
+        btnAp.title = validada ? '' : 'La carga tiene líneas con error';
+    }
+    if (puedeAprobar) document.getElementById('ci-btn-rechazar')?.classList.remove('d-none');
+    if (c.estado !== 'aprobada') document.getElementById('ci-btn-eliminar')?.classList.remove('d-none');
 }
 
-async function CI_accion(url, body, confirmMsg) {
-    if (confirmMsg && !confirm(confirmMsg)) return;
-    const msg = document.getElementById('ci-detalle-msg');
+/** Botones PDF / Excel del modal: descargan las líneas de la carga abierta. */
+function CI_exportarDetalle(tipo) {
+    if (!CI_cargaActual) {
+        CI_aviso({ icon: 'info', title: 'Espere un momento', text: 'La carga todavía se está abriendo.' }, 'ci-modal-detalle');
+        return;
+    }
+    const accion = tipo === 'pdf' ? 'export-detalle-pdf' : 'export-detalle-excel';
+    window.open(`${CI_URL}/${accion}?id=${CI_cargaActual.id}`, '_blank');
+}
+
+/** Aprobar / rechazar / eliminar: aviso de proceso, resultado y listado al día. */
+async function CI_accion(url, body, textoProceso) {
+    CI_avisoProceso(textoProceso, '', 'ci-modal-detalle');
+    let json;
     try {
         const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-        const json = await res.json();
-        if (json.ok) {
-            msg.innerHTML = `<div class="alert alert-success py-2 px-3 small mb-2">${json.mensaje || 'Listo'}</div>`;
-            setTimeout(() => window.location.reload(), 1000);
-        } else {
-            msg.innerHTML = `<div class="alert alert-danger py-2 px-3 small mb-2">${json.mensaje}</div>`;
-        }
+        json = await res.json();
     } catch (err) {
-        msg.innerHTML = `<div class="alert alert-danger py-2 px-3 small mb-2">Error de conexión.</div>`;
+        json = { ok: false, mensaje: 'No se pudo comunicar con el servidor. Intente de nuevo.' };
     }
+    if (!json.ok) {
+        CI_aviso({ icon: 'error', title: 'No se pudo completar', text: json.mensaje || json.error || 'Error al procesar la carga.' }, 'ci-modal-detalle');
+        return;
+    }
+    bootstrap.Modal.getInstance(document.getElementById('ci-modal-detalle'))?.hide();
+    CI_buscar(CI_currentPage);
+    CI_aviso({ icon: 'success', titleText: json.mensaje || 'Listo' });
 }
 
-function CI_aprobar() {
+async function CI_aprobar() {
     if (!CI_cargaActual) return;
-    CI_accion(`${CI_URL}/aprobarAjax`, `id=${CI_cargaActual.id}`, '¿Aprobar esta carga? Se aplicará al inventario.');
+    const r = await CI_aviso({
+        icon: 'question',
+        title: `¿Aprobar la carga #${CI_cargaActual.numero}?`,
+        text: 'Se aplicará al inventario y el stock se actualizará.',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, aprobar',
+        confirmButtonColor: '#198754',
+    }, 'ci-modal-detalle');
+    if (!r.isConfirmed) return;
+    CI_accion(`${CI_URL}/aprobarAjax`, `id=${CI_cargaActual.id}`, 'Aplicando la carga al inventario…');
 }
-function CI_rechazar() {
+
+async function CI_rechazar() {
     if (!CI_cargaActual) return;
-    const motivo = prompt('Motivo del rechazo:');
-    if (!motivo) return;
-    CI_accion(`${CI_URL}/rechazarAjax`, `id=${CI_cargaActual.id}&motivo=${encodeURIComponent(motivo)}`);
+    const r = await CI_aviso({
+        icon: 'warning',
+        title: `Rechazar la carga #${CI_cargaActual.numero}`,
+        input: 'textarea',
+        inputLabel: 'Motivo del rechazo',
+        inputPlaceholder: 'Escriba el motivo…',
+        showCancelButton: true,
+        confirmButtonText: 'Rechazar',
+        confirmButtonColor: '#dc3545',
+        inputValidator: v => (!v || !v.trim()) ? 'Indique el motivo del rechazo.' : undefined,
+    }, 'ci-modal-detalle');
+    if (!r.isConfirmed) return;
+    CI_accion(`${CI_URL}/rechazarAjax`, `id=${CI_cargaActual.id}&motivo=${encodeURIComponent(r.value.trim())}`, 'Rechazando la carga…');
 }
-function CI_eliminar() {
+
+async function CI_eliminar() {
     if (!CI_cargaActual) return;
-    CI_accion(`${CI_URL}/eliminarAjax`, `id=${CI_cargaActual.id}`, '¿Eliminar esta carga?');
+    const r = await CI_aviso({
+        icon: 'warning',
+        title: `¿Eliminar la carga #${CI_cargaActual.numero}?`,
+        text: 'Dejará de aparecer en el listado. No afecta el stock porque no fue aprobada.',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        confirmButtonColor: '#dc3545',
+    }, 'ci-modal-detalle');
+    if (!r.isConfirmed) return;
+    CI_accion(`${CI_URL}/eliminarAjax`, `id=${CI_cargaActual.id}`, 'Eliminando la carga…');
 }
 
 // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3

@@ -68,6 +68,18 @@ final class TiposComprobanteCompra
         return "UPPER(TRIM(COALESCE({$colEstado}, ''))) NOT IN (" . self::lista(self::ESTADOS_COMPRA_SIN_DEUDA) . ")";
     }
 
+    /**
+     * Fragmento SQL (sin AND): la compra se puede PAGAR — es deuda vigente y ya no espera
+     * aprobación. Una pendiente de aprobación sigue siendo deuda (CxP la muestra), pero no se
+     * paga hasta aprobarla (la aprobación genera su pago automático, si corresponde).
+     */
+    public static function sqlCompraPagable(string $colEstado): string
+    {
+        return self::sqlCompraVigente($colEstado)
+            . " AND UPPER(TRIM(COALESCE({$colEstado}, ''))) <> '"
+            . strtoupper(\App\Services\modulos\ComprasService::ESTADO_PENDIENTE) . "'";
+    }
+
     /** Fragmento SQL (sin AND): la liquidación de compra es deuda vigente. */
     public static function sqlLiquidacionVigente(string $colEstado): string
     {

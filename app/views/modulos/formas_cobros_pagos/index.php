@@ -59,6 +59,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                     'nombre' => 'Nombre',
                     'tipo' => 'Tipo',
                     'aplica_en' => 'Aplica en',
+                    'orden' => 'Orden',
+                    'mostrar_saldo' => 'Saldo',
                     'banco_cuenta' => 'Banco / Cuenta',
                     'cuenta_cobro' => 'Cta. Contable (Cobros)',
                     'cuenta_pago' => 'Cta. Contable (Pagos)',
@@ -91,19 +93,22 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                 <thead class="table-light">
                     <tr>
                         <?php
-                        $renderHeader = function($key, $label, $center = false) use ($ordenCol, $ordenDir) {
+                        $renderHeader = function($key, $label, $center = false, $title = '') use ($ordenCol, $ordenDir) {
                             $isCur = ($ordenCol === $key);
                             $icon = 'bi-arrow-down-up small text-muted';
                             if ($isCur) {
                                 $icon = (strtoupper($ordenDir) === 'ASC') ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary';
                             }
                             $cls = $center ? 'text-center' : '';
-                            echo '<th class="ps-3 py-2 sortable-header ' . $cls . '" style="cursor:pointer;" data-col="' . $key . '" onclick="FP_sort(\'' . $key . '\')">' . $label . ' <i class="bi ' . $icon . ' ms-1"></i></th>';
+                            $attrTitle = $title !== '' ? ' title="' . htmlspecialchars($title) . '"' : '';
+                            echo '<th class="ps-3 py-2 sortable-header ' . $cls . '" style="cursor:pointer;" data-col="' . $key . '"' . $attrTitle . ' onclick="FP_sort(\'' . $key . '\')">' . $label . ' <i class="bi ' . $icon . ' ms-1"></i></th>';
                         };
                         ?>
                         <?php $renderHeader('nombre', 'Nombre'); ?>
                         <?php $renderHeader('tipo', 'Tipo'); ?>
                         <?php $renderHeader('aplica_en', 'Aplica en'); ?>
+                        <?php $renderHeader('orden', 'Orden', true, 'Posición en la lista de formas al registrar Ingresos y Egresos (vacío = al final, por nombre)'); ?>
+                        <?php $renderHeader('mostrar_saldo', 'Saldo', true, 'Si Ingresos y Egresos muestran el saldo de la forma junto a su nombre'); ?>
                         <th data-col="banco_cuenta">Banco / Cuenta</th>
                         <th data-col="cuenta_cobro" title="Cuenta con la que se contabiliza un COBRO por esta forma (Configuración Contable → Cobros)">Cta. Contable (Cobros)</th>
                         <th data-col="cuenta_pago" title="Cuenta con la que se contabiliza un PAGO por esta forma (Configuración Contable → Pagos)">Cta. Contable (Pagos)</th>
@@ -133,7 +138,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                     };
                     ?>
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-credit-card-2-front fs-2 d-block mb-2"></i> No se encontraron formas de pago.</td></tr>
+                        <tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-credit-card-2-front fs-2 d-block mb-2"></i> No se encontraron formas de pago.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): 
                             $tipoCls = match($r['tipo']) {
@@ -156,6 +161,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                                 <td class="ps-3 fw-medium" data-col="nombre"><?= htmlspecialchars($r['nombre']) ?></td>
                                 <td data-col="tipo"><span class="badge <?= $tipoCls ?> bg-opacity-10 <?= $r['tipo']==='TARJETA'?'text-dark':'text-'.$tipoCls ?> border"><?= $r['tipo'] ?></span></td>
                                 <td data-col="aplica_en"><span class="badge bg-light text-dark border"><?= $r['aplica_en'] ?></span></td>
+                                <td class="text-center" data-col="orden">
+                                    <?php if (isset($r['orden'])): ?>
+                                        <?= (int) $r['orden'] ?>
+                                    <?php else: ?>
+                                        <span class="text-muted">-</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-center" data-col="mostrar_saldo">
+                                    <?php if (!array_key_exists('mostrar_saldo', $r) || !empty($r['mostrar_saldo'])): ?>
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success"><i class="bi bi-eye me-1"></i>Visible</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border"><i class="bi bi-eye-slash me-1"></i>Oculto</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="small" data-col="banco_cuenta">
                                     <?php if ($r['tipo'] === 'BANCO'): ?>
                                         <strong><?= htmlspecialchars($r['banco_nombre'] ?? '-') ?></strong><br>

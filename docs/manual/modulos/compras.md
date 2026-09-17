@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, buscar compra, buscador, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos
-version: 2.12
+version: 2.14
 orden: 20
 estado: activo
 ---
@@ -322,6 +322,13 @@ cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el
 texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo
 girando** al final del cuadro y la tabla se ve atenuada.
 
+**Montos y fechas.** Las fechas y los montos solo se comparan cuando lo escrito
+tiene números. El **saldo** se busca cuando se escribe un monto con decimales
+(`34.78` o `34,78`, con punto o con coma): calcularlo es lo más costoso de la
+búsqueda y así escribir un nombre o un producto responde mucho más rápido. Para
+buscar compras con un saldo aproximado, use el rango *Saldo pendiente* de la
+ventana de filtros.
+
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
 hasta ese momento. La ventana solo se cierra con la X, Cancelar, Aplicar o
@@ -425,6 +432,11 @@ los de *Contabilidad → Asientos Contables* (ver la sección anterior).
   primero (por el correo o desde el listado).
 - **"No puede aprobar una compra que usted mismo registró"**: la autorización
   tiene que darla otra persona. Es intencional.
+- **Aprobé una factura del SRI y no se generó el pago**: el aviso al aprobar
+  dice por qué (proveedor sin pago automático o con retenciones configuradas,
+  saldo fuera del rango, ya tenía pago, sin saldo o un error como un período
+  cerrado). Páguela desde la pestaña *Pagos* o con *Generar pagos pendientes* del
+  proveedor.
 - **La compra no generó asiento contable**: si está pendiente de aprobación, el
   asiento se genera al aprobarla, no al registrarla.
 - **"No se puede registrar el asiento: la fecha ... corresponde a un período
@@ -459,9 +471,10 @@ Dos cosas que conviene tener claras:
 - La aprobación aplica **a toda compra nueva**, tanto la que se captura a mano
   como la que entra por la **descarga del SRI**. Cuando se registra un lote de
   comprobantes, los aprobadores reciben **un solo correo** con la lista de todas
-  las que quedaron pendientes, no uno por documento. Además, una compra del SRI
-  que quede pendiente **no genera su pago automático**: el egreso se registra
-  cuando se apruebe.
+  las que quedaron pendientes, no uno por documento. Además, una factura del SRI
+  que quede pendiente **no genera su pago automático al descargarse**: si el
+  proveedor lo tiene configurado, el egreso se genera **al aprobarla** (ver
+  *Pago automático al aprobar*).
 - Quedan fuera los **documentos históricos**: las compras que vienen de una
   migración o de una importación de datos antiguos entran como registradas. Son
   operaciones que ya ocurrieron; ponerlas a esperar aprobación las dejaría sin
@@ -469,8 +482,45 @@ Dos cosas que conviene tener claras:
 - Si en Aprobaciones se configuró un **monto mínimo**, las compras por debajo de
   ese valor se registran directamente, sin pedir autorización.
 
+### Pago automático al aprobar
+
+Al aprobar una **factura descargada del SRI**, el sistema genera el pago que
+habría hecho al descargarla si la aprobación no la hubiera detenido. Aplica lo
+mismo desde el modal que desde el enlace del correo, y usa la configuración de
+pago automático del proveedor (ver *Proveedores → Pago automático de las
+compras*):
+
+- Se paga el **saldo** de la factura en el momento de aprobarla: si mientras
+  esperaba llegó una nota de crédito, se descuenta.
+- El egreso lleva la **fecha de la factura**, igual que en la descarga.
+- **No se genera** si el proveedor no tiene pago automático, tiene retenciones
+  configuradas, el saldo queda fuera de su rango de monto, la factura ya tiene
+  un pago o no le queda saldo. Al aprobar aparece el motivo.
+- Si el pago falla (por ejemplo, un período contable cerrado), la compra **queda
+  aprobada igual** y el aviso lo indica; se paga a mano o con *Generar pagos
+  pendientes* del proveedor.
+- Las compras **registradas a mano** y las **liquidaciones de compra** no
+  generan pago automático al aprobarlas, igual que no lo generan al registrarse.
+
+Mientras la compra está pendiente, *Generar pagos pendientes* del proveedor
+tampoco la incluye. Si dos aprobadores la aprueban a la vez, solo una de las
+aprobaciones pasa, así que no se paga dos veces.
+
 ## Historial de cambios
 
+- **2.14** — **Pago automático al aprobar**: al aprobar una factura descargada
+  del SRI se genera su pago automático, por el saldo de la factura y con la
+  configuración del proveedor; antes no se generaba y había que pagarla a mano.
+  *Generar pagos pendientes* ya no incluye compras pendientes de aprobación, y
+  una misma compra ya no puede aprobarse dos veces a la vez. Nueva sección
+  *Pago automático al aprobar*.
+
+- **2.13** — **Búsqueda del listado más rápida**: el conteo y la página salen de
+  una sola consulta, los pagos, notas de crédito y retenciones se calculan solo
+  para las 20 compras visibles (antes, para todas las de la empresa), y el saldo
+  solo se busca cuando se escribe un monto con decimales. Los montos escritos con
+  coma decimal (`34,78`) ahora sí se encuentran. Corregido: una compra de un tipo
+  de comprobante repetido en el catálogo (código 52) salía dos veces en el listado.
 - **2.12** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas de la compra (incluidos IVA, saldo
   y los productos comprados), salvo Tipo, Sustento, Pago y Estado. Los filtros

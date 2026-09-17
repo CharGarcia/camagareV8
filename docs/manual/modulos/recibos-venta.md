@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento
-version: 1.8
+version: 1.10
 orden: 35
 estado: activo
 ---
@@ -156,6 +156,14 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.10** — Con **"La facturación afecta al inventario"** apagado en Empresa, el
+  recibo ya no descuenta stock (lo hacía igual por un error al leer la opción). Con
+  **"Obligatorio usar Lotes"** apagado, la línea sin lote toma el lote que vence primero.
+- **1.9** — **Búsqueda del listado más rápida**: el conteo y la página salen
+  de una sola consulta y el total cobrado se calcula solo para los 20 recibos visibles (antes, para todos los de la empresa en cada carga). Las fechas y los montos solo se comparan
+  cuando lo escrito tiene números, así que buscar un nombre o un producto responde
+  antes. Si se sigue escribiendo, la búsqueda anterior se cancela. Los resultados
+  son los mismos que antes.
 - **1.8** — Nuevo **buscador del listado**: la búsqueda libre recorre todas las
   columnas (incluido el IVA), la factura generada y los productos del recibo; el
   botón del embudo abre la ventana de filtros con pestañas *Recibo* y *Detalles*,

@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
-version: 2.3
+version: 2.4
 orden: 10
 estado: activo
 ---
@@ -73,6 +73,12 @@ Se omite, y queda anotado en el historial de la descarga, si la forma de pago fu
 desactivada, si el proveedor tiene retenciones configuradas (aún no existe la
 retención, así que pagar el total sería incorrecto), si el monto queda fuera del
 rango, o si falta concepto de egreso o punto de emisión activo.
+
+Si la empresa exige **aprobar las compras**, la factura queda pendiente y no se
+paga al descargarla: el egreso se genera **al aprobarla**, con las mismas
+condiciones, pero por el **saldo** de la factura en ese momento (descuenta las
+notas de crédito que hayan llegado mientras esperaba). El motivo, si se omite,
+aparece al aprobar. Ver *Compras → Pago automático al aprobar*.
 
 ### Pago con cheque
 
@@ -391,6 +397,9 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 - **No se generó el pago automático de una compra**: revise el historial de la
   descarga del SRI; ahí queda escrito el motivo (forma de pago inactiva,
   retenciones configuradas, monto fuera de rango, falta de concepto de egreso).
+  Si la compra esperó aprobación, el motivo aparece al aprobarla.
+- **"Generar pagos pendientes" no incluye una factura**: si está pendiente de
+  aprobación, no se paga hasta aprobarla; al aprobarla se genera su pago.
 - **El botón "Generar pagos pendientes" no aparece**: el proveedor aún no está
   guardado, no tiene forma de pago predeterminada, o usted no tiene permiso para
   crear egresos.
@@ -412,6 +421,9 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.4** — El **pago automático** se genera también al **aprobar** una factura
+  del SRI que quedó pendiente de aprobación, por su saldo en ese momento.
+  *Generar pagos pendientes* ya no incluye facturas pendientes de aprobación.
 - **2.3** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas del listado y en el número de
   cuenta bancaria, salvo Tipo Id., Tipo Empresa, Rela. SRI y Estado (escribir

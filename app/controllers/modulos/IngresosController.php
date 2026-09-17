@@ -88,17 +88,10 @@ class IngresosController extends BaseModuloController
         $seriesFiltro   = $this->repository->getSeriesDistintas($idEmpresa);
         $usuariosFiltro = $this->repository->getUsuariosConIngresos($idEmpresa);
 
-        $formasCobro = $this->service->getFormasCobro($idEmpresa);
-
-        // Saldo actual de cada forma (anticipos se resuelven por cliente vía AJAX)
-        $fpRepo = new \App\repositories\modulos\FormaPagoRepository();
-        $saldosFormas = (new \App\Services\modulos\FormaPagoService($fpRepo))->getSaldosActuales($idEmpresa);
-        foreach ($formasCobro as &$fc) {
-            $esAnt = (($fc['tipo'] ?? '') === 'ANTICIPO');
-            $fc['es_anticipo'] = $esAnt;
-            $fc['saldo']       = $esAnt ? null : (float)($saldosFormas[(int)$fc['id']] ?? 0);
-        }
-        unset($fc);
+        // Formas de cobro en el "Orden" de Formas de Cobro y Pago, con su saldo solo si la forma
+        // tiene "Mostrar saldo" (el de un anticipo se consulta por cliente vía AJAX).
+        $formasCobro = (new \App\Services\modulos\FormaPagoService(new \App\repositories\modulos\FormaPagoRepository()))
+            ->getFormasConSaldo($idEmpresa, 'INGRESO');
 
         $conceptos   = $this->service->getConceptosIngreso($idEmpresa);
 
@@ -293,6 +286,9 @@ class IngresosController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa  = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
@@ -453,6 +449,9 @@ class IngresosController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q         = trim($_GET['q'] ?? '');
@@ -1204,5 +1203,13 @@ class IngresosController extends BaseModuloController
             return trim(preg_replace('/\s+/', ' ', (string) num_letras(number_format($monto, 2, '.', ''))));
         }
         return number_format($monto, 2);
+    }
+
+    /** Libera el candado de la sesión PHP (lectura de $_SESSION sigue disponible). */
+    private function liberarSesion(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
     }
 }

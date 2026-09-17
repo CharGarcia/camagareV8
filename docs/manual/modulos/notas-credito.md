@@ -6,7 +6,7 @@ ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips
-version: 1.8
+version: 1.10
 orden: 30
 estado: activo
 ---
@@ -78,7 +78,10 @@ mal, hay que gestionarlo como cualquier comprobante autorizado erróneo.
 ## Efecto en el inventario y la cartera
 
 Una nota de crédito por devolución **devuelve la mercadería al inventario** y
-reduce el saldo por cobrar de esa factura.
+reduce el saldo por cobrar de esa factura. La devolución de stock ocurre solo si el
+establecimiento tiene activado **"La facturación afecta al inventario"** (Empresa →
+Facturación): con esa opción apagada la venta no descontó nada, así que tampoco hay
+nada que devolver.
 
 ## Exportar el documento
 
@@ -174,6 +177,14 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.10** — La nota de crédito devuelve stock solo si **"La facturación afecta al
+  inventario"** está activada en el establecimiento, igual que la factura lo descuenta
+  solo en ese caso.
+- **1.9** — **Búsqueda del listado más rápida**: el conteo y la página salen
+  de una sola consulta y la condición de búsqueda se evalúa una sola vez (antes, dos: una para contar y otra para la página). Las fechas y los montos solo se comparan
+  cuando lo escrito tiene números, así que buscar un nombre o un producto responde
+  antes. Si se sigue escribiendo, la búsqueda anterior se cancela. Los resultados
+  son los mismos que antes.
 - **1.8** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas de la nota (y en autorización,
   clave de acceso, observaciones y productos), salvo Correo y Estado. Los

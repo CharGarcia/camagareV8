@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura
-version: 1.9
+etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar
+version: 1.12
 orden: 47
 estado: activo
 ---
@@ -31,10 +31,24 @@ factura de venta. Sirve para:
 
 El saldo facturable de cada línea es
 `consignado − retornado − facturado − entregado a cambio`, y solo descuenta
-documentos ya **facturados**: un borrador no reserva saldo. Lo *entregado a
-cambio* es lo que el cliente se quedó como reposición en un
-[Cambio de productos](modulos/cambio-producto-cv): ya es suyo y no se factura
-por aquí.
+documentos ya **facturados**: un borrador no reserva saldo.
+
+**Registros de cambios de productos.** Cuando un
+[Cambio de productos](modulos/cambio-producto-cv) entrega al cliente una unidad
+que tenía en consignación, el sistema crea aquí, solo, un documento
+**Facturada** con la **factura de venta** de la unidad que el cliente devolvió.
+Se reconoce por la etiqueta **Cambio** junto al estado y por el aviso del modal:
+
+- no genera factura nueva ni modifica la factura original;
+- no reingresa inventario ni tiene asiento propio (los lleva el cambio);
+- tiene su propio número de esta serie y sus observaciones dicen de qué cambio
+  viene;
+- es de **solo lectura**: no se edita, duplica ni elimina aquí. Si el cambio
+  pasa a borrador, se anula o se elimina, este documento queda **Anulado**.
+
+Esa unidad cuenta como **facturada** en el saldo de la consignación. El
+*entregado a cambio* de la fórmula solo queda para cambios anteriores a estos
+registros.
 
 ## Requisitos previos
 
@@ -207,7 +221,12 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 - **Consignaciones de venta**: la pestaña *Facturación* del modal de la
   consignación muestra estos documentos como historial de solo lectura.
 - Si la factura de venta se **anula o elimina**, el sistema deshace el reingreso,
-  anula el asiento, deja este documento en **Anulada** y libera el saldo.
+  anula el asiento, deja este documento en **Anulada** y libera el saldo. Los
+  registros de cambios de productos que apuntan a esa misma factura **no** se
+  tocan: se gestionan desde su cambio.
+- **Cambios de productos**: crea y anula los documentos con etiqueta *Cambio*
+  (ver *Qué es y para qué sirve*). La sincronización de asientos y Auditoría
+  contable no los tratan como documentos sin asiento.
 
 ## Errores frecuentes
 
@@ -234,6 +253,21 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.12** — **Generar factura** reingresa la mercadería a la bodega solo si
+  **"La facturación afecta al inventario"** está activada en el establecimiento, que es
+  cuando la factura la vuelve a descontar. Con la opción apagada no se hace ninguno de
+  los dos movimientos y el stock queda como lo dejó la consignación.
+- **1.11** — Guardar el borrador y **Generar factura** son más rápidos. El número
+  de la serie se calcula sin comparar cada documento con todos los demás (con unos
+  pocos miles de documentos en el punto de emisión podía tardar cerca de un
+  segundo, y lo mismo al abrir el formulario), y la salida de inventario de la
+  factura ya no carga la ficha completa de cada producto. Los números y los
+  movimientos que se generan son los mismos.
+- **1.10** — Documentos generados por **Cambios de productos**: lo que un cambio
+  entrega desde consignación aparece aquí como *Facturada* con la factura de
+  venta de lo devuelto, etiqueta **Cambio**, número propio de la serie y solo
+  lectura (sin duplicar ni eliminar). No generan factura, inventario ni asiento, y
+  anular la factura original no los revierte.
 - **1.9** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas del documento y además en el
   vendedor, el usuario, la información adicional, los productos facturados

@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips
-version: 1.5
+version: 1.6
 orden: 40
 estado: activo
 ---
@@ -146,6 +146,11 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.6** — **Búsqueda del listado más rápida**: el conteo y la página salen
+  de una sola consulta y la condición de búsqueda se evalúa una sola vez (antes, dos: una para contar y otra para la página). Las fechas y los montos solo se comparan
+  cuando lo escrito tiene números, así que buscar un nombre o un producto responde
+  antes. Si se sigue escribiendo, la búsqueda anterior se cancela. Los resultados
+  son los mismos que antes.
 - **1.5** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias; lo que
   se escribe se busca en las columnas de la liquidación (y en autorización, clave de
   acceso, observaciones y productos), salvo Correo y Estado. Los filtros pasan a una

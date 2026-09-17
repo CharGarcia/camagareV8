@@ -112,7 +112,7 @@ class ReporteRestauranteRepository extends BaseRepository
 
     /**
      * Formas de cobro de la empresa, para el filtro. Mismo criterio que
-     * IngresoRepository::getFormasCobro(): son las que pueden recibir dinero.
+     * FormaPagoRepository::getFormasFiltradas(..., 'INGRESO'): son las que pueden recibir dinero.
      */
     public function getFormasPago(int $idEmpresa): array
     {

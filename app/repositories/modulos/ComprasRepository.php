@@ -133,22 +133,28 @@ class ComprasRepository extends BaseRepository
         // columnas de clasificación y de estado NO entran en el texto libre — Tipo,
         // Sustento, Pago y Estado se filtran solo desde el modal de filtros.
         if ($textoLibre !== '') {
+            // Rendimiento: las columnas numéricas solo se evalúan si la palabra tiene
+            // dígitos, y el SALDO (tres subconsultas por fila, lo más caro de todo) solo
+            // si la palabra parece un monto con decimales. Buscar "garcia" ya no calcula
+            // el saldo de cada compra de la empresa. Ver FiltrosBusqueda::condicionTexto.
+            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
+            $decimal = \App\Helpers\FiltrosBusqueda::SI_DECIMAL;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     "CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)", // N° Comprobante
                     'c.secuencial_prov',
-                    'c.fecha_emision::text',                                                        // Fecha
                     'p.razon_social',                                                               // Proveedor
                     'p.identificacion',                                                             // RUC
-                    'c.total_sin_impuestos::text',                                                  // Subtotal
-                    "$ivaCalc::text",                                                               // IVA
-                    'c.importe_total::text',                                                        // Total
-                    "ROUND($saldo, 2)::text",                                                       // Saldo
                     // Fuera del listado, pero identifican la compra:
                     'c.numero_autorizacion',
                     'c.observaciones',
                     'u.nombre',
                     'c.documento_modificado',
+                    ['sql' => 'c.fecha_emision', 'si' => $digitos],                                 // Fecha
+                    ['sql' => 'c.total_sin_impuestos', 'si' => $digitos],                           // Subtotal
+                    ['sql' => $ivaCalc, 'si' => $digitos],                                          // IVA
+                    ['sql' => 'c.importe_total', 'si' => $digitos],                                 // Total
+                    ['sql' => "ROUND($saldo, 2)", 'si' => $decimal],                                // Saldo (caro)
                     "(SELECT STRING_AGG(CONCAT_WS(' ', cd.codigo_principal, cd.codigo_auxiliar, cd.descripcion), ' ') FROM compras_detalle cd WHERE cd.id_compra = c.id)",
                 ],
                 $textoLibre,
@@ -252,27 +258,6 @@ class ComprasRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        // El COUNT solo arma los JOIN que el WHERE realmente referencia. Los de
-        // usuarios y sustento_tributario cuelgan de la PK de su tabla, así que
-        // son 1:1 como máximo y quitarlos NO cambia el total: solo se agregan
-        // cuando el buscador usa los filtros "usuario:" o "sustento:", que son
-        // los únicos que mencionan esos alias. El INNER JOIN con proveedores sí
-        // se queda siempre porque descarta las compras sin proveedor válido y
-        // por lo tanto sí afecta al conteo.
-        $joinsCount = "INNER JOIN proveedores p ON c.id_proveedor = p.id";
-        if (str_contains($where, 'u.nombre')) {
-            $joinsCount .= " LEFT JOIN usuarios u ON c.created_by = u.id";
-        }
-        if (str_contains($where, 'st.nombre')) {
-            $joinsCount .= " LEFT JOIN sustento_tributario st ON c.id_sustento_tributario = st.id";
-        }
-
-        $sqlCount = "SELECT COUNT(*)
-                     FROM compras_cabecera c
-                     $joinsCount
-                     $where";
-        $total = $this->query($sqlCount, $params)->fetchColumn();
-
         // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
         // MAPA_ORDEN: lo único que puede llegar al ORDER BY sale de ahí.
         //
@@ -303,7 +288,35 @@ class ComprasRepository extends BaseRepository
         // getCompraAjax() y la descarga por descargarXml(), cada uno con su
         // propia consulta. Al agregar una columna nueva a la tabla, añadirla
         // aquí si el listado la necesita — pero NUNCA volver a traer detalle_xml.
-        $sql = "SELECT c.id, c.id_empresa, c.id_proveedor, c.id_establecimiento,
+        //
+        // Rendimiento (2026-09-16): UNA sola consulta en dos fases.
+        //  1) CTE `pagina`: aplica el WHERE (lo caro: texto libre, filtros calculados)
+        //     UNA vez, ordena y corta la página; el total sale de COUNT(*) OVER (), que
+        //     se calcula sobre todas las filas filtradas antes del LIMIT. Antes había un
+        //     COUNT y un SELECT por separado que evaluaban el mismo WHERE dos veces.
+        //  2) La consulta final une la página con la cabecera por PK y calcula las
+        //     subconsultas de pagos / NC / retenciones SOLO para esas filas (20), no
+        //     para todas las compras de la empresa.
+        // `ca` va con LATERAL ... LIMIT 1: el catálogo comprobantes_autorizados repite
+        // códigos (p. ej. 52) y el JOIN directo duplicaba la compra en el listado.
+        $joinCatalogos = "INNER JOIN proveedores p          ON c.id_proveedor = p.id
+                LEFT  JOIN sustento_tributario st ON c.id_sustento_tributario = st.id
+                LEFT  JOIN usuarios u             ON c.created_by = u.id
+                LEFT  JOIN LATERAL (
+                    SELECT cax.comprobante FROM comprobantes_autorizados cax
+                    WHERE cax.codigo_comprobante = c.tipo_comprobante
+                    ORDER BY cax.id LIMIT 1
+                ) ca ON TRUE";
+        $limite = $perPage > 0 ? " LIMIT $perPage OFFSET $offset" : '';
+        $sql = "WITH pagina AS MATERIALIZED (
+                    SELECT c.id, ROW_NUMBER() OVER ($orderBy) AS __rn, COUNT(*) OVER () AS __total
+                    FROM compras_cabecera c
+                    $joinCatalogos
+                    $where
+                    $orderBy
+                    $limite
+                )
+                SELECT c.id, c.id_empresa, c.id_proveedor, c.id_establecimiento,
                        c.id_sustento_tributario, c.tipo_comprobante, c.tipo_id_proveedor,
                        c.parte_relacionada, c.establecimiento_prov, c.punto_emision_prov,
                        c.secuencial_prov, c.numero_autorizacion, c.fecha_emision,
@@ -327,23 +340,30 @@ class ComprasRepository extends BaseRepository
                        ca.comprobante      AS tipo_comprobante_nombre,
                        (SELECT COALESCE(SUM(ed.monto_pagado), 0) FROM egresos_detalle ed INNER JOIN egresos_cabecera ec ON ed.id_egreso = ec.id WHERE ed.tipo_documento = 'COMPRA' AND ed.id_referencia_documento = c.id AND ed.eliminado = false AND ec.estado != 'anulado' AND ec.eliminado = false) AS total_pagado,
                        (SELECT COALESCE(SUM(nc.importe_total), 0) FROM compras_cabecera nc WHERE nc.tipo_comprobante = '04' AND nc.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AND nc.id_proveedor = c.id_proveedor AND nc.id_empresa = c.id_empresa AND nc.eliminado = false) AS total_nc,
-                       (SELECT COALESCE(SUM(r.total_retenido), 0) FROM retencion_compra_cabecera r WHERE r.id_compra = c.id AND r.eliminado = false AND r.estado != 'anulada') AS total_retencion
-                FROM compras_cabecera c
-                INNER JOIN proveedores p        ON c.id_proveedor = p.id
-                LEFT  JOIN sustento_tributario st ON c.id_sustento_tributario = st.id
-                LEFT  JOIN usuarios u            ON c.created_by = u.id
-                LEFT  JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
-                $where
-                $orderBy";
-
-
-        if ($perPage > 0) {
-            $sql .= " LIMIT $perPage OFFSET $offset";
-        }
+                       (SELECT COALESCE(SUM(r.total_retenido), 0) FROM retencion_compra_cabecera r WHERE r.id_compra = c.id AND r.eliminado = false AND r.estado != 'anulada') AS total_retencion,
+                       pg.__total
+                FROM pagina pg
+                INNER JOIN compras_cabecera c ON c.id = pg.id
+                $joinCatalogos
+                ORDER BY pg.__rn";
 
         $rows = $this->query($sql, $params)->fetchAll();
 
-        return ['rows' => $rows, 'total' => (int) $total];
+        if ($rows) {
+            $total = (int) $rows[0]['__total'];
+        } elseif ($offset > 0) {
+            // Página fuera de rango (p. ej. se borraron registros): sin filas no hay
+            // __total, así que se cuenta aparte. Caso raro; la carga normal no pasa aquí.
+            $total = (int) $this->query("SELECT COUNT(*) FROM compras_cabecera c $joinCatalogos $where", $params)->fetchColumn();
+        } else {
+            $total = 0;
+        }
+        foreach ($rows as &$r) {
+            unset($r['__total']);
+        }
+        unset($r);
+
+        return ['rows' => $rows, 'total' => $total];
     }
 
     /**
@@ -1369,17 +1389,23 @@ class ComprasRepository extends BaseRepository
     /**
      * Cierra el flujo de aprobación. El token se limpia siempre: un enlace de
      * correo ya usado no debe volver a resolver a nada.
+     *
+     * Solo cambia una compra que SIGUE pendiente, en el mismo UPDATE: si dos
+     * aprobadores deciden a la vez, uno solo la resuelve (y genera el pago
+     * automático); el otro recibe false.
+     *
+     * @return bool false si la compra ya no estaba pendiente.
      */
-    public function resolverAprobacion(int $id, string $estado, int $idUsuario, ?string $motivo = null): void
+    public function resolverAprobacion(int $id, string $estado, int $idUsuario, ?string $motivo = null): bool
     {
-        $this->query(
+        return $this->query(
             "UPDATE compras_cabecera
                 SET estado = ?, aprobado_by = ?, aprobado_at = NOW(),
                     motivo_rechazo = ?, token_aprobacion = NULL,
                     updated_by = ?, updated_at = NOW()
-              WHERE id = ?",
+              WHERE id = ? AND estado = 'pendiente_aprobacion'",
             [$estado, $idUsuario, $motivo, $idUsuario, $id]
-        );
+        )->rowCount() > 0;
     }
 
     /** Nombre y correo de los usuarios aprobadores (para notificar y mostrar). */

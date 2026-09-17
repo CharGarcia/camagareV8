@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente
-version: 1.15
+version: 1.16
 orden: 40
 estado: activo
 ---
@@ -168,7 +168,10 @@ un botón para **imprimir el PDF** de cada uno.
 La columna **A cambio** es lo que el cliente se quedó como reposición en un
 [Cambio de productos](modulos/cambio-producto-cv): también baja del saldo
 (`saldo = consignado − retornado − facturado − a cambio`), aunque no abre
-documentos al hacer clic.
+documentos al hacer clic. Los cambios emitidos desde la versión 1.16 registran
+esa unidad como **facturada** en la factura de venta de lo que el cliente
+devolvió: aparece en **Facturado**, con el número de esa factura, y no en *A
+cambio*.
 
 El PDF se abre en el módulo dueño del documento, así que el botón **solo
 aparece si el usuario tiene permiso de ver** sobre **Facturas de Venta** o
@@ -265,6 +268,9 @@ cuando haga falta.
 
 ## Historial de cambios
 
+- **1.16** — Lo que un cambio de productos entrega desde una consignación ahora
+  se registra en Facturación de consignaciones y se ve en **Facturado** (con la
+  factura de venta de lo devuelto), no en *A cambio*. El saldo no cambia.
 - **1.15** — **El reporte abre y busca mucho más rápido.** Medido sobre 1,8
   millones de movimientos de kardex (una empresa con 300.000, entre otras 100
   empresas) y 20.000 líneas de consignación, con resultados idénticos a la

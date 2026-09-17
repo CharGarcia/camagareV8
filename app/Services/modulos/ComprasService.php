@@ -185,10 +185,13 @@ class ComprasService
 
     /**
      * Aprueba la compra: pasa a 'registrado' y recién entonces se genera su
-     * asiento contable (a partir de ahí ya se puede pagar y procesar inventario).
+     * asiento contable (a partir de ahí ya se puede pagar y procesar inventario)
+     * y, si la aprobación lo había retenido, su pago automático (ver
+     * pagoAutomaticoRetenido()).
      *
      * @param bool $auto true cuando la aprobación viene del enlace del correo con
      *                   token válido (la autorización ya la dio el token).
+     * @return array{estado:string, aviso_asiento:?string, pago:?array{generado:bool, mensaje:string}}
      */
     public function aprobarCompra(int $idCompra, int $idEmpresa, int $idUsuario, bool $auto = false, int $nivel = 1): array
     {
@@ -207,7 +210,10 @@ class ComprasService
             throw new \InvalidArgumentException('No puede aprobar una compra que usted mismo registró. Debe aprobarla otro usuario autorizado.');
         }
 
-        $this->repository->resolverAprobacion($idCompra, self::ESTADO_REGISTRADO, $idUsuario);
+        // Si otro aprobador la resolvió entre la lectura y aquí, no se aprueba (ni se paga) dos veces.
+        if (!$this->repository->resolverAprobacion($idCompra, self::ESTADO_REGISTRADO, $idUsuario)) {
+            throw new \InvalidArgumentException('Esta compra ya no está pendiente de aprobación.');
+        }
         $this->logService->registrar(
             $idUsuario, $idEmpresa, 'APROBAR_COMPRA', 'compras_cabecera', $idCompra,
             ['estado' => self::ESTADO_PENDIENTE],
@@ -226,7 +232,35 @@ class ComprasService
             $this->lastAsientoWarning = $e->getMessage();
         }
 
-        return ['estado' => self::ESTADO_REGISTRADO, 'aviso_asiento' => $this->lastAsientoWarning];
+        // El pago automático que retuvo la aprobación se genera ahora. Tampoco revierte la
+        // aprobación si falla: el motivo vuelve en 'pago' para mostrarlo.
+        $pago = null;
+        if ($this->pagoAutomaticoRetenido($compra)) {
+            // Por el enlace del correo sin aprobador configurado llega 0: el egreso queda
+            // a nombre de quien registró la compra, como en la descarga del SRI.
+            $idUsuarioPago = $idUsuario > 0 ? $idUsuario : (int) ($compra['created_by'] ?? 0);
+            $pago = (new PagoAutomaticoProveedorService())->generarAlAprobar(
+                $idCompra,
+                (int) $compra['id_proveedor'],
+                $idEmpresa,
+                $idUsuarioPago
+            );
+        }
+
+        return ['estado' => self::ESTADO_REGISTRADO, 'aviso_asiento' => $this->lastAsientoWarning, 'pago' => $pago];
+    }
+
+    /**
+     * ¿La aprobación retuvo un pago automático? Solo la factura descargada del SRI genera
+     * sola su egreso al registrarse (DocumentoAutomatedRegisterService::handleFactura) y lo
+     * omite si queda pendiente. Las compras manuales y las liquidaciones nunca lo generan:
+     * aprobarlas no debe pagarlas. La captura manual ya no ofrece facturas (01), así que
+     * factura electrónica = descarga del SRI.
+     */
+    private function pagoAutomaticoRetenido(array $compra): bool
+    {
+        return (string) ($compra['tipo_comprobante'] ?? '') === '01'
+            && (string) ($compra['tipo_registro'] ?? '') === 'electronico';
     }
 
     /**
@@ -251,7 +285,9 @@ class ComprasService
             throw new \InvalidArgumentException('Indique el motivo del rechazo.');
         }
 
-        $this->repository->resolverAprobacion($idCompra, self::ESTADO_RECHAZADA, $idUsuario, $motivo);
+        if (!$this->repository->resolverAprobacion($idCompra, self::ESTADO_RECHAZADA, $idUsuario, $motivo)) {
+            throw new \InvalidArgumentException('Esta compra ya no está pendiente de aprobación.');
+        }
         $this->logService->registrar(
             $idUsuario, $idEmpresa, 'RECHAZAR_COMPRA', 'compras_cabecera', $idCompra,
             ['estado' => self::ESTADO_PENDIENTE],

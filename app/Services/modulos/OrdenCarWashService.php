@@ -107,7 +107,8 @@ class OrdenCarWashService
         } catch (\Throwable $e) {
             return;
         }
-        if (!($estConfig['facturacion_inventario'] ?? false)) return;
+        // Se guarda como texto 'true'/'false': sin Booleano::es(), 'false' contaba como activo.
+        if (!\App\Helpers\Booleano::es($estConfig['facturacion_inventario'] ?? false)) return;
 
         $prodRepo = new \App\repositories\modulos\ProductoRepository();
         foreach ($detalles as $d) {

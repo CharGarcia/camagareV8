@@ -5,6 +5,7 @@ namespace App\controllers\modulos;
 
 use App\repositories\modulos\FormaPagoRepository;
 use App\Services\modulos\FormaPagoService;
+use App\Helpers\OrdenListado;
 use App\Helpers\PreferenciasHelper;
 
 class FormasCobrosPagosController extends BaseModuloController
@@ -31,8 +32,11 @@ class FormasCobrosPagosController extends BaseModuloController
 
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'nombre');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'ASC'));
+        // leer() deja la columna como identificador y la dirección en ASC/DESC: la vista las
+        // imprime dentro de su <script>.
+        $orden    = OrdenListado::leer($prefsVista, 'nombre');
+        $ordenCol = OrdenListado::primeraCol($orden, 'nombre');
+        $ordenDir = OrdenListado::primeraDir($orden);
         $perPage  = 20;
 
         $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
@@ -102,6 +106,10 @@ class FormasCobrosPagosController extends BaseModuloController
             
             // Convertir checkbox activo a boolean real
             $data['activo'] = isset($_POST['activo']) && ($_POST['activo'] === '1' || $_POST['activo'] === 'on' || $_POST['activo'] === 'true');
+            // "Mostrar saldo" en Ingresos/Egresos: el modal lo envía siempre ('1'/'0'); si no llega,
+            // queda visible, que es el comportamiento de siempre.
+            $data['mostrar_saldo'] = !isset($_POST['mostrar_saldo'])
+                || in_array((string)$_POST['mostrar_saldo'], ['1', 'on', 'true'], true);
 
             $id = (int)($data['id'] ?? 0);
             if ($id > 0) {

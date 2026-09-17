@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\Helpers\OrdenListado;
 use App\repositories\modulos\CambioProductoCvRepository;
 use App\repositories\modulos\ProductoRepository;
 use App\Rules\modulos\CambioProductoCvRules;
@@ -61,21 +62,18 @@ class CambioProductoCvController extends BaseModuloController
 
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_cambio');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
+        $orden    = OrdenListado::leer($prefsVista, 'fecha_cambio', 'DESC');
+        $ordenCol = OrdenListado::primeraCol($orden, 'fecha_cambio');
+        $ordenDir = OrdenListado::primeraDir($orden);
         $perPage  = 20;
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        // Filas = parejas "entra ↔ sale" de cada cambio (no un cambio por fila).
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
-
-        foreach ($rows as &$r) {
-            if (!empty($r['fecha_cambio'])) $r['fecha_cambio'] = date('d-m-Y', strtotime($r['fecha_cambio']));
-        }
-        unset($r);
 
         $empresaData = $this->getEmpresaConfig($idEmpresa);
 
@@ -113,6 +111,7 @@ class CambioProductoCvController extends BaseModuloController
             'buscar'       => $buscar,
             'ordenCol'     => $ordenCol,
             'ordenDir'     => $ordenDir,
+            'decCant'      => self::decimalesCantidad($empresaData),
             'vistaConfig'  => $prefsVista,
             'fullWidth'    => true,
         ]);
@@ -127,14 +126,15 @@ class CambioProductoCvController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
         $buscar   = trim($_GET['b'] ?? $_GET['q'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_cambio');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
+        $orden    = OrdenListado::leer($prefsVista, 'fecha_cambio', 'DESC');
+        $ordenCol = OrdenListado::primeraCol($orden, 'fecha_cambio');
+        $ordenDir = OrdenListado::primeraDir($orden);
         $perPage  = 20;
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -142,26 +142,15 @@ class CambioProductoCvController extends BaseModuloController
         $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
         $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
-        ob_start();
+        $rowsHtml = '';
         if (empty($rows)) {
-            echo '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>No se encontraron cambios.</td></tr>';
+            $rowsHtml = '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>No se encontraron cambios.</td></tr>';
         } else {
+            $decCant = self::decimalesCantidad($this->getEmpresaConfig($idEmpresa));
             foreach ($rows as $r) {
-                if (!empty($r['fecha_cambio'])) $r['fecha_cambio'] = date('d-m-Y', strtotime($r['fecha_cambio']));
-                $dataJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
-                $statusBadge = self::badgeEstado($r['estado'] ?? '');
-
-                echo '<tr class="cambio-row" role="button" tabindex="0" data-row=\'' . $dataJson . '\' onclick="abrirModalCambioVer(this)">
-                        <td class="ps-3" data-col="fecha_cambio">' . htmlspecialchars($r['fecha_cambio'] ?? '') . '</td>
-                        <td data-col="secuencial">' . htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) . '</td>
-                        <td data-col="cliente" class="text-truncate" style="max-width:250px">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</td>
-                        <td data-col="motivo" class="text-truncate" style="max-width:220px">' . htmlspecialchars($r['motivo'] ?? '—') . '</td>
-                        <td data-col="diferencia" class="text-end pe-3">' . number_format((float)($r['diferencia'] ?? 0), 2) . '</td>
-                        <td class="text-center pe-3" data-col="estado">' . $statusBadge . '</td>
-                      </tr>';
+                $rowsHtml .= $this->renderFila($r, $decCant);
             }
         }
-        $rowsHtml = ob_get_clean();
 
         ob_start();
         $prevDisabled = ($page <= 1) ? 'disabled' : '';
@@ -204,7 +193,8 @@ class CambioProductoCvController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $origenes = ['FACTURA' => 'Factura de consignación', 'CAMBIO' => 'Cambio anterior', 'CONSIGNACION' => 'Consignación'];
+        // 'FACTURA': el número es el de la factura de venta (CambioProductoCvRepository::sqlNumeroOrigen).
+        $origenes = ['FACTURA' => 'Factura', 'CAMBIO' => 'Cambio anterior', 'CONSIGNACION' => 'Consignación'];
         $rows = [];
         foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
             $origenDoc = $r['documento_origen'] ?? '';
@@ -232,21 +222,51 @@ class CambioProductoCvController extends BaseModuloController
         echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
-    /** Filas del listado con el filtro/orden actual, sin paginar (para exportar). */
+    /**
+     * Una fila del listado. El HTML vive en un único partial que incluyen la carga inicial
+     * (index.php) y el refresco AJAX: escribirlo en dos sitios deja uno desfasado.
+     */
+    private function renderFila(array $r, int $decCant): string
+    {
+        ob_start();
+        include MVC_APP . '/views/modulos/cambio_producto_cv/_fila.php';
+        return (string) ob_get_clean();
+    }
+
+    /** Decimales de cantidad de la empresa (config ya resuelta por getEmpresaConfig), acotados a 0-6. */
+    private static function decimalesCantidad(array $empresaConfig): int
+    {
+        return max(0, min(6, (int) ($empresaConfig['decimales_cantidad'] ?? 2)));
+    }
+
+    /** Filas del listado (parejas entra ↔ sale) con el filtro/orden actual, sin paginar (para exportar). */
     private function filasParaExport(): array
     {
         $idEmpresa  = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
         $buscar     = trim($_GET['b'] ?? '');
-        $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_cambio');
-        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+        $orden      = OrdenListado::leer($prefsVista, 'fecha_cambio', 'DESC');
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
         // perPage = 0 => sin LIMIT (todas las filas que calcen con el filtro actual).
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, OrdenListado::primeraCol($orden, 'fecha_cambio'),
+            OrdenListado::primeraDir($orden), $idUsuarioFiltro, $orden);
         return $data['rows'] ?? [];
+    }
+
+    /**
+     * Número del documento de origen de lo que ENTRA, como texto para PDF/Excel: la factura
+     * de venta, o "Cambio …" si la unidad viene de un cambio anterior.
+     */
+    private static function textoFacturaDev(array $r): string
+    {
+        $num = trim((string) ($r['dev_origen_numero'] ?? ''));
+        if ($num === '') {
+            return '';
+        }
+        return (($r['dev_origen_tipo'] ?? '') === 'CAMBIO' ? 'Cambio ' : '') . $num;
     }
 
     /** Exporta el listado (con el filtro/orden actual del buscador) a PDF. */
@@ -265,43 +285,65 @@ class CambioProductoCvController extends BaseModuloController
                 require_once $autoload;
             }
 
+            $decCant = self::decimalesCantidad($this->getEmpresaConfig((int) $_SESSION['id_empresa']));
+            $cant    = static fn($v): string => ($v === null || $v === '') ? '' : number_format((float) $v, $decCant);
+            $h       = static fn($v): string => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8');
+
             ob_start();
             ?>
             <style>
                 table { width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:7pt; }
-                th { background:#f2f2f2; border:1px solid #ccc; padding:3px; text-align:left; }
-                td { border:1px solid #ccc; padding:3px; }
+                th { border:1px solid #ccc; padding:3px; text-align:left; color:#fff; }
+                th.entra { background:#dc3545; }
+                th.sale { background:#198754; }
+                td { border:1px solid #ccc; padding:3px; vertical-align:top; }
                 .r { text-align:right; }
+                .c { text-align:center; }
+                .cod { color:#666; font-size:6pt; }
+                tr.anulada td { color:#999; text-decoration:line-through; }
+                tr.borrador td { color:#777; font-style:italic; }
                 h2 { font-family:Arial,sans-serif; font-size:12pt; margin:0 0 2px 0; }
                 .sub { font-family:Arial,sans-serif; font-size:8pt; color:#555; margin-bottom:6px; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="6mm" backright="6mm">
-                <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
-                <div class="sub">Cambios de Producto de Consignaciones &mdash; <?= date('d-m-Y H:i:s') ?></div>
+                <h2><?= $h($nombreEmpresa) ?></h2>
+                <div class="sub">Cambios de productos &mdash; <?= date('d-m-Y H:i:s') ?></div>
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:10%">Fecha</th>
-                            <th style="width:13%">Secuencial</th>
-                            <th style="width:25%">Cliente</th>
-                            <th style="width:12%">Identificación</th>
-                            <th style="width:20%">Motivo</th>
-                            <th style="width:10%" class="r">Diferencia</th>
-                            <th style="width:10%">Estado</th>
+                            <th class="entra c" colspan="5">Entra</th>
+                            <th class="sale c" colspan="6">Sale</th>
+                        </tr>
+                        <tr>
+                            <th class="entra r" style="width:6%">Cantidad</th>
+                            <th class="entra" style="width:15%">Producto</th>
+                            <th class="entra" style="width:7%">Lote</th>
+                            <th class="entra" style="width:8%">Bodega</th>
+                            <th class="entra" style="width:10%">Factura</th>
+                            <th class="sale r" style="width:6%">Cantidad</th>
+                            <th class="sale" style="width:15%">Producto</th>
+                            <th class="sale" style="width:7%">Lote</th>
+                            <th class="sale" style="width:8%">Bodega</th>
+                            <th class="sale" style="width:10%">Cliente</th>
+                            <th class="sale" style="width:8%">Observaciones</th>
                         </tr>
                     </thead>
                     <tbody>
                     <?php foreach ($rows as $r):
-                        $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                        $clase = ['Anulada' => 'anulada', 'Borrador' => 'borrador'][(string) ($r['estado'] ?? '')] ?? '';
                     ?>
-                        <tr>
-                            <td><?= !empty($r['fecha_cambio']) ? date('d-m-Y', strtotime($r['fecha_cambio'])) : '-' ?></td>
-                            <td><?= htmlspecialchars($numero) ?></td>
-                            <td><?= htmlspecialchars((string) ($r['cliente_nombre'] ?? '')) ?></td>
-                            <td><?= htmlspecialchars((string) ($r['cliente_identificacion'] ?? '')) ?></td>
-                            <td><?= htmlspecialchars((string) ($r['motivo'] ?? '-')) ?></td>
-                            <td class="r"><?= number_format((float) ($r['diferencia'] ?? 0), 2) ?></td>
-                            <td><?= ucfirst((string) ($r['estado'] ?? '')) ?></td>
+                        <tr class="<?= $clase ?>">
+                            <td class="r"><?= $cant($r['dev_cantidad'] ?? null) ?></td>
+                            <td><?= $h($r['dev_producto_nombre'] ?? '') ?><?php if (($r['dev_producto_codigo'] ?? '') !== ''): ?><br><span class="cod"><?= $h($r['dev_producto_codigo']) ?></span><?php endif; ?></td>
+                            <td><?= $h($r['dev_lote'] ?? '') ?></td>
+                            <td><?= $h($r['dev_bodega'] ?? '') ?></td>
+                            <td><?= $h(self::textoFacturaDev($r)) ?></td>
+                            <td class="r"><?= $cant($r['ent_cantidad'] ?? null) ?></td>
+                            <td><?= $h($r['ent_producto_nombre'] ?? '') ?><?php if (($r['ent_producto_codigo'] ?? '') !== ''): ?><br><span class="cod"><?= $h($r['ent_producto_codigo']) ?></span><?php endif; ?></td>
+                            <td><?= $h($r['ent_lote'] ?? '') ?></td>
+                            <td><?= $h($r['ent_bodega'] ?? '') ?></td>
+                            <td><?= $h($r['cliente_nombre'] ?? '') ?></td>
+                            <td><?= $h($r['observaciones'] ?? '') ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -312,7 +354,7 @@ class CambioProductoCvController extends BaseModuloController
 
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
             $html2pdf->writeHTML($content);
-            $html2pdf->output('Cambios_producto_cv_' . date('Ymd_His') . '.pdf', 'D');
+            $html2pdf->output('Cambios_productos_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
             header('Content-Type: text/html');
@@ -337,24 +379,64 @@ class CambioProductoCvController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Motivo', 'Diferencia', 'Estado'];
+            // Mismas columnas que el listado; en Excel el código va en su propia columna.
+            $headers = [
+                'Entra: cantidad', 'Entra: código', 'Entra: producto', 'Entra: lote', 'Entra: bodega', 'Entra: factura',
+                'Sale: cantidad', 'Sale: código', 'Sale: producto', 'Sale: lote', 'Sale: bodega', 'Cliente', 'Observaciones',
+            ];
+            $numEntra = 6; // columnas A-F: lo que entra; G-M: lo que sale
 
             $exportData = [];
             foreach ($rows as $r) {
-                $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
                 $exportData[] = [
-                    !empty($r['fecha_cambio']) ? date('d-m-Y', strtotime($r['fecha_cambio'])) : '-',
-                    $numero,
+                    $r['dev_cantidad'] !== null ? (float) $r['dev_cantidad'] : null,
+                    (string) ($r['dev_producto_codigo'] ?? ''),
+                    (string) ($r['dev_producto_nombre'] ?? ''),
+                    (string) ($r['dev_lote'] ?? ''),
+                    (string) ($r['dev_bodega'] ?? ''),
+                    self::textoFacturaDev($r),
+                    $r['ent_cantidad'] !== null ? (float) $r['ent_cantidad'] : null,
+                    (string) ($r['ent_producto_codigo'] ?? ''),
+                    (string) ($r['ent_producto_nombre'] ?? ''),
+                    (string) ($r['ent_lote'] ?? ''),
+                    (string) ($r['ent_bodega'] ?? ''),
                     (string) ($r['cliente_nombre'] ?? ''),
-                    (string) ($r['cliente_identificacion'] ?? ''),
-                    (string) ($r['motivo'] ?? '-'),
-                    number_format((float) ($r['diferencia'] ?? 0), 2, '.', ''),
-                    ucfirst((string) ($r['estado'] ?? '')),
+                    (string) ($r['observaciones'] ?? ''),
                 ];
             }
 
+            $decCant = self::decimalesCantidad($this->getEmpresaConfig((int) $_SESSION['id_empresa']));
+            $fmtCant = '#,##0' . ($decCant > 0 ? '.' . str_repeat('0', $decCant) : '');
+
             $reportService = new \App\Services\ReportService();
-            $reportService->exportToExcel('Cambios_producto_cv', $headers, $exportData, 'Cambios de Producto de Consignaciones', $nombreEmpresa);
+            $spreadsheet = $reportService->construirSpreadsheet($headers, $exportData, 'Cambios de productos', 'Cambios de productos - ' . $nombreEmpresa, [], [1 => $fmtCant, 7 => $fmtCant]);
+
+            // Encabezados en rojo (entra) y verde (sale), como en pantalla. La fila de
+            // encabezados se ubica por su primer texto para no depender de dónde la deja ReportService.
+            $sheet = $spreadsheet->getActiveSheet();
+            $filaEnc = 0;
+            for ($f = 1; $f <= 6; $f++) {
+                if ((string) $sheet->getCell('A' . $f)->getValue() === $headers[0]) { $filaEnc = $f; break; }
+            }
+            if ($filaEnc > 0) {
+                $ultimaEntra = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($numEntra);
+                $primeraSale = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($numEntra + 1);
+                $ultimaSale  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+                $sheet->getStyle("A{$filaEnc}:{$ultimaEntra}{$filaEnc}")->getFill()->getStartColor()->setRGB('DC3545');
+                $sheet->getStyle("{$primeraSale}{$filaEnc}:{$ultimaSale}{$filaEnc}")->getFill()->getStartColor()->setRGB('198754');
+
+                // Sin columna Estado: los cambios anulados van tachados y los borradores en cursiva gris.
+                foreach ($rows as $i => $r) {
+                    $estado = (string) ($r['estado'] ?? '');
+                    if ($estado !== 'Anulada' && $estado !== 'Borrador') continue;
+                    $fila  = $filaEnc + 1 + $i;
+                    $fuente = $sheet->getStyle("A{$fila}:{$ultimaSale}{$fila}")->getFont();
+                    $fuente->getColor()->setRGB('888888');
+                    $estado === 'Anulada' ? $fuente->setStrikethrough(true) : $fuente->setItalic(true);
+                }
+            }
+
+            $reportService->descargarSpreadsheet($spreadsheet, 'Cambios_productos');
             exit;
         } catch (\Throwable $e) {
             header('Content-Type: text/html');
@@ -1017,21 +1099,6 @@ class CambioProductoCvController extends BaseModuloController
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
-
-    /** Badge HTML según el estado del cambio (Emitida | Borrador | Anulada). */
-    public static function badgeEstado(string $estado): string
-    {
-        switch ($estado) {
-            case 'Emitida':
-                return '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Emitida</span>';
-            case 'Borrador':
-                return '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Borrador</span>';
-            case 'Anulada':
-                return '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulada</span>';
-            default:
-                return '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">' . htmlspecialchars($estado) . '</span>';
-        }
-    }
 
     private function getEmpresaConfig(int $idEmpresa): array
     {

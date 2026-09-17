@@ -13,11 +13,13 @@ use PDO;
  * Generación automática del egreso (pago) de una compra a partir de la
  * configuración de la pestaña Pagos del proveedor.
  *
- * Se usa desde dos flujos:
+ * Se usa desde tres flujos:
  *  1. En caliente, al registrar una compra descargada del SRI
  *     (DocumentoAutomatedRegisterService).
  *  2. En lote y hacia atrás, desde el botón "Generar pagos pendientes" del
  *     modal de proveedores, para las compras que quedaron sin pago.
+ *  3. Al aprobar una factura del SRI que quedó pendiente de aprobación: es el pago
+ *     del flujo 1 que la aprobación retuvo (generarAlAprobar()).
  *
  * Diferencia intencional entre ambos: el flujo del SRI paga el total del
  * documento recién registrado y se omite si el proveedor tiene retenciones
@@ -280,14 +282,25 @@ class PagoAutomaticoProveedorService
     /**
      * Facturas de compra del proveedor, emitidas hasta $fechaHasta, que aún no
      * tienen ningún egreso asociado. Incluye el saldo real de cada una.
+     *
+     * Excluye las pendientes de aprobación: hasta aprobarlas no se pagan, y su pago
+     * lo genera la propia aprobación (generarAlAprobar()). Para CxP siguen siendo
+     * deuda (ver TiposComprobanteCompra::ESTADOS_COMPRA_SIN_DEUDA).
+     *
+     * @param int|null $idCompra Solo esa compra (pago al aprobarla).
      */
-    public function getComprasPendientes(int $idProveedor, int $idEmpresa, string $fechaHasta): array
+    public function getComprasPendientes(int $idProveedor, int $idEmpresa, string $fechaHasta, ?int $idCompra = null): array
     {
         $params = [
-            ':id_proveedor' => $idProveedor,
-            ':id_empresa'   => $idEmpresa,
-            ':fecha_hasta'  => $fechaHasta,
+            ':id_proveedor'     => $idProveedor,
+            ':id_empresa'       => $idEmpresa,
+            ':fecha_hasta'      => $fechaHasta,
         ];
+        $filtroCompra = '';
+        if ($idCompra !== null) {
+            $filtroCompra = ' AND c.id = :id_compra';
+            $params[':id_compra'] = $idCompra;
+        }
 
         // Solo el ambiente activo de la empresa, igual que el resto de módulos
         $stA = $this->db->prepare("SELECT CAST(tipo_ambiente AS VARCHAR) FROM empresas WHERE id = :id_empresa LIMIT 1");
@@ -303,7 +316,8 @@ class PagoAutomaticoProveedorService
 
         $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante'); // todo comprobante con deuda, no solo '01' (igual que CxP)
 
-        $compraVigente = \App\Helpers\TiposComprobanteCompra::sqlCompraVigente('c.estado'); // anuladas/rechazadas no son deuda
+        // Solo compras pagables: ni anuladas/rechazadas ni pendientes de aprobación.
+        $compraPagable = \App\Helpers\TiposComprobanteCompra::sqlCompraPagable('c.estado');
         $sql = "
             WITH pagado AS (
                 SELECT ed.id_referencia_documento AS id_doc
@@ -359,16 +373,79 @@ class PagoAutomaticoProveedorService
             WHERE c.id_empresa       = :id_empresa
               AND c.id_proveedor     = :id_proveedor
               AND c.eliminado        = false
-              AND {$esCargo} AND {$compraVigente}
+              AND {$esCargo} AND {$compraPagable}
               AND c.fecha_emision   <= :fecha_hasta
               AND pg.id_doc IS NULL
               {$filtroAmb}
+              {$filtroCompra}
             ORDER BY c.fecha_emision ASC, c.id ASC
         ";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // AL APROBAR UNA COMPRA
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Pago automático de una factura del SRI al aprobarla (checkpoint 'aprobacion_compras').
+     *
+     * Al descargarla no se pagó porque quedó pendiente (DocumentoAutomatedRegisterService::
+     * handleFactura); ComprasService::aprobarCompra() lo pide aquí. Mismas reglas que en la
+     * descarga —se omite si el proveedor tiene retenciones configuradas: la retención
+     * automática nace en borrador y el saldo todavía no la descuenta—, pero se paga el SALDO
+     * de la compra al aprobarla (mientras esperaba pudo llegar una nota de crédito) y solo si
+     * aún no tiene ningún pago. Nunca lanza: un fallo del pago no revierte la aprobación.
+     *
+     * @return array{generado:bool, mensaje:string} mensaje '' = el proveedor no tiene pago automático.
+     */
+    public function generarAlAprobar(int $idCompra, int $idProveedor, int $idEmpresa, int $idUsuario): array
+    {
+        try {
+            $cfg = $this->getConfiguracion($idProveedor, $idEmpresa, true);
+            if (!$cfg['ok']) {
+                return ['generado' => false, 'mensaje' => $cfg['motivo'] === null ? '' : 'Pago automático omitido: ' . $cfg['motivo']];
+            }
+
+            $compra = $this->getComprasPendientes($idProveedor, $idEmpresa, date('Y-m-d'), $idCompra)[0] ?? null;
+            if ($compra === null) {
+                return ['generado' => false, 'mensaje' => 'Pago automático omitido: la compra ya tiene un pago registrado.'];
+            }
+
+            $saldo = round((float) $compra['saldo'], 2);
+            if ($saldo <= 0.001) {
+                return ['generado' => false, 'mensaje' => 'Pago automático omitido: la compra no tiene saldo por pagar.'];
+            }
+
+            $motivoRango = $this->validarRango($cfg['config'], $saldo);
+            if ($motivoRango !== null) {
+                return ['generado' => false, 'mensaje' => 'Pago automático omitido: ' . $motivoRango . '.'];
+            }
+
+            $numDoc = (string) $compra['numero_documento'];
+            $res = $this->generarParaCompra(
+                $cfg['config'],
+                $idCompra,
+                $idProveedor,
+                $idEmpresa,
+                $idUsuario,
+                (float) $compra['monto_documento'],
+                $saldo,
+                $numDoc,
+                (string) $compra['fecha_emision'],
+                'Pago generado automáticamente al aprobar la Compra #' . $numDoc . '.'
+            );
+
+            $cheque = $res['numero_cheque'] !== null
+                ? " (cheque #{$res['numero_cheque']}, cobro {$res['fecha_cobro']})"
+                : '';
+            return ['generado' => true, 'mensaje' => 'Pago automático generado: ' . $res['numero_egreso'] . $cheque . '.'];
+        } catch (\Throwable $e) {
+            return ['generado' => false, 'mensaje' => 'No se pudo generar el pago automático: ' . $e->getMessage()];
+        }
     }
 
     /**

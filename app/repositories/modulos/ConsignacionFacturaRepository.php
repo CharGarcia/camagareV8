@@ -537,6 +537,59 @@ class ConsignacionFacturaRepository extends BaseRepository
         return (int) $st->fetchColumn();
     }
 
+    /**
+     * Línea de un registro generado por un Cambio de productos: igual que insertDetalle() más
+     * id_cambio_detalle (la línea de entrega del cambio). Solo se llama con la migración
+     * 20260916_facturacion_cv_registro_cambio.sql aplicada.
+     */
+    public function insertDetalleRegistroCambio(array $d): int
+    {
+        $sql = "INSERT INTO consignaciones_facturas_detalles (
+                    id_consignacion_factura, id_empresa, id_consignacion, id_consignacion_detalle,
+                    id_producto, cantidad, precio_unitario, descuento, id_impuesto, porcentaje_impuesto, valor_impuesto,
+                    subtotal, total, id_bodega, lote, nup, fecha_caducidad, id_cambio_detalle, eliminado
+                ) VALUES (
+                    :cf, :e, :idc, :idcd, :prod, :cant, :pu, 0, :idi, :pi, :vi,
+                    :sub, :tot, :idb, :lote, :nup, :fc, :icd, false
+                ) RETURNING id";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':cf'   => $d['id_consignacion_factura'],
+            ':e'    => $d['id_empresa'],
+            ':idc'  => $d['id_consignacion'],
+            ':idcd' => $d['id_consignacion_detalle'],
+            ':prod' => $d['id_producto'],
+            ':cant' => $d['cantidad'],
+            ':pu'   => $d['precio_unitario'] ?? 0,
+            ':idi'  => $d['id_impuesto'] ?? null,
+            ':pi'   => $d['porcentaje_impuesto'] ?? 0,
+            ':vi'   => $d['valor_impuesto'] ?? 0,
+            ':sub'  => $d['subtotal'] ?? 0,
+            ':tot'  => $d['total'] ?? 0,
+            ':idb'  => $d['id_bodega'] ?? null,
+            ':lote' => (isset($d['lote']) && $d['lote'] !== '') ? $d['lote'] : null,
+            ':nup'  => (isset($d['nup']) && $d['nup'] !== '') ? $d['nup'] : null,
+            ':fc'   => (isset($d['fecha_caducidad']) && $d['fecha_caducidad'] !== '') ? $d['fecha_caducidad'] : null,
+            ':icd'  => $d['id_cambio_detalle'],
+        ]);
+        return (int) $st->fetchColumn();
+    }
+
+    /** Registros vigentes ('facturada') que generó un Cambio de productos. */
+    public function getRegistrosVigentesDeCambio(int $idCambio, int $idEmpresa): array
+    {
+        if (!CambioProductoCvRepository::registroFacturacionDisponible()) {
+            return [];
+        }
+        $sql = "SELECT id, serie, secuencial, id_factura, numero_factura, estado
+                FROM consignaciones_facturas
+                WHERE id_cambio_producto = :c AND id_empresa = :e AND eliminado = false AND estado = 'facturada'
+                ORDER BY id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':c' => $idCambio, ':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function find(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT cf.*, c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
@@ -649,11 +702,17 @@ class ConsignacionFacturaRepository extends BaseRepository
 
     // ─── Reversión (al anular/eliminar la factura de origen) ──────────────────
 
-    /** Documento 'facturada' cuya factura es $idFactura (para la reversión automática). */
+    /**
+     * Documento 'facturada' que GENERÓ la factura $idFactura (para la reversión automática y para
+     * anularla desde este módulo). Excluye los registros creados por Cambios de productos: apuntan
+     * a esa misma factura, pero no la generaron ni tienen reingreso que revertir.
+     */
     public function getDocPorFactura(int $idFactura, int $idEmpresa): ?array
     {
         $sql = "SELECT * FROM consignaciones_facturas
-                WHERE id_factura = :f AND id_empresa = :e AND eliminado = false AND estado = 'facturada'
+                WHERE id_factura = :f AND id_empresa = :e AND eliminado = false AND estado = 'facturada'"
+             . CambioProductoCvRepository::sqlNoEsRegistroDeCambio('consignaciones_facturas') . "
+                ORDER BY id
                 LIMIT 1";
         $st = $this->db->prepare($sql);
         $st->execute([':f' => $idFactura, ':e' => $idEmpresa]);

@@ -355,6 +355,8 @@ class CargasInventarioController extends BaseModuloController
         $id = (int) ($_GET['id'] ?? 0);
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
         $data = $this->service->getDetalleCompleto($id, $idEmpresa);
+        // Sin acceso total solo se abren las cargas propias, igual que en el listado.
+        $this->requireRegistroPropio($data);
         if ($data) {
             echo json_encode(['ok' => true, 'data' => $data]);
         } else {
@@ -523,6 +525,154 @@ class CargasInventarioController extends BaseModuloController
         } catch (\Throwable $e) {
             echo 'Error al generar Excel: ' . $e->getMessage();
         }
+    }
+
+    // ─── Exportación del detalle de una carga (botones PDF / Excel del modal) ────
+
+    /**
+     * Carga pedida en `?id=` con sus líneas. Mismo alcance que el listado: empresa
+     * activa y, sin acceso total, solo las cargas que creó el usuario.
+     */
+    private function cargaParaExportar(): array
+    {
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $carga = $this->service->getDetalleCompleto((int) ($_GET['id'] ?? 0), $idEmpresa);
+        $this->requireRegistroPropio($carga);
+        if (!$carga) {
+            http_response_code(404);
+            echo 'Carga de inventario no encontrada.';
+            exit;
+        }
+        return $carga;
+    }
+
+    /**
+     * Líneas tal como las muestra la tabla del modal: código (el del sistema o, si el
+     * producto no se encontró, el que traía el archivo), producto, bodega, cantidad,
+     * costo, OK y el motivo del error con la fila del Excel (fila 1 = encabezado; las
+     * líneas se guardan en el orden del archivo, misma numeración que la comprobación).
+     *
+     * @return array<int, array{codigo:string, producto:string, bodega:string, cantidad:float, costo:float, ok:bool, motivo:string}>
+     */
+    private function lineasParaExportar(array $detalle): array
+    {
+        $primero = static function (...$valores): string {
+            foreach ($valores as $v) {
+                if (trim((string) $v) !== '') {
+                    return trim((string) $v);
+                }
+            }
+            return '';
+        };
+
+        $lineas = [];
+        foreach (array_values($detalle) as $i => $d) {
+            $ok = in_array($d['linea_valida'] ?? false, [true, 't', '1', 1], true);
+            $lineas[] = [
+                'codigo'   => $primero($d['producto_codigo'] ?? '', $d['cod_producto_raw'] ?? ''),
+                'producto' => $primero($d['producto_nombre'] ?? ''),
+                'bodega'   => $primero($d['bodega_nombre'] ?? '', $d['cod_bodega_raw'] ?? ''),
+                'cantidad' => (float) ($d['cantidad'] ?? 0),
+                'costo'    => (float) ($d['costo_unitario'] ?? 0),
+                'ok'       => $ok,
+                'motivo'   => $ok ? '' : 'Fila ' . ($i + 2) . ': ' . $primero($d['error_linea'] ?? '', 'Línea con error'),
+            ];
+        }
+        return $lineas;
+    }
+
+    /** Datos de la cabecera para el PDF y el Excel del detalle (etiqueta => valor). */
+    private function cabeceraParaExportar(array $carga, array $lineas): array
+    {
+        $conError = count(array_filter($lineas, static fn(array $l): bool => !$l['ok']));
+
+        $datos = [
+            'Carga'        => '#' . (int) $carga['numero'],
+            'Fecha'        => !empty($carga['fecha']) ? date('d-m-Y', strtotime((string) $carga['fecha'])) : '',
+            'Tipo'         => ucfirst((string) ($carga['tipo_movimiento'] ?? '')),
+            'Estado'       => $this->etiquetaEstado((string) ($carga['estado'] ?? '')),
+            'Comprobada'   => in_array($carga['validada'] ?? false, [true, 't', '1', 1], true) ? 'Sí' : 'No',
+            'Líneas'       => count($lineas) . ($conError > 0 ? " ({$conError} con error)" : ''),
+            'Creado por'   => trim((string) ($carga['creado_por_nombre'] ?? '')) ?: '-',
+            'Aprobado por' => trim((string) ($carga['aprobado_por_nombre'] ?? '')) ?: '-',
+        ];
+        if (trim((string) ($carga['observacion'] ?? '')) !== '') {
+            $datos['Observación'] = trim((string) $carga['observacion']);
+        }
+        if (trim((string) ($carga['motivo_rechazo'] ?? '')) !== '') {
+            $datos['Motivo de rechazo'] = trim((string) $carga['motivo_rechazo']);
+        }
+        return $datos;
+    }
+
+    /** PDF con las líneas de una carga (botón PDF del modal de detalle). */
+    public function exportDetallePdf(): void
+    {
+        $this->requireLeer();
+        $carga    = $this->cargaParaExportar();
+        $lineas   = $this->lineasParaExportar($carga['detalle'] ?? []);
+        $cabecera = $this->cabeceraParaExportar($carga, $lineas);
+
+        try {
+            $empresa  = (new \App\models\Empresa())->getPorId((int) ($_SESSION['id_empresa'] ?? 0)) ?? [];
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+            include MVC_APP . '/views/modulos/cargas_inventario/pdf_detalle.php';
+            $html = (string) ob_get_clean();
+
+            // Horizontal: siete columnas, con códigos de barras y el motivo del error.
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($html);
+            $html2pdf->output('Carga_Inventario_' . (int) $carga['numero'] . '.pdf', 'D');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            header('Content-Type: text/html; charset=utf-8');
+            echo 'Error al generar PDF: ' . htmlspecialchars($e->getMessage());
+        }
+        exit;
+    }
+
+    /** Excel con las líneas de una carga (botón Excel del modal de detalle). */
+    public function exportDetalleExcel(): void
+    {
+        $this->requireLeer();
+        $carga   = $this->cargaParaExportar();
+        $lineas  = $this->lineasParaExportar($carga['detalle'] ?? []);
+        $empresa = (new \App\models\Empresa())->getPorId((int) ($_SESSION['id_empresa'] ?? 0)) ?? [];
+
+        $data = array_map(static fn(array $l): array => [
+            $l['codigo'], $l['producto'], $l['bodega'], $l['cantidad'], $l['costo'], $l['ok'] ? 'Sí' : 'No', $l['motivo'],
+        ], $lineas);
+
+        $report = new \App\Services\ReportService();
+        // Todo lo que no es número se escribe como texto: con el binder por defecto un
+        // código como "12E5" se volvería número y un texto que empiece con "=", fórmula.
+        $binderAnterior = \PhpOffice\PhpSpreadsheet\Cell\Cell::getValueBinder();
+        \PhpOffice\PhpSpreadsheet\Cell\Cell::setValueBinder(
+            (new \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder())->setNumericConversion(false)
+        );
+        try {
+            $libro = $report->construirSpreadsheet(
+                ['Código', 'Producto', 'Bodega', 'Cantidad', 'Costo', 'OK', 'Motivo'],
+                $data,
+                'Carga ' . (int) $carga['numero'],
+                (string) ($empresa['nombre'] ?? ''),
+                $this->cabeceraParaExportar($carga, $lineas),
+                [5 => '#,##0.00']
+            );
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo 'Error al generar Excel: ' . htmlspecialchars($e->getMessage());
+            exit;
+        } finally {
+            \PhpOffice\PhpSpreadsheet\Cell\Cell::setValueBinder($binderAnterior);
+        }
+
+        $report->descargarSpreadsheet($libro, 'Carga_Inventario_' . (int) $carga['numero']);
     }
 
     public function eliminarAjax(): void

@@ -238,9 +238,13 @@ class InventarioRepository extends BaseRepository
 
     public function registrarMovimiento(array $data): int
     {
-        // Verificar si existe la columna id_medida para compatibilidad
-        $colsSql = "SELECT column_name FROM information_schema.columns WHERE table_name = 'inventario_kardex' AND column_name = 'id_medida'";
-        $hasMedida = (bool)$this->db->query($colsSql)->fetchColumn();
+        // Verificar si existe la columna id_medida para compatibilidad. Una vez por proceso: la
+        // consulta a information_schema costaba más que el propio INSERT y se hacía por movimiento.
+        static $hasMedida = null;
+        if ($hasMedida === null) {
+            $colsSql = "SELECT column_name FROM information_schema.columns WHERE table_name = 'inventario_kardex' AND column_name = 'id_medida'";
+            $hasMedida = (bool)$this->db->query($colsSql)->fetchColumn();
+        }
 
         // fecha_movimiento: por defecto CURRENT_TIMESTAMP (comportamiento de siempre, sin
         // parámetro de por medio). Si el llamador pasa 'fecha_movimiento' explícitamente
@@ -344,6 +348,22 @@ class InventarioRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':e' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodega]);
         return (float) ($st->fetchColumn() ?: 0);
+    }
+
+    /**
+     * Costo unitario al que salió un producto con un documento (sus salidas vigentes, p. ej. las de
+     * una consignación). Lo usa quien devuelve esas unidades a bodega, para que entren al mismo
+     * costo con que salieron y no bajen el costo promedio. 0 si no hay salidas con costo.
+     */
+    public function getCostoUnitarioSalidas(string $referenciaTipo, int $referenciaId, int $idProducto, int $idEmpresa): float
+    {
+        $sql = "SELECT COALESCE(SUM(costo_total), 0) / NULLIF(SUM(ABS(cantidad)), 0)
+                FROM inventario_kardex
+                WHERE id_empresa = :e AND referencia_tipo = :tipo AND referencia_id = :ref
+                  AND id_producto = :p AND tipo_movimiento = 'salida' AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa, ':tipo' => $referenciaTipo, ':ref' => $referenciaId, ':p' => $idProducto]);
+        return round((float) ($st->fetchColumn() ?: 0), 6);
     }
 
 

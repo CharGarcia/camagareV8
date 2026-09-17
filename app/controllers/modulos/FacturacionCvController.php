@@ -161,7 +161,7 @@ class FacturacionCvController extends BaseModuloController
             foreach ($rows as $r) {
                 $fecha = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '';
                 $dataJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
-                $badge = self::badgeEstado($r['estado'] ?? 'borrador');
+                $badge = self::badgeEstado($r['estado'] ?? 'borrador', !empty($r['id_cambio_producto']));
 
                 echo '<tr class="factcv-row" role="button" tabindex="0" data-row=\'' . $dataJson . '\' onclick="abrirModalFacturacionVer(this)">
                         <td class="ps-3" data-col="fecha">' . htmlspecialchars($fecha) . '</td>
@@ -914,17 +914,27 @@ class FacturacionCvController extends BaseModuloController
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    public static function badgeEstado(string $estado): string
+    /**
+     * Badge del estado. $deCambio: registro generado por un Cambio de productos (sin factura
+     * propia): se marca con un segundo badge "Cambio".
+     */
+    public static function badgeEstado(string $estado, bool $deCambio = false): string
     {
         switch ($estado) {
             case 'facturada':
-                return '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Facturada</span>';
+                $html = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Facturada</span>';
+                break;
             case 'anulada':
-                return '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulada</span>';
+                $html = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulada</span>';
+                break;
             case 'borrador':
             default:
-                return '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Borrador</span>';
+                $html = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Borrador</span>';
         }
+        if ($deCambio) {
+            $html .= ' <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" title="Registrado por un cambio de productos: sin factura nueva, inventario ni asiento propios">Cambio</span>';
+        }
+        return $html;
     }
 
     private function cargarEmpresaParaPdf(int $idEmpresa): array

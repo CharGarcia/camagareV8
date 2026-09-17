@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\Helpers\Booleano;
 use App\repositories\modulos\InventarioRepository;
 use App\Services\LogSistemaService;
 use App\core\Database;
@@ -59,6 +60,28 @@ class InventarioService
     // ────────────────────────────────────────────────────────────────
 
     /**
+     * ¿La facturación del establecimiento mueve inventario? («La facturación afecta al inventario»,
+     * Empresa → Facturación). Es la regla única para lo que una venta saca o devuelve: la salida de
+     * la factura o recibo, la entrada de la nota de crédito y el reingreso de Facturación de
+     * consignaciones que precede a su factura.
+     */
+    public function facturacionAfectaInventario(int $idEstablecimiento): bool
+    {
+        return self::configAfectaInventario($this->getEmpresaRepository()->getEstablecimientoConfig($idEstablecimiento));
+    }
+
+    /**
+     * Las opciones del establecimiento se guardan como texto 'true'/'false'
+     * (EmpresaService::saveFacturacionConfig) y en PHP la cadena 'false' es verdadera: evaluadas
+     * sin Booleano::es(), las ventas descontaban stock con la opción apagada y los lotes se trataban
+     * como obligatorios.
+     */
+    private static function configAfectaInventario(?array $estConfig): bool
+    {
+        return Booleano::es($estConfig['facturacion_inventario'] ?? false);
+    }
+
+    /**
      * Procesa salidas de inventario para todos los ítems de una factura.
      * Solo aplica a productos inventariables.
      * Devuelve array con id_inventario_kardex por posición de ítem.
@@ -68,16 +91,16 @@ class InventarioService
         $estConfig = $this->getEmpresaRepository()->getEstablecimientoConfig($idEstablecimiento);
 
         // Si no está activa la facturación con inventario, no hacemos nada
-        if (!($estConfig['facturacion_inventario'] ?? false)) {
+        if (!self::configAfectaInventario($estConfig)) {
             return [];
         }
 
         $metodo          = $estConfig['metodo_costeo'] ?? 'promedio';
-        $soloStockPos    = (bool)($estConfig['factura_solo_stock_positivo'] ?? false);
+        $soloStockPos    = Booleano::es($estConfig['factura_solo_stock_positivo'] ?? false);
         // $permitirNegativo fuerza salidas aunque el saldo quede negativo (p. ej. facturas
         // generadas desde una consignación: el stock ya se reingresó y la restricción es redundante).
         $permitirNeg     = $permitirNegativo || !$soloStockPos;
-        $obliLotes       = (bool)($estConfig['obligatorio_lotes']   ?? false);
+        $obliLotes       = Booleano::es($estConfig['obligatorio_lotes'] ?? false);
         $kardexIds        = [];
         
         $obsText = !empty($obsPrefix) ? $obsPrefix : "Factura #$idVenta";
@@ -98,7 +121,7 @@ class InventarioService
             ];
 
             // 1. Registrar salida del producto principal si es inventariable
-            $prodData = $this->getProductoRepository()->getDetalleCompleto($idProducto, $idEmpresa);
+            $prodData = $this->getProductoRepository()->getDatosMovimientoInventario($idProducto, $idEmpresa);
             $isInventariable = $prodData && 
                                ($prodData['inventariable'] === true || $prodData['inventariable'] === 'true' || $prodData['inventariable'] == 1) &&
                                ($prodData['tipo_produccion'] !== '02');
@@ -122,12 +145,6 @@ class InventarioService
                         // Fallback si no hay historial ni saldo
                         $loteParaKardex = 'SIN LOTE';
                         $cadParaKardex  = date('Y-m-d');
-                    }
-                } else {
-                    // Si el lote fue manual, pero el NUP es opcional y está vacío, buscar el NUP más antiguo de ese lote específico
-                    $obliNup = (bool)($estConfig['obligatorio_nup'] ?? false);
-                    if (!$obliNup && empty($d['nup']) && !empty($loteParaKardex)) {
-                         $nupAuto = $this->repo->getLoteMasAntiguo($idProducto, $idBodega, $idEmpresa, (string)$loteParaKardex, $soloStockPos);
                     }
                 }
 
@@ -519,7 +536,7 @@ class InventarioService
         if (!$idProducto || !$idBodega || !$idEmpresa || $cantidad <= 0) return;
 
         // Verificar si el producto es inventariable
-        $prodData = $this->getProductoRepository()->getDetalleCompleto($idProducto, $idEmpresa);
+        $prodData = $this->getProductoRepository()->getDatosMovimientoInventario($idProducto, $idEmpresa);
         if (!$prodData) return;
         $isInventariable = ($prodData['inventariable'] === true || $prodData['inventariable'] === 'true' || $prodData['inventariable'] == 1);
         if (!$isInventariable) return;

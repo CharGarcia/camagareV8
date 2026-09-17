@@ -87,6 +87,30 @@ try {
                             </div>
                         </div>
 
+                        <!-- Fila 3: cómo se ofrece la forma al registrar un Ingreso o un Egreso -->
+                        <div class="col-md-12">
+                            <div class="d-flex flex-wrap align-items-start gap-4">
+                                <div style="width:110px;">
+                                    <label class="form-label small fw-bold d-block mb-1" for="fp-orden">Orden</label>
+                                    <input type="number" name="orden" id="fp-orden" class="form-control form-control-sm" min="1" max="9999" step="1" placeholder="Sin orden">
+                                </div>
+                                <div>
+                                    <label class="form-label small fw-bold d-block mb-1">Saldo</label>
+                                    <div class="d-flex align-items-center" style="min-height:31px;">
+                                        <div class="form-check mb-0">
+                                            <input class="form-check-input" type="checkbox" id="fp-chk-mostrar-saldo" checked>
+                                            <label class="form-check-label small fw-medium" for="fp-chk-mostrar-saldo">Mostrar saldo</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-text text-muted" style="font-size: 0.7rem;">
+                                <i class="bi bi-info-circle me-1"></i> Al registrar un <strong>Ingreso</strong> o un <strong>Egreso</strong>, las formas se listan por
+                                <strong>Orden</strong> (1 = primera; las que no tienen orden van al final, por nombre) y el saldo aparece junto al
+                                nombre solo si está marcado <strong>Mostrar saldo</strong>.
+                            </div>
+                        </div>
+
                         <!-- SECCION DE BANCOS CONDICIONAL -->
                         <div class="col-12 d-none" id="sec-banco">
                             <div class="card border border-primary bg-light bg-opacity-10 p-3">
@@ -314,6 +338,7 @@ try {
 
                 const formData = new FormData(this);
                 formData.set('aplica_en', aplicaVal);
+                formData.set('mostrar_saldo', document.getElementById('fp-chk-mostrar-saldo').checked ? '1' : '0');
 
                 // Validacion banco
                 if (formData.get('tipo') === 'BANCO' && (!formData.get('id_banco') || !formData.get('numero_cuenta'))) {
@@ -495,6 +520,8 @@ try {
 
         document.getElementById('fp-chk-ingreso').checked = true;
         document.getElementById('fp-chk-egreso').checked = true;
+        document.getElementById('fp-orden').value = '';
+        document.getElementById('fp-chk-mostrar-saldo').checked = true;
         toggleCamposBanco('EFECTIVO');
 
         const swAct = document.getElementById('fp-activo-sw');
@@ -529,6 +556,11 @@ try {
                             swObj.nextElementSibling.nextElementSibling.innerText = isActive ? 'Estado: Activo' : 'Estado: Inactivo';
                         }
                         document.getElementById('fp-activo').value = isActive ? '1' : '0';
+
+                        // Sin las columnas (SQL aún no aplicado) no llegan: sin orden y saldo visible.
+                        document.getElementById('fp-orden').value = (d.orden ?? '');
+                        document.getElementById('fp-chk-mostrar-saldo').checked =
+                            !(d.mostrar_saldo === false || d.mostrar_saldo === 'f' || d.mostrar_saldo === 0 || d.mostrar_saldo === '0');
 
                         toggleCamposBanco(d.tipo);
                         if (d.tipo === 'BANCO') {

@@ -52,9 +52,35 @@ class AtsRepository extends BaseRepository
      * Compras del período, filtradas por FECHA DE EMISIÓN del comprobante.
      * fechaRegistro del ATS se reporta igual a la fecha de emisión.
      * Las bases IVA/ICE se agregan desde compras_detalle_impuestos.
+     *
+     * En notas de crédito/débito (04/05) resuelve además el comprobante que modifican,
+     * porque el ATS exige SU autorización (autModificado), no la de la nota:
+     *  - cod_doc_modificado_xml: <codDocModificado> del XML del SRI guardado en detalle_xml
+     *    (NULL si la nota se registró a mano).
+     *  - mod_numero_autorizacion / mod_tipo_comprobante: el comprobante registrado en Compras
+     *    con el número de documento_modificado, del mismo proveedor (por identificación) y
+     *    ambiente. Si el XML trae el tipo, solo vale un comprobante de ese tipo. NULL si no
+     *    está registrado.
+     *
+     * @param int[] $idsGrupo Empresas del mismo RUC a las que el usuario tiene acceso: el ATS
+     *        se presenta por RUC y la factura puede estar registrada en otro establecimiento
+     *        que la nota. Se prefiere la de la misma empresa. Vacío = solo $idEmpresa.
      */
-    public function getCompras(int $idEmpresa, string $desde, string $hasta): array
+    public function getCompras(int $idEmpresa, string $desde, string $hasta, array $idsGrupo = []): array
     {
+        $params = [
+            ':id_empresa' => $idEmpresa,
+            ':desde'      => $desde,
+            ':hasta'      => $hasta,
+        ];
+        $grupo = array_values(array_unique(array_map('intval', array_merge([$idEmpresa], $idsGrupo))));
+        $place = [];
+        foreach ($grupo as $i => $idg) {
+            $place[] = ":grp{$i}";
+            $params[":grp{$i}"] = $idg;
+        }
+        $inGrupo = implode(',', $place);
+
         $sql = "SELECT c.id,
                        'compra' AS origen,
                        c.tipo_comprobante,
@@ -77,7 +103,10 @@ class AtsRepository extends BaseRepository
                        p.tipo_empresa   AS prov_tipo_empresa,
                        st.codigo        AS cod_sustento,
                        imp.base_no_gra_iva, imp.base_imponible_0, imp.base_imponible_grav,
-                       imp.base_imponible_exe, imp.monto_iva, imp.monto_ice
+                       imp.base_imponible_exe, imp.monto_iva, imp.monto_ice,
+                       xm.cod_doc_modificado_xml,
+                       modif.numero_autorizacion AS mod_numero_autorizacion,
+                       modif.tipo_comprobante    AS mod_tipo_comprobante
                 FROM compras_cabecera c
                 INNER JOIN proveedores p ON p.id = c.id_proveedor
                 LEFT  JOIN sustento_tributario st ON st.id = c.id_sustento_tributario
@@ -93,16 +122,35 @@ class AtsRepository extends BaseRepository
                     INNER JOIN compras_detalle_impuestos di ON di.id_compra_detalle = d.id
                     WHERE d.id_compra = c.id
                 ) imp ON true
+                -- Solo 04/05: el WHERE sin FROM evita leer detalle_xml en el resto de compras.
+                LEFT  JOIN LATERAL (
+                    SELECT NULLIF(BTRIM(SUBSTRING(c.detalle_xml FROM '<codDocModificado>([^<]+)</codDocModificado>')), '') AS cod_doc_modificado_xml
+                     WHERE c.tipo_comprobante IN ('04', '05')
+                ) xm ON true
+                LEFT  JOIN LATERAL (
+                    SELECT f.numero_autorizacion, f.tipo_comprobante
+                      FROM proveedores pf
+                      INNER JOIN compras_cabecera f ON f.id_proveedor = pf.id
+                                                   AND f.id_empresa   = pf.id_empresa
+                     WHERE c.tipo_comprobante IN ('04', '05')
+                       AND pf.id_empresa IN ({$inGrupo})
+                       AND pf.identificacion = p.identificacion
+                       AND f.eliminado = false
+                       AND f.tipo_comprobante NOT IN ('04', '05')
+                       AND (xm.cod_doc_modificado_xml IS NULL OR f.tipo_comprobante = xm.cod_doc_modificado_xml)
+                       AND COALESCE(f.tipo_ambiente, '1') = COALESCE(c.tipo_ambiente, '1')
+                       AND LPAD(f.establecimiento_prov, 3, '0') = LPAD(BTRIM(SPLIT_PART(c.documento_modificado, '-', 1)), 3, '0')
+                       AND LPAD(f.punto_emision_prov, 3, '0')   = LPAD(BTRIM(SPLIT_PART(c.documento_modificado, '-', 2)), 3, '0')
+                       AND LTRIM(f.secuencial_prov, '0')        = LTRIM(BTRIM(SPLIT_PART(c.documento_modificado, '-', 3)), '0')
+                     ORDER BY (f.id_empresa = c.id_empresa) DESC, (f.tipo_comprobante = '01') DESC, f.id DESC
+                     LIMIT 1
+                ) modif ON true
                 WHERE c.id_empresa = :id_empresa
                   AND c.eliminado = false
                   AND COALESCE(c.tipo_ambiente, '1') = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                   AND c.fecha_emision BETWEEN :desde AND :hasta
                 ORDER BY c.fecha_emision, c.id";
-        return $this->query($sql, [
-            ':id_empresa' => $idEmpresa,
-            ':desde'      => $desde,
-            ':hasta'      => $hasta,
-        ])->fetchAll();
+        return $this->query($sql, $params)->fetchAll();
     }
 
     /**

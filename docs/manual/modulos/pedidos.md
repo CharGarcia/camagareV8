@@ -6,7 +6,7 @@ ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
 etiquetas: pedidos, pedido de cliente, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes
-version: 1.4
+version: 1.5
 orden: 0
 estado: activo
 ---
@@ -135,7 +135,7 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Cliente | Sí | A quién se le entrega. Se busca por nombre o identificación. |
 | Fecha Pedido | Sí | Cuándo se tomó el encargo. |
 | Fecha de Entrega | Sí | Cuándo se entrega. No puede ser anterior a hoy ni al día del pedido. |
-| Hora Inicial / Hora Máxima | Sí | Ventana horaria de la entrega, en formato 00:00. La inicial debe ser menor que la máxima. |
+| Hora Inicial / Hora Máxima | Sí | Ventana horaria de la entrega, en formato 00:00. La inicial no puede ser mayor que la máxima; pueden ser la misma hora si la entrega es a una hora exacta. |
 | Responsable de Entrega | Sí | Quién lleva el pedido. Se puede crear uno nuevo sin salir del formulario. |
 | Observaciones Generales | No | Notas que acompañan al pedido (salen en el PDF). |
 | Observaciones Internas | No | Notas para el equipo. |
@@ -155,8 +155,8 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
 ## Reglas de negocio
 
 - **Fechas y horas**: la entrega no puede quedar antes de hoy ni antes de la fecha
-  del pedido; las horas deben tener formato `00:00` y la inicial debe ser menor
-  que la máxima (no pueden ser iguales).
+  del pedido; las horas deben tener formato `00:00` y la inicial no puede ser
+  mayor que la máxima (sí pueden ser iguales, para una entrega a hora exacta).
 - **Al menos un producto**, y toda cantidad debe ser mayor a cero.
 - **El secuencial no se repite**: al guardar, el sistema toma el siguiente número
   bajo un bloqueo, de modo que dos personas guardando a la vez no obtienen el mismo.
@@ -208,6 +208,9 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
 
 ## Historial de cambios
 
+- **1.5** — La **hora inicial y la hora máxima de entrega pueden ser la misma**
+  (por ejemplo 10:00 - 10:00, para una entrega a hora exacta). Antes el formulario
+  lo rechazaba; sigue sin aceptarse una hora inicial mayor que la máxima.
 - **1.4** — Nuevo **buscador del listado**: la búsqueda libre recorre todas las
   columnas, la identificación del cliente, el usuario, los productos y las
   consignaciones o facturas que tomaron el pedido; el botón del embudo abre la

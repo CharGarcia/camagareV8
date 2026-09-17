@@ -812,9 +812,15 @@ class SecuencialRepository
                     CASE
                         WHEN NOT EXISTS (SELECT 1 FROM usados WHERE sec = :ini_libre) THEN :ini_valor
                         ELSE (
-                            SELECT MIN(u.sec + 1) FROM usados u
-                             WHERE u.sec >= :ini_desde
-                               AND NOT EXISTS (SELECT 1 FROM usados v WHERE v.sec = u.sec + 1)
+                            -- Primer libre desde el inicial: el número que sigue a un usado cuyo
+                            -- siguiente usado (en orden) no es el consecutivo. Con LEAD es un solo
+                            -- recorrido ordenado; el NOT EXISTS contra la CTE se resolvía con un
+                            -- Nested Loop Anti Join que comparaba cada número con todos los demás.
+                            SELECT MIN(h.sec + 1)
+                              FROM (SELECT sec, LEAD(sec) OVER (ORDER BY sec) AS sig
+                                      FROM usados
+                                     WHERE sec >= :ini_desde) h
+                             WHERE h.sig IS NULL OR h.sig > h.sec + 1
                         )
                     END AS siguiente";
 
@@ -888,9 +894,15 @@ class SecuencialRepository
                     CASE
                         WHEN NOT EXISTS (SELECT 1 FROM usados WHERE sec = :ini_libre) THEN :ini_valor
                         ELSE (
-                            SELECT MIN(u.sec + 1) FROM usados u
-                             WHERE u.sec >= :ini_desde
-                               AND NOT EXISTS (SELECT 1 FROM usados v WHERE v.sec = u.sec + 1)
+                            -- Primer libre desde el inicial: el número que sigue a un usado cuyo
+                            -- siguiente usado (en orden) no es el consecutivo. Con LEAD es un solo
+                            -- recorrido ordenado; el NOT EXISTS contra la CTE se resolvía con un
+                            -- Nested Loop Anti Join que comparaba cada número con todos los demás.
+                            SELECT MIN(h.sec + 1)
+                              FROM (SELECT sec, LEAD(sec) OVER (ORDER BY sec) AS sig
+                                      FROM usados
+                                     WHERE sec >= :ini_desde) h
+                             WHERE h.sig IS NULL OR h.sig > h.sec + 1
                         )
                     END AS siguiente";
 

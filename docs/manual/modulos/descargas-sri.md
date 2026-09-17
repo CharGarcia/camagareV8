@@ -6,7 +6,7 @@ ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
 etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri
-version: 1.7
+version: 1.9
 orden: 50
 estado: activo
 ---
@@ -110,8 +110,44 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
     declarar. Corríjalas desde el modal de *Compras*.
   Las compras registradas antes de este cambio no se corrigen solas; hay que
   editar la tarifa de la línea en *Compras*.
+- **La base con IVA de una compra no coincide con su subtotal en la Declaración
+  de IVA, el ATS o el Reporte de Compras**: es otro caso de XML inconsistente.
+  Algunos proveedores (por ejemplo SERVIENTREGA) informan como base del IVA de
+  cada línea el precio **antes del descuento**, aunque el IVA sí lo calculan sobre
+  el subtotal ya descontado. El SRI lo autoriza porque los totales del comprobante
+  cuadran. El sistema lo resuelve así al registrar la compra:
+  - Si la base de las líneas no coincide con la de los totales, pero el subtotal
+    de esas líneas sí, cada línea se registra con su subtotal como base. La compra
+    queda con una observación que lo explica.
+  - Si tampoco coincide el subtotal, el detalle se guarda tal como vino.
+  El valor del IVA no cambia en ningún caso. Las compras registradas antes de este
+  cambio se corrigen con una actualización de datos que aplica el administrador
+  del sistema.
+- **El enlace del correo para aprobar una compra descargada del SRI dice que ya
+  no está pendiente**: les ocurrió a las facturas y liquidaciones cargadas antes
+  de la versión 1.9 en empresas que exigen aprobar las compras. Quedaban
+  registradas aunque los aprobadores recibían el correo, así que el enlace ya no
+  tenía nada que aprobar y tampoco se generaba su pago automático. Las cargas
+  nuevas quedan pendientes, como se explica en *Compras → Aprobación de
+  compras*; las anteriores las revisa el administrador del sistema.
 
 ## Historial de cambios
+
+- **1.9** — En empresas que exigen aprobar las compras (módulo *Aprobaciones*),
+  las facturas y liquidaciones descargadas del SRI quedan **pendientes de
+  aprobación**, como ya indicaba *Compras → Aprobación de compras*. Por un error
+  se grababan como registradas, aunque los aprobadores recibían el correo. Al
+  aprobar una factura se genera su pago automático, si el proveedor lo tiene
+  configurado (ver *Compras → Pago automático al aprobar*). Las notas de crédito
+  y de débito siguen entrando como registradas. Ver *Errores frecuentes*.
+
+- **1.8** — Al registrar una compra desde el SRI, si la base del IVA de las líneas
+  no coincide con la de los totales del comprobante pero el subtotal de las líneas
+  sí, cada línea se registra con su subtotal como base y la compra queda con una
+  observación. Antes esa base inflada llegaba a la Declaración de IVA, al ATS y al
+  Reporte de Compras. Las notas de crédito recibidas guardan además el descuento
+  total de sus líneas, que antes quedaba en 0 y no salían al filtrar por descuento
+  en *Compras*. Ver *Errores frecuentes*.
 
 - **1.7** — Al registrar una compra desde el SRI, si el IVA de los totales del
   comprobante no coincide con el del detalle, el sistema corrige la línea desde

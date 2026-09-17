@@ -23,7 +23,8 @@ use Exception;
  *     de esa línea de consignación y no mueve stock, porque ya salió con la consignación).
  *
  * La diferencia de valor (entregado − devuelto) es informativa. Inventario y
- * asiento contable (a costo) van ligados al estado 'Emitida'.
+ * asiento contable (a costo) van ligados al estado 'Emitida', igual que los registros en
+ * Facturación de consignaciones de lo entregado desde consignación (crearRegistrosFacturacion).
  */
 class CambioProductoCvService
 {
@@ -108,9 +109,10 @@ class CambioProductoCvService
         ];
     }
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
+    /** Listado principal: una fila por pareja "entra ↔ sale" (ver CambioProductoCvRepository::getListado). */
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro, array $ordenMulti = []): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $ordenMulti);
     }
 
     /** Búsqueda libre dentro de los cambios (líneas devueltas y entregadas): pestaña Detalles del buscador. */
@@ -228,6 +230,9 @@ class CambioProductoCvService
             $cabecera['subtotal_devuelto']  = round($totDev, 6);
             $cabecera['subtotal_entregado'] = round($totEnt, 6);
             $cabecera['diferencia']         = round($totEnt - $totDev, 6);
+
+            // Lo entregado desde consignación queda facturado en la factura de venta de lo devuelto.
+            $this->crearRegistrosFacturacion($idCambio, $idEmpresa, $idUsuario);
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR_CAMBIO_PRODUCTO_CV', 'cambios_producto_cv', $idCambio, null, $cabecera);
 
@@ -478,6 +483,7 @@ class CambioProductoCvService
             if (($cabecera['estado'] ?? '') === 'Emitida') {
                 $numero = ($cabecera['serie'] ?? '') . '-' . ($cabecera['secuencial'] ?? '');
                 $this->reversarInventario($id, $idEmpresa, $idUsuario, $empresaConfig, "Reverso por Eliminación de Cambio {$numero}");
+                $this->anularRegistrosFacturacion($id, $idEmpresa, $idUsuario);
             }
 
             $this->repository->eliminar($id, $idEmpresa, $idUsuario);
@@ -526,6 +532,7 @@ class CambioProductoCvService
 
             if ($wasActive && !$willActive) {
                 $this->reversarInventario($id, $idEmpresa, $idUsuario, $empresaConfig, "Reverso por cambio a {$nuevoEstado} del Cambio {$numero}");
+                $this->anularRegistrosFacturacion($id, $idEmpresa, $idUsuario);
             } elseif (!$wasActive && $willActive) {
                 // Revalidar saldo (excluyendo este cambio) antes de re-aplicar: devoluciones
                 // contra su origen y entregas tomadas de una consignación contra su saldo.
@@ -548,6 +555,8 @@ class CambioProductoCvService
                     $this->moverInventarioLinea($det, $idEmpresa, $idUsuario, $empresaConfig, $tipoMov,
                         'CAMBIO_PRODUCTO_CV', $id, "Re-aplicación (Emitida) del Cambio {$numero}");
                 }
+                // Registros nuevos en Facturación de consignaciones (los anteriores quedaron anulados).
+                $this->crearRegistrosFacturacion($id, $idEmpresa, $idUsuario);
             }
             // Borrador ↔ Anulada: sin movimiento.
 
@@ -577,6 +586,128 @@ class CambioProductoCvService
             $tipoMov = (($det['tipo_linea'] ?? '') === 'devolucion') ? 'salida' : 'entrada';
             $this->moverInventarioLinea($det, $idEmpresa, $idUsuario, $empresaConfig, $tipoMov, 'CAMBIO_PRODUCTO_CV', $id, $obs);
         }
+    }
+
+    // ─── REGISTRO EN FACTURACIÓN DE CONSIGNACIONES ────────────────────────────
+
+    /**
+     * Registra en Facturación de consignaciones lo que el cambio entregó desde una consignación:
+     * esas unidades quedan FACTURADAS en la factura de venta de la unidad devuelta con la que se
+     * emparejan, sin crear factura nueva (ConsignacionFacturaService::crearRegistroDeCambio).
+     *
+     * Emparejamiento, el mismo del listado: la n-ésima entrega con la n-ésima devolución, en
+     * orden de registro; las entregas que sobran van con la última devolución. Un registro por
+     * factura de venta. Lo entregado desde bodega o catálogo no se registra (no es consignación).
+     * Participa en la transacción del llamador: si el registro no se puede crear (p. ej. falta el
+     * secuencial de Facturación de consignaciones en el punto de emisión), el cambio no se emite.
+     */
+    private function crearRegistrosFacturacion(int $idCambio, int $idEmpresa, int $idUsuario): void
+    {
+        $cab = $this->repository->find($idCambio, $idEmpresa);
+        if (!$cab) {
+            return;
+        }
+        [$devoluciones, $entregas] = $this->separarLineas($this->repository->getDetalles($idCambio, $idEmpresa));
+
+        $grupos = [];
+        foreach ($entregas as $k => $ent) {
+            if (strtoupper((string) ($ent['origen_tipo'] ?? '')) !== 'CONSIGNACION' || !$devoluciones) {
+                continue;
+            }
+            $factura = $this->resolverFacturaDeVenta($devoluciones[min($k, count($devoluciones) - 1)], $idEmpresa);
+            $clave   = (int) ($factura['id_factura'] ?? 0) . '|' . (string) ($factura['numero_factura'] ?? '');
+            $grupos[$clave]['factura']  = $factura;
+            $grupos[$clave]['lineas'][] = $ent;
+        }
+        if (!$grupos) {
+            return;
+        }
+
+        $numeroCambio = ($cab['serie'] ?? '') . '-' . ($cab['secuencial'] ?? '');
+        if (!CambioProductoCvRepository::registroFacturacionDisponible()) {
+            throw new Exception("El cambio {$numeroCambio} entrega productos desde consignación y deben quedar registrados en Facturación de consignaciones, pero la base de datos aún no lo admite: aplique database/migrations/20260916_facturacion_cv_registro_cambio.sql.");
+        }
+
+        $facturacion = $this->getFacturacionService();
+        foreach ($grupos as $g) {
+            try {
+                $facturacion->crearRegistroDeCambio([
+                    'id_empresa'         => $idEmpresa,
+                    'id_usuario'         => $idUsuario,
+                    'tipo_ambiente'      => (string) ($cab['tipo_ambiente'] ?? '1'),
+                    'id_punto_emision'   => (int) ($cab['id_punto_emision'] ?? 0),
+                    'fecha_emision'      => $cab['fecha_cambio'] ?? date('Y-m-d'),
+                    'id_cliente'         => (int) $cab['id_cliente'],
+                    'id_vendedor'        => $g['factura']['id_vendedor'] ?? null,
+                    'id_factura'         => $g['factura']['id_factura'] ?? null,
+                    'numero_factura'     => $g['factura']['numero_factura'] ?? null,
+                    'id_cambio_producto' => $idCambio,
+                    'numero_cambio'      => $numeroCambio,
+                    'lineas'             => $g['lineas'],
+                ]);
+            } catch (\Throwable $e) {
+                throw new Exception("No se pudo registrar en Facturación de consignaciones lo entregado desde consignación en el cambio {$numeroCambio}: " . $e->getMessage(), 0, $e);
+            }
+        }
+    }
+
+    /** Anula los registros en Facturación de consignaciones del cambio (deja de estar Emitida o se elimina). */
+    private function anularRegistrosFacturacion(int $idCambio, int $idEmpresa, int $idUsuario): void
+    {
+        $this->getFacturacionService()->anularRegistrosDeCambio($idCambio, $idEmpresa, $idUsuario);
+    }
+
+    /**
+     * Factura de venta de la que viene una unidad DEVUELTA: la de su factura de consignación o, si
+     * viene de un cambio anterior, la de la unidad que ese cambio entregó (la factura donde quedó
+     * registrada o, si salió de bodega, la de la devolución con la que se emparejó en ese cambio).
+     * Devuelve id_factura, numero_factura e id_vendedor, vacíos si no se encuentra.
+     */
+    private function resolverFacturaDeVenta(array $dev, int $idEmpresa, int $nivel = 0): array
+    {
+        $vacio  = ['id_factura' => null, 'numero_factura' => null, 'id_vendedor' => null];
+        $origen = strtoupper((string) ($dev['origen_tipo'] ?? ''));
+
+        if ($origen === 'FACTURA') {
+            return $this->repository->getFacturaVentaDeFacturacionCv((int) $dev['id_origen'], $idEmpresa) ?? $vacio;
+        }
+        if ($origen !== 'CAMBIO' || $nivel >= 20) {
+            return $vacio;
+        }
+
+        $idEntregaPrevia = (int) ($dev['id_origen_detalle'] ?? 0);
+        $registrada = $this->repository->getFacturaVentaDeEntregaRegistrada($idEntregaPrevia, $idEmpresa);
+        if ($registrada) {
+            return $registrada;
+        }
+
+        [$devPrevias, $entPrevias] = $this->separarLineas($this->repository->getDetalles((int) $dev['id_origen'], $idEmpresa));
+        foreach ($entPrevias as $k => $ent) {
+            if ((int) $ent['id'] === $idEntregaPrevia && $devPrevias) {
+                return $this->resolverFacturaDeVenta($devPrevias[min($k, count($devPrevias) - 1)], $idEmpresa, $nivel + 1);
+            }
+        }
+        return $vacio;
+    }
+
+    /** Devoluciones y entregas del cambio, cada grupo en orden de registro (id): base del emparejamiento. */
+    private function separarLineas(array $detalles): array
+    {
+        $porId = static fn(array $a, array $b): int => (int) $a['id'] <=> (int) $b['id'];
+        $dev = array_values(array_filter($detalles, static fn($d) => ($d['tipo_linea'] ?? '') === 'devolucion'));
+        $ent = array_values(array_filter($detalles, static fn($d) => ($d['tipo_linea'] ?? '') === 'entrega'));
+        usort($dev, $porId);
+        usort($ent, $porId);
+        return [$dev, $ent];
+    }
+
+    private function getFacturacionService(): ConsignacionFacturaService
+    {
+        return new ConsignacionFacturaService(
+            new \App\repositories\modulos\ConsignacionFacturaRepository(),
+            new \App\Rules\modulos\ConsignacionFacturaRules(),
+            $this->logService
+        );
     }
 
     // ─── ASIENTO CONTABLE (a costo) ───────────────────────────────────────────

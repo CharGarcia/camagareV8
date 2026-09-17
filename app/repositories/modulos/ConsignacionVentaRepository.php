@@ -506,7 +506,8 @@ class ConsignacionVentaRepository extends BaseRepository
 
                 -- 4. Entregado a cambio (Cambios de productos Emitida): la unidad consignada pasó
                 --    a ser del cliente como reposición de otra devuelta. Sale del saldo igual que
-                --    una facturación, sin mover stock (ya había salido con la consignación).
+                --    una facturación, sin mover stock (ya había salido con la consignación). Si el
+                --    cambio la registró en Facturación de consignaciones, ya salió en la rama 3.
                 SELECT cd.id_origen_detalle, cc.fecha_cambio, 4, cd.id,
                        'Cambio de producto',
                        (cc.serie || '-' || cc.secuencial), cc.estado,
@@ -518,6 +519,7 @@ class ConsignacionVentaRepository extends BaseRepository
                 INNER JOIN productos p ON p.id = cd.id_producto
                 WHERE cd.tipo_linea = 'entrega' AND cd.origen_tipo = 'CONSIGNACION'
                   AND cd.id_origen = :id4 AND cd.id_empresa = :e4 AND cd.eliminado = false
+                  " . CambioProductoCvRepository::sqlSinRegistroFacturacion('cd') . "
             ) t
             ORDER BY t.orden ASC, t.fecha ASC, t.orden_id ASC
         ";
@@ -682,10 +684,162 @@ class ConsignacionVentaRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':e' => $idEmpresa, ':u' => $idUsuario]);
 
-        $sqlDet = "UPDATE consignaciones_ventas_detalles 
-                   SET eliminado = true 
+        $sqlDet = "UPDATE consignaciones_ventas_detalles
+                   SET eliminado = true
                    WHERE id_consignacion = :id AND id_empresa = :e AND eliminado = false";
         $stDet = $this->db->prepare($sqlDet);
         $stDet->execute([':id' => $id, ':e' => $idEmpresa]);
+    }
+
+    /**
+     * Documentos vigentes que dependen de las líneas de la consignación: retornos (Emitida o
+     * Borrador), facturaciones de consignación (borrador o facturada) y cambios de productos que
+     * entregan desde ella (Emitida o Borrador). Mientras existan, la consignación no se puede
+     * editar ni eliminar: editar recrea sus líneas (quedarían apuntando a líneas eliminadas) y
+     * eliminar devolvería a bodega unidades que esos documentos ya movieron.
+     *
+     * @return array<int,array{tipo:string,numero:string,estado:string}>
+     */
+    public function getDocumentosRelacionadosActivos(int $idConsignacion, int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT 'Retorno' AS tipo, rc.serie || '-' || rc.secuencial AS numero, rc.estado
+                  FROM retornos_cv_detalles rcd
+                  JOIN retornos_cv rc ON rc.id = rcd.id_retorno
+                 WHERE rcd.id_consignacion = :c1 AND rcd.eliminado = false
+                   AND rc.id_empresa = :e1 AND rc.eliminado = false AND UPPER(rc.estado) IN ('EMITIDA', 'BORRADOR')
+                UNION
+                SELECT DISTINCT 'Facturación', cf.serie || '-' || cf.secuencial, cf.estado
+                  FROM consignaciones_facturas_detalles cfd
+                  JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
+                 WHERE cfd.id_consignacion = :c2 AND cfd.eliminado = false
+                   AND cf.id_empresa = :e2 AND cf.eliminado = false AND LOWER(cf.estado) IN ('borrador', 'facturada')
+                UNION
+                SELECT DISTINCT 'Cambio de productos', cc.serie || '-' || cc.secuencial, cc.estado
+                  FROM cambios_producto_cv_detalles cd
+                  JOIN cambios_producto_cv cc ON cc.id = cd.id_cambio
+                 WHERE cd.origen_tipo = 'CONSIGNACION' AND cd.eliminado = false
+                   AND cd.id_origen_detalle IN (SELECT cvd.id FROM consignaciones_ventas_detalles cvd
+                                                 WHERE cvd.id_consignacion = :c3 AND cvd.eliminado = false)
+                   AND cc.id_empresa = :e3 AND cc.eliminado = false AND UPPER(cc.estado) IN ('EMITIDA', 'BORRADOR')
+                ORDER BY 1, 2";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':c1' => $idConsignacion, ':e1' => $idEmpresa,
+            ':c2' => $idConsignacion, ':e2' => $idEmpresa,
+            ':c3' => $idConsignacion, ':e3' => $idEmpresa,
+        ]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // ESTADO DE LOS PEDIDOS QUE ALIMENTAN LA CONSIGNACIÓN
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Líneas de pedido (`id_pedido_detalle`) enlazadas a las líneas vigentes de la consignación.
+     *
+     * @return int[]
+     */
+    public function getIdsPedidoDetalle(int $idConsignacion, int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT id_pedido_detalle
+                  FROM consignaciones_ventas_detalles
+                 WHERE id_consignacion = :id AND id_empresa = :e AND eliminado = false
+                   AND id_pedido_detalle IS NOT NULL";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idConsignacion, ':e' => $idEmpresa]);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * Pedidos de la empresa dueños de esas líneas, en orden ascendente. Quedan fuera los
+     * eliminados y los anulados: su estado no se recalcula por lo consignado.
+     *
+     * @param array $idsPedidoDetalle ids de pedidos_detalle (los vacíos se ignoran)
+     * @return int[]
+     */
+    public function getPedidosDeLineas(array $idsPedidoDetalle, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsPedidoDetalle), static fn(int $v) => $v > 0)));
+        if (empty($ids)) {
+            return [];
+        }
+
+        $in  = implode(',', array_fill(0, count($ids), '?'));
+        $sql = "SELECT DISTINCT pd.id_pedido
+                  FROM pedidos_detalle pd
+                  JOIN pedidos_cabecera p ON p.id = pd.id_pedido
+                 WHERE pd.id IN ($in)
+                   AND p.id_empresa = ? AND p.eliminado = false
+                   AND UPPER(COALESCE(p.estado, '')) <> 'ANULADO'
+                 ORDER BY pd.id_pedido";
+        $st = $this->db->prepare($sql);
+        $st->execute([...$ids, $idEmpresa]);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * Candado transaccional por pedido (CLAUDE.md §8) antes de recalcular su estado: sin él, dos
+     * consignaciones que consumen el mismo pedido y se guardan a la vez calculan cada una sin ver
+     * las líneas de la otra, y el pedido queda "Pendiente" aunque ya esté cubierto. Se toman en
+     * orden ascendente para que dos guardados no queden esperándose mutuamente.
+     *
+     * @param int[] $idsPedido
+     */
+    public function lockEstadoPedidos(array $idsPedido, int $idEmpresa): void
+    {
+        $ids = array_values(array_unique(array_map('intval', $idsPedido)));
+        sort($ids);
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('pedido_estado:' || ? || ':' || ?))");
+        foreach ($ids as $idPedido) {
+            $st->execute([$idEmpresa, $idPedido]);
+        }
+    }
+
+    /**
+     * Deja "Procesado" cada pedido cuyas líneas vigentes quedaron cubiertas por lo consignado en
+     * consignaciones vigentes, y "Pendiente" a los demás, en una sola sentencia. Solo escribe los
+     * pedidos que cambian de estado. Un pedido sin líneas vigentes queda "Procesado".
+     *
+     * @param int[] $idsPedido
+     * @return int Pedidos que cambiaron de estado.
+     */
+    public function actualizarEstadoPedidosPorConsignado(array $idsPedido, int $idEmpresa, int $idUsuario): int
+    {
+        $ids = array_values(array_unique(array_map('intval', $idsPedido)));
+        if (empty($ids)) {
+            return 0;
+        }
+
+        // `consignado` va MATERIALIZED y con `= ANY (ARRAY(...))`: la suma se calcula una sola vez
+        // y, con idx_cons_ventas_det_pedido_detalle, entra directo por las líneas de estos pedidos.
+        // Como subconsulta enlazada el planificador la repetía por cada pedido o recorría el
+        // índice completo.
+        $in  = implode(',', array_fill(0, count($ids), '?'));
+        $sql = "WITH consignado AS MATERIALIZED (
+                    SELECT cvd.id_pedido_detalle, SUM(cvd.cantidad) AS cantidad
+                      FROM consignaciones_ventas_detalles cvd
+                      JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion AND cv.eliminado = false
+                     WHERE cvd.id_empresa = ? AND cvd.eliminado = false
+                       AND cvd.id_pedido_detalle = ANY (ARRAY(SELECT pdx.id FROM pedidos_detalle pdx WHERE pdx.id_pedido IN ($in)))
+                     GROUP BY cvd.id_pedido_detalle
+                ), calc AS (
+                    SELECT pc.id,
+                           CASE WHEN COALESCE(BOOL_AND(COALESCE(c.cantidad, 0) >= pd.cantidad), true)
+                                THEN 'Procesado' ELSE 'Pendiente' END AS nuevo_estado
+                      FROM pedidos_cabecera pc
+                      LEFT JOIN pedidos_detalle pd ON pd.id_pedido = pc.id AND pd.eliminado = false
+                      LEFT JOIN consignado c ON c.id_pedido_detalle = pd.id
+                     WHERE pc.id IN ($in)
+                     GROUP BY pc.id
+                )
+                UPDATE pedidos_cabecera p
+                   SET estado = calc.nuevo_estado, updated_at = CURRENT_TIMESTAMP, updated_by = ?
+                  FROM calc
+                 WHERE p.id = calc.id AND p.id_empresa = ?
+                   AND p.estado IS DISTINCT FROM calc.nuevo_estado";
+        $st = $this->db->prepare($sql);
+        $st->execute([$idEmpresa, ...$ids, ...$ids, $idUsuario, $idEmpresa]);
+        return $st->rowCount();
     }
 }

@@ -257,6 +257,7 @@ class CargaInventarioService
             'numero'   => $numero,
             'estado'   => $estadoFinal,
             'validada' => $todasOk,
+            'lineas'   => count($lineas),
             'errores'  => $errores,
             'requiere_aprobacion' => $cfg['requiere'],
         ];

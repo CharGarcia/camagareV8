@@ -185,7 +185,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php else: ?>
                         <?php foreach ($rows as $r):
                             $dataJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
-                            $badge = \App\controllers\modulos\FacturacionCvController::badgeEstado($r['estado'] ?? 'borrador');
+                            $badge = \App\controllers\modulos\FacturacionCvController::badgeEstado($r['estado'] ?? 'borrador', !empty($r['id_cambio_producto']));
                         ?>
                             <tr class="factcv-row" role="button" tabindex="0" data-row="<?= $dataJson ?>" onclick="abrirModalFacturacionVer(this)">
                                 <td class="ps-3" data-col="fecha"><?= htmlspecialchars($r['fecha_emision'] ?? '') ?></td>

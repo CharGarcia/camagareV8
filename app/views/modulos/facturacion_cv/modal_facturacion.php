@@ -62,6 +62,12 @@
                         </div>
                     </div>
 
+                    <!-- Registro generado por un Cambio de productos: solo lectura -->
+                    <div id="faccv_aviso_cambio" class="alert alert-info border-0 rounded-0 small d-flex align-items-center gap-2 mb-0 py-2 px-3 d-none">
+                        <i class="bi bi-arrow-left-right"></i>
+                        <span>Registro generado por un <strong>cambio de productos</strong>: estas unidades se entregaron a cambio y quedaron facturadas en la factura de venta indicada. No tiene factura nueva, movimiento de inventario ni asiento propio; se anula desde el cambio.</span>
+                    </div>
+
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1" id="tabsFaccv" role="tablist">
@@ -476,6 +482,7 @@
         $('faccv_btn_eliminar').classList.add('d-none');
         $('faccv_btn_generar').classList.add('d-none');
         $('faccv_btn_duplicar').classList.add('d-none');
+        $('faccv_aviso_cambio').classList.add('d-none');
         $('faccv_select_serie').disabled = false;
         $('faccv_fecha').value = CMG_fechaLocal();
         $('faccv_tbody_info').innerHTML = ''; faccvAgregarInfo(); faccvInfoDerivadas();
@@ -498,8 +505,11 @@
         $('faccv_btn_guardar').innerHTML = '<i class="bi bi-check2-circle me-1"></i> Actualizar';
         $('faccv_btn_eliminar').classList.toggle('d-none', !(row.estado === 'borrador' && window.FACCV_PERM.eliminar));
         $('faccv_btn_generar').classList.toggle('d-none', !(row.estado === 'borrador' && window.FACCV_PERM.actualizar));
+        // Registro generado por un cambio de productos: solo lectura, se gestiona desde el cambio.
+        const deCambio = !!row.id_cambio_producto;
+        $('faccv_aviso_cambio').classList.toggle('d-none', !deCambio);
         // "Crear nueva desde esta": disponible en documentos ya emitidos (facturada/anulada).
-        $('faccv_btn_duplicar').classList.toggle('d-none', !((row.estado === 'anulada' || row.estado === 'facturada') && window.FACCV_PERM.crear));
+        $('faccv_btn_duplicar').classList.toggle('d-none', deCambio || !((row.estado === 'anulada' || row.estado === 'facturada') && window.FACCV_PERM.crear));
         getModal().show();
         // Mostrar loader: la carga completa vía AJAX puede tardar y sin esto el
         // usuario ve el modal "vacío" y piensa que la facturación no tiene datos.

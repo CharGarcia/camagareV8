@@ -654,7 +654,9 @@ class SincronizadorAsientosService
         $trabajos[] = [
             // Igual que en Retornos: el reingreso es el asiento inverso de la consignación, así que
             // si la consignación de origen está excluida por migrada, su facturación también.
+            // Los registros que genera un cambio de productos no tienen reingreso: su asiento es el del cambio.
             'sql'    => "SELECT id FROM consignaciones_facturas WHERE id_empresa = ? AND eliminado = false AND id_asiento_reingreso IS NULL AND estado = 'facturada'"
+                        . \App\repositories\modulos\CambioProductoCvRepository::sqlNoEsRegistroDeCambio('consignaciones_facturas')
                         . $excMigConsig('consignaciones_facturas_detalles', 'id_consignacion_factura', 'consignaciones_facturas.id'),
             'params' => [$idEmpresa],
             'factory' => function() {

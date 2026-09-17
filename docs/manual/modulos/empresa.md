@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.23
+version: 1.24
 orden: 5
 estado: activo
 ---
@@ -348,6 +348,13 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.24** — Las opciones de la pestaña **Facturación** apagadas ahora se respetan en
+  todo el inventario: con **"La facturación afecta al inventario"** apagada, facturas,
+  recibos, notas de crédito y órdenes de car-wash, taller y servicio externo ya no
+  mueven stock (antes lo movían igual porque la opción guardada como *false* se leía
+  como activa); con **"Obligatorio usar Lotes"** apagado, la línea sin lote toma el lote
+  que vence primero. Una empresa que trabaja con inventario debe tener la primera
+  opción **activada**.
 - **1.22** — Se documenta **Presentación de los ítems en el comprobante** y se
   agrega la opción **Agrupar los ítems por nombre**, que junta las líneas del
   mismo producto sin importar el lote ni el NUP (antes solo se podía agrupar

@@ -45,21 +45,24 @@ class LiquidacionCompraRepository extends BaseRepository
         // columnas de estado (Correo, Estado) NO entran en el texto libre; se filtran
         // solo desde el modal de filtros.
         if ($parsed['texto_libre'] !== '') {
+            // Rendimiento: montos y fecha solo se comparan si la palabra tiene dígitos
+            // (ver FiltrosBusqueda::condicionTexto). La subconsulta del detalle va al final.
+            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     "CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial)", // Nº Liquidación
                     'l.secuencial',
-                    'l.fecha_emision::text',                                          // Fecha
                     'p.razon_social',                                                 // Proveedor
                     'p.identificacion',                                               // Identificación
-                    'l.total_sin_impuestos::text',                                    // Subtotal
-                    'l.total_descuento::text',                                        // Descuento
-                    'l.importe_total::text',                                          // Total
                     'u.nombre',                                                       // Usuario
                     // Fuera del listado, pero identifican la liquidación:
                     'l.numero_autorizacion',
                     'l.clave_acceso',
                     'l.observaciones',
+                    ['sql' => 'l.fecha_emision', 'si' => $digitos],                   // Fecha
+                    ['sql' => 'l.total_sin_impuestos', 'si' => $digitos],             // Subtotal
+                    ['sql' => 'l.total_descuento', 'si' => $digitos],                 // Descuento
+                    ['sql' => 'l.importe_total', 'si' => $digitos],                   // Total
                     "(SELECT STRING_AGG(CONCAT_WS(' ', ld.codigo_principal, ld.codigo_auxiliar, ld.descripcion), ' ') FROM liquidaciones_detalle ld WHERE ld.id_cabecera = l.id)",
                 ],
                 $parsed['texto_libre'],
@@ -135,15 +138,6 @@ class LiquidacionCompraRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        // El COUNT solo suma el JOIN de usuarios cuando el WHERE lo usa (texto libre o
-        // "usuario:"); es 1:1 por la PK, así que no cambia el total.
-        $joinsCount = "INNER JOIN proveedores p ON l.id_proveedor = p.id";
-        if (str_contains($where, 'u.nombre')) {
-            $joinsCount .= " LEFT JOIN usuarios u ON l.id_usuario = u.id";
-        }
-        $sqlCount = "SELECT COUNT(*) FROM liquidaciones_cabecera l $joinsCount $where";
-        $total = $this->query($sqlCount, $params)->fetchColumn();
-
         $allowedCols = ['id', 'fecha_emision', 'secuencial', 'importe_total', 'total_sin_impuestos', 'total_descuento', 'estado', 'estado_correo', 'proveedor_nombre', 'proveedor_ruc', 'usuario_nombre', 'observaciones'];
         if (!in_array($ordenCol, $allowedCols)) $ordenCol = 'fecha_emision';
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
@@ -155,20 +149,30 @@ class LiquidacionCompraRepository extends BaseRepository
             default            => "l.$ordenCol",
         };
 
-        $sql = "SELECT l.*,
+        // Rendimiento (2026-09-16): conteo + página en UNA consulta (el WHERE con texto
+        // libre o filtros de saldo se evalúa una sola vez). Ver App\Helpers\ListadoPaginado.
+        $joins = "INNER JOIN proveedores p ON l.id_proveedor = p.id
+                LEFT  JOIN usuarios    u ON l.id_usuario   = u.id";
+
+        return \App\Helpers\ListadoPaginado::consultar(
+            fn(string $sql, array $p) => $this->query($sql, $p)->fetchAll(),
+            [
+                'tabla'       => 'liquidaciones_cabecera',
+                'alias'       => 'l',
+                'joinsFiltro' => $joins,
+                'joinsFinal'  => $joins,
+                'where'       => $where,
+                'orderBy'     => "ORDER BY $ordenExpr $ordenDir, l.id DESC",
+                'perPage'     => $perPage,
+                'conBusqueda' => trim($buscar) !== '',   // sin buscar: forma liviana (ids por índice + COUNT aparte)
+                'offset'      => $offset,
+                'select'      => "l.*,
                        p.razon_social    AS proveedor_nombre,
                        p.identificacion   AS proveedor_ruc,
-                       u.nombre          AS usuario_nombre
-                FROM liquidaciones_cabecera l
-                INNER JOIN proveedores p ON l.id_proveedor = p.id
-                LEFT  JOIN usuarios    u ON l.id_usuario   = u.id
-                $where
-                ORDER BY $ordenExpr $ordenDir, l.id DESC
-                " . ($perPage > 0 ? "LIMIT $perPage OFFSET $offset" : "");
-
-        $rows = $this->query($sql, $params)->fetchAll();
-
-        return ['rows' => $rows, 'total' => (int) $total];
+                       u.nombre          AS usuario_nombre",
+            ],
+            $params
+        );
     }
 
     /**

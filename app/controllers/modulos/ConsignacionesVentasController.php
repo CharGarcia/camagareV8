@@ -1080,7 +1080,7 @@ class ConsignacionesVentasController extends BaseModuloController
                     $idBodega,
                     $idEmpresa,
                     $idConsignacion > 0 ? $idConsignacion : null,
-                    $idConsignacion > 0 ? 'consignacion_venta' : null
+                    $idConsignacion > 0 ? 'CONSIGNACION_VENTA' : null
                 );
             }
             $p['stock_actual'] = $stock;
@@ -1108,8 +1108,10 @@ class ConsignacionesVentasController extends BaseModuloController
         }
 
         $repoInv = new \App\repositories\modulos\InventarioRepository();
+        // Al editar, lo que la propia consignación ya tiene tomado cuenta como disponible. El tipo
+        // debe coincidir con el del kardex ('CONSIGNACION_VENTA'): en minúsculas no excluía nada.
         $excludeId   = ($idVenta > 0 ? $idVenta : null);
-        $excludeTipo = ($idVenta > 0 ? 'consignacion_venta' : null);
+        $excludeTipo = ($idVenta > 0 ? 'CONSIGNACION_VENTA' : null);
         
         $lotes = $repoInv->getLotesDisponibles($idProducto, $idBodega, $idEmpresa, $excludeId, $excludeTipo);
         $stockTotal = $repoInv->getStockActual($idProducto, $idBodega, $idEmpresa, $excludeId, $excludeTipo);

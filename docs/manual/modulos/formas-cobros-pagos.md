@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/formas_cobros_pagos
 tipo: modulo
 visibilidad: todos
-etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque
-version: 1.3
+etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque, orden, ordenar formas de pago, primera forma de pago, orden en ingresos, orden en egresos, saldo, mostrar saldo, ocultar saldo, saldo disponible, saldo de caja, saldo del banco
+version: 1.4
 orden: 70
 estado: activo
 ---
@@ -40,6 +40,33 @@ medida que se aplica a documentos.
 
 Su saldo es lo recibido menos lo ya aplicado. Por eso una forma de tipo anticipo
 no sirve como origen de un traspaso.
+
+## Orden y saldo en Ingresos y Egresos
+
+Al registrar un ingreso o un egreso, la forma de cobro o pago se elige de una
+lista. Dos campos de la forma deciden cómo aparece en esa lista:
+
+| Campo | Qué hace |
+|-------|----------|
+| **Orden** | Posición de la forma en la lista: **1** es la primera. Las formas sin orden van al final, por nombre. Es opcional y admite un número entero de 1 a 9999 |
+| **Mostrar saldo** | Marcado, el saldo actual de la forma se ve junto a su nombre (*Pichincha — $350.00*) y, al elegirla, debajo de la lista (*Saldo disponible*). Desmarcado, la forma aparece solo con su nombre |
+
+En una forma de tipo **Anticipo**, el saldo que se ve es el del cliente o
+proveedor elegido en el documento; **Mostrar saldo** también lo oculta.
+
+Por ejemplo, para que el banco más usado salga primero y la caja segunda, basta
+con poner **Orden 1** al banco y **Orden 2** a la caja: las demás formas siguen
+después, en orden alfabético. Dos formas con el mismo número se ordenan por
+nombre entre sí.
+
+Las formas existentes empiezan **sin orden y con el saldo visible**, así que la
+lista se ve igual que antes hasta que se configuren. Los dos campos aparecen
+también en el listado del módulo, en las columnas **Orden** y **Saldo**, y se
+puede ordenar por ellas.
+
+Estos campos solo cambian lo que se **muestra** al registrar Ingresos y Egresos:
+no alteran el saldo, ni la contabilidad, ni el orden de las formas en otros
+módulos (Compras, Traspasos, punto de venta…), que siguen listándolas por nombre.
 
 ## Cuenta contable
 
@@ -92,6 +119,11 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 - **No aparece al registrar un cobro**: puede estar inactiva, o ser de un tipo que
   no admite esa operación (Payphone no admite egresos).
+- **Al registrar un ingreso o egreso, una forma no muestra su saldo**: tiene
+  desmarcado **Mostrar saldo**. Edítela y márquelo.
+- **"El orden debe ser un número entero entre 1 y 9999, o dejarse vacío."**: el
+  campo **Orden** solo admite enteros de 1 a 9999. Déjelo vacío si esa forma no
+  necesita una posición fija.
 - **"No se pudo determinar el saldo de la forma de pago de origen"** en un
   traspaso: es de tipo anticipo o está inactiva.
 - **Los cobros van a la cuenta contable equivocada**: revise la cuenta asignada a
@@ -108,6 +140,12 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 ## Historial de cambios
 
+- **1.4** — Dos campos nuevos en la forma: **Orden**, la posición en la lista de
+  formas al registrar Ingresos y Egresos (las que no tienen orden van al final,
+  por nombre), y **Mostrar saldo**, que decide si esa lista muestra el saldo de la
+  forma junto a su nombre. El listado del módulo suma las columnas *Orden* y
+  *Saldo*. Las formas existentes quedan sin orden y con el saldo visible, como
+  hasta ahora. Nueva sección *Orden y saldo en Ingresos y Egresos*.
 - **1.3** — La cuenta contable de la forma pasa a pedirse **separada por flujo**
   (Cobros y Pagos) y es la misma que administra Configuración Contable: lo que se
   cambia en una pantalla se ve en la otra. El listado muestra ahora dos columnas

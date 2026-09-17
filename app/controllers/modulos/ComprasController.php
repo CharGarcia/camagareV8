@@ -100,6 +100,8 @@ class ComprasController extends BaseModuloController
                 'ok'      => true,
                 'mensaje' => 'Compra aprobada.',
                 'aviso'   => $res['aviso_asiento'] ?? null,
+                // Pago automático retenido por la aprobación: null si no aplica.
+                'pago'    => $res['pago'] ?? null,
             ]);
         } catch (\InvalidArgumentException $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -268,6 +270,8 @@ class ComprasController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q         = trim($_GET['q'] ?? '');
@@ -312,6 +316,10 @@ class ComprasController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario (la búsqueda
+        // siguiente al seguir tecleando, el sondeo del navbar) esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa  = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
@@ -1915,5 +1923,13 @@ class ComprasController extends BaseModuloController
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /** Libera el candado de la sesión PHP (lectura de $_SESSION sigue disponible). */
+    private function liberarSesion(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
     }
 }

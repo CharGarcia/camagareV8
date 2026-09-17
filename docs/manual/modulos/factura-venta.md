@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, buscar factura, buscador, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar
-version: 2.9
+version: 2.11
 orden: 20
 estado: activo
 ---
@@ -214,6 +214,13 @@ descripciones de los productos vendidos**. Puede escribir varias palabras en
 cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el
 texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro; cuando desaparece, el listado ya muestra el resultado. Mientras tanto la tabla se ve atenuada.
 
+**Montos y fechas.** Las fechas y los montos solo se comparan cuando lo escrito
+tiene números. El **saldo** se busca cuando se escribe un monto con decimales
+(`10.00` o `10,00`, con punto o con coma): calcularlo es lo más costoso de la
+búsqueda y así escribir un cliente o un producto responde mucho más rápido.
+Para buscar por un saldo aproximado, use el rango *Saldo pendiente* de la
+ventana de filtros.
+
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
 hasta ese momento. La ventana no se cierra con un clic fuera ni con Escape,
@@ -330,6 +337,18 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.11** — Se respeta **"La facturación afecta al inventario"** apagado: la factura
+  ya no descuenta stock (lo hacía igual, porque la opción guardada como *false* se leía
+  como activa). También se respeta **"Obligatorio usar Lotes"** apagado: la línea sin
+  lote toma el lote que vence primero y el stock se valida contra el total del producto
+  en la bodega, no contra un lote. La salida de inventario ya no carga la ficha completa
+  de cada producto, así que guardar una factura con muchas líneas es más rápido.
+- **2.10** — **Búsqueda del listado más rápida**: el conteo y la página salen de
+  una sola consulta, los cobros, notas de crédito y retenciones se calculan solo
+  para las 20 facturas visibles (antes, para todas las de la empresa en cada
+  carga del listado), y el saldo solo se busca cuando se escribe un monto con
+  decimales. Los montos escritos con coma decimal (`10,00`) ahora sí se
+  encuentran. Si se sigue escribiendo, la búsqueda anterior se cancela.
 - **2.9** — Nuevo buscador del listado: el cuadro de búsqueda ya no despliega
   sugerencias; lo que se escribe se busca **en todas las columnas** (incluidos
   los productos vendidos, el vendedor, el usuario, la clave de acceso, la guía

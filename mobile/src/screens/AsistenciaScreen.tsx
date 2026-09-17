@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
@@ -308,16 +308,21 @@ export default function AsistenciaScreen() {
       );
     }
     if (!permiso.granted) {
+      // Apple Guideline 5.1.1(iv): tras este mensaje, siempre se debe continuar al diálogo
+      // real del sistema (sin opción de "Cancelar" que lo evite) y el botón no debe sonar a
+      // que ya concede el permiso. Si el usuario ya lo negó antes, iOS no vuelve a mostrar su
+      // diálogo nativo (canAskAgain=false): en ese caso se dirige a Ajustes en su lugar.
+      const puedePedirDeNuevo = permiso.canAskAgain !== false;
       return (
         <View style={styles.centrado}>
           <View style={styles.panel}>
             <Text style={styles.panelTitulo}>Permiso de cámara</Text>
             <Text style={styles.panelTexto}>Necesitamos la cámara para escanear el código QR.</Text>
-            <TouchableOpacity style={styles.botonPrimario} onPress={solicitarPermiso}>
-              <Text style={styles.botonPrimarioTexto}>Dar permiso</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{ marginTop: 20 }} onPress={() => setPaso(modoEscaneo === 'empleado' ? 'vincular' : 'listo')}>
-              <Text style={styles.volver}>Cancelar</Text>
+            <TouchableOpacity
+              style={styles.botonPrimario}
+              onPress={puedePedirDeNuevo ? solicitarPermiso : () => Linking.openSettings()}
+            >
+              <Text style={styles.botonPrimarioTexto}>{puedePedirDeNuevo ? 'Continuar' : 'Abrir Ajustes'}</Text>
             </TouchableOpacity>
           </View>
         </View>

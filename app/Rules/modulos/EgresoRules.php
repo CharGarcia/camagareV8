@@ -116,4 +116,28 @@ class EgresoRules
             throw new Exception("Inconsistencia en la sumatoria total.");
         }
     }
+
+    /**
+     * Una compra solo se paga si está vigente y aprobada: ni pendiente de aprobación
+     * (checkpoint 'aprobacion_compras'), ni rechazada, ni anulada. Es el mismo criterio de
+     * TiposComprobanteCompra::sqlCompraPagable() en los listados de documentos por pagar;
+     * aquí se repite al guardar para que no se pueda saltar enviando el id a mano.
+     *
+     * @param string|null $estado compras_cabecera.estado; null si la compra no existe o fue eliminada.
+     */
+    public function validarCompraPagable(?string $estado, string $numeroDocumento): void
+    {
+        if ($estado === null) {
+            throw new Exception("La compra {$numeroDocumento} no existe o fue eliminada: no se puede pagar.");
+        }
+
+        $normalizado = strtoupper(trim($estado));
+        if ($normalizado === strtoupper(\App\Services\modulos\ComprasService::ESTADO_PENDIENTE)) {
+            throw new Exception("La compra {$numeroDocumento} está pendiente de aprobación: no se puede pagar hasta que la aprueben.");
+        }
+        if (in_array($normalizado, \App\Helpers\TiposComprobanteCompra::ESTADOS_COMPRA_SIN_DEUDA, true)) {
+            $motivo = str_starts_with($normalizado, 'RECHAZAD') ? 'fue rechazada en la aprobación' : 'está anulada';
+            throw new Exception("La compra {$numeroDocumento} {$motivo}: no se puede pagar.");
+        }
+    }
 }

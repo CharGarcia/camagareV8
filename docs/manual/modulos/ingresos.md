@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 2.2
+etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo
+version: 2.4
 orden: 10
 estado: activo
 ---
@@ -40,6 +40,11 @@ suma no coincide.
 
 Si es un ingreso que no cobra ninguna factura, elija el **concepto** que
 corresponda en lugar de documentos pendientes.
+
+La lista de **formas de cobro** sigue el **Orden** configurado en
+[Formas de cobro y pago](formas-cobros-pagos.md) (las que no tienen orden van al
+final, por nombre), y el saldo de cada forma se ve junto a su nombre solo si allí
+tiene marcado **Mostrar saldo**.
 
 ## Combinar varios conceptos en un mismo ingreso
 
@@ -290,6 +295,15 @@ deseable; para el contador o el administrador, active el acceso total.
 
 ## Historial de cambios
 
+- **2.4** — La lista de **formas de cobro** respeta el **Orden** definido en
+  *Formas de cobro y pago* (antes era siempre alfabética) y muestra el saldo solo
+  de las formas que tienen marcado **Mostrar saldo**. Sin configurar nada, se ve
+  igual que antes.
+- **2.3** — **Búsqueda del listado más rápida**: el conteo y la página salen
+  de una sola consulta y el tipo de cada ingreso (según sus documentos cobrados) se calcula solo para los 20 visibles. Las fechas y los montos solo se comparan
+  cuando lo escrito tiene números, así que buscar un nombre o un producto responde
+  antes. Si se sigue escribiendo, la búsqueda anterior se cancela. Los resultados
+  son los mismos que antes.
 - **2.2** — Nuevo buscador del listado: el cuadro de búsqueda ya no despliega
   sugerencias; lo que se escribe se busca **en todas las columnas** (incluidos
   los números de los documentos cobrados y el usuario que registró). Los

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion
-version: 1.16
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado
+version: 1.19
 orden: 45
 estado: activo
 ---
@@ -84,6 +84,14 @@ desmarcarla en cantidades grandes.
 No es todo o nada: las filas a las que les falte lote, vencimiento o NUP (cuando
 la empresa los exige) se omiten y se listan al final, pero las filas completas sí
 se agregan.
+
+### El pedido cambia de estado solo
+
+Al guardar la consignación, el pedido pasa a **Procesado** cuando todas sus líneas
+quedaron cubiertas por lo consignado, y vuelve a **Pendiente** si al editar o
+eliminar la consignación alguna línea deja de estarlo. Solo se revisan los pedidos
+que usa esa consignación: un pedido **anulado** no cambia, y el estado que se haya
+puesto a mano en cualquier otro pedido tampoco.
 
 ## Contabilidad
 
@@ -213,8 +221,34 @@ Depende del permiso **Acceso total** del módulo (se administra en
   responde *«No tiene permiso sobre este registro: lo creó otro usuario»*.
 
 El superadministrador (nivel 3) siempre ve todo.
+
+## Editar o eliminar una consignación
+
+Solo se edita una consignación en **Borrador** (el selector de estado la devuelve a
+Borrador). Al guardar la edición, o al eliminarla, las salidas de inventario que
+tenía **se anulan**: la mercadería vuelve a la bodega exactamente como salió y al
+mismo costo, y al editar se registra de nuevo con las cantidades nuevas. En el
+Kardex esas salidas quedan como **ANULADO** (se ven con *Ver anulados*), igual que
+cuando se edita una factura de venta. El asiento de la consignación se calcula
+solo con las salidas vigentes.
+
+Las consignaciones editadas antes de este cambio pueden tener en el Kardex
+entradas **Consignación (editada)**: eran el reverso que se registraba al
+editar. Al volver a editar o eliminar una de ellas, esas entradas también se
+anulan junto con las salidas, así que el stock queda bien.
+
+**No se puede editar ni eliminar** mientras la consignación tenga documentos
+vigentes que la usan: retornos (emitidos o en borrador), facturaciones de
+consignación (en borrador o facturadas) o cambios de productos que entregan desde
+ella. El mensaje dice cuáles son: hay que anularlos o eliminarlos primero. Los
+documentos **anulados** no cuentan.
+
 ## Errores frecuentes
 
+- **«No se puede eliminar (o editar) la consignación porque tiene documentos
+  relacionados»**: la consignación ya tiene retornos, facturaciones o cambios de
+  productos vigentes. Anule o elimine los documentos que nombra el mensaje y
+  vuelva a intentarlo.
 - **La consignación no aparece en ventas**: es correcto, no es una venta hasta
   que se factura.
 - **El stock bajó pero no hay venta**: es el comportamiento esperado; la
@@ -272,6 +306,27 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.19** — Eliminar una consignación ahora **devuelve el inventario a la
+  bodega** (antes el stock quedaba descontado). Editarla ya no duplica el costo del
+  asiento ni baja el costo promedio de los productos: las salidas anteriores se
+  anulan (quedan como ANULADO en el Kardex) en lugar de registrar entradas de
+  reverso sin costo (las de consignaciones editadas antes también se anulan al
+  volver a editarlas o eliminarlas). No se puede editar ni eliminar mientras tenga retornos,
+  facturaciones o cambios de productos vigentes. Al editar, el stock disponible
+  que muestra el formulario cuenta lo que la propia consignación ya tiene tomado.
+  Nueva sección *Editar o eliminar una consignación*.
+- **1.18** — Guardar, editar o eliminar una consignación ya no demora en las
+  empresas que trabajan con pedidos: en cada guardado se revisaban **todos** los
+  pedidos de la empresa enlazados alguna vez a una consignación, y podía tardar
+  minutos; ahora solo los que usa esa consignación. Un pedido **anulado** ya no
+  vuelve a Pendiente ni a Procesado al editar o eliminar la consignación que lo
+  consumía. Nueva sección *El pedido cambia de estado solo*.
+- **1.17** — Lo que un [Cambio de productos](modulos/cambio-producto-cv) entrega
+  desde la consignación ahora queda registrado en Facturación de consignaciones:
+  en el resumen de la consignación, el PDF y el Excel aparece como **Facturación**
+  (con la factura de venta de lo que el cliente devolvió) en lugar de *Cambio de
+  producto*. El saldo es el mismo. Como toda consignación con factura asociada,
+  ya no se puede cambiar su estado.
 - **1.16** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas de la consignación y además en los
   productos consignados (código, nombre, lote, NUP) y en las facturas, retornos

@@ -430,9 +430,15 @@ $to         = $to         ?? 0;
             // carga, también al paginar y ordenar, que llaman a esta función directo.
             const tbody = document.getElementById('tbodyCompras');
             if (tbody) tbody.classList.add('fm-cargando-target');
+            // Solo vale la ÚLTIMA búsqueda: si llega otra (se sigue tecleando, se pagina)
+            // se cancela la anterior, y una respuesta vieja nunca pinta sobre una nueva.
+            if (window.CMG_busquedaCtrl) window.CMG_busquedaCtrl.abort();
+            const ctrl = new AbortController();
+            window.CMG_busquedaCtrl = ctrl;
             try {
-                const resp = await fetch(uri);
+                const resp = await fetch(uri, { signal: ctrl.signal });
                 const data = await resp.json();
+                if (ctrl !== window.CMG_busquedaCtrl) return;
                 if (data.ok) {
                     window.CMG_currentPage = page;
                     document.getElementById('tbodyCompras').innerHTML = data.rows;
@@ -447,9 +453,10 @@ $to         = $to         ?? 0;
                     if (sorter) sorter.refreshIcons();
                 }
             } catch (e) {
-                console.error('Error búsqueda compras:', e);
+                if (e.name !== 'AbortError') console.error('Error búsqueda compras:', e);
             } finally {
-                if (tbody) tbody.classList.remove('fm-cargando-target');
+                // Si otra búsqueda tomó el relevo, ella quita el atenuado al terminar.
+                if (tbody && ctrl === window.CMG_busquedaCtrl) tbody.classList.remove('fm-cargando-target');
             }
         };
 

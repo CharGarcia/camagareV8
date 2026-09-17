@@ -102,20 +102,19 @@ class FacturaVentaRepository extends BaseRepository
         // Decisión del usuario: las columnas Estado, Estado correo y Estado pago NO
         // entran en el texto libre (se filtran solo desde el modal de filtros).
         if ($textoLibre !== '') {
+            // Rendimiento: las columnas numéricas solo se evalúan si la palabra tiene
+            // dígitos, y el SALDO (que obliga a calcular el LATERAL de abonos de TODAS
+            // las facturas de la empresa) solo si la palabra parece un monto con
+            // decimales. Buscar un cliente o un producto ya no calcula abonos.
+            // Ver FiltrosBusqueda::condicionTexto.
+            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
+            $decimal = \App\Helpers\FiltrosBusqueda::SI_DECIMAL;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     "CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)", // Nº Factura
                     'v.secuencial',
-                    'v.fecha_emision::text',                                          // Fecha
                     'c.nombre',                                                       // Cliente
                     'c.identificacion',                                               // Identificación
-                    'v.total_sin_impuestos::text',                                    // Subtotal
-                    'v.total_descuento::text',                                        // Descuento
-                    "$ivaCalc::text",                                                 // IVA
-                    'v.total_ice::text',                                              // ICE
-                    'v.propina::text',                                                // Propina
-                    'v.importe_total::text',                                          // Total
-                    "ROUND($saldo, 2)::text",                                         // Saldo
                     'ven.nombre',                                                     // Vendedor
                     'v.observaciones',                                                // Observaciones
                     'u.nombre',                                                       // Usuario
@@ -123,6 +122,14 @@ class FacturaVentaRepository extends BaseRepository
                     'v.clave_acceso',
                     'v.guia_remision',
                     'v.placa',
+                    ['sql' => 'v.fecha_emision', 'si' => $digitos],                   // Fecha
+                    ['sql' => 'v.total_sin_impuestos', 'si' => $digitos],             // Subtotal
+                    ['sql' => 'v.total_descuento', 'si' => $digitos],                 // Descuento
+                    ['sql' => $ivaCalc, 'si' => $digitos],                            // IVA
+                    ['sql' => 'v.total_ice', 'si' => $digitos],                       // ICE
+                    ['sql' => 'v.propina', 'si' => $digitos],                         // Propina
+                    ['sql' => 'v.importe_total', 'si' => $digitos],                   // Total
+                    ['sql' => "ROUND($saldo, 2)", 'si' => $decimal],                  // Saldo (caro)
                     "(SELECT STRING_AGG(CONCAT_WS(' ', vd.codigo_principal, vd.codigo_auxiliar, vd.descripcion), ' ') FROM ventas_detalle vd WHERE vd.id_venta = v.id)",
                 ],
                 $textoLibre,
@@ -256,14 +263,7 @@ class FacturaVentaRepository extends BaseRepository
 
         // El COUNT solo necesita el LATERAL cuando el WHERE realmente lo referencia
         // (texto libre, filtro pago:/saldo:); si no, se queda tan barato como antes.
-        $joinAbonosCount = (strpos($where, 'ab.') !== false) ? $lateralAbonos : '';
-        $sqlCount = "SELECT COUNT(*) FROM ventas_cabecera v
-                     INNER JOIN clientes   c   ON v.id_cliente  = c.id
-                     LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
-                     LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id
-                     $joinAbonosCount
-                     $where";
-        $total = $this->query($sqlCount, $params)->fetchColumn();
+        $joinAbonosFiltro = (strpos($where, 'ab.') !== false) ? $lateralAbonos : '';
 
         // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
         // el mapa: lo único que puede llegar al ORDER BY sale de ahí.
@@ -281,7 +281,32 @@ class FacturaVentaRepository extends BaseRepository
             'v.id ' . $dirPrincipal
         );
 
-        $sql = "SELECT v.*,
+        // Rendimiento (2026-09-16): UNA sola consulta en dos fases (mismo patrón que
+        // ComprasRepository::getListado).
+        //  1) CTE `pagina`: aplica el WHERE una vez, ordena, corta la página y saca el
+        //     total con COUNT(*) OVER (). El LATERAL de abonos solo entra aquí si el
+        //     WHERE o el ORDER BY lo necesitan (filtro pago:/saldo:, búsqueda de un
+        //     monto con decimales, orden por estado de pago).
+        //  2) La consulta final calcula el LATERAL de abonos SOLO para las filas de la
+        //     página. Antes se calculaba para todas las facturas de la empresa en cada
+        //     carga del listado (el LIMIT se aplicaba después), y el WHERE se evaluaba
+        //     dos veces (COUNT + SELECT).
+        $joins = "INNER JOIN clientes  c   ON v.id_cliente  = c.id
+                LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
+                LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id";
+        $joinAbonosPagina = ($joinAbonosFiltro !== '' || strpos($orderBy, 'ab.') !== false) ? $lateralAbonos : '';
+        $limite = $perPage > 0 ? " LIMIT $perPage OFFSET $offset" : '';
+
+        $sql = "WITH pagina AS MATERIALIZED (
+                    SELECT v.id, ROW_NUMBER() OVER ($orderBy) AS __rn, COUNT(*) OVER () AS __total
+                    FROM ventas_cabecera v
+                    $joins
+                    $joinAbonosPagina
+                    $where
+                    $orderBy
+                    $limite
+                )
+                SELECT v.*,
                        c.nombre        AS cliente_nombre,
                        c.identificacion AS cliente_ruc,
                        ven.nombre      AS vendedor_nombre,
@@ -289,19 +314,30 @@ class FacturaVentaRepository extends BaseRepository
                        ab.total_cobrado,
                        ab.total_nc,
                        ab.total_nd,
-                       ab.total_retencion
-                FROM ventas_cabecera v
-                INNER JOIN clientes  c   ON v.id_cliente  = c.id
-                LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
-                LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id
+                       ab.total_retencion,
+                       pg.__total
+                FROM pagina pg
+                INNER JOIN ventas_cabecera v ON v.id = pg.id
+                $joins
                 $lateralAbonos
-                $where
-                $orderBy
-                " . ($perPage > 0 ? "LIMIT $perPage OFFSET $offset" : "");
+                ORDER BY pg.__rn";
 
         $rows = $this->query($sql, $params)->fetchAll();
 
-        return ['rows' => $rows, 'total' => (int) $total];
+        if ($rows) {
+            $total = (int) $rows[0]['__total'];
+        } elseif ($offset > 0) {
+            // Página fuera de rango: sin filas no hay __total; se cuenta aparte (raro).
+            $total = (int) $this->query("SELECT COUNT(*) FROM ventas_cabecera v $joins $joinAbonosFiltro $where", $params)->fetchColumn();
+        } else {
+            $total = 0;
+        }
+        foreach ($rows as &$r) {
+            unset($r['__total']);
+        }
+        unset($r);
+
+        return ['rows' => $rows, 'total' => $total];
     }
 
     /**

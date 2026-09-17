@@ -107,7 +107,7 @@
                             <span id="cam_dev_info" class="small text-muted"></span>
                         </div>
                         <div class="position-relative mb-2" id="cam_dev_search_wrap">
-                            <input type="text" id="cam_dev_busqueda" class="form-control form-control-sm" placeholder="NUP, lote, N° de factura de consignación o de cambio, código o nombre del producto… (sin cliente busca en todos y lo fija con el ítem elegido)" oninput="camBuscarLineas(this.value)" onfocus="camBuscarLineas(this.value, true)" autocomplete="off">
+                            <input type="text" id="cam_dev_busqueda" class="form-control form-control-sm" placeholder="NUP, lote, N° de factura de venta o de cambio, código o nombre del producto… (sin cliente busca en todos y lo fija con el ítem elegido)" oninput="camBuscarLineas(this.value)" onfocus="camBuscarLineas(this.value, true)" autocomplete="off">
                             <div id="cam_dev_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1075; max-height:320px; overflow:auto;"></div>
                         </div>
                         <div class="table-responsive border rounded-3 bg-white" style="max-height:26vh; overflow:auto;">
@@ -117,9 +117,9 @@
                                         <th>Origen</th>
                                         <th>Producto</th>
                                         <th>Lote / NUP</th>
+                                        <th style="width:140px">Bodega</th>
                                         <th class="text-end">Saldo</th>
                                         <th class="text-end" style="width:110px">Cantidad</th>
-                                        <th class="text-end" style="width:90px">Total</th>
                                         <th style="width:34px"></th>
                                     </tr>
                                 </thead>
@@ -148,28 +148,14 @@
                                         <th>Producto</th>
                                         <th style="width:140px">Bodega</th>
                                         <th style="width:160px">Lote / NUP</th>
-                                        <th class="text-end" style="width:100px">Precio</th>
-                                        <th class="text-end" style="width:65px">IVA %</th>
                                         <th class="text-end" style="width:90px">Cantidad</th>
-                                        <th class="text-end" style="width:90px">Total</th>
                                         <th style="width:34px"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="cam_ent_body">
-                                    <tr><td colspan="9" class="text-center text-muted py-3">Busque por N° de consignación, NUP, lote o producto lo que se entrega a cambio.</td></tr>
+                                    <tr><td colspan="6" class="text-center text-muted py-3">Busque por N° de consignación, NUP, lote o producto lo que se entrega a cambio.</td></tr>
                                 </tbody>
                             </table>
-                        </div>
-                    </div>
-
-                    <!-- Resumen (diferencia informativa) -->
-                    <div class="d-flex justify-content-end">
-                        <div class="border rounded-3 p-2 bg-white shadow-sm" style="min-width:280px">
-                            <div class="d-flex justify-content-between small"><span class="text-muted">Total devuelto:</span><span id="cam_tot_dev" class="fw-semibold">0.00</span></div>
-                            <div class="d-flex justify-content-between small"><span class="text-muted">Total entregado:</span><span id="cam_tot_ent" class="fw-semibold">0.00</span></div>
-                            <hr class="my-1">
-                            <div class="d-flex justify-content-between"><span class="fw-bold">Diferencia:</span><span id="cam_tot_dif" class="fw-bold text-primary">0.00</span></div>
-                            <div class="small text-muted text-end" id="cam_dif_hint"></div>
                         </div>
                     </div>
                 </form>
@@ -209,7 +195,6 @@
 (function () {
     const RUTA = window.RUTA_MODULO_CAMBIO;
     const DEC_C = (window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.decimales_cantidad) || 2;
-    const DEC_P = (window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.decimales_precio) || 2;
     let modal;
     let camClientesTimer = null, camDevTimer = null, camEntTimer = null;
     let camBodegas = [];   // cache de bodegas [{id,nombre}]
@@ -244,7 +229,7 @@
     }
     function vaciarEnt() {
         document.getElementById('cam_ent_body').innerHTML =
-            '<tr class="cam-ent-empty"><td colspan="9" class="text-center text-muted py-3">Busque por N° de consignación, NUP, lote o producto lo que se entrega a cambio.</td></tr>';
+            '<tr class="cam-ent-empty"><td colspan="6" class="text-center text-muted py-3">Busque por N° de consignación, NUP, lote o producto lo que se entrega a cambio.</td></tr>';
         document.getElementById('cam_ent_info').textContent = '';
     }
 
@@ -555,8 +540,10 @@
     function camFechaCorta(f) {
         return f ? String(f).slice(0, 10).split('-').reverse().join('-') : '';
     }
+    // 'FACTURA' = factura de consignación, pero el número que la acompaña es el de la
+    // factura de venta que generó (CambioProductoCvRepository::sqlNumeroFacturaVenta).
     function camLabelOrigen(t) {
-        return t === 'CAMBIO' ? 'Cambio' : (t === 'CONSIGNACION' ? 'Consignación' : (t === 'FACTURA' ? 'Fact. consig.' : 'Bodega'));
+        return t === 'CAMBIO' ? 'Cambio' : (t === 'CONSIGNACION' ? 'Consignación' : (t === 'FACTURA' ? 'Factura' : 'Bodega'));
     }
     function camBadgeOrigen(t, texto) {
         const cls = t === 'CAMBIO' ? 'bg-info' : (t === 'CONSIGNACION' ? 'bg-warning' : (t === 'FACTURA' ? 'bg-secondary' : 'bg-primary'));
@@ -687,15 +674,14 @@
         tr.dataset.origenTipo = l.origen_tipo;
         tr.dataset.idOrigenDetalle = l.id_origen_detalle;
         tr.dataset.saldo = saldo;
-        tr.dataset.precio = num(l.precio_unitario);
-        tr.dataset.porc = num(l.porcentaje_impuesto);
+        // Bodega de la que salió la unidad (la de la línea de origen): ahí vuelve a entrar.
         tr.innerHTML = `
             <td class="small">${camBadgeOrigen(l.origen_tipo, ori)}</td>
             <td class="small">${esc(l.producto_codigo ? l.producto_codigo + ' · ' : '')}${esc(l.producto_nombre)}</td>
             <td class="small">${esc(camLoteNup(l))}</td>
+            <td class="small">${esc(l.bodega_nombre || '—')}</td>
             <td class="text-end small">${fmt(saldo, DEC_C)}</td>
             <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-dev-cant" min="0" max="${saldo}" step="any" value="${saldo}" oninput="camOnCantDev(this)" style="height:26px;font-size:.8rem;"></td>
-            <td class="text-end small cam-dev-total">0.00</td>
             <td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'dev')" title="Quitar"><i class="bi bi-x-lg"></i></button></td>`;
         document.getElementById('cam_dev_body').appendChild(tr);
         camOnCantDev(tr.querySelector('.cam-dev-cant'));
@@ -704,12 +690,7 @@
     window.camOnCantDev = function (inp) {
         const tr = inp.closest('tr');
         const saldo = num(tr.dataset.saldo);
-        let c = num(inp.value);
-        if (c < 0) c = 0;
-        if (c > saldo) { c = saldo; inp.value = saldo; }
-        const precio = num(tr.dataset.precio), porc = num(tr.dataset.porc);
-        const total = c * precio * (1 + porc / 100);
-        tr.querySelector('.cam-dev-total').textContent = fmt(total, 2);
+        if (num(inp.value) > saldo) inp.value = saldo;
         camRecalcular();
     };
 
@@ -803,7 +784,9 @@
         const empty = document.querySelector('#cam_ent_body .cam-ent-empty');
         if (empty) empty.parentElement.removeChild(empty);
 
-        // Precio: el de la consignación, o el primer precio de lista del producto.
+        // Precio: el de la consignación, o el primer precio de lista del producto. No se
+        // muestra en pantalla (ni el IVA): viaja oculto en la fila para que el servidor siga
+        // calculando la diferencia informativa del listado.
         let precio = esConsig ? num(o.precio_unitario) : 0;
         const iva  = esConsig ? num(o.porcentaje_impuesto) : 0;
         if (!esConsig) {
@@ -824,6 +807,8 @@
         tr.dataset.idOrigenDetalle = esConsig ? o.id_origen_detalle : '';
         tr.dataset.saldo = esConsig ? saldo : '';
         tr.dataset.caducidad = o.fecha_caducidad ? String(o.fecha_caducidad).slice(0, 10) : '';
+        tr.dataset.precio = precio;
+        tr.dataset.porc = iva;
         const origenCell = esConsig
             ? `${camBadgeOrigen('CONSIGNACION')}<div class="text-muted" style="font-size:.7rem">${esc(o.doc_numero || '')}</div>`
             : camBadgeOrigen('BODEGA', o.tipo === 'INVENTARIO' ? 'Existencias' : 'Catálogo');
@@ -835,10 +820,7 @@
                 <input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(o.lote || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;width:50%;">
                 <input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(o.nup || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;width:50%;">
             </div></td>
-            <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-precio" min="0" step="any" value="${precio}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
-            <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-iva" min="0" step="any" value="${iva}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
             <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" ${esConsig ? `max="${saldo}"` : ''} step="any" value="${cantIni}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
-            <td class="text-end small cam-ent-total">0.00</td>
             <td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'ent')" title="Quitar"><i class="bi bi-x-lg"></i></button></td>`;
         document.getElementById('cam_ent_body').appendChild(tr);
         camOnEnt(tr.querySelector('.cam-ent-cant'));
@@ -846,15 +828,10 @@
 
     window.camOnEnt = function (inp) {
         const tr = inp.closest('tr');
-        const precio = num(tr.querySelector('.cam-ent-precio').value);
-        const iva = num(tr.querySelector('.cam-ent-iva').value);
         const cantInp = tr.querySelector('.cam-ent-cant');
-        let cant = num(cantInp.value);
         // Desde consignación no se puede entregar más que el saldo en poder del cliente.
         const saldo = num(tr.dataset.saldo);
-        if (tr.dataset.saldo !== '' && saldo > 0 && cant > saldo) { cant = saldo; cantInp.value = saldo; }
-        const total = cant * precio * (1 + iva / 100);
-        tr.querySelector('.cam-ent-total').textContent = fmt(total, 2);
+        if (tr.dataset.saldo !== '' && saldo > 0 && num(cantInp.value) > saldo) cantInp.value = saldo;
         camRecalcular();
     };
 
@@ -867,21 +844,10 @@
     };
 
     function camRecalcular() {
-        // Suma las celdas de total (se mantienen actualizadas en edición y fijas en modo ver).
-        const cellNum = (el) => el ? num(String(el.textContent).replace(/,/g, '')) : 0;
-        let totDev = 0, totEnt = 0, nDev = 0, nEnt = 0;
-        document.querySelectorAll('#cam_dev_body tr[data-key]').forEach(tr => {
-            totDev += cellNum(tr.querySelector('.cam-dev-total')); nDev++;
-        });
-        document.querySelectorAll('#cam_ent_body tr[data-prod]').forEach(tr => {
-            totEnt += cellNum(tr.querySelector('.cam-ent-total')); nEnt++;
-        });
-        document.getElementById('cam_tot_dev').textContent = fmt(totDev, 2);
-        document.getElementById('cam_tot_ent').textContent = fmt(totEnt, 2);
-        const dif = totEnt - totDev;
-        document.getElementById('cam_tot_dif').textContent = fmt(dif, 2);
-        const hint = document.getElementById('cam_dif_hint');
-        hint.textContent = dif > 0.005 ? 'A favor de la empresa' : (dif < -0.005 ? 'A favor del cliente' : '');
+        // Solo el conteo de líneas de cada tabla: el modal ya no muestra precios, IVA,
+        // totales ni la diferencia (siguen calculándose en el servidor para el listado).
+        const nDev = document.querySelectorAll('#cam_dev_body tr[data-key]').length;
+        const nEnt = document.querySelectorAll('#cam_ent_body tr[data-prod]').length;
         document.getElementById('cam_dev_info').textContent = nDev ? nDev + ' línea(s)' : '';
         document.getElementById('cam_ent_info').textContent = nEnt ? nEnt + ' línea(s)' : '';
     }
@@ -940,8 +906,6 @@
         tr.dataset.origenTipo = d.origen_tipo;
         tr.dataset.idOrigenDetalle = d.id_origen_detalle;
         tr.dataset.saldo = editable ? 1e12 : saldoRef;
-        tr.dataset.precio = num(d.precio_unitario);
-        tr.dataset.porc = num(d.porcentaje_impuesto);
         const cantCell = editable
             ? `<input type="number" class="form-control form-control-sm text-end cam-dev-cant" min="0" step="any" value="${num(d.cantidad)}" oninput="camOnCantDev(this)" style="height:26px;font-size:.8rem;">`
             : `<span class="cam-dev-cant-ro">${fmt(d.cantidad, DEC_C)}</span>`;
@@ -949,13 +913,11 @@
             <td class="small">${camBadgeOrigen(d.origen_tipo, ori)}</td>
             <td class="small">${esc(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${esc(d.producto_nombre)}</td>
             <td class="small">${esc(loteNup)}</td>
+            <td class="small">${esc(d.bodega_nombre || '—')}</td>
             <td class="text-end small">${editable ? '—' : fmt(d.cantidad, DEC_C)}</td>
             <td class="p-0 text-end">${cantCell}</td>
-            <td class="text-end small cam-dev-total">0.00</td>
             <td class="text-center p-0">${editable ? `<button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'dev')"><i class="bi bi-x-lg"></i></button>` : ''}</td>`;
         document.getElementById('cam_dev_body').appendChild(tr);
-        if (editable) camOnCantDev(tr.querySelector('.cam-dev-cant'));
-        else tr.querySelector('.cam-dev-total').textContent = fmt(num(d.cantidad) * num(d.precio_unitario) * (1 + num(d.porcentaje_impuesto) / 100), 2);
     }
 
     function camPintarEntExistente(d, editable) {
@@ -969,10 +931,12 @@
         tr.dataset.idOrigenDetalle = esConsig ? (d.id_origen_detalle || '') : '';
         tr.dataset.saldo = ''; // en edición el máximo real se revalida en el server
         tr.dataset.caducidad = d.fecha_caducidad ? String(d.fecha_caducidad).slice(0, 10) : '';
+        // Precio e IVA guardados: no se muestran, pero al editar un borrador se reenvían tal cual.
+        tr.dataset.precio = num(d.precio_unitario);
+        tr.dataset.porc = num(d.porcentaje_impuesto);
         const origenCell = esConsig
             ? `${camBadgeOrigen('CONSIGNACION')}<div class="text-muted" style="font-size:.7rem">${esc(d.origen_numero || '')}</div>`
             : camBadgeOrigen('BODEGA');
-        const total = num(d.cantidad) * num(d.precio_unitario) * (1 + num(d.porcentaje_impuesto) / 100);
         if (editable) {
             tr.innerHTML = `
                 <td class="small">${origenCell}</td>
@@ -982,10 +946,7 @@
                     <input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(d.lote || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;width:50%;">
                     <input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(d.nup || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;width:50%;">
                 </div></td>
-                <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-precio" min="0" step="any" value="${num(d.precio_unitario)}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
-                <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-iva" min="0" step="any" value="${num(d.porcentaje_impuesto)}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
                 <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" step="any" value="${num(d.cantidad)}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
-                <td class="text-end small cam-ent-total">0.00</td>
                 <td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'ent')"><i class="bi bi-x-lg"></i></button></td>`;
             document.getElementById('cam_ent_body').appendChild(tr);
             camOnEnt(tr.querySelector('.cam-ent-cant'));
@@ -996,10 +957,7 @@
                 <td class="small">${esc(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${esc(d.producto_nombre)}</td>
                 <td class="small">${esc(bod)}</td>
                 <td class="small">${esc(camLoteNup(d))}</td>
-                <td class="text-end small">${fmt(d.precio_unitario, DEC_P)}</td>
-                <td class="text-end small">${fmt(d.porcentaje_impuesto, 2)}</td>
                 <td class="text-end small">${fmt(d.cantidad, DEC_C)}</td>
-                <td class="text-end small cam-ent-total">${fmt(total, 2)}</td>
                 <td></td>`;
             document.getElementById('cam_ent_body').appendChild(tr);
         }
@@ -1035,8 +993,9 @@
             if (c > 0) entregas.push({
                 id_producto: parseInt(tr.dataset.prod, 10),
                 cantidad: c,
-                precio_unitario: num(tr.querySelector('.cam-ent-precio').value),
-                porcentaje_impuesto: num(tr.querySelector('.cam-ent-iva').value),
+                // Ocultos en la fila (ver camAgregarEntregaFila): solo para la diferencia informativa.
+                precio_unitario: num(tr.dataset.precio),
+                porcentaje_impuesto: num(tr.dataset.porc),
                 id_bodega: parseInt(tr.querySelector('.cam-ent-bodega').value || 0, 10),
                 // Desde consignación: el servidor toma producto/bodega/lote/NUP de esa línea.
                 origen_tipo: tr.dataset.origenTipo || '',

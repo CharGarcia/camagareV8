@@ -74,20 +74,10 @@ class EgresosController extends BaseModuloController
         $tiposFiltro    = $this->repository->getTiposEgresoDistintos($idEmpresa);
         $usuariosFiltro = $this->repository->getUsuariosConEgresos($idEmpresa);
 
-        // Usamos repositorio auxiliar para formas de pago si no es un método directo en EgresoRepository
-        // O simplemente instanciamos el IngresoRepo que ya tiene el getFormasCobro genérico.
-        // Mejor aún, la tabla es universal. Lo extraeré mediante repositorio dedicado de la empresa.
-        $fpRepo = new \App\repositories\modulos\FormaPagoRepository();
-        $formasPago = $fpRepo->getFormasFiltradas($idEmpresa, 'EGRESO');
-
-        // Saldo actual de cada forma (anticipos se resuelven por proveedor vía AJAX)
-        $saldosFormas = (new \App\Services\modulos\FormaPagoService($fpRepo))->getSaldosActuales($idEmpresa);
-        foreach ($formasPago as &$fp) {
-            $esAnt = (($fp['tipo'] ?? '') === 'ANTICIPO');
-            $fp['es_anticipo'] = $esAnt;
-            $fp['saldo']       = $esAnt ? null : (float)($saldosFormas[(int)$fp['id']] ?? 0);
-        }
-        unset($fp);
+        // Formas de pago en el "Orden" de Formas de Cobro y Pago, con su saldo solo si la forma
+        // tiene "Mostrar saldo" (el de un anticipo se consulta por proveedor vía AJAX).
+        $formasPago = (new \App\Services\modulos\FormaPagoService(new \App\repositories\modulos\FormaPagoRepository()))
+            ->getFormasConSaldo($idEmpresa, 'EGRESO');
 
         $conceptos  = $this->service->getConceptosEgreso($idEmpresa);
 
@@ -324,6 +314,9 @@ class EgresosController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q         = trim($_GET['q'] ?? '');
@@ -360,6 +353,9 @@ class EgresosController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa  = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
@@ -1235,5 +1231,13 @@ class EgresosController extends BaseModuloController
             return trim(preg_replace('/\s+/', ' ', (string) num_letras(number_format($monto, 2, '.', ''))));
         }
         return number_format($monto, 2);
+    }
+
+    /** Libera el candado de la sesión PHP (lectura de $_SESSION sigue disponible). */
+    private function liberarSesion(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
     }
 }

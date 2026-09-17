@@ -48,23 +48,26 @@ class NotaCreditoRepository extends BaseRepository
         // en todo. Decisión del usuario: las columnas Correo y Estado NO entran en el
         // texto libre (se filtran solo desde el modal de filtros).
         if ($textoLibre !== '') {
+            // Rendimiento: montos y fecha solo se comparan si la palabra tiene dígitos
+            // (ver FiltrosBusqueda::condicionTexto). La subconsulta del detalle va al final.
+            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     "CONCAT(nc.establecimiento,'-',nc.punto_emision,'-',nc.secuencial)", // Nº Nota
                     'nc.secuencial',
-                    'nc.fecha_emision::text',                                             // Fecha
                     'c.nombre',                                                           // Cliente
                     'c.identificacion',                                                   // Identificación
                     'nc.num_doc_modificado',                                              // Doc. Modificado
-                    'nc.total_sin_impuestos::text',                                       // Subtotal
-                    'nc.total_descuento::text',                                           // Descuento
-                    'nc.importe_total::text',                                             // Total
                     'nc.motivo',                                                          // Motivo
                     'u.nombre',                                                           // Usuario
                     // Fuera del listado, pero identifican la nota:
                     'nc.numero_autorizacion',
                     'nc.clave_acceso',
                     'nc.observaciones',
+                    ['sql' => 'nc.fecha_emision', 'si' => $digitos],                      // Fecha
+                    ['sql' => 'nc.total_sin_impuestos', 'si' => $digitos],                // Subtotal
+                    ['sql' => 'nc.total_descuento', 'si' => $digitos],                    // Descuento
+                    ['sql' => 'nc.importe_total', 'si' => $digitos],                      // Total
                     "(SELECT STRING_AGG(CONCAT_WS(' ', ncd.codigo_principal, ncd.codigo_auxiliar, ncd.descripcion), ' ') FROM notas_credito_detalle ncd WHERE ncd.id_nota_credito = nc.id)",
                 ],
                 $textoLibre,
@@ -133,15 +136,6 @@ class NotaCreditoRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        // Conteo total
-        $sqlCount = "SELECT COUNT(*) FROM notas_credito_cabecera nc
-                     LEFT JOIN clientes c ON nc.id_cliente = c.id
-                     LEFT JOIN usuarios u ON nc.id_usuario = u.id
-                     $where";
-        $stCount = $this->db->prepare($sqlCount);
-        $stCount->execute($params);
-        $total = (int) $stCount->fetchColumn();
-
         // Mapear la columna de orden a su expresión real (algunas son alias de JOINs).
         $ordenExpr = match ($ordenCol) {
             'cliente_nombre'  => 'c.nombre',
@@ -155,26 +149,35 @@ class NotaCreditoRepository extends BaseRepository
         };
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
-        // Listado paginado
-        $sql = "SELECT nc.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,
+        // Rendimiento (2026-09-16): conteo + página en UNA consulta (el WHERE con texto
+        // libre se evalúa una sola vez). Ver App\Helpers\ListadoPaginado.
+        $joinsFiltro = "LEFT JOIN clientes c ON nc.id_cliente = c.id
+                LEFT JOIN usuarios u ON nc.id_usuario = u.id";
+
+        return \App\Helpers\ListadoPaginado::consultar(
+            function (string $sql, array $p): array {
+                $st = $this->db->prepare($sql);
+                $st->execute($p);
+                return $st->fetchAll();
+            },
+            [
+                'tabla'       => 'notas_credito_cabecera',
+                'alias'       => 'nc',
+                'joinsFiltro' => $joinsFiltro,
+                'joinsFinal'  => $joinsFiltro . "
+                LEFT JOIN empresas e ON e.id = nc.id_empresa",
+                'where'       => $where,
+                'orderBy'     => "ORDER BY $ordenExpr $ordenDir, nc.id DESC",
+                'perPage'     => (int) $perPage,
+                'conBusqueda' => trim($buscar) !== '',   // sin buscar: forma liviana (ids por índice + COUNT aparte)
+                'offset'      => (int) $offset,
+                'select'      => "nc.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,
                        c.email as cliente_email,
                        u.nombre as usuario_nombre,
-                       e.tipo_ambiente, e.tipo_emision
-                FROM notas_credito_cabecera nc
-                LEFT JOIN clientes c ON nc.id_cliente = c.id
-                LEFT JOIN usuarios u ON nc.id_usuario = u.id
-                LEFT JOIN empresas e ON e.id = nc.id_empresa
-                $where
-                ORDER BY $ordenExpr $ordenDir, nc.id DESC" . ($perPage > 0 ? " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset : "");
-
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        $rows = $st->fetchAll();
-
-        return [
-            'total' => $total,
-            'rows'  => $rows
-        ];
+                       e.tipo_ambiente, e.tipo_emision",
+            ],
+            $params
+        );
     }
 
     /** Usuarios que han registrado alguna nota de crédito en la empresa (select "Usuario" del modal de filtros). */

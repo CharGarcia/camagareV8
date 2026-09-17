@@ -59,13 +59,10 @@ class PedidoRules {
             }
         }
 
-        if (!empty($horaInicial) && !empty($horaMaxima)) {
-            if ($horaInicial > $horaMaxima) {
-                throw new Exception('La hora inicial no puede ser mayor a la hora máxima de entrega.');
-            }
-            if ($horaInicial === $horaMaxima) {
-                throw new Exception('La hora máxima no puede ser igual a la hora inicial.');
-            }
+        // Las dos horas pueden ser iguales (entrega a una hora exacta); solo se
+        // rechaza que la inicial quede después de la máxima.
+        if (!empty($horaInicial) && !empty($horaMaxima) && $horaInicial > $horaMaxima) {
+            throw new Exception('La hora inicial no puede ser mayor a la hora máxima de entrega.');
         }
     }
 }

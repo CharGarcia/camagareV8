@@ -457,12 +457,18 @@ async function mcAprobarCompra() {
             Swal.fire('No se pudo aprobar', json.error || 'Error desconocido.', 'error');
             return;
         }
+        // Pago automático que la aprobación tenía retenido (solo facturas del SRI):
+        // se informa tanto si se generó como el motivo si se omitió o falló.
+        const pagoTexto  = (json.pago && json.pago.mensaje) || '';
+        const pagoFallo  = !!pagoTexto && !json.pago.generado;
+        const texto      = [pagoTexto, json.aviso || ''].filter(Boolean).join(' ');
+        const conDetalle = texto !== '';
         await Swal.fire({
-            icon: json.aviso ? 'warning' : 'success',
+            icon: (json.aviso || pagoFallo) ? 'warning' : 'success',
             title: 'Compra aprobada',
-            text: json.aviso || '',
-            timer: json.aviso ? undefined : 1400,
-            showConfirmButton: !!json.aviso
+            text: texto,
+            timer: conDetalle ? undefined : 1400,
+            showConfirmButton: conDetalle
         });
         window.location.reload();
     } catch (e) {

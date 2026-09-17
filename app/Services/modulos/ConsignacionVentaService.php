@@ -26,6 +26,7 @@ class ConsignacionVentaService
     private InventarioRepository $inventarioRepo;
     private ClienteRepository $clienteRepo;
     private BloqueoEdicionService $bloqueoService;
+    private ?InventarioService $inventarioService = null;
 
     /** Número (serie-secuencial) que el servidor asignó en el último crear(); lo muestra el controlador. */
     private ?string $ultimoNumeroGenerado = null;
@@ -41,6 +42,43 @@ class ConsignacionVentaService
         $this->inventarioRepo = new InventarioRepository();
         $this->clienteRepo = new ClienteRepository();
         $this->bloqueoService = new BloqueoEdicionService();
+    }
+
+    private function getInventarioService(): InventarioService
+    {
+        if ($this->inventarioService === null) {
+            $this->inventarioService = new InventarioService($this->inventarioRepo, $this->logService);
+        }
+        return $this->inventarioService;
+    }
+
+    /**
+     * Devuelve a la bodega todo lo que la consignación tiene vigente en el kardex. Además de sus
+     * salidas, anula las entradas de reverso (EDICION_CONSIGNACION_VENTA) que dejaban las ediciones
+     * anteriores al 16-09-2026 junto a las salidas viejas: si solo se anularan las salidas, esos
+     * reversos seguirían sumando stock que nunca volvió. Primero las salidas (el stock sube) y
+     * después los reversos (baja), para no pasar por debajo del saldo de partida.
+     */
+    private function revertirInventarioConsignacion(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $inventario = $this->getInventarioService();
+        $inventario->revertirMovimientosPorReferencia('CONSIGNACION_VENTA', $id, $idEmpresa, $idUsuario, true);
+        $inventario->revertirMovimientosPorReferencia('EDICION_CONSIGNACION_VENTA', $id, $idEmpresa, $idUsuario, true);
+    }
+
+    /**
+     * Rechaza editar o eliminar mientras haya retornos, facturaciones o cambios de productos
+     * vigentes que dependen de la consignación (ver getDocumentosRelacionadosActivos). Se nombran
+     * los documentos para que el usuario sepa qué anular primero.
+     */
+    private function verificarSinDocumentosRelacionados(int $id, int $idEmpresa, string $accion): void
+    {
+        $docs = $this->repository->getDocumentosRelacionadosActivos($id, $idEmpresa);
+        if (empty($docs)) {
+            return;
+        }
+        $lista = implode(', ', array_map(static fn($d) => "{$d['tipo']} {$d['numero']} ({$d['estado']})", $docs));
+        throw new Exception("No se puede {$accion} la consignación porque tiene documentos relacionados: {$lista}. Anule o elimine primero esos documentos.");
     }
 
     /**
@@ -289,16 +327,14 @@ class ConsignacionVentaService
                 $esInv = $prodData && ($prodData['inventariable'] == true || $prodData['inventariable'] == 'true' || $prodData['inventariable'] == 1) && ($prodData['tipo_produccion'] ?? '01') !== '02';
                 
                 if ($soloStockPos && $esInv) {
-                    $excludeId = $idConsignacion;
-                    $excludeTipo = 'consignacion_venta';
                     $loteVal = (!empty($det['lote']) && $det['lote'] !== 'sin_lote') ? $det['lote'] : null;
-                    
+
                     $stockTotal = $this->inventarioRepo->getStockActual(
                         (int)$det['id_producto'],
                         (int)$det['id_bodega'],
                         $idEmpresa,
-                        $excludeId,
-                        $excludeTipo,
+                        null,
+                        null,
                         $loteVal
                     );
                     
@@ -342,7 +378,7 @@ class ConsignacionVentaService
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR_CONSIGNACION', 'consignaciones_ventas', $idConsignacion, null, $cabecera);
 
-            $this->reconciliarPedidosAfectados($db, $idEmpresa);
+            $this->reconciliarPedidosAfectados((int) $idEmpresa, (int) $idUsuario, array_column($detalles, 'id_pedido_detalle'));
 
             $db->commit();
 
@@ -372,6 +408,7 @@ class ConsignacionVentaService
         if ($this->tieneFacturaAsociada($id, $idEmpresa)) {
             throw new Exception("No se puede editar: la consignación tiene una factura asociada.");
         }
+        $this->verificarSinDocumentosRelacionados($id, $idEmpresa, 'editar');
 
         $this->validarPeriodoContableAlModificar(
             $cabecera['fecha_emision'] ?? null,
@@ -386,31 +423,13 @@ class ConsignacionVentaService
         try {
             $db->beginTransaction();
 
-            // 1. Reversar inventario de los detalles anteriores
+            // 1. Anular las salidas de inventario vigentes de la consignación (mismo criterio que
+            //    Facturas de Venta al editar): vuelven a la bodega exactamente como salieron y se
+            //    registran de nuevo con las líneas actualizadas. Antes se insertaba una entrada de
+            //    reverso SIN costo y las salidas viejas seguían vigentes: el asiento sumaba ambas
+            //    tandas (costo duplicado) y la entrada a costo 0 bajaba el costo promedio.
             $detallesAntiguos = $this->repository->getDetalles($id, $idEmpresa);
-            foreach ($detallesAntiguos as $det) {
-                $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-                $stockActual = $this->inventarioRepo->getStockActual((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-                $nuevoStock = $stockActual + $det['cantidad'];
-
-                $this->inventarioRepo->registrarMovimiento([
-                    'id_empresa' => $idEmpresa,
-                    'id_producto' => $det['id_producto'],
-                    'id_bodega' => $det['id_bodega'],
-                    'tipo_movimiento' => 'entrada',
-                    'referencia_tipo' => 'EDICION_CONSIGNACION_VENTA',
-                    'referencia_id' => $id,
-                    'cantidad' => $det['cantidad'], // positivo
-                    'stock_anterior' => $stockActual,
-                    'stock_posterior' => $nuevoStock,
-                    'numero_lote' => $det['lote'] ?? null,
-                    'fecha_caducidad' => $det['fecha_caducidad'] ?? null,
-                    'nup' => $det['nup'] ?? null,
-                    'observaciones' => 'Reverso por edición de Consignación ' . $cabecera['serie'] . '-' . $cabecera['secuencial'],
-                    'id_usuario' => $idUsuario
-                ]);
-                $this->inventarioRepo->actualizarStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
-            }
+            $this->revertirInventarioConsignacion($id, $idEmpresa, $idUsuario);
 
             // 2. Eliminar detalles lógicamente
             $this->repository->deleteDetalles($id, $idEmpresa);
@@ -456,16 +475,17 @@ class ConsignacionVentaService
                 $esInv = $prodData && ($prodData['inventariable'] == true || $prodData['inventariable'] == 'true' || $prodData['inventariable'] == 1) && ($prodData['tipo_produccion'] ?? '01') !== '02';
                 
                 if ($soloStockPos && $esInv) {
-                    $excludeId = $id;
-                    $excludeTipo = 'consignacion_venta';
                     $loteVal = (!empty($det['lote']) && $det['lote'] !== 'sin_lote') ? $det['lote'] : null;
-                    
+
+                    // Sin excluir la consignación: sus salidas anteriores ya se anularon en el paso 1,
+                    // y excluirla por referencia ocultaría también las salidas que este mismo guardado
+                    // acaba de registrar en líneas anteriores del mismo producto.
                     $stockTotal = $this->inventarioRepo->getStockActual(
                         (int)$det['id_producto'],
                         (int)$det['id_bodega'],
                         $idEmpresa,
-                        $excludeId,
-                        $excludeTipo,
+                        null,
+                        null,
                         $loteVal
                     );
                     
@@ -562,7 +582,11 @@ class ConsignacionVentaService
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR_CONSIGNACION', 'consignaciones_ventas', $id, $cabecera, $updData);
 
-            $this->reconciliarPedidosAfectados($db, $idEmpresa);
+            // Pedidos de las líneas que tenía y de las que quedan.
+            $this->reconciliarPedidosAfectados($idEmpresa, $idUsuario, array_merge(
+                array_column($detallesAntiguos, 'id_pedido_detalle'),
+                array_column($data['detalles'], 'id_pedido_detalle')
+            ));
 
             $db->commit();
 
@@ -587,6 +611,8 @@ class ConsignacionVentaService
             throw new Exception("No se puede eliminar una consignación que ya está " . $cabecera['estado'] . ". Se debe realizar un retorno.");
         }
 
+        $this->verificarSinDocumentosRelacionados($id, $idEmpresa, 'eliminar');
+
         // Eliminar revierte el inventario entregado y el asiento de reclasificación.
         $this->validarPeriodoContable(
             $cabecera['fecha_emision'] ?? null,
@@ -598,38 +624,20 @@ class ConsignacionVentaService
         try {
             $db->beginTransaction();
 
+            // Se leen antes: eliminar() marca también las líneas y después ya no son vigentes.
+            $idsPedidoDetalle = $this->repository->getIdsPedidoDetalle($id, $idEmpresa);
+
             $this->repository->eliminar($id, $idEmpresa, $idUsuario);
 
-            // Reversar el inventario
-            $detalles = $this->repository->getDetalles($id, $idEmpresa);
-            foreach ($detalles as $det) {
-                $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-                $stockActual = $this->inventarioRepo->getStockActual((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-                $nuevoStock = $stockActual + $det['cantidad'];
-
-                $this->inventarioRepo->registrarMovimiento([
-                    'id_empresa' => $idEmpresa,
-                    'id_producto' => $det['id_producto'],
-                    'id_bodega' => $det['id_bodega'],
-                    'tipo_movimiento' => 'entrada',
-                    'referencia_tipo' => 'ELIMINACION_CONSIGNACION_VENTA',
-                    'referencia_id' => $id,
-                    'cantidad' => $det['cantidad'], // positivo
-                    'stock_anterior' => $stockActual,
-                    'stock_posterior' => $nuevoStock,
-                    'numero_lote' => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
-                    'fecha_caducidad' => (isset($det['fecha_caducidad']) && $det['fecha_caducidad'] !== '') ? $det['fecha_caducidad'] : null,
-                    'nup' => (isset($det['nup']) && $det['nup'] !== '') ? $det['nup'] : null,
-                    'observaciones' => 'Reverso por Eliminación Consignación ' . $cabecera['serie'] . '-' . $cabecera['secuencial'],
-                    'id_usuario' => $idUsuario
-                ]);
-                
-                $this->inventarioRepo->actualizarStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
-            }
+            // Devolver el inventario: se anulan las salidas vigentes de la consignación, así vuelve
+            // exactamente lo que salió (a su costo) y nada más. Antes se leían las líneas DESPUÉS de
+            // marcarlas eliminadas —eliminar() también marca las líneas—, el bucle no encontraba
+            // ninguna y el stock nunca volvía a la bodega.
+            $this->revertirInventarioConsignacion($id, $idEmpresa, $idUsuario);
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'ELIMINAR_CONSIGNACION', 'consignaciones_ventas', $id, $cabecera);
 
-            $this->reconciliarPedidosAfectados($db, $idEmpresa);
+            $this->reconciliarPedidosAfectados($idEmpresa, $idUsuario, $idsPedidoDetalle);
 
             $db->commit();
 
@@ -1052,80 +1060,29 @@ class ConsignacionVentaService
         $this->repository->updateAsientoContable($idConsignacion, $idEmpresa, $idGenerado);
     }
 
-    private function reconciliarPedidosAfectados(\PDO $db, int $idEmpresa): void
+    /**
+     * Recalcula el estado (Pendiente / Procesado) de los pedidos que alimentan esta consignación.
+     *
+     * Solo entran los pedidos de las líneas que tocó el guardado —las nuevas y, al editar o
+     * eliminar, las que tenía antes—: el estado de un pedido depende únicamente de lo consignado
+     * contra sus propias líneas, así que ningún otro pedido puede cambiar por este guardado.
+     *
+     * Antes se recorrían TODOS los pedidos de la empresa enlazados alguna vez a una consignación,
+     * con una consulta por línea de pedido que leía entera la tabla de detalles (sin índice por
+     * id_pedido_detalle). Con 3.000 pedidos enlazados eran ~15.000 consultas y más de dos minutos
+     * por guardado, dentro de la transacción y con los candados de stock y de secuencial tomados,
+     * así que además frenaba a quien guardara otro documento con esos productos o esa serie.
+     *
+     * @param array $idsPedidoDetalle Líneas de pedido enlazadas, antes y después del cambio.
+     */
+    private function reconciliarPedidosAfectados(int $idEmpresa, int $idUsuario, array $idsPedidoDetalle): void
     {
-        // 1. Obtener todos los id_pedido únicos cuyos detalles han sido enlazados
-        // en consignaciones de venta activas (no eliminadas)
-        $sqlPedidos = "
-            SELECT DISTINCT pd.id_pedido
-            FROM consignaciones_ventas_detalles cvd
-            JOIN pedidos_detalle pd ON cvd.id_pedido_detalle = pd.id
-            WHERE cvd.id_empresa = :e AND cvd.id_pedido_detalle IS NOT NULL
-        ";
-        $st = $db->prepare($sqlPedidos);
-        $st->execute([':e' => $idEmpresa]);
-        $pedidos = $st->fetchAll(\PDO::FETCH_COLUMN);
-
-        // También incluimos aquellos pedidos que antes estaban asociados pero que ahora ya no tienen enlaces
-        // (por ejemplo, porque eliminamos la consignación o le quitamos los ítems)
-        // Para estar 100% seguros de no omitir ningún pedido que pudiera volver a 'Pendiente':
-        // Buscamos pedidos "Procesado" que en algún momento SÍ tuvieron un enlace a una consignación
-        // (activa o ya eliminada). Sin este filtro, un pedido "Procesado" por otra vía —marcado
-        // manualmente por el usuario, o migrado desde el sistema viejo con ese estado histórico y sin
-        // ninguna consignación real en este sistema— siempre da cantidadConsignada=0 y se revertía a
-        // 'Pendiente' cada vez que se guardaba/eliminaba CUALQUIER consignación de la empresa.
-        $sqlProcesados = "
-            SELECT p.id
-            FROM pedidos_cabecera p
-            WHERE p.id_empresa = :e AND p.estado = 'Procesado' AND p.eliminado = false
-              AND EXISTS (
-                  SELECT 1 FROM pedidos_detalle pd
-                  JOIN consignaciones_ventas_detalles cvd ON cvd.id_pedido_detalle = pd.id
-                  WHERE pd.id_pedido = p.id
-              )
-        ";
-        $st2 = $db->prepare($sqlProcesados);
-        $st2->execute([':e' => $idEmpresa]);
-        $procesados = $st2->fetchAll(\PDO::FETCH_COLUMN);
-        
-        $pedidosAComprobar = array_unique(array_merge($pedidos, $procesados));
-
-        foreach ($pedidosAComprobar as $idPedido) {
-            $idPedido = (int) $idPedido;
-            if ($idPedido <= 0) continue;
-
-            // Obtener todos los detalles del pedido
-            $sqlD = "SELECT id, cantidad FROM pedidos_detalle WHERE id_pedido = :id_p AND eliminado = false";
-            $stD = $db->prepare($sqlD);
-            $stD->execute([':id_p' => $idPedido]);
-            $detallesPedido = $stD->fetchAll(\PDO::FETCH_ASSOC);
-
-            $todoCompletado = true;
-            foreach ($detallesPedido as $dp) {
-                // Sumar la cantidad consignada en cualquier consignación activa de la empresa
-                $sqlSum = "
-                    SELECT COALESCE(SUM(cvd.cantidad), 0)
-                    FROM consignaciones_ventas_detalles cvd
-                    JOIN consignaciones_ventas cv ON cvd.id_consignacion = cv.id
-                    WHERE cvd.id_pedido_detalle = :id_pd 
-                      AND cv.eliminado = false 
-                      AND cvd.eliminado = false
-                ";
-                $stSum = $db->prepare($sqlSum);
-                $stSum->execute([':id_pd' => (int)$dp['id']]);
-                $cantidadConsignada = (float) $stSum->fetchColumn();
-
-                if ($cantidadConsignada < (float)$dp['cantidad']) {
-                    $todoCompletado = false;
-                    break;
-                }
-            }
-
-            // Actualizar estado del pedido de acuerdo a si está todo completado o no
-            $nuevoEstado = $todoCompletado ? 'Procesado' : 'Pendiente';
-            $sqlUpd = "UPDATE pedidos_cabecera SET estado = :est, updated_at = CURRENT_TIMESTAMP WHERE id = :id_p AND id_empresa = :e";
-            $stUpd = $db->prepare($sqlUpd);
-            $stUpd->execute([':est' => $nuevoEstado, ':id_p' => $idPedido, ':e' => $idEmpresa]);
+        $idsPedido = $this->repository->getPedidosDeLineas($idsPedidoDetalle, $idEmpresa);
+        if (empty($idsPedido)) {
+            return; // la consignación no usa pedidos: no hay estado que recalcular
         }
+
+        $this->repository->lockEstadoPedidos($idsPedido, $idEmpresa);
+        $this->repository->actualizarEstadoPedidosPorConsignado($idsPedido, $idEmpresa, $idUsuario);
     }
 }

@@ -186,7 +186,8 @@ class AtsService
         // AtsRepository siguen siendo por-empresa (id_compra/id_venta son globalmente únicos pero
         // las tablas de retenciones/pagos/reembolso SIEMPRE filtran también por id_empresa), así
         // que se recorre el grupo completo llamando el mismo pipeline una vez por empresa y
-        // fusionando resultados — no se tocó ni una sola query de AtsRepository.
+        // fusionando resultados. La única consulta que mira el grupo es la búsqueda del
+        // comprobante que modifica una NC/ND en getCompras() (puede estar en otro establecimiento).
         $idsGrupo = $this->empresaRepo->getIdsGrupoRucAccesible($idEmpresa, $idUsuario);
         if (!in_array($idEmpresa, $idsGrupo, true)) {
             $idsGrupo[] = $idEmpresa; // ya validada por sesión, siempre incluida
@@ -222,7 +223,8 @@ class AtsService
                 }
             }
 
-            $compras       = $this->filtrarDuplicados($this->repo->getCompras($idEmp, $desde, $hasta), 'numero_autorizacion', $clavesVistas, $omitidosPorDuplicado);
+            // $idsGrupo: el comprobante que modifica una NC/ND se busca en todo el RUC accesible.
+            $compras       = $this->filtrarDuplicados($this->repo->getCompras($idEmp, $desde, $hasta, $idsGrupo), 'numero_autorizacion', $clavesVistas, $omitidosPorDuplicado);
             $liquidaciones = $this->filtrarDuplicados($this->repo->getLiquidaciones($idEmp, $desde, $hasta), 'numero_autorizacion', $clavesVistas, $omitidosPorDuplicado);
 
             // Retenciones y formas de pago en bloque (evita N+1)
@@ -905,6 +907,14 @@ class AtsService
     /**
      * Documento modificado (solo notas de crédito/débito 04/05).
      * Best-effort: parsea el número "EEE-PPP-SSSSSSSSS" de documento_modificado.
+     *
+     * autModificado es la autorización del comprobante MODIFICADO (ficha del ATS), que
+     * AtsRepository::getCompras() busca registrado en Compras. Antes se reportaba la
+     * autorización de la propia nota. Si no está registrado (o no tiene autorización) va
+     * AtsValidatorService::AUT_MODIFICADO_SIN_REGISTRO y el validador lo advierte.
+     *
+     * docModificado es el tipo de ese comprobante: el del registrado, si no el
+     * codDocModificado del XML del SRI y, en último caso, '01' (factura).
      */
     private function docModificado(array $doc, string $tipoComp): ?array
     {
@@ -916,12 +926,16 @@ class AtsService
         if (count($partes) < 3) {
             return null;
         }
+        $autMod  = trim((string) ($doc['mod_numero_autorizacion'] ?? ''));
+        $tipoMod = trim((string) ($doc['mod_tipo_comprobante'] ?? ''))
+            ?: trim((string) ($doc['cod_doc_modificado_xml'] ?? ''))
+            ?: '01';
         return [
-            'docModificado'    => '01', // tipo del comprobante modificado (factura por defecto)
+            'docModificado'    => str_pad($tipoMod, 2, '0', STR_PAD_LEFT),
             'estabModificado'  => str_pad(substr($partes[0], 0, 3), 3, '0', STR_PAD_LEFT),
             'ptoEmiModificado' => str_pad(substr($partes[1], 0, 3), 3, '0', STR_PAD_LEFT),
             'secModificado'    => str_pad((string) (int) $partes[2], 9, '0', STR_PAD_LEFT),
-            'autModificado'    => (string) ($doc['numero_autorizacion'] ?: '9999999999'),
+            'autModificado'    => $autMod !== '' ? $autMod : AtsValidatorService::AUT_MODIFICADO_SIN_REGISTRO,
         ];
     }
 

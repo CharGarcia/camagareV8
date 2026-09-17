@@ -606,9 +606,23 @@ class EgresoService
      * id_referencia_documento (una por ítem): hay que sumarlas antes de comparar.
      * Llamar DENTRO de la transacción, antes de escribir. $excluirEgresoId excluye el
      * propio egreso (al editar) para no descontar su pago anterior del saldo disponible.
+     *
+     * Antes del saldo valida que cada compra se pueda pagar (ni pendiente de aprobación,
+     * ni rechazada, ni anulada): cubre todos los caminos que registran egresos (Egresos,
+     * Cuentas por Pagar, modal de Compras, API, pago automático). Al editar no se revalidan
+     * las compras que el egreso ya pagaba: el pago existía y editarlo no debe trabarse.
      */
     private function validarSaldoDocumentos(array $detalles, int $idEmpresa, ?int $excluirEgresoId = null): void
     {
+        $comprasYaPagadas = [];
+        if ($excluirEgresoId !== null) {
+            foreach ($this->repository->getDetalles($excluirEgresoId) as $previo) {
+                if (($previo['tipo_documento'] ?? '') === 'COMPRA') {
+                    $comprasYaPagadas[(int) $previo['id_referencia_documento']] = true;
+                }
+            }
+        }
+
         $montoPorDoc  = [];
         $numeroPorDoc = [];
         foreach ($detalles as $det) {
@@ -624,6 +638,12 @@ class EgresoService
             [$tipoDoc, $idRef] = explode(':', $clave, 2);
             $idRef = (int) $idRef;
             $this->repository->lockDocumentoPago($tipoDoc, $idRef, $idEmpresa);
+            if ($tipoDoc === 'COMPRA' && !isset($comprasYaPagadas[$idRef])) {
+                $this->rules->validarCompraPagable(
+                    $this->repository->getEstadoCompra($idRef, $idEmpresa),
+                    (string) $numeroPorDoc[$clave]
+                );
+            }
             $saldoReal = $this->repository->getSaldoPendienteDocumento($tipoDoc, $idRef, $idEmpresa, $excluirEgresoId);
             if ($montoTotalDoc > $saldoReal + 0.01) {
                 throw new \Exception(

@@ -158,19 +158,22 @@ class IngresoRepository extends BaseRepository
             // Decisión del usuario: las columnas Tipo (tipo de ingreso, tipo de los
             // documentos cobrados y nombre del concepto) y Estado NO entran en el
             // texto libre; se filtran solo desde el modal de filtros.
+            // Rendimiento: monto y fecha solo se comparan si la palabra tiene dígitos
+            // (ver FiltrosBusqueda::condicionTexto). La subconsulta del detalle va al final.
+            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     'i.numero_ingreso',                                   // Nº Ingreso
                     'i.secuencial',
                     "CONCAT(i.establecimiento,'-',i.punto_emision)",      // Serie
-                    'i.fecha_emision::text',                              // Fecha
                     'i.recibo_de',                                        // Recibo de
                     'c.nombre',
                     'c.identificacion',
                     'rc.nombre',
                     'i.observaciones',                                    // Observaciones
-                    'i.monto_total::text',                                // Monto
                     'u.nombre',                                           // Usuario que registró
+                    ['sql' => 'i.fecha_emision', 'si' => $digitos],       // Fecha
+                    ['sql' => 'i.monto_total', 'si' => $digitos],         // Monto
                     "(SELECT STRING_AGG(d.numero_documento, ' ') FROM ingresos_detalle d WHERE d.id_ingreso = i.id)",
                 ],
                 $parsed['texto_libre'],
@@ -259,17 +262,6 @@ class IngresoRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan
-        // c, rc, u y eic.
-        $sqlCount = "SELECT COUNT(*)
-                     FROM ingresos_cabecera i
-                     LEFT JOIN clientes c  ON i.id_cliente       = c.id
-                     LEFT JOIN clientes rc ON i.id_recibo_cliente = rc.id
-                     LEFT JOIN usuarios u  ON i.id_usuario       = u.id
-                     LEFT JOIN empresa_opciones_ingreso_egreso eic ON i.id_ingreso_concepto = eic.id
-                     $where";
-        $total = (int) $this->query($sqlCount, $params)->fetchColumn();
-
         // Una o varias columnas (Shift+clic en el listado), siempre validadas contra
         // MAPA_ORDEN, con i.id como desempate para que las filas empatadas no bailen
         // entre páginas.
@@ -283,7 +275,27 @@ class IngresoRepository extends BaseRepository
             'i.id DESC'
         );
 
-        $sql = "SELECT i.*,
+        // Rendimiento (2026-09-16): conteo + página en UNA consulta, y los tipos del
+        // detalle (subconsulta por fila) calculados solo para las filas de la página.
+        // Ver App\Helpers\ListadoPaginado.
+        $joins = "LEFT JOIN clientes c  ON i.id_cliente        = c.id
+                LEFT JOIN clientes rc ON i.id_recibo_cliente  = rc.id
+                LEFT JOIN usuarios u ON i.id_usuario = u.id
+                LEFT JOIN empresa_opciones_ingreso_egreso eic ON i.id_ingreso_concepto = eic.id";
+
+        return \App\Helpers\ListadoPaginado::consultar(
+            fn(string $sql, array $p) => $this->query($sql, $p)->fetchAll(PDO::FETCH_ASSOC),
+            [
+                'tabla'       => 'ingresos_cabecera',
+                'alias'       => 'i',
+                'joinsFiltro' => $joins,
+                'joinsFinal'  => $joins,
+                'where'       => $where,
+                'orderBy'     => $orderBy,
+                'perPage'     => $perPage,
+                'conBusqueda' => trim($buscar) !== '',   // sin buscar: forma liviana (ids por índice + COUNT aparte)
+                'offset'      => $offset,
+                'select'      => "i.*,
                        c.nombre AS cliente_nombre,
                        c.identificacion AS cliente_ruc,
                        rc.nombre AS recibo_cliente_nombre,
@@ -294,22 +306,10 @@ class IngresoRepository extends BaseRepository
                            FROM ingresos_detalle idt
                            WHERE idt.id_ingreso = i.id
                            ORDER BY t
-                       ) sub) AS tipos_detalle
-                FROM ingresos_cabecera i
-                LEFT JOIN clientes c  ON i.id_cliente        = c.id
-                LEFT JOIN clientes rc ON i.id_recibo_cliente  = rc.id
-                LEFT JOIN usuarios u ON i.id_usuario = u.id
-                LEFT JOIN empresa_opciones_ingreso_egreso eic ON i.id_ingreso_concepto = eic.id
-                $where
-                $orderBy";
-
-        if ($perPage > 0) {
-            $sql .= " LIMIT $perPage OFFSET $offset";
-        }
-
-        $rows = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
-
-        return ['rows' => $rows, 'total' => $total];
+                       ) sub) AS tipos_detalle",
+            ],
+            $params
+        );
     }
 
     /**
@@ -407,15 +407,6 @@ class IngresoRepository extends BaseRepository
                 WHERE ip.id_ingreso = ?
                 ORDER BY ip.id ASC";
         return $this->query($sql, [$idIngreso])->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    public function getFormasCobro(int $idEmpresa): array
-    {
-        $sql = "SELECT * FROM empresa_formas_pago 
-                WHERE id_empresa = :id_empresa AND activo = TRUE AND eliminado = FALSE 
-                  AND (aplica_en = 'AMBAS' OR aplica_en = 'INGRESO')
-                ORDER BY nombre ASC";
-        return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function getConceptosIngreso(int $idEmpresa): array

@@ -74,24 +74,27 @@ class ReciboVentaRepository extends BaseRepository
         // Decisión del usuario: Estado, Estado de pago e Impuestos (con/sin, es una
         // clasificación) NO entran en el texto libre: se filtran solo desde el modal.
         if ($textoLibre !== '') {
+            // Rendimiento: montos y fecha solo se comparan si la palabra tiene dígitos
+            // (ver FiltrosBusqueda::condicionTexto). Las subconsultas van al final.
+            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     "CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)", // Número
                     'v.secuencial',
-                    'v.fecha_emision::text',                                          // Fecha
                     'c.nombre',                                                       // Cliente
                     'c.identificacion',                                               // Identificación
-                    'v.total_sin_impuestos::text',                                    // Subtotal
-                    'v.total_descuento::text',                                        // Descuento
-                    "$ivaCalc::text",                                                 // IVA
-                    'v.total_ice::text',                                              // ICE
-                    'v.propina::text',                                                // Propina
-                    'v.importe_total::text',                                          // Total
                     'ven.nombre',                                                     // Vendedor
                     'v.observaciones',                                                // Observaciones
                     'u.nombre',                                                       // Usuario
                     // Fuera del listado, pero identifican el recibo:
                     'v.recibo_numero',
+                    ['sql' => 'v.fecha_emision', 'si' => $digitos],                   // Fecha
+                    ['sql' => 'v.total_sin_impuestos', 'si' => $digitos],             // Subtotal
+                    ['sql' => 'v.total_descuento', 'si' => $digitos],                 // Descuento
+                    ['sql' => $ivaCalc, 'si' => $digitos],                            // IVA
+                    ['sql' => 'v.total_ice', 'si' => $digitos],                       // ICE
+                    ['sql' => 'v.propina', 'si' => $digitos],                         // Propina
+                    ['sql' => 'v.importe_total', 'si' => $digitos],                   // Total
                     $numFacturaOrigen,                                                // factura generada
                     "(SELECT STRING_AGG(CONCAT_WS(' ', rd.codigo_principal, rd.codigo_auxiliar, rd.descripcion), ' ') FROM recibos_venta_detalle rd WHERE rd.id_recibo = v.id)",
                 ],
@@ -188,13 +191,6 @@ class ReciboVentaRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        $sqlCount = "SELECT COUNT(*) FROM recibos_venta_cabecera v
-                     INNER JOIN clientes   c   ON v.id_cliente  = c.id
-                     LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
-                     LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id
-                     $where";
-        $total = $this->query($sqlCount, $params)->fetchColumn();
-
         $allowedCols = ['id', 'fecha_emision', 'secuencial', 'numero', 'importe_total', 'total_sin_impuestos', 'total_descuento', 'total_ice', 'propina', 'estado', 'cliente_nombre', 'cliente_ruc', 'vendedor_nombre', 'usuario_nombre', 'observaciones', 'iva'];
         if (!in_array($ordenCol, $allowedCols)) $ordenCol = 'fecha_emision';
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
@@ -209,23 +205,34 @@ class ReciboVentaRepository extends BaseRepository
             default           => "v.$ordenCol",
         };
 
-        $sql = "SELECT v.*,
+        // Rendimiento (2026-09-16): conteo + página en UNA consulta y el total cobrado
+        // calculado solo para las filas de la página (antes, para todos los recibos de la
+        // empresa en cada carga). Ver App\Helpers\ListadoPaginado.
+        $joins = "INNER JOIN clientes  c   ON v.id_cliente  = c.id
+                LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
+                LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id";
+
+        return \App\Helpers\ListadoPaginado::consultar(
+            fn(string $sql, array $p) => $this->query($sql, $p)->fetchAll(),
+            [
+                'tabla'       => 'recibos_venta_cabecera',
+                'alias'       => 'v',
+                'joinsFiltro' => $joins,
+                'joinsFinal'  => $joins,
+                'where'       => $where,
+                'orderBy'     => "ORDER BY $ordenExpr $ordenDir" . ($ordenCol !== 'id' ? ", v.id $ordenDir" : ''),
+                'perPage'     => $perPage,
+                'conBusqueda' => trim($buscar) !== '',   // sin buscar: forma liviana (ids por índice + COUNT aparte)
+                'offset'      => $offset,
+                'select'      => "v.*,
                        c.nombre         AS cliente_nombre,
                        c.identificacion AS cliente_ruc,
                        ven.nombre       AS vendedor_nombre,
                        u.nombre         AS usuario_nombre,
-                       (SELECT COALESCE(SUM(ind.monto_cobrado), 0) FROM ingresos_detalle ind INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'RECIBO' AND inc.estado != 'anulado' AND inc.eliminado = false) AS total_cobrado
-                FROM recibos_venta_cabecera v
-                INNER JOIN clientes  c   ON v.id_cliente  = c.id
-                LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
-                LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id
-                $where
-                ORDER BY $ordenExpr $ordenDir" . ($ordenCol !== 'id' ? ", v.id $ordenDir" : "") . "
-                LIMIT $perPage OFFSET $offset";
-
-        $rows = $this->query($sql, $params)->fetchAll();
-
-        return ['rows' => $rows, 'total' => (int) $total];
+                       (SELECT COALESCE(SUM(ind.monto_cobrado), 0) FROM ingresos_detalle ind INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'RECIBO' AND inc.estado != 'anulado' AND inc.eliminado = false) AS total_cobrado",
+            ],
+            $params
+        );
     }
 
     /** Vendedores con algún recibo en la empresa (select "Vendedor" del modal de filtros). */

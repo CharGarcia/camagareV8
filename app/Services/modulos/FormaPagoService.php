@@ -53,6 +53,8 @@ class FormaPagoService
             $data['id_cuenta_contable'] = $this->cuentaBase($data, $cuentaCobro, $cuentaPago);
         }
 
+        $data['orden'] = $this->normalizarOrden($data['orden'] ?? null);
+
         $this->validar($data);
 
         if (!empty($data['id']) && (int)$data['id'] > 0) {
@@ -73,6 +75,22 @@ class FormaPagoService
         }
 
         return $id;
+    }
+
+    /**
+     * "Orden" de la forma en la lista de Ingresos/Egresos: vacío = sin orden (va al final, por
+     * nombre); si viene, un entero de 1 a 9999.
+     */
+    private function normalizarOrden(mixed $orden): ?int
+    {
+        $texto = is_scalar($orden) ? trim((string)$orden) : '';
+        if ($texto === '') {
+            return null;
+        }
+        if (!ctype_digit($texto) || (int)$texto < 1 || (int)$texto > 9999) {
+            throw new Exception("El orden debe ser un número entero entre 1 y 9999, o dejarse vacío.");
+        }
+        return (int)$texto;
     }
 
     /**
@@ -290,6 +308,39 @@ class FormaPagoService
     public function getSaldosActuales(int $idEmpresa): array
     {
         return $this->repository->getSaldosActuales($idEmpresa);
+    }
+
+    /**
+     * Formas activas de un flujo (INGRESO | EGRESO) tal como se ofrecen al registrar un Ingreso o
+     * un Egreso: en el "Orden" configurado en este módulo y con su saldo solo si la forma tiene
+     * marcado "Mostrar saldo". Cada forma sale con `es_anticipo`, `mostrar_saldo` y `saldo`
+     * (float, o null cuando no se muestra). Un anticipo nunca trae saldo aquí: el suyo depende del
+     * cliente/proveedor y la vista lo consulta por AJAX, también solo si la forma lo permite.
+     */
+    public function getFormasConSaldo(int $idEmpresa, string $flujo): array
+    {
+        $formas = $this->repository->getFormasFiltradas($idEmpresa, $flujo, true);
+
+        foreach ($formas as &$f) {
+            $f['es_anticipo'] = ($f['tipo'] ?? '') === 'ANTICIPO';
+            // Sin la columna (SQL aún no aplicado) el saldo se muestra, como siempre.
+            $f['mostrar_saldo'] = !array_key_exists('mostrar_saldo', $f) || !empty($f['mostrar_saldo']);
+        }
+        unset($f);
+
+        // El cálculo recorre todos los cobros y pagos de la empresa: solo se hace si alguna forma
+        // va a mostrar su saldo.
+        $conSaldo = array_filter($formas, fn(array $f) => $f['mostrar_saldo'] && !$f['es_anticipo']);
+        $saldos   = $conSaldo ? $this->repository->getSaldosActuales($idEmpresa) : [];
+
+        foreach ($formas as &$f) {
+            $f['saldo'] = ($f['mostrar_saldo'] && !$f['es_anticipo'])
+                ? (float)($saldos[(int)$f['id']] ?? 0)
+                : null;
+        }
+        unset($f);
+
+        return $formas;
     }
 
     /** Saldo de un anticipo para un cliente/proveedor concreto. */

@@ -11,8 +11,8 @@ use TCPDF;
  *
  * A4 vertical. Mismo ENCABEZADO del comprobante de caja (Ingresos/Egresos).
  * Cuerpo: datos del cliente, tabla de "Productos que devuelve" y tabla de
- * "Productos que entrega a cambio", resumen con la diferencia (informativa),
- * observaciones/motivo y dos firmas (Realizado por / Recibido por).
+ * "Productos que entrega a cambio" (por unidad: origen, lote, NUP, bodega y cantidad,
+ * sin precios ni totales), observaciones/motivo y dos firmas (Realizado por / Recibido por).
  *
  * Cuando la empresa tenga una plantilla activa (tipo 'cambio_producto_cv') se
  * usa PlantillasPdfRendererService; este es el respaldo estándar.
@@ -52,8 +52,7 @@ class CambioProductoCvPdfService
         $y = $this->dibujarDatosCliente($cabecera, $y + 3);
         $y = $this->dibujarTablaDetalle('Productos que devuelve', $devoluciones, $y + 3);
         $y = $this->dibujarTablaDetalle('Productos que entrega a cambio', $entregas, $y + 3);
-        $y = $this->dibujarResumen($cabecera, $y + 2);
-        $y = $this->dibujarObservacionesMotivo($cabecera, $y + 3);
+        $y = $this->dibujarObservacionesMotivo($cabecera, $y + 4);
         $this->dibujarFirmas($cabecera, $y);
 
         $nombre = 'Cambio_' . ($numero !== '' ? $numero : 'comprobante') . '.pdf';
@@ -166,21 +165,26 @@ class CambioProductoCvPdfService
 
     /**
      * Etiqueta del origen de una línea del cambio (también la usa el Excel):
-     * "Factura 001-001-000000123", "Cambio 001-001-000000004",
+     * "Factura 001-001-000000123" (número de la factura de venta que generó la factura de
+     * consignación, ver CambioProductoCvRepository::getDetalles), "Cambio 001-001-000000004",
      * "Consignación 001-001-000000012" o "Bodega" (entrega desde existencias / catálogo).
      */
     public static function etiquetaOrigen(array $d): string
     {
         $tipo = strtoupper((string)($d['origen_tipo'] ?? ''));
         $num  = trim((string)($d['origen_numero'] ?? ''));
-        $nombres = ['FACTURA' => 'Fact. consig.', 'CAMBIO' => 'Cambio', 'CONSIGNACION' => 'Consignación'];
+        $nombres = ['FACTURA' => 'Factura', 'CAMBIO' => 'Cambio', 'CONSIGNACION' => 'Consignación'];
         if (!isset($nombres[$tipo])) {
             return 'Bodega';
         }
         return trim($nombres[$tipo] . ' ' . $num);
     }
 
-    /** Tabla: Origen | Código | Descripción | Lote | NUP | Cantidad | P.Unit | Total. */
+    /**
+     * Tabla: Origen | Código | Descripción | Lote | NUP | Bodega | Cant. Sin precios ni
+     * totales, igual que el modal: el cambio es por unidad y la bodega dice de dónde viene
+     * (devolución) o de dónde sale (entrega) cada una.
+     */
     private function dibujarTablaDetalle(string $titulo, array $detalles, float $y): float
     {
         $pdf = $this->pdf;
@@ -200,14 +204,13 @@ class CambioProductoCvPdfService
         $y = $pdf->GetY();
 
         $cols = [
-            ['t' => 'Origen',      'w' => 30, 'a' => 'L', 'k' => 'origen_label'],
+            ['t' => 'Origen',      'w' => 38, 'a' => 'L', 'k' => 'origen_label'],
             ['t' => 'Código',      'w' => 20, 'a' => 'L', 'k' => 'producto_codigo'],
             ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'producto_nombre'],
             ['t' => 'Lote',        'w' => 20, 'a' => 'L', 'k' => 'lote'],
-            ['t' => 'NUP',         'w' => 22, 'a' => 'L', 'k' => 'nup'],
+            ['t' => 'NUP',         'w' => 24, 'a' => 'L', 'k' => 'nup'],
+            ['t' => 'Bodega',      'w' => 30, 'a' => 'L', 'k' => 'bodega_nombre'],
             ['t' => 'Cant.',       'w' => 14, 'a' => 'R', 'k' => 'cantidad'],
-            ['t' => 'P.Unit',      'w' => 19, 'a' => 'R', 'k' => 'precio_unitario'],
-            ['t' => 'Total',       'w' => 21, 'a' => 'R', 'k' => 'total'],
         ];
 
         $fixed = 0.0;
@@ -257,8 +260,6 @@ class CambioProductoCvPdfService
                 $raw = $d[$c['k']] ?? '';
                 if ($c['k'] === 'cantidad') {
                     $vals[] = number_format((float)$raw, 2);
-                } elseif ($c['k'] === 'precio_unitario' || $c['k'] === 'total') {
-                    $vals[] = number_format((float)$raw, 2);
                 } else {
                     $vals[] = trim((string)$raw) !== '' ? (string)$raw : '—';
                 }
@@ -298,40 +299,6 @@ class CambioProductoCvPdfService
             }
             $pdf->SetXY($mL, $yRow + $h);
         }
-
-        return $pdf->GetY();
-    }
-
-    private function dibujarResumen(array $c, float $y): float
-    {
-        $pdf = $this->pdf;
-        $mL  = $this->marginL;
-        $w   = $this->contentW;
-
-        $dev = (float)($c['subtotal_devuelto'] ?? 0);
-        $ent = (float)($c['subtotal_entregado'] ?? 0);
-        $dif = (float)($c['diferencia'] ?? ($ent - $dev));
-
-        $boxW = 70;
-        $x = $mL + $w - $boxW;
-        $pdf->SetFont('helvetica', '', 8.5);
-
-        $fila = function (string $lbl, float $val, bool $bold = false) use ($pdf, $x, $boxW) {
-            $pdf->SetX($x);
-            $pdf->SetFont('helvetica', $bold ? 'B' : '', 8.5);
-            $pdf->Cell($boxW - 30, 5, $lbl, 0, 0, 'R');
-            $pdf->Cell(30, 5, number_format($val, 2), 0, 1, 'R');
-        };
-        // Las tres filas del resumen se dibujan juntas o pasan juntas de página.
-        if ($y + 15 > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
-            $pdf->AddPage();
-            $y = $pdf->GetY();
-        }
-
-        $pdf->SetXY($x, $y);
-        $fila('Total devuelto:', $dev);
-        $fila('Total entregado:', $ent);
-        $fila('Diferencia:', $dif, true);
 
         return $pdf->GetY();
     }

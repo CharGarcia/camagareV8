@@ -352,9 +352,11 @@ class DocumentoAutomatedRegisterService
                 
                 // Generar egreso automático si aplica (Solo Facturas emitidas a la empresa).
                 // Si la compra quedó pendiente de aprobación NO se paga sola: el
-                // egreso es justamente lo que el checkpoint retiene hasta autorizar.
+                // egreso es justamente lo que el checkpoint retiene hasta autorizar, y lo
+                // genera ComprasService::aprobarCompra() (PagoAutomaticoProveedorService::
+                // generarAlAprobar) si el proveedor tiene pago automático.
                 if ($this->esComprapendiente($idCompra)) {
-                    $msgEgreso = ' | Pendiente de aprobación: el pago se registrará cuando se apruebe.';
+                    $msgEgreso = ' | Pendiente de aprobación: si el proveedor tiene pago automático, el egreso se generará al aprobarla.';
                 } else {
                     // El pago cubre el total real de la planilla: el importe declarado al
                     // SRI más los rubros recaudados para terceros (bomberos, tasa de
@@ -563,6 +565,15 @@ class DocumentoAutomatedRegisterService
             $total = (float)$info->valorModificacion;
             $subtotal = (float)$info->totalSinImpuestos;
             $descuento = (float)($info->totalDescuento ?? 0);
+            // La nota de crédito no tiene totalDescuento en la cabecera: el descuento
+            // solo viene por línea. Se suma como calcularTotales() de ComprasService al
+            // guardar desde el modal; sin esto la NC quedaba con descuento 0.
+            if (!isset($info->totalDescuento) && isset($xml->detalles->detalle)) {
+                foreach ($xml->detalles->detalle as $d) {
+                    $descuento += (float)$d->descuento;
+                }
+                $descuento = round($descuento, 2);
+            }
         } elseif ($codDoc === '05') {
             $info = $xml->infoNotaDebito;
             $total = (float)$info->valorTotal;
@@ -648,7 +659,6 @@ class DocumentoAutomatedRegisterService
                 'total_descuento' => $descuento,
                 'importe_total' => $total,
                 'propina' => (float)($info->propina ?? 0),
-                'estado' => 'registrado',
                 'deducible' => $esGastoPersonal ? 'gasto_personal' : 'declaracion_iva',
                 'tipo_registro' => 'electronico',
                 'autorizacion_desde' => $secuencial,
@@ -702,6 +712,17 @@ class DocumentoAutomatedRegisterService
                 ? $this->resolverAjusteIvaDetalle($xml, $info)
                 : null;
 
+            // 1.8 Base imponible de IVA de cabecera vs. detalle. Otros emisores
+            // (SERVIENTREGA, p. ej.) ponen como base de cada línea el precio ANTES del
+            // descuento, aunque el IVA sí lo calculan sobre el subtotal neto: el valor
+            // del IVA cuadra con la cabecera, pero la base inflada llegaba a la
+            // Declaración de IVA, al ATS y al Reporte de Compras. Ver
+            // resolverAjusteBasesIva(). Solo se evalúa si el IVA ya cuadra: si no,
+            // manda el ajuste 1.7 (que en modo 'corregir' ya toma la base de cabecera).
+            $ajusteBases = ($ajusteIva === null && isset($xml->detalles->detalle))
+                ? $this->resolverAjusteBasesIva($xml, $info)
+                : null;
+
             // 2. Detalles
             if (isset($xml->detalles->detalle)) {
                 foreach ($xml->detalles->detalle as $d) {
@@ -735,6 +756,11 @@ class DocumentoAutomatedRegisterService
                                 $fila = array_merge($fila, $ajusteIva['impuesto']);
                                 $ivaCorregido = true;
                             }
+                            // Base inflada (1.8): la línea toma su subtotal neto como base.
+                            if ($ajusteBases !== null && $fila['codigo_impuesto'] === '2'
+                                && isset($ajusteBases['codigos'][trim($fila['codigo_porcentaje'])])) {
+                                $fila['base_imponible'] = self::baseIvaLinea($d);
+                            }
                             $this->compraRepo->insertImpuesto($fila);
                         }
                         // El detalle no traía ninguna fila de IVA pero la cabecera sí.
@@ -754,6 +780,8 @@ class DocumentoAutomatedRegisterService
 
                 if ($ajusteIva !== null) {
                     $this->compraRepo->updateObservaciones($idCompra, $ajusteIva['observacion']);
+                } elseif ($ajusteBases !== null) {
+                    $this->compraRepo->updateObservaciones($idCompra, $ajusteBases['observacion']);
                 }
             } elseif ($codDoc === '05' && isset($xml->motivos->motivo)) {
                 // Nota de Débito de compra: a diferencia de una factura, el XML no trae
@@ -1134,6 +1162,101 @@ class DocumentoAutomatedRegisterService
         return [
             'modo'        => 'observar',
             'observacion' => $obs . ' El detalle se registró tal como vino en el XML; revise la tarifa de IVA de cada línea antes de declarar.',
+        ];
+    }
+
+    /**
+     * Base imponible de IVA de una línea de detalle: su subtotal sin impuestos más el
+     * ICE de la propia línea (el ICE forma parte de la base del IVA). Es el mismo
+     * cálculo que hace el modal de Compras al guardar (neto + ICE).
+     */
+    private static function baseIvaLinea(SimpleXMLElement $d): float
+    {
+        $base = (float) $d->precioTotalSinImpuesto;
+        if (isset($d->impuestos->impuesto)) {
+            foreach ($d->impuestos->impuesto as $imp) {
+                if ((string) $imp->codigo === '3') {
+                    $base += (float) $imp->valor;
+                }
+            }
+        }
+        return round($base, 2);
+    }
+
+    /**
+     * Compara, por tarifa (codigoPorcentaje), la base imponible de IVA que declara la
+     * cabecera en <totalConImpuestos> con la que suman las líneas de <detalles>.
+     *
+     * Devuelve null cuando no hay nada que corregir. Si en una tarifa la base de las
+     * líneas no cuadra con la cabecera (más de un centavo) pero la suma de sus
+     * subtotales netos (baseIvaLinea) sí cuadra, esa tarifa va en 'codigos' para que
+     * cada línea se registre con su subtotal neto como base, junto con la
+     * 'observacion' que se deja en la compra. Si tampoco cuadra el subtotal, la tarifa
+     * no se toca: no hay una base cierta con qué reemplazarla.
+     *
+     * Caso real que lo motivó: nota de crédito de SERVIENTREGA con una línea de precio
+     * 5.20, descuento 0.26 y subtotal 4.94 cuyo impuesto declara base 5.20 (el precio
+     * antes del descuento) e IVA 0.74 (15% de 4.94); la cabecera declara base 4.94.
+     */
+    private function resolverAjusteBasesIva(SimpleXMLElement $xml, ?SimpleXMLElement $info): ?array
+    {
+        if ($info === null || !isset($info->totalConImpuestos->totalImpuesto)) {
+            return null;
+        }
+
+        $cabecera = [];
+        foreach ($info->totalConImpuestos->totalImpuesto as $t) {
+            if ((string) $t->codigo === '2') {
+                $cp = trim((string) $t->codigoPorcentaje);
+                $cabecera[$cp] = ($cabecera[$cp] ?? 0.0) + (float) $t->baseImponible;
+            }
+        }
+        if ($cabecera === []) {
+            return null;
+        }
+
+        $bases = [];
+        $netos = [];
+        foreach ($xml->detalles->detalle as $d) {
+            if (!isset($d->impuestos->impuesto)) {
+                continue;
+            }
+            foreach ($d->impuestos->impuesto as $imp) {
+                if ((string) $imp->codigo !== '2') {
+                    continue;
+                }
+                $cp = trim((string) $imp->codigoPorcentaje);
+                $bases[$cp] = ($bases[$cp] ?? 0.0) + (float) $imp->baseImponible;
+                $netos[$cp] = ($netos[$cp] ?? 0.0) + self::baseIvaLinea($d);
+            }
+        }
+
+        $codigos = [];
+        $baseDet = 0.0;
+        $baseCab = 0.0;
+        foreach ($bases as $cp => $base) {
+            if (!isset($cabecera[$cp])) {
+                continue;
+            }
+            $cab = round($cabecera[$cp], 2);
+            if (abs(round($base, 2) - $cab) <= 0.01 || abs(round($netos[$cp], 2) - $cab) > 0.01) {
+                continue;
+            }
+            $codigos[$cp] = true;
+            $baseDet += $base;
+            $baseCab += $cab;
+        }
+        if ($codigos === []) {
+            return null;
+        }
+
+        return [
+            'codigos'     => $codigos,
+            'observacion' => sprintf(
+                'XML del SRI inconsistente: la base imponible de IVA del detalle suma %s y la cabecera declara %s. Cada línea se registró con su subtotal sin impuestos como base, que es el que cuadra con la cabecera.',
+                number_format($baseDet, 2, '.', ''),
+                number_format($baseCab, 2, '.', '')
+            ),
         ];
     }
 

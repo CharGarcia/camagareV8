@@ -420,7 +420,7 @@ function nuevoPedido() {
     document.getElementById('fecha_entrega').value = CMG_fechaLocal();
     // Las horas de entrega arrancan VACÍAS: no se sugiere la hora actual ni se
     // limita la hora máxima con `min`, para que se puedan escribir libremente.
-    // La coherencia (inicial < máxima) se sigue validando en validarFechasYHoras().
+    // La coherencia (inicial <= máxima) se sigue validando en validarFechasYHoras().
     document.getElementById('hora_inicial_entrega').value = '';
     document.getElementById('hora_maxima_entrega').value = '';
     document.getElementById('id_responsable_entrega').value = '';
@@ -966,17 +966,12 @@ function validarFechasYHoras() {
     });
 
     // La comparación es textual y por eso exige HH:MM con ceros a la izquierda,
-    // que es justo lo que deja pedNormalizarHora().
-    if (hIni && hMax && PED_RE_HORA.test(hIni) && PED_RE_HORA.test(hMax)) {
-        if (hIni > hMax) {
-            showError(inputHoraIni, 'La hora inicial no puede ser mayor a la hora máxima.');
-            showError(inputHoraMax, 'La hora máxima debe ser mayor a la hora inicial.');
-            isOk = false;
-        } else if (hIni === hMax) {
-            showError(inputHoraIni, 'La hora inicial no puede ser igual a la hora máxima.');
-            showError(inputHoraMax, 'La hora máxima no puede ser igual a la hora inicial.');
-            isOk = false;
-        }
+    // que es justo lo que deja pedNormalizarHora(). Las dos horas pueden ser
+    // iguales (entrega a una hora exacta); solo se rechaza la inicial mayor.
+    if (hIni && hMax && PED_RE_HORA.test(hIni) && PED_RE_HORA.test(hMax) && hIni > hMax) {
+        showError(inputHoraIni, 'La hora inicial no puede ser mayor a la hora máxima.');
+        showError(inputHoraMax, 'La hora máxima no puede ser menor a la hora inicial.');
+        isOk = false;
     }
 
     return isOk;

@@ -52,13 +52,14 @@ class ComprasAprobacionController extends Controller
             // El token ES la autorización: quien llega por el enlace del correo ya
             // fue elegido como aprobador, así que no se revalida contra la sesión
             // (no hay sesión). Se registra a nombre del aprobador configurado.
-            $this->service->aprobarCompra(
+            $res = $this->service->aprobarCompra(
                 (int) $compra['id'],
                 (int) $compra['id_empresa'],
                 $this->idAprobador($compra),
                 true
             );
-            $this->resultado('ok', 'La compra ' . $this->numero($compra) . ' fue APROBADA.');
+            $pago = trim((string) ($res['pago']['mensaje'] ?? ''));
+            $this->resultado('ok', 'La compra ' . $this->numero($compra) . ' fue APROBADA.' . ($pago !== '' ? ' ' . $pago : ''));
         } catch (\Throwable $e) {
             $this->resultado('error', $e->getMessage());
         }

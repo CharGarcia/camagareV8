@@ -149,9 +149,14 @@
         // componente apague su spinner cuando termine.
         const tbodyCarga = document.getElementById('tbodyLiquidaciones');
         if (tbodyCarga) tbodyCarga.classList.add('fm-cargando-target');
-        return fetch(url)
+        // Solo vale la ÚLTIMA búsqueda: la anterior se cancela y nunca pinta encima.
+        if (window.LC_busquedaCtrl) window.LC_busquedaCtrl.abort();
+        const ctrl = new AbortController();
+        window.LC_busquedaCtrl = ctrl;
+        return fetch(url, { signal: ctrl.signal })
             .then(r => r.json())
             .then(res => {
+                if (ctrl !== window.LC_busquedaCtrl) return;
                 const tbody = document.getElementById('tbodyLiquidaciones');
                 const pInfo = document.getElementById('paginationInfo');
                 if (res.ok && tbody) {
@@ -160,9 +165,9 @@
                     updatePaginationUI(page, res.totalPages);
                 }
             })
-            .catch(err => console.error("Error LC_fetchSearch:", err))
+            .catch(err => { if (err.name !== 'AbortError') console.error("Error LC_fetchSearch:", err); })
             .finally(() => {
-                if (tbodyCarga) tbodyCarga.classList.remove('fm-cargando-target');
+                if (tbodyCarga && ctrl === window.LC_busquedaCtrl) tbodyCarga.classList.remove('fm-cargando-target');
             });
     }
 

@@ -12,6 +12,7 @@
 /** @var string $ordenDir */
 /** @var array $vistaConfig */
 /** @var array $puntos */
+/** @var int $decCant */
 
 $base = BASE_URL;
 $urlBaseCam = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
@@ -35,6 +36,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
     .cambio-row { cursor: pointer; }
     .cambio-row:hover { background-color: rgba(0, 0, 0, .04); }
+
+    /* Listado de dos lados: lo que ENTRA (izquierda, rojo) y lo que SALE (derecha, verde). */
+    .cambios-scroll thead th.cam-th-entra { --bs-table-bg: #dc3545; --bs-table-color: #fff; background-color: #dc3545; color: #fff; }
+    .cambios-scroll thead th.cam-th-sale  { --bs-table-bg: #198754; --bs-table-color: #fff; background-color: #198754; color: #fff; }
+    #tablaCambios .cam-lado-sale { border-left: 2px solid #adb5bd; }
+    #tablaCambios td { vertical-align: middle; }
+    #tablaCambios .cam-producto { max-width: 280px; }
+    /* Sin columna Estado: un cambio anulado va tachado y uno en borrador, atenuado. */
+    #tablaCambios .cam-fila-anulada > td { color: #adb5bd; text-decoration: line-through; }
+    #tablaCambios .cam-fila-borrador > td { color: #6c757d; font-style: italic; }
 </style>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfig ?? []) ?>
@@ -121,7 +132,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             tab: 'Detalles',
                             url: `<?= $urlBaseCam ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los cambios',
-                            placeholder: 'Producto, código, lote, NUP, bodega, factura de consignación o documento de origen...',
+                            placeholder: 'Producto, código, lote, NUP, bodega, factura de venta o documento de origen...',
                             columns: [
                                 { key: 'origen',      label: 'Línea' },
                                 { key: 'tipo',        label: 'Código' },
@@ -154,12 +165,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
             <div id="fmExtraCAM" class="btn-group btn-group-sm">
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas([
-                    'fecha_cambio' => 'Fecha',
-                    'secuencial'   => 'Secuencial',
-                    'cliente'      => 'Cliente',
-                    'motivo'       => 'Motivo',
-                    'diferencia'   => 'Diferencia',
-                    'estado'       => 'Estado'
+                    'dev_cantidad'  => 'Entra: cantidad',
+                    'dev_producto'  => 'Entra: producto',
+                    'dev_lote'      => 'Entra: lote',
+                    'dev_bodega'    => 'Entra: bodega',
+                    'dev_factura'   => 'Entra: factura',
+                    'ent_cantidad'  => 'Sale: cantidad',
+                    'ent_producto'  => 'Sale: producto',
+                    'ent_lote'      => 'Sale: lote',
+                    'ent_bodega'    => 'Sale: bodega',
+                    'cliente'       => 'Cliente',
+                    'observaciones' => 'Observaciones',
                 ], $vistaConfig ?? [], 'cambio-producto-cv'); ?>
 
                 <a class="btn btn-outline-danger pdf-export-btn" href="<?= BASE_URL ?>/<?= $rutaModulo ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= $ordenCol ?>&dir=<?= $ordenDir ?>" target="_blank" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
@@ -179,37 +195,33 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     <div class="card-body p-0">
         <div class="cambios-scroll w-100">
             <table class="table table-hover table-sm mb-0" id="tablaCambios">
+                <?php // Encabezados en rojo: lo que ENTRA (devolución). En verde: lo que SALE (entrega). ?>
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3 sortable-header" role="button" data-col="fecha_cambio">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" role="button" data-col="secuencial">Secuencial <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" role="button" data-col="cliente">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" role="button" data-col="motivo">Motivo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-end sortable-header" role="button" data-col="diferencia">Diferencia <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center pe-3 sortable-header" role="button" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="ps-3 text-end sortable-header cam-th-entra" role="button" data-col="dev_cantidad" title="Producto que entra">Cantidad <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="sortable-header cam-th-entra" role="button" data-col="dev_producto" title="Producto que entra">Producto <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="sortable-header cam-th-entra" role="button" data-col="dev_lote" title="Producto que entra">Lote <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="sortable-header cam-th-entra" role="button" data-col="dev_bodega" title="Bodega a la que entra">Bodega <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="sortable-header cam-th-entra" role="button" data-col="dev_factura" title="Factura de venta de la que viene">Factura <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="text-end sortable-header cam-th-sale cam-lado-sale" role="button" data-col="ent_cantidad" title="Producto que sale">Cantidad <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="sortable-header cam-th-sale" role="button" data-col="ent_producto" title="Producto que sale">Producto <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="sortable-header cam-th-sale" role="button" data-col="ent_lote" title="Producto que sale">Lote <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="sortable-header cam-th-sale" role="button" data-col="ent_bodega" title="Bodega de la que sale">Bodega <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="sortable-header cam-th-sale" role="button" data-col="cliente">Cliente <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="pe-3 sortable-header cam-th-sale" role="button" data-col="observaciones">Observaciones <i class="bi bi-arrow-down-up small ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="grid-body">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="6" class="text-center py-5 text-muted">
+                            <td colspan="11" class="text-center py-5 text-muted">
                                 <i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>
                                 No se encontraron cambios.
                             </td>
                         </tr>
                     <?php else: ?>
-                        <?php foreach ($rows as $r):
-                            $dataJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
-                            $statusBadge = \App\controllers\modulos\CambioProductoCvController::badgeEstado($r['estado'] ?? '');
-                        ?>
-                            <tr class="cambio-row" role="button" tabindex="0" data-row="<?= $dataJson ?>" onclick="abrirModalCambioVer(this)">
-                                <td class="ps-3" data-col="fecha_cambio"><?= htmlspecialchars($r['fecha_cambio'] ?? '') ?></td>
-                                <td data-col="secuencial"><?= htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) ?></td>
-                                <td data-col="cliente" class="text-truncate" style="max-width:250px" title="<?= htmlspecialchars($r['cliente_nombre'] ?? '') ?>"><?= htmlspecialchars($r['cliente_nombre'] ?? '') ?></td>
-                                <td data-col="motivo" class="text-truncate" style="max-width:220px" title="<?= htmlspecialchars($r['motivo'] ?? '—') ?>"><?= htmlspecialchars($r['motivo'] ?? '—') ?></td>
-                                <td data-col="diferencia" class="text-end"><?= number_format((float)($r['diferencia'] ?? 0), 2) ?></td>
-                                <td class="text-center pe-3" data-col="estado"><?= $statusBadge ?></td>
-                            </tr>
+                        <?php foreach ($rows as $r): ?>
+                            <?php include __DIR__ . '/_fila.php'; ?>
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </tbody>
@@ -258,12 +270,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     });
 
     function actualizarIconosOrden(col, dir, tableId) {
+        // Los encabezados tienen fondo rojo o verde: íconos en blanco (tenue si la columna no ordena).
         document.querySelectorAll(`#${tableId} th.sortable-header`).forEach(th => {
             const icon = th.querySelector('i');
             if (icon) {
-                icon.className = 'bi bi-arrow-down-up text-muted ms-1';
+                icon.className = 'bi bi-arrow-down-up small text-white-50 ms-1';
                 if (th.dataset.col === col) {
-                    icon.className = dir === 'ASC' ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
+                    icon.className = dir === 'ASC' ? 'bi bi-sort-alpha-down text-white ms-1' : 'bi bi-sort-alpha-up text-white ms-1';
                 }
             }
         });

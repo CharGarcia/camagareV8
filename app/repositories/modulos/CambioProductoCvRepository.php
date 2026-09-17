@@ -18,9 +18,108 @@ use PDO;
  */
 class CambioProductoCvRepository extends BaseRepository
 {
+    /** Cache por petición de registroFacturacionDisponible(). */
+    private static ?bool $registroFacturacion = null;
+
     public function __construct()
     {
         parent::__construct('cambios_producto_cv');
+    }
+
+    // ─── REGISTRO EN FACTURACIÓN DE CONSIGNACIONES ────────────────────────────
+    //
+    // Al emitir un cambio, lo que se entrega desde una consignación queda como 'facturada' en
+    // Facturación de consignaciones (consignaciones_facturas.id_cambio_producto), dentro de la
+    // factura de venta de la unidad devuelta y sin crear factura nueva. A partir de ahí esa
+    // unidad cuenta como FACTURADA en el saldo de la consignación y deja de contar como
+    // "entregada a cambio". Estos fragmentos son la única definición de esa regla: los usan
+    // Retornos, Facturación CV, el kardex de la consignación, el Reporte de inventarios, la
+    // sincronización de asientos, Auditoría contable y la migración.
+
+    /**
+     * ¿La base ya tiene las columnas del registro (database/migrations/20260916_facturacion_cv_registro_cambio.sql)?
+     * Mientras no se apliquen, todo se comporta como antes: los fragmentos de abajo no agregan
+     * nada y el cambio no crea registros. Se consulta una vez por petición.
+     */
+    public static function registroFacturacionDisponible(): bool
+    {
+        if (self::$registroFacturacion === null) {
+            try {
+                $st = \App\core\Database::getConnection()->query(
+                    "SELECT COUNT(*) FROM information_schema.columns
+                      WHERE table_schema = current_schema()
+                        AND ((table_name = 'consignaciones_facturas'          AND column_name = 'id_cambio_producto')
+                          OR (table_name = 'consignaciones_facturas_detalles' AND column_name = 'id_cambio_detalle'))"
+                );
+                self::$registroFacturacion = ((int) $st->fetchColumn()) === 2;
+            } catch (\Throwable $e) {
+                self::$registroFacturacion = false;
+            }
+        }
+        return self::$registroFacturacion;
+    }
+
+    /**
+     * Condición " AND …": la línea de ENTREGA del cambio ($aliasLinea, cambios_producto_cv_detalles)
+     * NO quedó registrada como facturada. Las que sí, ya descuentan el saldo como facturación.
+     */
+    public static function sqlSinRegistroFacturacion(string $aliasLinea): string
+    {
+        if (!self::registroFacturacionDisponible()) {
+            return '';
+        }
+        return " AND NOT EXISTS (SELECT 1
+                                   FROM consignaciones_facturas_detalles rfd
+                                   INNER JOIN consignaciones_facturas rf ON rf.id = rfd.id_consignacion_factura
+                                  WHERE rfd.id_cambio_detalle = {$aliasLinea}.id
+                                    AND rfd.eliminado = false AND rf.eliminado = false AND rf.estado = 'facturada')";
+    }
+
+    /**
+     * Condición " AND …": el documento de Facturación de consignaciones ($aliasCf, alias o nombre
+     * de tabla) NO es un registro generado por un cambio (tiene factura de venta propia).
+     */
+    public static function sqlNoEsRegistroDeCambio(string $aliasCf): string
+    {
+        return self::registroFacturacionDisponible() ? " AND {$aliasCf}.id_cambio_producto IS NULL" : '';
+    }
+
+    /**
+     * Factura de venta de una factura de consignación (para el registro de un cambio): id,
+     * número (el de ventas_cabecera o, si no está, el guardado al enlazarla) y vendedor.
+     */
+    public function getFacturaVentaDeFacturacionCv(int $idConsignacionFactura, int $idEmpresa): ?array
+    {
+        $sql = "SELECT cf.id_factura, " . self::sqlNumeroFacturaVenta('cf', 'fv') . " AS numero_factura, cf.id_vendedor
+                FROM consignaciones_facturas cf
+                LEFT JOIN ventas_cabecera fv ON fv.id = cf.id_factura
+                WHERE cf.id = :id AND cf.id_empresa = :e";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idConsignacionFactura, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Factura de venta en la que quedó registrada una línea de ENTREGA de un cambio (registro
+     * vigente en Facturación de consignaciones). Null si no hay registro.
+     */
+    public function getFacturaVentaDeEntregaRegistrada(int $idCambioDetalle, int $idEmpresa): ?array
+    {
+        if (!self::registroFacturacionDisponible()) {
+            return null;
+        }
+        $sql = "SELECT rf.id_factura, rf.numero_factura, rf.id_vendedor
+                FROM consignaciones_facturas_detalles rfd
+                INNER JOIN consignaciones_facturas rf ON rf.id = rfd.id_consignacion_factura
+                WHERE rfd.id_cambio_detalle = :id AND rf.id_empresa = :e
+                  AND rfd.eliminado = false AND rf.eliminado = false AND rf.estado = 'facturada'
+                ORDER BY rf.id DESC
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idCambioDetalle, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 
     /**
@@ -41,17 +140,50 @@ class CambioProductoCvRepository extends BaseRepository
     }
 
     /**
-     * Expresión SQL con el número (serie-secuencial) del documento de origen de una línea de
-     * cambio, según su origen_tipo: FACTURA (facturación de consignación), CAMBIO (cambio
-     * anterior) o CONSIGNACION. NULL en las entregas de catálogo (sin origen).
+     * Expresión SQL con el número del documento de origen de una línea de cambio, tal como se
+     * MUESTRA: FACTURA → n.º de la factura de venta que generó la factura de consignación (ver
+     * sqlNumeroFacturaVenta), CAMBIO → cambio anterior, CONSIGNACION → consignación. NULL en
+     * las entregas de bodega / catálogo (sin origen).
      */
     private static function sqlNumeroOrigen(string $alias): string
     {
         return "(CASE {$alias}.origen_tipo
-                    WHEN 'FACTURA'      THEN (SELECT CONCAT(ox.serie, '-', ox.secuencial) FROM consignaciones_facturas ox WHERE ox.id = {$alias}.id_origen)
+                    WHEN 'FACTURA'      THEN (SELECT " . self::sqlNumeroFacturaVenta('ox', 'fx') . "
+                                                FROM consignaciones_facturas ox
+                                                LEFT JOIN ventas_cabecera fx ON fx.id = ox.id_factura
+                                               WHERE ox.id = {$alias}.id_origen)
                     WHEN 'CAMBIO'       THEN (SELECT CONCAT(ox.serie, '-', ox.secuencial) FROM cambios_producto_cv ox WHERE ox.id = {$alias}.id_origen)
                     WHEN 'CONSIGNACION' THEN (SELECT CONCAT(ox.serie, '-', ox.secuencial) FROM consignaciones_ventas ox WHERE ox.id = {$alias}.id_origen)
                  END)";
+    }
+
+    /**
+     * Lo mismo que sqlNumeroOrigen(), pero para BUSCAR: en las líneas de factura de consignación
+     * incluye además el número propio de esa factura de consignación, así se encuentran por
+     * cualquiera de los dos.
+     */
+    private static function sqlNumerosOrigenBusqueda(string $alias): string
+    {
+        return "(CASE {$alias}.origen_tipo
+                    WHEN 'FACTURA' THEN (SELECT CONCAT_WS(' ', " . self::sqlNumeroFacturaVenta('ox', 'fx') . ", CONCAT(ox.serie, '-', ox.secuencial))
+                                           FROM consignaciones_facturas ox
+                                           LEFT JOIN ventas_cabecera fx ON fx.id = ox.id_factura
+                                          WHERE ox.id = {$alias}.id_origen)
+                    ELSE " . self::sqlNumeroOrigen($alias) . "
+                 END)";
+    }
+
+    /**
+     * Número de la FACTURA DE VENTA (ventas_cabecera) que generó una factura de consignación:
+     * es el comprobante que tiene el cliente y el que se muestra como origen de lo devuelto
+     * (modal y PDF), en lugar del número interno de la factura de consignación.
+     * $aliasCf = consignaciones_facturas; $aliasVenta = LEFT JOIN ventas_cabecera por
+     * {$aliasCf}.id_factura. Sin esa fila, cae al número guardado al enlazar la factura.
+     */
+    private static function sqlNumeroFacturaVenta(string $aliasCf, string $aliasVenta): string
+    {
+        return "COALESCE({$aliasVenta}.establecimiento || '-' || {$aliasVenta}.punto_emision || '-' || {$aliasVenta}.secuencial,
+                         NULLIF(TRIM({$aliasCf}.numero_factura), ''))";
     }
 
     /** Responsables de traslado usados en cambios de la empresa: filtro del modal de filtros. */
@@ -101,7 +233,7 @@ class CambioProductoCvRepository extends BaseRepository
 
         $condLinea = \App\Helpers\FiltrosBusqueda::condicionTexto(
             ['p.codigo', 'p.nombre', 'p.codigo_barras', 'd.lote', 'd.nup', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')",
-             'bo.nombre', self::sqlNumeroOrigen('d'), 'd.cantidad::text', 'd.precio_unitario::text', 'd.total::text'],
+             'bo.nombre', self::sqlNumerosOrigenBusqueda('d'), 'd.cantidad::text', 'd.precio_unitario::text', 'd.total::text'],
             $q, $params, 'ln'
         );
         if ($condLinea === '') {
@@ -136,7 +268,139 @@ class CambioProductoCvRepository extends BaseRepository
 
     // ─── LISTADO PAGINADO ─────────────────────────────────────────────────────
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
+    /**
+     * Número del documento de origen de la línea que ENTRA en el listado (alias dv): factura de
+     * venta (misma regla que sqlNumeroFacturaVenta, con los alias cfo/fvo de getListado) o
+     * cambio anterior. Constante para poder usarla también en MAPA_ORDEN.
+     */
+    private const SQL_ORIGEN_DEV = "(CASE dv.origen_tipo
+                WHEN 'FACTURA' THEN COALESCE(fvo.establecimiento || '-' || fvo.punto_emision || '-' || fvo.secuencial,
+                                             NULLIF(TRIM(cfo.numero_factura), ''))
+                WHEN 'CAMBIO'  THEN COALESCE(cao.serie, '') || '-' || COALESCE(cao.secuencial, '')
+             END)";
+
+    /**
+     * Orden del listado (whitelist de OrdenListado): data-col de la vista => expresión SQL.
+     * En las columnas de un solo lado se ordena primero por "vacío" para que las filas sin
+     * producto de ese lado queden al final en los dos sentidos. fecha_cambio, secuencial,
+     * estado y diferencia ya no son columnas: siguen para las preferencias guardadas y como
+     * orden por defecto.
+     */
+    public const MAPA_ORDEN = [
+        // Lo que ENTRA (devolución)
+        'dev_cantidad'  => 'dv.cantidad IS NULL, dv.cantidad',
+        'dev_producto'  => 'pdv.nombre IS NULL, pdv.nombre',
+        'dev_lote'      => "COALESCE(dv.lote, '') = '', dv.lote",
+        'dev_bodega'    => 'bdv.nombre IS NULL, bdv.nombre',
+        'dev_factura'   => self::SQL_ORIGEN_DEV . ' IS NULL, ' . self::SQL_ORIGEN_DEV,
+        // Lo que SALE (entrega)
+        'ent_cantidad'  => 'en.cantidad IS NULL, en.cantidad',
+        'ent_producto'  => 'pen.nombre IS NULL, pen.nombre',
+        'ent_lote'      => "COALESCE(en.lote, '') = '', en.lote",
+        'ent_bodega'    => 'ben.nombre IS NULL, ben.nombre',
+        'cliente'       => 'c.nombre',
+        'observaciones' => "COALESCE(r.observaciones, '') = '', r.observaciones",
+        // Sin columna en pantalla
+        'fecha_cambio'  => 'r.fecha_cambio',
+        'secuencial'    => 'r.secuencial',
+        'estado'        => 'r.estado',
+        'diferencia'    => 'r.diferencia',
+    ];
+
+    /**
+     * Listado principal: una fila por PAREJA "entra ↔ sale" de cada cambio. La n-ésima
+     * devolución va con la n-ésima entrega del mismo cambio (en orden de registro); si un lado
+     * tiene más líneas, las celdas del otro quedan vacías. El buscador y los filtros siguen
+     * siendo por cambio: de un cambio que calza se listan todas sus parejas. `total` cuenta
+     * filas (parejas), no cambios.
+     */
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro, array $ordenMulti = []): array
+    {
+        [$where, $params] = $this->whereListado($idEmpresa, $buscar, $idUsuarioFiltro);
+
+        $ctes = "
+            WITH base AS (
+                SELECT r.id
+                FROM cambios_producto_cv r
+                INNER JOIN clientes c ON c.id = r.id_cliente
+                LEFT JOIN responsables_traslado rt ON rt.id = r.id_responsable_traslado
+                LEFT JOIN usuarios u ON u.id = r.created_by
+                $where
+            ),
+            lineas AS (
+                SELECT d.id, d.id_cambio, d.tipo_linea,
+                       ROW_NUMBER() OVER (PARTITION BY d.id_cambio, d.tipo_linea ORDER BY d.id) AS rn
+                FROM cambios_producto_cv_detalles d
+                WHERE d.id_cambio IN (SELECT id FROM base) AND COALESCE(d.eliminado, false) = false
+            ),
+            pares AS (
+                SELECT COALESCE(ld.id_cambio, le.id_cambio) AS id_cambio,
+                       COALESCE(ld.rn, le.rn)               AS rn,
+                       ld.id AS id_dev,
+                       le.id AS id_ent
+                FROM (SELECT * FROM lineas WHERE tipo_linea = 'devolucion') ld
+                FULL JOIN (SELECT * FROM lineas WHERE tipo_linea = 'entrega') le
+                       ON le.id_cambio = ld.id_cambio AND le.rn = ld.rn
+            )";
+
+        $stCount = $this->db->prepare("$ctes SELECT COUNT(*) FROM pares");
+        $stCount->execute($params);
+        $total = (int) $stCount->fetchColumn();
+
+        $limitClause = '';
+        if ($perPage > 0) {
+            $offset = ($page - 1) * $perPage;
+            $limitClause = "LIMIT $perPage OFFSET $offset";
+        }
+
+        if ($ordenMulti === []) {
+            $ordenMulti = [['col' => $ordenCol, 'dir' => $ordenDir]];
+        }
+        // Desempate: el cambio y, dentro de él, el orden de las parejas.
+        $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'r.fecha_cambio', 'r.id DESC, p.rn');
+
+        $sql = "$ctes
+            SELECT p.id_cambio AS id, p.rn,
+                   r.serie, r.secuencial, r.estado, r.fecha_cambio, r.observaciones,
+                   c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+                   dv.cantidad    AS dev_cantidad,
+                   pdv.nombre     AS dev_producto_nombre,
+                   pdv.codigo     AS dev_producto_codigo,
+                   dv.lote        AS dev_lote,
+                   bdv.nombre     AS dev_bodega,
+                   dv.origen_tipo AS dev_origen_tipo,
+                   " . self::SQL_ORIGEN_DEV . " AS dev_origen_numero,
+                   en.cantidad    AS ent_cantidad,
+                   pen.nombre     AS ent_producto_nombre,
+                   pen.codigo     AS ent_producto_codigo,
+                   en.lote        AS ent_lote,
+                   ben.nombre     AS ent_bodega
+            FROM pares p
+            INNER JOIN cambios_producto_cv r ON r.id = p.id_cambio
+            INNER JOIN clientes c ON c.id = r.id_cliente
+            LEFT JOIN cambios_producto_cv_detalles dv ON dv.id = p.id_dev
+            LEFT JOIN productos pdv ON pdv.id = dv.id_producto
+            LEFT JOIN bodegas bdv ON bdv.id = dv.id_bodega
+            LEFT JOIN consignaciones_facturas cfo ON dv.origen_tipo = 'FACTURA' AND cfo.id = dv.id_origen
+            LEFT JOIN ventas_cabecera fvo ON fvo.id = cfo.id_factura
+            LEFT JOIN cambios_producto_cv cao ON dv.origen_tipo = 'CAMBIO' AND cao.id = dv.id_origen
+            LEFT JOIN cambios_producto_cv_detalles en ON en.id = p.id_ent
+            LEFT JOIN productos pen ON pen.id = en.id_producto
+            LEFT JOIN bodegas ben ON ben.id = en.id_bodega
+            $orderBy
+            $limitClause";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        return ['total' => $total, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /**
+     * WHERE del listado, por CAMBIO: empresa, no eliminados, registros propios, texto libre del
+     * buscador y claves del modal de filtros. Usa los alias r (cambio), c (cliente),
+     * rt (responsable de traslado) y u (usuario que registró). Devuelve [where, params].
+     */
+    private function whereListado(int $idEmpresa, string $buscar, ?int $idUsuarioFiltro): array
     {
         $where  = "WHERE r.id_empresa = :e AND r.eliminado = false";
         $params = [':e' => $idEmpresa];
@@ -153,23 +417,24 @@ class CambioProductoCvRepository extends BaseRepository
             // columna Estado NO entra en el texto libre; se filtra desde el modal.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "TO_CHAR(r.fecha_cambio, 'DD-MM-YYYY')",              // Fecha (como se muestra)
+                    "TO_CHAR(r.fecha_cambio, 'DD-MM-YYYY')",              // Fecha
                     'r.fecha_cambio::text',
-                    "CONCAT(r.serie, '-', r.secuencial)",                 // Secuencial (serie-secuencial)
+                    "CONCAT(r.serie, '-', r.secuencial)",                 // N.° de cambio
                     'c.nombre',                                           // Cliente
                     'c.identificacion',
-                    'r.motivo',                                           // Motivo
-                    'r.diferencia::text',                                 // Diferencia
-                    'r.observaciones',
+                    'r.motivo',
+                    'r.diferencia::text',
+                    'r.observaciones',                                    // Observaciones
                     'rt.nombre',                                          // Responsable de traslado
                     'u.nombre',                                           // Usuario que registró
-                    // Productos devueltos y entregados (código, nombre, lote y NUP)
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup), ' ')
+                    // Productos que entran y salen: código, nombre, lote, NUP y bodega
+                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup, bo.nombre), ' ')
                         FROM cambios_producto_cv_detalles d
                         LEFT JOIN productos p ON p.id = d.id_producto
+                        LEFT JOIN bodegas bo ON bo.id = d.id_bodega
                        WHERE d.id_cambio = r.id AND d.eliminado = false)",
-                    // Documentos relacionados: documentos de origen de las líneas
-                    "(SELECT STRING_AGG(" . self::sqlNumeroOrigen('d') . ", ' ')
+                    // Documentos de origen de las líneas (factura de venta y de consignación, cambio, consignación)
+                    "(SELECT STRING_AGG(" . self::sqlNumerosOrigenBusqueda('d') . ", ' ')
                         FROM cambios_producto_cv_detalles d
                        WHERE d.id_cambio = r.id AND d.eliminado = false)",
                 ],
@@ -209,58 +474,14 @@ class CambioProductoCvRepository extends BaseRepository
                 'secuencial'         => 'r.secuencial::numeric',
             ],
             'existe' => [
-                // Nº del documento de origen (factura de consignación, cambio o consignación) de alguna línea
-                'documento_origen' => ['tipo' => 'texto', 'col' => self::sqlNumeroOrigen('dx'),
+                // Nº del documento de origen de alguna línea (factura de venta o de consignación, cambio o consignación)
+                'documento_origen' => ['tipo' => 'texto', 'col' => self::sqlNumerosOrigenBusqueda('dx'),
                                        'sql'  => 'EXISTS (SELECT 1 FROM cambios_producto_cv_detalles dx
                                                            WHERE dx.id_cambio = r.id AND dx.eliminado = false AND {cond})'],
             ],
         ]);
 
-        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan c, rt y u.
-        $sqlCount = "
-            SELECT COUNT(*)
-            FROM cambios_producto_cv r
-            INNER JOIN clientes c ON c.id = r.id_cliente
-            LEFT JOIN responsables_traslado rt ON rt.id = r.id_responsable_traslado
-            LEFT JOIN usuarios u ON u.id = r.created_by
-            $where
-        ";
-        $stCount = $this->db->prepare($sqlCount);
-        $stCount->execute($params);
-        $total = (int) $stCount->fetchColumn();
-
-        $limitClause = '';
-        if ($perPage > 0) {
-            $offset = ($page - 1) * $perPage;
-            $limitClause = "LIMIT $perPage OFFSET $offset";
-        }
-
-        $colMap = [
-            'fecha_cambio' => 'r.fecha_cambio',
-            'secuencial'   => 'r.secuencial',
-            'cliente'      => 'c.nombre',
-            'estado'       => 'r.estado',
-            'diferencia'   => 'r.diferencia',
-        ];
-        $sort = $colMap[$ordenCol] ?? 'r.fecha_cambio';
-        $dir  = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
-
-        $sql = "
-            SELECT r.*,
-                   c.nombre as cliente_nombre, c.identificacion as cliente_identificacion
-            FROM cambios_producto_cv r
-            INNER JOIN clientes c ON c.id = r.id_cliente
-            LEFT JOIN responsables_traslado rt ON rt.id = r.id_responsable_traslado
-            LEFT JOIN usuarios u ON u.id = r.created_by
-            $where
-            ORDER BY $sort $dir, r.id DESC
-            $limitClause
-        ";
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-
-        return ['total' => $total, 'rows' => $rows];
+        return [$where, $params];
     }
 
     // ─── LÍNEAS DISPONIBLES PARA DEVOLVER (facturas de consignación + cambios previos) ────
@@ -281,7 +502,8 @@ class CambioProductoCvRepository extends BaseRepository
     /**
      * Líneas que pueden devolverse, con saldo pendiente (> 0):
      *   (a) líneas de facturas de consignación 'facturada' (consignaciones_facturas_detalles)
-     *       → origen_tipo 'FACTURA' (no facturas de venta directas);
+     *       → origen_tipo 'FACTURA' (no facturas de venta directas). Su doc_numero es el de
+     *       la FACTURA DE VENTA que generó esa factura de consignación;
      *   (b) líneas de ENTREGA de cambios previos Emitida → origen_tipo 'CAMBIO'.
      *
      * saldo = cantidad_origen − Σ(devuelto en cambios Emitida que referencian esa línea).
@@ -291,9 +513,10 @@ class CambioProductoCvRepository extends BaseRepository
      *
      * $idCliente: null = buscar entre TODOS los clientes (el usuario localiza el ítem por su
      *   NUP o por el número de la factura, y el cliente del cambio se fija con el de esa línea).
-     * $q: NUP, lote, número del documento (completo o solo el secuencial, con o sin ceros),
-     *   código o nombre del producto. Vacío solo se admite con cliente (lista todo lo
-     *   pendiente de ese cliente).
+     * $q: NUP, lote, número del documento (completo o solo el secuencial, con o sin ceros;
+     *   una factura de consignación se encuentra por el número de su factura de venta y
+     *   también por el suyo propio), código o nombre del producto. Vacío solo se admite con
+     *   cliente (lista todo lo pendiente de ese cliente).
      */
     public function getLineasDisponiblesCliente(int $idEmpresa, ?int $idCliente, string $q, ?int $excluirCambio = null): array
     {
@@ -319,17 +542,23 @@ class CambioProductoCvRepository extends BaseRepository
         }
 
         // Filtro de texto, aplicado DENTRO de cada rama (antes de calcular el saldo por fila):
-        // NUP, lote, número del documento, código o nombre del producto.
-        $filtroQ = function (string $nombre, string $codigo, string $numero, string $secuencial, string $nup, string $lote) use ($q, &$params): string {
+        // NUP, lote, número(s) del documento, código o nombre del producto. Una rama puede
+        // traer varios números (la factura de consignación: el de su factura de venta y el suyo).
+        $filtroQ = function (string $nombre, string $codigo, array $numeros, array $secuenciales, string $nup, string $lote) use ($q, &$params): string {
             if ($q === '') {
                 return '';
             }
             $params[':q'] = '%' . $q . '%';
-            $sql = " AND ($nombre ILIKE :q OR $codigo ILIKE :q OR $numero ILIKE :q OR $nup ILIKE :q OR $lote ILIKE :q";
+            $sql = " AND ($nombre ILIKE :q OR $codigo ILIKE :q OR $nup ILIKE :q OR $lote ILIKE :q";
+            foreach ($numeros as $numero) {
+                $sql .= " OR $numero ILIKE :q";
+            }
             $qnum = self::numeroDesnudo($q);
             if ($qnum !== '') {
                 $params[':qnum'] = $qnum;
-                $sql .= " OR regexp_replace(TRIM(COALESCE($secuencial, '')), '^0+', '') = :qnum";
+                foreach ($secuenciales as $secuencial) {
+                    $sql .= " OR regexp_replace(TRIM(COALESCE($secuencial, '')), '^0+', '') = :qnum";
+                }
             }
             return $sql . ')';
         };
@@ -348,6 +577,7 @@ class CambioProductoCvRepository extends BaseRepository
         };
 
         $numFactura = "(COALESCE(vc.establecimiento,'') || '-' || COALESCE(vc.punto_emision,'') || '-' || COALESCE(vc.secuencial,''))";
+        $numVenta   = self::sqlNumeroFacturaVenta('vc', 'fv');
         $numCambio  = "(COALESCE(cx.serie,'') || '-' || COALESCE(cx.secuencial,''))";
 
         $sql = "
@@ -355,12 +585,13 @@ class CambioProductoCvRepository extends BaseRepository
                 -- (a) Líneas de FACTURAS DE CONSIGNACIÓN (módulo Facturación de consignaciones,
                 --     consignaciones_facturas en estado 'facturada'). NO se ofrecen facturas de
                 --     venta directas: lo que se cambia es mercadería que salió en consignación
-                --     y ya se facturó.
+                --     y ya se facturó. El número que se muestra es el de la factura de venta
+                --     generada (fv), no el interno de la factura de consignación.
                 SELECT
                     'FACTURA'          AS origen_tipo,
                     vc.id              AS id_origen,
                     d.id               AS id_origen_detalle,
-                    $numFactura        AS doc_numero,
+                    $numVenta          AS doc_numero,
                     vc.fecha_emision   AS doc_fecha,
                     vc.id_cliente,
                     c.nombre           AS cliente_nombre,
@@ -383,15 +614,19 @@ class CambioProductoCvRepository extends BaseRepository
                     " . $devuelto('FACTURA', 'd.id') . " AS cantidad_devuelta
                 FROM consignaciones_facturas_detalles d
                 INNER JOIN consignaciones_facturas vc ON vc.id = d.id_consignacion_factura
+                LEFT JOIN ventas_cabecera fv ON fv.id = vc.id_factura
                 INNER JOIN clientes c ON c.id = vc.id_cliente
                 INNER JOIN productos p ON p.id = d.id_producto
                 LEFT JOIN bodegas b ON b.id = d.id_bodega
                 WHERE vc.id_empresa = :e AND vc.eliminado = false
                   AND vc.estado = 'facturada'
+                  -- Un registro generado por un cambio no se devuelve por aquí: esa unidad se
+                  -- devuelve desde el cambio que la entregó (rama b).
+                  " . self::sqlNoEsRegistroDeCambio('vc') . "
                   AND COALESCE(d.eliminado, false) = false
                   {$filtroCliFac}
                   AND COALESCE(p.tipo_produccion,'01') = '01'   -- solo bienes/productos, no servicios
-                  " . $filtroQ('p.nombre', 'p.codigo', $numFactura, 'vc.secuencial', 'd.nup', 'd.lote') . "
+                  " . $filtroQ('p.nombre', 'p.codigo', [$numVenta, $numFactura], ['fv.secuencial', 'vc.secuencial'], 'd.nup', 'd.lote') . "
 
                 UNION ALL
 
@@ -431,7 +666,7 @@ class CambioProductoCvRepository extends BaseRepository
                   AND cx.eliminado = false AND cx.estado = 'Emitida'
                   {$filtroCliCam}
                   AND COALESCE(p.tipo_produccion,'01') = '01'   -- solo bienes/productos, no servicios
-                  " . $filtroQ('p.nombre', 'p.codigo', $numCambio, 'cx.secuencial', 'e.nup', 'e.lote') . "
+                  " . $filtroQ('p.nombre', 'p.codigo', [$numCambio], ['cx.secuencial'], 'e.nup', 'e.lote') . "
             ) t
             WHERE (t.cantidad_origen - t.cantidad_devuelta) > 0
             ORDER BY t.doc_fecha DESC, t.id_origen DESC, t.id_origen_detalle ASC
@@ -483,13 +718,13 @@ class CambioProductoCvRepository extends BaseRepository
     /** Cantidad original de la línea de origen (factura de consignación o entrega de cambio previo). */
     private function getCantidadOrigen(string $origenTipo, int $idOrigenDetalle, int $idEmpresa): float
     {
-        if ($origenTipo === 'FACTURA') { // factura de consignación
+        if ($origenTipo === 'FACTURA') { // factura de consignación (no un registro de cambio)
             $sql = "SELECT d.cantidad
                     FROM consignaciones_facturas_detalles d
                     INNER JOIN consignaciones_facturas v ON v.id = d.id_consignacion_factura
                     WHERE d.id = :id AND v.id_empresa = :e AND v.eliminado = false
                       AND COALESCE(d.eliminado, false) = false
-                      AND v.estado = 'facturada'";
+                      AND v.estado = 'facturada'" . self::sqlNoEsRegistroDeCambio('v');
         } else { // CAMBIO
             $sql = "SELECT e.cantidad
                     FROM cambios_producto_cv_detalles e
@@ -524,7 +759,7 @@ class CambioProductoCvRepository extends BaseRepository
                     INNER JOIN productos p ON p.id = d.id_producto
                     WHERE d.id = :id AND v.id_empresa = :e AND v.eliminado = false
                       AND COALESCE(d.eliminado, false) = false
-                      AND v.estado = 'facturada'";
+                      AND v.estado = 'facturada'" . self::sqlNoEsRegistroDeCambio('v');
         } else { // CAMBIO
             $sql = "SELECT e.id_cambio AS id_origen, cx.id_cliente,
                            (COALESCE(cx.serie,'') || '-' || COALESCE(cx.secuencial,'')) AS doc_numero,
@@ -550,9 +785,10 @@ class CambioProductoCvRepository extends BaseRepository
      * Subconsulta: cantidad de una línea de consignación ya ENTREGADA a cambio en
      * cambios Emitida (líneas de entrega con origen_tipo 'CONSIGNACION').
      *
-     * Pública y estática a propósito: cuando Retornos CV, Facturación CV y el kardex de
-     * la consignación deban descontar también lo entregado por cambios (hoy no lo hacen),
-     * enchufan esta misma subconsulta junto a sus "retornado" y "facturado".
+     * Pública y estática a propósito: Retornos CV, Facturación CV, el kardex de la
+     * consignación y el Reporte de inventarios la suman junto a sus "retornado" y "facturado".
+     * No cuenta las entregas que quedaron registradas en Facturación de consignaciones: esas
+     * ya descuentan el saldo como facturadas (sqlSinRegistroFacturacion).
      */
     public static function sqlEntregadoEnCambios(string $idExpr, string $excSql = ''): string
     {
@@ -562,7 +798,7 @@ class CambioProductoCvRepository extends BaseRepository
                 WHERE cd.tipo_linea = 'entrega' AND cd.origen_tipo = 'CONSIGNACION'
                   AND cd.id_origen_detalle = $idExpr
                   AND cd.eliminado = false AND cc.eliminado = false AND cc.estado = 'Emitida'
-                  $excSql";
+                  $excSql" . self::sqlSinRegistroFacturacion('cd');
     }
 
     /**
@@ -580,7 +816,8 @@ class CambioProductoCvRepository extends BaseRepository
                 INNER JOIN cambios_producto_cv cc ON cc.id = cd.id_cambio
                 WHERE cd.tipo_linea = 'entrega' AND cd.origen_tipo = 'CONSIGNACION'
                   AND cd.id_origen_detalle IN ($idsSubquery)
-                  AND cd.eliminado = false AND cc.eliminado = false AND cc.estado = 'Emitida'
+                  AND cd.eliminado = false AND cc.eliminado = false AND cc.estado = 'Emitida'"
+                . self::sqlSinRegistroFacturacion('cd') . "
                 GROUP BY cd.id_origen_detalle";
     }
 
@@ -588,6 +825,7 @@ class CambioProductoCvRepository extends BaseRepository
      * Cantidad entregada a cambio por cada línea de UNA consignación (cambios Emitida):
      * [id_consignacion_detalle => cantidad]. Alimenta las columnas "Cambio" del PDF, el
      * Excel y el modal de la consignación (mismo patrón que getRetornadoPorConsignacion).
+     * Lo registrado en Facturación de consignaciones va en "Facturados", no aquí.
      */
     public function getEntregadoPorConsignacion(int $idConsignacion, int $idEmpresa): array
     {
@@ -596,7 +834,8 @@ class CambioProductoCvRepository extends BaseRepository
                 INNER JOIN cambios_producto_cv cc ON cc.id = cd.id_cambio
                 WHERE cd.tipo_linea = 'entrega' AND cd.origen_tipo = 'CONSIGNACION'
                   AND cd.id_origen = :idc AND cd.id_empresa = :e
-                  AND cd.eliminado = false AND cc.eliminado = false AND cc.estado = 'Emitida'
+                  AND cd.eliminado = false AND cc.eliminado = false AND cc.estado = 'Emitida'"
+                . self::sqlSinRegistroFacturacion('cd') . "
                 GROUP BY cd.id_origen_detalle";
         $st = $this->db->prepare($sql);
         $st->execute([':idc' => $idConsignacion, ':e' => $idEmpresa]);
@@ -963,9 +1202,10 @@ class CambioProductoCvRepository extends BaseRepository
     }
 
     /**
-     * Detalles del cambio con el número del documento de origen de cada línea
-     * (factura de consignación / cambio previo para las devoluciones, consignación para las entregas
-     * tomadas de una consignación).
+     * Detalles del cambio con el número del documento de origen de cada línea: para las
+     * devoluciones, el de la FACTURA DE VENTA que generó la factura de consignación (no el de
+     * la factura de consignación) o el del cambio previo; para las entregas tomadas de una
+     * consignación, el de la consignación.
      */
     public function getDetalles(int $idCambio, int $idEmpresa): array
     {
@@ -974,7 +1214,7 @@ class CambioProductoCvRepository extends BaseRepository
                    p.nombre as producto_nombre, p.codigo as producto_codigo, p.inventariable, p.tipo_produccion,
                    b.nombre as bodega_nombre,
                    CASE d.origen_tipo
-                        WHEN 'FACTURA'      THEN (COALESCE(vo.establecimiento,'') || '-' || COALESCE(vo.punto_emision,'') || '-' || COALESCE(vo.secuencial,''))
+                        WHEN 'FACTURA'      THEN " . self::sqlNumeroFacturaVenta('vo', 'fvo') . "
                         WHEN 'CAMBIO'       THEN (COALESCE(co.serie,'') || '-' || COALESCE(co.secuencial,''))
                         WHEN 'CONSIGNACION' THEN (COALESCE(cvo.serie,'') || '-' || COALESCE(cvo.secuencial,''))
                         ELSE NULL
@@ -983,6 +1223,7 @@ class CambioProductoCvRepository extends BaseRepository
             INNER JOIN productos p ON p.id = d.id_producto
             LEFT JOIN bodegas b ON b.id = d.id_bodega
             LEFT JOIN consignaciones_facturas vo ON d.origen_tipo = 'FACTURA'      AND vo.id  = d.id_origen
+            LEFT JOIN ventas_cabecera fvo       ON fvo.id = vo.id_factura
             LEFT JOIN cambios_producto_cv co    ON d.origen_tipo = 'CAMBIO'       AND co.id  = d.id_origen
             LEFT JOIN consignaciones_ventas cvo ON d.origen_tipo = 'CONSIGNACION' AND cvo.id = d.id_origen
             WHERE d.id_cambio = :id AND d.id_empresa = :e AND (d.eliminado = false OR d.eliminado IS NULL)

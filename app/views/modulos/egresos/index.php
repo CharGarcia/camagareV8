@@ -577,12 +577,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <option value="">-- Seleccione --</option>
                                                     <?php foreach ($formasPago as $fp):
                                                         $esAnt = !empty($fp['es_anticipo']);
-                                                        $lblSaldo = $esAnt ? '' : ' — $' . number_format((float)($fp['saldo'] ?? 0), 2);
+                                                        // "Mostrar saldo" de Formas de Cobro y Pago: desmarcado, el saldo no viaja ni en la etiqueta ni en data-saldo.
+                                                        $muestraSaldo = !empty($fp['mostrar_saldo']);
+                                                        $conSaldo = $muestraSaldo && !$esAnt;
+                                                        $lblSaldo = $conSaldo ? ' — $' . number_format((float)($fp['saldo'] ?? 0), 2) : '';
                                                     ?>
                                                         <option value="<?= $fp['id'] ?>"
                                                                 data-tipo="<?= htmlspecialchars($fp['tipo'] ?? '') ?>"
                                                                 data-anticipo="<?= $esAnt ? '1' : '0' ?>"
-                                                                data-saldo="<?= $esAnt ? '' : number_format((float)($fp['saldo'] ?? 0), 2, '.', '') ?>"><?= htmlspecialchars($fp['nombre']) . $lblSaldo ?></option>
+                                                                data-mostrar-saldo="<?= $muestraSaldo ? '1' : '0' ?>"
+                                                                data-saldo="<?= $conSaldo ? number_format((float)($fp['saldo'] ?? 0), 2, '.', '') : '' ?>"><?= htmlspecialchars($fp['nombre']) . $lblSaldo ?></option>
                                                     <?php endforeach; ?>
                                                 </select>
                                             </div>
@@ -1395,7 +1399,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const box   = document.getElementById('eg-saldo-forma');
         if (!combo || !box) return;
         const opt = combo.options[combo.selectedIndex];
-        if (!opt || !opt.value) { box.classList.add('d-none'); box.innerHTML = ''; return; }
+        // Forma sin "Mostrar saldo" (Formas de Cobro y Pago): ni se muestra ni se consulta.
+        if (!opt || !opt.value || opt.dataset.mostrarSaldo === '0') { box.classList.add('d-none'); box.innerHTML = ''; return; }
 
         const esAnt = opt.dataset.anticipo === '1';
         if (!esAnt) {
@@ -1421,6 +1426,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         fetch(`${EGR_URL}/getSaldoAnticipoAjax?id_forma=${opt.value}&id_tercero=${idProv}`)
             .then(r => r.json())
             .then(res => {
+                if (combo.value !== opt.value) return; // se eligió otra forma mientras se consultaba
                 if (!res.ok) { box.className = 'small mt-1 text-danger'; box.innerHTML = res.mensaje || 'No se pudo obtener el saldo.'; return; }
                 const saldo = parseFloat(res.saldo) || 0;
                 box.className = 'small mt-1 fw-bold ' + (saldo < 0 ? 'text-danger' : 'text-success');
@@ -2543,9 +2549,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         // ordenar (que llaman a esta función directo) muestren que se está cargando.
         const tbody = document.getElementById('tbodyEgresos');
         if (tbody) tbody.classList.add('fm-cargando-target');
+        // Solo vale la ÚLTIMA búsqueda: la anterior se cancela y nunca pinta encima.
+        if (window.EGR_busquedaCtrl) window.EGR_busquedaCtrl.abort();
+        const ctrl = new AbortController();
+        window.EGR_busquedaCtrl = ctrl;
         try {
             const orden = window.CMG_ordenParam(window.currentSorts || []);
-            const res = await (await fetch(`${EGR_URL}/searchAjax?b=${encodeURIComponent(b)}&page=${p}&orden=${encodeURIComponent(orden)}`)).json();
+            const res = await (await fetch(`${EGR_URL}/searchAjax?b=${encodeURIComponent(b)}&page=${p}&orden=${encodeURIComponent(orden)}`, { signal: ctrl.signal })).json();
+            if (ctrl !== window.EGR_busquedaCtrl) return;
             document.getElementById('tbodyEgresos').innerHTML = res.rows;
             document.getElementById('paginationContainer').innerHTML = res.pagination;
             document.getElementById('paginationInfo').innerText = res.info;
@@ -2559,8 +2570,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // Los íconos (incluida la prioridad 1/2/3 del orden múltiple) los repinta
             // el motor global; aquí solo se le pide que se refresque.
             if (EGR_sorter) EGR_sorter.refreshIcons();
-        } catch(e){ console.error(e); }
-        finally { if (tbody) tbody.classList.remove('fm-cargando-target'); }
+        } catch(e){ if (e.name !== 'AbortError') console.error(e); }
+        finally { if (tbody && ctrl === window.EGR_busquedaCtrl) tbody.classList.remove('fm-cargando-target'); }
     }
 
     document.addEventListener('DOMContentLoaded', () => {

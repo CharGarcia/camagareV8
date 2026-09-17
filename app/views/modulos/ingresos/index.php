@@ -576,12 +576,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <option value="">-- Seleccione --</option>
                                                     <?php foreach ($formasCobro as $fc):
                                                         $esAnt = !empty($fc['es_anticipo']);
-                                                        $lblSaldo = $esAnt ? '' : ' — $' . number_format((float)($fc['saldo'] ?? 0), 2);
+                                                        // "Mostrar saldo" de Formas de Cobro y Pago: desmarcado, el saldo no viaja ni en la etiqueta ni en data-saldo.
+                                                        $muestraSaldo = !empty($fc['mostrar_saldo']);
+                                                        $conSaldo = $muestraSaldo && !$esAnt;
+                                                        $lblSaldo = $conSaldo ? ' — $' . number_format((float)($fc['saldo'] ?? 0), 2) : '';
                                                     ?>
                                                         <option value="<?= $fc['id'] ?>"
                                                                 data-tipo="<?= htmlspecialchars($fc['tipo'] ?? '') ?>"
                                                                 data-anticipo="<?= $esAnt ? '1' : '0' ?>"
-                                                                data-saldo="<?= $esAnt ? '' : number_format((float)($fc['saldo'] ?? 0), 2, '.', '') ?>"><?= htmlspecialchars($fc['nombre']) . $lblSaldo ?></option>
+                                                                data-mostrar-saldo="<?= $muestraSaldo ? '1' : '0' ?>"
+                                                                data-saldo="<?= $conSaldo ? number_format((float)($fc['saldo'] ?? 0), 2, '.', '') : '' ?>"><?= htmlspecialchars($fc['nombre']) . $lblSaldo ?></option>
                                                     <?php endforeach; ?>
                                                 </select>
                                             </div>
@@ -2524,9 +2528,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         const orden = window.CMG_ordenParam(window.currentSorts || []);
         const uri = `<?= BASE_URL ?>/<?= $rutaModulo ?>/searchAjax?b=${encodeURIComponent(b)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+        // Solo vale la ÚLTIMA búsqueda: la anterior se cancela y nunca pinta encima.
+        if (window.ING_busquedaCtrl) window.ING_busquedaCtrl.abort();
+        const ctrl = new AbortController();
+        window.ING_busquedaCtrl = ctrl;
         try {
-            const resp = await fetch(uri);
+            const resp = await fetch(uri, { signal: ctrl.signal });
             const data = await resp.json();
+            if (ctrl !== window.ING_busquedaCtrl) return;
             document.getElementById('tbodyIngresos').innerHTML = data.rows;
             document.getElementById('paginationContainer').innerHTML = data.pagination;
             document.getElementById('paginationInfo').innerText = data.info;
@@ -2541,9 +2550,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // el motor global; aquí solo se le pide que se refresque.
             if (ING_sorter) ING_sorter.refreshIcons();
         } catch (e) {
-            console.error(e);
+            if (e.name !== 'AbortError') console.error(e);
         } finally {
-            if (tbody) tbody.classList.remove('fm-cargando-target');
+            if (tbody && ctrl === window.ING_busquedaCtrl) tbody.classList.remove('fm-cargando-target');
         }
     }
 
@@ -2620,7 +2629,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const box   = document.getElementById('ing-saldo-forma');
         if (!combo || !box) return;
         const opt = combo.options[combo.selectedIndex];
-        if (!opt || !opt.value) { box.classList.add('d-none'); box.innerHTML = ''; return; }
+        // Forma sin "Mostrar saldo" (Formas de Cobro y Pago): ni se muestra ni se consulta.
+        if (!opt || !opt.value || opt.dataset.mostrarSaldo === '0') { box.classList.add('d-none'); box.innerHTML = ''; return; }
 
         const esAnt = opt.dataset.anticipo === '1';
         if (!esAnt) {
@@ -2646,6 +2656,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         fetch(`<?= BASE_URL ?>/modulos/ingresos/getSaldoAnticipoAjax?id_forma=${opt.value}&id_tercero=${idCli}`)
             .then(r => r.json())
             .then(res => {
+                if (combo.value !== opt.value) return; // se eligió otra forma mientras se consultaba
                 if (!res.ok) { box.className = 'small mt-1 text-danger'; box.innerHTML = res.mensaje || 'No se pudo obtener el saldo.'; return; }
                 const saldo = parseFloat(res.saldo) || 0;
                 box.className = 'small mt-1 fw-bold ' + (saldo < 0 ? 'text-danger' : 'text-success');

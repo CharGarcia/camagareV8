@@ -205,6 +205,7 @@ class RetornoCvService
                     $this->inventarioRepo->lockStock((int) $consLinea['id_producto'], $idBodega, $idEmpresa);
                     $stockActual = $this->inventarioRepo->getStockActual((int) $consLinea['id_producto'], $idBodega, $idEmpresa);
                     $nuevoStock  = $stockActual + $cant;
+                    $costoUnit   = $this->costoUnitarioRetorno((int) $consLinea['id_consignacion'], (int) $consLinea['id_producto'], $idBodega, $idEmpresa);
 
                     $this->inventarioRepo->registrarMovimiento([
                         'id_empresa'      => $idEmpresa,
@@ -214,6 +215,8 @@ class RetornoCvService
                         'referencia_tipo' => 'RETORNO_CV',
                         'referencia_id'   => $idRetorno,
                         'cantidad'        => $cant,
+                        'costo_unitario'  => $costoUnit,
+                        'costo_total'     => round($costoUnit * $cant, 2),
                         'stock_anterior'  => $stockActual,
                         'stock_posterior' => $nuevoStock,
                         'numero_lote'     => (isset($consLinea['lote']) && $consLinea['lote'] !== '') ? $consLinea['lote'] : null,
@@ -711,6 +714,7 @@ class RetornoCvService
         $stockActual = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $delta       = ($tipo === 'entrada') ? $cant : -$cant;
         $nuevoStock  = $stockActual + $delta;
+        $costoUnit   = $this->costoUnitarioRetorno((int) ($det['id_consignacion'] ?? 0), $idProducto, $idBodega, $idEmpresa);
 
         $this->inventarioRepo->registrarMovimiento([
             'id_empresa'      => $idEmpresa,
@@ -720,6 +724,8 @@ class RetornoCvService
             'referencia_tipo' => $refTipo,
             'referencia_id'   => $refId,
             'cantidad'        => $delta,
+            'costo_unitario'  => $costoUnit,
+            'costo_total'     => round($costoUnit * $cant, 2),
             'stock_anterior'  => $stockActual,
             'stock_posterior' => $nuevoStock,
             'numero_lote'     => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
@@ -730,6 +736,20 @@ class RetornoCvService
         ]);
 
         $this->inventarioRepo->actualizarStock($idProducto, $idBodega, $idEmpresa, $nuevoStock, $idUsuario);
+    }
+
+    /**
+     * Costo unitario con que entra (o vuelve a salir) una unidad retornada: el de la salida de su
+     * consignación de origen, como el reingreso de Facturación de consignaciones. Si esa salida
+     * quedó sin costo (consignaciones registradas antes de que se guardara), el costo promedio
+     * actual. Antes el retorno entraba a costo 0 y bajaba el costo promedio del producto.
+     */
+    private function costoUnitarioRetorno(int $idConsignacion, int $idProducto, int $idBodega, int $idEmpresa): float
+    {
+        $costo = $idConsignacion > 0
+            ? $this->inventarioRepo->getCostoUnitarioSalidas('CONSIGNACION_VENTA', $idConsignacion, $idProducto, $idEmpresa)
+            : 0.0;
+        return $costo > 0 ? $costo : (float) $this->inventarioRepo->getCostoPromedio($idProducto, $idBodega, $idEmpresa);
     }
 
     /**

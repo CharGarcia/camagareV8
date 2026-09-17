@@ -3,13 +3,22 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\OrdenListado;
 use App\repositories\BaseRepository;
 use PDO;
 
 class FormaPagoRepository extends BaseRepository
 {
-    public const COLUMNAS_ORDEN = [
-        'nombre', 'tipo', 'aplica_en', 'activo', 'banco_nombre'
+    /** Columnas ordenables del listado: clave del encabezado => expresión SQL. */
+    public const MAPA_ORDEN = [
+        'nombre'        => 'fp.nombre',
+        'tipo'          => 'fp.tipo',
+        'aplica_en'     => 'fp.aplica_en',
+        // Las formas sin orden quedan al final en ambos sentidos, como en Ingresos/Egresos.
+        'orden'         => '(fp.orden IS NULL), fp.orden',
+        'mostrar_saldo' => 'fp.mostrar_saldo',
+        'activo'        => 'fp.activo',
+        'banco_nombre'  => 'b.nombre_banco',
     ];
 
     /**
@@ -64,6 +73,17 @@ class FormaPagoRepository extends BaseRepository
         }
     }
 
+    /**
+     * ¿Ya existen `mostrar_saldo` y `orden` (database/migrations/20260916_formas_pago_mostrar_saldo_orden.sql)?
+     * El código puede llegar a una base antes que su SQL: mientras falten, Ingresos/Egresos listan
+     * las formas por nombre con el saldo visible (lo de siempre) y el guardado no toca esas columnas.
+     */
+    private function tieneColumnasPresentacion(): bool
+    {
+        return $this->columnaExiste($this->table, 'mostrar_saldo')
+            && $this->columnaExiste($this->table, 'orden');
+    }
+
     public function getListado(
         int $idEmpresa,
         string $buscar,
@@ -72,10 +92,13 @@ class FormaPagoRepository extends BaseRepository
         string $ordenCol,
         string $ordenDir
     ): array {
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre';
+        $mapaOrden = self::MAPA_ORDEN;
+        if (!$this->tieneColumnasPresentacion()) {
+            unset($mapaOrden['orden'], $mapaOrden['mostrar_saldo']);
         }
-        $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
+        $orderBy = OrdenListado::clausula(
+            [['col' => $ordenCol, 'dir' => $ordenDir]], $mapaOrden, 'fp.nombre', 'fp.id DESC'
+        );
 
         $params = [':id_empresa' => $idEmpresa];
         $whereSql = "WHERE fp.id_empresa = :id_empresa AND fp.eliminado = FALSE";
@@ -93,10 +116,6 @@ class FormaPagoRepository extends BaseRepository
 
         // 2. Rows
         $offset = ($page - 1) * $perPage;
-        $orderExpr = match($ordenCol) {
-            'banco_nombre' => 'b.nombre_banco',
-            default        => "fp.{$ordenCol}"
-        };
 
         $sqlRows = "SELECT fp.*,
                            b.nombre_banco AS banco_nombre,
@@ -108,7 +127,7 @@ class FormaPagoRepository extends BaseRepository
                     LEFT JOIN plan_cuentas pc ON fp.id_cuenta_contable = pc.id
                     " . self::JOIN_CUENTAS_FLUJO . "
                     {$whereSql}
-                    ORDER BY $orderExpr $dir, b.id DESC
+                    {$orderBy}
                     LIMIT :limit OFFSET :offset";
 
         $stRows = $this->db->prepare($sqlRows);
@@ -175,16 +194,19 @@ class FormaPagoRepository extends BaseRepository
 
     public function create(array $data): int
     {
+        $presentacion = $this->tieneColumnasPresentacion();
+
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, nombre, tipo, aplica_en, id_banco, tipo_cuenta, numero_cuenta,
-                    modalidad_tarjeta, id_cuenta_contable, tipo_cuenta_contable, activo, created_by, created_at
+                    modalidad_tarjeta, id_cuenta_contable, tipo_cuenta_contable, activo, created_by, created_at"
+                    . ($presentacion ? ", mostrar_saldo, orden" : "") . "
                 ) VALUES (
                     :id_empresa, :nombre, :tipo, :aplica_en, :id_banco, :tipo_cuenta, :numero_cuenta,
-                    :modalidad_tarjeta, :id_cuenta_contable, :tipo_cuenta_contable, :activo, :created_by, CURRENT_TIMESTAMP
+                    :modalidad_tarjeta, :id_cuenta_contable, :tipo_cuenta_contable, :activo, :created_by, CURRENT_TIMESTAMP"
+                    . ($presentacion ? ", :mostrar_saldo, :orden" : "") . "
                 )";
 
-        $st = $this->db->prepare($sql);
-        $st->execute([
+        $params = [
             ':id_empresa'         => $data['id_empresa'],
             ':nombre'             => $data['nombre'],
             ':tipo'               => $data['tipo'] ?? 'EFECTIVO',
@@ -197,12 +219,20 @@ class FormaPagoRepository extends BaseRepository
             ':tipo_cuenta_contable' => !empty($data['tipo_cuenta_contable']) ? $data['tipo_cuenta_contable'] : null,
             ':activo'             => !empty($data['activo']) ? 'true' : 'false',
             ':created_by'         => $data['usuario_id'] ?? null
-        ]);
+        ];
+        if ($presentacion) {
+            $params += $this->paramsPresentacion($data);
+        }
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $this->lastInsertId();
     }
 
     public function update(int $id, int $idEmpresa, array $data): bool
     {
+        $presentacion = $this->tieneColumnasPresentacion();
+
         $sql = "UPDATE {$this->table} SET
                     nombre = :nombre,
                     tipo = :tipo,
@@ -213,13 +243,15 @@ class FormaPagoRepository extends BaseRepository
                     modalidad_tarjeta = :modalidad_tarjeta,
                     id_cuenta_contable = :id_cuenta_contable,
                     tipo_cuenta_contable = :tipo_cuenta_contable,
-                    activo = :activo,
+                    activo = :activo,"
+                    . ($presentacion ? "
+                    mostrar_saldo = :mostrar_saldo,
+                    orden = :orden," : "") . "
                     updated_by = :updated_by,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = FALSE";
 
-        $st = $this->db->prepare($sql);
-        return $st->execute([
+        $params = [
             ':nombre'             => $data['nombre'],
             ':tipo'               => $data['tipo'],
             ':aplica_en'          => $data['aplica_en'],
@@ -233,7 +265,27 @@ class FormaPagoRepository extends BaseRepository
             ':updated_by'         => $data['usuario_id'] ?? null,
             ':id'                 => $id,
             ':id_empresa'         => $idEmpresa
-        ]);
+        ];
+        if ($presentacion) {
+            $params += $this->paramsPresentacion($data);
+        }
+
+        $st = $this->db->prepare($sql);
+        return $st->execute($params);
+    }
+
+    /**
+     * Parámetros de "Mostrar saldo" y "Orden". Si $data no trae mostrar_saldo se guarda visible,
+     * que es el valor por defecto de la columna; un orden vacío queda NULL (al final, por nombre).
+     */
+    private function paramsPresentacion(array $data): array
+    {
+        $mostrarSaldo = !array_key_exists('mostrar_saldo', $data) || !empty($data['mostrar_saldo']);
+
+        return [
+            ':mostrar_saldo' => $mostrarSaldo ? 'true' : 'false',
+            ':orden'         => (isset($data['orden']) && $data['orden'] !== '') ? (int)$data['orden'] : null,
+        ];
     }
 
     /**
@@ -289,17 +341,27 @@ class FormaPagoRepository extends BaseRepository
         return $st->execute([':id' => $id, ':id_empresa' => $idEmpresa, ':uid' => $usuarioId]);
     }
 
-    public function getFormasFiltradas(int $idEmpresa, string $flujo): array
+    /**
+     * Formas activas de un flujo (INGRESO | EGRESO).
+     *
+     * $ordenConfigurado: respeta el "Orden" definido en Formas de Cobro y Pago (1 = primera; las que
+     * no tienen orden van al final, por nombre). Lo piden Ingresos y Egresos; el resto de módulos
+     * sigue listando por nombre.
+     */
+    public function getFormasFiltradas(int $idEmpresa, string $flujo, bool $ordenConfigurado = false): array
     {
-        // Flujo can be INGRESO or EGRESO
-        $sql = "SELECT fp.*, b.nombre_banco AS banco_nombre 
-                FROM {$this->table} fp 
+        $orderBy = ($ordenConfigurado && $this->tieneColumnasPresentacion())
+            ? 'fp.orden ASC NULLS LAST, fp.nombre ASC'
+            : 'fp.nombre ASC';
+
+        $sql = "SELECT fp.*, b.nombre_banco AS banco_nombre
+                FROM {$this->table} fp
                 LEFT JOIN bancos_ecuador b ON fp.id_banco = b.id
-                WHERE fp.id_empresa = :id_empresa 
-                  AND fp.activo = TRUE 
-                  AND fp.eliminado = FALSE 
+                WHERE fp.id_empresa = :id_empresa
+                  AND fp.activo = TRUE
+                  AND fp.eliminado = FALSE
                   AND (fp.aplica_en = 'AMBAS' OR fp.aplica_en = :flujo)
-                ORDER BY fp.nombre ASC";
+                ORDER BY {$orderBy}";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa, ':flujo' => $flujo]);
         return $st->fetchAll(PDO::FETCH_ASSOC);

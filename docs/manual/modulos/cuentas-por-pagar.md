@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen
-version: 1.18
+version: 1.19
 orden: 50
 estado: activo
 ---
@@ -309,6 +309,9 @@ esa serie. En el consolidado, la lista es la de la sucursal dueña del documento
 - **Una serie no aparece en el modal de pago**: está **inactiva**. Solo se
   ofrecen los puntos de emisión activos; actívela en Empresa, pestaña Puntos de
   Emisión (ver *Serie del pago: solo puntos de emisión activos*).
+- **"La compra ... está pendiente de aprobación: no se puede pagar hasta que la
+  aprueben"**: la empresa exige aprobar las compras. La compra se lista porque es
+  una deuda real, pero se paga después de aprobarla.
 
 ## Qué comprobantes de compra aparecen
 
@@ -318,13 +321,18 @@ instituciones financieras, las planillas de servicios básicos y los demás tipo
 autorizados por el SRI, además de las liquidaciones de compra, importaciones y
 saldos iniciales. Una liquidación de compra se muestra desde que se autoriza y
 sigue visible cuando pasa a *contabilizado*; solo sale de la lista al anularse o
-al quedar pagada. Las compras anuladas o rechazadas no se muestran. No aparecen
+al quedar pagada. Las compras anuladas o rechazadas no se muestran. Las
+**pendientes de aprobación** sí se muestran, pero no se pueden pagar hasta que las
+aprueben. No aparecen
 como fila las notas de crédito y de débito recibidas: esas ajustan el saldo de
 la factura que modifican. Mismo criterio que
 el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
 
+- **1.19** — Pagar una compra **pendiente de aprobación** se rechaza con un aviso
+  claro: sigue listada como deuda, pero se paga después de aprobarla. Antes el
+  pago se registraba igual.
 - **1.18** — Se quitó la fila **SUBTOTAL** de cada proveedor en la vista *Por
   proveedor*: su saldo ya aparece en la línea del proveedor y en la cabecera de
   la sección del PDF y el Excel. El **TOTAL GENERAL** del listado se mantiene.

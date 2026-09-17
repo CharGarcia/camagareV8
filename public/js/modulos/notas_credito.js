@@ -61,12 +61,16 @@
         // carga (también al paginar y ordenar, que llaman a esta función directo).
         const tbody = document.getElementById('nc-table-body');
         if (tbody) tbody.classList.add('fm-cargando-target');
+        // Solo vale la ÚLTIMA búsqueda: la anterior se cancela y nunca pinta encima.
+        if (window.NC_busquedaCtrl) window.NC_busquedaCtrl.abort();
+        const ctrl = new AbortController();
+        window.NC_busquedaCtrl = ctrl;
 
         try {
-            const resp = await fetch(url);
+            const resp = await fetch(url, { signal: ctrl.signal });
             if (!resp.ok) return;
             const data = await resp.json();
-            if (!data.ok) return;
+            if (ctrl !== window.NC_busquedaCtrl || !data.ok) return;
 
             if (tbody) tbody.innerHTML = data.rows ?? '';
             const pg = document.getElementById('nc-pagination');
@@ -81,9 +85,9 @@
 
             NC_actualizarIconosOrden(sort, dir);
         } catch (e) {
-            console.error('Error al buscar NC:', e);
+            if (e.name !== 'AbortError') console.error('Error al buscar NC:', e);
         } finally {
-            if (tbody) tbody.classList.remove('fm-cargando-target');
+            if (tbody && ctrl === window.NC_busquedaCtrl) tbody.classList.remove('fm-cargando-target');
         }
     };
 

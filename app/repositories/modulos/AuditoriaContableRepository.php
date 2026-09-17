@@ -254,6 +254,11 @@ class AuditoriaContableRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('auditoria_contable_incidencias');
+
+        // Los registros que un cambio de productos crea en Facturación de consignaciones no llevan
+        // asiento de reingreso (su asiento es el del cambio): no son "documentos sin asiento".
+        $this->origenes['FACTURACION_CV']['estado_filtro'] .=
+            CambioProductoCvRepository::sqlNoEsRegistroDeCambio('d');
     }
 
     /** Lista de orígenes auditables (claves de modulo_origen). */

@@ -645,6 +645,23 @@ class ProductoRepository extends BaseRepository
         return $info['inventariable'] && $info['tipo_produccion'] !== '02';
     }
 
+    /**
+     * Lo único que un movimiento de inventario necesita del producto: si es inventariable, su
+     * tipo de producción y la unidad de medida. getDetalleCompleto() arma la ficha entera
+     * (inventario por bodega sumando el kardex, precios, variantes, homologaciones) y se usaba
+     * por cada línea de cada factura, recibo y nota de crédito.
+     */
+    public function getDatosMovimientoInventario(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT id, inventariable, tipo_produccion, id_medida
+                FROM {$this->table}
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function getInfoControlInventario(int $id, int $idEmpresa): array
     {
         $sql = "SELECT inventariable, tipo_produccion FROM {$this->table} WHERE id = ? AND id_empresa = ? AND eliminado = false LIMIT 1";

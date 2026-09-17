@@ -26,6 +26,13 @@ class AtsValidatorService
     private const TIPO_PROV = ['01','02'];
 
     /**
+     * autModificado que AtsService reporta cuando el comprobante que modifica una nota de
+     * crédito/débito no está registrado en Compras (o no tiene autorización): el formato
+     * pasa la carga, pero el dato no es real y se advierte para corregirlo antes de presentar.
+     */
+    public const AUT_MODIFICADO_SIN_REGISTRO = '9999999999';
+
+    /**
      * Catálogo `código de sustento → tipos de comprobante permitidos` de la tabla
      * `sustento_tributario`, inyectado por AtsService. Vacío = no se comprueba la
      * combinación (el resto de reglas sigue aplicándose igual).
@@ -254,6 +261,15 @@ class AtsValidatorService
             // docModificado obligatorio en notas de crédito/débito
             if (in_array($tipoComp, ['04', '05'], true) && $this->hijo($d, 'docModificado') === null) {
                 $err[] = "{$p}: tipoComprobante {$tipoComp} (N/C o N/D) requiere los campos de documento modificado.";
+            } elseif (in_array($tipoComp, ['04', '05'], true)
+                && $this->texto($d, 'autModificado') === self::AUT_MODIFICADO_SIN_REGISTRO) {
+                $mod = $this->texto($d, 'estabModificado') . '-'
+                     . $this->texto($d, 'ptoEmiModificado') . '-'
+                     . $this->texto($d, 'secModificado');
+                $adv[] = "{$p}: el comprobante que modifica ({$mod}) no está registrado en Compras con su número de "
+                       . "autorización, así que se reportó " . self::AUT_MODIFICADO_SIN_REGISTRO . " en su lugar. "
+                       . "Regístrelo en Compras (mismo proveedor, con su autorización) y vuelva a generar el anexo "
+                       . "antes de presentarlo.";
             }
         }
     }

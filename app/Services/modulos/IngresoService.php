@@ -488,11 +488,6 @@ class IngresoService
         $this->recalcularSaldosInicialesCxc($idsSaldo, $idEmpresa);
     }
 
-    public function getFormasCobro(int $idEmpresa): array
-    {
-        return $this->repository->getFormasCobro($idEmpresa);
-    }
-
     public function getConceptosIngreso(int $idEmpresa): array
     {
         return $this->repository->getConceptosIngreso($idEmpresa);

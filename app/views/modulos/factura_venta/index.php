@@ -1548,11 +1548,16 @@ $totalPages = $totalPagesOriginal;
         const buscar  = document.getElementById('buscarFactura')?.value || '';
         const orden   = window.CMG_ordenParam(window.FV_currentSorts || []);
         const url     = `${B_URL}/${RUTA_MODULO}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+        // Solo vale la ÚLTIMA búsqueda: si llega otra (se sigue tecleando, se pagina)
+        // se cancela la anterior, y una respuesta vieja nunca pinta sobre una nueva.
+        if (window.FV_busquedaCtrl) window.FV_busquedaCtrl.abort();
+        const ctrl = new AbortController();
+        window.FV_busquedaCtrl = ctrl;
         try {
-            const resp = await fetch(url);
+            const resp = await fetch(url, { signal: ctrl.signal });
             if (!resp.ok) return;
             const data = await resp.json();
-            if (!data.ok) return;
+            if (ctrl !== window.FV_busquedaCtrl || !data.ok) return;
             const tbody = document.getElementById('tbodyFacturas');
             if (tbody) tbody.innerHTML = data.rows ?? '';
             const pgCont = document.getElementById('paginationContainer');
@@ -1567,7 +1572,7 @@ $totalPages = $totalPagesOriginal;
             // el motor global; aquí solo se le pide que se refresque.
             if (FV_sorter) FV_sorter.refreshIcons();
         } catch (e) {
-            console.error('FV_fetchSearch error:', e);
+            if (e.name !== 'AbortError') console.error('FV_fetchSearch error:', e);
         }
     };
 

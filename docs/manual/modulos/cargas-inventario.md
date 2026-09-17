@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips
-version: 1.4
+etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga
+version: 1.5
 orden: 25
 estado: activo
 ---
@@ -27,13 +27,54 @@ Cada carga es de un tipo, y solo se admiten tres:
 
 ## Cómo se usa
 
-1. Prepare el archivo con los productos y cantidades.
-2. Elija el **tipo de movimiento** y la **bodega**.
-3. Suba el archivo y revise las líneas.
-4. Procese la carga.
+1. Pulse **Importar carga** y, si no la tiene, baje la **plantilla** de Excel. Cada fila del archivo es una línea: código del producto, bodega, cantidad y costo (más lote, caducidad, NUP y observación, opcionales).
+2. Elija el **tipo de movimiento** y, si quiere, escriba una observación.
+3. Seleccione el archivo y pulse **Importar**. Mientras el sistema lee el archivo y comprueba cada línea aparece el aviso **Cargando archivo…**; no cierre la ventana hasta que termine (con archivos grandes tarda unos segundos).
+4. Al terminar, un aviso resume el resultado:
+   - **Carga aplicada al inventario**: todas las líneas estaban bien y la empresa no exige aprobación; el stock ya se actualizó.
+   - **Carga registrada**: queda pendiente de aprobación.
+   - **Carga registrada con errores**: lista cada línea que falló con su número de fila del Excel; la carga no se podrá aprobar hasta corregirlas (ver *Errores frecuentes*).
+
+El botón **Ver líneas** del aviso abre la carga recién importada. El listado se
+actualiza solo, sin perder la búsqueda ni los filtros.
 
 Todas las cantidades deben ser **mayores a cero**, y la carga debe tener al menos
-una línea.
+una línea. Todos los avisos del módulo (resultado de la importación, confirmar
+una aprobación, el motivo de un rechazo, eliminar, errores) salen en una ventana
+emergente.
+
+## Ver las líneas de una carga
+
+Un clic en una fila del listado abre la carga. Arriba muestra la fecha, el tipo,
+el estado, si está **comprobada** (todas sus líneas sin error), la observación, el
+motivo del rechazo y, si está pendiente y usted no puede aprobarla, quién debe
+hacerlo.
+
+Debajo está la lista de líneas, en el mismo orden del archivo:
+
+| Columna | Qué muestra |
+|---------|-------------|
+| Código | Código del producto; si el producto no se encontró, el código tal como venía en el archivo |
+| Producto | Nombre del producto (vacío si el código no existe) |
+| Bodega | Bodega de la línea |
+| Cantidad | Cantidad del movimiento |
+| Costo | Costo unitario |
+| OK | Visto verde si la línea pasó la comprobación; X roja si tiene error |
+| Motivo | Solo en las líneas con error: la fila del Excel y qué falló, por ejemplo *Fila 5: La bodega "Norte" no existe en la empresa.* |
+
+La ventana **no crece** con la cantidad de líneas: la lista tiene su propio
+desplazamiento vertical y los títulos de las columnas quedan fijos al bajar. Junto
+a los botones de arriba se ve el total de líneas y cuántas tienen error.
+
+**Descargar**: los botones **PDF** y **Excel** de la barra superior bajan esas
+mismas columnas, con los datos de la carga (número, fecha, tipo, estado,
+comprobada, líneas, creado por, aprobado por, observación y motivo de rechazo) al
+inicio. En el Excel la cantidad y el costo quedan como números, y los códigos como
+texto (un código como *0012* o *12E5* no se altera).
+
+Los botones de abajo dependen del estado: **Aprobar** y **Rechazar** (solo quien
+puede aprobar; el rechazo pide el motivo) y **Eliminar** (cargas no aprobadas).
+Cada uno pide confirmación y muestra el resultado en una ventana emergente.
 
 ## El listado
 
@@ -130,18 +171,16 @@ Antes esta configuración estaba en *Empresa → Inventario*.
 ## Errores frecuentes
 
 - **"Tipo de movimiento inválido"**: debe ser entrada, salida o ajuste.
-- **"La carga no contiene líneas para procesar"**: el archivo llegó vacío o
-  ninguna fila se pudo interpretar.
+- **"La carga no contiene líneas para procesar"**: el archivo llegó vacío o ninguna fila se pudo interpretar.
 - **"La cantidad debe ser mayor a cero"**: revise las filas en cero o negativas.
 - **La carga no afecta el stock**: puede estar pendiente de aprobación.
-- **"La carga no está comprobada: corrija las líneas con error antes de aprobar"**
-  (o el botón **Aprobar** aparece deshabilitado y la carga tiene el triángulo
-  naranja en el listado): al importar, cada fila del archivo se comprobó contra
-  la empresa y al menos una falló. Abra la carga desde el listado: arriba de la
-  tabla se muestra la **lista completa de errores**, con el número de fila del
-  Excel (la fila 1 es el encabezado, así que "Fila 5" es la quinta fila del
-  archivo), y en cada línea con X roja la columna **Motivo** dice qué falló.
-  Los motivos posibles son:
+- **"La carga no está comprobada: corrija las líneas con error antes de aprobar"** (o el botón **Aprobar** aparece deshabilitado y la carga tiene el triángulo naranja en el listado): al importar, cada fila del archivo se comprobó contra la empresa y al menos una falló.
+
+El aviso que aparece al terminar la importación lista todos los errores; después,
+al abrir la carga, cada línea con X roja trae en la columna **Motivo** el número de
+fila del Excel y qué falló (la fila 1 es el encabezado, así que "Fila 5" es la
+quinta fila del archivo). Con el botón **Excel** del detalle puede bajar la lista
+para corregir el archivo. Los motivos posibles son:
 
   | Mensaje | Causa | Cómo corregirlo |
   |---------|-------|-----------------|
@@ -163,4 +202,5 @@ Antes esta configuración estaba en *Empresa → Inventario*.
 - **1.1** — La configuración de la aprobación se movió al módulo **Aprobaciones**; se agrega monto mínimo.
 - **1.2** — El listado pasa al estándar del sistema: buscador por campos con filtros rápidos, ordenamiento por encabezado (incluido el orden por varias columnas con Shift + clic), paginación sin recargar la página y nueva columna **Observación**, también en el PDF y el Excel. En las cargas migradas esa columna muestra solo la referencia.
 - **1.3** — El detalle de una carga pendiente con errores muestra la lista completa de errores de comprobación y una columna **Motivo** por línea (antes solo se veían al pasar el cursor sobre la X roja). Se documentan los mensajes y cómo corregir cada uno.
+- **1.5** — La ventana de una carga muestra las líneas con las columnas **Código**, Producto, Bodega, Cantidad, Costo, OK y Motivo (el motivo incluye la fila del Excel), en una lista con desplazamiento propio: la ventana ya no crece con la cantidad de líneas. Nuevos botones **PDF** y **Excel** para bajar esas líneas. Al importar aparece el aviso **Cargando archivo…** y el resultado se muestra en una ventana emergente con el botón **Ver líneas**; todos los avisos del módulo (confirmar aprobación, motivo del rechazo, eliminar, errores) pasan a ventanas emergentes y el listado se actualiza sin recargar la página. Sin acceso total, solo se abren y descargan las cargas propias, igual que en el listado.
 - **1.4** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias; lo que se escribe se busca en las columnas del listado (incluida la fecha), el motivo de rechazo y los productos de las líneas, salvo Tipo y Estado. Los filtros pasan a una **ventana propia** (botón del embudo, se aplican con *Aplicar*) con dos pestañas: **Carga** (criterios nuevos: pendientes con líneas en error, motivo de rechazo, creado por y aprobado por como lista, fecha de aprobación, producto y bodega de las líneas) y **Detalles**, un cuadro de **búsqueda libre dentro de las líneas** de las cargas que dice a qué carga pertenece cada coincidencia. Los botones rápidos pasan a ser opciones de los selectores de estado y tipo. Los filtros activos se ven como etiquetas dentro del cuadro y la tabla se atenúa mientras busca.

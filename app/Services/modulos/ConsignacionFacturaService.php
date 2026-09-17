@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\repositories\modulos\CambioProductoCvRepository;
 use App\repositories\modulos\ConsignacionFacturaRepository;
 use App\repositories\modulos\ConsignacionVentaRepository;
 use App\repositories\modulos\InventarioRepository;
@@ -461,6 +462,9 @@ class ConsignacionFacturaService
     {
         $doc = $this->repository->find($id, $idEmpresa);
         if (!$doc) throw new Exception('Documento no encontrado.');
+        if (!empty($doc['id_cambio_producto'])) {
+            throw new Exception('Este registro lo generó un cambio de productos: se anula desde ese cambio.');
+        }
         if (($doc['estado'] ?? '') === 'facturada') {
             throw new Exception('No se puede eliminar: el documento ya tiene una factura. Anule primero la factura.');
         }
@@ -494,6 +498,9 @@ class ConsignacionFacturaService
     {
         $src = $this->repository->find($idDoc, $idEmpresa);
         if (!$src) throw new Exception('Documento no encontrado.');
+        if (!empty($src['id_cambio_producto'])) {
+            throw new Exception('Este registro lo generó un cambio de productos: no se puede duplicar.');
+        }
 
         $idPunto = (int) ($src['id_punto_emision'] ?? 0);
         if ($idPunto <= 0) {
@@ -725,17 +732,23 @@ class ConsignacionFacturaService
         $idEstablecimiento = $this->repository->getEstablecimientoPorPunto($idPunto) ?? 0;
         $numDoc = ($doc['serie'] ?? '') . '-' . ($doc['secuencial'] ?? '');
 
-        // 2. Reingreso de inventario a la bodega de origen (transacción propia).
+        // 2. Reingreso de inventario a la bodega de origen (transacción propia). Existe para que la
+        //    salida de la factura encuentre el stock, así que solo se hace si la factura la va a
+        //    registrar («La facturación afecta al inventario» en su establecimiento). Sin salida,
+        //    reingresar devolvería a bodega unidades ya vendidas; sin ninguno de los dos
+        //    movimientos, el stock queda como lo dejó la consignación.
         $db = Database::getConnection();
-        $db->beginTransaction();
-        try {
-            foreach ($detalles as $d) {
-                $this->reingresarLinea($d, $idEmpresa, $idUsuario, $empresaConfig, $idDoc, $numDoc);
+        if ($this->getInventarioService()->facturacionAfectaInventario((int) $idEstablecimiento)) {
+            $db->beginTransaction();
+            try {
+                foreach ($detalles as $d) {
+                    $this->reingresarLinea($d, $idEmpresa, $idUsuario, $empresaConfig, $idDoc, $numDoc);
+                }
+                $db->commit();
+            } catch (\Throwable $e) {
+                if ($db->inTransaction()) $db->rollBack();
+                throw $e;
             }
-            $db->commit();
-        } catch (\Throwable $e) {
-            if ($db->inTransaction()) $db->rollBack();
-            throw $e;
         }
 
         // 2.1 Asiento inverso del reingreso (no fatal).
@@ -884,13 +897,141 @@ class ConsignacionFacturaService
         );
     }
 
+    // ─── Registros generados por Cambios de productos ─────────────────────────
+
+    /**
+     * Registra en Facturación de consignaciones las unidades que un CAMBIO DE PRODUCTOS entregó
+     * desde una consignación: quedan 'facturada' dentro de la factura de venta de la unidad
+     * devuelta (id_factura / numero_factura de esa factura, que no se modifica).
+     *
+     * Toma su propio número de la serie de Facturación de consignaciones del punto de emisión del
+     * cambio, pero NO crea factura de venta, NO reingresa inventario y NO genera asiento: todo eso
+     * lo hace el cambio. id_cambio_producto lo deja fuera de la sincronización de asientos, de
+     * Auditoría contable, de la reversión al anular la factura y de duplicar/eliminar en este
+     * módulo. Participa en la transacción del llamador, que debe seguir abierta hasta el INSERT
+     * (candado del secuencial, CLAUDE.md §8).
+     *
+     * $data: id_empresa, id_usuario, tipo_ambiente, id_punto_emision, fecha_emision, id_cliente,
+     *        id_vendedor, id_factura, numero_factura, id_cambio_producto, numero_cambio y lineas
+     *        (líneas de ENTREGA desde consignación, como las devuelve CambioProductoCvRepository::getDetalles).
+     */
+    public function crearRegistroDeCambio(array $data): int
+    {
+        if (!CambioProductoCvRepository::registroFacturacionDisponible()) {
+            throw new Exception('Falta aplicar database/migrations/20260916_facturacion_cv_registro_cambio.sql.');
+        }
+        $lineas = $data['lineas'] ?? [];
+        if (empty($lineas)) {
+            throw new Exception('El registro del cambio no tiene líneas.');
+        }
+        $idEmpresa = (int) $data['id_empresa'];
+        $idUsuario = (int) $data['id_usuario'];
+
+        $db = Database::getConnection();
+        $managed = !$db->inTransaction();
+        try {
+            if ($managed) $db->beginTransaction();
+
+            $numero = $this->reservarNumero($idEmpresa, [
+                'id_punto_emision' => $data['id_punto_emision'] ?? 0,
+                'fecha_emision'    => $data['fecha_emision'] ?? null,
+                'empresa_config'   => ['tipo_ambiente' => (string) ($data['tipo_ambiente'] ?? '1')],
+            ]);
+
+            $subtotal = 0.0; $impuesto = 0.0; $total = 0.0;
+            foreach ($lineas as $l) {
+                $subtotal += (float) ($l['subtotal'] ?? 0);
+                $impuesto += (float) ($l['valor_impuesto'] ?? 0);
+                $total    += (float) ($l['total'] ?? 0);
+            }
+
+            $numeroFactura = trim((string) ($data['numero_factura'] ?? ''));
+            $idDoc = $this->crearCabecera([
+                'id_empresa'         => $idEmpresa,
+                'fecha_emision'      => $data['fecha_emision'],
+                'serie'              => $numero['serie'],
+                'secuencial'         => $numero['secuencial'],
+                'id_punto_emision'   => $numero['id_punto_emision'],
+                'establecimiento'    => $numero['establecimiento'],
+                'punto_emision'      => $numero['punto_emision'],
+                'tipo_ambiente'      => $numero['tipo_ambiente'],
+                'id_cliente'         => (int) $data['id_cliente'],
+                'id_vendedor'        => empty($data['id_vendedor']) ? null : (int) $data['id_vendedor'],
+                'id_factura'         => empty($data['id_factura']) ? null : (int) $data['id_factura'],
+                'numero_factura'     => $numeroFactura !== '' ? $numeroFactura : null,
+                'id_cambio_producto' => (int) $data['id_cambio_producto'],
+                'observaciones'      => 'Registro del cambio de productos ' . ($data['numero_cambio'] ?? '')
+                                      . ': unidades entregadas a cambio' . ($numeroFactura !== '' ? ' en la factura de venta ' . $numeroFactura : '')
+                                      . '. Sin factura nueva, inventario ni asiento propios.',
+                'estado'             => 'facturada',
+                'subtotal'           => round($subtotal, 2),
+                'impuesto'           => round($impuesto, 2),
+                'total'              => round($total, 2),
+                'created_by'         => $idUsuario,
+                'updated_by'         => $idUsuario,
+            ], $numero);
+
+            foreach ($lineas as $l) {
+                $this->repository->insertDetalleRegistroCambio([
+                    'id_consignacion_factura' => $idDoc,
+                    'id_empresa'              => $idEmpresa,
+                    'id_consignacion'         => (int) $l['id_origen'],
+                    'id_consignacion_detalle' => (int) $l['id_origen_detalle'],
+                    'id_producto'             => (int) $l['id_producto'],
+                    'cantidad'                => (float) $l['cantidad'],
+                    'precio_unitario'         => (float) ($l['precio_unitario'] ?? 0),
+                    'id_impuesto'             => empty($l['id_impuesto']) ? null : (int) $l['id_impuesto'],
+                    'porcentaje_impuesto'     => (float) ($l['porcentaje_impuesto'] ?? 0),
+                    'valor_impuesto'          => (float) ($l['valor_impuesto'] ?? 0),
+                    'subtotal'                => (float) ($l['subtotal'] ?? 0),
+                    'total'                   => (float) ($l['total'] ?? 0),
+                    'id_bodega'               => empty($l['id_bodega']) ? null : (int) $l['id_bodega'],
+                    'lote'                    => $l['lote'] ?? null,
+                    'nup'                     => $l['nup'] ?? null,
+                    'fecha_caducidad'         => $l['fecha_caducidad'] ?? null,
+                    'id_cambio_detalle'       => (int) $l['id'],
+                ]);
+            }
+
+            $this->logService->registrar($idUsuario, $idEmpresa, 'REGISTRO_CAMBIO_FACTURACION_CV', 'consignaciones_facturas', $idDoc, null, [
+                'id_cambio_producto' => (int) $data['id_cambio_producto'],
+                'id_factura'         => $data['id_factura'] ?? null,
+                'numero_factura'     => $numeroFactura,
+                'numero'             => $numero['serie'] . '-' . $numero['secuencial'],
+                'total'              => round($total, 2),
+            ]);
+
+            if ($managed) $db->commit();
+            return $idDoc;
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Anula los registros vigentes que generó un cambio de productos (el cambio dejó de estar
+     * Emitida o se eliminó): la unidad deja de contar como facturada y se libera el saldo de la
+     * consignación. Participa en la transacción del llamador. Devuelve cuántos anuló.
+     */
+    public function anularRegistrosDeCambio(int $idCambio, int $idEmpresa, int $idUsuario): int
+    {
+        $registros = $this->repository->getRegistrosVigentesDeCambio($idCambio, $idEmpresa);
+        foreach ($registros as $reg) {
+            $this->repository->updateEstado((int) $reg['id'], $idEmpresa, 'anulada', $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'ANULAR_REGISTRO_CAMBIO_FACTURACION_CV', 'consignaciones_facturas', (int) $reg['id'],
+                ['estado' => 'facturada'], ['estado' => 'anulada', 'id_cambio_producto' => $idCambio]);
+        }
+        return count($registros);
+    }
+
     // ─── Helpers internos ─────────────────────────────────────────────────────
 
     private function reingresarLinea(array $d, int $idEmpresa, int $idUsuario, array $empresaConfig, int $idDoc, string $numDoc): void
     {
-        // La consignación descuenta el stock de forma INCONDICIONAL (registra la salida
-        // para toda línea). Por eso el reingreso debe hacerse igual, sin gatear por
-        // facturacion_inventario; si no, la factura no encuentra el stock reingresado.
+        // La consignación descuenta el stock de forma INCONDICIONAL (registra la salida para toda
+        // línea), así que aquí no se filtra por producto inventariable. Si corresponde reingresar
+        // lo decide generarFactura() con facturacionAfectaInventario() del establecimiento.
         $cant = (float) $d['cantidad'];
         $idBodega = (int) ($d['id_bodega'] ?? 0);
         if ($cant <= 0 || $idBodega <= 0) return;
@@ -970,8 +1111,7 @@ class ConsignacionFacturaService
     {
         $db = Database::getConnection();
         $st = $db->prepare(
-            "SELECT cf.id_empresa, cf.created_by, cf.serie, cf.secuencial, cf.estado,
-                    COALESCE(c.nombre, 'Cliente') AS cliente_nombre
+            "SELECT cf.*, COALESCE(c.nombre, 'Cliente') AS cliente_nombre
              FROM consignaciones_facturas cf
              LEFT JOIN clientes c ON c.id = cf.id_cliente
              WHERE cf.id = ? AND cf.eliminado = false"
@@ -979,6 +1119,10 @@ class ConsignacionFacturaService
         $st->execute([$idDoc]);
         $doc = $st->fetch(\PDO::FETCH_ASSOC);
         if (!$doc || ($doc['estado'] ?? '') !== 'facturada') {
+            return;
+        }
+        // Un registro generado por un cambio de productos no tiene reingreso: su asiento es el del cambio.
+        if (!empty($doc['id_cambio_producto'])) {
             return;
         }
 

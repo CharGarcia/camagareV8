@@ -25,17 +25,41 @@ class FiltrosBusqueda
     private static function unaccentDisponible(): bool
     {
         if (self::$unaccentDisponible === null) {
+            // Caché compartida (APCu, 1 h): antes era una consulta a pg_proc en CADA petición
+            // que buscaba — con la BD en otro servidor, eso es un viaje de red extra por
+            // búsqueda. La extensión no aparece ni desaparece sola; si se instala, se nota
+            // al vencer la caché. Sin APCu, Cache::get() devuelve null y se consulta como antes.
+            $cache = \App\Helpers\Cache::get('filtros_busqueda:unaccent');
+            if ($cache !== null) {
+                self::$unaccentDisponible = (bool) $cache;
+                return self::$unaccentDisponible;
+            }
             try {
                 $db = \App\core\Database::getConnection();
                 self::$unaccentDisponible = (bool) $db
                     ->query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'unaccent')")
                     ->fetchColumn();
+                \App\Helpers\Cache::set('filtros_busqueda:unaccent', self::$unaccentDisponible ? 1 : 0, 3600);
             } catch (\Throwable $e) {
                 self::$unaccentDisponible = false;
             }
         }
         return self::$unaccentDisponible;
     }
+
+    /**
+     * Condiciones para columnas "caras o numéricas" del texto libre (ver condicionTexto):
+     * la columna solo se evalúa si la PALABRA escrita cumple el patrón.
+     *
+     *  - SI_DIGITOS: la palabra tiene al menos un dígito (fechas, montos, números). Buscar
+     *    "garcia" nunca va a coincidir con "34.78" ni con "2026-09-15", así que no tiene
+     *    sentido convertir esas columnas a texto en cada fila.
+     *  - SI_DECIMAL: la palabra parece un monto con decimales ("34.78", "34,78"). Para
+     *    columnas CALCULADAS con subconsultas por fila (saldo, abonos): son lo más caro
+     *    de la búsqueda y solo tiene sentido pagarlo cuando se busca un valor.
+     */
+    public const SI_DIGITOS = '/\d/';
+    public const SI_DECIMAL = '/^\d+[.,]\d{1,2}$/';
 
     /**
      * Envuelve una columna o placeholder con unaccent() si la extensión está
@@ -56,7 +80,22 @@ class FiltrosBusqueda
      * sola frase (eso solo encuentra coincidencias exactas y contiguas: buscar
      * "kit 256" no encontraría "KIT XXXXHHH 256").
      *
-     * @param string[] $columnas Columnas o expresiones SQL a buscar (ej. ['c.nombre', 'c.identificacion'])
+     * Rendimiento (2026-09-16), sin cambiar qué encuentra:
+     *  - Las columnas simples se CONCATENAN y se buscan con un solo unaccent() + ILIKE por
+     *    palabra (antes: un unaccent + ILIKE por columna, por fila, por palabra). Las
+     *    palabras nunca tienen espacios, y el separador es un espacio, así que una palabra
+     *    no puede "coincidir" uniendo el final de una columna con el inicio de otra.
+     *  - Las expresiones con subconsulta (`(SELECT ...)`, p. ej. STRING_AGG de las líneas)
+     *    van aparte y AL FINAL del OR: si la fila ya coincidió por una columna simple,
+     *    PostgreSQL no las evalúa.
+     *  - El patrón se calcula una sola vez por consulta: `(SELECT unaccent(:ph))`.
+     *  - Una columna puede venir como `['sql' => expr, 'si' => self::SI_DIGITOS]`: solo se
+     *    evalúa cuando la palabra cumple el patrón (montos, fechas, saldos calculados). Esas
+     *    columnas no pasan por unaccent (son números/fechas) y, si la palabra es un monto
+     *    con coma decimal ("34,78"), se busca con punto ("34.78"), que es como PostgreSQL
+     *    convierte un numeric a texto.
+     *
+     * @param array<int, string|array{sql:string, si?:string}> $columnas Columnas o expresiones SQL a buscar
      * @param string   $texto    Texto escrito por el usuario (una o varias palabras)
      * @param array    $params   Se le agregan los parámetros nuevos (por referencia)
      * @param string   $prefijo  Prefijo único de placeholders (evita choques si se llama más de una vez en la misma consulta)
@@ -74,15 +113,77 @@ class FiltrosBusqueda
             return '';
         }
 
+        // Clasificar columnas una sola vez.
+        $simples = [];        // se concatenan
+        $conSubconsulta = []; // van aparte, al final
+        $condicionales = [];  // ['sql' => ..., 'si' => regex]
+        foreach ($columnas as $col) {
+            if (is_array($col)) {
+                if (!empty($col['sql'])) {
+                    $condicionales[] = ['sql' => (string) $col['sql'], 'si' => (string) ($col['si'] ?? '')];
+                }
+                continue;
+            }
+            $col = (string) $col;
+            if ($col === '') {
+                continue;
+            }
+            if (preg_match('/\(\s*select\b/i', $col)) {
+                $conSubconsulta[] = $col;
+            } else {
+                $simples[] = $col;
+            }
+        }
+
+        $conUnaccent = self::unaccentDisponible();
         $condicionesPalabras = [];
         foreach ($palabras as $i => $palabra) {
             $ph = ":{$prefijo}_{$i}";
             $params[$ph] = '%' . $palabra . '%';
-            $condicionesCol = array_map(
-                fn($col) => self::envolverUnaccent($col) . ' ILIKE ' . self::envolverUnaccent($ph),
-                $columnas
-            );
-            $condicionesPalabras[] = '(' . implode(' OR ', $condicionesCol) . ')';
+            $patron = $conUnaccent ? "(SELECT unaccent({$ph}))" : $ph;
+            $ors = [];
+
+            if (count($simples) === 1) {
+                $ors[] = ($conUnaccent ? "unaccent({$simples[0]})" : $simples[0]) . " ILIKE {$patron}";
+            } elseif (count($simples) > 1) {
+                $concat = "CONCAT_WS(' ', " . implode(', ', $simples) . ')';
+                $ors[] = ($conUnaccent ? "unaccent({$concat})" : $concat) . " ILIKE {$patron}";
+            }
+
+            // Condicionales baratas antes que las subconsultas; las caras (saldo) se
+            // declaran con SI_DECIMAL, así que casi nunca se evalúan.
+            $phNum = null;
+            foreach ($condicionales as $c) {
+                if ($c['si'] !== '' && !preg_match($c['si'], $palabra)) {
+                    continue;
+                }
+                if ($phNum === null) {
+                    $normal = preg_match('/^\d+,\d{1,2}$/', $palabra) ? str_replace(',', '.', $palabra) : $palabra;
+                    if ($normal === $palabra) {
+                        $phNum = $ph;
+                    } else {
+                        $phNum = ":{$prefijo}_{$i}_n";
+                        $params[$phNum] = '%' . $normal . '%';
+                    }
+                }
+                $ors[] = "({$c['sql']})::text ILIKE {$phNum}";
+            }
+
+            foreach ($conSubconsulta as $col) {
+                $ors[] = ($conUnaccent ? "unaccent({$col})" : $col) . " ILIKE {$patron}";
+            }
+
+            if (empty($ors)) {
+                // Ninguna columna aplica a esta palabra (p. ej. solo columnas numéricas y
+                // una palabra sin dígitos): no puede coincidir.
+                $ors[] = 'FALSE';
+            }
+            $sqlPalabra = '(' . implode(' OR ', $ors) . ')';
+            // PDO (pgsql) lanza HY093 si se liga un parámetro que la consulta no usa.
+            if (!preg_match('/' . preg_quote($ph, '/') . '(?![A-Za-z0-9_])/', $sqlPalabra)) {
+                unset($params[$ph]);
+            }
+            $condicionesPalabras[] = $sqlPalabra;
         }
 
         return '(' . implode(' AND ', $condicionesPalabras) . ')';

@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion
-version: 1.14
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo
+version: 1.17
 orden: 20
 estado: activo
 ---
@@ -45,6 +45,11 @@ seleccionar.
    pagando, total o parcialmente.
 5. En formas de pago, indique cómo salió el dinero. Puede combinar varias.
 6. Guarde.
+
+La lista de **formas de pago** sigue el **Orden** configurado en
+[Formas de cobro y pago](formas-cobros-pagos.md) (las que no tienen orden van al
+final, por nombre), y el saldo de cada forma se ve junto a su nombre solo si allí
+tiene marcado **Mostrar saldo**.
 
 ## Combinar varios conceptos en un mismo egreso
 
@@ -103,10 +108,30 @@ el nombre del concepto elegido.
 |-------|---------------|
 | La fecha no puede ser futura | No se registran pagos con fecha posterior a hoy |
 | El monto no puede superar el saldo pendiente | En cada línea, no se paga más de lo que se debe. El aviso indica la línea y ambos montos |
+| Solo se pagan compras aprobadas y vigentes | No se paga una compra **pendiente de aprobación**, **rechazada** ni **anulada** (ver abajo) |
 | Al menos una línea de detalle | Un egreso vacío no se guarda |
 | Al menos una forma de pago | Hay que declarar por dónde salió el dinero |
 | Todos los montos mayores a cero | Ni líneas ni pagos en cero |
 | El detalle debe cuadrar con lo pagado | Ambos totales tienen que ser iguales |
+
+### Compras que no se pueden pagar
+
+Si la empresa exige **aprobar las compras** (módulo *Aprobaciones*), una compra
+recién registrada queda **pendiente de aprobación** y no se paga hasta que la
+aprueben. Si la rechazan, ya no se paga. Tampoco se pagan las compras anuladas.
+
+- El buscador de documentos pendientes **no las muestra**, ni por proveedor ni
+  en la búsqueda general.
+- Al guardar, el sistema lo vuelve a comprobar, también cuando el pago se
+  registra desde **Cuentas por Pagar** o desde la propia compra. El aviso dice
+  cuál es la compra y por qué no se puede pagar.
+- Una compra pendiente sigue apareciendo en **Cuentas por Pagar**, porque es una
+  deuda real, pero no se puede pagar hasta aprobarla. Al aprobar una factura
+  descargada del SRI se genera su pago automático, si el proveedor lo tiene
+  configurado (ver *Compras → Pago automático al aprobar*).
+- Un egreso que **ya pagaba** una compra se puede seguir editando aunque esa
+  compra haya cambiado de estado después. Lo que no se permite es agregarle una
+  compra que no se puede pagar.
 
 ## Editar un egreso ya guardado
 
@@ -370,10 +395,32 @@ ve solo los que registró.
 - **"Debe seleccionar el Proveedor / el Empleado"**: falta el sujeto del pago.
 - **"El periodo contable está cerrado"**: la fecha cae en un mes ya cerrado.
 - **No encuentro la factura a pagar**: compruebe que esté a nombre de ese
-  proveedor, que no esté ya pagada y que la compra no fuera anulada.
+  proveedor, que no esté ya pagada y que la compra no fuera anulada, rechazada o
+  siga **pendiente de aprobación** (ver *Compras que no se pueden pagar*).
+- **"La compra ... está pendiente de aprobación: no se puede pagar hasta que la
+  aprueben"**: un aprobador debe autorizarla primero, desde el correo o desde el
+  modal de Compras.
+- **"La compra ... fue rechazada en la aprobación"** o **"... está anulada: no se
+  puede pagar"**: esa compra no se paga. Revise el motivo en el modal de Compras.
 
 ## Historial de cambios
 
+- **1.17** — La lista de **formas de pago** respeta el **Orden** definido en
+  *Formas de cobro y pago* (antes era siempre alfabética) y muestra el saldo solo
+  de las formas que tienen marcado **Mostrar saldo**. Sin configurar nada, se ve
+  igual que antes.
+
+- **1.16** — **No se pagan compras pendientes de aprobación, rechazadas ni
+  anuladas.** El buscador de documentos pendientes ya no las ofrece, y guardar un
+  egreso que las incluya se rechaza con un aviso claro, también desde Cuentas por
+  Pagar. Antes el módulo Egresos permitía pagarlas. Nueva sección *Compras que no
+  se pueden pagar*.
+
+- **1.15** — **Búsqueda del listado más rápida**: el conteo y la página salen
+  de una sola consulta y el tipo de cada egreso (según sus documentos pagados) se calcula solo para los 20 visibles. Las fechas y los montos solo se comparan
+  cuando lo escrito tiene números, así que buscar un nombre o un producto responde
+  antes. Si se sigue escribiendo, la búsqueda anterior se cancela. Los resultados
+  son los mismos que antes.
 - **1.14** — Corregido: sin **acceso total**, el listado mostraba los egresos de
   toda la empresa, aunque esta guía (sección *Permisos*) ya decía que cada usuario
   ve solo los que registró. Ahora el listado, la búsqueda y la exportación a PDF

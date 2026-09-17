@@ -4726,6 +4726,10 @@ class MigracionMysqlService
     private function cruzarLoteNupConsignacion(PDO $pg, int $idEmpresa): int
     {
         $total = 0;
+        // Los registros que genera un Cambio de productos apuntan a una factura que NO contiene sus
+        // líneas (son unidades entregadas a cambio): no sirven para completar esa factura.
+        $sinRegistroCambio = \App\repositories\modulos\CambioProductoCvRepository::sqlNoEsRegistroDeCambio('cf');
+
         // A) Por producto + lote (cuando el lote YA coincide): completa NUP y caducidad vacíos.
         try {
             $st = $pg->prepare(
@@ -4735,7 +4739,7 @@ class MigracionMysqlService
                    FROM ventas_cabecera vc, consignaciones_facturas cf
                    JOIN consignaciones_facturas_detalles cfd ON cfd.id_consignacion_factura = cf.id
                   WHERE vd.id_venta = vc.id AND vc.eliminado = false AND vc.id_empresa = :e
-                    AND cf.id_factura = vc.id AND cf.id_empresa = vc.id_empresa AND cf.eliminado = false
+                    AND cf.id_factura = vc.id AND cf.id_empresa = vc.id_empresa AND cf.eliminado = false {$sinRegistroCambio}
                     AND cfd.id_producto = vd.id_producto
                     AND COALESCE(cfd.lote, '') = COALESCE(vd.numero_lote, '')
                     AND ( (cfd.nup IS NOT NULL AND cfd.nup <> '' AND (vd.nup IS NULL OR vd.nup = ''))
@@ -4758,7 +4762,7 @@ class MigracionMysqlService
                                 MAX(cfd.lote) AS lote, MAX(cfd.nup) AS nup, MAX(cfd.fecha_caducidad) AS fecha_caducidad
                            FROM consignaciones_facturas cf
                            JOIN consignaciones_facturas_detalles cfd ON cfd.id_consignacion_factura = cf.id
-                          WHERE cf.id_empresa = :e AND cf.eliminado = false
+                          WHERE cf.id_empresa = :e AND cf.eliminado = false {$sinRegistroCambio}
                           GROUP BY cf.id_factura, cfd.id_producto
                          HAVING COUNT(DISTINCT COALESCE(cfd.lote, '')) = 1 AND MAX(COALESCE(cfd.lote, '')) <> '') u
                   WHERE vd.id_venta = vc.id AND vc.eliminado = false AND vc.id_empresa = :e2
@@ -4785,7 +4789,7 @@ class MigracionMysqlService
                                 MAX(cvd.fecha_caducidad) AS cad
                            FROM consignaciones_facturas cf
                            JOIN consignaciones_ventas_detalles cvd ON cvd.id_consignacion = cf.id_consignacion
-                          WHERE cf.id_empresa = :e AND cf.eliminado = false AND cvd.fecha_caducidad IS NOT NULL
+                          WHERE cf.id_empresa = :e AND cf.eliminado = false AND cvd.fecha_caducidad IS NOT NULL {$sinRegistroCambio}
                           GROUP BY cf.id_factura, cvd.id_producto, cvd.lote) src
                   WHERE vd.id_venta = vc.id AND vc.eliminado = false AND vc.id_empresa = :e2
                     AND vc.id = src.id_factura

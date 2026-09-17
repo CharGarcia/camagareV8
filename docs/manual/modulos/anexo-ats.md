@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-ats
 tipo: modulo
 visibilidad: todos
 etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras
-version: 1.4
+version: 1.5
 orden: 30
 estado: activo
 ---
@@ -72,9 +72,31 @@ proveedor o del cliente. Conviene tenerlas completas antes de generar:
 | Razón social del proveedor | Ficha del **proveedor** | Igual que el anterior (obligatoria desde mayo de 2016) |
 | Tipo de identificación del cliente | Ficha del **cliente** | Siempre; en ventas el anexo solo admite RUC, cédula, pasaporte y consumidor final |
 | Pago al exterior | Pestaña **ATS** del documento en Compras | Siempre; si el pago fue al exterior hay que indicar además país, convenio de doble tributación y sujeción a retención |
+| Autorización del comprobante modificado | La factura (u otro comprobante) registrada en **Compras** que corrige la nota de crédito o débito | En toda nota de crédito o débito de compra |
 
 Los clientes y proveedores del exterior se reportan como **pasaporte**: es el
 código que el anexo usa para la identificación del exterior.
+
+## Notas de crédito y débito de compra
+
+Cada nota de crédito o débito recibida se reporta junto con el comprobante que
+modifica: su tipo, su número y **su número de autorización**. El SRI pide la
+autorización de ese comprobante, no la de la nota. Como la nota no la trae, el
+sistema la busca entre las compras registradas:
+
+- Mismo **proveedor** (por su RUC o cédula), mismo **número** de comprobante y
+  mismo **ambiente** (pruebas o producción).
+- En cualquier establecimiento del mismo RUC al que usted tenga acceso,
+  empezando por el de la nota.
+- Si el XML de la nota indica el tipo del comprobante modificado (por ejemplo,
+  factura), solo vale un comprobante de ese tipo. Ese mismo tipo es el que se
+  reporta; si la nota se registró a mano, se toma el del comprobante encontrado
+  o, en último caso, factura.
+
+Si no encuentra el comprobante, el anexo se genera igual con **9999999999**
+como autorización, para que el archivo se pueda cargar, y la validación lo
+avisa. Ese valor no es real: registre el comprobante y vuelva a generar el
+anexo antes de presentarlo.
 
 ## Cómo se usa
 
@@ -116,8 +138,22 @@ código que el anexo usa para la identificación del exterior.
   (advertencia): abra la compra y complete la tarjeta *Pago al exterior* de su
   pestaña **ATS**. Una compra al exterior necesita el país del pago, el convenio
   de doble tributación y la sujeción a retención.
+- **"El comprobante que modifica (…) no está registrado en Compras con su número
+  de autorización"** (advertencia): una nota de crédito o débito corrige un
+  comprobante que el sistema no encontró. Ocurre cuando la factura no se
+  registró, se registró con otro proveedor, en el otro ambiente, como otro tipo
+  de comprobante o sin número de autorización. Regístrela o corríjala en
+  **Compras** y vuelva a generar el anexo. Mientras tanto la nota sale con
+  autorización 9999999999, que no es un dato real.
 
 ## Historial de cambios
+
+- **1.5** — Las notas de crédito y débito de compra reportan como autorización
+  del comprobante modificado la de la **factura registrada en Compras**; antes
+  se reportaba por error la de la propia nota. El tipo del comprobante
+  modificado se toma del documento registrado o del XML del SRI (antes siempre
+  factura). Si la factura no está registrada, la validación lo advierte. Nueva
+  sección *Notas de crédito y débito de compra*.
 
 - **1.4** — Nueva opción **Incluir el módulo de ventas** al generar: permite
   presentar el anexo solo con compras, liquidaciones y retenciones. Los

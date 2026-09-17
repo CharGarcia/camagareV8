@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion
-version: 1.11
+etiquetas: retorno, retornos, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero
+version: 1.13
 orden: 46
 estado: activo
 ---
@@ -22,7 +22,14 @@ vuelve a entrar.
 2. La tabla muestra **únicamente los ítems de esa consignación** que siguen
    pendientes de devolver.
 3. Se indican las cantidades que regresan.
-4. Al registrar el retorno, la mercadería **vuelve al inventario**.
+4. Al registrar el retorno, la mercadería **vuelve al inventario** al **mismo
+   costo con que salió en la consignación**, así el costo promedio del producto no
+   cambia. Si esa consignación es antigua y su salida quedó sin costo, entra al
+   costo promedio del producto. Pasarlo a Borrador, anularlo o eliminarlo saca la
+   mercadería con ese mismo costo.
+
+Mientras un retorno esté **emitido o en borrador**, la consignación de origen no se
+puede editar ni eliminar.
 
 ## Agregar la consignación por su número
 
@@ -57,7 +64,9 @@ sigue en poder del cliente:
 Ese saldo es el dato clave: cuadra siempre lo entregado con lo vendido, lo
 devuelto y lo que el cliente se quedó como reposición en un
 [Cambio de productos](modulos/cambio-producto-cv). Una unidad consignada que se
-entregó a cambio ya es del cliente y **no aparece** para retornar.
+entregó a cambio ya es del cliente y **no aparece** para retornar: el cambio la
+registra como facturada en *Facturación de consignaciones*, así que cuenta dentro
+de *facturado*.
 
 ## Exportar
 
@@ -199,6 +208,14 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.13** — El retorno entra al inventario al costo con que salió en la
+  consignación (antes entraba a costo 0 y bajaba el costo promedio del producto).
+  Sus reversos —pasarlo a Borrador, anularlo o eliminarlo— usan ese mismo costo.
+  La consignación de origen ya no se puede editar ni eliminar mientras el retorno
+  esté emitido o en borrador.
+- **1.12** — Lo entregado a cambio desde una consignación ahora cuenta como
+  *facturado* (el cambio lo registra en Facturación de consignaciones). El saldo
+  retornable no cambia: esa unidad sigue sin ofrecerse para retornar.
 - **1.11** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca por palabras (en cualquier orden y sin importar
   tildes) en las columnas del retorno y además en los productos retornados
