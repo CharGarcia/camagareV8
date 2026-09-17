@@ -693,7 +693,7 @@ class CambioProductoCvController extends BaseModuloController
 
     /**
      * Genera el Excel del cambio: mismas secciones y columnas que el PDF (Devuelve / Entrega con
-     * Origen, Código, Descripción, Lote, NUP, Bodega y Cantidad), sin precios ni totales.
+     * Origen, Código, Descripción, Bodega, Lote, NUP y Cantidad), sin precios ni totales.
      */
     public function excel(): void
     {
@@ -749,8 +749,8 @@ class CambioProductoCvController extends BaseModuloController
                 $row++;
 
                 // Igual que el PDF: el cambio se hace por unidad, así que cada fila dice de dónde
-                // viene (Origen), cuál es (lote / NUP) y su bodega. Sin precios ni totales.
-                $headers = ['Origen', 'Código', 'Descripción', 'Lote', 'NUP', 'Bodega', 'Cantidad'];
+                // viene (Origen), su bodega y cuál es (lote y NUP). Sin precios ni totales.
+                $headers = ['Origen', 'Código', 'Descripción', 'Bodega', 'Lote', 'NUP', 'Cantidad'];
                 $col = 'A';
                 foreach ($headers as $h) { $sheet->setCellValue($col . $row, $h); $col++; }
                 $sheet->getStyle('A' . $row . ':G' . $row)->applyFromArray($headerStyle);
@@ -766,9 +766,9 @@ class CambioProductoCvController extends BaseModuloController
                         $sheet->setCellValueExplicit('A' . $row, \App\Services\modulos\CambioProductoCvPdfService::etiquetaOrigen($d), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                         $sheet->setCellValueExplicit('B' . $row, (string)($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                         $sheet->setCellValueExplicit('C' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                        $sheet->setCellValueExplicit('D' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                        $sheet->setCellValueExplicit('E' . $row, (string)($d['nup'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                        $sheet->setCellValueExplicit('F' . $row, (string)($d['bodega_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValueExplicit('D' . $row, (string)($d['bodega_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValueExplicit('E' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValueExplicit('F' . $row, (string)($d['nup'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                         $sheet->setCellValue('G' . $row, (float)($d['cantidad'] ?? 0));
                         $row++;
                     }

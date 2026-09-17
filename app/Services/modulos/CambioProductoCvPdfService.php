@@ -11,7 +11,7 @@ use TCPDF;
  *
  * A4 vertical. Mismo ENCABEZADO del comprobante de caja (Ingresos/Egresos).
  * Cuerpo: datos del cliente, tabla de "Productos que devuelve" y tabla de
- * "Productos que entrega a cambio" (por unidad: origen, lote, NUP, bodega y cantidad,
+ * "Productos que entrega a cambio" (por unidad: origen, bodega, lote, NUP y cantidad,
  * sin precios ni totales), observaciones/motivo y dos firmas (Realizado por / Recibido por).
  *
  * Cuando la empresa tenga una plantilla activa (tipo 'cambio_producto_cv') se
@@ -195,9 +195,9 @@ class CambioProductoCvPdfService
     }
 
     /**
-     * Tabla: Origen | Código | Descripción | Lote | NUP | Bodega | Cant. Sin precios ni
-     * totales, igual que el modal: el cambio es por unidad y la bodega dice de dónde viene
-     * (devolución) o de dónde sale (entrega) cada una.
+     * Tabla: Origen | Código | Descripción | Bodega | Lote | NUP | Cant. Sin precios ni
+     * totales y con la bodega antes del lote, igual que el modal: el cambio es por unidad y la
+     * bodega dice de dónde viene (devolución) o de dónde sale (entrega) cada una.
      */
     private function dibujarTablaDetalle(string $titulo, array $detalles, float $y): float
     {
@@ -221,9 +221,9 @@ class CambioProductoCvPdfService
             ['t' => 'Origen',      'w' => 38, 'a' => 'L', 'k' => 'origen_label'],
             ['t' => 'Código',      'w' => 20, 'a' => 'L', 'k' => 'producto_codigo'],
             ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'producto_nombre'],
+            ['t' => 'Bodega',      'w' => 30, 'a' => 'L', 'k' => 'bodega_nombre'],
             ['t' => 'Lote',        'w' => 20, 'a' => 'L', 'k' => 'lote'],
             ['t' => 'NUP',         'w' => 24, 'a' => 'L', 'k' => 'nup'],
-            ['t' => 'Bodega',      'w' => 30, 'a' => 'L', 'k' => 'bodega_nombre'],
             ['t' => 'Cant.',       'w' => 14, 'a' => 'R', 'k' => 'cantidad'],
         ];
 

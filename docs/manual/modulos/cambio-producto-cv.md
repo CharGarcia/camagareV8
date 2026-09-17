@@ -6,7 +6,7 @@ ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup
-version: 1.12
+version: 1.13
 orden: 47
 estado: activo
 ---
@@ -292,7 +292,7 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   factura asociada y ya no se puede cambiar su estado.
 - **PDF, Excel y correo** desde la barra de acciones del documento. El PDF (el
   mismo que se envía por correo) y el Excel listan lo devuelto y lo entregado
-  con origen, código, descripción, lote, NUP, bodega y cantidad, **sin precios,
+  con origen, código, descripción, bodega, lote, NUP y cantidad, **sin precios,
   totales ni diferencia**. Si la empresa tiene una plantilla propia activa en
   *Plantillas PDF*, el PDF usa esa plantilla tal como fue diseñada.
 
@@ -342,6 +342,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   la pestaña Asiento contable.
 
 ## Historial de cambios
+
+- **1.13** — En el PDF del cambio (el mismo del correo) y en su Excel, la
+  **Bodega** pasa antes del *Lote*, igual que en el formulario: Origen, Código,
+  Descripción, Bodega, Lote, NUP y Cantidad.
 
 - **1.12** — En el formulario, **Lote** y **NUP** pasan a columnas separadas en
   las dos tablas (lo que se devuelve y lo que se entrega). El listado agrega
