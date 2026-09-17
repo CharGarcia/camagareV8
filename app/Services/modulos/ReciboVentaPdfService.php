@@ -400,9 +400,9 @@ class ReciboVentaPdfService
 
         // Encabezado (2 líneas). Se encapsula porque hay que repetirlo al inicio
         // de cada página cuando el detalle no cabe en una sola.
-        $hdrH = 7.6; // 2 líneas * 3.8
+        $hdrH = 9.8; // 2 líneas * 4.9
         $dibujarCabeceraTabla = function (float $yEnc) use ($pdf, $cols, $mL, $hdrH): float {
-            $pdf->SetFont('helvetica', 'B', 6.5);
+            $pdf->SetFont('helvetica', 'B', 8.5);
             $pdf->SetFillColor(230, 230, 230);
             $pdf->SetXY($mL, $yEnc);
             foreach ($cols as $col) {
@@ -417,7 +417,7 @@ class ReciboVentaPdfService
         $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
 
         // Filas de detalle
-        $pdf->SetFont('helvetica', '', 7);
+        $pdf->SetFont('helvetica', '', 9);
         $altColor = false;
 
         foreach ($detalles as $d) {
@@ -447,7 +447,7 @@ class ReciboVentaPdfService
             // Calcular altura de fila según columnas multilinea
             $nDesc = max(1, (int)ceil($pdf->GetStringWidth($vals['desc']) / ($cols[3]['w'] - 2)));
             $nDeta = max(1, (int)ceil($pdf->GetStringWidth($vals['deta']) / ($cols[4]['w'] - 2)));
-            $ch    = max(5, max($nDesc, $nDeta) * 4.5);
+            $ch    = max(6.5, max($nDesc, $nDeta) * 6);
 
             $xCur = $mL;
             $yRow = $pdf->GetY();
@@ -459,7 +459,7 @@ class ReciboVentaPdfService
             if ($yRow + $ch > $limiteY) {
                 $pdf->AddPage();
                 $yRow = $dibujarCabeceraTabla($pdf->GetY());
-                $pdf->SetFont('helvetica', '', 7);
+                $pdf->SetFont('helvetica', '', 9);
             }
 
             foreach ($cols as $col) {

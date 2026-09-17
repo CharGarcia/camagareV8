@@ -14,10 +14,14 @@
  *          respaldo mientras carga y si el documento no se puede consultar.
  *          Para SALDO_INICIAL es obligatorio (no hay documento que consultar):
  *          { numero, fecha, sujetoLabel, sujeto, total }
+ *          extra.url: endpoint de detalle propio del llamador, en lugar del de TIPOS
+ *          (el panel le agrega `id`). Debe responder la misma forma que el de TIPOS.
  *
  * Nota: cada endpoint de detalle valida el permiso de LECTURA de SU módulo
  * (compras, factura-venta, etc.). Si el usuario no lo tiene, el panel muestra
- * un aviso en lugar de romper la pantalla.
+ * el aviso del servidor en lugar de romper la pantalla. Un reporte cuyos usuarios
+ * no tienen por qué tener acceso a esos módulos (p. ej. Cuentas por Cobrar) pasa
+ * extra.url con un endpoint suyo, validado con su propio permiso.
  *
  * Requiere Bootstrap 5 (Offcanvas) y la constante BASE_URL.
  */
@@ -96,7 +100,14 @@
 <style>
     /* Por encima de modales apilados (el panel puede abrirse desde un modal) */
     #offcanvasDocPreview { z-index: 6000 !important; }
-    .offcanvas-backdrop  { z-index: 5990 !important; }
+    /* Solo el fondo de ESTE panel sube por encima de los modales. Bootstrap no liga el fondo
+       a su offcanvas, así que se reconoce por ir detrás del panel abierto (el panel se mueve
+       al body antes de abrirse y el fondo se agrega al final del body). Con la regla sin
+       acotar, el fondo de cualquier offcanvas quedaba en 5990, también el del menú del celular
+       (navbar.php, z-index 1045): lo tapaba y cada toque lo cerraba sin poder elegir nada. */
+    #offcanvasDocPreview.showing ~ .offcanvas-backdrop,
+    #offcanvasDocPreview.show ~ .offcanvas-backdrop,
+    #offcanvasDocPreview.hiding ~ .offcanvas-backdrop { z-index: 5990 !important; }
 </style>
 
 <script>
@@ -296,9 +307,10 @@
         if (!cfg) { error('Tipo de documento no soportado: ' + tipo); return; }
 
         // Solo resumen: el documento pertenece a OTRO establecimiento del grupo RUC
-        // (vista consolidada de CxC/CxP). Los endpoints de detalle responden por la
-        // empresa activa, así que no hay nada que consultar: se pinta lo que ya trae
-        // la fila y un aviso de a qué establecimiento hay que cambiar para ver más.
+        // (vista consolidada de CxP). Los endpoints de TIPOS responden por la empresa
+        // activa, así que no hay nada que consultar: se pinta lo que ya trae la fila y
+        // un aviso de a qué establecimiento hay que cambiar para ver más. (CxC no lo usa:
+        // su extra.url acepta la empresa dueña del documento.)
         if (extra.soloResumen) {
             pintarCabecera({
                 badge:       cfg.badge,
@@ -315,10 +327,16 @@
 
         mostrar('preview-doc-loading');
 
-        fetch(`${cfg.url}?id=${encodeURIComponent(id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+        const url = extra.url || cfg.url;
+        fetch(`${url}${url.includes('?') ? '&' : '?'}id=${encodeURIComponent(id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            // Una respuesta de error (403 sin permiso, 404…) trae su motivo en el JSON: se
+            // muestra ese texto y no un "HTTP 403" que el usuario no puede interpretar.
+            .then(r => r.json().catch(() => null).then(res => {
+                if (!r.ok) throw new Error((res && (res.mensaje || res.error)) || ('HTTP ' + r.status));
+                return res;
+            }))
             .then(res => {
-                if (!res || !res.ok) throw new Error((res && res.mensaje) || 'Documento no disponible');
+                if (!res || !res.ok) throw new Error((res && (res.mensaje || res.error)) || 'Documento no disponible');
 
                 const cab  = (cfg.forma === 'data') ? res.data : res.cabecera;
                 if (!cab) throw new Error('El documento no devolvió datos');
@@ -338,15 +356,19 @@
                     sujeto:      cab.cliente_nombre || cab.proveedor_nombre || extra.sujeto || ''
                 });
 
-                let subtotal, total, iva, extra, labelSubtotal, labelIva, labelExtra, labelTotal;
+                // La tercera línea de totales se llama `valorExtra` y no `extra`: un `let extra`
+                // en este bloque tapaba el parámetro `extra` de la función, y leer extra.numero o
+                // extra.sujeto arriba (documento sin número o sin cliente) lanzaba
+                // "Cannot access 'extra' before initialization".
+                let subtotal, total, iva, valorExtra, labelSubtotal, labelIva, labelExtra, labelTotal;
                 if (cfg.modo === 'retencion') {
                     // Una retención no tiene subtotal/IVA/total como una factura: sus 3
                     // componentes son Renta, IVA e ISD (ISD puede no aplicar → 3ra fila oculta si es 0).
                     labelSubtotal = 'Renta'; labelIva = 'IVA'; labelExtra = 'ISD'; labelTotal = 'Total Retenido';
-                    subtotal = parseFloat(cab.total_renta || 0);
-                    iva      = parseFloat(cab.total_iva || 0);
-                    extra    = parseFloat(cab.total_isd || 0);
-                    total    = parseFloat(cab.total_retenido || (subtotal + iva + extra));
+                    subtotal   = parseFloat(cab.total_renta || 0);
+                    iva        = parseFloat(cab.total_iva || 0);
+                    valorExtra = parseFloat(cab.total_isd || 0);
+                    total      = parseFloat(cab.total_retenido || (subtotal + iva + valorExtra));
                 } else if (tipo === 'IMPORTACION') {
                     // Importaciones: FOB + gastos capitalizables = costo nacionalizado; el IVA es crédito tributario aparte.
                     subtotal = parseFloat(cab.subtotal_fob || 0);
@@ -365,7 +387,7 @@
                 }
 
                 pintarItems(dets, null, cfg.modo);
-                pintarTotales({ subtotal, iva, extra, total, labelSubtotal, labelIva, labelExtra, labelTotal });
+                pintarTotales({ subtotal, iva, extra: valorExtra, total, labelSubtotal, labelIva, labelExtra, labelTotal });
                 mostrar('preview-doc-content');
             })
             .catch(e => {

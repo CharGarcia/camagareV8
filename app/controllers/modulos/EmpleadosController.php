@@ -562,6 +562,10 @@ class EmpleadosController extends BaseModuloController
             exit;
         }
 
+        // Soltar el candado de la sesión antes de esperar al SRI: si no, las demás peticiones
+        // del usuario hacen fila hasta que responda.
+        session_write_close();
+
         try {
             $svc    = new SriIdentificationService();
             $result = $svc->consultar($identificacion);

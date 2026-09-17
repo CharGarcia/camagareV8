@@ -58,10 +58,16 @@ class AsientoContableService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
     }
 
-    /** Tipos, orígenes y usuarios usados por la empresa (selects del modal de filtros). */
+    /**
+     * Selects del modal de filtros: tipos y usuarios usados por la empresa, y TODOS los orígenes
+     * (el catálogo completo más cualquier otro valor que la empresa tenga guardado), aunque la
+     * empresa todavía no tenga asientos de alguno.
+     */
     public function getOpcionesFiltroListado(int $idEmpresa): array
     {
-        return $this->repository->getOpcionesFiltroListado($idEmpresa);
+        $opciones = $this->repository->getOpcionesFiltroListado($idEmpresa);
+        $opciones['modulos'] = \App\Helpers\OrigenAsiento::todosConUsados($opciones['modulos'] ?? []);
+        return $opciones;
     }
 
     /** Búsqueda libre dentro de las líneas de los asientos (pestaña Detalles del buscador). */

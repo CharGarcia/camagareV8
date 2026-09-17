@@ -791,6 +791,9 @@ class FacturaVentaController extends BaseModuloController
     public function enviarWhatsappAjax(): void
     {
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el WhatsApp: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -1699,6 +1702,9 @@ class FacturaVentaController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Buscador del modal: dispara con cada tecla. Suelta el candado de la sesión para
+        // que las demás peticiones del usuario no hagan fila detrás de la búsqueda.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar = trim($_GET['q'] ?? '');
@@ -1715,6 +1721,8 @@ class FacturaVentaController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Igual que el buscador de clientes: una petición por tecla, sin candado de sesión.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar = trim($_GET['q'] ?? '');
@@ -1869,6 +1877,10 @@ class FacturaVentaController extends BaseModuloController
             echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
             exit;
         }
+
+        // Soltar el candado de la sesión antes de esperar al SRI (y al correo): si no, las
+        // demás peticiones del usuario hacen fila hasta que responda.
+        $this->liberarSesion();
 
         try {
             $envioService = new \App\Services\Sri\SriEnvioService();
@@ -3296,6 +3308,9 @@ class FacturaVentaController extends BaseModuloController
     {
         ob_start();
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         $id        = (int) ($_POST['id'] ?? 0);

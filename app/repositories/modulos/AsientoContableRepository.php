@@ -18,6 +18,20 @@ class AsientoContableRepository
         $this->modelDetalle = new AsientoContableDetalle();
     }
 
+    /**
+     * Texto libre del listado: la fecha y el total se formatean por fila, así que solo se miran si
+     * la palabra PUEDE estar dentro de ellos. Más estrictos que FiltrosBusqueda::SI_FECHA /
+     * SI_NUMERO, que sirven para cualquier fecha u hora: `fecha_asiento` como texto son 10
+     * caracteres de dígitos y guiones («2026-07-31», «31-07-2026»), y un total no lleva guion
+     * salvo al inicio. Así un número de documento («001-001-000012345») ya no formatea la fecha
+     * ni el total de cada asiento. `%` y `_` son comodines de LIKE y `\` su escape.
+     */
+    private const SI_CABE_EN_FECHA = '/^(?=.*\d)(?:[\d\-_]{1,10}|[\d\-_%\\\\]*[%\\\\][\d\-_%\\\\]*)$/';
+    private const SI_CABE_EN_MONTO = '/^(?=.*\d)-?[\d.,_%\\\\]+$/';
+
+    /** Asientos más recientes que revisa el primer paso de buscarEnDetalles(). */
+    private const DETALLES_ASIENTOS_RECIENTES = 3000;
+
     /** Prepara y ejecuta una consulta de lectura (punto único usado por el listado y su buscador). */
     protected function ejecutarLectura(string $sql, array $params = []): \PDOStatement
     {
@@ -30,11 +44,8 @@ class AsientoContableRepository
     {
         $offset = ($page - 1) * $perPage;
 
-        $sql = "SELECT a.id, a.fecha_asiento, a.tipo_comprobante, a.numero_comprobante, a.concepto, a.estado, a.modulo_origen, a.total_debe, a.total_haber
-                FROM asientos_contables_cabecera a
-                LEFT JOIN usuarios u ON u.id = a.created_by
-                WHERE a.id_empresa = :id_empresa AND a.eliminado = false
-                AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        $where = "WHERE a.id_empresa = :id_empresa AND a.eliminado = false
+                  AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         $params = [':id_empresa' => $idEmpresa];
 
@@ -45,30 +56,42 @@ class AsientoContableRepository
             // texto libre; se filtran solo desde el modal. Las cuentas de las líneas se
             // buscan en la pestaña Detalles (en el texto libre casi todo asiento
             // coincidiría con cualquier cuenta de uso común).
+            //
+            // Rendimiento (17-09-2026, medido con 200.000 asientos: de 7-33 s a 1,5-3 s): las
+            // referencias de las líneas eran un STRING_AGG por asiento, con la fecha formateada
+            // y el usuario cruzado en cada fila, y todo se evaluaba dos veces (conteo y página).
+            // Ahora conteo y página van en una consulta, el usuario es un conjunto, y la fecha y
+            // el total solo se miran si la palabra cabe en ellos. Las líneas se revisan con un
+            // EXISTS por asiento, a propósito correlacionado: usa idx_asientos_det_asiento y solo
+            // corre para los asientos que pasaron los demás filtros y no coincidieron por sus
+            // columnas. Con un conjunto de todas las líneas de la empresa daba lo mismo sin
+            // filtros, pero con un filtro del modal (fecha, estado…) era 5 veces más lento.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     'a.numero_comprobante',                              // Comprobante
-                    'a.fecha_asiento::text',                             // Fecha (Y-m-d, como se ve en la tabla)
-                    "TO_CHAR(a.fecha_asiento, 'DD-MM-YYYY')",            // Fecha (d-m-Y)
                     'a.concepto',                                        // Concepto
-                    'a.total_debe::text',                                // Total
                     'a.observaciones',
-                    'u.nombre',                                          // Usuario que registró
+                    // Fecha (Y-m-d, como se ve en la tabla, y d-m-Y)
+                    ['sql' => 'a.fecha_asiento::text', 'si' => self::SI_CABE_EN_FECHA],
+                    ['sql' => "TO_CHAR(a.fecha_asiento, 'DD-MM-YYYY')", 'si' => self::SI_CABE_EN_FECHA],
+                    ['sql' => 'a.total_debe::text', 'si' => self::SI_CABE_EN_MONTO],  // Total
+                    // Usuario que registró
+                    ['col' => 'u.nombre', 'sql' => 'a.created_by IN (SELECT u.id FROM usuarios u WHERE {cond})'],
                     // Documentos y referencias de las líneas (Egreso 001-..., Factura ...)
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', d.documento_referencia, d.referencia_detalle), ' ')
-                        FROM asientos_contables_detalle d
-                       WHERE d.id_asiento = a.id AND d.eliminado = false)",
+                    ['col' => "CONCAT_WS(' ', d.documento_referencia, d.referencia_detalle)",
+                     'sql' => 'EXISTS (SELECT 1 FROM asientos_contables_detalle d
+                                        WHERE d.id_asiento = a.id AND d.eliminado = false AND {cond})'],
                 ],
                 $parsed['texto_libre'],
                 $params,
                 'tl'
             );
             if ($condicion !== '') {
-                $sql .= " AND {$condicion}";
+                $where .= " AND {$condicion}";
             }
         }
         // Claves del modal de filtros (las viejas se conservan: viajan en URLs guardadas).
-        \App\Helpers\FiltrosBusqueda::aplicarFiltros($sql, $params, $parsed['filtros'], [
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto'    => [
                 'concepto'      => 'a.concepto',
                 'numero'        => 'a.numero_comprobante',
@@ -102,9 +125,6 @@ class AsientoContableRepository
             ],
         ]);
 
-        $sqlCount = "SELECT COUNT(*) as total FROM ($sql) as sub";
-        $total = (int) $this->ejecutarLectura($sqlCount, $params)->fetchColumn();
-
         // Debe cubrir TODAS las columnas con `data-sort` del thead de la vista: las que
         // falten se descartan acá en silencio y el listado se ordena por fecha_asiento, así
         // que el usuario ve el encabezado marcado pero las filas sin reordenar.
@@ -118,17 +138,22 @@ class AsientoContableRepository
 
         // Desempate por id: ninguna columna ordenable es única (varios asientos
         // comparten fecha_asiento), y sin un criterio estable LIMIT/OFFSET puede
-        // repetir una fila en dos páginas y saltarse otra. La consulta no usa
-        // alias de tabla, por eso la columna va suelta.
-        $sql .= " ORDER BY a.{$ordenCol} {$ordenDir}, a.id DESC";
-
-        if ($perPage > 0) {
-            $sql .= " LIMIT {$perPage} OFFSET {$offset}";
-        }
-
-        $rows = $this->ejecutarLectura($sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
-
-        return ['rows' => $rows, 'total' => $total];
+        // repetir una fila en dos páginas y saltarse otra.
+        // Conteo y página en una sola consulta (el WHERE con búsqueda se evalúa una vez).
+        return \App\Helpers\ListadoPaginado::consultar(
+            fn(string $sql, array $p): array => $this->ejecutarLectura($sql, $p)->fetchAll(\PDO::FETCH_ASSOC),
+            [
+                'tabla'       => 'asientos_contables_cabecera',
+                'alias'       => 'a',
+                'where'       => $where,
+                'orderBy'     => "ORDER BY a.{$ordenCol} {$ordenDir}, a.id DESC",
+                'select'      => 'a.id, a.fecha_asiento, a.tipo_comprobante, a.numero_comprobante, a.concepto, a.estado, a.modulo_origen, a.total_debe, a.total_haber',
+                'perPage'     => $perPage,
+                'offset'      => $offset,
+                'conBusqueda' => trim($buscar) !== '',
+            ],
+            $params
+        );
     }
 
     /**
@@ -186,15 +211,34 @@ class AsientoContableRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
+        // Rendimiento (17-09-2026, medido con 200.000 asientos y 800.000 líneas). Antes cada línea
+        // de la empresa se cruzaba con cuenta, centro de costo, proyecto y tercero y se le
+        // quitaban tildes a todo junto: una palabra frecuente tardaba 0,1-1,8 s y una rara (un
+        // número de documento, un monto) 2,5-40 s. Ahora:
+        //  - Cuentas, centros, proyectos y terceros que coinciden se calculan una vez por palabra
+        //    (solo los de la empresa) como arreglo: `= ANY(ARRAY(...))` y no `IN (SELECT ...)`,
+        //    porque el IN deja la lectura de las líneas en un solo proceso y el arreglo permite
+        //    que PostgreSQL la reparta entre varios.
+        //  - El Debe/Haber solo se mira si la palabra cabe en un monto.
+        //  - Se busca en dos pasos (abajo) y los cruces para mostrar se hacen solo para las
+        //    filas que se devuelven.
         $condDet = \App\Helpers\FiltrosBusqueda::condicionTexto(
             [
-                'pc.codigo', 'pc.nombre',
                 'd.referencia_detalle', 'd.documento_referencia',
-                'd.debe::text', 'd.haber::text',
-                'cc.nombre', 'pr.nombre',
-                'cl.nombre', 'cl.identificacion',
-                'pv.razon_social', 'pv.nombre_comercial', 'pv.identificacion',
-                'em.nombres_apellidos', 'em.identificacion',
+                ['sql' => 'd.debe::text',  'si' => self::SI_CABE_EN_MONTO],
+                ['sql' => 'd.haber::text', 'si' => self::SI_CABE_EN_MONTO],
+                ['col' => "CONCAT_WS(' ', pc.codigo, pc.nombre)",
+                 'sql' => 'd.id_cuenta_contable = ANY(ARRAY(SELECT pc.id FROM plan_cuentas pc WHERE pc.id_empresa = :id_empresa AND {cond}))'],
+                ['col' => 'cc.nombre',
+                 'sql' => 'd.id_centro_costo = ANY(ARRAY(SELECT cc.id FROM centro_costos cc WHERE cc.id_empresa = :id_empresa AND {cond}))'],
+                ['col' => 'pr.nombre',
+                 'sql' => 'd.id_proyecto = ANY(ARRAY(SELECT pr.id FROM proyectos pr WHERE pr.id_empresa = :id_empresa AND {cond}))'],
+                ['col' => "CONCAT_WS(' ', cl.nombre, cl.identificacion)",
+                 'sql' => "d.tipo_entidad = 'cliente' AND d.id_entidad = ANY(ARRAY(SELECT cl.id FROM clientes cl WHERE cl.id_empresa = :id_empresa AND {cond}))"],
+                ['col' => "CONCAT_WS(' ', pv.razon_social, pv.nombre_comercial, pv.identificacion)",
+                 'sql' => "d.tipo_entidad = 'proveedor' AND d.id_entidad = ANY(ARRAY(SELECT pv.id FROM proveedores pv WHERE pv.id_empresa = :id_empresa AND {cond}))"],
+                ['col' => "CONCAT_WS(' ', em.nombres_apellidos, em.identificacion)",
+                 'sql' => "d.tipo_entidad = 'empleado' AND d.id_entidad = ANY(ARRAY(SELECT em.id FROM empleados em WHERE em.id_empresa = :id_empresa AND {cond}))"],
             ],
             $q, $params, 'dt'
         );
@@ -203,29 +247,78 @@ class AsientoContableRepository
         }
 
         $limit = max(1, min(200, $limit));
-        $sql = "WITH base AS (
-                    SELECT a.id, a.numero_comprobante, a.fecha_asiento, a.concepto, a.estado
-                    FROM asientos_contables_cabecera a
-                    WHERE $whereBase
-                )
-                SELECT b.id AS id_asiento, b.numero_comprobante, b.fecha_asiento, b.concepto, b.estado,
+
+        // Paso 1: solo las líneas de los asientos más recientes. Si ahí ya hay $limit
+        // coincidencias, son exactamente las primeras del orden completo (fecha e id
+        // descendentes): cualquier asiento que quedó fuera va después. Resuelve al instante lo
+        // frecuente (una cuenta, un cliente habitual).
+        $filas = $this->ejecutarLectura(
+            "WITH recientes AS MATERIALIZED (
+                 SELECT a.id, a.numero_comprobante, a.fecha_asiento, a.concepto, a.estado
+                 FROM asientos_contables_cabecera a
+                 WHERE $whereBase
+                 ORDER BY a.fecha_asiento DESC, a.id DESC
+                 LIMIT " . self::DETALLES_ASIENTOS_RECIENTES . "
+             ),
+             top AS MATERIALIZED (
+                 SELECT d.id AS id_detalle, r.id AS id_asiento, r.numero_comprobante, r.fecha_asiento, r.concepto, r.estado
+                 FROM recientes r
+                 JOIN asientos_contables_detalle d ON d.id_asiento = r.id
+                 WHERE d.id_empresa = :id_empresa AND d.eliminado = false
+                   AND $condDet
+                 ORDER BY r.fecha_asiento DESC, r.id DESC, d.id
+                 LIMIT $limit
+             )
+             " . $this->sqlFilasDetalles(),
+            $params
+        )->fetchAll(\PDO::FETCH_ASSOC);
+        if (count($filas) >= $limit) {
+            return $filas;
+        }
+
+        // Paso 2: no alcanzó (lo buscado es raro). Se leen de corrido todas las líneas de la
+        // empresa y recién las que coinciden se cruzan con su asiento para ordenar. Recorrer los
+        // asientos por fecha y buscar sus líneas una por una era mucho más lento en este caso.
+        return $this->ejecutarLectura(
+            "WITH coincidencias AS MATERIALIZED (
+                 SELECT d.id, d.id_asiento
+                 FROM asientos_contables_detalle d
+                 WHERE d.id_empresa = :id_empresa AND d.eliminado = false
+                   AND $condDet
+             ),
+             top AS MATERIALIZED (
+                 SELECT c.id AS id_detalle, a.id AS id_asiento, a.numero_comprobante, a.fecha_asiento, a.concepto, a.estado
+                 FROM coincidencias c
+                 JOIN asientos_contables_cabecera a ON a.id = c.id_asiento
+                 WHERE $whereBase
+                 ORDER BY a.fecha_asiento DESC, a.id DESC, c.id
+                 LIMIT $limit
+             )
+             " . $this->sqlFilasDetalles(),
+            $params
+        )->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Parte final de buscarEnDetalles(): arma cada fila (cuenta, centro de costo, proyecto,
+     * tercero) solo para las líneas elegidas en el CTE `top`.
+     */
+    private function sqlFilasDetalles(): string
+    {
+        return "SELECT t.id_asiento, t.numero_comprobante, t.fecha_asiento, t.concepto, t.estado,
                        d.id AS id_detalle, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
                        d.debe, d.haber, d.referencia_detalle, d.documento_referencia,
                        cc.nombre AS centro_costo, pr.nombre AS proyecto,
                        COALESCE(cl.nombre, pv.razon_social, em.nombres_apellidos) AS tercero
-                FROM asientos_contables_detalle d
-                JOIN base b ON b.id = d.id_asiento
+                FROM top t
+                JOIN asientos_contables_detalle d ON d.id = t.id_detalle
                 LEFT JOIN plan_cuentas  pc ON pc.id = d.id_cuenta_contable
                 LEFT JOIN centro_costos cc ON cc.id = d.id_centro_costo
                 LEFT JOIN proyectos     pr ON pr.id = d.id_proyecto
                 LEFT JOIN clientes      cl ON d.tipo_entidad = 'cliente'   AND cl.id = d.id_entidad
                 LEFT JOIN proveedores   pv ON d.tipo_entidad = 'proveedor' AND pv.id = d.id_entidad
                 LEFT JOIN empleados     em ON d.tipo_entidad = 'empleado'  AND em.id = d.id_entidad
-                WHERE d.eliminado = false AND $condDet
-                ORDER BY b.fecha_asiento DESC, b.id DESC, d.id
-                LIMIT $limit";
-
-        return $this->ejecutarLectura($sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
+                ORDER BY t.fecha_asiento DESC, t.id_asiento DESC, t.id_detalle";
     }
 
     public function getDetalleAsiento(int $idAsiento, int $idEmpresa): array

@@ -533,6 +533,10 @@ class FacturaReembolsoController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => 'Identificación vacía.']);
             exit;
         }
+        // Soltar el candado de la sesión antes de esperar al SRI: si no, las demás peticiones
+        // del usuario hacen fila hasta que responda.
+        session_write_close();
+
         try {
             $svc    = new \App\Services\SriIdentificationService();
             $result = $svc->consultar($identificacion, (int) $_SESSION['id_empresa']);
@@ -646,6 +650,10 @@ class FacturaReembolsoController extends BaseModuloController
         $id        = (int) ($_POST['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
+
+        // Soltar el candado de la sesión antes de esperar al SRI (y al correo): si no, las
+        // demás peticiones del usuario hacen fila hasta que responda.
+        session_write_close();
 
         try {
             $envioService = new \App\Services\Sri\SriEnvioService();
@@ -1010,6 +1018,9 @@ class FacturaReembolsoController extends BaseModuloController
     {
         ob_start();
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        session_write_close();
         header('Content-Type: application/json');
 
         $id        = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);

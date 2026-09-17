@@ -221,15 +221,16 @@
                         <input class="form-check-input" type="checkbox" id="cxc-chk-all" onchange="CXC_seleccionarTodos(this.checked)">
                         <label class="form-check-label small text-muted" for="cxc-chk-all">Todos</label>
                     </div>
+                    <!-- En el celular estos botones quedan solo con el ícono (el texto se ve desde md) -->
                     <div class="btn-group btn-group-sm">
-                        <button type="button" class="btn btn-outline-danger" onclick="CXC_exportarPDF()">
-                            <i class="bi bi-file-earmark-pdf"></i> PDF
+                        <button type="button" class="btn btn-outline-danger" onclick="CXC_exportarPDF()" title="Exportar a PDF">
+                            <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                         </button>
-                        <button type="button" class="btn btn-outline-success" onclick="CXC_exportarExcel()">
-                            <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                        <button type="button" class="btn btn-outline-success" onclick="CXC_exportarExcel()" title="Exportar a Excel">
+                            <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                         </button>
-                        <button type="button" class="btn btn-outline-primary" onclick="CXC_envioMasivoEmail()" title="Un correo por cliente con el resumen de sus documentos seleccionados">
-                            <i class="bi bi-envelope"></i> Envío Masivo Email
+                        <button type="button" class="btn btn-outline-primary" onclick="CXC_envioMasivoEmail()" title="Envío masivo por email: un correo por cliente con el resumen de sus documentos seleccionados">
+                            <i class="bi bi-envelope"></i><span class="d-none d-md-inline"> Envío Masivo Email</span>
                         </button>
                     </div>
                     <div class="btn-group btn-group-sm ms-1" role="group" aria-label="Vista de tabla">
@@ -253,7 +254,7 @@
         </div>
         <div class="card-body p-0">
             <div class="cxc-scroll w-100">
-                <table class="table table-hover table-sm mb-0 align-middle" id="tabla-cxc" style="table-layout:fixed;min-width:1310px;">
+                <table class="table table-hover table-sm mb-0 align-middle" id="tabla-cxc" style="table-layout:fixed;min-width:1340px;">
                     <!-- Columnas de la vista Detallado / Por producto. La vista "Por cliente"
                          reemplaza colgroup y thead desde el JS (CXC_renderCabecera), porque
                          dentro de cada cliente el detalle que se necesita es otro. -->
@@ -268,7 +269,7 @@
                         <col style="width:100px;"><!-- Cobrado -->
                         <col style="width:95px;"><!-- Saldo -->
                         <col style="width:125px;"><!-- Estado -->
-                        <col style="width:162px;"><!-- Acciones -->
+                        <col style="width:190px;"><!-- Acciones: PDF, cobro, historial, correo, WhatsApp -->
                     </colgroup>
                     <!-- Cabeceras ordenables: `data-sort` debe existir en la lista blanca de
                          CuentasPorCobrarRepository::ordenColumnas() y en CXC_ORDEN (el JS del
@@ -619,7 +620,12 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 
 <script>
     const RUTA_MODULO_CXC = "<?php echo $rutaModulo; ?>";
-    const CXC_TIENE_WA    = <?php echo $tieneWA ? 'true' : 'false'; ?>;
+    // Botones de cada fila: WhatsApp solo con la integración configurada; historial con
+    // acceso al Reporte de cartera; cobro con permiso de crear aquí y en Ingresos (en cada
+    // fila lo confirma `puede_operar`, que en el consolidado mira la empresa del documento).
+    const CXC_TIENE_WA        = <?php echo $tieneWA ? 'true' : 'false'; ?>;
+    const CXC_PUEDE_HISTORIAL = <?php echo !empty($puedeHistorial) ? 'true' : 'false'; ?>;
+    const CXC_PUEDE_COBRAR    = <?php echo !empty($puedeCobrar) ? 'true' : 'false'; ?>;
 </script>
 <!-- Cédula y RUC del mismo tercero (cédula + '001') se tratan como uno solo -->
 <script src="<?php echo BASE_URL; ?>/js/components/identificacion_tercero.js?v=<?= asset_ver('/js/components/identificacion_tercero.js') ?>"></script>

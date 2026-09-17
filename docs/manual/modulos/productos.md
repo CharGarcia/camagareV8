@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
-version: 1.6
+version: 1.7
 orden: 10
 estado: activo
 ---
@@ -239,6 +239,14 @@ aparecer al facturar.
   compras que lo afectan quedaron vinculadas a este producto del catálogo.
 
 ## Historial de cambios
+
+- **1.7** — **Las búsquedas de productos dejan de tardar.** El buscador de los
+  documentos (factura, punto de venta, compras, comandas) responde en milésimas de
+  segundo aunque el catálogo tenga decenas de miles de productos, y **la búsqueda del
+  listado**, que con catálogos grandes podía tardar más de medio minuto, ahora contesta
+  en menos de medio segundo. Encuentran exactamente lo mismo que antes. Además, si se
+  sigue escribiendo, la búsqueda anterior se descarta sola, y buscar ya no deja en
+  espera a las demás pantallas del mismo usuario.
 
 - **1.6** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas del listado (incluidos valor del

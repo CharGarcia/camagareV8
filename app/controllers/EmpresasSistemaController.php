@@ -803,6 +803,10 @@ class EmpresasSistemaController extends Controller
             return;
         }
 
+        // Soltar el candado de la sesión antes de esperar al SRI: si no, las demás peticiones
+        // del usuario hacen fila hasta que responda.
+        session_write_close();
+
         $service = new SriIdentificationService();
         $resultado = $service->consultar($numero);
         $this->json($resultado);

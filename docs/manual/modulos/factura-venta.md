@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, buscar factura, buscador, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar
-version: 2.11
+version: 2.12
 orden: 20
 estado: activo
 ---
@@ -336,6 +336,17 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.12** — **Búsquedas mucho más rápidas** y sin cambiar lo que encuentran: el
+  buscador del listado deja de revisar todas las facturas de la empresa en cada tecla
+  (en la prueba con 30.000 facturas pasó de cerca de un segundo a una décima), y el
+  **buscador de productos del modal** responde en milésimas aunque el catálogo tenga
+  decenas de miles de productos. Además, el listado ya no arrastra el XML de cada
+  factura: la página pesa unas diez veces menos, así que tarda menos en aparecer. El
+  XML sigue disponible como siempre desde el documento. Buscar un **saldo** con
+  decimales sigue siendo la búsqueda más lenta, porque el saldo se calcula con los
+  cobros, notas de crédito y retenciones de cada factura; para eso conviene el filtro
+  *Saldo pendiente* de la ventana de filtros.
 
 - **2.11** — Se respeta **"La facturación afecta al inventario"** apagado: la factura
   ya no descuenta stock (lo hacía igual, porque la opción guardada como *false* se leía

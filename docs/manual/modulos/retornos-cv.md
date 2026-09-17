@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero
-version: 1.14
+etiquetas: retorno, retornos, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero
+version: 1.15
 orden: 46
 estado: activo
 ---
@@ -83,7 +83,23 @@ siguiente.
 Arriba del listado hay otro par de botones **PDF** y **Excel** que exportan la
 **lista completa de retornos** tal como se esté viendo: respetan el buscador,
 los filtros y el orden aplicados, y salen todas las filas que calcen, no solo
-la página en pantalla.
+la página en pantalla. Llevan la fecha, el secuencial, el cliente con su
+identificación, el motivo, las observaciones, el total y el estado.
+
+## Columnas del listado
+
+La tabla muestra, por cada retorno: **Fecha**, **Secuencial**, **Cliente**,
+**Motivo**, **Observaciones** y **Estado**.
+
+- **Observaciones** muestra lo que se escribió en el campo *Observaciones* del
+  retorno. Si el texto es largo se corta con puntos suspensivos (…); al pasar el
+  mouse sobre la celda se lee completo. Si el retorno no tiene observaciones, la
+  celda queda en blanco.
+- Pulse el **encabezado** de una columna para ordenar por ella; un segundo clic
+  invierte el orden. Al ordenar por **Motivo** u **Observaciones**, los retornos
+  que no tienen ese dato quedan siempre al final.
+- El botón de **columnas** (junto al buscador) permite ocultar o volver a mostrar
+  cualquiera de ellas; la elección se guarda para cada usuario.
 
 ## Buscar y filtrar el listado
 
@@ -92,8 +108,8 @@ búsqueda y los botones de columnas, PDF y Excel.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas del retorno: fecha,
-número (serie y secuencial), cliente, RUC o cédula y motivo. Además busca en las
-observaciones, el responsable de traslado, los puntos de partida y llegada, el
+número (serie y secuencial), cliente, RUC o cédula, motivo y observaciones.
+Además busca en el responsable de traslado, los puntos de partida y llegada, el
 total, el usuario que lo registró, los **productos retornados** (código, nombre,
 lote y NUP) y el número de las **consignaciones de origen**. La columna
 **Estado** no entra en la búsqueda libre: para filtrar por ella use la ventana
@@ -208,6 +224,14 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.15** — El listado muestra la nueva columna **Observaciones**, con lo que se
+  escribió en el retorno (si el texto es largo se corta y se lee completo al pasar
+  el mouse). Se ordena pulsando su encabezado y se puede ocultar desde el botón de
+  columnas. Las exportaciones del listado a **PDF** y **Excel** también la
+  incluyen; en el PDF, un motivo u observación largos se parten en varias líneas
+  dentro de su columna (antes estiraban la tabla y las últimas columnas quedaban
+  fuera de la hoja). Además, pulsar el encabezado **Motivo** ya ordena por motivo
+  (antes el listado seguía ordenado por fecha).
 - **1.14** — La búsqueda del listado y la de la pestaña **Detalles** responden más
   rápido en empresas con muchos retornos, y encuentran exactamente lo mismo. Si se
   sigue escribiendo mientras busca, la búsqueda anterior se cancela y solo se

@@ -383,9 +383,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // carga, también al paginar u ordenar (que llaman a esta función directo).
             const tbody = document.getElementById('tbodyProductos');
             if (tbody) tbody.classList.add('fm-cargando-target');
+            // Solo vale la ÚLTIMA búsqueda: si llega otra (se sigue tecleando, se pagina)
+            // se cancela la anterior, y una respuesta vieja nunca pinta sobre una nueva.
+            if (window.PROD_busquedaCtrl) window.PROD_busquedaCtrl.abort();
+            const ctrl = new AbortController();
+            window.PROD_busquedaCtrl = ctrl;
             try {
-                const resp = await fetch(uri);
+                const resp = await fetch(uri, { signal: ctrl.signal });
                 const data = await resp.json();
+                if (ctrl !== window.PROD_busquedaCtrl) return; // llegó tarde
                 if (data.ok) {
                     window.currentPage = page;
                     document.getElementById('tbodyProductos').innerHTML = data.rows;
@@ -399,9 +405,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     if (sorter) sorter.refreshIcons();
                 }
             } catch (e) {
+                if (e.name === 'AbortError') return;  // la canceló una búsqueda más nueva
                 console.error(e);
             } finally {
-                if (tbody) tbody.classList.remove('fm-cargando-target');
+                if (tbody && ctrl === window.PROD_busquedaCtrl) tbody.classList.remove('fm-cargando-target');
             }
         };
 

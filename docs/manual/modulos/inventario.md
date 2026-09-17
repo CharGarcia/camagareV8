@@ -6,7 +6,7 @@ ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips
-version: 1.3
+version: 1.4
 orden: 20
 estado: activo
 ---
@@ -85,6 +85,15 @@ motivo, de modo que quede el rastro de quién ajustó y por qué.
 Un ajuste no es un atajo para corregir un error de otro documento: si la compra
 entró mal, corrija la compra.
 
+El ajuste manual **no registra NUP / series**. Las series se registran con una
+**carga de inventario** de entrada o salida, una compra o una importación. Al
+editar un movimiento que ya tiene NUP, la ventana lo muestra (sin poder cambiarlo)
+y lo conserva al guardar.
+
+Para cuadrar muchos productos tras un conteo físico, use una **carga de
+inventario de tipo Ajuste**: se escribe lo contado y el sistema registra solo la
+diferencia.
+
 ## Solo productos inventariables
 
 Únicamente los productos marcados como **inventariables** en su ficha generan
@@ -104,6 +113,10 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Historial de cambios
 
+- **1.4** — La ventana de ajuste manual ya no ofrece "Registrar seriales
+  individuales (NUP)": las series escritas ahí nunca se guardaban. Al editar un
+  movimiento que tiene NUP, este se muestra y se conserva (antes, guardar la
+  edición lo borraba).
 - **1.3** — Nuevo buscador de movimientos: el cuadro ya no despliega
   sugerencias; lo que se escribe se busca en todas las columnas del listado
   (fecha, producto, bodega, cantidad, medida, lote, caducidad, NUP, usuario y

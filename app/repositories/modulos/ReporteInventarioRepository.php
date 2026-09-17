@@ -72,6 +72,25 @@ class ReporteInventarioRepository extends BaseRepository
     // PESTAÑA 1 — EXISTENCIAS (stock actual)
     // ════════════════════════════════════════════════════════════════════
 
+    /**
+     * Excluye del WHERE las bodegas sin acceso para el usuario (módulo Bodegas →
+     * pestaña "Accesos"). El controlador las resuelve una sola vez y las mete en $filtros,
+     * así que TODAS las consultas del reporte — pantalla, KPIs y exportaciones — descartan
+     * las mismas bodegas, y no solo el selector de bodega de la vista.
+     *
+     * Los ids se interpolan en vez de ir como parámetro porque son enteros que salen de la
+     * propia base y porque el mismo WHERE se arma varias veces dentro de una consulta: un
+     * placeholder repetido rompería el prepare. Lista vacía (lo habitual, ver
+     * BodegaRepository::getIdsBodegasDenegadas) = no se añade nada y la consulta queda
+     * exactamente igual que antes.
+     */
+    private function excluirBodegasDenegadas(array $filtros, string $columna): string
+    {
+        $ids = array_map('intval', (array) ($filtros['bodegas_denegadas'] ?? []));
+
+        return $ids ? " AND {$columna} NOT IN (" . implode(', ', $ids) . ")" : '';
+    }
+
     private function buildWhereExistencias(int $idEmpresa, array $filtros): array
     {
         $where = "u.id_empresa = :id_empresa
@@ -83,6 +102,7 @@ class ReporteInventarioRepository extends BaseRepository
             $where .= " AND u.id_bodega = :id_bodega";
             $params[':id_bodega'] = (int) $filtros['id_bodega'];
         }
+        $where .= $this->excluirBodegasDenegadas($filtros, 'u.id_bodega');
         if (!empty($filtros['id_categoria'])) {
             $where .= " AND p.id_categoria = :id_categoria";
             $params[':id_categoria'] = (int) $filtros['id_categoria'];
@@ -160,6 +180,8 @@ class ReporteInventarioRepository extends BaseRepository
             $sinAlias .= ' AND id_bodega = :id_bodega';
             $cvd      .= ' AND cvd.id_bodega = :id_bodega';
         }
+        $sinAlias .= $this->excluirBodegasDenegadas($filtros, 'id_bodega');
+        $cvd      .= $this->excluirBodegasDenegadas($filtros, 'cvd.id_bodega');
         if (!empty($filtros['id_producto'])) {
             $sinAlias .= ' AND id_producto = :id_producto';
             $cvd      .= ' AND cvd.id_producto = :id_producto';
@@ -382,6 +404,7 @@ class ReporteInventarioRepository extends BaseRepository
             $where .= " AND k.id_bodega = :id_bodega";
             $params[':id_bodega'] = (int) $filtros['id_bodega'];
         }
+        $where .= $this->excluirBodegasDenegadas($filtros, 'k.id_bodega');
         if (!empty($filtros['id_categoria'])) {
             $where .= " AND p.id_categoria = :id_categoria";
             $params[':id_categoria'] = (int) $filtros['id_categoria'];
@@ -616,6 +639,7 @@ class ReporteInventarioRepository extends BaseRepository
             $whereKardex .= " AND k.id_bodega = :id_bodega";
             $params[':id_bodega'] = (int) $filtros['id_bodega'];
         }
+        $whereKardex .= $this->excluirBodegasDenegadas($filtros, 'k.id_bodega');
         if (!empty($filtros['id_producto'])) {
             $whereKardex .= " AND k.id_producto = :id_producto";
             $params[':id_producto'] = (int) $filtros['id_producto'];
@@ -1092,6 +1116,7 @@ class ReporteInventarioRepository extends BaseRepository
             $where .= " AND cvd.id_bodega = :id_bodega";
             $params[':id_bodega'] = (int) $filtros['id_bodega'];
         }
+        $where .= $this->excluirBodegasDenegadas($filtros, 'cvd.id_bodega');
         if (!empty($filtros['id_vendedor'])) {
             $where .= " AND cv.id_vendedor = :id_vendedor";
             $params[':id_vendedor'] = (int) $filtros['id_vendedor'];
@@ -1274,6 +1299,10 @@ class ReporteInventarioRepository extends BaseRepository
     public function getConsignacionDetalleLineas(int $idEmpresa, int $idConsignacion, array $filtrosLinea = []): array
     {
         $filtros = array_intersect_key($filtrosLinea, array_flip(self::FILTROS_LINEA_CONSIGNACION));
+        // Las bodegas denegadas no son un filtro del formulario, así que no están en
+        // FILTROS_LINEA_CONSIGNACION y hay que pasarlas aparte: el modal no puede mostrar
+        // líneas de una bodega que el listado ya le oculta, ni con "Ver todas las líneas".
+        $filtros['bodegas_denegadas'] = $filtrosLinea['bodegas_denegadas'] ?? [];
         list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);
         $where .= " AND cv.id = :id_consignacion";
         $params[':id_consignacion'] = $idConsignacion;
@@ -1381,6 +1410,34 @@ class ReporteInventarioRepository extends BaseRepository
         ];
     }
 
+    /**
+     * ¿Queda alguna línea de esta consignación en una bodega que el usuario sí puede ver?
+     * Es el guard de lo que se sirve por id (el PDF de estado y los documentos de una
+     * línea): sin esto, escribiendo el id en la URL se llegaba al documento completo que
+     * el listado y el modal ya no muestran.
+     */
+    public function consignacionVisible(int $idEmpresa, int $idConsignacion, array $bodegasDenegadas): bool
+    {
+        return $this->existeLineaVisible($idEmpresa, 'cvd.id_consignacion = :id', $idConsignacion, $bodegasDenegadas);
+    }
+
+    /** Igual que consignacionVisible(), pero para UNA línea concreta del documento. */
+    public function lineaConsignacionVisible(int $idEmpresa, int $idDetalle, array $bodegasDenegadas): bool
+    {
+        return $this->existeLineaVisible($idEmpresa, 'cvd.id = :id', $idDetalle, $bodegasDenegadas);
+    }
+
+    private function existeLineaVisible(int $idEmpresa, string $condicion, int $id, array $bodegasDenegadas): bool
+    {
+        $where = "cvd.id_empresa = :id_empresa AND cvd.eliminado = false AND {$condicion}"
+               . $this->excluirBodegasDenegadas(['bodegas_denegadas' => $bodegasDenegadas], 'cvd.id_bodega');
+
+        $st = $this->db->prepare("SELECT EXISTS (SELECT 1 FROM consignaciones_ventas_detalles cvd WHERE {$where})");
+        $st->execute([':id_empresa' => $idEmpresa, ':id' => $id]);
+
+        return (bool) $st->fetchColumn();
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // PESTAÑA 5 — AUDITORÍA (stock cacheado vs. real del kardex)
     // ════════════════════════════════════════════════════════════════════
@@ -1405,6 +1462,7 @@ class ReporteInventarioRepository extends BaseRepository
             $where .= " AND pb.id_bodega = :id_bodega";
             $params[':id_bodega'] = (int) $filtros['id_bodega'];
         }
+        $where .= $this->excluirBodegasDenegadas($filtros, 'pb.id_bodega');
         if (!empty($filtros['id_producto'])) {
             $where .= " AND pb.id_producto = :id_producto";
             $params[':id_producto'] = (int) $filtros['id_producto'];

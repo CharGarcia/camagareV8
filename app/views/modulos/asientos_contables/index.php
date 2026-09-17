@@ -71,7 +71,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             ];
             $etiquetaLegible = fn(string $v, array $mapa) => $mapa[$v] ?? ucfirst(str_replace('_', ' ', mb_strtolower($v)));
             $opcionesTipo    = array_map(fn($t) => ['v' => (string) $t, 'l' => $etiquetaLegible((string) $t, $etiquetasTipo)], $opcionesFiltro['tipos'] ?? []);
-            $opcionesModulo  = array_map(fn($m) => ['v' => (string) $m, 'l' => $etiquetaLegible((string) $m, [])], $opcionesFiltro['modulos'] ?? []);
+            // Origen: catálogo completo (AsientoContableService::getOpcionesFiltroListado), con nombre legible.
+            $opcionesModulo  = array_map(fn($m) => ['v' => (string) $m, 'l' => \App\Helpers\OrigenAsiento::etiqueta((string) $m)], $opcionesFiltro['modulos'] ?? []);
             $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $opcionesFiltro['usuarios'] ?? []);
             // Dos pestañas: "Asiento" (filtros por campo) y "Detalles" (solo la búsqueda
             // libre dentro de las líneas, ver `busquedaDetalle`).
@@ -266,9 +267,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // vaciarse. Aquí también para paginar y ordenar, que llaman a esta función directo.
             const tbody = document.getElementById('tbodyAsientos');
             if (tbody) tbody.classList.add('fm-cargando-target');
+            // Una búsqueda nueva cancela la anterior: solo la última pinta la tabla y quita el
+            // atenuado (sin esto, una respuesta lenta que llega tarde pisaba el resultado nuevo).
+            if (window.ASIENTO_busquedaCtrl) window.ASIENTO_busquedaCtrl.abort();
+            const ctrl = new AbortController();
+            window.ASIENTO_busquedaCtrl = ctrl;
             try {
-                const resp = await fetch(uri);
+                const resp = await fetch(uri, { signal: ctrl.signal });
                 const data = await resp.json();
+                if (ctrl !== window.ASIENTO_busquedaCtrl) return;
                 if (data.ok) {
                     window.currentPage = page;
                     document.getElementById('tbodyAsientos').innerHTML = data.rows;
@@ -279,9 +286,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     // nunca el thead.
                 }
             } catch (e) {
-                console.error(e);
+                if (e.name !== 'AbortError') console.error(e);
             } finally {
-                if (tbody) tbody.classList.remove('fm-cargando-target');
+                if (tbody && ctrl === window.ASIENTO_busquedaCtrl) tbody.classList.remove('fm-cargando-target');
             }
         };
 

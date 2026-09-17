@@ -163,7 +163,7 @@ class RetornosCvController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-arrow-return-left fs-3 d-block mb-2"></i>No se encontraron retornos.</td></tr>';
+            echo '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-arrow-return-left fs-3 d-block mb-2"></i>No se encontraron retornos.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 if (!empty($r['fecha_retorno'])) $r['fecha_retorno'] = date('d-m-Y', strtotime($r['fecha_retorno']));
@@ -176,6 +176,7 @@ class RetornosCvController extends BaseModuloController
                         <td data-col="secuencial">' . htmlspecialchars(($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '')) . '</td>
                         <td data-col="cliente" class="text-truncate" style="max-width:250px">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</td>
                         <td data-col="motivo" class="text-truncate" style="max-width:220px">' . htmlspecialchars($r['motivo'] ?? '—') . '</td>
+                        <td data-col="observaciones" class="text-truncate" style="max-width:260px" title="' . htmlspecialchars((string) ($r['observaciones'] ?? '')) . '">' . htmlspecialchars((string) ($r['observaciones'] ?? '')) . '</td>
                         <td class="text-center pe-3" data-col="estado">' . $statusBadge . '</td>
                       </tr>';
             }
@@ -282,6 +283,12 @@ class RetornosCvController extends BaseModuloController
                 require_once $autoload;
             }
 
+            // Ancho de cada columna (%). Va en el <th> Y en cada <td>: si solo lo lleva el <th>,
+            // Html2Pdf no parte el texto largo (observaciones, motivo) en varias líneas sino que
+            // ensancha la columna hasta que quepa en una sola, y la tabla se sale de la hoja.
+            $anchos = ['fecha' => 9, 'numero' => 12, 'cliente' => 20, 'identificacion' => 11, 'motivo' => 15, 'observaciones' => 18, 'total' => 7, 'estado' => 8];
+            $ancho  = static fn(string $col): string => 'style="width:' . $anchos[$col] . '%"';
+
             ob_start();
             ?>
             <style>
@@ -298,13 +305,14 @@ class RetornosCvController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:10%">Fecha</th>
-                            <th style="width:13%">Secuencial</th>
-                            <th style="width:25%">Cliente</th>
-                            <th style="width:12%">Identificación</th>
-                            <th style="width:20%">Motivo</th>
-                            <th style="width:10%" class="r">Total</th>
-                            <th style="width:10%">Estado</th>
+                            <th <?= $ancho('fecha') ?>>Fecha</th>
+                            <th <?= $ancho('numero') ?>>Secuencial</th>
+                            <th <?= $ancho('cliente') ?>>Cliente</th>
+                            <th <?= $ancho('identificacion') ?>>Identificación</th>
+                            <th <?= $ancho('motivo') ?>>Motivo</th>
+                            <th <?= $ancho('observaciones') ?>>Observaciones</th>
+                            <th <?= $ancho('total') ?> class="r">Total</th>
+                            <th <?= $ancho('estado') ?>>Estado</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -312,13 +320,14 @@ class RetornosCvController extends BaseModuloController
                         $numero = ($r['serie'] ?? '') . '-' . ($r['secuencial'] ?? '');
                     ?>
                         <tr>
-                            <td><?= !empty($r['fecha_retorno']) ? date('d-m-Y', strtotime($r['fecha_retorno'])) : '-' ?></td>
-                            <td><?= htmlspecialchars($numero) ?></td>
-                            <td><?= htmlspecialchars((string) ($r['cliente_nombre'] ?? '')) ?></td>
-                            <td><?= htmlspecialchars((string) ($r['cliente_identificacion'] ?? '')) ?></td>
-                            <td><?= htmlspecialchars((string) ($r['motivo'] ?? '-')) ?></td>
-                            <td class="r"><?= number_format((float) ($r['total'] ?? 0), 2) ?></td>
-                            <td><?= ucfirst((string) ($r['estado'] ?? '')) ?></td>
+                            <td <?= $ancho('fecha') ?>><?= !empty($r['fecha_retorno']) ? date('d-m-Y', strtotime($r['fecha_retorno'])) : '-' ?></td>
+                            <td <?= $ancho('numero') ?>><?= htmlspecialchars($numero) ?></td>
+                            <td <?= $ancho('cliente') ?>><?= htmlspecialchars((string) ($r['cliente_nombre'] ?? '')) ?></td>
+                            <td <?= $ancho('identificacion') ?>><?= htmlspecialchars((string) ($r['cliente_identificacion'] ?? '')) ?></td>
+                            <td <?= $ancho('motivo') ?>><?= htmlspecialchars((string) ($r['motivo'] ?? '-')) ?></td>
+                            <td <?= $ancho('observaciones') ?>><?= htmlspecialchars((string) ($r['observaciones'] ?? '')) ?></td>
+                            <td <?= $ancho('total') ?> class="r"><?= number_format((float) ($r['total'] ?? 0), 2) ?></td>
+                            <td <?= $ancho('estado') ?>><?= ucfirst((string) ($r['estado'] ?? '')) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -354,7 +363,7 @@ class RetornosCvController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Motivo', 'Total', 'Estado'];
+            $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Motivo', 'Observaciones', 'Total', 'Estado'];
 
             $exportData = [];
             foreach ($rows as $r) {
@@ -365,6 +374,7 @@ class RetornosCvController extends BaseModuloController
                     (string) ($r['cliente_nombre'] ?? ''),
                     (string) ($r['cliente_identificacion'] ?? ''),
                     (string) ($r['motivo'] ?? '-'),
+                    (string) ($r['observaciones'] ?? ''),
                     number_format((float) ($r['total'] ?? 0), 2, '.', ''),
                     ucfirst((string) ($r['estado'] ?? '')),
                 ];
@@ -682,6 +692,9 @@ class RetornosCvController extends BaseModuloController
     {
         ob_start();
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         $id        = (int) ($_POST['id'] ?? 0);

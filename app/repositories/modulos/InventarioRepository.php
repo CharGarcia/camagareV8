@@ -415,6 +415,92 @@ class InventarioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * ¿Ya se usó lo que ingresó un documento? Antes de anular sus movimientos (p. ej. una
+     * carga de inventario aprobada) se recorre en orden cronológico el kardex de cada
+     * producto/bodega que tocó y se recalcula el saldo que habría habido SIN el documento,
+     * desde el momento en que se aplicó.
+     *
+     * Devuelve una fila por cada grupo en conflicto, con el primer movimiento que lo provoca:
+     *  - nivel 'producto' (producto+bodega), 'lote' y 'nup' (solo los lotes y series que trae
+     *    el documento): si el documento ingresó stock y sin él el saldo habría quedado
+     *    negativo, esas unidades ya salieron (venta, consignación, transferencia…). Si el
+     *    saldo ya era negativo al aplicarse, el movimiento devuelto es el del propio documento.
+     *  - nivel 'nup' de un documento que SACÓ la serie: si sin él la serie quedaría más de una
+     *    vez en stock (volvió a entrar después).
+     *
+     * Solo cuentan los movimientos vigentes del mismo ambiente (pruebas/producción) que los
+     * del documento. Llamarlo con el stock bloqueado (lockStock) si a continuación se anula.
+     *
+     * @return array<int, array<string, mixed>> nivel, id_producto, id_bodega, clave (lote o
+     *         NUP), cantidad_doc, saldo_sin, datos del movimiento (id_movimiento,
+     *         fecha_movimiento, referencia_tipo, referencia_id, observaciones) y nombres.
+     */
+    public function getConsumoPosteriorPorReferencia(string $referenciaTipo, int $referenciaId, int $idEmpresa): array
+    {
+        $sql = "WITH doc AS (
+                    SELECT id_producto, id_bodega, tipo_ambiente,
+                           NULLIF(TRIM(numero_lote), '') AS lote,
+                           NULLIF(TRIM(nup), '')         AS nup
+                    FROM inventario_kardex
+                    WHERE id_empresa = :e AND referencia_tipo = :tipo AND referencia_id = :ref
+                      AND eliminado = false
+                ),
+                grupos AS (
+                    SELECT 'producto'::text AS nivel, id_producto, id_bodega, tipo_ambiente, ''::text AS clave FROM doc
+                    UNION
+                    SELECT 'lote', id_producto, id_bodega, tipo_ambiente, lote FROM doc WHERE lote IS NOT NULL
+                    UNION
+                    SELECT 'nup', id_producto, id_bodega, tipo_ambiente, nup FROM doc WHERE nup IS NOT NULL
+                ),
+                movs AS (
+                    SELECT g.nivel, g.id_producto, g.id_bodega, g.clave,
+                           k.id, k.fecha_movimiento, k.cantidad, k.referencia_tipo, k.referencia_id, k.observaciones,
+                           (k.referencia_tipo = :tipo2 AND k.referencia_id = :ref2) AS es_doc
+                    FROM grupos g
+                    JOIN inventario_kardex k
+                      ON k.id_empresa = :e2 AND k.id_producto = g.id_producto AND k.id_bodega = g.id_bodega
+                     AND k.tipo_ambiente = g.tipo_ambiente AND k.eliminado = false
+                     AND (g.nivel = 'producto'
+                          OR (g.nivel = 'lote' AND TRIM(k.numero_lote) = g.clave)
+                          OR (g.nivel = 'nup'  AND TRIM(k.nup) = g.clave))
+                ),
+                saldos AS (
+                    SELECT m.*,
+                           SUM(CASE WHEN m.es_doc THEN 0 ELSE m.cantidad END) OVER w AS saldo_sin,
+                           BOOL_OR(m.es_doc) OVER w AS desde_doc,
+                           SUM(CASE WHEN m.es_doc THEN m.cantidad ELSE 0 END)
+                               OVER (PARTITION BY m.nivel, m.id_producto, m.id_bodega, m.clave) AS cantidad_doc
+                    FROM movs m
+                    WINDOW w AS (PARTITION BY m.nivel, m.id_producto, m.id_bodega, m.clave
+                                 ORDER BY m.fecha_movimiento, m.id)
+                )
+                SELECT DISTINCT ON (s.nivel, s.id_producto, s.id_bodega, s.clave)
+                       s.nivel, s.id_producto, s.id_bodega, s.clave, s.cantidad_doc,
+                       ROUND(s.saldo_sin, 4) AS saldo_sin,
+                       s.id AS id_movimiento, s.fecha_movimiento, s.cantidad,
+                       s.referencia_tipo, s.referencia_id, s.observaciones,
+                       p.codigo AS producto_codigo, p.nombre AS producto_nombre, b.nombre AS bodega_nombre
+                FROM saldos s
+                LEFT JOIN productos p ON p.id = s.id_producto
+                LEFT JOIN bodegas   b ON b.id = s.id_bodega
+                WHERE s.desde_doc
+                  AND ((s.cantidad_doc > 0 AND s.saldo_sin < -0.005)
+                    OR (s.nivel = 'nup' AND s.cantidad_doc < 0 AND s.saldo_sin > 1.005))
+                ORDER BY s.nivel, s.id_producto, s.id_bodega, s.clave, s.fecha_movimiento, s.id";
+
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':e'     => $idEmpresa,
+            ':e2'    => $idEmpresa,
+            ':tipo'  => $referenciaTipo,
+            ':tipo2' => $referenciaTipo,
+            ':ref'   => $referenciaId,
+            ':ref2'  => $referenciaId,
+        ]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getKardex(int $idEmpresa, array $filtros = [], int $page = 1, int $perPage = 50): array
     {
         $params = [':e' => $idEmpresa];

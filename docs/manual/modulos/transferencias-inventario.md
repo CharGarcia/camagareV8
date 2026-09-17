@@ -5,8 +5,8 @@ categoria: Inventarios
 ruta_modulo: modulos/transferencias-inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: transferencia de inventario, traslado de mercaderia, mover stock, cambiar de bodega, pasar productos de una bodega a otra, entre bodegas, entre establecimientos, entre sucursales, entre locales, traspaso de inventario, guia de remision, acta de entrega, kardex
-version: 1.0
+etiquetas: transferencia de inventario, traslado de mercaderia, mover stock, cambiar de bodega, pasar productos de una bodega a otra, entre bodegas, entre establecimientos, entre sucursales, entre locales, traspaso de inventario, guia de remision, acta de entrega, kardex, imprimir acta, pdf de la transferencia, logo en el acta
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -52,6 +52,27 @@ la trazabilidad no se pierde al cambiar de bodega.
 6. Pulse **Registrar transferencia**. El stock se mueve en ese momento.
 7. Desde el documento ya guardado puede **imprimir el acta** (PDF con las firmas de
    entrega y recepción) y, si cruza establecimientos, **Generar guía de remisión**.
+
+## El acta en PDF
+
+Es el documento que se imprime y se firma al entregar la mercadería. Contiene:
+
+- **Encabezado**: el **logo** del establecimiento principal de la empresa, el nombre
+  y el RUC, y a la derecha un recuadro con el tipo de documento, el número
+  (*TRF-…*) y la fecha.
+- **Origen y destino**: el **nombre de la bodega** de cada lado, más quién entrega,
+  quién recibe, quién registró el documento y si el traslado cruza establecimientos.
+  No se imprime el código ni el nombre del establecimiento junto a la bodega.
+- **Detalle**: número de línea, código, producto y cantidad. Las columnas **Lote**,
+  **Caducidad** y **Serie / NUP** solo aparecen si alguna línea las usa; cuando no,
+  el nombre del producto ocupa ese espacio. El acta **no muestra costos**: es un
+  documento de entrega física, no de valoración.
+- **Observaciones** (si las hay) y el bloque de **firmas** de entrega y recepción,
+  que nunca se parte entre dos páginas.
+- Si la transferencia está **anulada**, lo advierte en un recuadro rojo arriba.
+
+Si la empresa no tiene logo cargado, el encabezado sale solo con el nombre y el RUC.
+El logo se sube en **Configuración → Empresa → Establecimientos**.
 
 ## Campos del formulario
 
@@ -140,6 +161,13 @@ Además, el usuario solo puede transferir entre bodegas a las que tenga acceso
 
 ## Historial de cambios
 
+- **1.1** — Se rehízo el **acta en PDF**: ahora lleva el logo de la empresa y un
+  recuadro de documento con el número y la fecha; el origen y el destino muestran
+  solo el nombre de la bodega (antes se añadía el establecimiento entre paréntesis);
+  se quitaron las columnas de **costo unitario** y **costo total** del detalle, y
+  las de lote, caducidad y serie solo salen cuando se usan. Además se corrigió el
+  ancho de las tablas, que hacía que parte de la información quedara **fuera de la
+  hoja** y no se imprimiera.
 - **1.0** — Versión inicial: transferencias entre bodegas y entre establecimientos
   del mismo RUC, con lote/caducidad/serie, costo automático del origen, acta en
   PDF, anulación con reverso de stock y generación opcional de guía de remisión.

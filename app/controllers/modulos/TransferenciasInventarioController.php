@@ -556,6 +556,7 @@ class TransferenciasInventarioController extends BaseModuloController
 
         try {
             $empresa  = (new Empresa())->getPorId((int) $_SESSION['id_empresa']) ?? [];
+            $logoPdf  = $this->logoPdf((int) $_SESSION['id_empresa']);
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) {
                 require_once $autoload;
@@ -578,6 +579,35 @@ class TransferenciasInventarioController extends BaseModuloController
     // ────────────────────────────────────────────────────────────────
     // AUXILIARES
     // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Ruta en disco del logo del establecimiento principal ('' si no hay). La tabla guarda la
+     * URL pública (empresa_establecimiento.logo_ruta) y se resuelve igual que en los demás PDF
+     * del sistema. Solo se devuelve si es una imagen legible: ante una imagen que no puede
+     * medir, Html2Pdf aborta el PDF entero, y un logo dañado no debe impedir sacar el acta.
+     */
+    private function logoPdf(int $idEmpresa): string
+    {
+        $ruta = (string) ((new Empresa())->getEstablecimientos($idEmpresa)[0]['logo_ruta'] ?? '');
+        if ($ruta === '') {
+            return '';
+        }
+        $clean = ltrim($ruta, '/');
+        if (strpos($clean, 'sistema/public/') === 0) {
+            $clean = substr($clean, strlen('sistema/public/'));
+        } elseif (strpos($clean, 'sistema/') === 0) {
+            $clean = substr($clean, strlen('sistema/'));
+        }
+        if (strpos($clean, 'public/') === 0) {
+            $clean = substr($clean, strlen('public/'));
+        }
+        foreach ([MVC_ROOT . '/public/' . $clean, MVC_ROOT . '/' . $clean] as $cand) {
+            if (is_file($cand) && @getimagesize($cand)) {
+                return $cand;
+            }
+        }
+        return '';
+    }
 
     /** Sin permiso "todo", el usuario solo ve las transferencias que él registró. */
     private function getIdUsuarioFiltro(array $perm): ?int

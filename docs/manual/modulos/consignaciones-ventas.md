@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado
-version: 1.20
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto
+version: 1.22
 orden: 45
 estado: activo
 ---
@@ -93,11 +93,42 @@ eliminar la consignación alguna línea deja de estarlo. Solo se revisan los ped
 que usa esa consignación: un pedido **anulado** no cambia, y el estado que se haya
 puesto a mano en cualquier otro pedido tampoco.
 
+### La pestaña Pedidos
+
+En el modal de la consignación, la pestaña **Pedidos** muestra los pedidos de los
+que se cargaron líneas en esta consignación. De cada pedido se ve el número, el
+estado (Pendiente, Procesado o Anulado), la fecha, la entrega programada con su
+horario, el responsable de entrega, el cliente, el total y las observaciones.
+
+Debajo aparecen **todas las líneas del pedido**, no solo las que se cargaron aquí,
+para ver qué quedó pendiente. Las que se cargaron en esta consignación llevan una
+marca y, por cada línea, se muestra:
+
+| Columna | Qué indica |
+|---------|------------|
+| Pedido | Cantidad pedida |
+| En esta consignación | Cantidad cargada en esta consignación |
+| Total registrado | Cantidad ya registrada en consignaciones y facturas de venta, incluida esta |
+| Pendiente | Lo que falta despachar del pedido |
+
+Si una línea se quitó del pedido después de cargarla, aparece con la etiqueta
+*Eliminada del pedido* y sin pendiente. Quien tiene acceso al módulo **Pedidos**
+puede abrir el pedido desde su número (se abre en otra pestaña del navegador). Si
+la consignación no se cargó desde ningún pedido, la pestaña lo indica.
+
 ## Contabilidad
 
 Una consignación **no es una venta**, así que su asiento no registra ingresos: es
 una **reclasificación de inventario a costo**, es decir, mercadería que sale del
 almacén propio pero sigue siendo un activo de la empresa.
+
+La pestaña **Asiento contable** muestra el asiento solo cuando ya está
+**generado y completo**. Mientras no lo esté, no muestra líneas sueltas con
+importes: explica el motivo. Puede ser que la consignación no tenga costo de
+inventario, o que falte configurar la cuenta de *Mercadería en consignación* o de
+*Inventario* en **Configuración contable**, sección *Consignaciones en Ventas*.
+Apenas la configuración está completa, el asiento se genera solo al guardar la
+consignación o al abrir esa pestaña.
 
 ## Exportar
 
@@ -255,6 +286,9 @@ documentos **anulados** no cuentan.
   mercadería salió de la bodega.
 - **No puedo facturar lo consignado**: use el módulo de facturación de
   consignaciones, no el de facturas de venta.
+- **La pestaña Asiento contable dice que falta configurar una cuenta**: complete
+  la sección *Consignaciones en Ventas* de Configuración contable y vuelva a abrir
+  la pestaña; el asiento se genera en ese momento.
 
 ## El número no se puede repetir
 
@@ -306,6 +340,17 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.22** — La **búsqueda del listado vuelve a ser instantánea** en empresas con
+  decenas de miles de consignaciones: encuentra exactamente lo mismo, pero deja de
+  revisar la tabla completa de clientes, productos y líneas en cada tecla. En la
+  prueba con 50.000 consignaciones pasó de 0,7–1,8 segundos por búsqueda a
+  centésimas de segundo.
+
+- **1.21** — Nueva pestaña **Pedidos** con los pedidos de los que se cargó la
+  consignación: sus datos y todas sus líneas con lo pedido, lo cargado aquí, lo ya
+  registrado y lo pendiente. La pestaña **Asiento contable** ya no muestra líneas con
+  importes y sin cuenta cuando el asiento no está completo: muestra el asiento solo
+  cuando ya está generado y, si no, explica qué falta.
 - **1.20** — La búsqueda del listado y la de la pestaña **Detalles** ya no se quedan
   cargando en empresas con muchas consignaciones: antes, con decenas de miles de
   consignaciones, podían tardar minutos sin mostrar respuesta; ahora contestan en

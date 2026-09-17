@@ -826,6 +826,9 @@ class TallerController extends BaseModuloController
     public function enviarWhatsappAjax(): void
     {
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el WhatsApp: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        session_write_close();
         header('Content-Type: application/json');
 
         $idEmpresa   = (int) $_SESSION['id_empresa'];
@@ -992,6 +995,9 @@ class TallerController extends BaseModuloController
     {
         ob_start();
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        session_write_close();
         header('Content-Type: application/json');
 
         $id        = (int) ($_POST['id'] ?? 0);

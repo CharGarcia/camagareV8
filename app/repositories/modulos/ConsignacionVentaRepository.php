@@ -172,6 +172,118 @@ class ConsignacionVentaRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Texto propio de la consignación que entra en la búsqueda libre: número (serie-secuencial),
+     * observaciones, punto de partida, punto de llegada, la fecha en los dos formatos en que se
+     * puede escribir (como se muestra y como la guarda PostgreSQL) y el total.
+     * `$a` es el prefijo del alias ('cv.' en la consulta, '' en el CREATE INDEX): la MISMA
+     * expresión alimenta la consulta y el índice, así que no se pueden desalinear.
+     */
+    private static function exprConsignacion(string $a = ''): string
+    {
+        $m = \App\Helpers\MotorBusqueda::class;
+        return "COALESCE({$a}serie, '') || '-' || COALESCE({$a}secuencial, '')"
+             . " || ' ' || COALESCE({$a}observaciones, '')"
+             . " || ' ' || COALESCE({$a}punto_partida, '')"
+             . " || ' ' || COALESCE({$a}punto_llegada, '')"
+             . " || ' ' || " . $m::fechaDmy("{$a}fecha_emision")
+             . " || ' ' || " . $m::fechaIso("{$a}fecha_emision")
+             . " || ' ' || COALESCE({$a}total::text, '')";
+    }
+
+    /**
+     * Fuentes del texto libre del listado (ver App\Helpers\MotorBusqueda). Cada una es un
+     * conjunto que PostgreSQL resuelve UNA vez por palabra con su índice trigram, en lugar de
+     * recorrer la tabla entera: antes, buscar un cliente o un producto obligaba a quitarle las
+     * tildes al nombre de los 26.000 clientes o de los 68.000 productos en cada búsqueda, y el
+     * número, las observaciones y los puntos se comparaban consignación por consignación.
+     *
+     * Busca exactamente lo mismo que antes: número, observaciones, punto de partida y de
+     * llegada, fecha, total, cliente (nombre e identificación), asesor, responsable de traslado,
+     * usuario que registró, productos consignados (código y nombre), lote y NUP de las líneas, y
+     * los números de las facturaciones, retornos y cambios de producto de esa consignación.
+     */
+    private function fuentesBusqueda(): array
+    {
+        $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
+
+        return [
+            // Datos propios de la consignación
+            [
+                'sql'    => "cv.id IN (SELECT bx.id FROM consignaciones_ventas bx WHERE bx.id_empresa = :e AND {cond})",
+                'expr'   => self::exprConsignacion('bx.'),
+                'indice' => ['tabla' => 'consignaciones_ventas', 'nombre' => 'idx_trgm_consignaciones_ventas', 'expr' => self::exprConsignacion()],
+            ],
+            // Total escrito con coma decimal ("34,78"): el texto indexado lo guarda con punto,
+            // así que esa forma se compara aparte, y solo cuando la palabra es un monto así.
+            ['expr' => 'cv.total', 'crudo' => true, 'si' => '/^\d+,\d{1,2}$/'],
+            // Cliente: nombre e identificación (mismo índice que usan los demás módulos)
+            [
+                'sql'    => "cv.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})",
+                'expr'   => "COALESCE(cx.nombre, '') || ' ' || COALESCE(cx.identificacion, '')",
+                'indice' => ['tabla' => 'clientes', 'nombre' => 'idx_trgm_clientes', 'expr' => "COALESCE(nombre, '') || ' ' || COALESCE(identificacion, '')"],
+            ],
+            // Asesor, responsable de traslado y usuario que registró: tablas chicas, sin índice.
+            ['sql' => "cv.id_vendedor IN (SELECT vx.id FROM vendedores vx WHERE vx.id_empresa = :e AND {cond})", 'expr' => "COALESCE(vx.nombre, '')"],
+            ['sql' => "cv.id_responsable_traslado IN (SELECT rx.id FROM responsables_traslado rx WHERE rx.id_empresa = :e AND {cond})", 'expr' => "COALESCE(rx.nombre, '')"],
+            ['sql' => "cv.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})", 'expr' => "COALESCE(ux.nombre, '')"],
+            // Productos consignados: código y nombre del catálogo
+            [
+                'sql'    => "cv.id IN (SELECT d.id_consignacion
+                                         FROM consignaciones_ventas_detalles d
+                                        WHERE d.id_empresa = :e AND d.eliminado = false
+                                          AND d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond}))",
+                'expr'   => "COALESCE(px.codigo, '') || ' ' || COALESCE(px.nombre, '')",
+                'indice' => ['tabla' => 'productos', 'nombre' => 'idx_trgm_productos', 'expr' => "COALESCE(codigo, '') || ' ' || COALESCE(nombre, '')"],
+            ],
+            // Lote y NUP de las líneas
+            [
+                'sql'    => "cv.id IN (SELECT d.id_consignacion
+                                         FROM consignaciones_ventas_detalles d
+                                        WHERE d.id_empresa = :e AND d.eliminado = false AND {cond})",
+                'expr'   => "COALESCE(d.lote, '') || ' ' || COALESCE(d.nup, '')",
+                'indice' => ['tabla' => 'consignaciones_ventas_detalles', 'nombre' => 'idx_trgm_cons_det_lote_nup', 'expr' => "COALESCE(lote, '') || ' ' || COALESCE(nup, '')"],
+            ],
+            // Facturaciones de la consignación: nº interno y nº de la factura de venta
+            [
+                'sql'    => "cv.id IN (SELECT cfd.id_consignacion
+                                         FROM consignaciones_facturas cf
+                                         JOIN consignaciones_facturas_detalles cfd ON cfd.id_consignacion_factura = cf.id
+                                        WHERE cf.id_empresa = :e AND cf.eliminado = false AND {cond})",
+                'expr'   => "COALESCE(cf.serie, '') || '-' || COALESCE(cf.secuencial, '') || ' ' || COALESCE(cf.numero_factura, '')",
+                'indice' => ['tabla' => 'consignaciones_facturas', 'nombre' => 'idx_trgm_consignaciones_facturas', 'expr' => "COALESCE(serie, '') || '-' || COALESCE(secuencial, '') || ' ' || COALESCE(numero_factura, '')"],
+            ],
+            // Retornos de esta consignación
+            [
+                'sql'    => "cv.id IN (SELECT rd.id_consignacion
+                                         FROM retornos_cv r
+                                         JOIN retornos_cv_detalles rd ON rd.id_retorno = r.id
+                                        WHERE r.id_empresa = :e AND r.eliminado = false AND {cond})",
+                'expr'   => "COALESCE(r.serie, '') || '-' || COALESCE(r.secuencial, '')",
+                'si'     => $digitos,
+                'indice' => ['tabla' => 'retornos_cv', 'nombre' => 'idx_trgm_retornos_numero', 'expr' => "COALESCE(serie, '') || '-' || COALESCE(secuencial, '')"],
+            ],
+            // Cambios de producto que entregan desde esta consignación
+            [
+                'sql'    => "cv.id IN (SELECT ccd.id_origen
+                                         FROM cambios_producto_cv cc
+                                         JOIN cambios_producto_cv_detalles ccd ON ccd.id_cambio = cc.id
+                                              AND ccd.origen_tipo = 'CONSIGNACION' AND ccd.eliminado = false
+                                        WHERE cc.id_empresa = :e AND cc.eliminado = false
+                                          AND ccd.id_origen IS NOT NULL AND {cond})",
+                'expr'   => "COALESCE(cc.serie, '') || '-' || COALESCE(cc.secuencial, '')",
+                'si'     => $digitos,
+                'indice' => ['tabla' => 'cambios_producto_cv', 'nombre' => 'idx_trgm_cambios_numero', 'expr' => "COALESCE(serie, '') || '-' || COALESCE(secuencial, '')"],
+            ],
+        ];
+    }
+
+    /** SQL de los índices que necesita la búsqueda de este módulo (para database/*.sql). */
+    public function sqlIndicesBusqueda(): array
+    {
+        return \App\Helpers\MotorBusqueda::sqlIndices($this->fuentesBusqueda());
+    }
+
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
     {
         $params = [':e' => $idEmpresa];
@@ -190,69 +302,9 @@ class ConsignacionVentaRepository extends BaseRepository
             // Texto libre (buscador FiltrosModal de la vista): las columnas del listado y
             // lo que identifica a la consignación aunque no sea columna. Decisión del
             // usuario: la columna Estado NO entra en el texto libre; se filtra desde el
-            // modal de filtros.
-            //
-            // Rendimiento (17-09-2026): lo que vive en otra tabla se busca como CONJUNTO por
-            // palabra (FiltrosBusqueda::condicionTexto, `col` + `sql`): la tabla se filtra una
-            // vez y cada consignación solo consulta el conjunto de ids. Antes, por cada
-            // consignación que no coincidía por cliente o número se armaban con STRING_AGG sus
-            // líneas y documentos (los cambios de producto, además, sin índice por consignación
-            // de origen): con ~50.000 consignaciones la búsqueda tardaba minutos. Cliente,
-            // asesor, responsable y usuario también van como conjunto: quitar tildes a un texto
-            // largo en cada consignación era lo más caro que quedaba. Fecha, total y números de
-            // retorno/cambio solo se comparan si la palabra tiene dígitos.
-            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
-            $fecha   = \App\Helpers\FiltrosBusqueda::SI_FECHA;
-            $numero  = \App\Helpers\FiltrosBusqueda::SI_NUMERO;
-            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                [
-                    "CONCAT(cv.serie, '-', cv.secuencial)",               // Secuencial (serie-secuencial)
-                    'cv.observaciones',                                   // Observaciones
-                    'cv.punto_partida',
-                    'cv.punto_llegada',
-                    ['sql' => "TO_CHAR(cv.fecha_emision, 'DD-MM-YYYY')", 'si' => $fecha], // Fecha (como se muestra)
-                    ['sql' => 'cv.fecha_emision', 'si' => $fecha],                       // Fecha (yyyy-mm-dd)
-                    ['sql' => 'cv.total', 'si' => $numero],
-                    // Cliente (nombre e identificación), asesor, responsable de traslado y usuario que registró
-                    ['col' => "CONCAT_WS(' ', cx.nombre, cx.identificacion)",
-                     'sql' => "cv.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})"],
-                    ['col' => 'vx.nombre',
-                     'sql' => "cv.id_vendedor IN (SELECT vx.id FROM vendedores vx WHERE vx.id_empresa = :e AND {cond})"],
-                    ['col' => 'rx.nombre',
-                     'sql' => "cv.id_responsable_traslado IN (SELECT rx.id FROM responsables_traslado rx WHERE rx.id_empresa = :e AND {cond})"],
-                    ['col' => 'ux.nombre',
-                     'sql' => "cv.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})"],
-                    // Productos consignados: código y nombre en el catálogo, lote y NUP en la línea
-                    ['col' => "CONCAT_WS(' ', px.codigo, px.nombre)",
-                     'sql' => "cv.id IN (SELECT d.id_consignacion
-                                           FROM consignaciones_ventas_detalles d
-                                          WHERE d.id_empresa = :e AND d.eliminado = false
-                                            AND d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond}))"],
-                    ['col' => "CONCAT_WS(' ', d.lote, d.nup)",
-                     'sql' => "cv.id IN (SELECT d.id_consignacion
-                                           FROM consignaciones_ventas_detalles d
-                                          WHERE d.id_empresa = :e AND d.eliminado = false AND {cond})"],
-                    // Documentos relacionados: facturas de la consignación (nº interno y nº de la factura SRI)
-                    ['col' => "CONCAT_WS(' ', CONCAT(cf.serie, '-', cf.secuencial), cf.numero_factura)",
-                     'sql' => "cv.id IN (SELECT cfd.id_consignacion
-                                           FROM consignaciones_facturas cf
-                                           JOIN consignaciones_facturas_detalles cfd ON cfd.id_consignacion_factura = cf.id
-                                          WHERE cf.id_empresa = :e AND cf.eliminado = false AND {cond})"],
-                    // Documentos relacionados: retornos de esta consignación
-                    ['col' => "CONCAT(r.serie, '-', r.secuencial)", 'si' => $digitos,
-                     'sql' => "cv.id IN (SELECT rd.id_consignacion
-                                           FROM retornos_cv r
-                                           JOIN retornos_cv_detalles rd ON rd.id_retorno = r.id
-                                          WHERE r.id_empresa = :e AND r.eliminado = false AND {cond})"],
-                    // Documentos relacionados: cambios de producto que entregan desde esta consignación
-                    ['col' => "CONCAT(cc.serie, '-', cc.secuencial)", 'si' => $digitos,
-                     'sql' => "cv.id IN (SELECT ccd.id_origen
-                                           FROM cambios_producto_cv cc
-                                           JOIN cambios_producto_cv_detalles ccd ON ccd.id_cambio = cc.id
-                                                AND ccd.origen_tipo = 'CONSIGNACION' AND ccd.eliminado = false
-                                          WHERE cc.id_empresa = :e AND cc.eliminado = false
-                                            AND ccd.id_origen IS NOT NULL AND {cond})"],
-                ],
+            // modal de filtros. Ver fuentesBusqueda().
+            $condicion = \App\Helpers\MotorBusqueda::condicion(
+                $this->fuentesBusqueda(),
                 $textoLibre,
                 $params,
                 'tl'
@@ -769,6 +821,49 @@ class ConsignacionVentaRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $idConsignacion, ':e' => $idEmpresa]);
         return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * Pedidos de los que se cargaron líneas en la consignación (pestaña Pedidos del modal): una
+     * fila por línea de cada pedido —todas, no solo las cargadas aquí, para ver qué quedó
+     * pendiente— con lo tomado en ESTA consignación. Solo pedidos de la empresa y no eliminados;
+     * una línea eliminada del pedido aparece únicamente si esta consignación la usó.
+     */
+    public function getPedidosRelacionados(int $idConsignacion, int $idEmpresa): array
+    {
+        $sql = "WITH usadas AS (
+                    SELECT d.id_pedido_detalle, SUM(d.cantidad) AS cantidad
+                      FROM consignaciones_ventas_detalles d
+                     WHERE d.id_consignacion = :id AND d.id_empresa = :e
+                       AND d.eliminado = false AND d.id_pedido_detalle IS NOT NULL
+                     GROUP BY d.id_pedido_detalle
+                ),
+                pedidos AS (
+                    SELECT DISTINCT pd.id_pedido
+                      FROM usadas u
+                      JOIN pedidos_detalle pd ON pd.id = u.id_pedido_detalle
+                )
+                SELECT p.id AS id_pedido,
+                       (p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) AS numero_pedido,
+                       p.fecha_pedido, p.fecha_entrega, p.hora_inicial_entrega, p.hora_maxima_entrega,
+                       p.estado, p.observaciones,
+                       c.nombre AS cliente_nombre, rt.nombre AS responsable_entrega,
+                       pd.id AS id_detalle, pd.eliminado AS linea_eliminada,
+                       pr.codigo AS producto_codigo, pr.nombre AS producto_nombre,
+                       pd.cantidad AS cantidad_pedida, pd.precio_unitario, pd.total,
+                       COALESCE(u.cantidad, 0) AS cantidad_consignacion
+                  FROM pedidos x
+                  JOIN pedidos_cabecera p ON p.id = x.id_pedido AND p.id_empresa = :e AND p.eliminado = false
+                  LEFT JOIN clientes c ON c.id = p.id_cliente
+                  LEFT JOIN responsables_traslado rt ON rt.id = p.id_responsable_entrega
+                  JOIN pedidos_detalle pd ON pd.id_pedido = p.id
+                  LEFT JOIN usadas u ON u.id_pedido_detalle = pd.id
+                  LEFT JOIN productos pr ON pr.id = pd.id_producto
+                 WHERE pd.eliminado = false OR u.id_pedido_detalle IS NOT NULL
+                 ORDER BY p.fecha_pedido, p.id, pd.id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idConsignacion, ':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

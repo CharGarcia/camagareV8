@@ -345,12 +345,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             </div>
                         </div>
 
-                        <!-- Pestaña Pedidos -->
-                        <div class="tab-pane fade" id="cons-tab-pedidos" role="tabpanel">
-                            <div class="p-4 text-center text-muted">
-                                <i class="bi bi-cart3 fs-1 text-secondary mb-3 opacity-50"></i>
-                                <h5>Pedidos Asociados</h5>
-                                <p>Detalle de los pedidos que fueron generados y despachados desde esta consignación.</p>
+                        <!-- Pestaña Pedidos: pedidos de los que se cargaron líneas en esta consignación -->
+                        <div class="tab-pane fade p-3" id="cons-tab-pedidos" role="tabpanel">
+                            <div id="cons_pedidos_contenido">
+                                <div class="p-4 text-center text-muted">Cargando pedidos...</div>
                             </div>
                         </div>
 
@@ -2816,7 +2814,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             _consAsientoTab = window.crearAsientoTab({
                 prefijo: 'cons',
                 moduloOrigen: 'consignacion_venta',
-                previewEditable: true,
+                // Solo el asiento ya generado y completo: sin él no se muestran líneas con
+                // importes y sin cuenta, solo el motivo (getAsientoSugeridoAjax intenta generarlo).
+                soloRegistrado: true,
                 previewUrl: `${RUTA_MODULO_CONSIGNACION}/getAsientoSugeridoAjax`,
                 cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
                 asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`
@@ -3056,6 +3056,111 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (btnTabE) {
             btnTabE.addEventListener('shown.bs.tab', () => {
                 consCargarEntrega(document.getElementById('cons_id').value);
+            });
+        }
+    });
+
+    // ── Pestaña Pedidos: pedidos de los que se cargaron líneas en esta consignación ──
+    window.consBadgeEstadoPedido = function(estado) {
+        const txt = String(estado || '').trim();
+        const e = txt.toLowerCase();
+        const color = e === 'procesado' ? 'success' : (e === 'anulado' ? 'danger' : (e === 'pendiente' ? 'warning' : 'secondary'));
+        const etiqueta = txt ? txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase() : '—';
+        return `<span class="badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25">${consEscHtml(etiqueta)}</span>`;
+    };
+    window.consFmtCantidad = function(n) {
+        const v = parseFloat(n || 0);
+        return Number.isInteger(v) ? String(v) : v.toFixed(2);
+    };
+
+    window.consCargarPedidos = async function(id) {
+        const cont = document.getElementById('cons_pedidos_contenido');
+        if (!cont) return;
+        if (!id) {
+            cont.innerHTML = '<div class="p-4 text-center text-muted">Guarde la consignación para ver sus pedidos.</div>';
+            return;
+        }
+        cont.innerHTML = '<div class="p-4 text-center text-muted">Cargando pedidos...</div>';
+        try {
+            const res  = await fetch(`${RUTA_MODULO_CONSIGNACION}/getPedidosAjax?id=${id}`);
+            const data = await res.json();
+            if (!data.ok) {
+                cont.innerHTML = `<div class="p-4 text-center text-danger">${consEscHtml(data.error || 'Error al cargar los pedidos.')}</div>`;
+                return;
+            }
+            const pedidos = data.data || [];
+            if (!pedidos.length) {
+                cont.innerHTML = '<div class="p-4 text-center text-muted"><i class="bi bi-cart3 fs-1 text-secondary d-block mb-2 opacity-50"></i>Esta consignación no se cargó desde ningún pedido.</div>';
+                return;
+            }
+
+            const hora = h => (h ? String(h).substring(0, 5) : '');
+            const tarjetas = pedidos.map(p => {
+                const numero = consEscHtml(p.numero_pedido || '');
+                // Abre el módulo Pedidos filtrado por el número (en otra pestaña, para no perder la consignación).
+                const numeroHtml = data.url_pedidos && p.numero_pedido
+                    ? `<a href="${data.url_pedidos}?b=${encodeURIComponent('numero:' + p.numero_pedido)}" target="_blank" rel="noopener" title="Abrir en Pedidos">${numero} <i class="bi bi-box-arrow-up-right small"></i></a>`
+                    : numero;
+                const horario = [hora(p.hora_inicial_entrega), hora(p.hora_maxima_entrega)].filter(Boolean).join(' – ');
+                const entrega = p.fecha_entrega ? consFmtFecha(p.fecha_entrega) + (horario ? ` (${horario})` : '') : '—';
+
+                const filas = (p.lineas || []).map(l => {
+                    const enEsta    = parseFloat(l.cantidad_consignacion || 0);
+                    const pendiente = parseFloat(l.pendiente || 0);
+                    return `<tr>
+                        <td class="ps-3">
+                            ${enEsta > 0 ? '<i class="bi bi-check2-circle text-primary me-1" title="Cargada en esta consignación"></i>' : '<i class="bi bi-dot text-muted me-1"></i>'}
+                            <code class="text-secondary me-1">${consEscHtml(l.producto_codigo || '')}</code>${consEscHtml(l.producto_nombre || '')}
+                            ${l.linea_eliminada ? '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 ms-1">Eliminada del pedido</span>' : ''}
+                        </td>
+                        <td class="text-end">${consFmtCantidad(l.cantidad_pedida)}</td>
+                        <td class="text-end ${enEsta > 0 ? 'fw-bold text-primary' : 'text-muted'}">${enEsta > 0 ? consFmtCantidad(enEsta) : '—'}</td>
+                        <td class="text-end">${consFmtCantidad(l.cantidad_consumida)}</td>
+                        <td class="text-end pe-3 ${pendiente > 0 ? 'fw-bold text-warning-emphasis' : 'text-muted'}">${consFmtCantidad(pendiente)}</td>
+                    </tr>`;
+                }).join('');
+
+                return `<div class="border rounded-3 bg-white shadow-sm mb-3 overflow-hidden">
+                    <div class="d-flex flex-wrap align-items-center gap-3 px-3 py-2 border-bottom bg-light small">
+                        <span class="fw-bold"><i class="bi bi-cart3 me-1 text-primary"></i>Pedido ${numeroHtml}</span>
+                        ${consBadgeEstadoPedido(p.estado)}
+                        <span class="text-muted">Fecha: <span class="text-body">${consFmtFecha(p.fecha_pedido)}</span></span>
+                        <span class="text-muted">Entrega: <span class="text-body">${entrega}</span></span>
+                        <span class="text-muted">Responsable: <span class="text-body">${consEscHtml(p.responsable_entrega || '—')}</span></span>
+                        <span class="text-muted text-truncate" style="max-width:260px">Cliente: <span class="text-body" title="${consEscHtml(p.cliente_nombre || '')}">${consEscHtml(p.cliente_nombre || '—')}</span></span>
+                        <span class="ms-auto text-muted">Total: <span class="fw-bold text-body">${parseFloat(p.total || 0).toFixed(2)}</span></span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 text-nowrap small">
+                            <thead>
+                                <tr class="table-light border-bottom">
+                                    <th class="ps-3 py-2 fw-bold text-muted">Producto</th>
+                                    <th class="py-2 fw-bold text-muted text-end">Pedido</th>
+                                    <th class="py-2 fw-bold text-muted text-end">En esta consignación</th>
+                                    <th class="py-2 fw-bold text-muted text-end" title="Cantidad ya registrada en consignaciones y facturas de venta (incluida esta consignación)">Total registrado</th>
+                                    <th class="py-2 fw-bold text-muted text-end pe-3">Pendiente</th>
+                                </tr>
+                            </thead>
+                            <tbody>${filas}</tbody>
+                        </table>
+                    </div>
+                    ${p.observaciones ? `<div class="px-3 py-2 border-top small text-muted"><i class="bi bi-chat-left-text me-1"></i>${consEscHtml(p.observaciones)}</div>` : ''}
+                </div>`;
+            }).join('');
+
+            const resumen = `<div class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>${pedidos.length === 1 ? '1 pedido relacionado' : pedidos.length + ' pedidos relacionados'}. Se listan todas las líneas de cada pedido; las marcadas con <i class="bi bi-check2-circle text-primary"></i> se cargaron en esta consignación.</div>`;
+            cont.innerHTML = resumen + tarjetas;
+        } catch (err) {
+            cont.innerHTML = '<div class="p-4 text-center text-danger">Error al cargar los pedidos.</div>';
+        }
+    };
+
+    // Carga perezosa: al mostrar la pestaña Pedidos.
+    document.addEventListener('DOMContentLoaded', () => {
+        const btnTabP = document.getElementById('cons-tab-pedidos-btn');
+        if (btnTabP) {
+            btnTabP.addEventListener('shown.bs.tab', () => {
+                consCargarPedidos(document.getElementById('cons_id').value);
             });
         }
     });

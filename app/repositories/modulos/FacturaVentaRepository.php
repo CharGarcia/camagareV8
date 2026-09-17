@@ -63,6 +63,96 @@ class FacturaVentaRepository extends BaseRepository
     }
 
     /**
+     * Texto propio de la factura que entra en la búsqueda libre: número, secuencial,
+     * observaciones, clave de acceso, guía de remisión, placa, fecha de emisión y los
+     * importes (subtotal, descuento, IVA calculado, ICE, propina y total) como texto.
+     * `$a` es el prefijo del alias ('v.' en la consulta, '' en el CREATE INDEX): la MISMA
+     * expresión alimenta la consulta y el índice, así que no se pueden desalinear.
+     *
+     * Los importes van aquí —y no como columnas numéricas aparte, que era lo de antes—
+     * porque así buscar "298" o "45.50" también usa el índice. El resultado es el mismo:
+     * una palabra sin dígitos nunca podía coincidir con un número.
+     */
+    private static function exprFactura(string $a = ''): string
+    {
+        $m = \App\Helpers\MotorBusqueda::class;
+        return "COALESCE({$a}establecimiento, '') || '-' || COALESCE({$a}punto_emision, '') || '-' || COALESCE({$a}secuencial, '')"
+             . " || ' ' || COALESCE({$a}observaciones, '')"
+             . " || ' ' || COALESCE({$a}clave_acceso, '')"
+             . " || ' ' || COALESCE({$a}guia_remision, '')"
+             . " || ' ' || COALESCE({$a}placa, '')"
+             . " || ' ' || " . $m::fechaIso("{$a}fecha_emision")
+             . " || ' ' || COALESCE({$a}total_sin_impuestos::text, '')"
+             . " || ' ' || COALESCE({$a}total_descuento::text, '')"
+             . " || ' ' || COALESCE(({$a}importe_total - {$a}total_sin_impuestos + {$a}total_descuento - COALESCE({$a}total_ice, 0) - COALESCE({$a}propina, 0))::text, '')"
+             . " || ' ' || COALESCE({$a}total_ice::text, '')"
+             . " || ' ' || COALESCE({$a}propina::text, '')"
+             . " || ' ' || COALESCE({$a}importe_total::text, '')";
+    }
+
+    /**
+     * Fuentes del texto libre del listado (ver App\Helpers\MotorBusqueda). Cada una es un
+     * conjunto que PostgreSQL resuelve UNA vez por palabra con su índice trigram, en lugar
+     * de recorrer todas las facturas de la empresa quitándole las tildes al texto de cada
+     * una y juntando las líneas de su detalle.
+     *
+     * Busca exactamente lo mismo que antes: número, secuencial, observaciones, clave de
+     * acceso, guía, placa, fecha, importes, saldo pendiente, cliente (nombre e
+     * identificación), vendedor, usuario que registró y los productos facturados (código y
+     * descripción de cada línea). Estado, Estado correo y Estado pago siguen fuera del texto
+     * libre (decisión del usuario): se filtran desde el modal.
+     *
+     * @param string $saldo Expresión del saldo (usa el LATERAL de abonos `ab`).
+     */
+    private function fuentesBusqueda(string $saldo): array
+    {
+        $decimal = \App\Helpers\FiltrosBusqueda::SI_DECIMAL;
+
+        return [
+            // Datos propios de la factura (texto e importes)
+            [
+                'sql'    => "v.id IN (SELECT bx.id FROM ventas_cabecera bx WHERE bx.id_empresa = :id_empresa AND {cond})",
+                'expr'   => self::exprFactura('bx.'),
+                'indice' => ['tabla' => 'ventas_cabecera', 'nombre' => 'idx_trgm_ventas_cabecera', 'expr' => self::exprFactura()],
+            ],
+            // Importes escritos con coma decimal ("34,78"): el texto indexado los guarda con
+            // punto, así que esa forma se compara aparte y solo para palabras de ese tipo.
+            [
+                'expr'  => "CONCAT_WS(' ', v.fecha_emision, v.total_sin_impuestos, v.total_descuento,
+                                      (v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice, 0) - COALESCE(v.propina, 0)),
+                                      v.total_ice, v.propina, v.importe_total)",
+                'crudo' => true,
+                'si'    => '/^\d+,\d{1,2}$/',
+            ],
+            // Saldo pendiente: se calcula con los cobros, notas de crédito y retenciones de
+            // cada factura, así que no se puede indexar. Igual que antes, solo se evalúa
+            // cuando la palabra parece un monto con decimales.
+            ['expr' => "ROUND($saldo, 2)", 'crudo' => true, 'si' => $decimal],
+            // Cliente: nombre e identificación (mismo índice que usan los demás módulos)
+            [
+                'sql'    => "v.id_cliente IN (SELECT cx.id FROM clientes cx WHERE {cond})",
+                'expr'   => "COALESCE(cx.nombre, '') || ' ' || COALESCE(cx.identificacion, '')",
+                'indice' => ['tabla' => 'clientes', 'nombre' => 'idx_trgm_clientes', 'expr' => "COALESCE(nombre, '') || ' ' || COALESCE(identificacion, '')"],
+            ],
+            // Vendedor y usuario que registró: tablas chicas, sin índice.
+            ['sql' => "v.id_vendedor IN (SELECT vx.id FROM vendedores vx WHERE {cond})", 'expr' => "COALESCE(vx.nombre, '')"],
+            ['sql' => "v.id_usuario IN (SELECT ux.id FROM usuarios ux WHERE {cond})", 'expr' => "COALESCE(ux.nombre, '')"],
+            // Productos facturados: código principal, código auxiliar y descripción de la línea
+            [
+                'sql'    => "v.id IN (SELECT dx.id_venta FROM ventas_detalle dx WHERE {cond})",
+                'expr'   => "COALESCE(dx.codigo_principal, '') || ' ' || COALESCE(dx.codigo_auxiliar, '') || ' ' || COALESCE(dx.descripcion, '')",
+                'indice' => ['tabla' => 'ventas_detalle', 'nombre' => 'idx_trgm_ventas_detalle', 'expr' => "COALESCE(codigo_principal, '') || ' ' || COALESCE(codigo_auxiliar, '') || ' ' || COALESCE(descripcion, '')"],
+            ],
+        ];
+    }
+
+    /** SQL de los índices que necesita la búsqueda de este módulo (para database/*.sql). */
+    public function sqlIndicesBusqueda(): array
+    {
+        return \App\Helpers\MotorBusqueda::sqlIndices($this->fuentesBusqueda('(v.importe_total - ab.abonos)'));
+    }
+
+    /**
      * @param array $ordenMulti Criterios de orden [['col'=>…,'dir'=>…], …] cuando el
      *        llamador usa `OrdenListado`. Vacío = se ordena por $ordenCol/$ordenDir.
      */
@@ -92,8 +182,6 @@ class FacturaVentaRepository extends BaseRepository
         // y $sqlAbonos/$saldo solo referencian ese alias.
         $sqlAbonos = 'ab.abonos';
         $saldo = '(v.importe_total - ab.abonos)';
-        // IVA: no es columna, se deduce de los totales (misma fórmula que la vista).
-        $ivaCalc = '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))';
 
         // Texto libre: las columnas del listado (incluidas las calculadas IVA y Saldo)
         // y sus relacionadas. El buscador de la vista no sugiere campos; lo escrito se
@@ -102,36 +190,13 @@ class FacturaVentaRepository extends BaseRepository
         // Decisión del usuario: las columnas Estado, Estado correo y Estado pago NO
         // entran en el texto libre (se filtran solo desde el modal de filtros).
         if ($textoLibre !== '') {
-            // Rendimiento: las columnas numéricas solo se evalúan si la palabra tiene
-            // dígitos, y el SALDO (que obliga a calcular el LATERAL de abonos de TODAS
-            // las facturas de la empresa) solo si la palabra parece un monto con
-            // decimales. Buscar un cliente o un producto ya no calcula abonos.
-            // Ver FiltrosBusqueda::condicionTexto.
-            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
-            $decimal = \App\Helpers\FiltrosBusqueda::SI_DECIMAL;
-            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                [
-                    "CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)", // Nº Factura
-                    'v.secuencial',
-                    'c.nombre',                                                       // Cliente
-                    'c.identificacion',                                               // Identificación
-                    'ven.nombre',                                                     // Vendedor
-                    'v.observaciones',                                                // Observaciones
-                    'u.nombre',                                                       // Usuario
-                    // Fuera del listado, pero identifican la factura:
-                    'v.clave_acceso',
-                    'v.guia_remision',
-                    'v.placa',
-                    ['sql' => 'v.fecha_emision', 'si' => $digitos],                   // Fecha
-                    ['sql' => 'v.total_sin_impuestos', 'si' => $digitos],             // Subtotal
-                    ['sql' => 'v.total_descuento', 'si' => $digitos],                 // Descuento
-                    ['sql' => $ivaCalc, 'si' => $digitos],                            // IVA
-                    ['sql' => 'v.total_ice', 'si' => $digitos],                       // ICE
-                    ['sql' => 'v.propina', 'si' => $digitos],                         // Propina
-                    ['sql' => 'v.importe_total', 'si' => $digitos],                   // Total
-                    ['sql' => "ROUND($saldo, 2)", 'si' => $decimal],                  // Saldo (caro)
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', vd.codigo_principal, vd.codigo_auxiliar, vd.descripcion), ' ') FROM ventas_detalle vd WHERE vd.id_venta = v.id)",
-                ],
+            // Conjuntos indexables (ver fuentesBusqueda() y App\Helpers\MotorBusqueda): cada
+            // fuente se resuelve una vez por palabra con su índice trigram. El SALDO —que
+            // obliga a calcular el LATERAL de abonos de TODAS las facturas de la empresa— es
+            // lo único que sigue evaluándose por fila, y solo si la palabra parece un monto
+            // con decimales, igual que antes.
+            $condicion = \App\Helpers\MotorBusqueda::condicion(
+                $this->fuentesBusqueda($saldo),
                 $textoLibre,
                 $params,
                 'tl'
@@ -295,18 +360,40 @@ class FacturaVentaRepository extends BaseRepository
                 LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id
                 LEFT  JOIN usuarios   u   ON v.id_usuario  = u.id";
         $joinAbonosPagina = ($joinAbonosFiltro !== '' || strpos($orderBy, 'ab.') !== false) ? $lateralAbonos : '';
-        $limite = $perPage > 0 ? " LIMIT $perPage OFFSET $offset" : '';
 
-        $sql = "WITH pagina AS MATERIALIZED (
-                    SELECT v.id, ROW_NUMBER() OVER ($orderBy) AS __rn, COUNT(*) OVER () AS __total
-                    FROM ventas_cabecera v
-                    $joins
-                    $joinAbonosPagina
-                    $where
-                    $orderBy
-                    $limite
-                )
-                SELECT v.*,
+        // Columnas explícitas en lugar de "v.*" A PROPÓSITO (mismo criterio que
+        // ComprasRepository::getListado): ventas_cabecera tiene `detalle_xml` con el XML del
+        // SRI, y el listado lo arrastraba en cada fila para volcarlo entero en el atributo
+        // data-row de cada <tr>. Medido en local con facturas firmadas de 17 KB: 558 KB por
+        // página de 20 contra 76 KB sin el XML. Nadie lo usa desde el listado: el modal pide
+        // la factura con getFacturaAjax() y la descarga del XML tiene su propia consulta.
+        // Al agregar una columna nueva a la tabla, añadirla aquí si el listado la necesita —
+        // pero NUNCA volver a traer detalle_xml.
+        $columnas = "v.id, v.id_empresa, v.id_establecimiento, v.id_punto_emision, v.id_cliente,
+                     v.id_usuario, v.fecha_emision, v.establecimiento, v.punto_emision, v.secuencial,
+                     v.clave_acceso, v.fecha_autorizacion, v.guia_remision, v.total_sin_impuestos,
+                     v.total_descuento, v.importe_total, v.propina, v.moneda, v.estado,
+                     v.id_asiento_contable, v.observaciones, v.created_at, v.updated_at, v.created_by,
+                     v.updated_by, v.eliminado, v.deleted_at, v.deleted_by, v.total_ice, v.id_vendedor,
+                     v.dias_credito, v.plazo, v.tipo_ambiente, v.tipo_emision, v.estado_correo,
+                     v.id_proforma, v.id_caja_sesion, v.id_cotizacion_publicidad, v.placa";
+
+        // Conteo + página en UNA consulta (App\Helpers\ListadoPaginado). Sin texto ni filtros
+        // usa la forma liviana (los ids de la página salen por índice y el total va aparte),
+        // que es más rápida que COUNT(*) OVER () cuando no hay nada que filtrar.
+        return \App\Helpers\ListadoPaginado::consultar(
+            fn(string $sql, array $prm): array => $this->query($sql, $prm)->fetchAll(\PDO::FETCH_ASSOC),
+            [
+                'tabla'       => 'ventas_cabecera',
+                'alias'       => 'v',
+                'joinsFiltro' => $joins . ' ' . $joinAbonosPagina,
+                'joinsFinal'  => $joins . ' ' . $lateralAbonos,
+                'where'       => $where,
+                'orderBy'     => $orderBy,
+                'perPage'     => $perPage,
+                'offset'      => $offset,
+                'conBusqueda' => trim($buscar) !== '',
+                'select'      => "$columnas,
                        c.nombre        AS cliente_nombre,
                        c.identificacion AS cliente_ruc,
                        ven.nombre      AS vendedor_nombre,
@@ -314,30 +401,10 @@ class FacturaVentaRepository extends BaseRepository
                        ab.total_cobrado,
                        ab.total_nc,
                        ab.total_nd,
-                       ab.total_retencion,
-                       pg.__total
-                FROM pagina pg
-                INNER JOIN ventas_cabecera v ON v.id = pg.id
-                $joins
-                $lateralAbonos
-                ORDER BY pg.__rn";
-
-        $rows = $this->query($sql, $params)->fetchAll();
-
-        if ($rows) {
-            $total = (int) $rows[0]['__total'];
-        } elseif ($offset > 0) {
-            // Página fuera de rango: sin filas no hay __total; se cuenta aparte (raro).
-            $total = (int) $this->query("SELECT COUNT(*) FROM ventas_cabecera v $joins $joinAbonosFiltro $where", $params)->fetchColumn();
-        } else {
-            $total = 0;
-        }
-        foreach ($rows as &$r) {
-            unset($r['__total']);
-        }
-        unset($r);
-
-        return ['rows' => $rows, 'total' => $total];
+                       ab.total_retencion",
+            ],
+            $params
+        );
     }
 
     /**

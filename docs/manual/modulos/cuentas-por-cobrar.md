@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, quitar filtros del pdf, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos
-version: 2.14
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, quitar filtros del pdf, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde
+version: 2.15
 orden: 40
 estado: activo
 ---
@@ -105,8 +105,9 @@ Ventas y el Reporte de Ventas por Vendedor:
   arriba, en el gráfico de antigüedad, en las vistas *Por cliente* y *Por
   producto*, ni en el PDF y el Excel: todo parte del mismo listado. Tampoco se
   puede llegar a un documento ajeno por otras vías: registrar un cobro, ver el
-  historial o mandar el recordatorio por correo o WhatsApp responde *No tiene
-  permiso sobre este registro: no pertenece a su cartera*. En el **envío
+  historial, abrir su detalle, descargar su PDF o mandar el recordatorio por
+  correo o WhatsApp responde *No tiene permiso sobre este registro: no pertenece
+  a su cartera*. En el **envío
   masivo**, los documentos ajenos que hubieran quedado seleccionados simplemente
   se omiten.
 - A estos usuarios **el filtro *Vendedor* les queda fijo**: el vendedor ve su
@@ -157,25 +158,27 @@ En las vistas *Por cliente* y *Por producto* las secciones salen siempre en
 pantalla como en el PDF y el Excel; el orden que elija en las cabeceras acomoda
 los documentos dentro de cada sección.
 
-## El PDF: logo y filtros del encabezado
+## El PDF del listado: logo y encabezado, sin filtros
 
-El PDF, en cualquiera de las vistas (*Detallado*, *Por cliente* y *Por
-producto*), empieza con el **logo de la empresa a la izquierda del nombre**; al
-centro van el nombre de la empresa, el título del reporte y la fecha en que se
-generó. Es el logo del establecimiento principal (el primero activo, normalmente
-el 001), el que se sube en **Empresa**, pestaña **Establecimiento**. Si no hay
-logo cargado, el encabezado sale solo con el nombre, centrado.
+El PDF del listado (botón **PDF** de la cabecera de la tabla), en cualquiera de
+las vistas (*Detallado*, *Por cliente* y *Por producto*), empieza con el **logo
+de la empresa a la izquierda del nombre**; al centro van el nombre de la empresa,
+el título del reporte y la fecha en que se generó. Es el logo del establecimiento
+principal (el primero activo, normalmente el 001), el que se sube en **Empresa**,
+pestaña **Establecimiento**. Si no hay logo cargado, el encabezado sale solo con
+el nombre, centrado.
 
-Debajo va el recuadro de **filtros aplicados**, reducido a lo que acota la
-cartera:
+Debajo del encabezado van directamente las **tarjetas de totales** (documentos,
+saldo total, vencido y al día; la vista *Por producto* no las lleva) y la tabla.
+El PDF **no imprime el recuadro de filtros aplicados** (vendedor, período,
+cliente, producto…): el listado ya refleja esos filtros.
 
-- **Vendedor** y **Período** aparecen siempre.
-- **Producto** y **Cliente** aparecen solo cuando se filtró por ellos.
-- La vista, el alcance (establecimientos), el tipo de documento y el estado no
-  se imprimen en el PDF.
+El **Excel** sí conserva, en su encabezado, la descripción completa de los
+filtros: vista, alcance, tipo de documento, estado, vendedor, producto, período
+y cliente.
 
-El **Excel** conserva la descripción completa de los filtros, incluidos la
-vista, el alcance, el tipo de documento y el estado.
+No confundir con el **PDF de un documento** (botón rojo de cada fila), que
+descarga la factura o el recibo (ver *Acciones de cada documento*).
 
 ## Filtrar por tipo de documento
 
@@ -272,8 +275,8 @@ listado va la fila **TOTAL GENERAL** con la suma de todos.
   hasta el final.
 - Dentro de cada cliente los documentos van en **orden cronológico** por fecha
   de emisión; los clientes se ordenan **alfabéticamente (A-Z)**.
-- Cada documento conserva sus acciones normales (cobrar, historial, correo,
-  WhatsApp).
+- Cada documento conserva sus acciones normales (PDF, cobrar, historial,
+  correo, WhatsApp), con las mismas reglas de *Acciones de cada documento*.
 
 **El detalle de cada cliente** no repite las columnas del listado general (el
 cliente ya es la cabecera de la sección): muestra **fecha, n. de documento,
@@ -350,14 +353,14 @@ Reglas:
   El modal lo avisa con una franja azul con el nombre del establecimiento. La
   matriz no registra nada propio: no hay asiento intercompañías.
 - Para cobrar en una sucursal el usuario necesita permiso de **crear** en
-  Cuentas por Cobrar **en esa sucursal** (superadministrador siempre puede). Si
-  no lo tiene, el botón aparece deshabilitado con el aviso "Sin permiso para
-  registrar cobros en el establecimiento…".
-- El historial de cobros de un documento de otra sucursal sí se consulta desde
-  la matriz. El correo y el WhatsApp de recordatorio **no**: usan la
-  configuración de correo y las plantillas de la empresa activa, así que para
-  esos documentos se envían desde la sucursal; tampoco entran en el envío masivo.
-  Al hacer clic en la fila, el panel de detalle muestra solo el resumen.
+  Cuentas por Cobrar **y** en Ingresos **en esa sucursal** (superadministrador
+  siempre puede). Si le falta alguno, el botón de cobro no aparece en esa fila.
+- El historial de cobros (con acceso al Reporte de cartera), el **PDF** del
+  documento y el **detalle** que se abre al hacer clic en la fila sí se consultan
+  desde la matriz; el PDF sale con los datos y el logo de la sucursal dueña. El
+  correo y el WhatsApp de recordatorio **no**: usan la configuración de correo y
+  las plantillas de la empresa activa, así que para esos documentos se envían
+  desde la sucursal; tampoco entran en el envío masivo.
 - El buscador de **Cliente** busca en todos los establecimientos y muestra al
   cliente una sola vez por identificación; al elegirlo, el filtro alcanza sus
   documentos en todas las sucursales (el cruce es por RUC/cédula, porque cada
@@ -424,12 +427,59 @@ en plazo.
 
 Puede filtrar entre ver solo lo pendiente, solo lo vencido o todo.
 
+## Acciones de cada documento: PDF, cobro, historial, correo y WhatsApp
+
+La columna **Acciones** de cada fila muestra solo los botones que el usuario
+puede usar sobre ese documento; los que no aplican **no aparecen** (no se
+muestran deshabilitados):
+
+| Botón | Qué hace | Cuándo aparece |
+| --- | --- | --- |
+| PDF (rojo) | Descarga el PDF de la factura o del recibo | Facturas y recibos. Los saldos iniciales no son un documento impreso |
+| Cobro (verde) | Abre el modal para registrar el cobro | El documento tiene saldo y el usuario tiene permiso de **crear** en Cuentas por Cobrar **y** en **Ingresos** |
+| Historial (reloj) | Lista los movimientos que mueven el saldo | El usuario tiene acceso (ver) al **Reporte de cartera** |
+| Correo | Recordatorio de pago por correo | Facturas y recibos de la empresa activa |
+| WhatsApp | Recordatorio por WhatsApp | Facturas de la empresa activa, solo si la empresa tiene **WhatsApp configurado** |
+
+- El **PDF del documento** es el mismo que se descarga desde Facturas o Recibos
+  de venta (misma plantilla y datos del establecimiento). Se abre en otra
+  pestaña, así la cartera no pierde los filtros.
+- El PDF y el detalle se conceden con el permiso de **Cuentas por Cobrar**: quien
+  ve el documento en la cartera puede descargarlo y ver su detalle aunque no
+  tenga acceso a los módulos de Facturas o Recibos. Siguen valiendo las reglas de
+  *Quién ve qué*: un documento que no es de su cartera responde *No tiene
+  permiso sobre este registro: no pertenece a su cartera*.
+- Los permisos del cobro y del historial también los valida el servidor: aunque
+  alguien intente la acción por otra vía, sin el permiso responde con el aviso
+  correspondiente.
+
+### Ver el detalle del documento
+
+Un clic sobre la fila (fuera de los botones) abre a la derecha el panel **Detalle
+del Documento**: número, fecha, cliente, ítems con cantidad y precio, subtotal,
+IVA y total. En los saldos iniciales muestra solo el valor, porque no tienen
+ítems.
+
+### En el celular
+
+- Los botones **PDF**, **Excel** y **Envío Masivo Email** de la cabecera de la
+  tabla se muestran **solo con su ícono** (rojo PDF, verde Excel, azul sobre de
+  correo) para ocupar menos espacio. En pantallas medianas y grandes llevan
+  también su texto.
+- El **menú lateral** (botón de las tres rayas) funciona normalmente en esta
+  pantalla.
+
 ## Registrar el cobro
 
 El cobro se registra desde el propio listado, sin salir a otro módulo, tanto
 para facturas como para recibos de venta y saldos iniciales. Lo que se registra
 aquí es exactamente lo mismo que un ingreso: reduce el saldo del documento y
 genera su asiento.
+
+Por eso, además del permiso de **crear** en Cuentas por Cobrar, se exige permiso
+de **crear en Ingresos** (*Configuración → Permisos por módulo*). Sin alguno de
+los dos, el botón de cobro no aparece; en el consolidado se mira el permiso en la
+sucursal dueña del documento.
 
 ### Serie del cobro: solo puntos de emisión activos
 
@@ -447,13 +497,15 @@ esa serie. En el consolidado, la lista es la de la sucursal dueña del documento
   está inactiva*: cierre el modal y vuelva a abrirlo.
 
 El recordatorio por **correo** funciona para facturas y recibos; el envío por
-**WhatsApp** está disponible solo para facturas.
+**WhatsApp** está disponible solo para facturas y solo si la empresa tiene
+WhatsApp configurado (si no, el botón no aparece).
 
 ## Historial de la factura
 
 El botón del reloj de cada fila abre el **Historial de Cobros**, que lista
 **todos los movimientos que mueven el saldo del documento**, no solo los cobros
-en efectivo o banco:
+en efectivo o banco. El botón aparece solo a quien tiene acceso al **Reporte de
+cartera** (permiso de ver en *Configuración → Permisos por módulo*):
 
 | Tipo | Qué es | Efecto |
 | --- | --- | --- |
@@ -552,8 +604,36 @@ Y dos casos que el reporte **no** descuenta a propósito:
 - **Una serie no aparece en el modal de cobro**: está **inactiva**. Solo se
   ofrecen los puntos de emisión activos; actívela en Empresa, pestaña Puntos de
   Emisión (ver *Serie del cobro: solo puntos de emisión activos*).
+- **Al hacer clic en una fila, el panel de detalle decía "HTTP 403"**: el panel
+  consultaba el documento en los módulos de Facturas o Recibos de venta, y el
+  usuario no tenía acceso a ellos. Ya está corregido: el detalle (y el PDF) se
+  piden a Cuentas por Cobrar. Si ahora el panel muestra un aviso, es el motivo
+  real (por ejemplo, que el documento no pertenece a su cartera).
+- **No aparece el botón de cobro, de historial o de WhatsApp**: no es un error.
+  El cobro exige permiso de crear en Cuentas por Cobrar y en Ingresos, el
+  historial exige acceso al Reporte de cartera y WhatsApp exige que la empresa lo
+  tenga configurado (ver *Acciones de cada documento*).
+- **En el celular, el menú lateral se veía oscurecido y no dejaba elegir nada**:
+  el fondo oscuro del menú quedaba por encima del propio menú en esta pantalla
+  (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
+
+- **2.15** — Cada fila tiene un botón **PDF** que descarga la factura o el recibo
+  (el mismo de sus módulos), también para quien no tiene acceso a Facturas o
+  Recibos de venta. Los botones que no se pueden usar **ya no se muestran**: el
+  **cobro** exige permiso de crear en Cuentas por Cobrar **y en Ingresos**
+  (también lo valida el servidor), el **historial** exige acceso al **Reporte de
+  cartera** y **WhatsApp** solo aparece si la empresa lo tiene configurado. En el
+  consolidado, el botón de cobro sin permiso ya no sale deshabilitado: no
+  aparece. El **detalle del documento** (clic en la fila) deja de responder
+  *HTTP 403* a quien no tiene acceso a Facturas o Recibos, y en el consolidado
+  muestra el detalle completo del documento de otra sucursal. El **PDF del
+  listado** ya no imprime el recuadro de filtros aplicados (el Excel sí). En el
+  celular, los botones PDF, Excel y Envío Masivo Email quedan solo con su ícono
+  y el **menú lateral** vuelve a responder. Nueva sección *Acciones de cada
+  documento*; actualizadas *El PDF del listado*, *Registrar el cobro*,
+  *Historial de la factura* y *Consolidado de establecimientos*.
 
 - **2.14** — Los **administradores (nivel 2)** ven la cartera completa aunque no
   tengan marcado *Acceso total*, igual que el superadministrador, y pueden

@@ -628,6 +628,9 @@ class ConsignacionesVentasController extends BaseModuloController
     {
         ob_start();
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         $id        = (int) ($_POST['id'] ?? 0);
@@ -728,6 +731,34 @@ class ConsignacionesVentasController extends BaseModuloController
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Pedidos de los que se cargaron líneas en la consignación (pestaña Pedidos del modal). */
+    public function getPedidosAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idCons    = (int) ($_GET['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            if ($idCons <= 0) {
+                echo json_encode(['ok' => true, 'data' => []]);
+                exit;
+            }
+            $this->docPropioOCortar($idCons);
+            $pedidos = $this->service->getPedidosDeConsignacion($idCons, $idEmpresa);
+            // El enlace al pedido solo se ofrece a quien puede ver el módulo Pedidos (allí se
+            // vuelve a validar el permiso).
+            $urlPedidos = !empty(\App\Helpers\Permisos::porRuta('modulos/pedidos')['ver'])
+                ? rtrim(BASE_URL, '/') . '/modulos/pedidos'
+                : null;
+            echo json_encode(['ok' => true, 'data' => $pedidos, 'url_pedidos' => $urlPedidos]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudieron cargar los pedidos de la consignación.']);
         }
         exit;
     }
@@ -853,6 +884,7 @@ class ConsignacionesVentasController extends BaseModuloController
 
                 // Si aún no tiene asiento, intentar generarlo ahora: procesarAsientoContable
                 // solo persiste si la sugerencia queda COMPLETA (cuentas configuradas) y cuadrada.
+                $errorGeneracion = null;
                 if ($idAsiento <= 0 && !empty($cab)) {
                     try {
                         $this->service->procesarAsientoContable($idCons, [
@@ -862,7 +894,8 @@ class ConsignacionesVentasController extends BaseModuloController
                         $cab = $this->service->getPorId($idCons, $idEmpresa) ?? [];
                         $idAsiento = (int) ($cab['id_asiento_contable'] ?? 0);
                     } catch (\Throwable $e) {
-                        // No fatal: si no se pudo, se devuelve la sugerencia para completarla a mano.
+                        // No fatal: se informa el motivo en la pestaña.
+                        $errorGeneracion = $e->getMessage();
                     }
                 }
 
@@ -889,9 +922,14 @@ class ConsignacionesVentasController extends BaseModuloController
                     exit;
                 }
 
-                // Sin asiento guardado: proponer reclasificación por costo.
-                $detalles = $this->service->obtenerAsientoSugerido($idEmpresa, $idCons);
-                echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
+                // Sin asiento guardado: la pestaña no muestra líneas a medias (importes sin
+                // cuenta), solo el motivo por el que todavía no se generó.
+                echo json_encode([
+                    'ok'          => true,
+                    'detalles'    => [],
+                    'es_guardado' => false,
+                    'aviso'       => $this->service->motivoSinAsiento($idCons, $idEmpresa, $errorGeneracion),
+                ]);
                 exit;
             }
 

@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado
-version: 1.17
+etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen
+version: 1.18
 orden: 20
 estado: activo
 ---
@@ -250,9 +250,11 @@ columnas **Tipo**, **Origen** y **Estado** no entran en la búsqueda libre: para
 filtrar por ellas use la ventana de filtros. Las cuentas contables tampoco (casi
 todo asiento usa Caja o Bancos): búsquelas en la pestaña *Detalles* o con el
 filtro *Cuenta contable*. Puede escribir varias palabras en cualquier orden y no
-importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el
-cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y la
-tabla se ve atenuada.
+importan mayúsculas ni tildes. El total también se encuentra escrito con coma
+decimal (*1078,09* encuentra *1.078,09*). Para limpiar, borre el texto o pulse
+Escape en el cuadro. Mientras busca, aparece un **círculo girando** al final del
+cuadro y la tabla se ve atenuada. Si sigue escribiendo, la búsqueda anterior se
+cancela y el listado muestra solo el resultado de lo último que escribió.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -266,8 +268,14 @@ Limpiar filtros.
 | Documento | Fecha del asiento (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (contabilizado, borrador, anulado), tipo, N° comprobante, origen, usuario que registró, total (mínimo y máximo), cuadrado o descuadrado (Debe = Haber), editado a mano, fecha de registro, concepto, observaciones |
 | Líneas | Cuenta contable (código o nombre) y referencia / documento: el asiento aparece si **alguna** de sus líneas coincide |
 
-Los selectores *Tipo*, *Origen* y *Usuario que registró* listan solo lo que la
-empresa ya tiene en sus asientos.
+El selector *Origen* lista **todos** los módulos que generan asientos, con su
+nombre (factura de venta, compra, ingreso, egreso, retenciones, notas de crédito y
+débito, importación, traspaso, conciliación de tarjetas, consignación, retorno y
+cambio de productos, facturación de consignación, rol de pagos, activos fijos,
+declaraciones de IVA y de retenciones, asiento manual y migración del sistema
+anterior), aunque la empresa todavía no tenga asientos de alguno; si la empresa
+tiene asientos con otro origen, también aparece, al final. Los selectores *Tipo* y
+*Usuario que registró* listan solo lo que la empresa ya tiene en sus asientos.
 
 **Pestaña Detalles** (lo que hay dentro del asiento). Es un único cuadro,
 **Buscar libremente dentro de los asientos**: escriba una cuenta (código o
@@ -329,6 +337,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.18** — La búsqueda del listado y la de la pestaña *Detalles* son mucho más rápidas con muchos asientos: medido con 200.000 asientos, la búsqueda libre pasa de 7 a 33 segundos a entre 1,5 y 3 segundos, y en *Detalles* lo que aparece poco (un número de documento, un monto) pasa de hasta 40 segundos a entre 1 y 1,5 segundos. Encuentran lo mismo que antes; además, el total ahora también se encuentra escrito con coma decimal. Mientras se busca, el resto del sistema ya no queda esperando, y una búsqueda nueva cancela la anterior. El selector *Origen* de la ventana de filtros lista todos los orígenes con su nombre, aunque la empresa todavía no tenga asientos de alguno.
 - **1.17** — Los **cambios de productos migrados** no reciben asiento por ninguna vía: ni en la generación en masa, ni desde Auditoría Contable, ni al abrir su pestaña *Asiento contable* (que ahora lo indica), ni al cambiarles el estado. Antes se les podía generar, aunque el sistema anterior no contabilizaba los cambios. Los que ya lo recibieron se detectan y se quitan (eliminación lógica) con `database/diagnosticos/20260916_cambios_migrados_con_asiento.sql`.
 - **1.16** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas del asiento (salvo Tipo, Origen y

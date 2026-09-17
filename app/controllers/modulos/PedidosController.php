@@ -456,6 +456,8 @@ class PedidosController extends BaseModuloController {
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q         = trim($_GET['q'] ?? '');
@@ -494,6 +496,10 @@ class PedidosController extends BaseModuloController {
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario (la búsqueda
+        // siguiente al seguir tecleando, el sondeo del navbar) esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
@@ -852,6 +858,9 @@ class PedidosController extends BaseModuloController {
     {
         ob_start();
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        session_write_close();
         header('Content-Type: application/json');
 
         $id        = (int) ($_POST['id'] ?? 0);
@@ -1054,5 +1063,13 @@ class PedidosController extends BaseModuloController {
             echo json_encode(['ok' => false, 'count' => 0]);
         }
         exit;
+    }
+
+    /** Libera el candado de la sesión PHP (leer $_SESSION sigue disponible). */
+    private function liberarSesion(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
     }
 }

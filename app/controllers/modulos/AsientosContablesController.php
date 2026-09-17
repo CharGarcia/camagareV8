@@ -82,6 +82,9 @@ class AsientosContablesController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q         = trim($_GET['q'] ?? '');
@@ -214,6 +217,9 @@ class AsientosContablesController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
@@ -718,6 +724,14 @@ class AsientosContablesController extends BaseModuloController
             'cuadre' => $cuadre,
         ]);
         return true;
+    }
+
+    /** Libera el candado de la sesión PHP (lectura de $_SESSION sigue disponible). */
+    private function liberarSesion(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
     }
 
     private function recogerDatosFormulario(): array

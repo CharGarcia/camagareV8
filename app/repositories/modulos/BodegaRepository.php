@@ -354,4 +354,31 @@ class BodegaRepository extends BaseRepository
         $st->execute([':id_u' => $idUsuario, ':id_e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    /**
+     * Ids de las bodegas con el acceso REVOCADO explícitamente para un usuario
+     * (Bodegas → pestaña "Accesos": usuarios_bodegas.denegado = true).
+     *
+     * Es la cara negativa de getBodegasPermitidas() y expresa el modelo tal como está
+     * en la base desde database/usuarios_bodegas_denegado.sql: sin registro = con
+     * acceso. Por eso lo normal es que devuelva [] y quien filtra un listado por
+     * bodega no tenga que añadir nada a su consulta (ni perder el plan que ya tenía);
+     * solo los usuarios a los que se les quitó alguna bodega generan condición.
+     * Niveles 2 y 3 (administrador y superadministrador) ven todas las bodegas.
+     */
+    public function getIdsBodegasDenegadas(int $idUsuario, int $idEmpresa, int $nivel): array
+    {
+        if ($nivel >= 2) {
+            return [];
+        }
+
+        $sql = "SELECT ub.id_bodega
+                  FROM usuarios_bodegas ub
+                 WHERE ub.id_usuario = :id_u AND ub.id_empresa = :id_e
+                   AND ub.eliminado = false AND ub.denegado = true";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_u' => $idUsuario, ':id_e' => $idEmpresa]);
+
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
 }

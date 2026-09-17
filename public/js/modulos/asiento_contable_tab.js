@@ -17,6 +17,7 @@
  *   const tab = crearAsientoTab({
  *     prefijo: 'mc',                                     // → mc-asiento-tbody, mc-asiento-save, …
  *     previewUrl: `${CMG_urlBase}/getAsientoSugeridoAjax`, // { ok, detalles, es_guardado, asiento, cuadre_documento, aviso? }
+ *     soloRegistrado: true,                              // opcional: sin asiento registrado no hay vista previa, solo el aviso
  *     cuentasUrl: `${BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
  *     asientosUrl: `${BASE_URL}/modulos/asientos-contables`,
  *     onGuardado: () => { … }                            // opcional: refrescar el documento
@@ -82,7 +83,12 @@
                 lblDif.classList.toggle('text-success', diff < 0.005);
             }
             if (badge) {
-                if (diff < 0.005 && (td > 0 || th > 0)) {
+                if (filas().length === 0) {
+                    // Sin líneas (asiento aún no generado): no hay nada que calificar; un
+                    // «Descuadrado» en rojo se leía como un error del documento.
+                    badge.className = 'badge d-none';
+                    badge.textContent = '';
+                } else if (diff < 0.005 && (td > 0 || th > 0)) {
                     badge.className = 'badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2';
                     badge.textContent = 'Cuadrado';
                 } else {
@@ -339,37 +345,71 @@
             placeholder('<i class="bi bi-hourglass-split me-1"></i> Cargando asiento contable...');
             setStatus('');
 
+            // Asiento ya registrado: es el que se edita.
+            function pintarRegistrado() {
+                // Solo se guarda desde aquí un asiento existente. Los botones existen solo si
+                // el usuario puede actualizar asientos contables (la vista no los renderiza
+                // sin ese permiso).
+                guardable = !!(ids.save && $(ids.save) && cabecera.modificable);
+                editable = guardable;
+                pintarBotones();
+
+                tbody.innerHTML = '';
+                cabecera.detalles.forEach(d => agregarLinea(
+                    d.id_cuenta_contable,
+                    d.codigo_cuenta || d.cuenta_codigo || '',
+                    d.nombre_cuenta || d.cuenta_nombre || '',
+                    parseFloat(d.debe || 0),
+                    parseFloat(d.haber || 0),
+                    d.documento_referencia || d.referencia_detalle || '',
+                    { id_centro_costo: d.id_centro_costo, id_proyecto: d.id_proyecto }
+                ));
+                manual = false;
+                recalcular();
+
+                if (cabecera.editado_manual) {
+                    setStatus('<i class="bi bi-pencil-fill me-1"></i> Asiento editado a mano: el sistema ya no lo regenera al guardar el documento.', 'text-warning-emphasis');
+                } else if (guardable) {
+                    setStatus('<i class="bi bi-check-circle-fill me-1"></i> Asiento contable registrado. Puedes corregirlo aquí y guardarlo.', 'text-success');
+                } else {
+                    setStatus('<i class="bi bi-check-circle-fill me-1"></i> Asiento contable generado y registrado.', 'text-success');
+                }
+            }
+
             try {
-                // 1. Asiento ya registrado: es el que se edita.
+                // 1. Asiento ya registrado.
                 cabecera = soloVistaPrevia ? null : await cargarAsientoReal();
                 if (cabecera && cabecera.detalles.length) {
-                    // Solo se guarda desde aquí un asiento existente. Los botones existen solo si
-                    // el usuario puede actualizar asientos contables (la vista no los renderiza
-                    // sin ese permiso).
-                    guardable = !!(ids.save && $(ids.save) && cabecera.modificable);
-                    editable = guardable;
+                    pintarRegistrado();
+                    return;
+                }
+
+                // `soloRegistrado`: el módulo muestra únicamente el asiento ya generado y completo
+                // (consignaciones). Sin él no se muestran líneas a medias —importes sin cuenta—,
+                // solo el motivo. El `previewUrl` igual se consulta: intenta generarlo en ese
+                // momento (si la configuración contable ya está completa) y dice qué falta.
+                if (cfg.soloRegistrado && !soloVistaPrevia) {
+                    cabecera = null;
+                    editable = false;
+                    guardable = false;
                     pintarBotones();
-
-                    tbody.innerHTML = '';
-                    cabecera.detalles.forEach(d => agregarLinea(
-                        d.id_cuenta_contable,
-                        d.codigo_cuenta || d.cuenta_codigo || '',
-                        d.nombre_cuenta || d.cuenta_nombre || '',
-                        parseFloat(d.debe || 0),
-                        parseFloat(d.haber || 0),
-                        d.documento_referencia || d.referencia_detalle || '',
-                        { id_centro_costo: d.id_centro_costo, id_proyecto: d.id_proyecto }
-                    ));
-                    manual = false;
-                    recalcular();
-
-                    if (cabecera.editado_manual) {
-                        setStatus('<i class="bi bi-pencil-fill me-1"></i> Asiento editado a mano: el sistema ya no lo regenera al guardar el documento.', 'text-warning-emphasis');
-                    } else if (guardable) {
-                        setStatus('<i class="bi bi-check-circle-fill me-1"></i> Asiento contable registrado. Puedes corregirlo aquí y guardarlo.', 'text-success');
-                    } else {
-                        setStatus('<i class="bi bi-check-circle-fill me-1"></i> Asiento contable generado y registrado.', 'text-success');
+                    let json = { ok: true };
+                    if (cfg.previewUrl) {
+                        json = await (await fetch(`${cfg.previewUrl}?${new URLSearchParams({ id: idDocumento }).toString()}`)).json();
+                        if (json.ok && json.es_guardado) {
+                            cabecera = await cargarAsientoReal();
+                            if (cabecera && cabecera.detalles.length) {
+                                pintarRegistrado();
+                                return;
+                            }
+                            cabecera = null;
+                        }
                     }
+                    placeholder(json.ok
+                        ? '<i class="bi bi-info-circle me-1"></i> ' + (json.aviso || 'A&uacute;n no se ha generado el asiento contable de este documento.')
+                        : '<i class="bi bi-exclamation-triangle-fill me-1"></i> ' + (json.error || 'No se pudo consultar el asiento contable.'),
+                        json.ok ? 'text-muted' : 'text-danger');
+                    setStatus('');
                     return;
                 }
 

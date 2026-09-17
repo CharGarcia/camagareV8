@@ -114,6 +114,11 @@ class FiltrosBusqueda
      *    d.x = cv.id)` la subconsulta corre por cada fila de la empresa, y si el cruce no
      *    tiene índice se vuelve cuadrática (Consignaciones, 17-09-2026: minutos con ~50.000
      *    documentos). Admite también `'si'`.
+     *    Excepción medida (Asientos contables, 17-09-2026): si el cruce con la fila de afuera
+     *    TIENE índice, un `EXISTS (SELECT 1 FROM … d WHERE d.id_asiento = a.id AND {cond})`
+     *    correlacionado también sirve, y gana cuando el texto se combina con filtros que
+     *    descartan muchas filas: solo corre para las filas que pasaron los demás filtros,
+     *    mientras que el conjunto lee siempre todas las líneas de la empresa.
      *
      * @param array<int, string|array{sql:string, si?:string, col?:string}> $columnas Columnas o expresiones SQL a buscar
      * @param string   $texto    Texto escrito por el usuario (una o varias palabras)

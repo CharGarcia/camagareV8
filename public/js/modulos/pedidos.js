@@ -291,12 +291,18 @@ async function PED_fetchSearch(page = 1) {
     // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras se
     // busca, también al paginar u ordenar (que llaman a esta función directo).
     tbody.classList.add('fm-cargando-target');
+    // Solo vale la ÚLTIMA búsqueda: si llega otra (se sigue tecleando, se pagina) se
+    // cancela la anterior, y una respuesta vieja nunca pinta sobre una nueva.
+    if (window.PED_busquedaCtrl) window.PED_busquedaCtrl.abort();
+    const ctrl = new AbortController();
+    window.PED_busquedaCtrl = ctrl;
     try {
         const orden = window.CMG_ordenParam(window.currentSorts || []);
         const uri = `${window.CMG_urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
-        const resp = await fetch(uri);
+        const resp = await fetch(uri, { signal: ctrl.signal });
         const data = await resp.json();
-        
+
+        if (ctrl !== window.PED_busquedaCtrl) return; // llegó tarde: ya hay otra búsqueda
         if (data.ok) {
             window.currentPage = page;
             window.PED_TOTAL = Number(data.total || 0); // tope de exportación
@@ -309,6 +315,7 @@ async function PED_fetchSearch(page = 1) {
             // reemplaza el <tbody>, el <thead> no se vuelve a renderizar aquí).
         }
     } catch (err) {
+        if (err.name === 'AbortError') return;  // la canceló una búsqueda más nueva
         console.error('Error al listar pedidos:', err);
         tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5 text-danger">
             <i class="bi bi-exclamation-triangle d-block fs-2 mb-2"></i>
@@ -316,7 +323,7 @@ async function PED_fetchSearch(page = 1) {
         </td></tr>`;
         infoPag.textContent = 'Error de carga';
     } finally {
-        tbody.classList.remove('fm-cargando-target');
+        if (ctrl === window.PED_busquedaCtrl) tbody.classList.remove('fm-cargando-target');
     }
 }
 

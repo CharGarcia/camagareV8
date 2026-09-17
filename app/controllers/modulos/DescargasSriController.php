@@ -91,6 +91,10 @@ class DescargasSriController extends BaseModuloController
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         $resultados = [];
 
+        // Soltar el candado de la sesión antes de esperar al SRI (una consulta por clave): si
+        // no, las demás peticiones del usuario hacen fila hasta que termine todo el lote.
+        session_write_close();
+
         foreach ($clavesArr as $clave) {
             if (strlen($clave) !== 49) {
                 $resultados[] = [
@@ -158,6 +162,13 @@ class DescargasSriController extends BaseModuloController
             return;
         }
 
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        // Soltar el candado de la sesión antes de esperar al SRI: si no, las demás peticiones
+        // del usuario hacen fila hasta que responda.
+        session_write_close();
+
         try {
             $xmlString = '';
             if (!empty($xmlBase64)) {
@@ -174,8 +185,6 @@ class DescargasSriController extends BaseModuloController
             }
 
             $registerService = new DocumentoAutomatedRegisterService();
-            $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
-            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
 
             $res = $registerService->procesarYRegistrar($xmlString, $idEmpresa, $idUsuario);
 

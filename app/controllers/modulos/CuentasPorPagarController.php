@@ -540,7 +540,6 @@ class CuentasPorPagarController extends BaseModuloController
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
-            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
 
             // Consolidado: columna "Estab." al inicio; se le resta ancho a "Proveedor" para
             // que la suma siga en 100% (table-layout: fixed).
@@ -605,9 +604,6 @@ class CuentasPorPagarController extends BaseModuloController
                 .header p  { margin: 0; font-size: 7.5pt; color: #777; }
                 .stats-box { text-align: center; padding: 5px; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
-                table.filtros td { border: none; padding: 1px 4px; font-size: 7.5pt; }
-                table.filtros td.filtro-lbl { width: 12%; font-weight: bold; color: #555; }
-                table.filtros td.filtro-val { width: 88%; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <div class="header">
@@ -615,14 +611,6 @@ class CuentasPorPagarController extends BaseModuloController
                 <h3>Cuentas por Pagar</h3>
                 <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
             </div>
-            <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
-                <?php foreach ($filtrosTxt as $lbl => $val): ?>
-                <tr>
-                    <td class="filtro-lbl"><?= htmlspecialchars($lbl) ?>:</td>
-                    <td class="filtro-val"><?= htmlspecialchars($val) ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </table>
             <table class="stats">
                 <tr>
                     <td class="stats-box" style="width:25%;">
@@ -855,7 +843,6 @@ class CuentasPorPagarController extends BaseModuloController
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
-            $filtrosTxt    = ['Vista' => 'Por proveedor (formato mayor)'] + $this->describirFiltros($idsEmpresa, $filtros);
             $e = static fn ($v): string => htmlspecialchars((string)$v);
 
             // Anchos por columna (table-layout: fixed, deben sumar 100%). La columna del
@@ -950,9 +937,6 @@ class CuentasPorPagarController extends BaseModuloController
                 table.tot td { background: #343a40; color: #fff; font-weight: bold; font-size: 8.5pt; border: 1px solid #343a40; }
                 .stats-box { text-align: center; padding: 5px; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
-                table.filtros td { border: none; padding: 1px 4px; font-size: 7.5pt; }
-                table.filtros td.filtro-lbl { width: 12%; font-weight: bold; color: #555; }
-                table.filtros td.filtro-val { width: 88%; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <div class="header">
@@ -960,11 +944,6 @@ class CuentasPorPagarController extends BaseModuloController
                 <h3>Cuentas por Pagar por Proveedor</h3>
                 <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
             </div>
-            <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
-                <?php foreach ($filtrosTxt as $lbl => $val): ?>
-                <tr><td class="filtro-lbl"><?= $e($lbl) ?>:</td><td class="filtro-val"><?= $e($val) ?></td></tr>
-                <?php endforeach; ?>
-            </table>
             <table class="stats">
                 <tr>
                     <td class="stats-box" style="width:25%;">
@@ -1083,7 +1062,8 @@ class CuentasPorPagarController extends BaseModuloController
     }
 
     /**
-     * Descripción legible de los filtros aplicados (encabezado de PDF y Excel).
+     * Descripción legible de los filtros aplicados (encabezado del Excel; el PDF no imprime
+     * los filtros, solo el encabezado y las tarjetas de totales).
      * Devuelve etiqueta => valor, con los ids de proveedor resueltos a nombre.
      */
     private function describirFiltros(int|array $idsEmpresa, array $filtros): array

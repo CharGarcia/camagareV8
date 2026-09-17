@@ -686,6 +686,10 @@ class NotasCreditoController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
 
+        // Soltar el candado de la sesión antes de esperar al SRI (y al correo): si no, las
+        // demás peticiones del usuario hacen fila hasta que responda.
+        $this->liberarSesion();
+
         try {
             $envioService = new \App\Services\Sri\SriEnvioService();
             $resultado    = $envioService->enviarNotaCredito($id, $idEmpresa, $idUsuario);
@@ -968,6 +972,9 @@ class NotasCreditoController extends BaseModuloController
     {
         ob_start();
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         $id        = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);

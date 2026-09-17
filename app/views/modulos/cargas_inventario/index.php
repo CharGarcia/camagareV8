@@ -138,6 +138,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                     ['v' => 'pendiente', 'l' => 'Pendiente'],
                     ['v' => 'aprobada',  'l' => 'Aprobada'],
                     ['v' => 'rechazada', 'l' => 'Rechazada'],
+                    ['v' => 'anulada',   'l' => 'Anulada'],
                 ]],
                 ['tab' => $tC, 'key' => 'numero',      'label' => 'N° de carga',         'icon' => 'bi-hash',            'type' => 'number_range', 'grupo' => 'Carga', 'col' => 4],
                 ['tab' => $tC, 'key' => 'lineas',      'label' => 'Líneas',              'icon' => 'bi-list-ol',         'type' => 'number_range', 'grupo' => 'Carga', 'col' => 4],
@@ -300,6 +301,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                             <div class="form-text" style="font-size:0.72rem;">
                                 Formato <strong>Excel (.xlsx)</strong>. Columnas: <code>codigo_producto, bodega, cantidad, costo_unitario, numero_lote, fecha_caducidad, nup, observacion</code>.
                                 La plantilla incluye hojas <strong>Productos</strong> y <strong>Bodegas</strong> con los valores válidos de la empresa. El movimiento se aplica al inventario solo al aprobarse (si la empresa exige aprobación).
+                                <br><strong>Ajuste</strong>: conteo físico. La cantidad es lo contado (0 si no hay); al aprobar se registra solo la diferencia. Si el producto tiene lotes, una línea por lote; sin NUP.
+                                <br><strong>NUP</strong>: una serie con cualquier cantidad, o varias series (una por renglón de la celda) con cantidad igual al número de series.
                             </div>
                         </div>
                     </div>
@@ -337,9 +340,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                 <div id="ci-detalle-cuerpo" class="ci-det-cuerpo p-3"></div>
             </div>
             <div class="modal-footer py-2 d-flex justify-content-between">
-                <div>
+                <div class="d-flex gap-2">
                     <?php if (!empty($perm['eliminar'])): ?>
                         <button type="button" id="ci-btn-eliminar" class="btn btn-outline-danger btn-sm d-none" onclick="CI_eliminar()"><i class="bi bi-trash me-1"></i>Eliminar</button>
+                    <?php endif; ?>
+                    <?php // Anular (solo cargas aprobadas): aprobador con permiso de eliminar. ?>
+                    <?php if (!empty($perm['eliminar']) && !empty($esAprobador)): ?>
+                        <button type="button" id="ci-btn-anular" class="btn btn-outline-danger btn-sm d-none" onclick="CI_anular()" title="Reversa el stock de la carga"><i class="bi bi-x-octagon me-1"></i>Anular</button>
                     <?php endif; ?>
                 </div>
                 <div class="d-flex gap-2">
@@ -358,6 +365,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
 const CI_URL = '<?= $urlBase ?>';
 const CI_ES_APROBADOR  = <?= !empty($esAprobador) ? 'true' : 'false' ?>;
 const CI_ES_SUPERADMIN = <?= !empty($esSuperAdmin) ? 'true' : 'false' ?>;
+const CI_PUEDE_CREAR   = <?= !empty($perm['crear']) ? 'true' : 'false' ?>;
 const CI_ID_USUARIO    = <?= (int) ($idUsuarioActual ?? 0) ?>;
 const CI_APROBADORES   = <?= json_encode(array_values($aprobadoresNombres ?? []), JSON_UNESCAPED_UNICODE) ?>;
 const CI_PER_PAGE      = <?= $perPage ?>;
@@ -375,6 +383,12 @@ const CI_esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
 /** Booleano de PostgreSQL tal como llega en el JSON (true, 't' o '1'). */
 const CI_bool = v => v === true || v === 't' || v === '1' || v === 1;
+
+/** Fecha y hora de PostgreSQL ("2026-09-17 10:22:33.123") en formato d-m-Y H:i:s. */
+const CI_fechaHora = s => {
+    const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}:\d{2}:\d{2})/);
+    return m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}` : '';
+};
 
 /**
  * Todos los avisos del módulo van con SweetAlert.
@@ -442,8 +456,11 @@ window.CI_buscar = async function (p = 1) {
     }
 };
 
-function CI_abrirImportar() {
-    document.getElementById('ci-form-importar').reset();
+/** @param {string} observacion Texto inicial de la observación (p. ej. al reemplazar una carga anulada). */
+function CI_abrirImportar(observacion = '') {
+    const form = document.getElementById('ci-form-importar');
+    form.reset();
+    form.querySelector('input[name=observacion]').value = observacion;
     bootstrap.Modal.getOrCreateInstance(document.getElementById('ci-modal-importar')).show();
 }
 
@@ -530,7 +547,7 @@ async function CI_verDetalle(id) {
     cuerpo.innerHTML = '';
     document.getElementById('ci-det-numero').textContent = '';
     document.getElementById('ci-det-resumen').innerHTML = '';
-    ['ci-btn-aprobar', 'ci-btn-rechazar', 'ci-btn-eliminar'].forEach(b => document.getElementById(b)?.classList.add('d-none'));
+    ['ci-btn-aprobar', 'ci-btn-rechazar', 'ci-btn-eliminar', 'ci-btn-anular'].forEach(b => document.getElementById(b)?.classList.add('d-none'));
     const modalEl = document.getElementById('ci-modal-detalle');
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
     const loader = document.getElementById('ci-modal-loader');
@@ -562,8 +579,25 @@ async function CI_verDetalle(id) {
     const esCreador    = String(c.created_by) === String(CI_ID_USUARIO);
     const puedeAprobar = c.estado === 'pendiente' && CI_ES_APROBADOR && (CI_ES_SUPERADMIN || !esCreador);
 
+    // Ajuste (conteo físico): la cantidad es lo contado. Aprobado, se muestran el saldo que
+    // tenía el sistema y la diferencia registrada; pendiente, una estimación con el saldo de
+    // hoy (al aprobar se recalcula).
+    const esAjuste   = c.tipo_movimiento === 'ajuste';
+    const ajusteHoy  = esAjuste && c.estado === 'pendiente';
+    const saldoDe    = d => ajusteHoy ? d.saldo_actual : d.saldo_sistema;
+    const difDe      = d => ajusteHoy ? d.diferencia_estimada : d.diferencia;
+    const conDif     = esAjuste ? detalle.filter(d => difDe(d) != null && Math.abs(parseFloat(difDe(d))) > 0.000001).length : 0;
+    const celdaNum   = v => (v == null || v === '') ? '<span class="text-muted">—</span>' : String(parseFloat(v));
+    const celdaDif   = v => {
+        if (v == null || v === '') return '<span class="text-muted">—</span>';
+        const n = parseFloat(v);
+        if (Math.abs(n) < 0.000001) return '<span class="text-muted">0</span>';
+        return n > 0 ? `<span class="text-success fw-semibold">+${n}</span>` : `<span class="text-danger fw-semibold">${n}</span>`;
+    };
+
     // Resumen junto a los botones de exportar: la lista de líneas hace su propio scroll.
     document.getElementById('ci-det-resumen').innerHTML = `${detalle.length} ${detalle.length === 1 ? 'línea' : 'líneas'}`
+        + (esAjuste && detalle.some(d => difDe(d) != null) ? ` · ${conDif} con diferencia${ajusteHoy ? ' (estimado)' : ''}` : '')
         + (conError ? ` · <span class="text-danger fw-semibold">${conError} con error</span>` : '');
 
     // Líneas en el orden del archivo. El motivo lleva la fila del Excel (fila 1 =
@@ -577,7 +611,9 @@ async function CI_verDetalle(id) {
             <td class="text-truncate" style="max-width:280px" title="${CI_esc(producto)}">${CI_esc(producto)}</td>
             <td class="text-truncate" style="max-width:160px" title="${CI_esc(bodega)}">${CI_esc(bodega)}</td>
             <td class="text-end text-nowrap">${parseFloat(d.cantidad || 0)}</td>
+            ${esAjuste ? `<td class="text-end text-nowrap">${celdaNum(saldoDe(d))}</td><td class="text-end text-nowrap">${celdaDif(difDe(d))}</td>` : ''}
             <td class="text-end text-nowrap">$ ${parseFloat(d.costo_unitario || 0).toFixed(2)}</td>
+            <td style="min-width:180px">${CI_esc(d.observacion || '')}</td>
             <td class="text-center">${ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>'}</td>
             <td class="pe-2 text-danger" style="min-width:220px">${ok ? '' : `Fila ${i + 2}: ${CI_esc(d.error_linea || 'Línea con error')}`}</td>
         </tr>`;
@@ -585,7 +621,8 @@ async function CI_verDetalle(id) {
 
     const campo = (etiqueta, valor, col = 'col-6 col-md-3', claseValor = 'fw-bold') =>
         `<div class="${col}"><div class="text-muted" style="font-size:.65rem;">${etiqueta}</div><div class="${claseValor}">${valor}</div></div>`;
-    const estadoTxt = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' }[c.estado] || CI_esc(c.estado);
+    const estadoTxt = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada', anulada: 'Anulada' }[c.estado] || CI_esc(c.estado);
+    const anuladaPor = [c.anulado_por_nombre, CI_fechaHora(c.anulada_at)].filter(Boolean).join(' · ');
     const aprobadores = CI_APROBADORES.length ? CI_esc(CI_APROBADORES.join(', ')) : 'un usuario autorizado (configúrelos en el módulo Aprobaciones)';
 
     cuerpo.innerHTML = `
@@ -596,11 +633,17 @@ async function CI_verDetalle(id) {
             ${campo('Comprobada', validada ? 'Sí' : 'No', undefined, `fw-bold ${validada ? 'text-success' : 'text-danger'}`)}
             ${c.observacion ? campo('Observación', CI_esc(c.observacion), 'col-12', '') : ''}
             ${c.motivo_rechazo ? campo('Motivo rechazo', CI_esc(c.motivo_rechazo), 'col-12', 'text-danger') : ''}
+            ${c.estado === 'anulada' ? campo('Anulada por', CI_esc(anuladaPor || '-'), 'col-12', '') : ''}
+            ${c.motivo_anulacion ? campo('Motivo de anulación', CI_esc(c.motivo_anulacion), 'col-12', 'text-danger') : ''}
             ${c.estado === 'pendiente' && !puedeAprobar ? campo('Pendiente de aprobación por', aprobadores, 'col-12') : ''}
         </div>
         ${c.estado === 'pendiente' && !validada ? `<div class="small text-danger mb-2 flex-shrink-0">
             <i class="bi bi-exclamation-triangle-fill me-1"></i>No se puede aprobar mientras haya líneas con error: corrija el archivo,
             <strong>elimine</strong> esta carga e impórtela de nuevo.
+        </div>` : ''}
+        ${esAjuste ? `<div class="small text-muted mb-2 flex-shrink-0">
+            <i class="bi bi-clipboard-check me-1"></i>Ajuste por conteo físico: cada producto queda con la cantidad contada y solo se registra la diferencia.
+            ${ajusteHoy ? 'El saldo y la diferencia son los de <strong>hoy</strong>; al aprobar se recalculan con el saldo de ese momento.' : ''}
         </div>` : ''}
         <div class="ci-det-lineas border rounded-3">
             <table class="table table-sm table-hover mb-0 align-middle" style="font-size:.78rem;">
@@ -609,13 +652,15 @@ async function CI_verDetalle(id) {
                         <th class="ps-2">Código</th>
                         <th>Producto</th>
                         <th>Bodega</th>
-                        <th class="text-end">Cantidad</th>
+                        <th class="text-end">${esAjuste ? 'Contado' : 'Cantidad'}</th>
+                        ${esAjuste ? `<th class="text-end">${ajusteHoy ? 'Saldo actual' : 'Saldo sistema'}</th><th class="text-end">${ajusteHoy ? 'Diferencia estimada' : 'Diferencia'}</th>` : ''}
                         <th class="text-end">Costo</th>
+                        <th>Observación</th>
                         <th class="text-center">OK</th>
                         <th class="pe-2">Motivo</th>
                     </tr>
                 </thead>
-                <tbody>${filas || '<tr><td colspan="7" class="text-center text-muted py-3">Sin líneas</td></tr>'}</tbody>
+                <tbody>${filas || `<tr><td colspan="${esAjuste ? 10 : 8}" class="text-center text-muted py-3">Sin líneas</td></tr>`}</tbody>
             </table>
         </div>`;
 
@@ -626,7 +671,10 @@ async function CI_verDetalle(id) {
         btnAp.title = validada ? '' : 'La carga tiene líneas con error';
     }
     if (puedeAprobar) document.getElementById('ci-btn-rechazar')?.classList.remove('d-none');
-    if (c.estado !== 'aprobada') document.getElementById('ci-btn-eliminar')?.classList.remove('d-none');
+    // Pendientes y rechazadas no movieron el stock: se eliminan. Una aprobada se anula
+    // (lo hace otro aprobador, no quien la registró); una anulada queda como constancia.
+    if (c.estado === 'pendiente' || c.estado === 'rechazada') document.getElementById('ci-btn-eliminar')?.classList.remove('d-none');
+    if (c.estado === 'aprobada' && (CI_ES_SUPERADMIN || !esCreador)) document.getElementById('ci-btn-anular')?.classList.remove('d-none');
 }
 
 /** Botones PDF / Excel del modal: descargan las líneas de la carga abierta. */
@@ -639,8 +687,11 @@ function CI_exportarDetalle(tipo) {
     window.open(`${CI_URL}/${accion}?id=${CI_cargaActual.id}`, '_blank');
 }
 
-/** Aprobar / rechazar / eliminar: aviso de proceso, resultado y listado al día. */
-async function CI_accion(url, body, textoProceso) {
+/**
+ * Aprobar / rechazar / eliminar / anular: aviso de proceso, resultado y listado al día.
+ * @param {Function|null} alTerminar Si se indica, reemplaza el aviso de éxito (recibe la respuesta).
+ */
+async function CI_accion(url, body, textoProceso, alTerminar = null) {
     CI_avisoProceso(textoProceso, '', 'ci-modal-detalle');
     let json;
     try {
@@ -655,6 +706,10 @@ async function CI_accion(url, body, textoProceso) {
     }
     bootstrap.Modal.getInstance(document.getElementById('ci-modal-detalle'))?.hide();
     CI_buscar(CI_currentPage);
+    if (alTerminar) {
+        alTerminar(json);
+        return;
+    }
     CI_aviso({ icon: 'success', titleText: json.mensaje || 'Listo' });
 }
 
@@ -663,7 +718,9 @@ async function CI_aprobar() {
     const r = await CI_aviso({
         icon: 'question',
         title: `¿Aprobar la carga #${CI_cargaActual.numero}?`,
-        text: 'Se aplicará al inventario y el stock se actualizará.',
+        text: CI_cargaActual.tipo_movimiento === 'ajuste'
+            ? 'Cada producto quedará con la cantidad contada: se registrará solo la diferencia con el saldo que tenga en este momento.'
+            : 'Se aplicará al inventario y el stock se actualizará.',
         showCancelButton: true,
         confirmButtonText: 'Sí, aprobar',
         confirmButtonColor: '#198754',
@@ -701,6 +758,75 @@ async function CI_eliminar() {
     }, 'ci-modal-detalle');
     if (!r.isConfirmed) return;
     CI_accion(`${CI_URL}/eliminarAjax`, `id=${CI_cargaActual.id}`, 'Eliminando la carga…');
+}
+
+/**
+ * Anular una carga aprobada (reversa su stock). Primero se pregunta al servidor si se puede
+ * —entre otras cosas, si sus productos ya se usaron después de aplicarla— y solo entonces se
+ * pide el motivo. Una carga aprobada no se edita: se anula y se importa el archivo corregido.
+ */
+async function CI_anular() {
+    if (!CI_cargaActual) return;
+    const carga = CI_cargaActual;
+    CI_avisoProceso('Comprobando la carga…', 'Revisando si sus productos ya se usaron después de aplicarla.', 'ci-modal-detalle');
+
+    let chk;
+    try {
+        const res = await fetch(`${CI_URL}/comprobarAnulacionAjax?id=${carga.id}`);
+        chk = await res.json();
+    } catch (err) {
+        chk = { ok: false, mensaje: 'No se pudo comunicar con el servidor. Intente de nuevo.' };
+    }
+    if (!chk.ok) {
+        CI_aviso({ icon: 'error', title: 'No se pudo comprobar la carga', text: chk.mensaje || chk.error || 'Error al comprobar la carga.' }, 'ci-modal-detalle');
+        return;
+    }
+    if (!chk.puede) {
+        const conflictos = chk.conflictos || [];
+        CI_aviso({
+            icon: 'error',
+            title: `No se puede anular la carga #${carga.numero}`,
+            ...(conflictos.length ? { width: 720 } : {}),
+            html: `<div class="text-start small">
+                <p class="mb-2">${CI_esc(chk.mensaje)}</p>
+                ${conflictos.length ? `<ul class="mb-2 ps-3 text-danger" style="max-height:260px;overflow:auto;">${conflictos.map(x => `<li>${CI_esc(x)}</li>`).join('')}</ul>
+                <p class="mb-0 text-muted">Anule o elimine primero esos documentos, o corrija el stock con una carga nueva (entrada o salida) sin anular esta.</p>` : ''}
+            </div>`,
+        }, 'ci-modal-detalle');
+        return;
+    }
+
+    const n = Number(chk.movimientos) || 0;
+    const r = await CI_aviso({
+        icon: 'warning',
+        title: `¿Anular la carga #${carga.numero}?`,
+        html: `<div class="text-start small">
+            <p class="mb-2">${n === 0
+                ? 'Esta carga no movió el stock (el conteo coincidía con el sistema): no hay nada que reversar, solo quedará anulada.'
+                : `${n === 1 ? 'Se reversará 1 movimiento' : `Se reversarán ${n} movimientos`} de inventario y el stock volverá a como estaba antes de aplicarla. Sus productos no se usaron después, así que se puede anular.`}</p>
+            <p class="mb-0 text-muted">La carga queda en el listado como <b>Anulada</b>. Si tenía un error, importe después el archivo corregido como una carga nueva.</p>
+        </div>`,
+        input: 'textarea',
+        inputLabel: 'Motivo de la anulación',
+        inputPlaceholder: 'Escriba el motivo…',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, anular',
+        confirmButtonColor: '#dc3545',
+        inputValidator: v => (!v || !v.trim()) ? 'Indique el motivo de la anulación.' : undefined,
+    }, 'ci-modal-detalle');
+    if (!r.isConfirmed) return;
+
+    CI_accion(`${CI_URL}/anularAjax`, `id=${carga.id}&motivo=${encodeURIComponent(r.value.trim())}`, 'Anulando la carga y reversando el stock…', async json => {
+        const fin = await CI_aviso({
+            icon: 'success',
+            titleText: json.mensaje || 'Carga anulada',
+            text: CI_PUEDE_CREAR ? 'Si la carga tenía un error, importe ahora el archivo corregido como una carga nueva.' : '',
+            showCancelButton: CI_PUEDE_CREAR,
+            confirmButtonText: CI_PUEDE_CREAR ? '<i class="bi bi-upload me-1"></i>Importar archivo corregido' : 'Aceptar',
+            cancelButtonText: 'Cerrar',
+        });
+        if (CI_PUEDE_CREAR && fin.isConfirmed) CI_abrirImportar(`Corrige la carga #${carga.numero} (anulada)`);
+    });
 }
 
 // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3

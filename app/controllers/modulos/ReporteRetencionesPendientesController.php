@@ -145,6 +145,9 @@ class ReporteRetencionesPendientesController extends BaseModuloController
     public function enviarEmailAjax(): void
     {
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        session_write_close();
         try {
             $res = $this->service->enviarAvisoIndividual(
                 (int) $_SESSION['id_empresa'],
@@ -166,6 +169,9 @@ class ReporteRetencionesPendientesController extends BaseModuloController
     public function enviarEmailAgrupadoAjax(): void
     {
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        session_write_close();
         try {
             $ids = json_decode($_POST['ids'] ?? '[]', true);
             $correos = json_decode($_POST['correos'] ?? '{}', true);

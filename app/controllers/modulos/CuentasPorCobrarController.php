@@ -13,6 +13,12 @@ use PDO;
 
 class CuentasPorCobrarController extends BaseModuloController
 {
+    /** Registrar un cobro emite un ingreso: exige además permiso de crear en Ingresos. */
+    private const RUTA_INGRESOS = 'modulos/ingresos';
+
+    /** El historial de cobros se ofrece a quien puede ver el Reporte de cartera. */
+    private const RUTA_CARTERA = 'modulos/reporte_cartera';
+
     private CuentasPorCobrarRepository $repo;
 
     protected function getRutaModulo(): string
@@ -88,6 +94,11 @@ class CuentasPorCobrarController extends BaseModuloController
             'puedeConsolidar'  => !empty($idsConsolidado),
             'establecimientos' => $establecimientos,
             'idEmpresa'        => $idEmpresa,
+            // Botones de cada fila: el historial y el cobro solo aparecen si el usuario los
+            // puede usar (el servidor valida lo mismo en historialCobros*Ajax y
+            // empresaEscritura()). El cobro se decide además por fila (`puede_operar`).
+            'puedeHistorial'   => \App\Helpers\Permisos::puedeVer(self::RUTA_CARTERA),
+            'puedeCobrar'      => $this->puedeRegistrarCobro($idEmpresa),
             'fullWidth'   => true,
             'base'        => BASE_URL,
         ]);
@@ -110,6 +121,7 @@ class CuentasPorCobrarController extends BaseModuloController
         $antiguedad = $this->repo->getAntiguedad($idsEmpresa, $filtros);
 
         // Formateamos filas
+        $puedeCobrarEn = [];
         foreach ($filas as &$f) {
             $f['total']        = number_format((float)$f['total'],        2, '.', '');
             $f['total_cobrado']= number_format((float)$f['total_cobrado'],2, '.', '');
@@ -120,19 +132,12 @@ class CuentasPorCobrarController extends BaseModuloController
             // deshabilitar esas acciones y mostrar el badge del establecimiento.
             $f['id_empresa'] = (int)($f['id_empresa'] ?? $idEmpresa);
             $f['es_hermana'] = $f['id_empresa'] !== $idEmpresa;
-            // Fase 2: cobrar desde la matriz un documento de una hermana exige permiso de
-            // CREAR en ESA empresa (el ingreso se registra en sus libros). Se resuelve una
-            // vez por establecimiento; la vista deshabilita el botón cuando es false.
-            $permCrearPorEmpresa ??= [];
-            if ($f['es_hermana']) {
-                $e = $f['id_empresa'];
-                if (!isset($permCrearPorEmpresa[$e])) {
-                    $permCrearPorEmpresa[$e] = !empty(\App\Helpers\Permisos::porRutaEnEmpresa($this->getRutaModulo(), $e)['crear']);
-                }
-                $f['puede_operar'] = $permCrearPorEmpresa[$e];
-            } else {
-                $f['puede_operar'] = true;
-            }
+            // ¿Se puede cobrar desde aquí? Exige crear en este módulo y en Ingresos en la
+            // empresa dueña del documento: en el consolidado (fase 2) el ingreso se registra
+            // en los libros de la hermana. Se resuelve una vez por establecimiento; la vista
+            // oculta el botón de cobro cuando es false.
+            $puedeCobrarEn[$f['id_empresa']] ??= $this->puedeRegistrarCobro($f['id_empresa']);
+            $f['puede_operar'] = $puedeCobrarEn[$f['id_empresa']];
         }
         unset($f);
 
@@ -258,7 +263,6 @@ class CuentasPorCobrarController extends BaseModuloController
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
-            $filtrosTxt    = $this->describirFiltrosPdf($idsEmpresa, $filtros);
             $e = static fn ($v): string => htmlspecialchars((string)$v);
 
             $totalValor = 0.0; $totalSaldo = 0.0; $totalCobrado = 0.0; $totalDocs = 0.0; $totalCant = 0.0;
@@ -297,16 +301,9 @@ class CuentasPorCobrarController extends BaseModuloController
                 .text-end { text-align: right; } .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; } .header h3 { margin: 0 0 2px 0; font-size: 10pt; } .header p { margin: 0; font-size: 7.5pt; }
-                table.filtros td { border: none; padding: 1px 4px; font-size: 7.5pt; }
-                table.filtros td.filtro-lbl { width: 12%; font-weight: bold; color: #555; } table.filtros td.filtro-val { width: 88%; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar por Producto') ?>
-            <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
-                <?php foreach ($filtrosTxt as $lbl => $val): ?>
-                <tr><td class="filtro-lbl"><?= $e($lbl) ?>:</td><td class="filtro-val"><?= $e($val) ?></td></tr>
-                <?php endforeach; ?>
-            </table>
             <table>
                 <thead>
                     <tr>
@@ -510,7 +507,6 @@ class CuentasPorCobrarController extends BaseModuloController
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
-            $filtrosTxt    = $this->describirFiltrosPdf($idsEmpresa, $filtros);
             $e = static fn ($v): string => htmlspecialchars((string)$v);
 
             // Anchos por columna (table-layout: fixed, deben sumar 100%). La columna del
@@ -607,17 +603,9 @@ class CuentasPorCobrarController extends BaseModuloController
                 table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }
                 .stat-lbl  { font-size: 7.5pt; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
-                table.filtros td { border: none; padding: 1px 4px; font-size: 7.5pt; }
-                table.filtros td.filtro-lbl { width: 12%; font-weight: bold; color: #555; }
-                table.filtros td.filtro-val { width: 88%; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar por Cliente') ?>
-            <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
-                <?php foreach ($filtrosTxt as $lbl => $val): ?>
-                <tr><td class="filtro-lbl"><?= $e($lbl) ?>:</td><td class="filtro-val"><?= $e($val) ?></td></tr>
-                <?php endforeach; ?>
-            </table>
             <table class="stats">
                 <tr>
                     <td class="stats-box" style="width:25%;">
@@ -728,18 +716,42 @@ class CuentasPorCobrarController extends BaseModuloController
      * Empresa en la que se REGISTRA un cobro (fase 2 del consolidado). Por defecto la activa;
      * si la petición trae el `id_empresa` de una hermana del grupo consolidable desde la
      * matriz, el ingreso se registra en los libros de ESA empresa (su punto de emisión, su
-     * secuencial, su cartera y su contabilidad), y se exige que el usuario tenga permiso de
-     * CREAR en ella (Permisos::porRutaEnEmpresa): responde 403 si no lo tiene. Un id fuera del
-     * grupo cae a la empresa activa, donde el documento no existe y el cobro se rechaza.
+     * secuencial, su cartera y su contabilidad). En la empresa que corresponda se exige
+     * permiso de CREAR en este módulo y en Ingresos (puedeRegistrarCobro()): responde 403 si
+     * falta alguno. Un id fuera del grupo cae a la empresa activa, donde el documento no
+     * existe y el cobro se rechaza.
      */
     private function empresaEscritura(): int
     {
         $idEmpresa = $this->empresaLectura();
-        if ($idEmpresa !== (int) $_SESSION['id_empresa']
-            && empty(\App\Helpers\Permisos::porRutaEnEmpresa($this->getRutaModulo(), $idEmpresa)['crear'])) {
-            $this->json(['ok' => false, 'error' => 'No tiene permiso para registrar cobros en ese establecimiento.'], 403);
+        if (!$this->puedeRegistrarCobro($idEmpresa)) {
+            $this->json(['ok' => false, 'error' => $idEmpresa !== (int) $_SESSION['id_empresa']
+                ? 'No tiene permiso para registrar cobros en ese establecimiento: requiere permiso de crear en Cuentas por Cobrar y en Ingresos.'
+                : 'No tiene permiso para registrar cobros: el cobro genera un ingreso y requiere permiso de crear en Cuentas por Cobrar y en Ingresos.'], 403);
         }
         return $idEmpresa;
+    }
+
+    /**
+     * ¿Puede el usuario registrar cobros en esa empresa? El cobro emite un INGRESO en sus
+     * libros, así que además de crear en este módulo exige crear en Ingresos. Es la misma
+     * regla con la que la vista muestra u oculta el botón de cobro (`puede_operar`).
+     */
+    private function puedeRegistrarCobro(int $idEmpresa): bool
+    {
+        return !empty(\App\Helpers\Permisos::porRutaEnEmpresa($this->getRutaModulo(), $idEmpresa)['crear'])
+            && !empty(\App\Helpers\Permisos::porRutaEnEmpresa(self::RUTA_INGRESOS, $idEmpresa)['crear']);
+    }
+
+    /**
+     * El historial de cobros se ofrece a quien puede ver el Reporte de cartera; la vista
+     * oculta el botón con la misma regla. Responde 403 si no tiene ese permiso.
+     */
+    private function requireHistorialCobros(): void
+    {
+        if (!\App\Helpers\Permisos::puedeVer(self::RUTA_CARTERA)) {
+            $this->json(['ok' => false, 'error' => 'No tiene permiso para consultar el historial de cobros: requiere acceso al Reporte de cartera.'], 403);
+        }
     }
 
     /**
@@ -994,6 +1006,7 @@ class CuentasPorCobrarController extends BaseModuloController
     public function historialCobrosAjax(): void
     {
         $this->requireLeer();
+        $this->requireHistorialCobros();
         $idEmpresa = $this->empresaLectura(); // consolidado: puede ser una hermana (solo lectura)
         $idVenta   = (int)($_GET['id_venta'] ?? 0);
 
@@ -1005,6 +1018,108 @@ class CuentasPorCobrarController extends BaseModuloController
         $this->facturaPropiaOCortar($idVenta, $idEmpresa); // registros propios (§6)
         $historial = $this->repo->getHistorialCobros($idVenta, $idEmpresa);
         $this->jsonSuccess(['historial' => $historial]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // DETALLE Y PDF DE UN DOCUMENTO (panel lateral y botón PDF de la fila)
+    //
+    // Se validan con el permiso de ESTE módulo y el alcance del usuario (§6), no con el
+    // de Facturas o Recibos de venta: quien ve el documento en la cartera puede ver su
+    // detalle y descargarlo aunque no tenga acceso a esos módulos. Antes el panel
+    // consultaba los endpoints de esos módulos y, sin ese acceso, mostraba "HTTP 403".
+    // En el consolidado aceptan el id_empresa de una hermana (empresaLectura()).
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Factura o recibo del listado ya validado (empresa + alcance del usuario): corta con 403
+     * si no pertenece a su cartera y devuelve null si no existe o no es un documento
+     * pendiente de la cartera (anulado, eliminado…).
+     *
+     * @return array{0:string,1:int,2:int,3:?array} [origen, id, empresa, documento]
+     */
+    private function documentoDelListado(): array
+    {
+        $idEmpresa = $this->empresaLectura();
+        $origen    = strtoupper(trim((string) ($_GET['origen'] ?? 'FACTURA')));
+        $id        = (int) ($_GET['id'] ?? 0);
+        if ($id <= 0 || !in_array($origen, ['FACTURA', 'RECIBO'], true)) {
+            return [$origen, $id, $idEmpresa, null];
+        }
+        $doc = $origen === 'RECIBO'
+            ? $this->reciboPropioOCortar($id, $idEmpresa)
+            : $this->facturaPropiaOCortar($id, $idEmpresa);
+        return [$origen, $id, $idEmpresa, $doc];
+    }
+
+    /**
+     * Detalle para el panel lateral (partials/offcanvas_doc_preview.php, vía extra.url).
+     * Responde la forma que espera el panel y solo lo que pinta: cabecera con número,
+     * fecha, cliente y totales, y las líneas con código, descripción, cantidad y precios.
+     */
+    public function detalleDocumentoAjax(): void
+    {
+        $this->requireLeer();
+        [$origen, $id, , $doc] = $this->documentoDelListado();
+        if (!$doc) {
+            $this->json(['ok' => false, 'mensaje' => $origen === 'RECIBO' ? 'Recibo no encontrado.' : 'Factura no encontrada.']);
+        }
+
+        $detalles = $origen === 'RECIBO'
+            ? (new \App\repositories\modulos\ReciboVentaRepository())->getDetalles($id)
+            : (new \App\repositories\modulos\FacturaVentaRepository())->getDetalles($id);
+
+        $this->json([
+            'ok'       => true,
+            'cabecera' => [
+                'establecimiento'     => $doc['establecimiento'] ?? '',
+                'punto_emision'       => $doc['punto_emision'] ?? '',
+                'secuencial'          => $doc['secuencial'] ?? '',
+                'fecha_emision'       => $doc['fecha_emision'] ?? '',
+                'cliente_nombre'      => $doc['cliente_nombre'] ?? '',
+                'total_sin_impuestos' => $doc['total_sin_impuestos'] ?? 0,
+                'importe_total'       => $doc['importe_total'] ?? 0,
+            ],
+            'detalles' => array_map(static fn (array $d): array => [
+                'codigo_principal'          => $d['codigo_principal'] ?? '',
+                'descripcion'               => (string) ($d['descripcion'] ?? '') !== '' ? $d['descripcion'] : ($d['producto_nombre'] ?? ''),
+                'cantidad'                  => $d['cantidad'] ?? 0,
+                'precio_unitario'           => $d['precio_unitario'] ?? 0,
+                'precio_total_sin_impuesto' => $d['precio_total_sin_impuesto'] ?? 0,
+            ], $detalles),
+        ]);
+    }
+
+    /**
+     * PDF de una factura o un recibo del listado (botón PDF de la columna Acciones): el mismo
+     * que descargan los módulos Facturas y Recibos de venta (DocumentoVentaPdfService).
+     * Se abre en otra pestaña, así que los errores responden texto plano.
+     */
+    public function pdfDocumento(): void
+    {
+        $this->requireLeer();
+        [$origen, $id, $idEmpresa, $doc] = $this->documentoDelListado();
+        if (!$doc) {
+            http_response_code(404);
+            echo $origen === 'RECIBO' ? 'Recibo no encontrado.' : 'Factura no encontrada.';
+            exit;
+        }
+        // Validado el acceso, la sesión ya no se usa: se suelta su candado para que las demás
+        // peticiones del usuario no esperen a que termine de armarse el PDF.
+        session_write_close();
+
+        try {
+            if (!(new \App\Services\modulos\DocumentoVentaPdfService())->descargar($origen, $id, $idEmpresa)) {
+                http_response_code(404);
+                echo $origen === 'RECIBO' ? 'Recibo no encontrado.' : 'Factura no encontrada.';
+            }
+        } catch (\Throwable $e) {
+            error_log('[CxC pdfDocumento] ' . $e->getMessage());
+            if (!headers_sent()) {
+                http_response_code(500);
+            }
+            echo 'Error al generar el PDF: ' . $e->getMessage();
+        }
+        exit;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1034,6 +1149,7 @@ class CuentasPorCobrarController extends BaseModuloController
     public function historialCobrosReciboAjax(): void
     {
         $this->requireLeer();
+        $this->requireHistorialCobros();
         $idEmpresa = $this->empresaLectura(); // consolidado: puede ser una hermana (solo lectura)
         $idRecibo  = (int)($_GET['id_recibo'] ?? 0);
 
@@ -1271,6 +1387,9 @@ $plantillasFiltradas = [];
     public function enviarEmailAjax(): void
     {
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        session_write_close();
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
         $idVenta   = (int)($_POST['id_venta'] ?? 0);
@@ -1343,6 +1462,9 @@ $plantillasFiltradas = [];
     public function enviarEmailMasivoAjax(): void
     {
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar los correos (hasta 300 documentos): si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        session_write_close();
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
         $docsRaw = json_decode($_POST['documentos'] ?? '[]', true);
@@ -1517,6 +1639,9 @@ $plantillasFiltradas = [];
     public function enviarWhatsappAjax(): void
     {
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el WhatsApp: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        session_write_close();
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
         $idVenta      = (int)($_POST['id_venta'] ?? 0);
@@ -1910,7 +2035,6 @@ $plantillasFiltradas = [];
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
-            $filtrosTxt    = $this->describirFiltrosPdf($idsEmpresa, $filtros);
 
             // Consolidado: columna "Estab." al inicio; se le resta ancho a "Cliente" para
             // que la suma siga en 100% (table-layout: fixed).
@@ -1965,20 +2089,9 @@ $plantillasFiltradas = [];
                 table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }
                 .stat-lbl  { font-size: 7.5pt; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
-                table.filtros td { border: none; padding: 1px 4px; font-size: 7.5pt; }
-                table.filtros td.filtro-lbl { width: 12%; font-weight: bold; color: #555; }
-                table.filtros td.filtro-val { width: 88%; }
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar') ?>
-            <table class="filtros" style="border:1px solid #ccc;background:#f8f9fa;">
-                <?php foreach ($filtrosTxt as $lbl => $val): ?>
-                <tr>
-                    <td class="filtro-lbl"><?= htmlspecialchars($lbl) ?>:</td>
-                    <td class="filtro-val"><?= htmlspecialchars($val) ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </table>
             <table class="stats">
                 <tr>
                     <td class="stats-box" style="width:25%;">
@@ -2177,8 +2290,8 @@ $plantillasFiltradas = [];
     }
 
     /**
-     * Descripción legible de los filtros aplicados (encabezado del Excel; el PDF imprime la
-     * versión acotada de describirFiltrosPdf()).
+     * Descripción legible de los filtros aplicados (encabezado del Excel; el PDF no imprime
+     * los filtros, solo el encabezado y las tarjetas de totales).
      * Devuelve etiqueta => valor, con los ids de cliente/vendedor resueltos a nombre.
      */
     private function describirFiltros(int|array $idsEmpresa, array $filtros): array
@@ -2261,25 +2374,7 @@ $plantillasFiltradas = [];
     }
 
     /**
-     * Filtros del recuadro de los PDF: los de describirFiltros() sin Alcance, Tipo de
-     * documento ni Estado, y con Producto y Cliente solo cuando se filtró por ellos (sin
-     * filtro, describirFiltros() los describe como 'Todos'). El Excel conserva la
-     * descripción completa.
-     */
-    private function describirFiltrosPdf(int|array $idsEmpresa, array $filtros): array
-    {
-        $txt = $this->describirFiltros($idsEmpresa, $filtros);
-        unset($txt['Alcance'], $txt['Tipo de documento'], $txt['Estado']);
-        foreach (['Producto', 'Cliente'] as $clave) {
-            if ($txt[$clave] === 'Todos') {
-                unset($txt[$clave]);
-            }
-        }
-        return $txt;
-    }
-
-    /**
-     * Texto del filtro Producto para PDF/Excel: productos elegidos (una vez por código) y,
+     * Texto del filtro Producto para el Excel: productos elegidos (una vez por código) y,
      * si además hay texto libre, se agrega entre comillas.
      */
     private function describirProductos(array $filtros, array $idsEmpresa): string
@@ -2555,6 +2650,7 @@ HTML;
     public function historialCobrosSaldoInicialAjax(): void
     {
         $this->requireLeer();
+        $this->requireHistorialCobros();
         $idEmpresa = $this->empresaLectura(); // consolidado: puede ser una hermana (solo lectura)
         $idSaldo   = (int)($_GET['id_saldo'] ?? 0);
         if ($idSaldo <= 0) {

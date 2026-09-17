@@ -134,19 +134,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                                     <input type="date" name="fecha_caducidad" class="form-control form-control-sm">
                                 </div>
 
-                                <!-- Traceabilidad Unitaria -->
-                                <div class="col-12">
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="ajuste_check_individual" name="individual_check">
-                                        <label class="form-check-label small fw-bold text-primary" for="ajuste_check_individual">
-                                            <i class="bi bi-tag-fill me-1"></i> Registrar seriales individuales (NUP)
-                                        </label>
-                                    </div>
-                                    <div id="ajuste_div_individual" class="d-none animate__animated animate__fadeIn">
-                                        <label class="form-label small fw-bold text-muted">Ingrese seriales (uno por línea)</label>
-                                        <textarea name="seriales" id="ajuste_seriales" class="form-control form-control-sm font-monospace" rows="4" placeholder="SERIAL001&#10;SERIAL002"></textarea>
-                                        <small class="text-muted">Si ingresa seriales, el sistema creará un movimiento por cada uno.</small>
-                                    </div>
+                                <?php
+                                // NUP / serial: este modal no los registra (se registran desde cargas de
+                                // inventario, compras o importaciones). Al editar un movimiento que ya
+                                // tiene NUP se muestra y se reenvía tal cual: sin el campo, guardar lo borraba.
+                                ?>
+                                <div class="col-12 d-none" id="ajuste_div_nup">
+                                    <label class="form-label small fw-bold text-muted">NUP / Serial</label>
+                                    <input type="text" id="ajuste_nup_ver" class="form-control form-control-sm font-monospace" readonly>
+                                    <input type="hidden" name="nup" id="ajuste_nup">
                                 </div>
 
                                 <!-- Observaciones -->
@@ -210,8 +206,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
         const inputBusqueda = document.getElementById('ajuste_busqueda_prod');
         const inputIdProd = document.getElementById('ajuste_id_producto');
         const resDiv = document.getElementById('ajuste_resultados_prod');
-        const checkIndiv = document.getElementById('ajuste_check_individual');
-        const divIndiv = document.getElementById('ajuste_div_individual');
+        const divNup = document.getElementById('ajuste_div_nup');
+        const inputNup = document.getElementById('ajuste_nup');
+        const inputNupVer = document.getElementById('ajuste_nup_ver');
         const resMsg = document.getElementById('ajuste_mensaje');
         const selectTipoMov = document.getElementById('ajuste_tipo_mov');
         const selectBodega = document.getElementById('ajuste_id_bodega');
@@ -248,7 +245,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                 inputIdMov.value = '';
                 inputIdProd.value = '';
                 resMsg.className = 'alert mx-3 mb-3 py-2 small d-none shadow-sm border-0';
-                divIndiv.classList.add('d-none');
+                divNup.classList.add('d-none');
+                inputNup.value = '';
+                inputNupVer.value = '';
                 spanStock.classList.add('d-none');
                 btnGuardar.disabled = false;
                 btnGuardar.classList.remove('d-none');
@@ -298,9 +297,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                                 inputCaducidad.value = d.fecha_caducidad.split(' ')[0];
                             }
                             if (d.nup) {
-                                checkIndiv.checked = true;
-                                divIndiv.classList.remove('d-none');
-                                document.getElementById('ajuste_seriales').value = d.nup;
+                                inputNup.value = d.nup;
+                                inputNupVer.value = d.nup;
+                                divNup.classList.remove('d-none');
                             }
 
                             const estaAnulado = d.eliminado === true || d.eliminado === 't';
@@ -572,18 +571,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
             cargarMedidasProducto(id);
             verificarCargaDatos();
         };
-
-        // Toggle individual NUP
-        checkIndiv.addEventListener('change', () => {
-            const areaSeriales = document.getElementById('ajuste_seriales');
-            if (checkIndiv.checked) {
-                divIndiv.classList.remove('d-none');
-                areaSeriales.required = true;
-            } else {
-                divIndiv.classList.add('d-none');
-                areaSeriales.required = false;
-            }
-        });
 
         // Guardar Ajuste
         form.addEventListener('submit', async (e) => {

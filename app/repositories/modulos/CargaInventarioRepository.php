@@ -275,6 +275,49 @@ class CargaInventarioRepository extends BaseRepository
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
+    /**
+     * Igual que getById(), pero bloquea la cabecera hasta el fin de la transacción: una
+     * segunda anulación de la misma carga espera y luego la encuentra ya anulada, en vez
+     * de reversar el stock dos veces. `OF c`: el bloqueo no se aplica a los LEFT JOIN.
+     */
+    public function getByIdParaActualizar(int $id, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT c.*, u.nombre AS creado_por_nombre, ua.nombre AS aprobado_por_nombre
+             FROM inventario_cargas c
+             LEFT JOIN usuarios u  ON u.id = c.created_by
+             LEFT JOIN usuarios ua ON ua.id = c.aprobada_por
+             WHERE c.id = :id AND c.id_empresa = :e AND c.eliminado = false
+             FOR UPDATE OF c"
+        );
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Movimientos de kardex vigentes que generó la aprobación de la carga (uno por línea, o
+     * uno por serie en las líneas con NUP). Las cargas migradas del sistema anterior no
+     * tienen: su kardex se migró aparte, sin enlace a la carga.
+     *
+     * `ambiente_vigente`: el movimiento es del ambiente (pruebas/producción) que la empresa
+     * usa hoy, el mismo con el que se calcula su stock.
+     */
+    public function getMovimientosKardex(int $idCarga, int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT k.id, k.id_producto, k.id_bodega, k.cantidad, k.fecha_movimiento, k.tipo_ambiente,
+                    k.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = k.id_empresa) AS ambiente_vigente,
+                    b.nombre AS bodega_nombre
+             FROM inventario_kardex k
+             LEFT JOIN bodegas b ON b.id = k.id_bodega
+             WHERE k.id_empresa = :e AND k.referencia_tipo = 'carga_inventario' AND k.referencia_id = :id
+               AND k.eliminado = false
+             ORDER BY k.id ASC"
+        );
+        $st->execute([':e' => $idEmpresa, ':id' => $idCarga]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getDetalle(int $idCarga, int $idEmpresa): array
     {
         $st = $this->db->prepare(
@@ -492,6 +535,120 @@ class CargaInventarioRepository extends BaseRepository
         $st = $this->db->prepare("SELECT nombre FROM bodegas WHERE id_empresa = :e AND eliminado = false ORDER BY nombre ASC");
         $st->execute([':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Marca como anulada una carga aprobada (su stock ya se reversó en la misma transacción).
+     * Condicionado a `estado = 'aprobada'`: devuelve false si otro proceso la cambió antes.
+     * El token del enlace de aprobación por correo deja de servir.
+     */
+    public function anular(int $id, int $idEmpresa, int $idUsuario, string $motivo): bool
+    {
+        $st = $this->db->prepare(
+            "UPDATE inventario_cargas
+                SET estado = 'anulada', anulada_por = :u, anulada_at = CURRENT_TIMESTAMP,
+                    motivo_anulacion = :motivo, token_aprobacion = NULL,
+                    updated_at = CURRENT_TIMESTAMP, updated_by = :u2
+              WHERE id = :id AND id_empresa = :e AND eliminado = false AND estado = 'aprobada'"
+        );
+        $st->execute([':u' => $idUsuario, ':u2' => $idUsuario, ':motivo' => $motivo, ':id' => $id, ':e' => $idEmpresa]);
+        return $st->rowCount() === 1;
+    }
+
+    // ─── Ajuste por conteo físico ─────────────────────────────────────────────
+
+    /**
+     * Resultado de aplicar una línea de ajuste: el saldo que tenía el sistema al aprobar y la
+     * diferencia registrada (contado − saldo; 0 si no hubo que mover nada).
+     */
+    public function registrarResultadoAjuste(int $idLinea, int $idEmpresa, float $saldoSistema, float $diferencia): void
+    {
+        $this->db->prepare(
+            "UPDATE inventario_cargas_detalle
+                SET saldo_sistema = :saldo, diferencia = :dif, updated_at = CURRENT_TIMESTAMP
+              WHERE id = :id AND id_empresa = :e"
+        )->execute([':saldo' => $saldoSistema, ':dif' => $diferencia, ':id' => $idLinea, ':e' => $idEmpresa]);
+    }
+
+    /** ¿Alguna línea de la carga se aplicó ya como ajuste por conteo (tiene diferencia registrada)? */
+    public function tieneAjusteAplicado(int $idCarga, int $idEmpresa): bool
+    {
+        if (!$this->soportaAjusteConteo()) {
+            return false;
+        }
+        $st = $this->db->prepare(
+            "SELECT EXISTS (SELECT 1 FROM inventario_cargas_detalle
+                             WHERE id_carga = :id AND id_empresa = :e AND eliminado = false AND diferencia IS NOT NULL)"
+        );
+        $st->execute([':id' => $idCarga, ':e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
+     * Saldo que tiene HOY cada línea de un ajuste pendiente (vista previa para quien aprueba):
+     * el del lote si la línea trae lote, o el total del producto en la bodega. Mismo cálculo que
+     * InventarioRepository::getStockActual()/getStockLote(), en una sola consulta.
+     *
+     * @return array<int, float> id de la línea => saldo
+     */
+    public function getSaldosActualesAjuste(int $idCarga, int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT d.id,
+                    (SELECT ROUND(COALESCE(SUM(k.cantidad), 0), 2)
+                       FROM inventario_kardex k
+                      WHERE k.id_empresa = d.id_empresa AND k.id_producto = d.id_producto
+                        AND k.id_bodega = d.id_bodega AND k.eliminado = false
+                        AND k.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = d.id_empresa)
+                        AND (COALESCE(btrim(d.numero_lote), '') = ''
+                             OR d.numero_lote ~* '^sin[[:space:]_]*lote$'
+                             OR k.numero_lote = btrim(d.numero_lote))) AS saldo
+               FROM inventario_cargas_detalle d
+              WHERE d.id_carga = :id AND d.id_empresa = :e AND d.eliminado = false
+                AND d.id_producto IS NOT NULL AND d.id_bodega IS NOT NULL"
+        );
+        $st->execute([':id' => $idCarga, ':e' => $idEmpresa]);
+        $saldos = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $saldos[(int) $r['id']] = (float) $r['saldo'];
+        }
+        return $saldos;
+    }
+
+    /**
+     * ¿La base ya tiene las columnas del ajuste por conteo?
+     * (database/migrations/20260917_cargas_inventario_ajuste_conteo.sql). Sin ellas no se
+     * aprueba un ajuste: el servicio avisa antes de mover el stock.
+     */
+    public function soportaAjusteConteo(): bool
+    {
+        static $soporta = null;
+        if ($soporta === null) {
+            $soporta = (int) $this->db->query(
+                "SELECT COUNT(*) FROM information_schema.columns
+                  WHERE table_name = 'inventario_cargas_detalle'
+                    AND column_name IN ('saldo_sistema', 'diferencia')"
+            )->fetchColumn() === 2;
+        }
+        return $soporta;
+    }
+
+    /**
+     * ¿La base ya tiene las columnas de la anulación?
+     * (database/migrations/20260917_cargas_inventario_anulacion.sql). Sin ellas, anular
+     * fallaría a mitad de camino; así el servicio avisa antes de tocar el stock.
+     */
+    public function soportaAnulacion(): bool
+    {
+        static $soporta = null;
+        if ($soporta === null) {
+            $soporta = (int) $this->db->query(
+                "SELECT COUNT(*) FROM information_schema.columns
+                  WHERE table_name = 'inventario_cargas'
+                    AND column_name IN ('anulada_por', 'anulada_at', 'motivo_anulacion')"
+            )->fetchColumn() === 3;
+        }
+        return $soporta;
     }
 
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): bool

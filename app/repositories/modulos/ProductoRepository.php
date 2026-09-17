@@ -42,6 +42,102 @@ class ProductoRepository extends BaseRepository
         parent::__construct('productos');
     }
 
+    /**
+     * Texto del producto que entra en el buscador de los documentos (facturas, POS, compras,
+     * comandas…): nombre y los tres códigos. `$a` es el prefijo del alias ('px.' en la
+     * consulta, '' en el CREATE INDEX): la MISMA expresión alimenta la consulta y el índice.
+     *
+     * OJO: es distinta de la de `idx_trgm_productos` (solo código y nombre), que usan los
+     * listados que buscan "el producto dentro del documento" (Pedidos, Consignaciones). Son
+     * dos índices a propósito: cada módulo busca en las columnas que su usuario decidió.
+     */
+    private static function exprProducto(string $a = ''): string
+    {
+        return "COALESCE({$a}codigo, '') || ' ' || COALESCE({$a}nombre, '')"
+             . " || ' ' || COALESCE({$a}codigo_auxiliar, '')"
+             . " || ' ' || COALESCE({$a}codigo_barras, '')";
+    }
+
+    /**
+     * Columnas numéricas del listado, tal como se ven en pantalla. Dos de ellas (Val. IVA y
+     * PVP) dependen del porcentaje de la tarifa, que vive en otra tabla, así que estas se
+     * comparan por fila y solo cuando la palabra puede ser un número — una palabra de puras
+     * letras nunca podría coincidir con un importe.
+     */
+    private const SI_PUEDE_SER_NUMERO = '/^[.,\-]+$|\d/';
+
+    private static function exprNumerica(): string
+    {
+        return "CONCAT_WS(' ',
+                    ROUND(p.precio_base, 2),
+                    NULLIF(ROUND((p.precio_base + COALESCE(p.valor_ice, 0)) * (COALESCE(ti.porcentaje_iva, 0) / 100), 2), 0),
+                    NULLIF(ROUND(COALESCE(p.valor_ice, 0), 2), 0),
+                    ROUND((p.precio_base + COALESCE(p.valor_ice, 0)) * (1 + COALESCE(ti.porcentaje_iva, 0) / 100), 2),
+                    NULLIF(ROUND(p.stock_minimo, 2), 0),
+                    NULLIF(ROUND(p.stock_maximo, 2), 0))";
+    }
+
+    /** Fuentes del buscador de producto de los documentos (ver App\Helpers\MotorBusqueda). */
+    private function fuentesBusqueda(): array
+    {
+        return [[
+            'sql'    => "p.id IN (SELECT px.id FROM productos px WHERE px.id_empresa = :id_empresa AND {cond})",
+            'expr'   => self::exprProducto('px.'),
+            'indice' => ['tabla' => 'productos', 'nombre' => 'idx_trgm_productos_codigos', 'expr' => self::exprProducto()],
+        ]];
+    }
+
+    /**
+     * Fuentes del texto libre del LISTADO del módulo (búsqueda amplia): las columnas
+     * visibles y lo que identifica al producto. Busca exactamente lo mismo que antes —
+     * código, código auxiliar, código de barras, descripción, categoría, marca, medida,
+     * ubicación, precio base, Val. IVA, ICE, PVP, mínimo, máximo, nombre del ICE, usuario
+     * que registró, variantes y códigos de proveedor—, pero lo que vive en otra tabla se
+     * resuelve como conjunto (una vez por palabra) en vez de recalcularse por cada producto
+     * del catálogo. Tipo, Tipo IVA, Inv., Estado y Saldo siguen fuera (solo por el modal).
+     */
+    private function fuentesBusquedaAmplia(): array
+    {
+        return [
+            // Código, descripción y los otros dos códigos: mismo índice que el buscador de
+            // los documentos.
+            [
+                'sql'    => "p.id IN (SELECT px.id FROM productos px WHERE px.id_empresa = :id_empresa AND {cond})",
+                'expr'   => self::exprProducto('px.'),
+                'indice' => ['tabla' => 'productos', 'nombre' => 'idx_trgm_productos_codigos', 'expr' => self::exprProducto()],
+            ],
+            // Ubicación y nombre del ICE: columnas cortas que casi nadie busca; se comparan
+            // por fila para no cargar otro índice a la tabla de productos.
+            ['expr' => "CONCAT_WS(' ', p.ubicacion, p.nombre_ice)"],
+            // Importes y stocks mínimos/máximos, como se ven en el listado.
+            ['expr' => self::exprNumerica(), 'crudo' => true, 'si' => self::SI_PUEDE_SER_NUMERO],
+            // Catálogos: tablas chicas, sin índice.
+            ['sql' => "p.id_categoria IN (SELECT cx.id FROM categorias cx WHERE {cond})", 'expr' => "COALESCE(cx.nombre, '')"],
+            ['sql' => "p.id_marca IN (SELECT mx.id FROM marcas mx WHERE {cond})", 'expr' => "COALESCE(mx.nombre, '')"],
+            ['sql' => "p.id_medida IN (SELECT dx.id FROM unidades_medida dx WHERE {cond})", 'expr' => "COALESCE(dx.nombre, '')"],
+            ['sql' => "p.created_by IN (SELECT gx.id FROM usuarios gx WHERE {cond})", 'expr' => "COALESCE(gx.nombre, '')"],
+            // Variantes (nombre y valor) y códigos con que lo factura cada proveedor.
+            [
+                'sql'    => "p.id IN (SELECT pv.id_producto FROM productos_variantes pv WHERE pv.eliminado = false AND {cond})",
+                'expr'   => "COALESCE(pv.nombre, '') || ' ' || COALESCE(pv.valor, '')",
+                'indice' => ['tabla' => 'productos_variantes', 'nombre' => 'idx_trgm_productos_variantes', 'expr' => "COALESCE(nombre, '') || ' ' || COALESCE(valor, '')"],
+            ],
+            [
+                'sql'    => "p.id IN (SELECT ph.id_producto FROM productos_homologacion ph WHERE ph.id_empresa = :id_empresa AND ph.eliminado = false AND {cond})",
+                'expr'   => "COALESCE(ph.codigo_proveedor, '')",
+                'indice' => ['tabla' => 'productos_homologacion', 'nombre' => 'idx_trgm_productos_homologacion', 'expr' => "COALESCE(codigo_proveedor, '')"],
+            ],
+        ];
+    }
+
+    /** SQL de los índices que necesita la búsqueda de este módulo (para database/*.sql). */
+    public function sqlIndicesBusqueda(): array
+    {
+        return \App\Helpers\MotorBusqueda::sqlIndices(
+            array_merge($this->fuentesBusqueda(), $this->fuentesBusquedaAmplia())
+        );
+    }
+
     public function getListado(
         int $idEmpresa,
         string $buscar,
@@ -88,38 +184,25 @@ class ProductoRepository extends BaseRepository
         }
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
-        if ($parsed['texto_libre'] !== '') {
-            $columnasTexto = ['p.nombre', 'p.codigo', 'p.codigo_auxiliar', 'p.codigo_barras'];
-            if ($busquedaAmplia) {
-                // Listado del módulo: columnas visibles + lo que identifica al producto.
-                // Decisión del usuario: Tipo, Tipo IVA, Inv. y Estado NO entran en el texto
-                // libre (se filtran desde el modal). Saldo tampoco: es una suma del kardex
-                // por fila y evaluarla en cada tecla sobre todo el catálogo es caro; se
-                // filtra con el rango "Saldo" del modal.
-                $columnasTexto = [
-                    'p.codigo',                     // Código
-                    'p.codigo_auxiliar',            // Cód. Aux.
-                    'p.codigo_barras',              // Barras
-                    'p.nombre',                     // Descripción
-                    'cat.nombre',                   // Categoría
-                    'mar.nombre',                   // Marca
-                    'um.nombre',                    // Medida
-                    'p.ubicacion',                  // Ubicación
-                    'ROUND(p.precio_base, 2)::text',                                                            // P. Base
-                    'NULLIF(ROUND((p.precio_base + COALESCE(p.valor_ice, 0)) * (COALESCE(ti.porcentaje_iva, 0) / 100), 2), 0)::text', // Val. IVA (sin los 0.00: si no, "0" coincide con todo)
-                    'NULLIF(ROUND(COALESCE(p.valor_ice, 0), 2), 0)::text',                                               // ICE
-                    'ROUND((p.precio_base + COALESCE(p.valor_ice, 0)) * (1 + COALESCE(ti.porcentaje_iva, 0) / 100), 2)::text', // PVP Final
-                    'NULLIF(ROUND(p.stock_minimo, 2), 0)::text', // Mín.
-                    'NULLIF(ROUND(p.stock_maximo, 2), 0)::text', // Máx.
-                    'p.nombre_ice',                 // Nombre del ICE (ficha)
-                    'ureg.nombre',                  // Usuario que registró (ficha)
-                    // Variantes (nombre y valor) y códigos con que lo factura cada proveedor.
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', pv.nombre, pv.valor), ' ') FROM productos_variantes pv WHERE pv.id_producto = p.id AND pv.eliminado = false)",
-                    "(SELECT STRING_AGG(ph.codigo_proveedor, ' ') FROM productos_homologacion ph WHERE ph.id_empresa = p.id_empresa AND ph.id_producto = p.id AND ph.eliminado = false)",
-                ];
+        if ($parsed['texto_libre'] !== '' && $busquedaAmplia) {
+            // Listado del módulo Productos (y sus exportaciones): ver fuentesBusquedaAmplia().
+            $condicion = \App\Helpers\MotorBusqueda::condicion(
+                $this->fuentesBusquedaAmplia(),
+                $parsed['texto_libre'],
+                $params,
+                'tl'
+            );
+            if ($condicion !== '') {
+                $whereSql .= " AND {$condicion}";
             }
-            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                $columnasTexto,
+        } elseif ($parsed['texto_libre'] !== '') {
+            // Buscador de producto de facturas, POS, compras, comandas… (el que más se usa
+            // del sistema: 3.280 búsquedas en 15 horas según producción). Mismas columnas de
+            // siempre —nombre y los tres códigos— pero como un conjunto que PostgreSQL
+            // resuelve UNA vez con su índice trigram, en vez de quitarle las tildes al texto
+            // de cada producto del catálogo en cada tecla. Ver App\Helpers\MotorBusqueda.
+            $condicion = \App\Helpers\MotorBusqueda::condicion(
+                $this->fuentesBusqueda(),
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -210,14 +293,10 @@ class ProductoRepository extends BaseRepository
         $joinUsuario = $busquedaAmplia ? "LEFT JOIN usuarios ureg ON ureg.id = p.created_by" : '';
         $countJoins .= "\n                       {$joinUsuario}";
 
-        $sqlCount = "SELECT COUNT(*) FROM {$this->table} p {$countJoins} {$whereSql}";
-        $stCount  = $this->db->prepare($sqlCount);
-        $stCount->execute($params);
-        $total = (int) $stCount->fetchColumn();
-
-        $offset = ($page - 1) * $perPage;
-        
-        $sqlRows = "SELECT p.*,
+        // Conteo + página en UNA consulta (App\Helpers\ListadoPaginado): antes el COUNT y el
+        // SELECT repetían el mismo WHERE, así que el texto libre se evaluaba dos veces. En el
+        // buscador de producto de los documentos eso se paga en CADA tecla.
+        $select = "p.*,
                            cat.nombre AS nombre_categoria,
                            mar.nombre AS nombre_marca,
                            ti.tarifa AS nombre_tarifa_iva,
@@ -232,28 +311,28 @@ class ProductoRepository extends BaseRepository
                               FROM inventario_kardex k
                              WHERE k.id_producto = p.id
                                AND k.id_empresa = p.id_empresa
-                               AND k.eliminado = false) AS saldo_actual
-                    FROM {$this->table} p
-                    LEFT JOIN categorias cat ON cat.id = p.id_categoria
-                    LEFT JOIN marcas mar ON mar.id = p.id_marca
-                    LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
-                    LEFT JOIN unidades_medida um ON um.id = p.id_medida
-                    {$joinUsuario}
-                    {$whereSql}
-                    $orderBy";
+                               AND k.eliminado = false) AS saldo_actual";
 
-        if ($perPage > 0) {
-            $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
-        }
-
-        $stRows = $this->db->prepare($sqlRows);
-        $stRows->execute($params);
-        $rows = $stRows->fetchAll(PDO::FETCH_ASSOC);
-
-        return [
-            'total' => $total,
-            'rows'  => $rows
-        ];
+        return \App\Helpers\ListadoPaginado::consultar(
+            function (string $sql, array $prm): array {
+                $st = $this->db->prepare($sql);
+                $st->execute($prm);
+                return $st->fetchAll(PDO::FETCH_ASSOC);
+            },
+            [
+                'tabla'       => $this->table,
+                'alias'       => 'p',
+                'joinsFiltro' => $countJoins,
+                'joinsFinal'  => $countJoins,
+                'where'       => $whereSql,
+                'orderBy'     => $orderBy,
+                'select'      => $select,
+                'perPage'     => $perPage,
+                'offset'      => $perPage > 0 ? ($page - 1) * $perPage : 0,
+                'conBusqueda' => trim($buscar) !== '',
+            ],
+            $params
+        );
     }
 
     /**

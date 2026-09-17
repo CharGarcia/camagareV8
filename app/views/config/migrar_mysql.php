@@ -271,6 +271,35 @@ $base = BASE_URL;
             </div>
         </div>
     </div>
+
+    <!-- Paso 3b: configuración contable POR ENTIDAD (proveedor, IVA por tarifa, retenciones, formas de pago/bancos, conceptos ing/egr) -->
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex align-items-center justify-content-between">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-diagram-3 text-primary me-2"></i>Configuración contable por entidad (opcional)</h6>
+                <button class="btn btn-sm btn-outline-primary" id="btnCfg3Prev">
+                    <i class="bi bi-search me-1"></i> Revisar configuración por entidad
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="small text-muted mb-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Trae las reglas <b>por entidad</b> del sistema anterior: cuenta de gasto por proveedor, IVA por tarifa,
+                    retenciones por código, cuentas de las formas de cobro/pago y bancos, y conceptos de ingreso/egreso.
+                    Migre primero <b>Plan de cuentas</b>, <b>Proveedores</b>, <b>Formas de cobro/pago</b> y <b>Cuentas bancarias</b>.
+                    Nada se guarda hasta que usted elija qué aplicar.
+                </div>
+                <div id="cfg3Resumen" class="small mb-2"></div>
+                <div id="cfg3Tabla" class="table-responsive" style="max-height:460px;overflow:auto;"></div>
+                <div id="cfg3Acciones" class="mt-2 d-none">
+                    <button class="btn btn-success btn-sm" id="btnCfg3Aplicar">
+                        <i class="bi bi-check2-circle me-1"></i> Aplicar seleccionadas
+                    </button>
+                    <span id="cfg3AplicarMsg" class="small ms-2"></span>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -993,6 +1022,113 @@ $base = BASE_URL;
             $('btnCfgPrev').click(); // refrescar: ahora saldrán como "Ya configurada"
         } catch (e) {
             $('cfgAplicarMsg').innerHTML = '<span class="text-danger">Error al aplicar.</span>';
+        }
+    });
+
+    // ── Paso 3b: configuración contable POR ENTIDAD (revisión previa + aplicar) ──
+    $('btnCfg3Prev').addEventListener('click', async () => {
+        const idEmpresa = $('selEmpresa').value;
+        if (!idEmpresa) { $('cfg3Resumen').innerHTML = '<span class="text-danger">Seleccione una empresa.</span>'; return; }
+
+        $('cfg3Resumen').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Revisando…';
+        $('cfg3Tabla').innerHTML = ''; $('cfg3Acciones').classList.add('d-none');
+        try {
+            const body = new FormData(); body.append('id_empresa', idEmpresa);
+            const res = await fetch(base + '/config/migrarMysql?action=config-preview-fase3', { method: 'POST', body }).then(r => r.json());
+            if (!res.ok) { $('cfg3Resumen').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
+
+            const r = res.resumen;
+            $('cfg3Resumen').innerHTML =
+                `<b>${fmt(r.total)}</b> reglas por entidad · ` +
+                `<b class="text-success">${fmt(r.listas)}</b> listas · ` +
+                `<b class="${r.sin_referencia ? 'text-warning' : ''}">${fmt(r.sin_referencia)}</b> sin destino en el nuevo · ` +
+                `<b class="${r.sin_cuenta ? 'text-danger' : ''}">${fmt(r.sin_cuenta)}</b> sin cuenta · ` +
+                `<b>${fmt(r.ya)}</b> ya configuradas` +
+                (r.omitidas ? ` · <b class="text-muted">${fmt(r.omitidas)}</b> omitidas (duplicadas)` : '');
+
+            if (r.sin_referencia) {
+                $('cfg3Resumen').innerHTML +=
+                    '<div class="form-text mt-1"><i class="bi bi-info-circle me-1"></i>Las filas <b>sin destino</b> no casaron con el proveedor/forma/concepto/retención en el sistema nuevo ' +
+                    '(migre esas entidades primero, o el nombre no coincide) → revisión manual.</div>';
+            }
+
+            if (!res.filas.length) { $('cfg3Tabla').innerHTML = '<div class="text-muted small">Sin configuración por entidad en el sistema anterior.</div>'; return; }
+
+            const badge = {
+                lista:          '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Lista</span>',
+                ya_configurada: '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Ya configurada</span>',
+                sin_referencia: '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Sin destino</span>',
+                sin_cuenta:     '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Sin cuenta</span>',
+                omitida:        '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Omitida</span>'
+            };
+
+            let filas = '';
+            res.filas.forEach((f, i) => {
+                const aplicable = (f.estado === 'lista' || f.estado === 'ya_configurada') && f.aplicar;
+                const chk = aplicable
+                    ? `<input type="checkbox" class="form-check-input chk-cfg3" data-i="${i}" ${f.estado === 'lista' ? 'checked' : ''}>`
+                    : '<span class="text-muted">—</span>';
+                filas +=
+                    `<tr class="${aplicable ? '' : 'table-light text-muted'}">
+                        <td class="text-center">${chk}</td>
+                        <td class="small">${esc(f.grupo)}</td>
+                        <td class="small">${esc(f.concepto_viejo)}</td>
+                        <td class="small">${esc(f.referencia)}</td>
+                        <td class="small">${esc(f.cuenta_vieja)}</td>
+                        <td class="small">${f.destino ? esc(f.destino) : '<i>(sin destino en el nuevo)</i>'}</td>
+                        <td class="small">${f.cuenta_nueva
+                            ? esc(f.cuenta_nueva)
+                            : (f.estado === 'sin_cuenta' ? `<span class="text-danger">falta <b>${esc(f.cod_casa)}</b> en el plan</span>` : '—')}</td>
+                        <td class="text-center">${badge[f.estado] || ''}</td>
+                     </tr>`;
+            });
+
+            $('cfg3Tabla').innerHTML =
+                `<table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light" style="position:sticky;top:0;z-index:1">
+                        <tr>
+                            <th style="width:34px" class="text-center"><input type="checkbox" class="form-check-input" id="chkCfg3Todos" checked></th>
+                            <th>Grupo</th><th>Concepto (anterior)</th><th>Referencia</th><th>Cuenta anterior</th>
+                            <th>Destino (nuevo)</th><th>Cuenta destino</th><th class="text-center">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>${filas}</tbody>
+                 </table>`;
+
+            window.__cfg3Filas = res.filas;
+            $('cfg3Acciones').classList.remove('d-none');
+            $('chkCfg3Todos').addEventListener('change', (e) => {
+                document.querySelectorAll('.chk-cfg3').forEach(c => c.checked = e.target.checked);
+            });
+        } catch (e) {
+            $('cfg3Resumen').innerHTML = '<span class="text-danger">Error al revisar la configuración por entidad.</span>';
+        }
+    });
+
+    $('btnCfg3Aplicar').addEventListener('click', async () => {
+        const idEmpresa = $('selEmpresa').value;
+        const marcadas = Array.from(document.querySelectorAll('.chk-cfg3:checked'))
+            .map(c => window.__cfg3Filas[Number(c.dataset.i)])
+            .filter(f => f && f.aplicar)
+            .map(f => f.aplicar);
+
+        if (!marcadas.length) { $('cfg3AplicarMsg').innerHTML = '<span class="text-warning">No hay reglas seleccionadas.</span>'; return; }
+        if (!confirm(`¿Aplicar ${marcadas.length} regla(s) por entidad a la configuración contable de esta empresa?`)) return;
+
+        $('cfg3AplicarMsg').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Aplicando…';
+        try {
+            const body = new FormData();
+            body.append('id_empresa', idEmpresa);
+            body.append('seleccion', JSON.stringify(marcadas));
+            const res = await fetch(base + '/config/migrarMysql?action=config-aplicar-fase3', { method: 'POST', body }).then(r => r.json());
+            if (!res.ok) { $('cfg3AplicarMsg').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
+            const d = res.data;
+            $('cfg3AplicarMsg').innerHTML =
+                `<span class="text-success"><b>${fmt(d.aplicadas)}</b> creadas · <b>${fmt(d.actualizadas)}</b> actualizadas` +
+                (d.errores ? ` · <b class="text-danger">${fmt(d.errores)}</b> con error` : '') + '</span>';
+            $('btnCfg3Prev').click();
+        } catch (e) {
+            $('cfg3AplicarMsg').innerHTML = '<span class="text-danger">Error al aplicar.</span>';
         }
     });
 

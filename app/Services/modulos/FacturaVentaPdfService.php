@@ -554,7 +554,7 @@ class FacturaVentaPdfService
         // encima de la columna siguiente en vez de ensanchar la suya. Se mide
         // con la misma fuente de las filas y se acota entre el ancho base y un
         // máximo, para no dejar sin sitio a la Descripción.
-        $pdf->SetFont('helvetica', '', 7);
+        $pdf->SetFont('helvetica', '', 9);
         $campoCod = ['codp' => 'codigo_principal', 'coda' => 'codigo_auxiliar'];
         $maxCod   = ['codp' => 42.0,               'coda' => 26.0];
         $minCod   = [];
@@ -606,9 +606,9 @@ class FacturaVentaPdfService
 
         // Encabezado (2 líneas). Se encapsula porque hay que repetirlo al inicio
         // de cada página cuando el detalle no cabe en una sola.
-        $hdrH = 7.6; // 2 líneas * 3.8
+        $hdrH = 9.8; // 2 líneas * 4.9
         $dibujarEncabezado = function (float $yEnc) use ($pdf, $cols, $mL, $hdrH): float {
-            $pdf->SetFont('helvetica', 'B', 6.5);
+            $pdf->SetFont('helvetica', 'B', 8.5);
             $pdf->SetFillColor(230, 230, 230);
             $pdf->SetXY($mL, $yEnc);
             foreach ($cols as $col) {
@@ -631,7 +631,7 @@ class FacturaVentaPdfService
         }
 
         // Filas de detalle
-        $pdf->SetFont('helvetica', '', 7);
+        $pdf->SetFont('helvetica', '', 9);
         $altColor = false;
 
         // Alto útil de la página para el detalle. Se deja sitio para el bloque de
@@ -662,7 +662,7 @@ class FacturaVentaPdfService
             // Calcular altura de fila según columnas multilinea
             $nDesc = $wDesc > 0 ? max(1, $pdf->getNumLines($vals['desc'], $wDesc)) : 1;
             $nDeta = $wDeta > 0 ? max(1, $pdf->getNumLines($vals['deta'], $wDeta)) : 1;
-            $ch    = max(3.6, max($nDesc, $nDeta) * 3.1);
+            $ch    = max(4.8, max($nDesc, $nDeta) * 4.2);
 
             $xCur = $mL;
             $yRow = $pdf->GetY();
@@ -676,7 +676,7 @@ class FacturaVentaPdfService
                 $pdf->AddPage();
                 // Tras AddPage, GetY() ya está en el margen superior de la página.
                 $yRow = $dibujarEncabezado($pdf->GetY());
-                $pdf->SetFont('helvetica', '', 7);
+                $pdf->SetFont('helvetica', '', 9);
                 $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
             }
 

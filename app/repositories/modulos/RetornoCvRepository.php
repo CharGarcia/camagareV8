@@ -240,6 +240,11 @@ class RetornoCvRepository extends BaseRepository
             'fecha_retorno' => 'r.fecha_retorno',
             'secuencial'    => 'r.secuencial',
             'cliente'       => 'c.nombre',
+            // Motivo y observaciones: el modal los guarda como '' cuando no se llenan, y ''
+            // ordena antes que cualquier texto (NULL, al final). El primer criterio deja los
+            // vacíos siempre al final, en ambas direcciones, y la dirección aplica al texto.
+            'motivo'        => "(NULLIF(BTRIM(r.motivo), '') IS NULL), r.motivo",
+            'observaciones' => "(NULLIF(BTRIM(r.observaciones), '') IS NULL), r.observaciones",
             'estado'        => 'r.estado',
             'total'         => 'r.total',
         ];

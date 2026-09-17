@@ -40,7 +40,13 @@ $e = static fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8')
 <body>
 <div class="wrap">
     <div class="card">
-        <?php if ($vista === 'detalle'): $c = $carga; ?>
+        <?php if ($vista === 'detalle'):
+            $c = $carga;
+            // Ajuste por conteo físico: la cantidad es lo contado; se muestra la diferencia que
+            // se registraría con el saldo de hoy (al aprobar se recalcula).
+            $esAjuste = ($c['tipo_movimiento'] ?? '') === 'ajuste';
+            $num = static fn($v): string => rtrim(rtrim(number_format((float) $v, 6, '.', ''), '0'), '.');
+        ?>
             <div class="card-head">
                 <h1><i></i>Aprobación de carga de inventario</h1>
                 <p><?= $e($c['empresa_nombre']) ?></p>
@@ -54,14 +60,33 @@ $e = static fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8')
                     <div><div class="lbl">Registrada por</div><div class="val"><?= $e($c['creado_por_nombre']) ?></div></div>
                 </div>
 
+                <?php if ($esAjuste): ?>
+                    <p style="font-size:13px;color:#475569;margin:0 0 12px;">
+                        Ajuste por conteo físico: cada producto quedará con la cantidad contada y solo se
+                        registrará la diferencia. El saldo y la diferencia son los de hoy; al aprobar se
+                        recalculan con el saldo de ese momento.
+                    </p>
+                <?php endif; ?>
                 <table>
-                    <thead><tr><th>Producto</th><th>Bodega</th><th class="num">Cantidad</th><th class="num">Costo</th></tr></thead>
+                    <thead><tr>
+                        <th>Producto</th><th>Bodega</th>
+                        <?php if ($esAjuste): ?>
+                            <th class="num">Contado</th><th class="num">Saldo actual</th><th class="num">Diferencia</th>
+                        <?php else: ?>
+                            <th class="num">Cantidad</th>
+                        <?php endif; ?>
+                        <th class="num">Costo</th>
+                    </tr></thead>
                     <tbody>
                         <?php foreach (($c['detalle'] ?? []) as $d): ?>
                             <tr>
-                                <td><?= $e($d['producto_nombre'] ?: $d['cod_producto_raw']) ?></td>
+                                <td><?= $e($d['producto_nombre'] ?: $d['cod_producto_raw']) ?><?= !empty($d['numero_lote']) ? ' <span style="color:#64748b;">· lote ' . $e($d['numero_lote']) . '</span>' : '' ?></td>
                                 <td><?= $e($d['bodega_nombre'] ?: $d['cod_bodega_raw']) ?></td>
-                                <td class="num"><?= $e((float) $d['cantidad']) ?></td>
+                                <td class="num"><?= $e($num($d['cantidad'])) ?></td>
+                                <?php if ($esAjuste): ?>
+                                    <td class="num"><?= array_key_exists('saldo_actual', $d) ? $e($num($d['saldo_actual'])) : '-' ?></td>
+                                    <td class="num"><?= array_key_exists('diferencia_estimada', $d) ? $e(($d['diferencia_estimada'] > 0 ? '+' : '') . $num($d['diferencia_estimada'])) : '-' ?></td>
+                                <?php endif; ?>
                                 <td class="num">$ <?= number_format((float) $d['costo_unitario'], 2) ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -69,7 +94,7 @@ $e = static fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8')
                 </table>
 
                 <div class="actions">
-                    <form method="POST" action="<?= $base ?>/aprobar-carga-inventario/<?= $e($token) ?>/aprobar" onsubmit="return confirm('¿Aprobar esta carga? Se aplicará al inventario.');">
+                    <form method="POST" action="<?= $base ?>/aprobar-carga-inventario/<?= $e($token) ?>/aprobar" onsubmit="return confirm('<?= $esAjuste ? '¿Aprobar este ajuste? Se registrará la diferencia de cada producto con su saldo actual.' : '¿Aprobar esta carga? Se aplicará al inventario.' ?>');">
                         <input type="hidden" name="token" value="<?= $e($token) ?>">
                         <button type="submit" class="btn btn-ok">✓ Aprobar</button>
                     </form>

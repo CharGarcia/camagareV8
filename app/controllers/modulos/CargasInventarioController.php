@@ -115,7 +115,7 @@ class CargasInventarioController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $estados = ['pendiente' => 'Pendiente', 'aprobada' => 'Aprobada', 'rechazada' => 'Rechazada'];
+        $estados = ['pendiente' => 'Pendiente', 'aprobada' => 'Aprobada', 'rechazada' => 'Rechazada', 'anulada' => 'Anulada'];
         $rows = [];
         try {
             foreach ($this->service->buscarEnDetalles($idEmpresa, $q, $idUsuarioFiltro, 50) as $r) {
@@ -210,6 +210,23 @@ class CargasInventarioController extends BaseModuloController
         return (string) ob_get_clean();
     }
 
+    /**
+     * Encabezado del archivo → clave de columna: minúsculas, sin tildes y con "_" en lugar
+     * de espacios o guiones ("Observación" → observacion, "Código producto" →
+     * codigo_producto). Antes solo se pasaba a minúsculas, así que una columna escrita a
+     * mano con tilde o espacios se ignoraba sin avisar: la observación de cada línea se
+     * perdía y el costo quedaba en cero.
+     */
+    private static function claveEncabezado($encabezado): string
+    {
+        // Quita también el BOM que deja Excel al guardar un CSV en UTF-8.
+        $clave = mb_strtolower(trim(preg_replace('/^\x{FEFF}/u', '', (string) $encabezado) ?? ''), 'UTF-8');
+        $clave = strtr($clave, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u']);
+        $clave = trim((string) preg_replace('/[\s\-]+/u', '_', $clave), '_');
+
+        return $clave === 'observaciones' ? 'observacion' : $clave;
+    }
+
     public function importarAjax(): void
     {
         $this->requireCrear();
@@ -239,8 +256,8 @@ class CargasInventarioController extends BaseModuloController
                 return;
             }
 
-            // Primera fila = encabezados (se normalizan a minúsculas sin espacios).
-            $header = array_map(static fn($h) => strtolower(trim((string) $h)), $hoja[0]);
+            // Primera fila = encabezados (ver claveEncabezado()).
+            $header = array_map(static fn($h): string => self::claveEncabezado($h), $hoja[0]);
 
             $filas = [];
             for ($i = 1; $i < count($hoja); $i++) {
@@ -417,6 +434,72 @@ class CargasInventarioController extends BaseModuloController
         }
     }
 
+    // ─── Anulación de una carga aprobada ──────────────────────────────────────
+    // Una carga aprobada no se edita: se anula (se reversa su stock) y el archivo
+    // corregido se importa como carga nueva. Anula un aprobador con permiso de eliminar.
+
+    /**
+     * Antes de pedir el motivo, el modal pregunta si la carga se puede anular: estado,
+     * quién anula, bodegas, período contable y, sobre todo, si sus productos ya se usaron
+     * después de aplicarla. No escribe nada.
+     */
+    public function comprobarAnulacionAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
+        $id        = (int) ($_GET['id'] ?? 0);
+        $this->requireRegistroPropio($this->service->getCabecera($id, $idEmpresa));
+
+        try {
+            $res = $this->service->comprobarAnulacion($id, $idEmpresa, $idUsuario, $nivel);
+            echo json_encode(['ok' => true] + $res, JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo comprobar la carga. Intente de nuevo.']);
+        }
+    }
+
+    /** Anula una carga aprobada: reversa sus movimientos de inventario y la deja como Anulada. */
+    public function anularAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
+
+        if (!$this->service->esAprobador($idUsuario, $idEmpresa, $nivel)) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Solo los aprobadores de cargas de inventario pueden anular una carga aprobada.']);
+            return;
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $this->requireRegistroPropio($this->service->getCabecera($id, $idEmpresa));
+
+        try {
+            $res = $this->service->anular($id, $idEmpresa, $idUsuario, (string) ($_POST['motivo'] ?? ''), $nivel);
+            $n   = (int) $res['movimientos'];
+            echo json_encode([
+                'ok'      => true,
+                'data'    => $res,
+                'mensaje' => $n === 0
+                    ? "Carga #{$res['numero']} anulada: no tenía diferencias de stock que reversar."
+                    : "Carga #{$res['numero']} anulada: se reversaron {$n} " . ($n === 1 ? 'movimiento' : 'movimientos') . ' de inventario.',
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            // Los motivos de negocio (productos ya usados, período cerrado…) no son fallos del sistema.
+            if (!$e instanceof \InvalidArgumentException) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            }
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
     /** Filas del listado sin paginar (para exportar), respetando búsqueda y registros propios. */
     private function filasParaExportar(): array
     {
@@ -437,7 +520,7 @@ class CargasInventarioController extends BaseModuloController
 
     private function etiquetaEstado(string $estado): string
     {
-        return ['pendiente' => 'Pendiente', 'aprobada' => 'Aprobada', 'rechazada' => 'Rechazada'][$estado] ?? $estado;
+        return ['pendiente' => 'Pendiente', 'aprobada' => 'Aprobada', 'rechazada' => 'Rechazada', 'anulada' => 'Anulada'][$estado] ?? $estado;
     }
 
     public function exportPdf(): void
@@ -549,10 +632,14 @@ class CargasInventarioController extends BaseModuloController
     /**
      * Líneas tal como las muestra la tabla del modal: código (el del sistema o, si el
      * producto no se encontró, el que traía el archivo), producto, bodega, cantidad,
-     * costo, OK y el motivo del error con la fila del Excel (fila 1 = encabezado; las
-     * líneas se guardan en el orden del archivo, misma numeración que la comprobación).
+     * costo, observación de la línea, OK y el motivo del error con la fila del Excel
+     * (fila 1 = encabezado; las líneas se guardan en el orden del archivo, misma
+     * numeración que la comprobación).
      *
-     * @return array<int, array{codigo:string, producto:string, bodega:string, cantidad:float, costo:float, ok:bool, motivo:string}>
+     * En una carga de ajuste, `saldo` y `diferencia`: los registrados al aprobar o, si está
+     * pendiente, la estimación con el saldo de hoy (CargaInventarioService::getDetalleCompleto).
+     *
+     * @return array<int, array{codigo:string, producto:string, bodega:string, cantidad:float, costo:float, observacion:string, ok:bool, motivo:string, saldo:?float, diferencia:?float}>
      */
     private function lineasParaExportar(array $detalle): array
     {
@@ -569,16 +656,37 @@ class CargasInventarioController extends BaseModuloController
         foreach (array_values($detalle) as $i => $d) {
             $ok = in_array($d['linea_valida'] ?? false, [true, 't', '1', 1], true);
             $lineas[] = [
-                'codigo'   => $primero($d['producto_codigo'] ?? '', $d['cod_producto_raw'] ?? ''),
-                'producto' => $primero($d['producto_nombre'] ?? ''),
-                'bodega'   => $primero($d['bodega_nombre'] ?? '', $d['cod_bodega_raw'] ?? ''),
-                'cantidad' => (float) ($d['cantidad'] ?? 0),
-                'costo'    => (float) ($d['costo_unitario'] ?? 0),
-                'ok'       => $ok,
-                'motivo'   => $ok ? '' : 'Fila ' . ($i + 2) . ': ' . $primero($d['error_linea'] ?? '', 'Línea con error'),
+                'codigo'      => $primero($d['producto_codigo'] ?? '', $d['cod_producto_raw'] ?? ''),
+                'producto'    => $primero($d['producto_nombre'] ?? ''),
+                'bodega'      => $primero($d['bodega_nombre'] ?? '', $d['cod_bodega_raw'] ?? ''),
+                'cantidad'    => (float) ($d['cantidad'] ?? 0),
+                'costo'       => (float) ($d['costo_unitario'] ?? 0),
+                'observacion' => $primero($d['observacion'] ?? ''),
+                'ok'          => $ok,
+                'motivo'      => $ok ? '' : 'Fila ' . ($i + 2) . ': ' . $primero($d['error_linea'] ?? '', 'Línea con error'),
+                'saldo'       => self::numeroONulo($d['saldo_sistema'] ?? $d['saldo_actual'] ?? null),
+                'diferencia'  => self::numeroONulo($d['diferencia'] ?? $d['diferencia_estimada'] ?? null),
             ];
         }
         return $lineas;
+    }
+
+    private static function numeroONulo($valor): ?float
+    {
+        return ($valor === null || $valor === '') ? null : (float) $valor;
+    }
+
+    /**
+     * Títulos de las columnas de saldo y diferencia de un ajuste: los valores registrados al
+     * aprobar o, en uno pendiente, la estimación con el saldo de hoy.
+     *
+     * @return array{saldo:string, diferencia:string}
+     */
+    private function titulosAjuste(array $carga): array
+    {
+        return ($carga['estado'] ?? '') === 'pendiente'
+            ? ['saldo' => 'Saldo actual', 'diferencia' => 'Diferencia estimada']
+            : ['saldo' => 'Saldo sistema', 'diferencia' => 'Diferencia'];
     }
 
     /** Datos de la cabecera para el PDF y el Excel del detalle (etiqueta => valor). */
@@ -602,6 +710,18 @@ class CargasInventarioController extends BaseModuloController
         if (trim((string) ($carga['motivo_rechazo'] ?? '')) !== '') {
             $datos['Motivo de rechazo'] = trim((string) $carga['motivo_rechazo']);
         }
+        if (($carga['estado'] ?? '') === 'anulada') {
+            $datos['Anulada por'] = trim((string) ($carga['anulado_por_nombre'] ?? '')) ?: '-';
+            $datos['Fecha de anulación'] = !empty($carga['anulada_at']) ? date('d-m-Y H:i:s', strtotime((string) $carga['anulada_at'])) : '-';
+        }
+        if (trim((string) ($carga['motivo_anulacion'] ?? '')) !== '') {
+            $datos['Motivo de anulación'] = trim((string) $carga['motivo_anulacion']);
+        }
+        if (($carga['tipo_movimiento'] ?? '') === 'ajuste') {
+            $datos['Conteo'] = ($carga['estado'] ?? '') === 'pendiente'
+                ? 'Saldo y diferencia estimados al ' . date('d-m-Y H:i:s') . '; se recalculan al aprobar'
+                : 'Saldo del sistema y diferencia registrados al aprobar';
+        }
         return $datos;
     }
 
@@ -609,9 +729,10 @@ class CargasInventarioController extends BaseModuloController
     public function exportDetallePdf(): void
     {
         $this->requireLeer();
-        $carga    = $this->cargaParaExportar();
-        $lineas   = $this->lineasParaExportar($carga['detalle'] ?? []);
-        $cabecera = $this->cabeceraParaExportar($carga, $lineas);
+        $carga         = $this->cargaParaExportar();
+        $lineas        = $this->lineasParaExportar($carga['detalle'] ?? []);
+        $cabecera      = $this->cabeceraParaExportar($carga, $lineas);
+        $titulosAjuste = $this->titulosAjuste($carga);
 
         try {
             $empresa  = (new \App\models\Empresa())->getPorId((int) ($_SESSION['id_empresa'] ?? 0)) ?? [];
@@ -624,7 +745,7 @@ class CargasInventarioController extends BaseModuloController
             include MVC_APP . '/views/modulos/cargas_inventario/pdf_detalle.php';
             $html = (string) ob_get_clean();
 
-            // Horizontal: siete columnas, con códigos de barras y el motivo del error.
+            // Horizontal: ocho columnas (diez en un ajuste), con la observación y el motivo del error.
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('Carga_Inventario_' . (int) $carga['numero'] . '.pdf', 'D');
@@ -644,9 +765,22 @@ class CargasInventarioController extends BaseModuloController
         $lineas  = $this->lineasParaExportar($carga['detalle'] ?? []);
         $empresa = (new \App\models\Empresa())->getPorId((int) ($_SESSION['id_empresa'] ?? 0)) ?? [];
 
-        $data = array_map(static fn(array $l): array => [
-            $l['codigo'], $l['producto'], $l['bodega'], $l['cantidad'], $l['costo'], $l['ok'] ? 'Sí' : 'No', $l['motivo'],
-        ], $lineas);
+        // En un ajuste la cantidad es lo contado, y se agregan el saldo y la diferencia.
+        if (($carga['tipo_movimiento'] ?? '') === 'ajuste') {
+            $titulos = $this->titulosAjuste($carga);
+            $headers = ['Código', 'Producto', 'Bodega', 'Contado', $titulos['saldo'], $titulos['diferencia'], 'Costo', 'Observación', 'OK', 'Motivo'];
+            $data    = array_map(static fn(array $l): array => [
+                $l['codigo'], $l['producto'], $l['bodega'], $l['cantidad'], $l['saldo'], $l['diferencia'],
+                $l['costo'], $l['observacion'], $l['ok'] ? 'Sí' : 'No', $l['motivo'],
+            ], $lineas);
+            $formatos = [7 => '#,##0.00'];
+        } else {
+            $headers = ['Código', 'Producto', 'Bodega', 'Cantidad', 'Costo', 'Observación', 'OK', 'Motivo'];
+            $data    = array_map(static fn(array $l): array => [
+                $l['codigo'], $l['producto'], $l['bodega'], $l['cantidad'], $l['costo'], $l['observacion'], $l['ok'] ? 'Sí' : 'No', $l['motivo'],
+            ], $lineas);
+            $formatos = [5 => '#,##0.00'];
+        }
 
         $report = new \App\Services\ReportService();
         // Todo lo que no es número se escribe como texto: con el binder por defecto un
@@ -657,12 +791,12 @@ class CargasInventarioController extends BaseModuloController
         );
         try {
             $libro = $report->construirSpreadsheet(
-                ['Código', 'Producto', 'Bodega', 'Cantidad', 'Costo', 'OK', 'Motivo'],
+                $headers,
                 $data,
                 'Carga ' . (int) $carga['numero'],
                 (string) ($empresa['nombre'] ?? ''),
                 $this->cabeceraParaExportar($carga, $lineas),
-                [5 => '#,##0.00']
+                $formatos
             );
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

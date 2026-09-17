@@ -800,6 +800,8 @@ class ConfigController extends Controller
             'verificar-anuladas' => 'verificarAnuladasAjax',
             'config-preview'     => 'configPreviewAjax',
             'config-aplicar'     => 'configAplicarAjax',
+            'config-preview-fase3' => 'configPreviewFase3Ajax',
+            'config-aplicar-fase3' => 'configAplicarFase3Ajax',
             'eliminar-preview'   => 'eliminarPreviewAjax',
             'eliminar'           => 'eliminarAjax',
             'verificar-existentes' => 'verificarExistentesAjax',

@@ -3250,7 +3250,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     #offcanvasDocPreview {
         z-index: 6000 !important;
     }
-    .offcanvas-backdrop {
+    /* Solo el fondo del panel de detalle (va detrás del panel abierto, ambos en el body).
+       Sin acotar, también subía el fondo del menú del celular por encima del menú y no se
+       podía elegir nada (ver partials/offcanvas_doc_preview.php). */
+    #offcanvasDocPreview.showing ~ .offcanvas-backdrop,
+    #offcanvasDocPreview.show ~ .offcanvas-backdrop,
+    #offcanvasDocPreview.hiding ~ .offcanvas-backdrop {
         z-index: 5990 !important;
     }
 </style>

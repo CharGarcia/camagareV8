@@ -694,6 +694,9 @@ class ReporteCarteraController extends BaseModuloController
     public function enviarCorreoAjax(): void
     {
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar el reporte y enviarlo por correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        session_write_close();
         header('Content-Type: application/json');
 
         try {

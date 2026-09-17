@@ -236,6 +236,10 @@ class FirmasElectronicasController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => 'Identificación vacía.']);
             exit;
         }
+        // Soltar el candado de la sesión antes de esperar al SRI: si no, las demás peticiones
+        // del usuario hacen fila hasta que responda.
+        session_write_close();
+
         try {
             $svc    = new \App\Services\SriIdentificationService();
             $result = $svc->consultar($identificacion);

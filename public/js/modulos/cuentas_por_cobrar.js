@@ -108,7 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // presiona "Aplicar" (ver CXC_cargado / CXC_recargar).
     CXC_initOrden();
     CXC_estadoInicial();
-    CXC_cargarCatalogos();
+    // Series, conceptos y formas de cobro solo hacen falta si puede cobrar en esta empresa
+    // (los de una hermana del consolidado se piden al abrir su cobro).
+    if (CXC_PUEDE_COBRAR) CXC_cargarCatalogos();
     if (CXC_TIENE_WA) CXC_cargarPlantillasWA();
     CXC_initBuscadorClientes();
     CXC_initBuscadorProductos();
@@ -323,8 +325,14 @@ function CXC_filaHtml(r) {
         </tr>`;
 }
 
-/* Botonera de un documento (cobrar, historial, correo, WhatsApp). La comparten la fila
-   detallada y la fila del detalle por cliente, para no duplicar reglas de permisos. */
+/* Botonera de un documento (PDF, cobrar, historial, correo, WhatsApp). La comparten la fila
+   detallada y la fila del detalle por cliente, para no duplicar reglas de permisos.
+   Cada botón aparece solo si se puede usar, con la misma regla que valida el servidor:
+   - PDF: facturas y recibos (un saldo inicial no es un documento que se imprima).
+   - Cobro: `puede_operar` = crear en Cuentas por Cobrar y en Ingresos en la empresa del
+     documento (el cobro emite un ingreso; en el consolidado, en los libros de la hermana).
+   - Historial: acceso al Reporte de cartera (CXC_PUEDE_HISTORIAL).
+   - WhatsApp: la empresa tiene la integración configurada (CXC_TIENE_WA). */
 function CXC_accionesHtml(r) {
     const saldo     = parseFloat(r.saldo) || 0;
     const esSaldo   = r.origen === 'SALDO_INICIAL';
@@ -332,34 +340,36 @@ function CXC_accionesHtml(r) {
     const esHermana = !!r.es_hermana;
     const idEmpresa = parseInt(r.id_empresa) || 0;
     const estabTxt  = `${r.establecimiento || ''}${r.empresa_nombre ? ' - ' + r.empresa_nombre : ''}`;
+    // El PDF lo sirve este módulo (su permiso y el alcance del usuario), no Facturas/Recibos:
+    // así lo descarga también quien no tiene acceso a esos módulos. En el consolidado viaja
+    // la empresa dueña del documento, igual que en el historial.
+    const urlPdf = `${BASE_URL}/${RUTA_MODULO_CXC}/pdfDocumento?origen=${encodeURIComponent(r.origen)}&id=${parseInt(r.id)}`
+                 + (esHermana && idEmpresa ? `&id_empresa=${idEmpresa}` : '');
 
     return `
                 <div class="d-flex justify-content-center gap-1">
-                    ${(saldo > 0 && esHermana && r.puede_operar) ? `
-                    <button class="btn btn-success btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar cobro en el establecimiento ${esc(estabTxt)}"
+                    ${!esSaldo ? `
+                    <a class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:.72rem;" href="${urlPdf}" target="_blank" rel="noopener"
+                       title="Descargar PDF del documento">
+                        <i class="bi bi-file-earmark-pdf"></i>
+                    </a>` : ''}
+                    ${(saldo > 0 && r.puede_operar) ? `
+                    <button class="btn btn-success btn-sm py-0 px-2" style="font-size:.72rem;"
+                            title="${esHermana ? `Registrar cobro en el establecimiento ${esc(estabTxt)}` : 'Registrar cobro'}"
                             onclick="CXC_abrirModalCobro(${r.id}, '${r.origen}', ${idEmpresa})">
                         <i class="bi bi-cash-coin"></i>
                     </button>` : ''}
-                    ${(saldo > 0 && esHermana && !r.puede_operar) ? `
-                    <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;" disabled
-                            title="Sin permiso para registrar cobros en el establecimiento ${esc(estabTxt)}">
-                        <i class="bi bi-cash-coin"></i>
-                    </button>` : ''}
-                    ${(saldo > 0 && !esHermana) ? `
-                    <button class="btn btn-success btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar cobro"
-                            onclick="CXC_abrirModalCobro(${r.id}, '${r.origen}')">
-                        <i class="bi bi-cash-coin"></i>
-                    </button>` : ''}
+                    ${CXC_PUEDE_HISTORIAL ? `
                     <button class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size:.72rem;" title="Ver historial de cobros"
                             onclick="CXC_abrirHistorial(${r.id}, '${esc(r.numero_factura)}', '${r.origen}', ${idEmpresa})">
                         <i class="bi bi-clock-history"></i>
-                    </button>
+                    </button>` : ''}
                     ${(!esSaldo && !esHermana) ? `
                     <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;" title="Enviar recordatorio email"
                             onclick="CXC_abrirEmail(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_email || '')}', '${esc(r.cliente_nombre)}', '${r.origen}')">
                         <i class="bi bi-envelope"></i>
                     </button>` : ''}
-                    ${(!esSaldo && !esRecibo && !esHermana) ? `
+                    ${(CXC_TIENE_WA && !esSaldo && !esRecibo && !esHermana) ? `
                     <button class="btn btn-sm py-0 px-2" style="font-size:.72rem;background:#25d366;color:#fff;" title="Enviar WhatsApp"
                             onclick="CXC_abrirWA(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_telefono || '')}', '${esc(r.cliente_nombre)}')">
                         <i class="bi bi-whatsapp"></i>
@@ -380,7 +390,7 @@ function CXC_accionesHtml(r) {
 const CXC_COLS_ESTANDAR = `
     <col style="width:36px;"><col style="width:170px;"><col style="width:120px;"><col>
     <col style="width:110px;"><col style="width:126px;"><col style="width:95px;">
-    <col style="width:100px;"><col style="width:95px;"><col style="width:125px;"><col style="width:162px;">`;
+    <col style="width:100px;"><col style="width:95px;"><col style="width:125px;"><col style="width:190px;">`;
 const CXC_TH_ESTANDAR = `
     <tr>
         <th class="text-center p-1"></th>
@@ -398,7 +408,7 @@ const CXC_TH_ESTANDAR = `
 const CXC_COLS_MAYOR = `
     <col style="width:36px;"><col style="width:92px;"><col style="width:170px;"><col style="width:100px;">
     <col style="width:90px;"><col style="width:95px;"><col style="width:100px;">
-    <col style="width:105px;"><col style="width:62px;"><col><col style="width:162px;">`;
+    <col style="width:105px;"><col style="width:62px;"><col><col style="width:190px;">`;
 const CXC_TH_MAYOR = `
     <tr>
         <th class="text-center p-1"></th>
@@ -1675,19 +1685,18 @@ document.addEventListener('click', function (e) {
     const id     = tr.dataset.id;
     const origen = tr.dataset.origen;
     const r      = CXC_datos.find(x => String(x.id) === String(id) && x.origen === origen) || {};
+    // El detalle lo sirve este módulo (su permiso y el alcance del usuario), no Facturas ni
+    // Recibos: sin acceso a esos módulos el panel respondía "HTTP 403". En el consolidado
+    // viaja la empresa dueña del documento, así también se ve el de otro establecimiento.
+    const emp = (r.es_hermana && parseInt(r.id_empresa)) ? `&id_empresa=${parseInt(r.id_empresa)}` : '';
 
     window.CMG_abrirPreviewDoc(id, origen, {
+        url:         `${BASE_URL}/${RUTA_MODULO_CXC}/detalleDocumentoAjax?origen=${encodeURIComponent(origen)}${emp}`,
         numero:      r.numero_factura || tr.dataset.factura || '',
         fecha:       r.fecha_emision  || '',
         sujetoLabel: 'Cliente',
         sujeto:      r.cliente_nombre || tr.dataset.cliente || '',
-        total:       r.total,
-        // Consolidado: el detalle de un documento de otro establecimiento no se puede
-        // consultar desde esta empresa; el panel muestra solo el resumen de la fila.
-        soloResumen: !!r.es_hermana,
-        aviso:       r.es_hermana
-            ? `Documento del establecimiento ${r.establecimiento || ''} - ${r.empresa_nombre || ''}. Cambie a esa empresa para ver el detalle completo; el cobro sí puede registrarse desde aquí con el botón de la fila.`
-            : ''
+        total:       r.total
     });
 });
 

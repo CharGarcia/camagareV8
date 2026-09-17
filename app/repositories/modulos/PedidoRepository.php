@@ -56,6 +56,123 @@ class PedidoRepository {
         $this->db = Database::getConnection();
     }
 
+    /** Ejecuta SQL con parámetros y devuelve las filas (lo que espera ListadoPaginado). */
+    private function query(string $sql, array $params = []): array {
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Fecha/hora como texto, con expresiones INMUTABLES (to_char() y los casts a texto son
+     * STABLE: dependen del DateStyle de la sesión y PostgreSQL no los admite en un índice).
+     * Producen exactamente el mismo texto que antes: 'YYYY-MM-DD' y 'HH24:MI'.
+     */
+    private static function fechaTexto(string $col): string {
+        return \App\Helpers\MotorBusqueda::fechaIso($col);
+    }
+
+    private static function horaTexto(string $col): string {
+        return \App\Helpers\MotorBusqueda::horaHm($col);
+    }
+
+    /**
+     * Texto propio del pedido que entra en la búsqueda libre: número, observaciones,
+     * observaciones internas, fecha de emisión, fecha de entrega y rango horario.
+     * `$a` es el prefijo del alias ('p.' en la consulta, '' en el CREATE INDEX): la MISMA
+     * expresión alimenta la consulta y el índice, así que no se pueden desalinear.
+     */
+    private static function exprPedido(string $a = ''): string {
+        return "COALESCE({$a}establecimiento, '') || '-' || COALESCE({$a}punto_emision, '') || '-' || COALESCE({$a}secuencial, '')"
+             . " || ' ' || COALESCE({$a}observaciones, '')"
+             . " || ' ' || COALESCE({$a}observaciones_internas, '')"
+             . " || ' ' || " . self::fechaTexto("{$a}fecha_pedido")
+             . " || ' ' || " . self::fechaTexto("{$a}fecha_entrega")
+             . " || ' ' || " . self::horaTexto("{$a}hora_inicial_entrega")
+             . " || ' - ' || " . self::horaTexto("{$a}hora_maxima_entrega");
+    }
+
+    /** Número de comprobante (establecimiento-punto-secuencial) de otra tabla. */
+    private static function exprNumero(string $a = ''): string {
+        return "COALESCE({$a}establecimiento, '') || '-' || COALESCE({$a}punto_emision, '') || '-' || COALESCE({$a}secuencial, '')";
+    }
+
+    /**
+     * Fuentes del texto libre del listado (ver App\Helpers\MotorBusqueda). Cada una es un
+     * conjunto que PostgreSQL resuelve UNA vez por palabra con su índice trigram, en lugar
+     * de recalcularse por cada pedido de la empresa.
+     *
+     * Busca exactamente lo mismo que antes: número de pedido, fechas, rango horario,
+     * observaciones, observaciones internas, cliente (nombre e identificación), responsable
+     * de entrega, usuario que registró, productos pedidos y el número de las consignaciones
+     * o facturas que consumieron el pedido. El Estado sigue fuera (solo por el modal).
+     *
+     * A propósito NO se filtra por empresa en las fuentes que cuelgan de otra tabla: el
+     * listado ya está acotado a la empresa por fuera, y filtrar aquí cambiaría el resultado
+     * si un dato quedó cruzado entre empresas.
+     */
+    private function fuentesBusqueda(): array {
+        $fuentes = [
+            // Datos propios del pedido
+            [
+                'sql'    => "p.id IN (SELECT bx.id FROM pedidos_cabecera bx WHERE bx.id_empresa = :id_empresa AND {cond})",
+                'expr'   => self::exprPedido('bx.'),
+                'indice' => ['tabla' => 'pedidos_cabecera', 'nombre' => 'idx_trgm_pedidos_cabecera', 'expr' => self::exprPedido()],
+            ],
+            // Cliente: nombre e identificación
+            [
+                'sql'    => "p.id_cliente IN (SELECT cx.id FROM clientes cx WHERE {cond})",
+                'expr'   => "COALESCE(cx.nombre, '') || ' ' || COALESCE(cx.identificacion, '')",
+                'indice' => ['tabla' => 'clientes', 'nombre' => 'idx_trgm_clientes', 'expr' => "COALESCE(nombre, '') || ' ' || COALESCE(identificacion, '')"],
+            ],
+            // Responsable de entrega y usuario que registró: tablas chicas, sin índice.
+            [
+                'sql'  => "p.id_responsable_entrega IN (SELECT rx.id FROM responsables_traslado rx WHERE {cond})",
+                'expr' => "COALESCE(rx.nombre, '')",
+            ],
+            [
+                'sql'  => "p.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})",
+                'expr' => "COALESCE(ux.nombre, '')",
+            ],
+            // Productos pedidos
+            [
+                'sql'    => "p.id IN (SELECT pdp.id_pedido FROM pedidos_detalle pdp
+                                        JOIN productos pr ON pr.id = pdp.id_producto
+                                       WHERE pdp.eliminado = false AND {cond})",
+                'expr'   => "COALESCE(pr.codigo, '') || ' ' || COALESCE(pr.nombre, '')",
+                'indice' => ['tabla' => 'productos', 'nombre' => 'idx_trgm_productos', 'expr' => "COALESCE(codigo, '') || ' ' || COALESCE(nombre, '')"],
+            ],
+            // Consignaciones de venta que consumieron el pedido
+            [
+                'sql'    => "p.id IN (SELECT pdr.id_pedido FROM pedidos_detalle pdr
+                                        JOIN consignaciones_ventas_detalles cvd ON cvd.id_pedido_detalle = pdr.id AND cvd.eliminado = false
+                                        JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion AND cv.eliminado = false
+                                       WHERE {cond})",
+                'expr'   => self::exprNumero('cv.'),
+                'indice' => ['tabla' => 'consignaciones_ventas', 'nombre' => 'idx_trgm_consignaciones_numero', 'expr' => self::exprNumero()],
+            ],
+        ];
+
+        // Facturas de venta que consumieron el pedido (solo si existe la columna de enlace).
+        if ($this->columnaVentasDetalleExiste()) {
+            $fuentes[] = [
+                'sql'    => "p.id IN (SELECT pdf.id_pedido FROM pedidos_detalle pdf
+                                        JOIN ventas_detalle vd ON vd.id_pedido_detalle = pdf.id
+                                        JOIN ventas_cabecera v ON v.id = vd.id_venta AND v.eliminado = false
+                                       WHERE {cond})",
+                'expr'   => self::exprNumero('v.'),
+                'indice' => ['tabla' => 'ventas_cabecera', 'nombre' => 'idx_trgm_ventas_numero', 'expr' => self::exprNumero()],
+            ];
+        }
+
+        return $fuentes;
+    }
+
+    /** SQL de los índices que necesita la búsqueda de este módulo (para database/*.sql). */
+    public function sqlIndicesBusqueda(): array {
+        return \App\Helpers\MotorBusqueda::sqlIndices($this->fuentesBusqueda());
+    }
+
     public function getListado(
         int $idEmpresa,
         string $buscar,
@@ -83,25 +200,16 @@ class PedidoRepository {
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
-        // Documentos que consumieron el pedido (Consignaciones de Venta y, si ya está
-        // la migración de ventas_detalle.id_pedido_detalle, Facturas de Venta): su
-        // número entra en el texto libre y en el filtro "documentos".
-        $sqlDocsRelacionados = "(SELECT STRING_AGG(DISTINCT (cv.establecimiento || '-' || cv.punto_emision || '-' || cv.secuencial), ' ')
-                                   FROM pedidos_detalle pdr
-                                   JOIN consignaciones_ventas_detalles cvd ON cvd.id_pedido_detalle = pdr.id AND cvd.eliminado = false
-                                   JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion AND cv.eliminado = false
-                                  WHERE pdr.id_pedido = p.id)";
+        // Documentos que consumieron el pedido (Consignaciones de Venta y, si ya está la
+        // migración de ventas_detalle.id_pedido_detalle, Facturas de Venta). Su número entra
+        // en el texto libre —ahora como una fuente del motor de búsqueda, ver
+        // fuentesBusqueda()— y aquí queda solo lo que necesita el filtro "documentos:si/no",
+        // que se evalúa únicamente cuando el usuario lo usa.
         $existeDocs = "EXISTS (SELECT 1 FROM pedidos_detalle pde
                                  JOIN consignaciones_ventas_detalles cvd2 ON cvd2.id_pedido_detalle = pde.id AND cvd2.eliminado = false
                                  JOIN consignaciones_ventas cv2 ON cv2.id = cvd2.id_consignacion AND cv2.eliminado = false
                                 WHERE pde.id_pedido = p.id)";
         if ($this->columnaVentasDetalleExiste()) {
-            $sqlDocsRelacionados = "CONCAT_WS(' ', {$sqlDocsRelacionados},
-                                     (SELECT STRING_AGG(DISTINCT (v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial), ' ')
-                                        FROM pedidos_detalle pdf
-                                        JOIN ventas_detalle vd ON vd.id_pedido_detalle = pdf.id
-                                        JOIN ventas_cabecera v ON v.id = vd.id_venta AND v.eliminado = false
-                                       WHERE pdf.id_pedido = p.id))";
             $existeDocs = "({$existeDocs} OR EXISTS (SELECT 1 FROM pedidos_detalle pdf2
                                  JOIN ventas_detalle vd2 ON vd2.id_pedido_detalle = pdf2.id
                                  JOIN ventas_cabecera v2 ON v2.id = vd2.id_venta AND v2.eliminado = false
@@ -111,26 +219,13 @@ class PedidoRepository {
         $sqlTotal = "(SELECT COALESCE(SUM(pdt.total), 0) FROM pedidos_detalle pdt WHERE pdt.id_pedido = p.id AND pdt.eliminado = false)";
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
-        // Texto libre: las columnas del listado y campos que identifican el pedido
-        // aunque no sean columnas. Decisión del usuario: la columna Estado NO entra en
-        // el texto libre (se filtra solo desde el modal de filtros).
+        // Texto libre: mismas columnas de siempre (ver fuentesBusqueda()), pero armadas como
+        // conjuntos que PostgreSQL resuelve una sola vez con índices trigram en vez de
+        // recalcular por cada pedido de la empresa. Decisión del usuario: la columna Estado
+        // NO entra en el texto libre (se filtra solo desde el modal de filtros).
         if ($parsed['texto_libre'] !== '') {
-            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                [
-                    "(p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial)", // Nro. Pedido
-                    "TO_CHAR(p.fecha_pedido, 'YYYY-MM-DD')",                                // Fecha Emisión
-                    'p.fecha_entrega::text',                                                // Fecha Entrega
-                    "CONCAT_WS(' - ', TO_CHAR(p.hora_inicial_entrega, 'HH24:MI'), TO_CHAR(p.hora_maxima_entrega, 'HH24:MI'))", // Rango Horario
-                    'c.nombre',                                                             // Cliente
-                    'rt.nombre',                                                            // Resp. Entrega
-                    'p.observaciones',                                                      // Observaciones
-                    'p.observaciones_internas',                                             // Obs. Internas
-                    // Fuera del listado, pero identifican el pedido:
-                    'c.identificacion',
-                    '(SELECT uc.nombre FROM usuarios uc WHERE uc.id = p.created_by)',     // usuario que registró
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', pr.codigo, pr.nombre), ' ') FROM pedidos_detalle pdp JOIN productos pr ON pr.id = pdp.id_producto WHERE pdp.id_pedido = p.id AND pdp.eliminado = false)",
-                    $sqlDocsRelacionados,                                                   // consignaciones / facturas
-                ],
+            $condicion = \App\Helpers\MotorBusqueda::condicion(
+                $this->fuentesBusqueda(),
                 $parsed['texto_libre'],
                 $params,
                 'b'
@@ -177,44 +272,41 @@ class PedidoRepository {
             ],
         ]);
 
-        // 1. Contar total
-        $sqlCount = "SELECT COUNT(*) 
-                     FROM pedidos_cabecera p 
-                     JOIN clientes c ON p.id_cliente = c.id 
-                     LEFT JOIN responsables_traslado rt ON p.id_responsable_entrega = rt.id
-                     {$whereSql}";
-        $stCount  = $this->db->prepare($sqlCount);
-        $stCount->execute($params);
-        $total = (int) $stCount->fetchColumn();
-
-        // 2. Obtener filas
-        $offset = ($page - 1) * $perPage;
-        
         // Una o varias columnas, siempre validadas contra MAPA_ORDEN, con p.id como
         // desempate para que las filas empatadas no bailen entre páginas.
         $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'p.created_at', 'p.id DESC');
 
-        $sqlRows = "SELECT p.*,
-                           (p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) AS numero_pedido,
-                           c.nombre AS cliente_nombre,
-                           rt.nombre AS responsable_entrega
-                    FROM pedidos_cabecera p
-                    JOIN clientes c ON p.id_cliente = c.id
-                    LEFT JOIN responsables_traslado rt ON p.id_responsable_entrega = rt.id
-                    {$whereSql}
-                    $orderBy";
-                    
-        if ($perPage > 0) {
-            $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
-        }
+        // UNA sola consulta (ver App\Helpers\ListadoPaginado): antes había un COUNT y un
+        // SELECT por separado con el mismo WHERE, así que todo el trabajo del texto libre se
+        // hacía DOS veces —medido con 20.000 pedidos: 8,3 s por búsqueda, la mitad en cada
+        // consulta—. El JOIN a clientes es INNER y el ORDER BY puede usar c.nombre / rt.nombre,
+        // así que ambos joins van también en la fase que filtra y cuenta.
+        $joins = "JOIN clientes c ON p.id_cliente = c.id
+                  LEFT JOIN responsables_traslado rt ON p.id_responsable_entrega = rt.id";
 
-        $stRows = $this->db->prepare($sqlRows);
-        $stRows->execute($params);
-        $rows = $stRows->fetchAll(PDO::FETCH_ASSOC);
+        $resultado = \App\Helpers\ListadoPaginado::consultar(
+            fn(string $sql, array $prm): array => $this->query($sql, $prm),
+            [
+                'tabla'       => 'pedidos_cabecera',
+                'alias'       => 'p',
+                'joinsFiltro' => $joins,
+                'joinsFinal'  => $joins,
+                'where'       => $whereSql,
+                'orderBy'     => $orderBy,
+                'select'      => "p.*,
+                                  (p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) AS numero_pedido,
+                                  c.nombre AS cliente_nombre,
+                                  rt.nombre AS responsable_entrega",
+                'perPage'     => $perPage,
+                'offset'      => $perPage > 0 ? ($page - 1) * $perPage : 0,
+                'conBusqueda' => trim($buscar) !== '',
+            ],
+            $params
+        );
 
         return [
-            'total' => $total,
-            'rows'  => $rows
+            'total' => $resultado['total'],
+            'rows'  => $resultado['rows'],
         ];
     }
 

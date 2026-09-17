@@ -489,6 +489,10 @@ class LiquidacionCompraController extends BaseModuloController
             exit;
         }
 
+        // Soltar el candado de la sesión antes de esperar al SRI (y al correo): si no, las
+        // demás peticiones del usuario hacen fila hasta que responda.
+        $this->liberarSesion();
+
         try {
             $envioService = new \App\Services\Sri\SriEnvioService();
             $resultado    = $envioService->enviarLiquidacionCompra($id, $idEmpresa, $idUsuario);
@@ -1108,6 +1112,9 @@ class LiquidacionCompraController extends BaseModuloController
     {
         ob_start();
         $this->requireLeer();
+        // Soltar el candado de la sesión antes de armar y enviar el correo: si no, las demás
+        // peticiones del usuario hacen fila hasta que termine.
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         $id        = (int) ($_POST['id'] ?? 0);

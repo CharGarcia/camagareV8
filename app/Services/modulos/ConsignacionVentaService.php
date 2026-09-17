@@ -896,6 +896,66 @@ class ConsignacionVentaService
         }
     }
 
+    /**
+     * Pedidos de los que se cargaron líneas en la consignación (pestaña Pedidos del modal): la
+     * cabecera de cada pedido y todas sus líneas con lo pedido, lo tomado en esta consignación,
+     * lo consumido en total y lo pendiente. "Consumido" es la misma cifra que muestra el módulo
+     * Pedidos (consignaciones y facturas de venta que usan la línea).
+     */
+    public function getPedidosDeConsignacion(int $idConsignacion, int $idEmpresa): array
+    {
+        $filas = $this->repository->getPedidosRelacionados($idConsignacion, $idEmpresa);
+        if (empty($filas)) {
+            return [];
+        }
+        $consumido = (new \App\Repositories\Modulos\PedidoRepository())
+            ->getCantidadConsumidaPorDetalle(array_column($filas, 'id_detalle'));
+
+        $pedidos = [];
+        foreach ($filas as $f) {
+            $idPedido = (int) $f['id_pedido'];
+            if (!isset($pedidos[$idPedido])) {
+                $pedidos[$idPedido] = [
+                    'id_pedido'           => $idPedido,
+                    'numero_pedido'       => $f['numero_pedido'],
+                    'fecha_pedido'        => $f['fecha_pedido'],
+                    'fecha_entrega'       => $f['fecha_entrega'],
+                    'hora_inicial_entrega'=> $f['hora_inicial_entrega'],
+                    'hora_maxima_entrega' => $f['hora_maxima_entrega'],
+                    'estado'              => $f['estado'],
+                    'observaciones'       => $f['observaciones'],
+                    'cliente_nombre'      => $f['cliente_nombre'],
+                    'responsable_entrega' => $f['responsable_entrega'],
+                    'total'               => 0.0,
+                    'lineas'              => [],
+                ];
+            }
+            $eliminada = in_array($f['linea_eliminada'], [true, 't', '1', 1], true);
+            $pedida    = (float) $f['cantidad_pedida'];
+            $consumida = (float) ($consumido[(int) $f['id_detalle']] ?? 0);
+            if (!$eliminada) {
+                $pedidos[$idPedido]['total'] += (float) $f['total'];
+            }
+            $pedidos[$idPedido]['lineas'][] = [
+                'producto_codigo'       => $f['producto_codigo'],
+                'producto_nombre'       => $f['producto_nombre'],
+                'cantidad_pedida'       => $pedida,
+                'precio_unitario'       => (float) $f['precio_unitario'],
+                'cantidad_consignacion' => (float) $f['cantidad_consignacion'],
+                'cantidad_consumida'    => $consumida,
+                // Una línea que se quitó del pedido ya no tiene nada pendiente.
+                'pendiente'             => $eliminada ? 0.0 : max(0.0, round($pedida - $consumida, 4)),
+                'linea_eliminada'       => $eliminada,
+            ];
+        }
+        foreach ($pedidos as &$p) {
+            $p['total'] = round($p['total'], 2);
+        }
+        unset($p);
+
+        return array_values($pedidos);
+    }
+
     /** Evidencias de entrega (GPS + firma) registradas desde la app móvil, para la pestaña Entrega. */
     public function getEntregasDeConsignacion(int $idConsignacion, int $idEmpresa): array
     {
@@ -969,6 +1029,34 @@ class ConsignacionVentaService
     {
         $builder = new \App\Services\modulos\AsientoBuilderService();
         return $builder->generarAsientoConsignacion($idEmpresa, $idConsignacion);
+    }
+
+    /**
+     * Por qué la consignación todavía no tiene asiento, para la pestaña Asiento contable (que
+     * solo muestra el asiento ya generado y completo, nunca líneas con importe y sin cuenta).
+     *
+     * @param string|null $errorGeneracion mensaje si el último intento de generarlo falló
+     */
+    public function motivoSinAsiento(int $idConsignacion, int $idEmpresa, ?string $errorGeneracion = null): string
+    {
+        $sugerido = $this->obtenerAsientoSugerido($idEmpresa, $idConsignacion);
+        if (empty($sugerido)) {
+            return 'Esta consignación no tiene costo de inventario registrado, así que no genera asiento contable.';
+        }
+        $faltan = [];
+        foreach ($sugerido as $linea) {
+            if ((int) ($linea['id_cuenta_contable'] ?? 0) <= 0) {
+                $faltan[] = '«' . ($linea['referencia_detalle'] ?? 'cuenta') . '»';
+            }
+        }
+        if ($faltan) {
+            return 'El asiento contable aún no se genera: falta configurar la cuenta de ' . implode(' y de ', $faltan)
+                . ' en Configuración contable, sección «Consignaciones en Ventas».';
+        }
+        if ($errorGeneracion !== null && $errorGeneracion !== '') {
+            return 'El asiento contable aún no se genera: ' . $errorGeneracion;
+        }
+        return 'Aún no se ha generado el asiento contable de esta consignación.';
     }
 
     /** Genera/actualiza el asiento sin propagar errores (no debe tumbar el guardado). */
