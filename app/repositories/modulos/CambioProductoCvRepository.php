@@ -85,17 +85,56 @@ class CambioProductoCvRepository extends BaseRepository
     }
 
     /**
-     * Factura de venta de una factura de consignación (para el registro de un cambio): id,
-     * número (el de ventas_cabecera o, si no está, el guardado al enlazarla) y vendedor.
+     * LEFT JOIN a la factura de una línea 'FACTURA' ($alias = cambios_producto_cv_detalles).
+     *
+     * 'FACTURA' tuvo dos significados: hasta el 15-09-2026 la devolución apuntaba a la FACTURA DE
+     * VENTA (id_origen = ventas_cabecera, id_origen_detalle = ventas_detalle); desde el 16-09-2026, a
+     * la FACTURA DE CONSIGNACIÓN (consignaciones_facturas / _detalles). Los id de esas tablas se pisan,
+     * así que la línea se reconoce por el PAR cabecera + detalle + producto: primero como factura de
+     * consignación y, si no calza, como factura de venta directa. Alias con prefijo $p: {$p}cfd,
+     * {$p}cf, {$p}fv (factura de consignación y su venta) y {$p}vd, {$p}vc (venta directa, formato antiguo).
      */
-    public function getFacturaVentaDeFacturacionCv(int $idConsignacionFactura, int $idEmpresa): ?array
+    private static function sqlJoinsFacturaDeLinea(string $alias, string $p): string
     {
-        $sql = "SELECT cf.id_factura, " . self::sqlNumeroFacturaVenta('cf', 'fv') . " AS numero_factura, cf.id_vendedor
-                FROM consignaciones_facturas cf
-                LEFT JOIN ventas_cabecera fv ON fv.id = cf.id_factura
-                WHERE cf.id = :id AND cf.id_empresa = :e";
+        return "
+            LEFT JOIN consignaciones_facturas_detalles {$p}cfd ON {$alias}.origen_tipo = 'FACTURA'
+                  AND {$p}cfd.id = {$alias}.id_origen_detalle AND {$p}cfd.id_consignacion_factura = {$alias}.id_origen
+                  AND {$p}cfd.id_producto = {$alias}.id_producto
+            LEFT JOIN consignaciones_facturas {$p}cf ON {$p}cf.id = {$p}cfd.id_consignacion_factura
+            LEFT JOIN ventas_cabecera {$p}fv ON {$p}fv.id = {$p}cf.id_factura
+            LEFT JOIN ventas_detalle {$p}vd ON {$alias}.origen_tipo = 'FACTURA' AND {$p}cfd.id IS NULL
+                  AND {$p}vd.id = {$alias}.id_origen_detalle AND {$p}vd.id_venta = {$alias}.id_origen
+                  AND {$p}vd.id_producto = {$alias}.id_producto
+            LEFT JOIN ventas_cabecera {$p}vc ON {$p}vc.id = {$p}vd.id_venta";
+    }
+
+    /**
+     * Número de la factura de venta de una línea 'FACTURA', con los alias de sqlJoinsFacturaDeLinea():
+     * la venta de la factura de consignación (o el número guardado al enlazarla) o la venta directa.
+     */
+    private static function sqlNumeroFacturaDeJoins(string $p): string
+    {
+        return "COALESCE({$p}fv.establecimiento || '-' || {$p}fv.punto_emision || '-' || {$p}fv.secuencial,
+                         NULLIF(TRIM({$p}cf.numero_factura), ''),
+                         {$p}vc.establecimiento || '-' || {$p}vc.punto_emision || '-' || {$p}vc.secuencial)";
+    }
+
+    /**
+     * Factura de venta de la que viene una devolución 'FACTURA' (para el registro de un cambio y la
+     * columna Origen): id, número y vendedor. Reconoce los dos formatos (ver sqlJoinsFacturaDeLinea).
+     */
+    public function getFacturaVentaDeLinea(int $idOrigen, int $idOrigenDetalle, int $idProducto, int $idEmpresa): ?array
+    {
+        $sql = "SELECT COALESCE(ocf.id_factura, ovc.id)          AS id_factura,
+                       " . self::sqlNumeroFacturaDeJoins('o') . " AS numero_factura,
+                       COALESCE(ocf.id_vendedor, ovc.id_vendedor) AS id_vendedor
+                FROM (SELECT CAST('FACTURA' AS VARCHAR(15)) AS origen_tipo, CAST(:io AS INTEGER) AS id_origen,
+                             CAST(:iod AS INTEGER) AS id_origen_detalle, CAST(:prod AS INTEGER) AS id_producto) l
+                " . self::sqlJoinsFacturaDeLinea('l', 'o') . "
+                WHERE (ocfd.id IS NOT NULL OR ovd.id IS NOT NULL)
+                  AND COALESCE(ocf.id_empresa, ovc.id_empresa) = :e";
         $st = $this->db->prepare($sql);
-        $st->execute([':id' => $idConsignacionFactura, ':e' => $idEmpresa]);
+        $st->execute([':io' => $idOrigen, ':iod' => $idOrigenDetalle, ':prod' => $idProducto, ':e' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }
@@ -141,17 +180,15 @@ class CambioProductoCvRepository extends BaseRepository
 
     /**
      * Expresión SQL con el número del documento de origen de una línea de cambio, tal como se
-     * MUESTRA: FACTURA → n.º de la factura de venta que generó la factura de consignación (ver
-     * sqlNumeroFacturaVenta), CAMBIO → cambio anterior, CONSIGNACION → consignación. NULL en
-     * las entregas de bodega / catálogo (sin origen).
+     * MUESTRA: FACTURA → n.º de la factura de venta (en los dos formatos, ver
+     * sqlJoinsFacturaDeLinea), CAMBIO → cambio anterior, CONSIGNACION → consignación. NULL en
+     * las entregas de bodega / catálogo y en las devoluciones migradas (sin origen).
      */
     private static function sqlNumeroOrigen(string $alias): string
     {
         return "(CASE {$alias}.origen_tipo
-                    WHEN 'FACTURA'      THEN (SELECT " . self::sqlNumeroFacturaVenta('ox', 'fx') . "
-                                                FROM consignaciones_facturas ox
-                                                LEFT JOIN ventas_cabecera fx ON fx.id = ox.id_factura
-                                               WHERE ox.id = {$alias}.id_origen)
+                    WHEN 'FACTURA'      THEN (SELECT " . self::sqlNumeroFacturaDeJoins('x') . "
+                                                FROM (SELECT 1) uno " . self::sqlJoinsFacturaDeLinea($alias, 'x') . ")
                     WHEN 'CAMBIO'       THEN (SELECT CONCAT(ox.serie, '-', ox.secuencial) FROM cambios_producto_cv ox WHERE ox.id = {$alias}.id_origen)
                     WHEN 'CONSIGNACION' THEN (SELECT CONCAT(ox.serie, '-', ox.secuencial) FROM consignaciones_ventas ox WHERE ox.id = {$alias}.id_origen)
                  END)";
@@ -165,10 +202,8 @@ class CambioProductoCvRepository extends BaseRepository
     private static function sqlNumerosOrigenBusqueda(string $alias): string
     {
         return "(CASE {$alias}.origen_tipo
-                    WHEN 'FACTURA' THEN (SELECT CONCAT_WS(' ', " . self::sqlNumeroFacturaVenta('ox', 'fx') . ", CONCAT(ox.serie, '-', ox.secuencial))
-                                           FROM consignaciones_facturas ox
-                                           LEFT JOIN ventas_cabecera fx ON fx.id = ox.id_factura
-                                          WHERE ox.id = {$alias}.id_origen)
+                    WHEN 'FACTURA' THEN (SELECT CONCAT_WS(' ', " . self::sqlNumeroFacturaDeJoins('x') . ", NULLIF(CONCAT(xcf.serie, '-', xcf.secuencial), '-'))
+                                           FROM (SELECT 1) uno " . self::sqlJoinsFacturaDeLinea($alias, 'x') . ")
                     ELSE " . self::sqlNumeroOrigen($alias) . "
                  END)";
     }
@@ -270,23 +305,25 @@ class CambioProductoCvRepository extends BaseRepository
 
     /**
      * Número del documento de origen de la línea que ENTRA en el listado (alias dv): factura de
-     * venta (misma regla que sqlNumeroFacturaVenta, con los alias cfo/fvo de getListado) o
-     * cambio anterior. Constante para poder usarla también en MAPA_ORDEN.
+     * venta en sus dos formatos (misma expresión que sqlNumeroFacturaDeJoins('o'), con los joins
+     * de sqlJoinsFacturaDeLinea('dv', 'o') de getListado) o cambio anterior. Constante para poder
+     * usarla también en MAPA_ORDEN.
      */
     private const SQL_ORIGEN_DEV = "(CASE dv.origen_tipo
-                WHEN 'FACTURA' THEN COALESCE(fvo.establecimiento || '-' || fvo.punto_emision || '-' || fvo.secuencial,
-                                             NULLIF(TRIM(cfo.numero_factura), ''))
+                WHEN 'FACTURA' THEN COALESCE(ofv.establecimiento || '-' || ofv.punto_emision || '-' || ofv.secuencial,
+                                             NULLIF(TRIM(ocf.numero_factura), ''),
+                                             ovc.establecimiento || '-' || ovc.punto_emision || '-' || ovc.secuencial)
                 WHEN 'CAMBIO'  THEN COALESCE(cao.serie, '') || '-' || COALESCE(cao.secuencial, '')
              END)";
 
     /**
      * Orden del listado (whitelist de OrdenListado): data-col de la vista => expresión SQL.
      * En las columnas de un solo lado se ordena primero por "vacío" para que las filas sin
-     * producto de ese lado queden al final en los dos sentidos. fecha_cambio, secuencial,
-     * estado y diferencia ya no son columnas: siguen para las preferencias guardadas y como
-     * orden por defecto.
+     * producto de ese lado queden al final en los dos sentidos. secuencial, estado y diferencia
+     * ya no son columnas: siguen para las preferencias guardadas.
      */
     public const MAPA_ORDEN = [
+        'fecha_cambio'  => 'r.fecha_cambio',
         // Lo que ENTRA (devolución)
         'dev_cantidad'  => 'dv.cantidad IS NULL, dv.cantidad',
         'dev_producto'  => 'pdv.nombre IS NULL, pdv.nombre',
@@ -301,7 +338,6 @@ class CambioProductoCvRepository extends BaseRepository
         'cliente'       => 'c.nombre',
         'observaciones' => "COALESCE(r.observaciones, '') = '', r.observaciones",
         // Sin columna en pantalla
-        'fecha_cambio'  => 'r.fecha_cambio',
         'secuencial'    => 'r.secuencial',
         'estado'        => 'r.estado',
         'diferencia'    => 'r.diferencia',
@@ -364,6 +400,7 @@ class CambioProductoCvRepository extends BaseRepository
                    r.serie, r.secuencial, r.estado, r.fecha_cambio, r.observaciones,
                    c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
                    dv.cantidad    AS dev_cantidad,
+                   dv.id_producto AS dev_id_producto,
                    pdv.nombre     AS dev_producto_nombre,
                    pdv.codigo     AS dev_producto_codigo,
                    dv.lote        AS dev_lote,
@@ -383,8 +420,7 @@ class CambioProductoCvRepository extends BaseRepository
             LEFT JOIN cambios_producto_cv_detalles dv ON dv.id = p.id_dev
             LEFT JOIN productos pdv ON pdv.id = dv.id_producto
             LEFT JOIN bodegas bdv ON bdv.id = dv.id_bodega
-            LEFT JOIN consignaciones_facturas cfo ON dv.origen_tipo = 'FACTURA' AND cfo.id = dv.id_origen
-            LEFT JOIN ventas_cabecera fvo ON fvo.id = cfo.id_factura
+            " . self::sqlJoinsFacturaDeLinea('dv', 'o') . "
             LEFT JOIN cambios_producto_cv cao ON dv.origen_tipo = 'CAMBIO' AND cao.id = dv.id_origen
             LEFT JOIN cambios_producto_cv_detalles en ON en.id = p.id_ent
             LEFT JOIN productos pen ON pen.id = en.id_producto
@@ -415,14 +451,13 @@ class CambioProductoCvRepository extends BaseRepository
             $params[":c{$i}"] = $id;
         }
         $sql = "SELECT DISTINCT ON (d.id_cambio)
-                       d.id_cambio, d.origen_tipo, d.id_origen, d.id_origen_detalle,
+                       d.id_cambio, d.origen_tipo, d.id_origen, d.id_origen_detalle, d.id_producto,
                        CASE d.origen_tipo
-                            WHEN 'FACTURA' THEN " . self::sqlNumeroFacturaVenta('vo', 'fvo') . "
+                            WHEN 'FACTURA' THEN " . self::sqlNumeroFacturaDeJoins('o') . "
                             WHEN 'CAMBIO'  THEN (COALESCE(co.serie,'') || '-' || COALESCE(co.secuencial,''))
                        END AS origen_numero
                 FROM cambios_producto_cv_detalles d
-                LEFT JOIN consignaciones_facturas vo ON d.origen_tipo = 'FACTURA' AND vo.id = d.id_origen
-                LEFT JOIN ventas_cabecera fvo       ON fvo.id = vo.id_factura
+                " . self::sqlJoinsFacturaDeLinea('d', 'o') . "
                 LEFT JOIN cambios_producto_cv co    ON d.origen_tipo = 'CAMBIO' AND co.id = d.id_origen
                 WHERE d.id_cambio IN (" . implode(', ', $marcas) . ") AND d.id_empresa = :e
                   AND d.tipo_linea = 'devolucion' AND COALESCE(d.eliminado, false) = false
@@ -605,13 +640,16 @@ class CambioProductoCvRepository extends BaseRepository
         };
 
         // Subconsulta reutilizable de "cantidad ya devuelta" para un origen dado.
-        $devuelto = function (string $origenTipo, string $colDetalle) use ($excSql): string {
+        // Se compara el PAR cabecera + detalle: las devoluciones anteriores al 16-09-2026 guardan en
+        // 'FACTURA' ids de ventas_cabecera / ventas_detalle, que se pisan con los de la factura de
+        // consignación (ver sqlJoinsFacturaDeLinea); solo por detalle descontarían saldo ajeno.
+        $devuelto = function (string $origenTipo, string $colDetalle, string $colOrigen) use ($excSql): string {
             return "COALESCE((
                 SELECT SUM(cd.cantidad)
                 FROM cambios_producto_cv_detalles cd
                 INNER JOIN cambios_producto_cv cc ON cc.id = cd.id_cambio
                 WHERE cd.tipo_linea = 'devolucion' AND cd.origen_tipo = '$origenTipo'
-                  AND cd.id_origen_detalle = $colDetalle
+                  AND cd.id_origen_detalle = $colDetalle AND cd.id_origen = $colOrigen
                   AND cd.eliminado = false AND cc.eliminado = false AND cc.estado = 'Emitida'
                   $excSql
             ), 0)";
@@ -633,6 +671,9 @@ class CambioProductoCvRepository extends BaseRepository
                     vc.id              AS id_origen,
                     d.id               AS id_origen_detalle,
                     $numVenta          AS doc_numero,
+                    -- Número propio de la factura de consignación: identifica el documento en el
+                    -- buscador cuando no tiene factura de venta enlazada (doc_numero vacío).
+                    $numFactura        AS doc_numero_consignacion,
                     vc.fecha_emision   AS doc_fecha,
                     vc.id_cliente,
                     c.nombre           AS cliente_nombre,
@@ -652,7 +693,7 @@ class CambioProductoCvRepository extends BaseRepository
                     d.id_bodega,
                     b.nombre           AS bodega_nombre,
                     d.cantidad         AS cantidad_origen,
-                    " . $devuelto('FACTURA', 'd.id') . " AS cantidad_devuelta
+                    " . $devuelto('FACTURA', 'd.id', 'vc.id') . " AS cantidad_devuelta
                 FROM consignaciones_facturas_detalles d
                 INNER JOIN consignaciones_facturas vc ON vc.id = d.id_consignacion_factura
                 LEFT JOIN ventas_cabecera fv ON fv.id = vc.id_factura
@@ -677,6 +718,7 @@ class CambioProductoCvRepository extends BaseRepository
                     e.id_cambio        AS id_origen,
                     e.id               AS id_origen_detalle,
                     $numCambio         AS doc_numero,
+                    NULL               AS doc_numero_consignacion,
                     cx.fecha_cambio    AS doc_fecha,
                     cx.id_cliente,
                     c.nombre           AS cliente_nombre,
@@ -696,7 +738,7 @@ class CambioProductoCvRepository extends BaseRepository
                     e.id_bodega,
                     b.nombre           AS bodega_nombre,
                     e.cantidad         AS cantidad_origen,
-                    " . $devuelto('CAMBIO', 'e.id') . " AS cantidad_devuelta
+                    " . $devuelto('CAMBIO', 'e.id', 'e.id_cambio') . " AS cantidad_devuelta
                 FROM cambios_producto_cv_detalles e
                 INNER JOIN cambios_producto_cv cx ON cx.id = e.id_cambio
                 INNER JOIN clientes c ON c.id = cx.id_cliente
@@ -735,18 +777,23 @@ class CambioProductoCvRepository extends BaseRepository
             return 0.0;
         }
 
-        $paramsDev = [':id' => $idOrigenDetalle, ':ot' => $origenTipo];
+        $paramsDev = [':id' => $idOrigenDetalle, ':ot' => $origenTipo, ':id2' => $idOrigenDetalle];
         $excSql = '';
         if ($excluirCambio !== null) {
             $excSql = ' AND cc.id <> :exc';
             $paramsDev[':exc'] = $excluirCambio;
         }
 
+        // Par cabecera + detalle (ver el comentario de $devuelto en getLineasDisponiblesCliente).
+        $cabecera = $origenTipo === 'FACTURA'
+            ? '(SELECT x.id_consignacion_factura FROM consignaciones_facturas_detalles x WHERE x.id = :id2)'
+            : '(SELECT x.id_cambio FROM cambios_producto_cv_detalles x WHERE x.id = :id2)';
+
         $sqlDev = "SELECT COALESCE(SUM(cd.cantidad), 0)
                    FROM cambios_producto_cv_detalles cd
                    INNER JOIN cambios_producto_cv cc ON cc.id = cd.id_cambio
                    WHERE cd.tipo_linea = 'devolucion' AND cd.origen_tipo = :ot
-                     AND cd.id_origen_detalle = :id
+                     AND cd.id_origen_detalle = :id AND cd.id_origen = {$cabecera}
                      AND cd.eliminado = false AND cc.eliminado = false AND cc.estado = 'Emitida'
                      $excSql";
         $stDev = $this->db->prepare($sqlDev);
@@ -1244,9 +1291,9 @@ class CambioProductoCvRepository extends BaseRepository
 
     /**
      * Detalles del cambio con el número del documento de origen de cada línea: para las
-     * devoluciones, el de la FACTURA DE VENTA que generó la factura de consignación (no el de
-     * la factura de consignación) o el del cambio previo; para las entregas tomadas de una
-     * consignación, el de la consignación.
+     * devoluciones, el de la FACTURA DE VENTA (de la factura de consignación o, en los cambios
+     * anteriores al 16-09-2026, la factura de venta directa; ver sqlJoinsFacturaDeLinea) o el del
+     * cambio previo; para las entregas tomadas de una consignación, el de la consignación.
      */
     public function getDetalles(int $idCambio, int $idEmpresa): array
     {
@@ -1255,7 +1302,7 @@ class CambioProductoCvRepository extends BaseRepository
                    p.nombre as producto_nombre, p.codigo as producto_codigo, p.inventariable, p.tipo_produccion,
                    b.nombre as bodega_nombre,
                    CASE d.origen_tipo
-                        WHEN 'FACTURA'      THEN " . self::sqlNumeroFacturaVenta('vo', 'fvo') . "
+                        WHEN 'FACTURA'      THEN " . self::sqlNumeroFacturaDeJoins('o') . "
                         WHEN 'CAMBIO'       THEN (COALESCE(co.serie,'') || '-' || COALESCE(co.secuencial,''))
                         WHEN 'CONSIGNACION' THEN (COALESCE(cvo.serie,'') || '-' || COALESCE(cvo.secuencial,''))
                         ELSE NULL
@@ -1263,8 +1310,7 @@ class CambioProductoCvRepository extends BaseRepository
             FROM cambios_producto_cv_detalles d
             INNER JOIN productos p ON p.id = d.id_producto
             LEFT JOIN bodegas b ON b.id = d.id_bodega
-            LEFT JOIN consignaciones_facturas vo ON d.origen_tipo = 'FACTURA'      AND vo.id  = d.id_origen
-            LEFT JOIN ventas_cabecera fvo       ON fvo.id = vo.id_factura
+            " . self::sqlJoinsFacturaDeLinea('d', 'o') . "
             LEFT JOIN cambios_producto_cv co    ON d.origen_tipo = 'CAMBIO'       AND co.id  = d.id_origen
             LEFT JOIN consignaciones_ventas cvo ON d.origen_tipo = 'CONSIGNACION' AND cvo.id = d.id_origen
             WHERE d.id_cambio = :id AND d.id_empresa = :e AND (d.eliminado = false OR d.eliminado IS NULL)

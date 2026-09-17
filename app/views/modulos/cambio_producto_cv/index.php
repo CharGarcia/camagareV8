@@ -37,7 +37,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     .cambio-row { cursor: pointer; }
     .cambio-row:hover { background-color: rgba(0, 0, 0, .04); }
 
-    /* Listado de dos lados: lo que ENTRA (izquierda, rojo) y lo que SALE (derecha, verde). */
+    /* Listado de dos lados: fecha (celeste), lo que ENTRA (izquierda, rojo) y lo que SALE (derecha, verde). */
+    .cambios-scroll thead th.cam-th-fecha { --bs-table-bg: #4fc3f7; --bs-table-color: #0d3c55; background-color: #4fc3f7; color: #0d3c55; }
     .cambios-scroll thead th.cam-th-entra { --bs-table-bg: #dc3545; --bs-table-color: #fff; background-color: #dc3545; color: #fff; }
     .cambios-scroll thead th.cam-th-sale  { --bs-table-bg: #198754; --bs-table-color: #fff; background-color: #198754; color: #fff; }
     #tablaCambios .cam-lado-sale { border-left: 2px solid #adb5bd; }
@@ -165,6 +166,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
             <div id="fmExtraCAM" class="btn-group btn-group-sm">
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas([
+                    'fecha_cambio'  => 'Fecha',
                     'dev_cantidad'  => 'Entra: cantidad',
                     'dev_producto'  => 'Entra: producto',
                     'dev_lote'      => 'Entra: lote',
@@ -195,10 +197,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     <div class="card-body p-0">
         <div class="cambios-scroll w-100">
             <table class="table table-hover table-sm mb-0" id="tablaCambios">
-                <?php // Encabezados en rojo: lo que ENTRA (devolución). En verde: lo que SALE (entrega). ?>
+                <?php // Fecha en celeste. En rojo: lo que ENTRA (devolución). En verde: lo que SALE (entrega). ?>
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3 text-end sortable-header cam-th-entra" role="button" data-col="dev_cantidad" title="Producto que entra">Cantidad <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="ps-3 sortable-header cam-th-fecha" role="button" data-col="fecha_cambio" title="Fecha de emisión del cambio">Fecha <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="text-end sortable-header cam-th-entra" role="button" data-col="dev_cantidad" title="Producto que entra">Cantidad <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-entra" role="button" data-col="dev_producto" title="Producto que entra">Producto <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-entra" role="button" data-col="dev_lote" title="Producto que entra">Lote <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-entra" role="button" data-col="dev_bodega" title="Bodega a la que entra">Bodega <i class="bi bi-arrow-down-up small ms-1"></i></th>
@@ -214,7 +217,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="grid-body">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="11" class="text-center py-5 text-muted">
+                            <td colspan="12" class="text-center py-5 text-muted">
                                 <i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>
                                 No se encontraron cambios.
                             </td>
@@ -270,13 +273,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     });
 
     function actualizarIconosOrden(col, dir, tableId) {
-        // Los encabezados tienen fondo rojo o verde: íconos en blanco (tenue si la columna no ordena).
+        // Encabezados con fondo de color: íconos en blanco sobre rojo/verde y oscuros sobre el
+        // celeste de Fecha (tenues si la columna no ordena).
         document.querySelectorAll(`#${tableId} th.sortable-header`).forEach(th => {
             const icon = th.querySelector('i');
             if (icon) {
-                icon.className = 'bi bi-arrow-down-up small text-white-50 ms-1';
+                const claro = th.classList.contains('cam-th-fecha');
+                icon.className = 'bi bi-arrow-down-up small ms-1 ' + (claro ? 'text-black-50' : 'text-white-50');
                 if (th.dataset.col === col) {
-                    icon.className = dir === 'ASC' ? 'bi bi-sort-alpha-down text-white ms-1' : 'bi bi-sort-alpha-up text-white ms-1';
+                    icon.className = (dir === 'ASC' ? 'bi bi-sort-alpha-down ms-1 ' : 'bi bi-sort-alpha-up ms-1 ') + (claro ? 'text-dark' : 'text-white');
                 }
             }
         });

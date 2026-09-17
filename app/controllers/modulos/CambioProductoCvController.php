@@ -144,7 +144,7 @@ class CambioProductoCvController extends BaseModuloController
 
         $rowsHtml = '';
         if (empty($rows)) {
-            $rowsHtml = '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>No se encontraron cambios.</td></tr>';
+            $rowsHtml = '<tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>No se encontraron cambios.</td></tr>';
         } else {
             $decCant = self::decimalesCantidad($this->getEmpresaConfig($idEmpresa));
             foreach ($rows as $r) {
@@ -259,7 +259,8 @@ class CambioProductoCvController extends BaseModuloController
     /**
      * Columna Factura del listado, como texto para PDF/Excel: la factura de venta afectada por lo que
      * entra (también si la unidad llegó en un cambio anterior; si no se encuentra, "Cambio …") y, en
-     * las filas que solo tienen lo que sale, la factura de la que vino el cambio.
+     * las filas que solo tienen lo que sale, la factura de la que vino el cambio. "Sin factura" si lo
+     * que entra no tiene factura de venta que mostrar (igual que _fila.php).
      */
     private static function textoFacturaDev(array $r): string
     {
@@ -269,7 +270,12 @@ class CambioProductoCvController extends BaseModuloController
         }
         $num = trim((string) ($r['dev_origen_numero'] ?? ''));
         if ($num === '') {
-            return trim((string) ($r['factura_cambio'] ?? ''));
+            $facturaCambio = trim((string) ($r['factura_cambio'] ?? ''));
+            // Devolución migrada del sistema anterior o de una factura de consignación sin factura de venta.
+            if ($facturaCambio === '' && $r['dev_cantidad'] !== null && in_array($r['dev_origen_tipo'] ?? '', ['', 'FACTURA'], true)) {
+                return 'Sin factura';
+            }
+            return $facturaCambio;
         }
         return (($r['dev_origen_tipo'] ?? '') === 'CAMBIO' ? 'Cambio ' : '') . $num;
     }
@@ -299,6 +305,7 @@ class CambioProductoCvController extends BaseModuloController
             <style>
                 table { width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:7pt; }
                 th { border:1px solid #ccc; padding:3px; text-align:left; color:#fff; }
+                th.fecha { background:#4fc3f7; color:#0d3c55; }
                 th.entra { background:#dc3545; }
                 th.sale { background:#198754; }
                 td { border:1px solid #ccc; padding:3px; vertical-align:top; }
@@ -316,21 +323,22 @@ class CambioProductoCvController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
+                            <th class="fecha" rowspan="2" style="width:7%">Fecha</th>
                             <th class="entra c" colspan="5">Entra</th>
                             <th class="sale c" colspan="6">Sale</th>
                         </tr>
                         <tr>
-                            <th class="entra r" style="width:6%">Cantidad</th>
-                            <th class="entra" style="width:15%">Producto</th>
+                            <th class="entra r" style="width:5%">Cantidad</th>
+                            <th class="entra" style="width:14%">Producto</th>
                             <th class="entra" style="width:7%">Lote</th>
                             <th class="entra" style="width:8%">Bodega</th>
                             <th class="entra" style="width:10%">Factura</th>
-                            <th class="sale r" style="width:6%">Cantidad</th>
-                            <th class="sale" style="width:15%">Producto</th>
+                            <th class="sale r" style="width:5%">Cantidad</th>
+                            <th class="sale" style="width:14%">Producto</th>
                             <th class="sale" style="width:7%">Lote</th>
                             <th class="sale" style="width:8%">Bodega</th>
-                            <th class="sale" style="width:10%">Cliente</th>
-                            <th class="sale" style="width:8%">Observaciones</th>
+                            <th class="sale" style="width:9%">Cliente</th>
+                            <th class="sale" style="width:6%">Observaciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -338,6 +346,7 @@ class CambioProductoCvController extends BaseModuloController
                         $clase = ['Anulada' => 'anulada', 'Borrador' => 'borrador'][(string) ($r['estado'] ?? '')] ?? '';
                     ?>
                         <tr class="<?= $clase ?>">
+                            <td><?= !empty($r['fecha_cambio']) ? date('d-m-Y', strtotime((string) $r['fecha_cambio'])) : '' ?></td>
                             <td class="r"><?= $cant($r['dev_cantidad'] ?? null) ?></td>
                             <td><?= $h($r['dev_producto_nombre'] ?? '') ?><?php if (($r['dev_producto_codigo'] ?? '') !== ''): ?><br><span class="cod"><?= $h($r['dev_producto_codigo']) ?></span><?php endif; ?></td>
                             <td><?= $h($r['dev_lote'] ?? '') ?></td>
@@ -386,14 +395,16 @@ class CambioProductoCvController extends BaseModuloController
 
             // Mismas columnas que el listado; en Excel el código va en su propia columna.
             $headers = [
+                'Fecha',
                 'Entra: cantidad', 'Entra: código', 'Entra: producto', 'Entra: lote', 'Entra: bodega', 'Entra: factura',
                 'Sale: cantidad', 'Sale: código', 'Sale: producto', 'Sale: lote', 'Sale: bodega', 'Cliente', 'Observaciones',
             ];
-            $numEntra = 6; // columnas A-F: lo que entra; G-M: lo que sale
+            $numEntra = 6; // A: fecha; B-G: lo que entra; H-N: lo que sale
 
             $exportData = [];
             foreach ($rows as $r) {
                 $exportData[] = [
+                    !empty($r['fecha_cambio']) ? date('d-m-Y', strtotime((string) $r['fecha_cambio'])) : '',
                     $r['dev_cantidad'] !== null ? (float) $r['dev_cantidad'] : null,
                     (string) ($r['dev_producto_codigo'] ?? ''),
                     (string) ($r['dev_producto_nombre'] ?? ''),
@@ -414,7 +425,7 @@ class CambioProductoCvController extends BaseModuloController
             $fmtCant = '#,##0' . ($decCant > 0 ? '.' . str_repeat('0', $decCant) : '');
 
             $reportService = new \App\Services\ReportService();
-            $spreadsheet = $reportService->construirSpreadsheet($headers, $exportData, 'Cambios de productos', 'Cambios de productos - ' . $nombreEmpresa, [], [1 => $fmtCant, 7 => $fmtCant]);
+            $spreadsheet = $reportService->construirSpreadsheet($headers, $exportData, 'Cambios de productos', 'Cambios de productos - ' . $nombreEmpresa, [], [2 => $fmtCant, 8 => $fmtCant]);
 
             // Encabezados en rojo (entra) y verde (sale), como en pantalla. La fila de
             // encabezados se ubica por su primer texto para no depender de dónde la deja ReportService.
@@ -424,10 +435,12 @@ class CambioProductoCvController extends BaseModuloController
                 if ((string) $sheet->getCell('A' . $f)->getValue() === $headers[0]) { $filaEnc = $f; break; }
             }
             if ($filaEnc > 0) {
-                $ultimaEntra = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($numEntra);
-                $primeraSale = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($numEntra + 1);
+                $ultimaEntra = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(1 + $numEntra);
+                $primeraSale = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(2 + $numEntra);
                 $ultimaSale  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
-                $sheet->getStyle("A{$filaEnc}:{$ultimaEntra}{$filaEnc}")->getFill()->getStartColor()->setRGB('DC3545');
+                $sheet->getStyle("A{$filaEnc}")->getFill()->getStartColor()->setRGB('4FC3F7');
+                $sheet->getStyle("A{$filaEnc}")->getFont()->getColor()->setRGB('0D3C55');
+                $sheet->getStyle("B{$filaEnc}:{$ultimaEntra}{$filaEnc}")->getFill()->getStartColor()->setRGB('DC3545');
                 $sheet->getStyle("{$primeraSale}{$filaEnc}:{$ultimaSale}{$filaEnc}")->getFill()->getStartColor()->setRGB('198754');
 
                 // Sin columna Estado: los cambios anulados van tachados y los borradores en cursiva gris.

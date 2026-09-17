@@ -552,11 +552,20 @@
     /**
      * Origen de lo que ENTRA: el número de la factura de venta afectada. Si la unidad llegó en un
      * cambio anterior, el servidor resuelve esa factura (factura_afectada) y el cambio queda en el
-     * título; si no la encuentra, se muestra el cambio.
+     * título; si no la encuentra, se muestra el cambio. "Sin factura" si no hay factura de venta que
+     * mostrar (igual que CambioProductoCvPdfService::etiquetaOrigen).
      */
     function camBadgeOrigenDev(tipo, numeroOrigen, facturaAfectada) {
         if (facturaAfectada) {
             return camBadgeOrigen(tipo, 'Factura ' + facturaAfectada, tipo === 'CAMBIO' ? 'Entregada en el cambio ' + (numeroOrigen || '') : '');
+        }
+        // Sin factura de venta que mostrar: devolución migrada del sistema anterior (no guarda de qué
+        // factura vino) o de una factura de consignación que no tiene factura de venta enlazada.
+        if (!tipo || (tipo === 'FACTURA' && !numeroOrigen)) {
+            const motivo = !tipo
+                ? 'Cambio migrado: el sistema anterior no guardaba la factura'
+                : 'La factura de consignación de esta unidad no tiene factura de venta enlazada';
+            return `<span class="badge bg-secondary bg-opacity-10 text-secondary" title="${motivo}">Sin factura</span>`;
         }
         return camBadgeOrigen(tipo, camLabelOrigen(tipo) + (numeroOrigen ? ' ' + numeroOrigen : ''));
     }
@@ -583,7 +592,7 @@
         if (String(actual) !== String(l.id_cliente)) {
             camSwal({
                 icon: 'warning', title: 'Es de otro cliente',
-                html: `El documento <strong>${esc(l.doc_numero || '')}</strong> pertenece a <strong>${esc(l.cliente_nombre || 'otro cliente')}</strong>.<br>Un cambio es de un solo cliente: quite el cliente actual (Backspace en el campo Cliente) o registre otro cambio.`
+                html: `El documento <strong>${esc(l.doc_numero || l.doc_numero_consignacion || '')}</strong> pertenece a <strong>${esc(l.cliente_nombre || 'otro cliente')}</strong>.<br>Un cambio es de un solo cliente: quite el cliente actual (Backspace en el campo Cliente) o registre otro cambio.`
             });
             return false;
         }
@@ -600,14 +609,18 @@
         const grupos = new Map();
         rows.forEach(l => {
             const g = l.origen_tipo + '-' + l.id_origen;
-            if (!grupos.has(g)) grupos.set(g, { tipo: l.origen_tipo, numero: l.doc_numero, fecha: l.doc_fecha, cliente: l.cliente_nombre, items: [] });
+            if (!grupos.has(g)) grupos.set(g, { tipo: l.origen_tipo, numero: l.doc_numero, numeroConsig: l.doc_numero_consignacion, fecha: l.doc_fecha, cliente: l.cliente_nombre, items: [] });
             grupos.get(g).items.push(l);
         });
         grupos.forEach(g => {
             const head = document.createElement('div');
             head.className = 'list-group-item py-1 bg-light d-flex align-items-center gap-2 flex-wrap';
+            // Factura de consignación sin factura de venta enlazada: se identifica por su número propio.
+            const numero = g.numero
+                ? `<span class="small fw-semibold">${esc(g.numero)}</span>`
+                : (g.numeroConsig ? `<span class="small text-muted" title="Esta factura de consignación no tiene factura de venta enlazada">Sin factura · F. consig. ${esc(g.numeroConsig)}</span>` : '');
             head.innerHTML = `${camBadgeOrigen(g.tipo)}
-                <span class="small fw-semibold">${esc(g.numero || '')}</span>
+                ${numero}
                 <span class="small text-muted">${camFechaCorta(g.fecha)}</span>
                 ${opts.mostrarCliente && g.cliente ? `<span class="small text-muted">· ${esc(g.cliente)}</span>` : ''}
                 <span class="small text-muted ms-auto">${g.items.length} ítem(s)</span>`;

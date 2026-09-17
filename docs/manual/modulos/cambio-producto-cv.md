@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones
-version: 1.8
+etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados
+version: 1.9
 orden: 47
 estado: activo
 ---
@@ -98,7 +98,15 @@ dónde viene cada línea:
 - **Lo que se devuelve**: *Factura 001-001-000000123*, el número de la **factura
   de venta afectada**. Si la unidad llegó en un cambio anterior, se muestra
   igual la factura de venta de la que vino (el número de ese cambio aparece al
-  pasar el mouse); solo si no se encuentra la factura se ve *Cambio …*.
+  pasar el mouse); solo si no se encuentra la factura se ve *Cambio …*. Los
+  cambios registrados antes del 16-09-2026, cuando lo devuelto se tomaba de la
+  factura de venta directa, también muestran esa factura. Dice *Sin factura*
+  cuando no hay factura de venta que mostrar: en los cambios **migrados del
+  sistema anterior** (aquel sistema no guardaba de qué factura venía lo
+  devuelto) y cuando la factura de consignación de la unidad **no tiene factura
+  de venta enlazada** (pasa con algunas migradas). En el buscador, esa factura
+  de consignación aparece como *Sin factura · F. consig. …* con su número
+  propio.
 - **Lo que se entrega**: *Consignación 001-001-000000012*, el número de la
   consignación de la que se tomó la unidad; o *Existencias*, *Catálogo* o
   *Bodega* si sale de bodega.
@@ -135,14 +143,16 @@ esa unidad pasa a estar vendida: reemplaza a la que devolvió. Por eso, al
 
 ## El listado: lo que entra y lo que sale
 
-La pantalla principal no muestra un cambio por fila sino **los productos**: a la
-**izquierda**, con encabezados en **rojo**, el producto que **entra** (lo que el
-cliente devuelve) y a la **derecha**, con encabezados en **verde**, el producto
-que **sale** (lo que recibe a cambio).
+La pantalla principal no muestra un cambio por fila sino **los productos**. La
+primera columna, con encabezado **celeste**, es la **Fecha** de emisión del
+cambio; luego, a la **izquierda**, con encabezados en **rojo**, el producto que
+**entra** (lo que el cliente devuelve) y a la **derecha**, con encabezados en
+**verde**, el producto que **sale** (lo que recibe a cambio).
 
 | Lado | Columnas |
 |------|----------|
-| Entra (rojo) | Cantidad, Producto (con el código debajo), Lote, Bodega a la que entra, Factura (número de la factura de venta de la que vino el cambio: la de la unidad que entra, también si llegó en un cambio anterior; en las filas que solo tienen producto que sale, en gris, la factura del cambio) |
+| Fecha (celeste) | Fecha de emisión del cambio |
+| Entra (rojo) | Cantidad, Producto (con el código debajo), Lote, Bodega a la que entra, Factura (número de la factura de venta de la que vino el cambio: la de la unidad que entra, también si llegó en un cambio anterior; en las filas que solo tienen producto que sale, en gris, la factura del cambio; *Sin factura* si no hay factura de venta que mostrar) |
 | Sale (verde) | Cantidad, Producto (con el código debajo), Lote, Bodega de la que sale, Cliente, Observaciones del cambio |
 
 - Cada fila **empareja** un producto que entra con uno que sale del mismo
@@ -297,6 +307,11 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 - **No aparece la consignación**: debe estar en estado **Entregada**, ser del
   mismo cliente del cambio y tener saldo (no retornado, no facturado, no
   entregado en otro cambio).
+- **La factura dice *Sin factura***: no hay número de factura de venta que
+  mostrar. O el cambio se migró del sistema anterior, que no guardaba de qué
+  factura venía lo devuelto, o la factura de consignación de esa unidad no tiene
+  factura de venta enlazada. Al pasar el mouse sobre el texto, el listado dice
+  cuál de los dos casos es. No es un error del cambio.
 - **"Secuencial no configurado"**: configure *Cambios de productos* en
   *Empresa → Secuenciales* para el punto de emisión.
 - **"No se pudo registrar en Facturación de consignaciones lo entregado desde
@@ -315,6 +330,17 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.9** — Nueva primera columna **Fecha** (fecha de emisión del cambio, encabezado
+  celeste) en el listado y en su PDF y Excel. Corregido: en los cambios
+  registrados antes del 16-09-2026 (lo devuelto venía de la factura de venta
+  directa) no se veía el número de la factura en el listado ni en la columna
+  *Origen* del PDF y el formulario; ahora sí. Además, esas devoluciones antiguas
+  ya no pueden descontar por error el saldo de otra línea de factura de
+  consignación con el mismo número interno. Dice *Sin factura* cuando no hay
+  factura de venta que mostrar: devoluciones de cambios migrados del sistema
+  anterior (antes decía *Bodega*) y de facturas de consignación sin factura de
+  venta enlazada (antes la celda quedaba vacía y el PDF decía solo *Factura*). En
+  el buscador, esas facturas de consignación se identifican por su número propio.
 - **1.8** — Columna **Origen**: lo que se devuelve muestra siempre la **factura de
   venta afectada**, también cuando la unidad llegó en un cambio anterior (antes
   salía el número de ese cambio); lo que se entrega desde consignación muestra

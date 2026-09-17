@@ -37,6 +37,13 @@ if ($afectada !== '') {
     $factura = '<span class="small text-muted">Cambio</span> ' . $h($r['dev_origen_numero']);
 } elseif (trim((string) ($r['factura_cambio'] ?? '')) !== '') {
     $factura = '<span class="text-muted" title="Factura de la que vino este cambio de productos">' . $h($r['factura_cambio']) . '</span>';
+} elseif ($r['dev_cantidad'] !== null && in_array($r['dev_origen_tipo'] ?? '', ['', 'FACTURA'], true)) {
+    // Sin factura de venta que mostrar: devolución migrada del sistema anterior (no guarda de qué
+    // factura vino) o de una factura de consignación que no tiene factura de venta enlazada.
+    $motivo  = ($r['dev_origen_tipo'] ?? '') === ''
+        ? 'Cambio migrado: el sistema anterior no guardaba la factura'
+        : 'La factura de consignación de esta unidad no tiene factura de venta enlazada';
+    $factura = '<span class="small text-muted" title="' . $motivo . '">Sin factura</span>';
 }
 
 // El listado ya no tiene columna Estado: un cambio anulado o en borrador se distingue en la fila.
@@ -53,7 +60,8 @@ $dataRow = $h(json_encode([
 ]));
 ?>
 <tr class="cambio-row<?= $claseEstado ?>" role="button" tabindex="0" data-row="<?= $dataRow ?>" onclick="abrirModalCambioVer(this)"<?= $tituloFila !== '' ? ' title="' . $tituloFila . '"' : '' ?>>
-    <td class="ps-3 text-end" data-col="dev_cantidad"><?= $cantidad($r['dev_cantidad'] ?? null) ?></td>
+    <td class="ps-3 text-nowrap" data-col="fecha_cambio"><?= !empty($r['fecha_cambio']) ? date('d-m-Y', strtotime((string) $r['fecha_cambio'])) : '' ?></td>
+    <td class="text-end" data-col="dev_cantidad"><?= $cantidad($r['dev_cantidad'] ?? null) ?></td>
     <td data-col="dev_producto"><?= $producto($r['dev_producto_nombre'] ?? null, $r['dev_producto_codigo'] ?? null) ?></td>
     <td data-col="dev_lote"><?= $h($r['dev_lote'] ?? '') ?></td>
     <td data-col="dev_bodega"><?= $h($r['dev_bodega'] ?? '') ?></td>

@@ -743,7 +743,9 @@ class CambioProductoCvService
         $origen = strtoupper((string) ($dev['origen_tipo'] ?? ''));
 
         if ($origen === 'FACTURA') {
-            return $this->repository->getFacturaVentaDeFacturacionCv((int) $dev['id_origen'], $idEmpresa) ?? $vacio;
+            // Factura de consignación o, en devoluciones anteriores al 16-09-2026, factura de venta directa.
+            return $this->repository->getFacturaVentaDeLinea((int) $dev['id_origen'], (int) ($dev['id_origen_detalle'] ?? 0),
+                (int) ($dev['id_producto'] ?? 0), $idEmpresa) ?? $vacio;
         }
         if ($origen !== 'CAMBIO' || $nivel >= 20) {
             return $vacio;
