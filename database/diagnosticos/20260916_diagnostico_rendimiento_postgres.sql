@@ -7,12 +7,9 @@
 --             por día, errores).
 -- Toca datos: NO. Solo SELECT sobre catálogos y tablas del sistema.
 -- Reversible: no aplica, no cambia nada.
--- Cómo      : pgAdmin → Query Tool sobre la base de producción →
---             1) ejecutar la CONSULTA 1 completa (F5): devuelve una fila por
---                sección → botón "Save results to file" (CSV) y enviármelo.
---             2) solo si la fila "extensiones" dice
---                "pg_stat_statements_instalada": true → seleccionar la
---                CONSULTA 2 y F5 → guardar también su CSV.
+-- Cómo      : pgAdmin → Query Tool sobre la base de producción → F5: devuelve
+--             una fila por sección → copiar el resultado o "Save results to
+--             file" (CSV).
 -- Carga     : liviana. log_sistema se limita a sus últimas 300.000 filas por id
 --             (índice de la PK), así que no recorre la tabla completa.
 -- Si falla  : por una tabla que no exista en esa base, borrar esa sección
@@ -245,20 +242,5 @@ SELECT 16, 'errores_por_dia_14d', (
 
 ORDER BY orden;
 
-
--- ── CONSULTA 2 (solo si pg_stat_statements está instalada) ───────────────────
--- Las 40 consultas que más tiempo total de base consumen desde el último reinicio
--- de estadísticas. Es la lista que dice qué optimizar primero.
-/*
-SELECT round(total_exec_time::numeric / 1000, 1) AS total_seg,
-       calls AS llamadas,
-       round(mean_exec_time::numeric, 1) AS media_ms,
-       round(max_exec_time::numeric, 1) AS max_ms,
-       rows AS filas,
-       round(100.0 * shared_blks_hit / NULLIF(shared_blks_hit + shared_blks_read, 0), 1) AS cache_pct,
-       left(regexp_replace(query, '\s+', ' ', 'g'), 400) AS consulta
-FROM pg_stat_statements
-WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
-ORDER BY total_exec_time DESC
-LIMIT 40;
-*/
+-- Siguiente paso: 20260916_diagnostico_consultas_pesadas_postgres.sql
+-- (necesita pg_stat_statements; ver la fila "extensiones").
