@@ -6,7 +6,7 @@ ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: entregas, entrega, buscar entrega, buscar consignacion, buscador, filtros, filtrar entregas, buscar por producto, buscar por lote, con firma, sin firma, con gps, sin gps, chips, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas
-version: 1.6
+version: 1.7
 orden: 0
 estado: activo
 ---
@@ -248,6 +248,11 @@ igual que una que no existe.
 
 ## Historial de cambios
 
+- **1.7** — La búsqueda del listado, los indicadores de arriba y la pestaña
+  **Detalles** responden más rápido en empresas con muchas consignaciones: con
+  decenas de miles podían tardar varios segundos por búsqueda. Encuentran
+  exactamente lo mismo. Si se sigue escribiendo mientras busca, la búsqueda
+  anterior se cancela y solo se muestra la última.
 - **1.6** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas del listado y en los productos
   consignados (código, nombre, lote, NUP), salvo Estado, Canal, Firma y GPS.

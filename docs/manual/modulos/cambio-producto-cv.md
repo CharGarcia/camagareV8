@@ -6,7 +6,7 @@ ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura
-version: 1.14
+version: 1.15
 orden: 47
 estado: activo
 ---
@@ -354,6 +354,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.15** — La búsqueda del listado y la de la pestaña **Detalles** responden más
+  rápido en empresas con muchos cambios, y encuentran exactamente lo mismo. Si se
+  sigue escribiendo mientras busca, la búsqueda anterior se cancela y solo se
+  muestra la última.
 - **1.14** — **IVA**: lo que sale en un cambio (desde consignación, existencias
   o catálogo) toma la tarifa de IVA vigente del producto, igual que Facturación
   de consignaciones; antes se guardaba con IVA 0. Así el registro en

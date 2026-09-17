@@ -90,26 +90,28 @@ class ConsignacionVentaRepository extends BaseRepository
         // Rendimiento (17-09-2026): cada rama filtra su tabla por empresa y la cabecera se une
         // solo a las líneas que coinciden (antes se materializaban TODAS las consignaciones y se
         // recorrían las líneas y documentos de todas las empresas). Producto y bodega se buscan
-        // en su catálogo como conjunto; montos, cantidades y fechas solo si la palabra tiene dígitos.
-        $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
+        // en su catálogo como conjunto; montos, cantidades y fechas solo si la palabra puede ser
+        // un número o una fecha.
+        $fecha   = \App\Helpers\FiltrosBusqueda::SI_FECHA;
+        $numero  = \App\Helpers\FiltrosBusqueda::SI_NUMERO;
         $condProd = \App\Helpers\FiltrosBusqueda::condicionTexto(
             ['d.lote', 'd.nup',
              ['col' => "CONCAT_WS(' ', px.codigo, px.nombre, px.codigo_barras)",
               'sql' => "d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :id_empresa AND {cond})"],
              ['col' => 'bx.nombre',
               'sql' => "d.id_bodega IN (SELECT bx.id FROM bodegas bx WHERE bx.id_empresa = :id_empresa AND {cond})"],
-             ['sql' => "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')", 'si' => $digitos],
-             ['sql' => 'd.cantidad', 'si' => $digitos],
-             ['sql' => 'd.precio_unitario', 'si' => $digitos],
-             ['sql' => 'd.total', 'si' => $digitos]],
+             ['sql' => "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')", 'si' => $fecha],
+             ['sql' => 'd.cantidad', 'si' => $numero],
+             ['sql' => 'd.precio_unitario', 'si' => $numero],
+             ['sql' => 'd.total', 'si' => $numero]],
             $q, $params, 'pr'
         );
         $condFac = \App\Helpers\FiltrosBusqueda::condicionTexto(
-            ["CONCAT(cf.serie, '-', cf.secuencial)", 'cf.numero_factura', 'cf.observaciones', ['sql' => 'cf.total', 'si' => $digitos]],
+            ["CONCAT(cf.serie, '-', cf.secuencial)", 'cf.numero_factura', 'cf.observaciones', ['sql' => 'cf.total', 'si' => $numero]],
             $q, $params, 'fc'
         );
         $condRet = \App\Helpers\FiltrosBusqueda::condicionTexto(
-            ["CONCAT(r.serie, '-', r.secuencial)", 'r.motivo', 'r.observaciones', ['sql' => 'r.total', 'si' => $digitos]],
+            ["CONCAT(r.serie, '-', r.secuencial)", 'r.motivo', 'r.observaciones', ['sql' => 'r.total', 'si' => $numero]],
             $q, $params, 'rt'
         );
         $condCam = \App\Helpers\FiltrosBusqueda::condicionTexto(
@@ -200,15 +202,17 @@ class ConsignacionVentaRepository extends BaseRepository
             // largo en cada consignación era lo más caro que quedaba. Fecha, total y números de
             // retorno/cambio solo se comparan si la palabra tiene dígitos.
             $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
+            $fecha   = \App\Helpers\FiltrosBusqueda::SI_FECHA;
+            $numero  = \App\Helpers\FiltrosBusqueda::SI_NUMERO;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     "CONCAT(cv.serie, '-', cv.secuencial)",               // Secuencial (serie-secuencial)
                     'cv.observaciones',                                   // Observaciones
                     'cv.punto_partida',
                     'cv.punto_llegada',
-                    ['sql' => "TO_CHAR(cv.fecha_emision, 'DD-MM-YYYY')", 'si' => $digitos], // Fecha (como se muestra)
-                    ['sql' => 'cv.fecha_emision', 'si' => $digitos],                       // Fecha (yyyy-mm-dd)
-                    ['sql' => 'cv.total', 'si' => $digitos],
+                    ['sql' => "TO_CHAR(cv.fecha_emision, 'DD-MM-YYYY')", 'si' => $fecha], // Fecha (como se muestra)
+                    ['sql' => 'cv.fecha_emision', 'si' => $fecha],                       // Fecha (yyyy-mm-dd)
+                    ['sql' => 'cv.total', 'si' => $numero],
                     // Cliente (nombre e identificación), asesor, responsable de traslado y usuario que registró
                     ['col' => "CONCAT_WS(' ', cx.nombre, cx.identificacion)",
                      'sql' => "cv.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})"],

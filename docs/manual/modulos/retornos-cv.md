@@ -6,7 +6,7 @@ ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: retorno, retornos, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero
-version: 1.13
+version: 1.14
 orden: 46
 estado: activo
 ---
@@ -208,6 +208,10 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.14** — La búsqueda del listado y la de la pestaña **Detalles** responden más
+  rápido en empresas con muchos retornos, y encuentran exactamente lo mismo. Si se
+  sigue escribiendo mientras busca, la búsqueda anterior se cancela y solo se
+  muestra la última.
 - **1.13** — El retorno entra al inventario al costo con que salió en la
   consignación (antes entraba a costo 0 y bajaba el costo promedio del producto).
   Sus reversos —pasarlo a Borrador, anularlo o eliminarlo— usan ese mismo costo.

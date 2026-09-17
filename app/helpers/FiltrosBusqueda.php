@@ -60,6 +60,17 @@ class FiltrosBusqueda
      */
     public const SI_DIGITOS = '/\d/';
     public const SI_DECIMAL = '/^\d+[.,]\d{1,2}$/';
+    /**
+     * Más estrictos que SI_DIGITOS, para columnas cuyo TIPO fija los caracteres del texto:
+     *  - SI_FECHA: fechas y horas como texto (dígitos, guiones, dos puntos; también barra y
+     *    punto, por si el DateStyle de la sesión no es ISO). "SIM000123" o "L00123" tienen
+     *    letras: nunca están dentro de "17-12-2025", así que no se formatea la fecha de cada
+     *    fila para buscarlos.
+     *  - SI_NUMERO: columnas numéricas (dígitos, punto, coma decimal, signo).
+     * Ambos aceptan los comodines de ILIKE (`_`, `%`) y la barra de escape, que sí podrían coincidir.
+     */
+    public const SI_FECHA  = '/^(?=.*\d)[\d\-:\/._%\\\\]+$/';
+    public const SI_NUMERO = '/^(?=.*\d)[\d.,\-_%\\\\]+$/';
 
     /**
      * Envuelve una columna o placeholder con unaccent() si la extensión está

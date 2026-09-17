@@ -41,9 +41,9 @@ class EntregasConsignacionesRepository extends BaseRepository
      * Una fila por consignación. La evidencia de entrega se trae por LATERAL (la
      * confirmada por id_entrega_confirmada primero; si no, la más reciente válida),
      * así una consignación con varios intentos desde el celular no se duplica.
+     * Para pocas filas (la página, las coincidencias de la pestaña Detalles).
      */
-    private const JOIN_BASE = "
-        FROM consignaciones_ventas cv
+    private const JOINS_CONSIGNACION = "
         INNER JOIN clientes c ON c.id = cv.id_cliente
         LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
         LEFT JOIN LATERAL (
@@ -53,6 +53,31 @@ class EntregasConsignacionesRepository extends BaseRepository
             ORDER BY (ev.id = cv.id_entrega_confirmada) DESC NULLS LAST, ev.capturado_en DESC, ev.id DESC
             LIMIT 1
         ) e ON true
+        LEFT JOIN usuarios u ON u.id = e.created_by
+    ";
+
+    /**
+     * La misma evidencia elegida (mismo orden que el LATERAL de JOINS_CONSIGNACION), pero
+     * calculada de UNA vez (DISTINCT ON) para las consignaciones del alcance, para filtrar,
+     * contar y resumir todas las filas. Rendimiento (17-09-2026): el LATERAL por fila era lo más
+     * caro de buscar con `estado:todas` y de los indicadores (~25 µs por consignación). La
+     * subconsulta repite el alcance de construirWhere() (empresa, no eliminadas, estados
+     * entregables y `{alcance}` = responsables del usuario): no cambia el resultado de las filas
+     * que pasan ese WHERE y acota el trabajo del repartidor a sus consignaciones. Usar con
+     * joinsTodas(); requiere el parámetro :e.
+     */
+    private const JOINS_CONSIGNACION_TODAS = "
+        INNER JOIN clientes c ON c.id = cv.id_cliente
+        LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
+        LEFT JOIN (
+            SELECT DISTINCT ON (ev.id_consignacion) ev.*
+            FROM consignaciones_ventas_entregas ev
+            INNER JOIN consignaciones_ventas cve ON cve.id = ev.id_consignacion
+            WHERE cve.id_empresa = :e AND cve.eliminado = false
+              AND cve.estado IN ('Emitida', 'Entregada', 'Facturada'){alcance}
+              AND ev.eliminado = false AND ev.estado <> 'anulada'
+            ORDER BY ev.id_consignacion, (ev.id = cve.id_entrega_confirmada) DESC NULLS LAST, ev.capturado_en DESC, ev.id DESC
+        ) e ON e.id_consignacion = cv.id
         LEFT JOIN usuarios u ON u.id = e.created_by
     ";
 
@@ -140,8 +165,8 @@ class EntregasConsignacionesRepository extends BaseRepository
      * (empresa, no eliminadas, estados entregables y "solo mis responsables"), sin el
      * filtro de estado de entrega: busca en pendientes y entregadas.
      *
-     * La CTE `base` trae las mismas columnas que una fila del listado, para abrir el
-     * modal de detalle con los mismos datos.
+     * Cada coincidencia trae además las mismas columnas que una fila del listado, para
+     * abrir el modal de detalle con los mismos datos.
      */
     public function buscarEnDetalles(int $idEmpresa, string $q, ?array $idsResponsables = null, int $limit = 50): array
     {
@@ -155,48 +180,71 @@ class EntregasConsignacionesRepository extends BaseRepository
             return [];
         }
 
+        // Rendimiento (17-09-2026): cada rama filtra su tabla por empresa y la consignación (con
+        // su evidencia por LATERAL) se une solo a lo que coincide; antes se armaba la fila del
+        // listado de TODAS las consignaciones y se recorrían las líneas de todas las empresas.
+        // Producto, bodega y usuario se buscan en su tabla como conjunto; fechas y cantidades
+        // solo si la palabra tiene dígitos.
+        $fecha   = FiltrosBusqueda::SI_FECHA;
+        $numero  = FiltrosBusqueda::SI_NUMERO;
         $condProd = FiltrosBusqueda::condicionTexto(
-            ['p.codigo', 'p.nombre', 'p.codigo_barras', 'd.lote', 'd.nup', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')",
-             'bo.nombre', 'd.cantidad::text'],
+            ['d.lote', 'd.nup',
+             ['col' => "CONCAT_WS(' ', px.codigo, px.nombre, px.codigo_barras)",
+              'sql' => "d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond})"],
+             ['col' => 'bx.nombre',
+              'sql' => "d.id_bodega IN (SELECT bx.id FROM bodegas bx WHERE bx.id_empresa = :e AND {cond})"],
+             ['sql' => "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')", 'si' => $fecha],
+             ['sql' => 'd.cantidad', 'si' => $numero]],
             $q, $params, 'pr'
         );
         $condEnt = FiltrosBusqueda::condicionTexto(
-            ['ev.observaciones', 'ev.dispositivo_id', 'ue.nombre', "TO_CHAR(ev.capturado_en, 'DD-MM-YYYY HH24:MI:SS')"],
+            ['ev.observaciones', 'ev.dispositivo_id',
+             ['col' => 'ux.nombre', 'sql' => "ev.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})"],
+             ['sql' => "TO_CHAR(ev.capturado_en, 'DD-MM-YYYY HH24:MI:SS')", 'si' => $fecha]],
             $q, $params, 'en'
         );
         if ($condProd === '' || $condEnt === '') {
             return [];
         }
 
+        // Usuario limitado a sus responsables: las líneas y evidencias se acotan desde el inicio a
+        // sus consignaciones (sin límite, el alcance es casi toda la empresa y no hace falta).
+        $enAlcance = $idsResponsables !== null
+            ? " AND %s IN (SELECT cv.id FROM consignaciones_ventas cv WHERE $cond)"
+            : '';
+
         $limit = max(1, min(200, $limit));
-        $sql = "WITH base AS (
-                    SELECT " . self::COLUMNAS_LISTADO . "
-                    " . self::JOIN_BASE . "
-                    WHERE $cond
-                ),
-                coincidencias AS (
+        // `top`: primero se eligen las coincidencias que se muestran y después se arma la fila del
+        // listado (evidencia por LATERAL incluida) solo para esas.
+        $sql = "WITH coincidencias AS (
                     SELECT 'PRODUCTO' AS det_origen, p.codigo AS det_tipo, p.nombre AS det_descripcion,
                            NULLIF(CONCAT_WS(' / ', NULLIF(d.lote, ''), NULLIF(d.nup, ''), TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')), '') AS det_extra,
                            d.cantidad AS det_cantidad, d.id_consignacion AS det_id_cons
                     FROM consignaciones_ventas_detalles d
-                    JOIN base b ON b.id_consignacion = d.id_consignacion
                     LEFT JOIN productos p ON p.id = d.id_producto
-                    LEFT JOIN bodegas bo ON bo.id = d.id_bodega
-                    WHERE d.eliminado = false AND $condProd
+                    WHERE d.id_empresa = :e AND d.eliminado = false AND $condProd" . sprintf($enAlcance, 'd.id_consignacion') . "
                     UNION ALL
                     SELECT 'ENTREGA' AS det_origen, ev.canal AS det_tipo, ev.observaciones AS det_descripcion,
                            TO_CHAR(ev.capturado_en, 'DD-MM-YYYY HH24:MI:SS') AS det_extra,
                            NULL::numeric AS det_cantidad, ev.id_consignacion AS det_id_cons
                     FROM consignaciones_ventas_entregas ev
-                    JOIN base b ON b.id_consignacion = ev.id_consignacion
-                    LEFT JOIN usuarios ue ON ue.id = ev.created_by
-                    WHERE ev.eliminado = false AND $condEnt
+                    WHERE ev.id_empresa = :e AND ev.eliminado = false AND $condEnt" . sprintf($enAlcance, 'ev.id_consignacion') . "
+                ),
+                top AS MATERIALIZED (
+                    SELECT x.*
+                    FROM coincidencias x
+                    JOIN consignaciones_ventas cv ON cv.id = x.det_id_cons
+                    INNER JOIN clientes c ON c.id = cv.id_cliente
+                    WHERE $cond
+                    ORDER BY cv.fecha_emision DESC, cv.id DESC, x.det_origen
+                    LIMIT $limit
                 )
-                SELECT x.det_origen, x.det_tipo, x.det_descripcion, x.det_extra, x.det_cantidad, b.*
-                FROM coincidencias x
-                JOIN base b ON b.id_consignacion = x.det_id_cons
-                ORDER BY b.fecha_emision DESC, b.id_consignacion DESC, x.det_origen
-                LIMIT $limit";
+                SELECT t.det_origen, t.det_tipo, t.det_descripcion, t.det_extra, t.det_cantidad,
+                       " . self::COLUMNAS_LISTADO . "
+                FROM top t
+                JOIN consignaciones_ventas cv ON cv.id = t.det_id_cons
+                " . self::JOINS_CONSIGNACION . "
+                ORDER BY cv.fecha_emision DESC, cv.id DESC, t.det_origen";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -267,10 +315,12 @@ class EntregasConsignacionesRepository extends BaseRepository
         // Borrador y Anulada nunca entran: no son entregables ni entregadas.
         $where = "WHERE cv.id_empresa = :e AND cv.eliminado = false
                     AND cv.estado IN ('Emitida', 'Entregada', 'Facturada')";
+        // Mismo filtro de responsables para la subconsulta de la evidencia (ver joinsTodas()).
+        $alcance = '';
 
         if ($idsResponsables !== null) {
             if (empty($idsResponsables)) {
-                return ['where' => $where . " AND 1=0", 'params' => $params, 'estado' => self::ESTADO_PENDIENTE];
+                return ['where' => $where . " AND 1=0", 'params' => $params, 'estado' => self::ESTADO_PENDIENTE, 'alcance' => ''];
             }
             $marcadores = [];
             foreach (array_values($idsResponsables) as $i => $idResp) {
@@ -279,6 +329,7 @@ class EntregasConsignacionesRepository extends BaseRepository
                 $params[$clave] = $idResp;
             }
             $where .= " AND cv.id_responsable_traslado IN (" . implode(',', $marcadores) . ")";
+            $alcance = " AND cve.id_responsable_traslado IN (" . implode(',', $marcadores) . ")";
         }
 
         $parsed     = FiltrosBusqueda::parsear($buscar);
@@ -290,27 +341,41 @@ class EntregasConsignacionesRepository extends BaseRepository
             // que identifica a la consignación aunque no sea columna. Decisión del usuario:
             // Estado y Canal (tipo) NO entran en el texto libre; se filtran desde el modal.
             // Firma y GPS son íconos sí/no: también van solo al modal.
+            //
+            // Rendimiento (17-09-2026): cliente, responsable, usuario y productos se buscan en
+            // su tabla como CONJUNTO por palabra (FiltrosBusqueda::condicionTexto, `col` + `sql`)
+            // en vez de un STRING_AGG de las líneas por cada consignación; fechas y días solo si
+            // la palabra tiene dígitos.
+            $fecha   = FiltrosBusqueda::SI_FECHA;
+            $numero  = FiltrosBusqueda::SI_NUMERO;
             $condicion = FiltrosBusqueda::condicionTexto(
                 [
-                    "TO_CHAR(cv.fecha_emision, 'DD-MM-YYYY')",                   // Emisión
                     "CONCAT(cv.serie, '-', cv.secuencial)",                      // Consignación
-                    'c.nombre',                                                  // Cliente
-                    'c.identificacion',
-                    'c.direccion',                                               // Dirección
-                    'rt.nombre',                                                 // Responsable
-                    "TO_CHAR(cv.fecha_entrega, 'DD-MM-YYYY')",                   // Entrega programada
-                    '(' . self::EXPR_DIAS . ')::text',                           // Días
-                    "TO_CHAR(e.capturado_en, 'DD-MM-YYYY HH24:MI:SS')",          // Fecha/hora entrega
-                    'u.nombre',                                                  // Registrado por
                     'e.observaciones',                                           // Observaciones (de la entrega)
                     'cv.observaciones',                                          // Observaciones de la consignación
                     'cv.punto_llegada',
                     'e.dispositivo_id',
-                    // Productos consignados (código, nombre, lote y NUP)
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup), ' ')
-                        FROM consignaciones_ventas_detalles d
-                        LEFT JOIN productos p ON p.id = d.id_producto
-                       WHERE d.id_consignacion = cv.id AND d.eliminado = false)",
+                    ['sql' => "TO_CHAR(cv.fecha_emision, 'DD-MM-YYYY')", 'si' => $fecha],          // Emisión
+                    ['sql' => "TO_CHAR(cv.fecha_entrega, 'DD-MM-YYYY')", 'si' => $fecha],          // Entrega programada
+                    ['sql' => self::EXPR_DIAS, 'si' => $numero],                                     // Días
+                    ['sql' => "TO_CHAR(e.capturado_en, 'DD-MM-YYYY HH24:MI:SS')", 'si' => $fecha], // Fecha/hora entrega
+                    // Cliente (nombre, identificación y dirección), responsable y quien registró la entrega
+                    ['col' => "CONCAT_WS(' ', cx.nombre, cx.identificacion, cx.direccion)",
+                     'sql' => "cv.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})"],
+                    ['col' => 'rx.nombre',
+                     'sql' => "cv.id_responsable_traslado IN (SELECT rx.id FROM responsables_traslado rx WHERE rx.id_empresa = :e AND {cond})"],
+                    ['col' => 'ux.nombre',
+                     'sql' => "e.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})"],
+                    // Productos consignados: código y nombre en el catálogo, lote y NUP en la línea
+                    ['col' => "CONCAT_WS(' ', px.codigo, px.nombre)",
+                     'sql' => "cv.id IN (SELECT d.id_consignacion
+                                           FROM consignaciones_ventas_detalles d
+                                          WHERE d.id_empresa = :e AND d.eliminado = false
+                                            AND d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond}))"],
+                    ['col' => "CONCAT_WS(' ', d.lote, d.nup)",
+                     'sql' => "cv.id IN (SELECT d.id_consignacion
+                                           FROM consignaciones_ventas_detalles d
+                                          WHERE d.id_empresa = :e AND d.eliminado = false AND {cond})"],
                 ],
                 $textoLibre,
                 $params,
@@ -364,7 +429,13 @@ class EntregasConsignacionesRepository extends BaseRepository
             ],
         ]);
 
-        return ['where' => $where, 'params' => $params, 'estado' => $estado];
+        return ['where' => $where, 'params' => $params, 'estado' => $estado, 'alcance' => $alcance];
+    }
+
+    /** JOINS_CONSIGNACION_TODAS con el filtro de responsables de construirWhere() en la subconsulta de la evidencia. */
+    private function joinsTodas(string $alcance): string
+    {
+        return str_replace('{alcance}', $alcance, self::JOINS_CONSIGNACION_TODAS);
     }
 
     /** Saca `estado:` del array de filtros (no es una columna directa) y lo devuelve normalizado. */
@@ -411,32 +482,35 @@ class EntregasConsignacionesRepository extends BaseRepository
      */
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, array $orden, ?array $idsResponsables): array
     {
-        ['where' => $where, 'params' => $params, 'estado' => $estado] = $this->construirWhere($idEmpresa, $buscar, $idsResponsables);
+        ['where' => $where, 'params' => $params, 'estado' => $estado, 'alcance' => $alcance] = $this->construirWhere($idEmpresa, $buscar, $idsResponsables);
         $where .= " AND " . $this->condicionEstado($estado);
-
-        $sqlCount = "SELECT COUNT(*) " . self::JOIN_BASE . " $where";
-        $stCount = $this->db->prepare($sqlCount);
-        $stCount->execute($params);
-        $total = (int) $stCount->fetchColumn();
-
-        $limitClause = '';
-        if ($perPage > 0) {
-            $offset = ($page - 1) * $perPage;
-            $limitClause = "LIMIT $perPage OFFSET $offset";
-        }
 
         $orderBy = OrdenListado::clausula($orden, self::MAPA_ORDEN, 'cv.fecha_emision', 'cv.id DESC');
 
-        $sql = "SELECT " . self::COLUMNAS_LISTADO . "
-                " . self::JOIN_BASE . "
-                $where
-                $orderBy
-                $limitClause";
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        // Conteo + página en UNA consulta (App\Helpers\ListadoPaginado): el WHERE con texto
+        // libre se evaluaba dos veces (COUNT y SELECT).
+        $resultado = \App\Helpers\ListadoPaginado::consultar(
+            function (string $sql, array $p): array {
+                $st = $this->db->prepare($sql);
+                $st->execute($p);
+                return $st->fetchAll(PDO::FETCH_ASSOC);
+            },
+            [
+                'tabla'       => 'consignaciones_ventas',
+                'alias'       => 'cv',
+                'joinsFiltro' => $this->joinsTodas($alcance),
+                'joinsFinal'  => self::JOINS_CONSIGNACION,
+                'where'       => $where,
+                'orderBy'     => $orderBy,
+                'perPage'     => $perPage,
+                'offset'      => $perPage > 0 ? ($page - 1) * $perPage : 0,
+                'conBusqueda' => trim($buscar) !== '',
+                'select'      => self::COLUMNAS_LISTADO,
+            ],
+            $params
+        );
 
-        return ['total' => $total, 'rows' => $rows, 'estado' => $estado];
+        return ['total' => $resultado['total'], 'rows' => $resultado['rows'], 'estado' => $estado];
     }
 
     /**
@@ -445,7 +519,7 @@ class EntregasConsignacionesRepository extends BaseRepository
      */
     public function getResumen(int $idEmpresa, string $buscar, ?array $idsResponsables): array
     {
-        ['where' => $where, 'params' => $params] = $this->construirWhere($idEmpresa, $buscar, $idsResponsables);
+        ['where' => $where, 'params' => $params, 'alcance' => $alcance] = $this->construirWhere($idEmpresa, $buscar, $idsResponsables);
 
         $sql = "SELECT
                     COUNT(*) FILTER (WHERE cv.estado = 'Emitida') AS pendientes,
@@ -459,7 +533,7 @@ class EntregasConsignacionesRepository extends BaseRepository
                     ) AS incompletas,
                     AVG(EXTRACT(EPOCH FROM (e.capturado_en - (cv.fecha_emision)::timestamp)) / 3600.0)
                         FILTER (WHERE e.id IS NOT NULL AND cv.fecha_emision IS NOT NULL) AS horas_promedio
-                " . self::JOIN_BASE . "
+                FROM consignaciones_ventas cv " . $this->joinsTodas($alcance) . "
                 $where";
         $st = $this->db->prepare($sql);
         $st->execute($params);

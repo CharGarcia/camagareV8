@@ -92,6 +92,8 @@ class ConsignacionFacturaRepository extends BaseRepository
         // buscan en su catálogo como conjunto; el nº de la consignación de origen, montos,
         // cantidades y fechas solo si la palabra tiene dígitos.
         $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
+        $fecha   = \App\Helpers\FiltrosBusqueda::SI_FECHA;
+        $numero  = \App\Helpers\FiltrosBusqueda::SI_NUMERO;
         $condProd = \App\Helpers\FiltrosBusqueda::condicionTexto(
             ['d.lote', 'd.nup',
              ['col' => "CONCAT_WS(' ', px.codigo, px.nombre, px.codigo_barras)",
@@ -99,10 +101,10 @@ class ConsignacionFacturaRepository extends BaseRepository
              ['col' => 'bx.nombre',
               'sql' => "d.id_bodega IN (SELECT bx.id FROM bodegas bx WHERE bx.id_empresa = :id_empresa AND {cond})"],
              ['sql' => "CONCAT(cv.serie, '-', cv.secuencial)", 'si' => $digitos],
-             ['sql' => "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')", 'si' => $digitos],
-             ['sql' => 'd.cantidad', 'si' => $digitos],
-             ['sql' => 'd.precio_unitario', 'si' => $digitos],
-             ['sql' => 'd.total', 'si' => $digitos]],
+             ['sql' => "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')", 'si' => $fecha],
+             ['sql' => 'd.cantidad', 'si' => $numero],
+             ['sql' => 'd.precio_unitario', 'si' => $numero],
+             ['sql' => 'd.total', 'si' => $numero]],
             $q, $params, 'pr'
         );
         $condInfo = \App\Helpers\FiltrosBusqueda::condicionTexto(
@@ -330,6 +332,8 @@ class ConsignacionFacturaRepository extends BaseRepository
             // (FiltrosBusqueda::condicionTexto, `col` + `sql`) en vez de armar un STRING_AGG de
             // las líneas por cada documento; fecha y total solo si la palabra tiene dígitos.
             $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
+            $fecha   = \App\Helpers\FiltrosBusqueda::SI_FECHA;
+            $numero  = \App\Helpers\FiltrosBusqueda::SI_NUMERO;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     "CONCAT(cf.serie, '-', cf.secuencial)",               // Secuencial (serie-secuencial)
@@ -339,9 +343,9 @@ class ConsignacionFacturaRepository extends BaseRepository
                     // replace() y no regexp_replace(): por fila cuesta la mitad (json_encode no
                     // deja espacios entre la clave y los dos puntos).
                     "replace(replace(COALESCE(cf.info_adicional, ''), '\"nombre\":', ''), '\"valor\":', '')",
-                    ['sql' => "TO_CHAR(cf.fecha_emision, 'DD-MM-YYYY')", 'si' => $digitos], // Fecha (como se muestra)
-                    ['sql' => 'cf.fecha_emision', 'si' => $digitos],
-                    ['sql' => 'cf.total', 'si' => $digitos],
+                    ['sql' => "TO_CHAR(cf.fecha_emision, 'DD-MM-YYYY')", 'si' => $fecha], // Fecha (como se muestra)
+                    ['sql' => 'cf.fecha_emision', 'si' => $fecha],
+                    ['sql' => 'cf.total', 'si' => $numero],
                     // Cliente (nombre e identificación), vendedor y usuario que registró
                     ['col' => "CONCAT_WS(' ', cx.nombre, cx.identificacion)",
                      'sql' => "cf.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})"],

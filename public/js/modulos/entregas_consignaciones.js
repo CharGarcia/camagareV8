@@ -38,6 +38,10 @@ async function entcCargarGrid() {
     // vaciarse; también al paginar, ordenar o registrar una entrega.
     const tbody = document.getElementById('entc_grid_body');
     if (tbody) tbody.classList.add('fm-cargando-target');
+    // Solo vale la ÚLTIMA búsqueda: la anterior se cancela y nunca pinta encima.
+    if (window.ENTC_busquedaCtrl) window.ENTC_busquedaCtrl.abort();
+    const ctrl = new AbortController();
+    window.ENTC_busquedaCtrl = ctrl;
     try {
         const bInput = document.getElementById('b');
         const buscar = bInput ? bInput.value : '';
@@ -49,9 +53,10 @@ async function entcCargarGrid() {
             dir: g_ordenDir,
         });
 
-        const res = await fetch(`${RUTA_MODULO_ENTC}/searchAjax?${params.toString()}`);
+        const res = await fetch(`${RUTA_MODULO_ENTC}/searchAjax?${params.toString()}`, { signal: ctrl.signal });
         if (!res.ok) throw new Error('Error en red');
         const data = await res.json();
+        if (ctrl !== window.ENTC_busquedaCtrl) return;
 
         if (data.ok) {
             tbody.innerHTML = data.rows;
@@ -62,10 +67,11 @@ async function entcCargarGrid() {
             entcActualizarKpis(data.resumen);
         }
     } catch (e) {
+        if (e.name === 'AbortError') return;
         console.error(e);
         if (window.Swal) Swal.fire('Error', 'No se pudo cargar la lista de consignaciones', 'error');
     } finally {
-        if (tbody) tbody.classList.remove('fm-cargando-target');
+        if (tbody && ctrl === window.ENTC_busquedaCtrl) tbody.classList.remove('fm-cargando-target');
     }
 }
 

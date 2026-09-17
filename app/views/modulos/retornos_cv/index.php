@@ -276,14 +276,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         // vaciarse; también al paginar y ordenar, que llaman a esta función directo.
         const tbody = document.getElementById('grid-body');
         if (tbody) tbody.classList.add('fm-cargando-target');
+        // Solo vale la ÚLTIMA búsqueda: la anterior se cancela y nunca pinta encima.
+        if (window.RCV_busquedaCtrl) window.RCV_busquedaCtrl.abort();
+        const ctrl = new AbortController();
+        window.RCV_busquedaCtrl = ctrl;
         try {
             const b_input = document.getElementById('b');
             g_buscar = b_input ? b_input.value : '';
 
             const params = new URLSearchParams({ b: g_buscar, page: g_paginaActual, sort: g_ordenCol, dir: g_ordenDir });
-            const res = await fetch(`${RUTA_MODULO_RETORNO}/searchAjax?${params.toString()}`);
+            const res = await fetch(`${RUTA_MODULO_RETORNO}/searchAjax?${params.toString()}`, { signal: ctrl.signal });
             if (!res.ok) throw new Error('Error en red');
             const data = await res.json();
+            if (ctrl !== window.RCV_busquedaCtrl) return;
 
             if (data.ok) {
                 tbody.innerHTML = data.rows;
@@ -293,10 +298,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 document.querySelector('.excel-export-btn').href = data.excel_url;
             }
         } catch (e) {
+            if (e.name === 'AbortError') return;
             console.error(e);
             Swal.fire('Error', 'No se pudo cargar la lista', 'error');
         } finally {
-            if (tbody) tbody.classList.remove('fm-cargando-target');
+            if (tbody && ctrl === window.RCV_busquedaCtrl) tbody.classList.remove('fm-cargando-target');
         }
     }
 </script>

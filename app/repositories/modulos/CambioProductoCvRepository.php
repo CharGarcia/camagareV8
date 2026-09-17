@@ -289,9 +289,21 @@ class CambioProductoCvRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
+        // Rendimiento (17-09-2026): las líneas se filtran por empresa, y producto y bodega se
+        // buscan en su catálogo como conjunto (FiltrosBusqueda::condicionTexto, `col` + `sql`);
+        // montos, cantidades y fechas solo si la palabra tiene dígitos.
+        $fecha   = \App\Helpers\FiltrosBusqueda::SI_FECHA;
+        $numero  = \App\Helpers\FiltrosBusqueda::SI_NUMERO;
         $condLinea = \App\Helpers\FiltrosBusqueda::condicionTexto(
-            ['p.codigo', 'p.nombre', 'p.codigo_barras', 'd.lote', 'd.nup', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')",
-             'bo.nombre', self::sqlNumerosOrigenBusqueda('d'), 'd.cantidad::text', 'd.precio_unitario::text', 'd.total::text'],
+            ['d.lote', 'd.nup', self::sqlNumerosOrigenBusqueda('d'),
+             ['col' => "CONCAT_WS(' ', px.codigo, px.nombre, px.codigo_barras)",
+              'sql' => "d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :id_empresa AND {cond})"],
+             ['col' => 'bx.nombre',
+              'sql' => "d.id_bodega IN (SELECT bx.id FROM bodegas bx WHERE bx.id_empresa = :id_empresa AND {cond})"],
+             ['sql' => "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')", 'si' => $fecha],
+             ['sql' => 'd.cantidad', 'si' => $numero],
+             ['sql' => 'd.precio_unitario', 'si' => $numero],
+             ['sql' => 'd.total', 'si' => $numero]],
             $q, $params, 'ln'
         );
         if ($condLinea === '') {
@@ -315,7 +327,7 @@ class CambioProductoCvRepository extends BaseRepository
                 JOIN base b ON b.id = d.id_cambio
                 LEFT JOIN productos p ON p.id = d.id_producto
                 LEFT JOIN bodegas bo ON bo.id = d.id_bodega
-                WHERE d.eliminado = false AND $condLinea
+                WHERE d.id_empresa = :id_empresa AND d.eliminado = false AND $condLinea
                 ORDER BY b.fecha_cambio DESC, b.id DESC, d.tipo_linea, d.id
                 LIMIT $limit";
 
@@ -404,10 +416,6 @@ class CambioProductoCvRepository extends BaseRepository
                        ON le.id_cambio = ld.id_cambio AND le.rn = ld.rn
             )";
 
-        $stCount = $this->db->prepare("$ctes SELECT COUNT(*) FROM pares");
-        $stCount->execute($params);
-        $total = (int) $stCount->fetchColumn();
-
         $limitClause = '';
         if ($perPage > 0) {
             $offset = ($page - 1) * $perPage;
@@ -420,7 +428,33 @@ class CambioProductoCvRepository extends BaseRepository
         // Desempate: el cambio y, dentro de él, el orden de las parejas.
         $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'r.fecha_cambio', 'r.id DESC, p.rn');
 
-        $sql = "$ctes
+        // Lo que entra (dv) y lo que sale (en) de cada pareja, con el origen de la devolución.
+        $joinsLineas = "
+            LEFT JOIN cambios_producto_cv_detalles dv ON dv.id = p.id_dev
+            LEFT JOIN productos pdv ON pdv.id = dv.id_producto
+            LEFT JOIN bodegas bdv ON bdv.id = dv.id_bodega
+            " . self::sqlJoinsFacturaDeLinea('dv', 'o') . "
+            LEFT JOIN cambios_producto_cv cao ON dv.origen_tipo = 'CAMBIO' AND cao.id = dv.id_origen
+            LEFT JOIN cambios_producto_cv_detalles en ON en.id = p.id_ent
+            LEFT JOIN productos pen ON pen.id = en.id_producto
+            LEFT JOIN bodegas ben ON ben.id = en.id_bodega";
+        // Rendimiento (17-09-2026): conteo + página en UNA consulta (antes el WHERE con texto
+        // libre se evaluaba dos veces), y las líneas con su origen solo se unen a las parejas de
+        // la página; para ordenar entran a todas las parejas únicamente si el orden las usa.
+        $ordenUsaLineas = preg_match('/(?<![\w.])(dv|pdv|bdv|ocfd|ocf|ofv|ovd|ovc|cao|en|pen|ben)\./', $orderBy) === 1;
+
+        $sql = "$ctes,
+            pagina AS MATERIALIZED (
+                SELECT p.id_cambio, p.rn, p.id_dev, p.id_ent,
+                       ROW_NUMBER() OVER ($orderBy) AS __rn,
+                       COUNT(*) OVER () AS __total
+                FROM pares p
+                INNER JOIN cambios_producto_cv r ON r.id = p.id_cambio
+                INNER JOIN clientes c ON c.id = r.id_cliente
+                " . ($ordenUsaLineas ? $joinsLineas : '') . "
+                $orderBy
+                $limitClause
+            )
             SELECT p.id_cambio AS id, p.rn,
                    r.serie, r.secuencial, r.estado, r.fecha_cambio, r.observaciones,
                    c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
@@ -440,24 +474,33 @@ class CambioProductoCvRepository extends BaseRepository
                    pen.codigo     AS ent_producto_codigo,
                    en.lote        AS ent_lote,
                    en.nup         AS ent_nup,
-                   ben.nombre     AS ent_bodega
-            FROM pares p
+                   ben.nombre     AS ent_bodega,
+                   p.__total
+            FROM pagina p
             INNER JOIN cambios_producto_cv r ON r.id = p.id_cambio
             INNER JOIN clientes c ON c.id = r.id_cliente
-            LEFT JOIN cambios_producto_cv_detalles dv ON dv.id = p.id_dev
-            LEFT JOIN productos pdv ON pdv.id = dv.id_producto
-            LEFT JOIN bodegas bdv ON bdv.id = dv.id_bodega
-            " . self::sqlJoinsFacturaDeLinea('dv', 'o') . "
-            LEFT JOIN cambios_producto_cv cao ON dv.origen_tipo = 'CAMBIO' AND cao.id = dv.id_origen
-            LEFT JOIN cambios_producto_cv_detalles en ON en.id = p.id_ent
-            LEFT JOIN productos pen ON pen.id = en.id_producto
-            LEFT JOIN bodegas ben ON ben.id = en.id_bodega
-            $orderBy
-            $limitClause";
+            $joinsLineas
+            ORDER BY p.__rn";
         $st = $this->db->prepare($sql);
         $st->execute($params);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-        return ['total' => $total, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC)];
+        if ($rows) {
+            $total = (int) $rows[0]['__total'];
+        } elseif ($perPage > 0 && $page > 1) {
+            // Página fuera de rango: sin filas no hay __total; se cuenta aparte (raro).
+            $stCount = $this->db->prepare("$ctes SELECT COUNT(*) FROM pares");
+            $stCount->execute($params);
+            $total = (int) $stCount->fetchColumn();
+        } else {
+            $total = 0;
+        }
+        foreach ($rows as &$fila) {
+            unset($fila['__total']);
+        }
+        unset($fila);
+
+        return ['total' => $total, 'rows' => $rows];
     }
 
     /**
@@ -518,28 +561,39 @@ class CambioProductoCvRepository extends BaseRepository
             // Texto libre (buscador FiltrosModal de la vista): las columnas del listado y lo
             // que identifica al cambio aunque no sea columna. Decisión del usuario: la
             // columna Estado NO entra en el texto libre; se filtra desde el modal.
+            //
+            // Rendimiento (17-09-2026): lo que vive en otra tabla (cliente, responsable, usuario,
+            // productos, bodegas y documentos de origen) se busca como CONJUNTO por palabra
+            // (FiltrosBusqueda::condicionTexto, `col` + `sql`) en vez de un STRING_AGG de las
+            // líneas por cada cambio; fecha y diferencia solo si la palabra tiene dígitos.
+            $fecha   = \App\Helpers\FiltrosBusqueda::SI_FECHA;
+            $numero  = \App\Helpers\FiltrosBusqueda::SI_NUMERO;
+            $lineasEmpresa = "SELECT d.id_cambio FROM cambios_producto_cv_detalles d WHERE d.id_empresa = :e AND d.eliminado = false";
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "TO_CHAR(r.fecha_cambio, 'DD-MM-YYYY')",              // Fecha
-                    'r.fecha_cambio::text',
                     "CONCAT(r.serie, '-', r.secuencial)",                 // N.° de cambio
-                    'c.nombre',                                           // Cliente
-                    'c.identificacion',
                     'r.motivo',
-                    'r.diferencia::text',
                     'r.observaciones',                                    // Observaciones
-                    'rt.nombre',                                          // Responsable de traslado
-                    'u.nombre',                                           // Usuario que registró
-                    // Productos que entran y salen: código, nombre, lote, NUP y bodega
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup, bo.nombre), ' ')
-                        FROM cambios_producto_cv_detalles d
-                        LEFT JOIN productos p ON p.id = d.id_producto
-                        LEFT JOIN bodegas bo ON bo.id = d.id_bodega
-                       WHERE d.id_cambio = r.id AND d.eliminado = false)",
+                    ['sql' => "TO_CHAR(r.fecha_cambio, 'DD-MM-YYYY')", 'si' => $fecha], // Fecha
+                    ['sql' => 'r.fecha_cambio', 'si' => $fecha],
+                    ['sql' => 'r.diferencia', 'si' => $numero],
+                    // Cliente (nombre e identificación), responsable de traslado y usuario que registró
+                    ['col' => "CONCAT_WS(' ', cx.nombre, cx.identificacion)",
+                     'sql' => "r.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})"],
+                    ['col' => 'rx.nombre',
+                     'sql' => "r.id_responsable_traslado IN (SELECT rx.id FROM responsables_traslado rx WHERE rx.id_empresa = :e AND {cond})"],
+                    ['col' => 'ux.nombre',
+                     'sql' => "r.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})"],
+                    // Productos que entran y salen: código y nombre en el catálogo, bodega, lote y NUP
+                    ['col' => "CONCAT_WS(' ', px.codigo, px.nombre)",
+                     'sql' => "r.id IN ($lineasEmpresa AND d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond}))"],
+                    ['col' => 'bx.nombre',
+                     'sql' => "r.id IN ($lineasEmpresa AND d.id_bodega IN (SELECT bx.id FROM bodegas bx WHERE bx.id_empresa = :e AND {cond}))"],
+                    ['col' => "CONCAT_WS(' ', d.lote, d.nup)",
+                     'sql' => "r.id IN ($lineasEmpresa AND {cond})"],
                     // Documentos de origen de las líneas (factura de venta y de consignación, cambio, consignación)
-                    "(SELECT STRING_AGG(" . self::sqlNumerosOrigenBusqueda('d') . ", ' ')
-                        FROM cambios_producto_cv_detalles d
-                       WHERE d.id_cambio = r.id AND d.eliminado = false)",
+                    ['col' => self::sqlNumerosOrigenBusqueda('d'),
+                     'sql' => "r.id IN ($lineasEmpresa AND {cond})"],
                 ],
                 $parsed['texto_libre'],
                 $params,

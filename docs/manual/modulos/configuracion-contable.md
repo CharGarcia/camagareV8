@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales
-version: 1.10
+version: 1.11
 orden: 5
 estado: activo
 ---
@@ -23,26 +23,6 @@ Sin esto configurado, los documentos no generan asiento.
 Cada tipo de operación (venta con factura, compra, cobro, pago, traspaso,
 consignación, cierre del ejercicio…) tiene su configuración con las cuentas que
 necesita.
-
-## Configurar cuentas sugeridas
-
-Dentro de **Configuración General** hay un botón **Configurar cuentas
-sugeridas**. Asigna de una sola vez las cuentas que propone el
-[plan de cuentas modelo](plan-cuentas.md) a todos los conceptos que estén **sin
-cuenta**: tipos de asiento de ventas, recibos de venta, compras y nómina, IVA
-por tarifa, cierre del ejercicio, formas de cobro/pago y opciones de
-ingreso/egreso.
-
-**No modifica ninguna cuenta ya asignada** y **no toca el plan de cuentas**.
-Puede pulsarlo las veces que quiera: si no hay nada pendiente, lo dice y no
-cambia nada.
-
-Sirve sobre todo en dos casos: una empresa que cargó su plan por Excel (esa vía
-no configura cuentas), y una empresa configurada hace tiempo a la que le faltan
-conceptos añadidos después.
-
-Si su plan de cuentas usa códigos distintos a los del modelo, los conceptos cuya
-cuenta no exista se informan al terminar y quedan para asignar a mano.
 
 ## De lo general a lo específico
 
@@ -284,6 +264,10 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.11** — Se retiró el botón "Configurar cuentas sugeridas" de Configuración
+  General, porque asignaba cuentas equivocadas. Las cuentas se asignan a mano en
+  cada concepto. Las cuentas que ese botón ya había asignado no cambian:
+  revíselas y corrija las que no correspondan.
 - **1.10** — Nómina incorpora tres conceptos opcionales para las cuotas de préstamo
   (quirografario, hipotecario y empresa), configurables en General y por
   empleado. Si quedan sin cuenta, la cuota sigue yendo a Descuentos.
