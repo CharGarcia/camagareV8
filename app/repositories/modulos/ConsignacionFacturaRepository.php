@@ -88,13 +88,26 @@ class ConsignacionFacturaRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
+        // Rendimiento (17-09-2026): las líneas se filtran por empresa, y producto y bodega se
+        // buscan en su catálogo como conjunto; el nº de la consignación de origen, montos,
+        // cantidades y fechas solo si la palabra tiene dígitos.
+        $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
         $condProd = \App\Helpers\FiltrosBusqueda::condicionTexto(
-            ['p.codigo', 'p.nombre', 'p.codigo_barras', 'd.lote', 'd.nup', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')",
-             'bo.nombre', "CONCAT(cv.serie, '-', cv.secuencial)", 'd.cantidad::text', 'd.precio_unitario::text', 'd.total::text'],
+            ['d.lote', 'd.nup',
+             ['col' => "CONCAT_WS(' ', px.codigo, px.nombre, px.codigo_barras)",
+              'sql' => "d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :id_empresa AND {cond})"],
+             ['col' => 'bx.nombre',
+              'sql' => "d.id_bodega IN (SELECT bx.id FROM bodegas bx WHERE bx.id_empresa = :id_empresa AND {cond})"],
+             ['sql' => "CONCAT(cv.serie, '-', cv.secuencial)", 'si' => $digitos],
+             ['sql' => "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')", 'si' => $digitos],
+             ['sql' => 'd.cantidad', 'si' => $digitos],
+             ['sql' => 'd.precio_unitario', 'si' => $digitos],
+             ['sql' => 'd.total', 'si' => $digitos]],
             $q, $params, 'pr'
         );
         $condInfo = \App\Helpers\FiltrosBusqueda::condicionTexto(
-            ["regexp_replace(COALESCE(b.info_adicional, ''), '\"(nombre|valor)\"\\s*:', '', 'g')"],
+            // Sin las claves del JSON; replace() en vez de regexp_replace(): la mitad de costo por fila.
+            ["replace(replace(COALESCE(b.info_adicional, ''), '\"nombre\":', ''), '\"valor\":', '')"],
             $q, $params, 'ia'
         );
         if ($condProd === '' || $condInfo === '') {
@@ -118,9 +131,8 @@ class ConsignacionFacturaRepository extends BaseRepository
                     FROM consignaciones_facturas_detalles d
                     JOIN base b ON b.id = d.id_consignacion_factura
                     LEFT JOIN productos p ON p.id = d.id_producto
-                    LEFT JOIN bodegas bo ON bo.id = d.id_bodega
                     LEFT JOIN consignaciones_ventas cv ON cv.id = d.id_consignacion
-                    WHERE d.eliminado = false AND $condProd
+                    WHERE d.id_empresa = :id_empresa AND d.eliminado = false AND $condProd
                     UNION ALL
                     SELECT 'INFO' AS origen, NULL AS tipo, NULL AS descripcion, NULL AS extra, NULL AS consignacion,
                            NULL::numeric AS cantidad, NULL::numeric AS monto, b.info_adicional,
@@ -312,30 +324,47 @@ class ConsignacionFacturaRepository extends BaseRepository
             // Texto libre (buscador FiltrosModal de la vista): las columnas del listado y lo
             // que identifica al documento aunque no sea columna. Decisión del usuario: la
             // columna Estado NO entra en el texto libre; se filtra desde el modal.
+            //
+            // Rendimiento (17-09-2026): lo que vive en otra tabla (cliente, vendedor, usuario,
+            // productos, consignaciones de origen) se busca como CONJUNTO por palabra
+            // (FiltrosBusqueda::condicionTexto, `col` + `sql`) en vez de armar un STRING_AGG de
+            // las líneas por cada documento; fecha y total solo si la palabra tiene dígitos.
+            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "TO_CHAR(cf.fecha_emision, 'DD-MM-YYYY')",            // Fecha (como se muestra)
-                    'cf.fecha_emision::text',
                     "CONCAT(cf.serie, '-', cf.secuencial)",               // Secuencial (serie-secuencial)
-                    'c.nombre',                                           // Cliente
-                    'c.identificacion',
                     'cf.numero_factura',                                  // Factura
                     'cf.observaciones',                                   // Observaciones
-                    'v.nombre',                                           // Vendedor
-                    'cf.total::text',
-                    'u.nombre',                                           // Usuario que registró
-                    // Información adicional (JSON [{nombre, valor}]): sin las claves del JSON
-                    "regexp_replace(COALESCE(cf.info_adicional, ''), '\"(nombre|valor)\"\\s*:', '', 'g')",
-                    // Productos facturados (código, nombre, lote y NUP)
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup), ' ')
-                        FROM consignaciones_facturas_detalles d
-                        LEFT JOIN productos p ON p.id = d.id_producto
-                       WHERE d.id_consignacion_factura = cf.id AND d.eliminado = false)",
+                    // Información adicional (JSON [{nombre, valor}]): sin las claves del JSON.
+                    // replace() y no regexp_replace(): por fila cuesta la mitad (json_encode no
+                    // deja espacios entre la clave y los dos puntos).
+                    "replace(replace(COALESCE(cf.info_adicional, ''), '\"nombre\":', ''), '\"valor\":', '')",
+                    ['sql' => "TO_CHAR(cf.fecha_emision, 'DD-MM-YYYY')", 'si' => $digitos], // Fecha (como se muestra)
+                    ['sql' => 'cf.fecha_emision', 'si' => $digitos],
+                    ['sql' => 'cf.total', 'si' => $digitos],
+                    // Cliente (nombre e identificación), vendedor y usuario que registró
+                    ['col' => "CONCAT_WS(' ', cx.nombre, cx.identificacion)",
+                     'sql' => "cf.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})"],
+                    ['col' => 'vx.nombre',
+                     'sql' => "cf.id_vendedor IN (SELECT vx.id FROM vendedores vx WHERE vx.id_empresa = :e AND {cond})"],
+                    ['col' => 'ux.nombre',
+                     'sql' => "cf.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})"],
+                    // Productos facturados: código y nombre en el catálogo, lote y NUP en la línea
+                    ['col' => "CONCAT_WS(' ', px.codigo, px.nombre)",
+                     'sql' => "cf.id IN (SELECT d.id_consignacion_factura
+                                           FROM consignaciones_facturas_detalles d
+                                          WHERE d.id_empresa = :e AND d.eliminado = false
+                                            AND d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond}))"],
+                    ['col' => "CONCAT_WS(' ', d.lote, d.nup)",
+                     'sql' => "cf.id IN (SELECT d.id_consignacion_factura
+                                           FROM consignaciones_facturas_detalles d
+                                          WHERE d.id_empresa = :e AND d.eliminado = false AND {cond})"],
                     // Documentos relacionados: consignaciones de origen
-                    "(SELECT STRING_AGG(DISTINCT CONCAT(cv.serie, '-', cv.secuencial), ' ')
-                        FROM consignaciones_facturas_detalles d
-                        JOIN consignaciones_ventas cv ON cv.id = d.id_consignacion
-                       WHERE d.id_consignacion_factura = cf.id AND d.eliminado = false)",
+                    ['col' => "CONCAT(cvx.serie, '-', cvx.secuencial)", 'si' => $digitos,
+                     'sql' => "cf.id IN (SELECT d.id_consignacion_factura
+                                           FROM consignaciones_facturas_detalles d
+                                           JOIN consignaciones_ventas cvx ON cvx.id = d.id_consignacion
+                                          WHERE d.id_empresa = :e AND d.eliminado = false AND {cond})"],
                 ],
                 $parsed['texto_libre'],
                 $params,
@@ -381,23 +410,6 @@ class ConsignacionFacturaRepository extends BaseRepository
             ],
         ]);
 
-        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan c, v y u.
-        $sqlCount = "SELECT COUNT(*)
-                     FROM consignaciones_facturas cf
-                     LEFT JOIN clientes c ON c.id = cf.id_cliente
-                     LEFT JOIN vendedores v ON v.id = cf.id_vendedor
-                     LEFT JOIN usuarios u ON u.id = cf.created_by
-                     $where";
-        $stCount = $this->db->prepare($sqlCount);
-        $stCount->execute($params);
-        $total = (int) $stCount->fetchColumn();
-
-        $limitClause = '';
-        if ($perPage > 0) {
-            $offset = ($page - 1) * $perPage;
-            $limitClause = "LIMIT $perPage OFFSET $offset";
-        }
-
         $colMap = [
             'fecha'         => 'cf.fecha_emision',
             'secuencial'    => 'cf.secuencial',
@@ -409,22 +421,36 @@ class ConsignacionFacturaRepository extends BaseRepository
         $sort = $colMap[$ordenCol] ?? 'cf.fecha_emision';
         $dir  = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
-        $sql = "SELECT cf.*, c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
-                       v.nombre AS vendedor_nombre,
-                       vc.estado AS estado_factura, vc.eliminado AS factura_eliminada
-                FROM consignaciones_facturas cf
-                LEFT JOIN clientes c ON c.id = cf.id_cliente
-                LEFT JOIN vendedores v ON v.id = cf.id_vendedor
-                LEFT JOIN ventas_cabecera vc ON vc.id = cf.id_factura
-                LEFT JOIN usuarios u ON u.id = cf.created_by
-                $where
-                ORDER BY $sort $dir, cf.id DESC
-                $limitClause";
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        // Conteo + página en UNA consulta (App\Helpers\ListadoPaginado): el WHERE con texto
+        // libre se evaluaba dos veces (COUNT y SELECT). La factura de venta solo se une a las
+        // filas de la página.
+        $joins = "LEFT JOIN clientes c ON c.id = cf.id_cliente
+                LEFT JOIN vendedores v ON v.id = cf.id_vendedor";
 
-        return ['total' => $total, 'rows' => $rows];
+        return \App\Helpers\ListadoPaginado::consultar(
+            function (string $sql, array $p): array {
+                $st = $this->db->prepare($sql);
+                $st->execute($p);
+                return $st->fetchAll(PDO::FETCH_ASSOC);
+            },
+            [
+                'tabla'       => 'consignaciones_facturas',
+                'alias'       => 'cf',
+                'joinsFiltro' => $joins . "
+                LEFT JOIN usuarios u ON u.id = cf.created_by",
+                'joinsFinal'  => $joins . "
+                LEFT JOIN ventas_cabecera vc ON vc.id = cf.id_factura",
+                'where'       => $where,
+                'orderBy'     => "ORDER BY $sort $dir, cf.id DESC",
+                'perPage'     => $perPage,
+                'offset'      => $perPage > 0 ? ($page - 1) * $perPage : 0,
+                'conBusqueda' => trim($buscar) !== '',
+                'select'      => "cf.*, c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+                       v.nombre AS vendedor_nombre,
+                       vc.estado AS estado_factura, vc.eliminado AS factura_eliminada",
+            ],
+            $params
+        );
     }
 
     /** Consignaciones ENTREGADAS con saldo facturable ( > 0 ), buscador del modal. */

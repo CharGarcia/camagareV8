@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup
-version: 1.13
+etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura
+version: 1.14
 orden: 47
 estado: activo
 ---
@@ -124,6 +124,8 @@ esa unidad pasa a estar vendida: reemplaza a la que devolvió. Por eso, al
   hace el cambio.
 - Solo lleva lo entregado **desde consignación**. Lo que sale de bodega o del
   catálogo no se registra ahí.
+- Lleva el precio de la consignación y el **IVA vigente del producto**, igual
+  que si esa unidad se facturara en Facturación de consignaciones.
 - Cada unidad que sale va con la factura de la unidad que entra **en la misma
   posición** (la primera con la primera, la segunda con la segunda…, igual que
   en el listado); las que sobran van con la factura de la última que entra. Se
@@ -262,10 +264,19 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   documentos en *Borrador*.
 - **Numeración**: el número que se ve al abrir es una vista previa; el
   definitivo se asigna al guardar y no se puede repetir en la misma serie.
-- **Diferencia**: se calcula a precio de venta —el de la línea de origen, con
-  su IVA; para lo que sale de bodega o del catálogo, el primer precio de lista
-  del producto— y es informativa. Solo se usa en los filtros del listado; el
-  formulario, el PDF, el Excel y el listado no muestran precios ni totales.
+- **IVA**: lo que **sale** (desde consignación, existencias o catálogo) lleva
+  siempre la tarifa de IVA **vigente del producto**, la misma con la que factura
+  Facturación de consignaciones, aunque la consignación no guarde IVA. Si el
+  producto no tiene una tarifa válida, se usa la de la línea de consignación.
+  Lo que **entra** conserva el IVA con que se facturó esa unidad y resta el
+  descuento que tuvo su línea; si ese origen no guardó su tarifa (una
+  facturación migrada o lo entregado en un cambio anterior al 17-09-2026), toma
+  la vigente del producto. Al guardar un borrador editado se vuelve a calcular.
+- **Diferencia**: se calcula a precio de venta con IVA —lo que entra, al precio
+  de su línea de origen menos su descuento; lo que sale, al de la consignación
+  o, desde bodega o catálogo, al primer precio de lista del producto— y es
+  informativa. Solo se usa en los filtros del listado; el formulario, el PDF, el
+  Excel y el listado no muestran precios ni totales.
 
 ## Integraciones con otros módulos
 
@@ -342,6 +353,14 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   la pestaña Asiento contable.
 
 ## Historial de cambios
+
+- **1.14** — **IVA**: lo que sale en un cambio (desde consignación, existencias
+  o catálogo) toma la tarifa de IVA vigente del producto, igual que Facturación
+  de consignaciones; antes se guardaba con IVA 0. Así el registro en
+  Facturación de consignaciones muestra su IVA y su total con IVA. Lo que entra
+  conserva el IVA con que se facturó y ahora resta el descuento de esa línea; si
+  su origen no guardó la tarifa, usa la del producto. Los cambios ya guardados
+  no se recalculan solos.
 
 - **1.13** — En el PDF del cambio (el mismo del correo) y en su Excel, la
   **Bodega** pasa antes del *Lote*, igual que en el formulario: Origen, Código,

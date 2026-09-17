@@ -274,13 +274,18 @@ include dirname(__DIR__) . '/clientes/modal_cliente.php';
         // vaciarse; también al paginar y ordenar, que llaman a esta función directo.
         const tbody = document.getElementById('grid-body');
         if (tbody) tbody.classList.add('fm-cargando-target');
+        // Solo vale la ÚLTIMA búsqueda: la anterior se cancela y nunca pinta encima.
+        if (window.FACCV_busquedaCtrl) window.FACCV_busquedaCtrl.abort();
+        const ctrl = new AbortController();
+        window.FACCV_busquedaCtrl = ctrl;
         try {
             const b_input = document.getElementById('b');
             g_buscar = b_input ? b_input.value : '';
             const params = new URLSearchParams({ b: g_buscar, page: g_paginaActual, sort: g_ordenCol, dir: g_ordenDir });
-            const res = await fetch(`${RUTA_MODULO_FACCV}/searchAjax?${params.toString()}`);
+            const res = await fetch(`${RUTA_MODULO_FACCV}/searchAjax?${params.toString()}`, { signal: ctrl.signal });
             if (!res.ok) throw new Error('Error en red');
             const data = await res.json();
+            if (ctrl !== window.FACCV_busquedaCtrl) return;
             if (data.ok) {
                 tbody.innerHTML = data.rows;
                 document.getElementById('pagination-info').textContent = data.info;
@@ -289,10 +294,11 @@ include dirname(__DIR__) . '/clientes/modal_cliente.php';
                 document.querySelector('.excel-export-btn').href = data.excel_url;
             }
         } catch (e) {
+            if (e.name === 'AbortError') return;
             console.error(e);
             Swal.fire('Error', 'No se pudo cargar la lista', 'error');
         } finally {
-            if (tbody) tbody.classList.remove('fm-cargando-target');
+            if (tbody && ctrl === window.FACCV_busquedaCtrl) tbody.classList.remove('fm-cargando-target');
         }
     }
 </script>

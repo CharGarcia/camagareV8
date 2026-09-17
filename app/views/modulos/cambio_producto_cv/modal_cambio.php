@@ -797,7 +797,7 @@
     /**
      * Agrega una fila de entrega. o.tipo:
      *  - 'CONSIGNACION': línea de consignación del cliente (bodega, lote y NUP fijos; el
-     *    máximo es el saldo en poder del cliente; precio e IVA los de la consignación).
+     *    máximo es el saldo en poder del cliente; precio el de la consignación).
      *  - 'INVENTARIO': existencia en bodega (bodega, lote y NUP precargados, editables).
      *  - 'CATALOGO': producto suelto (todo editable).
      */
@@ -816,10 +816,10 @@
         if (empty) empty.parentElement.removeChild(empty);
 
         // Precio: el de la consignación, o el primer precio de lista del producto. No se
-        // muestra en pantalla (ni el IVA): viaja oculto en la fila para que el servidor siga
-        // calculando la diferencia informativa del listado.
+        // muestra en pantalla: viaja oculto en la fila para que el servidor calcule la
+        // diferencia informativa y el registro en Facturación de consignaciones. El IVA no
+        // viaja: lo pone el servidor con la tarifa vigente del producto.
         let precio = esConsig ? num(o.precio_unitario) : 0;
-        const iva  = esConsig ? num(o.porcentaje_impuesto) : 0;
         if (!esConsig) {
             try {
                 const res = await fetch(`${RUTA}/getPreciosAjax?id_producto=${o.id_producto}`);
@@ -839,7 +839,6 @@
         tr.dataset.saldo = esConsig ? saldo : '';
         tr.dataset.caducidad = o.fecha_caducidad ? String(o.fecha_caducidad).slice(0, 10) : '';
         tr.dataset.precio = precio;
-        tr.dataset.porc = iva;
         const origenCell = esConsig
             ? camBadgeOrigenConsignacion(o.doc_numero)
             : camBadgeOrigen('BODEGA', o.tipo === 'INVENTARIO' ? 'Existencias' : 'Catálogo');
@@ -958,9 +957,9 @@
         tr.dataset.idOrigenDetalle = esConsig ? (d.id_origen_detalle || '') : '';
         tr.dataset.saldo = ''; // en edición el máximo real se revalida en el server
         tr.dataset.caducidad = d.fecha_caducidad ? String(d.fecha_caducidad).slice(0, 10) : '';
-        // Precio e IVA guardados: no se muestran, pero al editar un borrador se reenvían tal cual.
+        // Precio guardado: no se muestra, pero al editar un borrador se reenvía tal cual (el IVA
+        // lo vuelve a poner el servidor).
         tr.dataset.precio = num(d.precio_unitario);
-        tr.dataset.porc = num(d.porcentaje_impuesto);
         const origenCell = esConsig
             ? camBadgeOrigenConsignacion(d.origen_numero)
             : camBadgeOrigen('BODEGA');
@@ -1019,9 +1018,8 @@
             if (c > 0) entregas.push({
                 id_producto: parseInt(tr.dataset.prod, 10),
                 cantidad: c,
-                // Ocultos en la fila (ver camAgregarEntregaFila): solo para la diferencia informativa.
+                // Oculto en la fila (ver camAgregarEntregaFila); el IVA lo pone el servidor.
                 precio_unitario: num(tr.dataset.precio),
-                porcentaje_impuesto: num(tr.dataset.porc),
                 id_bodega: parseInt(tr.querySelector('.cam-ent-bodega').value || 0, 10),
                 // Desde consignación: el servidor toma producto/bodega/lote/NUP de esa línea.
                 origen_tipo: tr.dataset.origenTipo || '',

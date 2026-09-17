@@ -855,8 +855,9 @@ class CambioProductoCvRepository extends BaseRepository
 
     /**
      * Datos autoritativos "tal cual" de la línea de origen a devolver (para el Service).
-     * Devuelve producto, precio, impuesto, lote, nup, bodega, caducidad, id_origen, número
-     * del documento y el cliente dueño (el Service exige que sea el cliente del cambio).
+     * Devuelve producto, precio, impuesto, cantidad y descuento de la línea (cantidad_origen,
+     * descuento_origen), lote, nup, bodega, caducidad, id_origen, número del documento y el
+     * cliente dueño (el Service exige que sea el cliente del cambio).
      */
     public function getDatosLineaOrigen(string $origenTipo, int $idOrigenDetalle, int $idEmpresa): ?array
     {
@@ -867,6 +868,8 @@ class CambioProductoCvRepository extends BaseRepository
                            d.precio_unitario,
                            d.id_impuesto,
                            COALESCE(d.porcentaje_impuesto, 0) AS porcentaje_impuesto,
+                           d.cantidad AS cantidad_origen,
+                           COALESCE(d.descuento, 0) AS descuento_origen,
                            d.id_bodega, d.lote, d.nup, d.fecha_caducidad,
                            p.nombre AS producto_nombre, p.inventariable, p.tipo_produccion
                     FROM consignaciones_facturas_detalles d
@@ -880,6 +883,8 @@ class CambioProductoCvRepository extends BaseRepository
                            (COALESCE(cx.serie,'') || '-' || COALESCE(cx.secuencial,'')) AS doc_numero,
                            e.id_producto,
                            e.precio_unitario, e.id_impuesto, e.porcentaje_impuesto,
+                           e.cantidad AS cantidad_origen,
+                           0 AS descuento_origen,
                            e.id_bodega, e.lote, e.nup, e.fecha_caducidad,
                            p.nombre AS producto_nombre, p.inventariable, p.tipo_produccion
                     FROM cambios_producto_cv_detalles e

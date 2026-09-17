@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado
-version: 1.19
+version: 1.20
 orden: 45
 estado: activo
 ---
@@ -306,6 +306,11 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.20** — La búsqueda del listado y la de la pestaña **Detalles** ya no se quedan
+  cargando en empresas con muchas consignaciones: antes, con decenas de miles de
+  consignaciones, podían tardar minutos sin mostrar respuesta; ahora contestan en
+  alrededor de un segundo y encuentran exactamente lo mismo. Si se sigue escribiendo
+  mientras busca, la búsqueda anterior se cancela y solo se muestra la última.
 - **1.19** — Eliminar una consignación ahora **devuelve el inventario a la
   bodega** (antes el stock quedaba descontado). Editarla ya no duplica el costo del
   asiento ni baja el costo promedio de los productos: las salidas anteriores se

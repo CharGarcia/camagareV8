@@ -118,6 +118,9 @@ class ConsignacionesVentasController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
@@ -191,6 +194,9 @@ class ConsignacionesVentasController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
+        // Suelta el candado de la sesión: nada de aquí en adelante escribe $_SESSION, y
+        // mientras está tomado las demás peticiones del mismo usuario esperan en fila.
+        $this->liberarSesion();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $q         = trim((string) ($_GET['q'] ?? ''));
@@ -1265,5 +1271,13 @@ class ConsignacionesVentasController extends BaseModuloController
     public function liberarBloqueoAjax(): void {
         $this->requireLeer();
         $this->liberarBloqueoAjaxTrait(self::TABLA_BLOQUEO_PEDIDO);
+    }
+
+    /** Libera el candado de la sesión PHP (lectura de $_SESSION sigue disponible). */
+    private function liberarSesion(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
     }
 }

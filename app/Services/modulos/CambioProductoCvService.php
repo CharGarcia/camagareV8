@@ -45,6 +45,9 @@ class CambioProductoCvService
     /** Cache por petición de facturaAfectada() para unidades que llegaron en un cambio: id de la línea de entrega → número. */
     private array $facturasAfectadas = [];
 
+    /** Cache por petición de ivaDelProducto(): "producto|tarifa de respaldo" → [id_impuesto, porcentaje] o null. */
+    private array $tarifasIva = [];
+
     public function __construct(
         CambioProductoCvRepository $repository,
         CambioProductoCvRules $rules,
@@ -324,6 +327,11 @@ class CambioProductoCvService
     /**
      * Inserta las líneas de un lado (devolucion|entrega). Si $aplicaInventario, mueve stock.
      * Devuelve el total monetario del lado.
+     *
+     * Los valores no se muestran en pantalla, pero alimentan la diferencia del cambio y el registro
+     * en Facturación de consignaciones. Lo que entra copia precio e IVA de su línea de origen, menos
+     * el descuento que tuvo esa línea; lo que sale lleva el IVA vigente del producto
+     * (ivaDelProducto). El IVA nunca se toma del navegador.
      */
     private function procesarLineas(int $idCambio, int $idEmpresa, int $idUsuario, array $empresaConfig, array $lineas, string $tipoLinea, bool $aplicaInventario, string $numero, int $idCliente): float
     {
@@ -332,6 +340,7 @@ class CambioProductoCvService
         foreach ($lineas as $det) {
             $cant = (float) ($det['cantidad'] ?? 0);
             if ($cant <= 0) continue;
+            $descuento = 0.0;
 
             if ($tipoLinea === 'devolucion') {
                 $origenTipo = (string) ($det['origen_tipo'] ?? '');
@@ -355,8 +364,22 @@ class CambioProductoCvService
                 }
 
                 $precio  = (float) $origen['precio_unitario'];
-                $porcImp = (float) ($origen['porcentaje_impuesto'] ?? 0);
                 $idBodega = (int) ($origen['id_bodega'] ?? 0);
+
+                // IVA con que se facturó la unidad (o con que salió en el cambio anterior). Si el
+                // origen no guardó su tarifa —facturación migrada o entrega de un cambio anterior al
+                // 17-09-2026—, el vigente del producto, como lo que sale.
+                if (!empty($origen['id_impuesto'])) {
+                    $idImp   = (int) $origen['id_impuesto'];
+                    $porcImp = (float) ($origen['porcentaje_impuesto'] ?? 0);
+                } else {
+                    [$idImp, $porcImp] = $this->ivaDelProducto((int) $origen['id_producto'], null, (float) ($origen['porcentaje_impuesto'] ?? 0));
+                }
+                // Descuento de la línea de origen, en proporción a lo que se devuelve.
+                $cantOrigen = (float) ($origen['cantidad_origen'] ?? 0);
+                if ($cantOrigen > 0) {
+                    $descuento = (float) ($origen['descuento_origen'] ?? 0) * $cant / $cantOrigen;
+                }
 
                 $linea = [
                     'tipo_linea'        => 'devolucion',
@@ -365,7 +388,7 @@ class CambioProductoCvService
                     'id_origen_detalle' => $idOrigenDet,
                     'id_producto'       => (int) $origen['id_producto'],
                     'precio_unitario'   => $precio,
-                    'id_impuesto'       => $origen['id_impuesto'] ?? null,
+                    'id_impuesto'       => $idImp,
                     'porcentaje_impuesto' => $porcImp,
                     'id_bodega'         => $idBodega,
                     'lote'              => $origen['lote'] ?? null,
@@ -377,9 +400,9 @@ class CambioProductoCvService
             } elseif (strtoupper((string) ($det['origen_tipo'] ?? '')) === 'CONSIGNACION') {
                 // Entrega tomada de una CONSIGNACIÓN que el cliente ya tiene en su poder:
                 // producto, bodega, lote y NUP son los de esa línea (autoritativo, no se confía
-                // en el navegador); precio e IVA se pueden ajustar en pantalla. Consume el saldo
-                // de la consignación y NO mueve stock (la mercadería ya salió de bodega con la
-                // consignación; ver moverInventarioLinea).
+                // en el navegador); el precio llega oculto desde el formulario y el IVA es el
+                // vigente del producto. Consume el saldo de la consignación y NO mueve stock (la
+                // mercadería ya salió de bodega con la consignación; ver moverInventarioLinea).
                 $idOrigenDet = (int) ($det['id_origen_detalle'] ?? 0);
                 $origen = $this->repository->getDatosLineaConsignacion($idOrigenDet, $idEmpresa);
                 if (!$origen) {
@@ -396,7 +419,9 @@ class CambioProductoCvService
                 }
 
                 $precio  = isset($det['precio_unitario']) ? (float) $det['precio_unitario'] : (float) $origen['precio_unitario'];
-                $porcImp = isset($det['porcentaje_impuesto']) ? (float) $det['porcentaje_impuesto'] : (float) ($origen['porcentaje_impuesto'] ?? 0);
+                [$idImp, $porcImp] = $this->ivaDelProducto((int) $origen['id_producto'],
+                    empty($origen['id_impuesto']) ? null : (int) $origen['id_impuesto'],
+                    (float) ($origen['porcentaje_impuesto'] ?? 0));
 
                 $linea = [
                     'tipo_linea'        => 'entrega',
@@ -405,7 +430,7 @@ class CambioProductoCvService
                     'id_origen_detalle' => $idOrigenDet,
                     'id_producto'       => (int) $origen['id_producto'],
                     'precio_unitario'   => $precio,
-                    'id_impuesto'       => $origen['id_impuesto'] ?? null,
+                    'id_impuesto'       => $idImp,
                     'porcentaje_impuesto' => $porcImp,
                     'id_bodega'         => (int) ($origen['id_bodega'] ?? 0),
                     'lote'              => $origen['lote'] ?? null,
@@ -421,7 +446,7 @@ class CambioProductoCvService
                     throw new Exception("El producto de entrega #{$idProducto} no existe.");
                 }
                 $precio   = (float) ($det['precio_unitario'] ?? 0);
-                $porcImp  = (float) ($det['porcentaje_impuesto'] ?? 0);
+                [$idImp, $porcImp] = $this->ivaDelProducto($idProducto);
                 $idBodega = (int) ($det['id_bodega'] ?? 0);
 
                 $linea = [
@@ -431,7 +456,7 @@ class CambioProductoCvService
                     'id_origen_detalle' => null,
                     'id_producto'       => $idProducto,
                     'precio_unitario'   => $precio,
-                    'id_impuesto'       => empty($det['id_impuesto']) ? null : (int) $det['id_impuesto'],
+                    'id_impuesto'       => $idImp,
                     'porcentaje_impuesto' => $porcImp,
                     'id_bodega'         => $idBodega,
                     'lote'              => (isset($det['lote']) && trim((string) $det['lote']) !== '') ? trim((string) $det['lote']) : null,
@@ -442,7 +467,7 @@ class CambioProductoCvService
                 ];
             }
 
-            $subtotal   = round($precio * $cant, 6);
+            $subtotal   = round($precio * $cant - $descuento, 6);
             $valorImp   = round($subtotal * ($porcImp / 100), 6);
             $totalLinea = round($subtotal + $valorImp, 6);
 
@@ -479,6 +504,27 @@ class CambioProductoCvService
         }
 
         return $total;
+    }
+
+    /**
+     * IVA vigente de un producto: [id_impuesto, porcentaje]. La tarifa ACTUAL del producto; si no
+     * tiene, la de $idTarifaRespaldo (la de la línea de consignación) y, si tampoco, [null,
+     * $porcentajeRespaldo]. Es la misma regla con la que Facturación de consignaciones factura
+     * (ConsignacionFacturaService::normalizarDetalles), así que el registro que el cambio crea allí
+     * queda con el mismo IVA que si se hubiera facturado esa unidad.
+     */
+    private function ivaDelProducto(int $idProducto, ?int $idTarifaRespaldo = null, float $porcentajeRespaldo = 0.0): array
+    {
+        $clave = $idProducto . '|' . (int) $idTarifaRespaldo;
+        if (!array_key_exists($clave, $this->tarifasIva)) {
+            $repo = new \App\repositories\modulos\ConsignacionFacturaRepository();
+            $tar  = $idProducto > 0 ? $repo->getTarifaIvaProducto($idProducto) : null;
+            if (!$tar && $idTarifaRespaldo) {
+                $tar = $repo->getTarifaIvaById($idTarifaRespaldo);
+            }
+            $this->tarifasIva[$clave] = $tar ? [(int) $tar['id'], (float) $tar['porcentaje_iva']] : null;
+        }
+        return $this->tarifasIva[$clave] ?? [null, $porcentajeRespaldo];
     }
 
     // ─── EDITAR (solo Borrador; no mueve inventario) ──────────────────────────

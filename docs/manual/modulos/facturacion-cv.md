@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar
-version: 1.13
+etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto
+version: 1.15
 orden: 47
 estado: activo
 ---
@@ -40,6 +40,8 @@ que tenía en consignación, el sistema crea aquí, solo, un documento
 Se reconoce por la etiqueta **Cambio** junto al estado y por el aviso del modal:
 
 - no genera factura nueva ni modifica la factura original;
+- lleva el precio de la consignación y el **IVA vigente de cada producto**,
+  igual que una facturación hecha aquí;
 - no reingresa inventario ni tiene asiento propio (los lleva el cambio);
 - tiene su propio número de esta serie y sus observaciones dicen de qué cambio
   viene;
@@ -258,6 +260,13 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.15** — La búsqueda del listado y la de la pestaña **Detalles** responden más
+  rápido en empresas con muchos documentos (encuentran exactamente lo mismo). Si se
+  sigue escribiendo mientras busca, la búsqueda anterior se cancela y solo se muestra
+  la última.
+- **1.14** — Los registros que crea un **Cambio de productos** llevan el IVA
+  vigente de cada producto, como una facturación hecha aquí; antes quedaban con
+  IVA 0 y el total sin IVA. Los registros ya creados no se recalculan solos.
 - **1.13** — Las facturaciones que el sistema anterior creaba con cada cambio de
   productos quedan enlazadas a ese cambio al migrar Cambios de productos: se
   ven con la etiqueta **Cambio** y son de solo lectura, como los registros de

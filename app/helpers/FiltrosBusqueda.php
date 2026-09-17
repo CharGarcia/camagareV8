@@ -94,8 +94,17 @@ class FiltrosBusqueda
      *    columnas no pasan por unaccent (son números/fechas) y, si la palabra es un monto
      *    con coma decimal ("34,78"), se busca con punto ("34.78"), que es como PostgreSQL
      *    convierte un numeric a texto.
+     *  - Lo que vive en una TABLA HIJA (líneas, documentos relacionados) puede venir como
+     *    `['col' => "CONCAT_WS(' ', p.codigo, p.nombre)", 'sql' => "cv.id IN (SELECT d.id_consignacion
+     *    FROM … WHERE d.id_empresa = :e AND {cond})"]`: `{cond}` se reemplaza por
+     *    `unaccent(col) ILIKE patrón`. La subconsulta NO debe depender de la fila de afuera
+     *    (nada de `= cv.id` adentro): así PostgreSQL arma el conjunto UNA vez por palabra
+     *    (hashed SubPlan) y cada fila solo lo consulta. Con `(SELECT STRING_AGG(…) … WHERE
+     *    d.x = cv.id)` la subconsulta corre por cada fila de la empresa, y si el cruce no
+     *    tiene índice se vuelve cuadrática (Consignaciones, 17-09-2026: minutos con ~50.000
+     *    documentos). Admite también `'si'`.
      *
-     * @param array<int, string|array{sql:string, si?:string}> $columnas Columnas o expresiones SQL a buscar
+     * @param array<int, string|array{sql:string, si?:string, col?:string}> $columnas Columnas o expresiones SQL a buscar
      * @param string   $texto    Texto escrito por el usuario (una o varias palabras)
      * @param array    $params   Se le agregan los parámetros nuevos (por referencia)
      * @param string   $prefijo  Prefijo único de placeholders (evita choques si se llama más de una vez en la misma consulta)
@@ -117,9 +126,12 @@ class FiltrosBusqueda
         $simples = [];        // se concatenan
         $conSubconsulta = []; // van aparte, al final
         $condicionales = [];  // ['sql' => ..., 'si' => regex]
+        $conjuntos = [];      // ['sql' => '… {cond} …', 'col' => ..., 'si' => regex]: tabla hija
         foreach ($columnas as $col) {
             if (is_array($col)) {
-                if (!empty($col['sql'])) {
+                if (!empty($col['sql']) && !empty($col['col'])) {
+                    $conjuntos[] = ['sql' => (string) $col['sql'], 'col' => (string) $col['col'], 'si' => (string) ($col['si'] ?? '')];
+                } elseif (!empty($col['sql'])) {
                     $condicionales[] = ['sql' => (string) $col['sql'], 'si' => (string) ($col['si'] ?? '')];
                 }
                 continue;
@@ -167,6 +179,15 @@ class FiltrosBusqueda
                     }
                 }
                 $ors[] = "({$c['sql']})::text ILIKE {$phNum}";
+            }
+
+            // Tablas hijas: un conjunto por palabra, antes que las subconsultas por fila.
+            foreach ($conjuntos as $c) {
+                if ($c['si'] !== '' && !preg_match($c['si'], $palabra)) {
+                    continue;
+                }
+                $cond = ($conUnaccent ? "unaccent({$c['col']})" : $c['col']) . " ILIKE {$patron}";
+                $ors[] = '(' . str_replace('{cond}', $cond, $c['sql']) . ')';
             }
 
             foreach ($conSubconsulta as $col) {

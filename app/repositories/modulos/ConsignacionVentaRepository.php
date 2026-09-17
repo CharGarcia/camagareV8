@@ -87,17 +87,29 @@ class ConsignacionVentaRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
+        // Rendimiento (17-09-2026): cada rama filtra su tabla por empresa y la cabecera se une
+        // solo a las líneas que coinciden (antes se materializaban TODAS las consignaciones y se
+        // recorrían las líneas y documentos de todas las empresas). Producto y bodega se buscan
+        // en su catálogo como conjunto; montos, cantidades y fechas solo si la palabra tiene dígitos.
+        $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
         $condProd = \App\Helpers\FiltrosBusqueda::condicionTexto(
-            ['p.codigo', 'p.nombre', 'p.codigo_barras', 'd.lote', 'd.nup', "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')",
-             'bo.nombre', 'd.cantidad::text', 'd.precio_unitario::text', 'd.total::text'],
+            ['d.lote', 'd.nup',
+             ['col' => "CONCAT_WS(' ', px.codigo, px.nombre, px.codigo_barras)",
+              'sql' => "d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :id_empresa AND {cond})"],
+             ['col' => 'bx.nombre',
+              'sql' => "d.id_bodega IN (SELECT bx.id FROM bodegas bx WHERE bx.id_empresa = :id_empresa AND {cond})"],
+             ['sql' => "TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')", 'si' => $digitos],
+             ['sql' => 'd.cantidad', 'si' => $digitos],
+             ['sql' => 'd.precio_unitario', 'si' => $digitos],
+             ['sql' => 'd.total', 'si' => $digitos]],
             $q, $params, 'pr'
         );
         $condFac = \App\Helpers\FiltrosBusqueda::condicionTexto(
-            ["CONCAT(cf.serie, '-', cf.secuencial)", 'cf.numero_factura', 'cf.observaciones', 'cf.total::text'],
+            ["CONCAT(cf.serie, '-', cf.secuencial)", 'cf.numero_factura', 'cf.observaciones', ['sql' => 'cf.total', 'si' => $digitos]],
             $q, $params, 'fc'
         );
         $condRet = \App\Helpers\FiltrosBusqueda::condicionTexto(
-            ["CONCAT(r.serie, '-', r.secuencial)", 'r.motivo', 'r.observaciones', 'r.total::text'],
+            ["CONCAT(r.serie, '-', r.secuencial)", 'r.motivo', 'r.observaciones', ['sql' => 'r.total', 'si' => $digitos]],
             $q, $params, 'rt'
         );
         $condCam = \App\Helpers\FiltrosBusqueda::condicionTexto(
@@ -109,42 +121,27 @@ class ConsignacionVentaRepository extends BaseRepository
         }
 
         $limit = max(1, min(200, $limit));
-        $sql = "WITH base AS (
-                    SELECT cv.*,
-                           c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
-                           v.nombre AS vendedor_nombre,
-                           rt.nombre AS responsable_traslado_nombre
-                    FROM consignaciones_ventas cv
-                    INNER JOIN clientes c ON c.id = cv.id_cliente
-                    LEFT JOIN vendedores v ON v.id = cv.id_vendedor
-                    LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
-                    WHERE $whereBase
-                ),
-                coincidencias AS (
+        $sql = "WITH coincidencias AS (
                     SELECT 'PRODUCTO' AS origen, p.codigo AS tipo, p.nombre AS descripcion,
                            NULLIF(CONCAT_WS(' / ', NULLIF(d.lote, ''), NULLIF(d.nup, ''), TO_CHAR(d.fecha_caducidad, 'DD-MM-YYYY')), '') AS extra,
                            d.cantidad, d.total AS monto, d.id_consignacion AS id_cons
                     FROM consignaciones_ventas_detalles d
-                    JOIN base b ON b.id = d.id_consignacion
                     LEFT JOIN productos p ON p.id = d.id_producto
-                    LEFT JOIN bodegas bo ON bo.id = d.id_bodega
-                    WHERE d.eliminado = false AND $condProd
+                    WHERE d.id_empresa = :id_empresa AND d.eliminado = false AND $condProd
                     UNION ALL
                     SELECT DISTINCT 'FACTURA' AS origen, CONCAT(cf.serie, '-', cf.secuencial) AS tipo,
                            cf.numero_factura AS descripcion, NULL AS extra,
                            NULL::numeric AS cantidad, cf.total AS monto, cfd.id_consignacion AS id_cons
                     FROM consignaciones_facturas cf
                     JOIN consignaciones_facturas_detalles cfd ON cfd.id_consignacion_factura = cf.id
-                    JOIN base b ON b.id = cfd.id_consignacion
-                    WHERE cf.eliminado = false AND $condFac
+                    WHERE cf.id_empresa = :id_empresa AND cf.eliminado = false AND $condFac
                     UNION ALL
                     SELECT DISTINCT 'RETORNO' AS origen, CONCAT(r.serie, '-', r.secuencial) AS tipo,
                            NULLIF(r.motivo, '') AS descripcion, NULL AS extra,
                            NULL::numeric AS cantidad, r.total AS monto, rd.id_consignacion AS id_cons
                     FROM retornos_cv r
                     JOIN retornos_cv_detalles rd ON rd.id_retorno = r.id
-                    JOIN base b ON b.id = rd.id_consignacion
-                    WHERE r.eliminado = false AND $condRet
+                    WHERE r.id_empresa = :id_empresa AND r.eliminado = false AND $condRet
                     UNION ALL
                     SELECT DISTINCT 'CAMBIO' AS origen, CONCAT(cc.serie, '-', cc.secuencial) AS tipo,
                            NULLIF(cc.motivo, '') AS descripcion, NULL AS extra,
@@ -152,13 +149,20 @@ class ConsignacionVentaRepository extends BaseRepository
                     FROM cambios_producto_cv cc
                     JOIN cambios_producto_cv_detalles ccd ON ccd.id_cambio = cc.id
                          AND ccd.origen_tipo = 'CONSIGNACION' AND ccd.eliminado = false
-                    JOIN base b ON b.id = ccd.id_origen
-                    WHERE cc.eliminado = false AND $condCam
+                    WHERE cc.id_empresa = :id_empresa AND cc.eliminado = false AND $condCam
                 )
-                SELECT x.origen, x.tipo, x.descripcion, x.extra, x.cantidad, x.monto, b.*
+                SELECT x.origen, x.tipo, x.descripcion, x.extra, x.cantidad, x.monto,
+                       cv.*,
+                       c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+                       v.nombre AS vendedor_nombre,
+                       rt.nombre AS responsable_traslado_nombre
                 FROM coincidencias x
-                JOIN base b ON b.id = x.id_cons
-                ORDER BY b.fecha_emision DESC, b.id DESC, x.origen
+                JOIN consignaciones_ventas cv ON cv.id = x.id_cons
+                INNER JOIN clientes c ON c.id = cv.id_cliente
+                LEFT JOIN vendedores v ON v.id = cv.id_vendedor
+                LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
+                WHERE $whereBase
+                ORDER BY cv.fecha_emision DESC, cv.id DESC, x.origen
                 LIMIT $limit";
 
         $st = $this->db->prepare($sql);
@@ -185,44 +189,65 @@ class ConsignacionVentaRepository extends BaseRepository
             // lo que identifica a la consignación aunque no sea columna. Decisión del
             // usuario: la columna Estado NO entra en el texto libre; se filtra desde el
             // modal de filtros.
+            //
+            // Rendimiento (17-09-2026): lo que vive en otra tabla se busca como CONJUNTO por
+            // palabra (FiltrosBusqueda::condicionTexto, `col` + `sql`): la tabla se filtra una
+            // vez y cada consignación solo consulta el conjunto de ids. Antes, por cada
+            // consignación que no coincidía por cliente o número se armaban con STRING_AGG sus
+            // líneas y documentos (los cambios de producto, además, sin índice por consignación
+            // de origen): con ~50.000 consignaciones la búsqueda tardaba minutos. Cliente,
+            // asesor, responsable y usuario también van como conjunto: quitar tildes a un texto
+            // largo en cada consignación era lo más caro que quedaba. Fecha, total y números de
+            // retorno/cambio solo se comparan si la palabra tiene dígitos.
+            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "TO_CHAR(cv.fecha_emision, 'DD-MM-YYYY')",            // Fecha (como se muestra)
-                    'cv.fecha_emision::text',                             // Fecha (yyyy-mm-dd)
                     "CONCAT(cv.serie, '-', cv.secuencial)",               // Secuencial (serie-secuencial)
-                    'c.nombre',                                           // Cliente
-                    'c.identificacion',
-                    'v.nombre',                                           // Asesor
                     'cv.observaciones',                                   // Observaciones
-                    'rt.nombre',                                          // Responsable de traslado
                     'cv.punto_partida',
                     'cv.punto_llegada',
-                    'cv.total::text',
-                    'u.nombre',                                           // Usuario que registró
-                    // Productos consignados (código, nombre, lote y NUP)
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', p.codigo, p.nombre, d.lote, d.nup), ' ')
-                        FROM consignaciones_ventas_detalles d
-                        LEFT JOIN productos p ON p.id = d.id_producto
-                       WHERE d.id_consignacion = cv.id AND d.eliminado = false)",
+                    ['sql' => "TO_CHAR(cv.fecha_emision, 'DD-MM-YYYY')", 'si' => $digitos], // Fecha (como se muestra)
+                    ['sql' => 'cv.fecha_emision', 'si' => $digitos],                       // Fecha (yyyy-mm-dd)
+                    ['sql' => 'cv.total', 'si' => $digitos],
+                    // Cliente (nombre e identificación), asesor, responsable de traslado y usuario que registró
+                    ['col' => "CONCAT_WS(' ', cx.nombre, cx.identificacion)",
+                     'sql' => "cv.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})"],
+                    ['col' => 'vx.nombre',
+                     'sql' => "cv.id_vendedor IN (SELECT vx.id FROM vendedores vx WHERE vx.id_empresa = :e AND {cond})"],
+                    ['col' => 'rx.nombre',
+                     'sql' => "cv.id_responsable_traslado IN (SELECT rx.id FROM responsables_traslado rx WHERE rx.id_empresa = :e AND {cond})"],
+                    ['col' => 'ux.nombre',
+                     'sql' => "cv.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})"],
+                    // Productos consignados: código y nombre en el catálogo, lote y NUP en la línea
+                    ['col' => "CONCAT_WS(' ', px.codigo, px.nombre)",
+                     'sql' => "cv.id IN (SELECT d.id_consignacion
+                                           FROM consignaciones_ventas_detalles d
+                                          WHERE d.id_empresa = :e AND d.eliminado = false
+                                            AND d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond}))"],
+                    ['col' => "CONCAT_WS(' ', d.lote, d.nup)",
+                     'sql' => "cv.id IN (SELECT d.id_consignacion
+                                           FROM consignaciones_ventas_detalles d
+                                          WHERE d.id_empresa = :e AND d.eliminado = false AND {cond})"],
                     // Documentos relacionados: facturas de la consignación (nº interno y nº de la factura SRI)
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', CONCAT(cf.serie, '-', cf.secuencial), cf.numero_factura), ' ')
-                        FROM consignaciones_facturas cf
-                       WHERE cf.eliminado = false
-                         AND EXISTS (SELECT 1 FROM consignaciones_facturas_detalles cfd
-                                      WHERE cfd.id_consignacion_factura = cf.id AND cfd.id_consignacion = cv.id))",
+                    ['col' => "CONCAT_WS(' ', CONCAT(cf.serie, '-', cf.secuencial), cf.numero_factura)",
+                     'sql' => "cv.id IN (SELECT cfd.id_consignacion
+                                           FROM consignaciones_facturas cf
+                                           JOIN consignaciones_facturas_detalles cfd ON cfd.id_consignacion_factura = cf.id
+                                          WHERE cf.id_empresa = :e AND cf.eliminado = false AND {cond})"],
                     // Documentos relacionados: retornos de esta consignación
-                    "(SELECT STRING_AGG(CONCAT(r.serie, '-', r.secuencial), ' ')
-                        FROM retornos_cv r
-                       WHERE r.eliminado = false
-                         AND EXISTS (SELECT 1 FROM retornos_cv_detalles rd
-                                      WHERE rd.id_retorno = r.id AND rd.id_consignacion = cv.id))",
+                    ['col' => "CONCAT(r.serie, '-', r.secuencial)", 'si' => $digitos,
+                     'sql' => "cv.id IN (SELECT rd.id_consignacion
+                                           FROM retornos_cv r
+                                           JOIN retornos_cv_detalles rd ON rd.id_retorno = r.id
+                                          WHERE r.id_empresa = :e AND r.eliminado = false AND {cond})"],
                     // Documentos relacionados: cambios de producto que entregan desde esta consignación
-                    "(SELECT STRING_AGG(CONCAT(cc.serie, '-', cc.secuencial), ' ')
-                        FROM cambios_producto_cv cc
-                       WHERE cc.eliminado = false
-                         AND EXISTS (SELECT 1 FROM cambios_producto_cv_detalles ccd
-                                      WHERE ccd.id_cambio = cc.id AND ccd.origen_tipo = 'CONSIGNACION'
-                                        AND ccd.id_origen = cv.id AND ccd.eliminado = false))",
+                    ['col' => "CONCAT(cc.serie, '-', cc.secuencial)", 'si' => $digitos,
+                     'sql' => "cv.id IN (SELECT ccd.id_origen
+                                           FROM cambios_producto_cv cc
+                                           JOIN cambios_producto_cv_detalles ccd ON ccd.id_cambio = cc.id
+                                                AND ccd.origen_tipo = 'CONSIGNACION' AND ccd.eliminado = false
+                                          WHERE cc.id_empresa = :e AND cc.eliminado = false
+                                            AND ccd.id_origen IS NOT NULL AND {cond})"],
                 ],
                 $textoLibre,
                 $params,
@@ -281,27 +306,6 @@ class ConsignacionVentaRepository extends BaseRepository
             ],
         ]);
 
-        // Mismos JOIN que la consulta principal: el texto libre y los filtros usan c, v, rt y u.
-        $sqlCount = "
-            SELECT COUNT(*)
-            FROM consignaciones_ventas cv
-            INNER JOIN clientes c ON c.id = cv.id_cliente
-            LEFT JOIN vendedores v ON v.id = cv.id_vendedor
-            LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
-            LEFT JOIN usuarios u ON u.id = cv.created_by
-            $where
-        ";
-        $stCount = $this->db->prepare($sqlCount);
-        $stCount->execute($params);
-        $total = (int) $stCount->fetchColumn();
-
-        if ($perPage > 0) {
-            $offset = ($page - 1) * $perPage;
-            $limitClause = "LIMIT $perPage OFFSET $offset";
-        } else {
-            $limitClause = "";
-        }
-
         $colMap = [
             'fecha_emision' => 'cv.fecha_emision',
             'secuencial' => 'cv.secuencial',
@@ -313,25 +317,37 @@ class ConsignacionVentaRepository extends BaseRepository
         $sort = $colMap[$ordenCol] ?? 'cv.fecha_emision';
         $dir = $ordenDir === 'DESC' ? 'DESC' : 'ASC';
 
-        $sql = "
-            SELECT cv.*, 
-                   c.nombre as cliente_nombre, c.identificacion as cliente_identificacion,
-                   v.nombre as vendedor_nombre,
-                   rt.nombre as responsable_traslado_nombre
-            FROM consignaciones_ventas cv
-            INNER JOIN clientes c ON c.id = cv.id_cliente
-            LEFT JOIN vendedores v ON v.id = cv.id_vendedor
-            LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
-            LEFT JOIN usuarios u ON u.id = cv.created_by
-            $where
-            ORDER BY $sort $dir, cv.id DESC
-            $limitClause
-        ";
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        // Conteo + página en UNA consulta (App\Helpers\ListadoPaginado): el WHERE con texto
+        // libre se evaluaba dos veces (COUNT y SELECT). Los JOIN del filtro son los que usan
+        // el texto libre, los filtros y el orden (c, v, rt, u).
+        $joinsFinal = "INNER JOIN clientes c ON c.id = cv.id_cliente
+                LEFT JOIN vendedores v ON v.id = cv.id_vendedor
+                LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado";
 
-        return ['total' => $total, 'rows' => $rows];
+        return \App\Helpers\ListadoPaginado::consultar(
+            function (string $sql, array $p): array {
+                $st = $this->db->prepare($sql);
+                $st->execute($p);
+                return $st->fetchAll(PDO::FETCH_ASSOC);
+            },
+            [
+                'tabla'       => 'consignaciones_ventas',
+                'alias'       => 'cv',
+                'joinsFiltro' => $joinsFinal . "
+                LEFT JOIN usuarios u ON u.id = cv.created_by",
+                'joinsFinal'  => $joinsFinal,
+                'where'       => $where,
+                'orderBy'     => "ORDER BY $sort $dir, cv.id DESC",
+                'perPage'     => $perPage,
+                'offset'      => $perPage > 0 ? ($page - 1) * $perPage : 0,
+                'conBusqueda' => trim($buscar) !== '',
+                'select'      => "cv.*,
+                       c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+                       v.nombre AS vendedor_nombre,
+                       rt.nombre AS responsable_traslado_nombre",
+            ],
+            $params
+        );
     }
 
     /**

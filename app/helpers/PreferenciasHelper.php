@@ -29,7 +29,8 @@ class PreferenciasHelper
     public static function getJavascriptVariables(string $modulo): string
     {
         $modulo = str_replace('-', '_', basename($modulo));
-        if (session_status() === PHP_SESSION_NONE) {
+        // Sin reabrir una sesión ya cerrada (ver getPreferenciasVista).
+        if (session_status() === PHP_SESSION_NONE && !isset($_SESSION)) {
             session_start();
         }
 
@@ -66,7 +67,10 @@ class PreferenciasHelper
     public static function getPreferenciasVista(string $modulo): array
     {
         $modulo = str_replace('-', '_', basename($modulo));
-        if (session_status() === PHP_SESSION_NONE) {
+        // `!isset($_SESSION)`: no reabrir una sesión que el controlador ya cerró a propósito
+        // (liberarSesion() en los searchAjax). session_start() volvía a tomar el candado y las
+        // demás peticiones del usuario seguían en fila durante la búsqueda. Solo se lee.
+        if (session_status() === PHP_SESSION_NONE && !isset($_SESSION)) {
             session_start();
         }
 
