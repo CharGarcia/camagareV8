@@ -53,12 +53,14 @@ try {
                             <div class="form-text" style="font-size: 0.7rem;">Máx. 50 caracteres para evitar desbordes.</div>
                         </div>
 
-                        <!-- Fila 2: Aplica Para + Estado -->
+                        <!-- Fila 2: Aplica Para + Orden + Saldo + Estado.
+                             Cada control ocupa 31px de alto (lo que mide el input de Orden) para que
+                             todos queden centrados en la misma línea. -->
                         <div class="col-md-12">
                             <div class="d-flex flex-wrap align-items-end gap-4">
                                 <div>
                                     <label class="form-label small fw-bold d-block mb-1">Aplica para:</label>
-                                    <div class="d-flex gap-4">
+                                    <div class="d-flex align-items-center gap-4" style="min-height:31px;">
                                         <div class="form-check mb-0">
                                             <input class="form-check-input" type="checkbox" id="fp-chk-ingreso" checked>
                                             <label class="form-check-label small fw-medium" for="fp-chk-ingreso">Ingreso</label>
@@ -69,10 +71,23 @@ try {
                                         </div>
                                     </div>
                                 </div>
-                                <div class="form-check form-switch ms-auto mb-0">
-                                    <input class="form-check-input" type="checkbox" id="fp-activo-sw" checked>
-                                    <input type="hidden" name="activo" id="fp-activo" value="1">
-                                    <label class="form-check-label fw-bold small" for="fp-activo-sw">Estado: Activo</label>
+                                <!-- Orden y saldo: cómo se ofrece la forma al registrar un Ingreso o un Egreso -->
+                                <div style="width:100px;">
+                                    <label class="form-label small fw-bold d-block mb-1" for="fp-orden">Orden:</label>
+                                    <input type="number" name="orden" id="fp-orden" class="form-control form-control-sm" min="1" max="9999" step="1" placeholder="Sin orden">
+                                </div>
+                                <div class="d-flex align-items-center" style="min-height:31px;">
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input" type="checkbox" id="fp-chk-mostrar-saldo" checked>
+                                        <label class="form-check-label small fw-medium" for="fp-chk-mostrar-saldo">Mostrar saldo</label>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center ms-auto" style="min-height:31px;">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" id="fp-activo-sw" checked>
+                                        <input type="hidden" name="activo" id="fp-activo" value="1">
+                                        <label class="form-check-label fw-bold small" for="fp-activo-sw">Estado: Activo</label>
+                                    </div>
                                 </div>
                             </div>
                             <input type="hidden" name="aplica_en" id="fp-aplica" value="AMBAS">
@@ -85,29 +100,9 @@ try {
                             <div id="fp-hint-nuvei" class="form-text text-info d-none" style="font-size: 0.72rem;">
                                 <i class="bi bi-info-circle me-1"></i> Nuvei es un cobro online: solo aplica a <strong>Ingreso</strong>.
                             </div>
-                        </div>
-
-                        <!-- Fila 3: cómo se ofrece la forma al registrar un Ingreso o un Egreso -->
-                        <div class="col-md-12">
-                            <div class="d-flex flex-wrap align-items-start gap-4">
-                                <div style="width:110px;">
-                                    <label class="form-label small fw-bold d-block mb-1" for="fp-orden">Orden</label>
-                                    <input type="number" name="orden" id="fp-orden" class="form-control form-control-sm" min="1" max="9999" step="1" placeholder="Sin orden">
-                                </div>
-                                <div>
-                                    <label class="form-label small fw-bold d-block mb-1">Saldo</label>
-                                    <div class="d-flex align-items-center" style="min-height:31px;">
-                                        <div class="form-check mb-0">
-                                            <input class="form-check-input" type="checkbox" id="fp-chk-mostrar-saldo" checked>
-                                            <label class="form-check-label small fw-medium" for="fp-chk-mostrar-saldo">Mostrar saldo</label>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
                             <div class="form-text text-muted" style="font-size: 0.7rem;">
-                                <i class="bi bi-info-circle me-1"></i> Al registrar un <strong>Ingreso</strong> o un <strong>Egreso</strong>, las formas se listan por
-                                <strong>Orden</strong> (1 = primera; las que no tienen orden van al final, por nombre) y el saldo aparece junto al
-                                nombre solo si está marcado <strong>Mostrar saldo</strong>.
+                                <i class="bi bi-info-circle me-1"></i> <strong>Orden</strong> y <strong>Mostrar saldo</strong>: cómo aparece la forma al registrar
+                                Ingresos y Egresos (1 = primera; sin orden, al final por nombre).
                             </div>
                         </div>
 
