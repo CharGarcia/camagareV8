@@ -125,13 +125,26 @@ class ComprasRepository extends BaseRepository
         $saldo        = "(CASE WHEN c.tipo_comprobante = '04' THEN 0 ELSE GREATEST(0, c.importe_total - $sqlAbonos) END)";
         $ivaCalc      = '(c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0) - COALESCE(c.total_ice, 0))';
 
-        // Texto libre: las columnas del listado (incluidas las calculadas IVA y Saldo)
-        // y sus relacionadas. El buscador de la vista no sugiere campos; lo escrito se
-        // busca en todo. Los productos comprados viven en el detalle: se agregan como
-        // una sola cadena por compra.
-        // Decisión del usuario (igual que en Ingresos, Egresos y Facturas): las
-        // columnas de clasificación y de estado NO entran en el texto libre — Tipo,
-        // Sustento, Pago y Estado se filtran solo desde el modal de filtros.
+        // Texto libre: el número del comprobante, el proveedor, la fecha, los importes,
+        // el saldo, las observaciones y el documento modificado.
+        //
+        // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar:
+        //   - Tipo, Sustento, Pago y Estado → modal de filtros (decisión anterior, igual
+        //     que en Ingresos, Egresos y Facturas).
+        //   - RUC / identificación del proveedor → filtro `ruc:` / `identificacion:`.
+        //   - Número de autorización → filtro `autorizacion:` (17-09-2026). En los
+        //     comprobantes electrónicos son 49 dígitos —fecha, RUC, serie, secuencial y
+        //     un código numérico aleatorio de 8—, así que al escribir un número de
+        //     factura caía dentro de la autorización de OTRAS compras por puro azar y el
+        //     listado devolvía filas sin ninguna coincidencia visible. Medido con los
+        //     datos locales (948 compras, 946 con autorización de 49 dígitos): el 5 % de
+        //     las búsquedas por el propio N° de comprobante traía filas de más, 4,3 de
+        //     media. Mismo caso que la clave de acceso en FacturaVentaRepository.
+        //   - Usuario que registró → filtro `usuario:`.
+        //   - Productos del detalle (código y descripción) → pestaña "Detalles" del modal
+        //     de filtros (buscarEnDetalles()), que SÍ dice qué línea coincidió; desde el
+        //     listado la compra aparecía sin que se viera el motivo. De paso se va la
+        //     subconsulta STRING_AGG, que se evaluaba por cada compra de la empresa.
         if ($textoLibre !== '') {
             // Rendimiento: las columnas numéricas solo se evalúan si la palabra tiene
             // dígitos, y el SALDO (tres subconsultas por fila, lo más caro de todo) solo
@@ -144,18 +157,14 @@ class ComprasRepository extends BaseRepository
                     "CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)", // N° Comprobante
                     'c.secuencial_prov',
                     'p.razon_social',                                                               // Proveedor
-                    'p.identificacion',                                                             // RUC
                     // Fuera del listado, pero identifican la compra:
-                    'c.numero_autorizacion',
                     'c.observaciones',
-                    'u.nombre',
                     'c.documento_modificado',
                     ['sql' => 'c.fecha_emision', 'si' => $digitos],                                 // Fecha
                     ['sql' => 'c.total_sin_impuestos', 'si' => $digitos],                           // Subtotal
                     ['sql' => $ivaCalc, 'si' => $digitos],                                          // IVA
                     ['sql' => 'c.importe_total', 'si' => $digitos],                                 // Total
                     ['sql' => "ROUND($saldo, 2)", 'si' => $decimal],                                // Saldo (caro)
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', cd.codigo_principal, cd.codigo_auxiliar, cd.descripcion), ' ') FROM compras_detalle cd WHERE cd.id_compra = c.id)",
                 ],
                 $textoLibre,
                 $params,

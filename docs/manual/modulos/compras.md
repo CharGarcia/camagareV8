@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, buscar compra, buscador, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos
-version: 2.14
+etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos
+version: 2.15
 orden: 20
 estado: activo
 ---
@@ -311,16 +311,30 @@ Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
 búsqueda y los botones de columnas, PDF y Excel.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
-solo, sin menús ni sugerencias. Busca en las columnas de la compra: N°
-comprobante, secuencial, fecha, proveedor, RUC, subtotal, IVA, total y
-**saldo**. Además busca en el número de autorización, las observaciones, el
-usuario que la registró, el documento modificado de las notas de crédito y los
-**códigos y descripciones de los productos comprados**. Las columnas **Tipo**,
-**Sustento**, **Pago** y **Estado** no entran en la búsqueda libre: para
-filtrar por ellas use la ventana de filtros. Puede escribir varias palabras en
-cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el
-texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo
-girando** al final del cuadro y la tabla se ve atenuada.
+solo, sin menús ni sugerencias. Busca en el N° de comprobante, el secuencial, la
+fecha, el proveedor, el subtotal, el IVA, el total y el **saldo**; además, en las
+observaciones y en el documento modificado de las notas de crédito. Puede
+escribir varias palabras en cualquier orden y no importan mayúsculas ni tildes.
+Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca,
+aparece un **círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** Para que el cuadro
+devuelva solo compras donde se vea por qué coinciden, estos datos se consultan
+en la ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| N° de autorización | Pestaña *Compra* → **N° autorización** |
+| RUC / cédula del proveedor | Pestaña *Compra* → **RUC / cédula** |
+| Usuario que registró | Pestaña *Compra* → **Usuario que registró** |
+| Productos comprados (código y descripción) | Pestaña *Detalles* |
+| Tipo, Sustento, Pago, Estado | Pestaña *Compra* |
+
+El número de autorización de un comprobante electrónico son 49 dígitos que
+llevan dentro la fecha, el RUC y el número del documento, así que al escribir un
+número de factura en el cuadro aparecían compras ajenas cuya autorización
+contenía por casualidad esa secuencia. Ahora ese número solo encuentra la compra
+que realmente lo tiene.
 
 **Montos y fechas.** Las fechas y los montos solo se comparan cuando lo escrito
 tiene números. El **saldo** se busca cuando se escribe un monto con decimales
@@ -507,6 +521,16 @@ tampoco la incluye. Si dos aprobadores la aprueban a la vez, solo una de las
 aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
+
+- **2.15** — Corregido: al buscar un **número de factura** en el cuadro aparecían
+  también compras que no lo tenían. La búsqueda libre miraba dentro del **número de
+  autorización** —49 dígitos que llevan la fecha, el RUC y el número del documento— y
+  cualquier número corto caía ahí por casualidad. Ahora la autorización se consulta en
+  la ventana de filtros (pestaña *Compra*), igual que el **RUC del proveedor** y el
+  **usuario que registró**; los **productos comprados** pasan a la pestaña *Detalles*,
+  que sí muestra qué línea coincidió. El cuadro de búsqueda queda para el N° de
+  comprobante, la fecha, el proveedor, los importes, el saldo, las observaciones y el
+  documento modificado.
 
 - **2.14** — **Pago automático al aprobar**: al aprobar una factura descargada
   del SRI se genera su pago automático, por el saldo de la factura y con la
