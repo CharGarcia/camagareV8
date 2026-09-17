@@ -66,7 +66,7 @@ class ProductosController extends ApiBaseController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, 'nombre', 'ASC', $idUsuarioFiltro, null, false);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, 'nombre', 'ASC', $idUsuarioFiltro, [], false);
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 

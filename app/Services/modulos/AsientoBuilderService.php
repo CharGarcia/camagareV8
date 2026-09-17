@@ -1702,15 +1702,22 @@ class AsientoBuilderService
         $aplicaRepartoPorCategoria = $repartePorLinea && !$tieneReglaDescuento && $idVenta > 0;
 
         // Joins reutilizables para sumar el valor real POR LÍNEA de cada concepto repartible, sin
-        // fan-out (subconsultas agregadas primero, 1 fila por línea, luego JOIN 1:1 a `d`).
-        $joinImpuestosPorLinea = "LEFT JOIN (
-                SELECT id_venta_detalle, SUM(valor) AS total_impuestos
-                FROM ventas_detalle_impuestos WHERE codigo_impuesto IN ('2','3') GROUP BY id_venta_detalle
-            ) imp_cxc ON imp_cxc.id_venta_detalle = d.id";
-        $joinIcePorLinea = "LEFT JOIN (
-                SELECT id_venta_detalle, SUM(valor) AS total_ice
-                FROM ventas_detalle_impuestos WHERE codigo_impuesto = '3' GROUP BY id_venta_detalle
-            ) imp_ice ON imp_ice.id_venta_detalle = d.id";
+        // fan-out (1 fila por línea, JOIN 1:1 a `d`). LATERAL y no subconsulta agregada: la agregada
+        // (GROUP BY id_venta_detalle sin filtro) sumaba los impuestos de TODAS las líneas de TODAS las
+        // empresas antes de unir, porque PostgreSQL no empuja el filtro de `d` dentro de un GROUP BY
+        // (medido en producción 16-09-2026: 152 ms y 215 mil filas para una factura de 1 línea; con
+        // LATERAL, 0,16 ms y 1 fila). SUM sin filas da NULL, igual que el LEFT JOIN sin coincidencia,
+        // así que COALESCE(..., 0) devuelve exactamente lo mismo.
+        $joinImpuestosPorLinea = "LEFT JOIN LATERAL (
+                SELECT SUM(i.valor) AS total_impuestos
+                FROM ventas_detalle_impuestos i
+                WHERE i.id_venta_detalle = d.id AND i.codigo_impuesto IN ('2','3')
+            ) imp_cxc ON true";
+        $joinIcePorLinea = "LEFT JOIN LATERAL (
+                SELECT SUM(i.valor) AS total_ice
+                FROM ventas_detalle_impuestos i
+                WHERE i.id_venta_detalle = d.id AND i.codigo_impuesto = '3'
+            ) imp_ice ON true";
         // Por producto+documento (no por id_inventario_kardex): un lote/kit puede generar más de un
         // movimiento de Kardex por línea; así se capturan todos los de ese producto en esta venta.
         $joinCostoPorLinea = "LEFT JOIN inventario_kardex kc
@@ -2158,14 +2165,18 @@ class AsientoBuilderService
 
         $aplicaRepartoPorCategoria = $repartePorLinea && !$tieneReglaDescuento && $idRecibo > 0;
 
-        $joinImpuestosPorLinea = "LEFT JOIN (
-                SELECT id_recibo_detalle, SUM(valor) AS total_impuestos
-                FROM recibos_venta_detalle_impuestos WHERE codigo_impuesto IN ('2','3') GROUP BY id_recibo_detalle
-            ) imp_cxc ON imp_cxc.id_recibo_detalle = d.id";
-        $joinIcePorLinea = "LEFT JOIN (
-                SELECT id_recibo_detalle, SUM(valor) AS total_ice
-                FROM recibos_venta_detalle_impuestos WHERE codigo_impuesto = '3' GROUP BY id_recibo_detalle
-            ) imp_ice ON imp_ice.id_recibo_detalle = d.id";
+        // LATERAL por línea, no subconsulta agregada sobre toda la tabla: mismo motivo que en
+        // armarDistribucionVentasFactura(). Usa idx_recibos_venta_detalle_impuestos_detalle.
+        $joinImpuestosPorLinea = "LEFT JOIN LATERAL (
+                SELECT SUM(i.valor) AS total_impuestos
+                FROM recibos_venta_detalle_impuestos i
+                WHERE i.id_recibo_detalle = d.id AND i.codigo_impuesto IN ('2','3')
+            ) imp_cxc ON true";
+        $joinIcePorLinea = "LEFT JOIN LATERAL (
+                SELECT SUM(i.valor) AS total_ice
+                FROM recibos_venta_detalle_impuestos i
+                WHERE i.id_recibo_detalle = d.id AND i.codigo_impuesto = '3'
+            ) imp_ice ON true";
         $joinCostoPorLinea = "LEFT JOIN inventario_kardex kc
                 ON kc.referencia_tipo = 'recibo_venta' AND kc.referencia_id = d.id_recibo
                AND kc.id_producto = d.id_producto AND kc.tipo_movimiento = 'salida' AND kc.eliminado = false";
@@ -2547,10 +2558,13 @@ class AsientoBuilderService
         $gastoLineas = null; $inventarioLineas = null; $porPagarLineas = null;
         $sinCuentaExtra = [];
         if ($repartePorLinea && $idCompra > 0) {
-            $joinImpuestosPorLinea = "LEFT JOIN (
-                    SELECT id_compra_detalle, SUM(valor) AS total_impuestos
-                    FROM compras_detalle_impuestos WHERE codigo_impuesto = '2' GROUP BY id_compra_detalle
-                ) imp_pp ON imp_pp.id_compra_detalle = d.id";
+            // LATERAL por línea, no subconsulta agregada sobre toda la tabla: mismo motivo que en
+            // armarDistribucionVentasFactura(). Usa idx_compras_impuestos_detalle.
+            $joinImpuestosPorLinea = "LEFT JOIN LATERAL (
+                    SELECT SUM(i.valor) AS total_impuestos
+                    FROM compras_detalle_impuestos i
+                    WHERE i.id_compra_detalle = d.id AND i.codigo_impuesto = '2'
+                ) imp_pp ON true";
 
             foreach ($reglas as $rr) {
                 $cod = strtoupper($rr['asiento_tipo_codigo'] ?? $rr['codigo'] ?? '');
@@ -3320,10 +3334,13 @@ class AsientoBuilderService
         unset($rr);
         $aplicaRepartoPorCategoria = !$entidadTieneReglas && $idNotaCredito > 0;
 
-        $joinImpuestosPorLinea = "LEFT JOIN (
-                SELECT id_nota_credito_detalle, SUM(valor) AS total_impuestos
-                FROM notas_credito_detalle_impuestos WHERE codigo_impuesto = '2' GROUP BY id_nota_credito_detalle
-            ) imp_cxc ON imp_cxc.id_nota_credito_detalle = d.id";
+        // LATERAL por línea, no subconsulta agregada sobre toda la tabla: mismo motivo que en
+        // armarDistribucionVentasFactura(). Usa idx_nc_detalle_impuestos_id_detalle.
+        $joinImpuestosPorLinea = "LEFT JOIN LATERAL (
+                SELECT SUM(i.valor) AS total_impuestos
+                FROM notas_credito_detalle_impuestos i
+                WHERE i.id_nota_credito_detalle = d.id AND i.codigo_impuesto = '2'
+            ) imp_cxc ON true";
         $joinCostoPorLinea = "LEFT JOIN inventario_kardex kc
                 ON kc.referencia_tipo = 'nota_credito' AND kc.referencia_id = d.id_nota_credito
                AND kc.id_producto = d.id_producto AND kc.tipo_movimiento = 'entrada' AND kc.eliminado = false";
