@@ -6,7 +6,7 @@ ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones
-version: 1.7
+version: 1.8
 orden: 47
 estado: activo
 ---
@@ -40,7 +40,8 @@ producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
   **catálogo** de productos.
 - La **diferencia** entre lo entregado y lo devuelto es solo **informativa**:
   el documento no genera cobro ni cuenta por cobrar. No aparece en el
-  formulario ni en el PDF; se ve en la columna *Diferencia* del listado.
+  formulario, el PDF, el Excel ni el listado; solo se puede filtrar por ella
+  desde la ventana de filtros del listado.
 
 ## Requisitos previos
 
@@ -91,9 +92,16 @@ unidades: lo que se devuelve lleva *Origen, Producto, Lote / NUP, Bodega, Saldo
 y Cantidad*; lo que se entrega, *Origen, Producto, Bodega, Lote / NUP y
 Cantidad*.
 
-Al abrir un cambio ya guardado, cada línea muestra de dónde salió: *Factura
-001-001-000000123* (número de la factura de venta), *Cambio 001-001-000000004*,
-*Consignación 001-001-000000012* o *Bodega*.
+La columna **Origen** del formulario (y del PDF y el Excel del cambio) dice de
+dónde viene cada línea:
+
+- **Lo que se devuelve**: *Factura 001-001-000000123*, el número de la **factura
+  de venta afectada**. Si la unidad llegó en un cambio anterior, se muestra
+  igual la factura de venta de la que vino (el número de ese cambio aparece al
+  pasar el mouse); solo si no se encuentra la factura se ve *Cambio …*.
+- **Lo que se entrega**: *Consignación 001-001-000000012*, el número de la
+  consignación de la que se tomó la unidad; o *Existencias*, *Catálogo* o
+  *Bodega* si sale de bodega.
 
 ## Registro en Facturación de consignaciones
 
@@ -134,7 +142,7 @@ que **sale** (lo que recibe a cambio).
 
 | Lado | Columnas |
 |------|----------|
-| Entra (rojo) | Cantidad, Producto (con el código debajo), Lote, Bodega a la que entra, Factura (número de la factura de venta de la que viene, o *Cambio …* si viene de un cambio anterior) |
+| Entra (rojo) | Cantidad, Producto (con el código debajo), Lote, Bodega a la que entra, Factura (número de la factura de venta de la que vino el cambio: la de la unidad que entra, también si llegó en un cambio anterior; en las filas que solo tienen producto que sale, en gris, la factura del cambio) |
 | Sale (verde) | Cantidad, Producto (con el código debajo), Lote, Bodega de la que sale, Cliente, Observaciones del cambio |
 
 - Cada fila **empareja** un producto que entra con uno que sale del mismo
@@ -246,8 +254,8 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   definitivo se asigna al guardar y no se puede repetir en la misma serie.
 - **Diferencia**: se calcula a precio de venta —el de la línea de origen, con
   su IVA; para lo que sale de bodega o del catálogo, el primer precio de lista
-  del producto— y es informativa. Solo se ve en el listado (columna y filtros);
-  el formulario y el PDF no muestran precios ni totales.
+  del producto— y es informativa. Solo se usa en los filtros del listado; el
+  formulario, el PDF, el Excel y el listado no muestran precios ni totales.
 
 ## Integraciones con otros módulos
 
@@ -270,11 +278,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   pasar a borrador el cambio libera ese saldo. Además, la consignación queda con
   factura asociada y ya no se puede cambiar su estado.
 - **PDF, Excel y correo** desde la barra de acciones del documento. El PDF (el
-  mismo que se envía por correo) lista lo devuelto y lo entregado con origen,
-  código, descripción, lote, NUP, bodega y cantidad, **sin precios, totales ni
-  diferencia**. El Excel todavía incluye precio unitario, total y los totales.
-  Si la empresa tiene una plantilla propia activa en *Plantillas PDF*, se usa
-  esa plantilla tal como fue diseñada.
+  mismo que se envía por correo) y el Excel listan lo devuelto y lo entregado
+  con origen, código, descripción, lote, NUP, bodega y cantidad, **sin precios,
+  totales ni diferencia**. Si la empresa tiene una plantilla propia activa en
+  *Plantillas PDF*, el PDF usa esa plantilla tal como fue diseñada.
 
 ## Errores frecuentes
 
@@ -308,6 +315,15 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.8** — Columna **Origen**: lo que se devuelve muestra siempre la **factura de
+  venta afectada**, también cuando la unidad llegó en un cambio anterior (antes
+  salía el número de ese cambio); lo que se entrega desde consignación muestra
+  *Consignación* con su **número** en la misma etiqueta. En el listado, la
+  columna **Factura** se llena en todas las filas: en las que solo tienen
+  producto que sale aparece, en gris, la factura de la que vino el cambio (la de
+  la última unidad que entra, la misma con la que se registra en Facturación de
+  consignaciones). El **Excel del cambio** queda como el PDF: sin precio
+  unitario, total ni la fila de totales, y con la columna *Bodega*.
 - **1.7** — Al emitir un cambio, lo entregado **desde consignación** queda
   registrado en **Facturación de consignaciones** como *Facturada* con la
   factura de venta de lo devuelto (emparejado en orden, un registro por factura),

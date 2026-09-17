@@ -165,12 +165,18 @@ class CambioProductoCvPdfService
 
     /**
      * Etiqueta del origen de una línea del cambio (también la usa el Excel):
-     * "Factura 001-001-000000123" (número de la factura de venta que generó la factura de
-     * consignación, ver CambioProductoCvRepository::getDetalles), "Cambio 001-001-000000004",
-     * "Consignación 001-001-000000012" o "Bodega" (entrega desde existencias / catálogo).
+     *  - lo que ENTRA: "Factura 001-001-000000123", la factura de venta afectada, también cuando la
+     *    unidad llegó en un cambio anterior (factura_afectada, CambioProductoCvService::getDetalleCompleto);
+     *    si no se encuentra, "Cambio 001-001-000000004";
+     *  - lo que SALE: "Consignación 001-001-000000012" (consignación de la que se tomó) o "Bodega"
+     *    (existencias / catálogo).
      */
     public static function etiquetaOrigen(array $d): string
     {
+        $factura = trim((string)($d['factura_afectada'] ?? ''));
+        if (($d['tipo_linea'] ?? '') === 'devolucion' && $factura !== '') {
+            return 'Factura ' . $factura;
+        }
         $tipo = strtoupper((string)($d['origen_tipo'] ?? ''));
         $num  = trim((string)($d['origen_numero'] ?? ''));
         $nombres = ['FACTURA' => 'Factura', 'CAMBIO' => 'Cambio', 'CONSIGNACION' => 'Consignación'];

@@ -369,6 +369,8 @@ class CambioProductoCvRepository extends BaseRepository
                    dv.lote        AS dev_lote,
                    bdv.nombre     AS dev_bodega,
                    dv.origen_tipo AS dev_origen_tipo,
+                   dv.id_origen   AS dev_id_origen,
+                   dv.id_origen_detalle AS dev_id_origen_detalle,
                    " . self::SQL_ORIGEN_DEV . " AS dev_origen_numero,
                    en.cantidad    AS ent_cantidad,
                    pen.nombre     AS ent_producto_nombre,
@@ -393,6 +395,45 @@ class CambioProductoCvRepository extends BaseRepository
         $st->execute($params);
 
         return ['total' => $total, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /**
+     * Última devolución (en orden de registro) de cada cambio de $idsCambio: con ella se emparejan
+     * las entregas que sobran. [id_cambio => origen_tipo, id_origen, id_origen_detalle y
+     * origen_numero (la factura de venta o el cambio anterior)].
+     */
+    public function getUltimasDevoluciones(array $idsCambio, int $idEmpresa): array
+    {
+        $idsCambio = array_values(array_unique(array_filter(array_map('intval', $idsCambio))));
+        if ($idsCambio === []) {
+            return [];
+        }
+        $params = [':e' => $idEmpresa];
+        $marcas = [];
+        foreach ($idsCambio as $i => $id) {
+            $marcas[] = ":c{$i}";
+            $params[":c{$i}"] = $id;
+        }
+        $sql = "SELECT DISTINCT ON (d.id_cambio)
+                       d.id_cambio, d.origen_tipo, d.id_origen, d.id_origen_detalle,
+                       CASE d.origen_tipo
+                            WHEN 'FACTURA' THEN " . self::sqlNumeroFacturaVenta('vo', 'fvo') . "
+                            WHEN 'CAMBIO'  THEN (COALESCE(co.serie,'') || '-' || COALESCE(co.secuencial,''))
+                       END AS origen_numero
+                FROM cambios_producto_cv_detalles d
+                LEFT JOIN consignaciones_facturas vo ON d.origen_tipo = 'FACTURA' AND vo.id = d.id_origen
+                LEFT JOIN ventas_cabecera fvo       ON fvo.id = vo.id_factura
+                LEFT JOIN cambios_producto_cv co    ON d.origen_tipo = 'CAMBIO' AND co.id = d.id_origen
+                WHERE d.id_cambio IN (" . implode(', ', $marcas) . ") AND d.id_empresa = :e
+                  AND d.tipo_linea = 'devolucion' AND COALESCE(d.eliminado, false) = false
+                ORDER BY d.id_cambio, d.id DESC";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[(int) $row['id_cambio']] = $row;
+        }
+        return $out;
     }
 
     /**

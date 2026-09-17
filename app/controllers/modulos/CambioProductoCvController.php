@@ -257,14 +257,19 @@ class CambioProductoCvController extends BaseModuloController
     }
 
     /**
-     * Número del documento de origen de lo que ENTRA, como texto para PDF/Excel: la factura
-     * de venta, o "Cambio …" si la unidad viene de un cambio anterior.
+     * Columna Factura del listado, como texto para PDF/Excel: la factura de venta afectada por lo que
+     * entra (también si la unidad llegó en un cambio anterior; si no se encuentra, "Cambio …") y, en
+     * las filas que solo tienen lo que sale, la factura de la que vino el cambio.
      */
     private static function textoFacturaDev(array $r): string
     {
+        $afectada = trim((string) ($r['dev_factura_afectada'] ?? ''));
+        if ($afectada !== '') {
+            return $afectada;
+        }
         $num = trim((string) ($r['dev_origen_numero'] ?? ''));
         if ($num === '') {
-            return '';
+            return trim((string) ($r['factura_cambio'] ?? ''));
         }
         return (($r['dev_origen_tipo'] ?? '') === 'CAMBIO' ? 'Cambio ' : '') . $num;
     }
@@ -660,7 +665,10 @@ class CambioProductoCvController extends BaseModuloController
         exit;
     }
 
-    /** Genera el Excel del cambio (mismas secciones que el PDF: Devuelve / Entrega). */
+    /**
+     * Genera el Excel del cambio: mismas secciones y columnas que el PDF (Devuelve / Entrega con
+     * Origen, Código, Descripción, Lote, NUP, Bodega y Cantidad), sin precios ni totales.
+     */
     public function excel(): void
     {
         $this->requireLeer();
@@ -690,11 +698,11 @@ class CambioProductoCvController extends BaseModuloController
             $sheet->setTitle('Cambio');
 
             $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
-            $sheet->mergeCells('A1:F1');
+            $sheet->mergeCells('A1:G1');
             $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
 
             $sheet->setCellValue('A2', 'CAMBIO DE PRODUCTOS N.° ' . ($numero !== '' ? $numero : '—'));
-            $sheet->mergeCells('A2:F2');
+            $sheet->mergeCells('A2:G2');
             $sheet->getStyle('A2')->getFont()->setBold(true);
 
             $fecha = !empty($cambio['fecha_cambio']) ? date('d-m-Y', strtotime((string)$cambio['fecha_cambio'])) : '';
@@ -714,18 +722,18 @@ class CambioProductoCvController extends BaseModuloController
                 $sheet->getStyle('A' . $row)->getFont()->setBold(true);
                 $row++;
 
-                // Origen (factura / cambio / consignación de la que sale la línea) y NUP:
-                // el cambio se hace por unidad, así que el documento debe decir cuál.
-                $headers = ['Origen', 'Código', 'Descripción', 'Lote', 'NUP', 'Cantidad', 'P. Unitario', 'Total'];
+                // Igual que el PDF: el cambio se hace por unidad, así que cada fila dice de dónde
+                // viene (Origen), cuál es (lote / NUP) y su bodega. Sin precios ni totales.
+                $headers = ['Origen', 'Código', 'Descripción', 'Lote', 'NUP', 'Bodega', 'Cantidad'];
                 $col = 'A';
                 foreach ($headers as $h) { $sheet->setCellValue($col . $row, $h); $col++; }
-                $sheet->getStyle('A' . $row . ':H' . $row)->applyFromArray($headerStyle);
+                $sheet->getStyle('A' . $row . ':G' . $row)->applyFromArray($headerStyle);
                 $row++;
 
                 $inicio = $row;
                 if (empty($filas)) {
                     $sheet->setCellValue('A' . $row, 'Sin productos.');
-                    $sheet->mergeCells('A' . $row . ':H' . $row);
+                    $sheet->mergeCells('A' . $row . ':G' . $row);
                     $row++;
                 } else {
                     foreach ($filas as $d) {
@@ -734,40 +742,25 @@ class CambioProductoCvController extends BaseModuloController
                         $sheet->setCellValueExplicit('C' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                         $sheet->setCellValueExplicit('D' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                         $sheet->setCellValueExplicit('E' . $row, (string)($d['nup'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                        $sheet->setCellValue('F' . $row, (float)($d['cantidad'] ?? 0));
-                        $sheet->setCellValue('G' . $row, (float)($d['precio_unitario'] ?? 0));
-                        $sheet->setCellValue('H' . $row, (float)($d['total'] ?? 0));
+                        $sheet->setCellValueExplicit('F' . $row, (string)($d['bodega_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValue('G' . $row, (float)($d['cantidad'] ?? 0));
                         $row++;
                     }
                 }
-                $sheet->getStyle('F' . $inicio . ':H' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle('G' . $inicio . ':G' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
                 $row++;
             };
 
             $escribirTabla('Productos que devuelve', $devoluciones);
             $escribirTabla('Productos que entrega a cambio', $entregas);
 
-            $totales = [
-                'Total devuelto'  => (float)($cambio['subtotal_devuelto'] ?? 0),
-                'Total entregado' => (float)($cambio['subtotal_entregado'] ?? 0),
-                'Diferencia'      => (float)($cambio['diferencia'] ?? 0),
-            ];
-            foreach ($totales as $label => $valor) {
-                $sheet->setCellValue('E' . $row, $label);
-                $sheet->getStyle('E' . $row)->getFont()->setBold(true);
-                $sheet->setCellValue('F' . $row, $valor);
-                $sheet->getStyle('F' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-                $row++;
-            }
-
-            $row++;
             $sheet->setCellValue('A' . $row, 'Motivo: ' . (string)($cambio['motivo'] ?? ''));
-            $sheet->mergeCells('A' . $row . ':F' . $row);
+            $sheet->mergeCells('A' . $row . ':G' . $row);
             $row++;
             $sheet->setCellValue('A' . $row, 'Observaciones: ' . (string)($cambio['observaciones'] ?? ''));
-            $sheet->mergeCells('A' . $row . ':F' . $row);
+            $sheet->mergeCells('A' . $row . ':G' . $row);
 
-            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $c) {
+            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G'] as $c) {
                 $sheet->getColumnDimension($c)->setAutoSize(true);
             }
 

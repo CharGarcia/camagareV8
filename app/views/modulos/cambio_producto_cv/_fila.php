@@ -24,12 +24,19 @@ $producto = static function ($nombre, $codigo) use ($h): string {
          . (($codigo ?? '') !== '' ? '<div class="small text-muted">' . $h($codigo) . '</div>' : '');
 };
 
-// Documento de origen de lo que entra: la factura de venta o, si viene de un cambio anterior, ese cambio.
-$factura = '';
-if (($r['dev_origen_numero'] ?? '') !== '') {
+// Factura de venta de la que vino el cambio en esta fila: la de lo que entra, también si la unidad
+// llegó en un cambio anterior (ese cambio queda en el título); si no se encuentra, el número del
+// cambio. En las filas que solo tienen lo que sale, la del cambio (factura_cambio), en gris.
+$factura  = '';
+$afectada = trim((string) ($r['dev_factura_afectada'] ?? ''));
+if ($afectada !== '') {
     $factura = ($r['dev_origen_tipo'] ?? '') === 'CAMBIO'
-        ? '<span class="small text-muted">Cambio</span> ' . $h($r['dev_origen_numero'])
-        : $h($r['dev_origen_numero']);
+        ? '<span title="Entregada en el cambio ' . $h($r['dev_origen_numero'] ?? '') . '">' . $h($afectada) . '</span>'
+        : $h($afectada);
+} elseif (($r['dev_origen_numero'] ?? '') !== '') {
+    $factura = '<span class="small text-muted">Cambio</span> ' . $h($r['dev_origen_numero']);
+} elseif (trim((string) ($r['factura_cambio'] ?? '')) !== '') {
+    $factura = '<span class="text-muted" title="Factura de la que vino este cambio de productos">' . $h($r['factura_cambio']) . '</span>';
 }
 
 // El listado ya no tiene columna Estado: un cambio anulado o en borrador se distingue en la fila.

@@ -42,6 +42,9 @@ class CambioProductoCvService
     /** Número (serie-secuencial) que el servidor asignó en el último crear(); lo muestra el controlador. */
     private ?string $ultimoNumeroGenerado = null;
 
+    /** Cache por petición de facturaAfectada() para unidades que llegaron en un cambio: id de la línea de entrega → número. */
+    private array $facturasAfectadas = [];
+
     public function __construct(
         CambioProductoCvRepository $repository,
         CambioProductoCvRules $rules,
@@ -109,10 +112,33 @@ class CambioProductoCvService
         ];
     }
 
-    /** Listado principal: una fila por pareja "entra ↔ sale" (ver CambioProductoCvRepository::getListado). */
+    /**
+     * Listado principal: una fila por pareja "entra ↔ sale" (ver CambioProductoCvRepository::getListado).
+     * Agrega la factura de venta de la que vino el cambio en esa fila:
+     *  - dev_factura_afectada: la de lo que entra (ver facturaAfectada());
+     *  - factura_cambio: en las filas que solo tienen lo que sale, la de la última devolución del
+     *    cambio, que es con la que se emparejan las entregas que sobran (misma regla que el registro
+     *    en Facturación de consignaciones).
+     */
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro, array $ordenMulti = []): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $ordenMulti);
+        $res = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $ordenMulti);
+
+        $soloSale = array_map(fn($r) => (int) $r['id'], array_filter($res['rows'], fn($r) => $r['dev_cantidad'] === null));
+        $ultimas  = $this->repository->getUltimasDevoluciones($soloSale, $idEmpresa);
+
+        foreach ($res['rows'] as &$r) {
+            $r['dev_factura_afectada'] = $this->facturaAfectada($r['dev_origen_tipo'] ?? null, $r['dev_origen_numero'] ?? null,
+                (int) ($r['dev_id_origen'] ?? 0), (int) ($r['dev_id_origen_detalle'] ?? 0), $idEmpresa);
+            $r['factura_cambio'] = null;
+            if ($r['dev_cantidad'] === null && isset($ultimas[(int) $r['id']])) {
+                $u = $ultimas[(int) $r['id']];
+                $r['factura_cambio'] = $this->facturaAfectada($u['origen_tipo'] ?? null, $u['origen_numero'] ?? null,
+                    (int) ($u['id_origen'] ?? 0), (int) ($u['id_origen_detalle'] ?? 0), $idEmpresa);
+            }
+        }
+        unset($r);
+        return $res;
     }
 
     /** Búsqueda libre dentro de los cambios (líneas devueltas y entregadas): pestaña Detalles del buscador. */
@@ -130,10 +156,19 @@ class CambioProductoCvService
         ];
     }
 
-    /** Líneas a devolver (facturas de consignación + cambios previos). $idCliente null = todos los clientes. */
+    /**
+     * Líneas a devolver (facturas de consignación + cambios previos). $idCliente null = todos los clientes.
+     * Agrega factura_afectada: la factura de venta de la que viene cada unidad (ver facturaAfectada()).
+     */
     public function getLineasDisponiblesCliente(int $idEmpresa, ?int $idCliente, string $q, ?int $excluirCambio = null): array
     {
-        return $this->repository->getLineasDisponiblesCliente($idEmpresa, $idCliente, $q, $excluirCambio);
+        $rows = $this->repository->getLineasDisponiblesCliente($idEmpresa, $idCliente, $q, $excluirCambio);
+        foreach ($rows as &$r) {
+            $r['factura_afectada'] = $this->facturaAfectada($r['origen_tipo'] ?? null, $r['doc_numero'] ?? null,
+                (int) ($r['id_origen'] ?? 0), (int) ($r['id_origen_detalle'] ?? 0), $idEmpresa);
+        }
+        unset($r);
+        return $rows;
     }
 
     /** Líneas de consignaciones entregadas con saldo en poder del cliente, para entregarlas a cambio. */
@@ -148,12 +183,51 @@ class CambioProductoCvService
         return $this->repository->buscarInventario($idEmpresa, $q, $limite);
     }
 
+    /**
+     * Cabecera + detalles (modal, PDF, Excel, correo). Cada línea que entra lleva factura_afectada:
+     * la factura de venta de la que viene (ver facturaAfectada()).
+     */
     public function getDetalleCompleto(int $id, int $idEmpresa): ?array
     {
         $cabecera = $this->repository->find($id, $idEmpresa);
         if (!$cabecera) return null;
         $cabecera['detalles'] = $this->repository->getDetalles($id, $idEmpresa);
+        foreach ($cabecera['detalles'] as &$d) {
+            if (($d['tipo_linea'] ?? '') === 'devolucion') {
+                $d['factura_afectada'] = $this->facturaAfectada($d['origen_tipo'] ?? null, $d['origen_numero'] ?? null,
+                    (int) ($d['id_origen'] ?? 0), (int) ($d['id_origen_detalle'] ?? 0), $idEmpresa);
+            }
+        }
+        unset($d);
         return $cabecera;
+    }
+
+    /**
+     * Número de la factura de venta AFECTADA por una unidad que entra: el de su factura de venta
+     * ($numeroOrigen, cuando viene de una factura de consignación) o, si la unidad llegó en un
+     * cambio anterior, el de la factura de venta de origen de esa unidad (resolverFacturaDeVenta:
+     * la factura donde quedó registrada o la del emparejamiento de ese cambio). Null si no se
+     * encuentra: la vista muestra entonces el número del cambio.
+     */
+    private function facturaAfectada(?string $origenTipo, ?string $numeroOrigen, int $idOrigen, int $idOrigenDetalle, int $idEmpresa): ?string
+    {
+        $origenTipo = strtoupper((string) $origenTipo);
+        if ($origenTipo === 'FACTURA') {
+            $num = trim((string) $numeroOrigen);
+            return $num !== '' ? $num : null;
+        }
+        if ($origenTipo !== 'CAMBIO' || $idOrigenDetalle <= 0) {
+            return null;
+        }
+        if (!array_key_exists($idOrigenDetalle, $this->facturasAfectadas)) {
+            $factura = $this->resolverFacturaDeVenta(
+                ['origen_tipo' => 'CAMBIO', 'id_origen' => $idOrigen, 'id_origen_detalle' => $idOrigenDetalle],
+                $idEmpresa
+            );
+            $num = trim((string) ($factura['numero_factura'] ?? ''));
+            $this->facturasAfectadas[$idOrigenDetalle] = $num !== '' ? $num : null;
+        }
+        return $this->facturasAfectadas[$idOrigenDetalle];
     }
 
     public function getPorId(int $id, int $idEmpresa): ?array

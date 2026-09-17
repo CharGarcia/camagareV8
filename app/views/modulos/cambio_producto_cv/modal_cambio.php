@@ -144,7 +144,7 @@
                             <table class="table table-sm table-hover mb-0 align-middle" id="tablaCamEnt">
                                 <thead class="table-light">
                                     <tr class="small">
-                                        <th style="width:130px">Origen</th>
+                                        <th style="width:200px">Origen</th>
                                         <th>Producto</th>
                                         <th style="width:140px">Bodega</th>
                                         <th style="width:160px">Lote / NUP</th>
@@ -545,9 +545,24 @@
     function camLabelOrigen(t) {
         return t === 'CAMBIO' ? 'Cambio' : (t === 'CONSIGNACION' ? 'Consignación' : (t === 'FACTURA' ? 'Factura' : 'Bodega'));
     }
-    function camBadgeOrigen(t, texto) {
+    function camBadgeOrigen(t, texto, titulo) {
         const cls = t === 'CAMBIO' ? 'bg-info' : (t === 'CONSIGNACION' ? 'bg-warning' : (t === 'FACTURA' ? 'bg-secondary' : 'bg-primary'));
-        return `<span class="badge ${cls} bg-opacity-25 text-dark">${esc(texto != null ? texto : camLabelOrigen(t))}</span>`;
+        return `<span class="badge ${cls} bg-opacity-25 text-dark"${titulo ? ` title="${esc(titulo)}"` : ''}>${esc(texto != null ? texto : camLabelOrigen(t))}</span>`;
+    }
+    /**
+     * Origen de lo que ENTRA: el número de la factura de venta afectada. Si la unidad llegó en un
+     * cambio anterior, el servidor resuelve esa factura (factura_afectada) y el cambio queda en el
+     * título; si no la encuentra, se muestra el cambio.
+     */
+    function camBadgeOrigenDev(tipo, numeroOrigen, facturaAfectada) {
+        if (facturaAfectada) {
+            return camBadgeOrigen(tipo, 'Factura ' + facturaAfectada, tipo === 'CAMBIO' ? 'Entregada en el cambio ' + (numeroOrigen || '') : '');
+        }
+        return camBadgeOrigen(tipo, camLabelOrigen(tipo) + (numeroOrigen ? ' ' + numeroOrigen : ''));
+    }
+    /** Origen de lo que SALE desde una consignación: el número de esa consignación. */
+    function camBadgeOrigenConsignacion(numero) {
+        return camBadgeOrigen('CONSIGNACION', 'Consignación ' + (numero || ''));
     }
     function camLoteNup(l) {
         return [l.lote, l.nup].filter(Boolean).join(' / ') || '—';
@@ -668,7 +683,6 @@
         if (empty) empty.parentElement.removeChild(empty);
 
         const saldo = num(l.saldo_pendiente);
-        const ori = camLabelOrigen(l.origen_tipo) + ' ' + (l.doc_numero || '');
         const tr = document.createElement('tr');
         tr.setAttribute('data-key', key);
         tr.dataset.origenTipo = l.origen_tipo;
@@ -676,7 +690,7 @@
         tr.dataset.saldo = saldo;
         // Bodega de la que salió la unidad (la de la línea de origen): ahí vuelve a entrar.
         tr.innerHTML = `
-            <td class="small">${camBadgeOrigen(l.origen_tipo, ori)}</td>
+            <td class="small">${camBadgeOrigenDev(l.origen_tipo, l.doc_numero, l.factura_afectada)}</td>
             <td class="small">${esc(l.producto_codigo ? l.producto_codigo + ' · ' : '')}${esc(l.producto_nombre)}</td>
             <td class="small">${esc(camLoteNup(l))}</td>
             <td class="small">${esc(l.bodega_nombre || '—')}</td>
@@ -810,7 +824,7 @@
         tr.dataset.precio = precio;
         tr.dataset.porc = iva;
         const origenCell = esConsig
-            ? `${camBadgeOrigen('CONSIGNACION')}<div class="text-muted" style="font-size:.7rem">${esc(o.doc_numero || '')}</div>`
+            ? camBadgeOrigenConsignacion(o.doc_numero)
             : camBadgeOrigen('BODEGA', o.tipo === 'INVENTARIO' ? 'Existencias' : 'Catálogo');
         tr.innerHTML = `
             <td class="small">${origenCell}</td>
@@ -898,7 +912,6 @@
     }
 
     function camPintarDevExistente(d, editable) {
-        const ori = camLabelOrigen(d.origen_tipo) + (d.origen_numero ? ' ' + d.origen_numero : '');
         const loteNup = camLoteNup(d);
         const saldoRef = num(d.cantidad); // en edición el máximo real se revalida en el server
         const tr = document.createElement('tr');
@@ -910,7 +923,7 @@
             ? `<input type="number" class="form-control form-control-sm text-end cam-dev-cant" min="0" step="any" value="${num(d.cantidad)}" oninput="camOnCantDev(this)" style="height:26px;font-size:.8rem;">`
             : `<span class="cam-dev-cant-ro">${fmt(d.cantidad, DEC_C)}</span>`;
         tr.innerHTML = `
-            <td class="small">${camBadgeOrigen(d.origen_tipo, ori)}</td>
+            <td class="small">${camBadgeOrigenDev(d.origen_tipo, d.origen_numero, d.factura_afectada)}</td>
             <td class="small">${esc(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${esc(d.producto_nombre)}</td>
             <td class="small">${esc(loteNup)}</td>
             <td class="small">${esc(d.bodega_nombre || '—')}</td>
@@ -935,7 +948,7 @@
         tr.dataset.precio = num(d.precio_unitario);
         tr.dataset.porc = num(d.porcentaje_impuesto);
         const origenCell = esConsig
-            ? `${camBadgeOrigen('CONSIGNACION')}<div class="text-muted" style="font-size:.7rem">${esc(d.origen_numero || '')}</div>`
+            ? camBadgeOrigenConsignacion(d.origen_numero)
             : camBadgeOrigen('BODEGA');
         if (editable) {
             tr.innerHTML = `
