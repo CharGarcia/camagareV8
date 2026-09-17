@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados
-version: 1.11
+etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup
+version: 1.12
 orden: 47
 estado: activo
 ---
@@ -89,7 +89,7 @@ producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
    asiento.
 
 Las tablas del formulario **no muestran precios, IVA ni totales**, solo
-unidades. Las dos tablas llevan *Origen, Producto, Bodega, Lote / NUP y
+unidades. Las dos tablas llevan *Origen, Producto, Bodega, Lote, NUP y
 Cantidad*.
 
 La columna **Origen** del formulario (y del PDF y el Excel del cambio) dice de
@@ -152,8 +152,8 @@ cambio; luego, a la **izquierda**, con encabezados en **rojo**, el producto que
 | Lado | Columnas |
 |------|----------|
 | Fecha (celeste) | Fecha de emisión del cambio |
-| Entra (rojo) | Cantidad, Producto (con el código debajo), Lote, Bodega a la que entra, Factura (número de la factura de venta de la que vino el cambio: la de la unidad que entra, también si llegó en un cambio anterior; en las filas que solo tienen producto que sale, en gris, la factura del cambio; *Sin factura* si no hay factura de venta que mostrar) |
-| Sale (verde) | Cantidad, Producto (con el código debajo), Lote, Bodega de la que sale, Cliente, Observaciones del cambio |
+| Entra (rojo) | Cantidad, Producto (con el código debajo), Lote, NUP (el de la unidad en la facturación de consignación), Bodega a la que entra, Factura (número de la factura de venta de la que vino el cambio: la de la unidad que entra, también si llegó en un cambio anterior; en las filas que solo tienen producto que sale, en gris, la factura del cambio; *Sin factura* si no hay factura de venta que mostrar) |
+| Sale (verde) | Cantidad, Producto (con el código debajo), Lote, NUP, Bodega de la que sale, Cliente, Observaciones del cambio |
 
 - Cada fila **empareja** un producto que entra con uno que sale del mismo
   cambio, en el orden en que se registraron (el primero con el primero, el
@@ -224,8 +224,8 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Secuencial | Automático | Vista previa; el número definitivo lo asigna el sistema al guardar. |
 | Cliente | Sí | Se fija solo con el primer ítem agregado (factura de consignación, cambio o consignación) o se elige a mano. Backspace en el campo lo limpia junto con las líneas que dependen de él. |
 | Motivo / Observaciones | No | Texto libre. |
-| Productos que devuelve | Sí (al menos uno) | Ítems de facturas de consignación (estado *facturada*) o de cambios anteriores con saldo pendiente. Columnas: origen (n.º de la factura de venta o del cambio), producto, bodega, lote / NUP y cantidad (propone el saldo pendiente y no puede superarlo). |
-| Productos que entrega a cambio | No | Ítems desde consignación, existencias o catálogo. Columnas: origen, producto, bodega, lote / NUP y cantidad. |
+| Productos que devuelve | Sí (al menos uno) | Ítems de facturas de consignación (estado *facturada*) o de cambios anteriores con saldo pendiente. Columnas: origen (n.º de la factura de venta o del cambio), producto, bodega, lote, NUP y cantidad (propone el saldo pendiente y no puede superarlo). |
+| Productos que entrega a cambio | No | Ítems desde consignación, existencias o catálogo. Columnas: origen, producto, bodega, lote, NUP y cantidad. |
 | Estado | Solo al editar | Borrador, Emitida o Anulada. Está a la derecha de la barra de botones (PDF, Excel, correo y WhatsApp). |
 
 ## Permisos
@@ -343,12 +343,19 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.12** — En el formulario, **Lote** y **NUP** pasan a columnas separadas en
+  las dos tablas (lo que se devuelve y lo que se entrega). El listado agrega
+  también la columna **NUP** del producto que sale, después de su *Lote*, y la
+  lleva a su PDF y Excel.
+
 - **1.11** — En *Productos que devuelve* se quita la columna **Saldo** (la
   cantidad sigue proponiéndolo y no deja superarlo) y **Bodega** pasa antes de
   *Lote / NUP*, igual que en lo que se entrega. Los cambios migrados completan
   el NUP de lo devuelto en más casos: cuando la factura tiene una sola unidad
   posible y, si vendió varias, cuando se puede saber cuál volvió porque esa
-  unidad se consignó de nuevo después del cambio.
+  unidad se consignó de nuevo después del cambio. El listado agrega la columna
+  **NUP** del producto que entra, después del *Lote* (también en su PDF y
+  Excel); se puede ordenar y ocultar como las demás.
 
 - **1.10** — Los cambios **migrados** del sistema anterior muestran la factura de
   venta de lo devuelto (ese sistema sí la guardaba), los NUP y, en lo entregado,

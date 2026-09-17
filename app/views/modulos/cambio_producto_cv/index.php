@@ -170,11 +170,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'dev_cantidad'  => 'Entra: cantidad',
                     'dev_producto'  => 'Entra: producto',
                     'dev_lote'      => 'Entra: lote',
+                    'dev_nup'       => 'Entra: NUP',
                     'dev_bodega'    => 'Entra: bodega',
                     'dev_factura'   => 'Entra: factura',
                     'ent_cantidad'  => 'Sale: cantidad',
                     'ent_producto'  => 'Sale: producto',
                     'ent_lote'      => 'Sale: lote',
+                    'ent_nup'       => 'Sale: NUP',
                     'ent_bodega'    => 'Sale: bodega',
                     'cliente'       => 'Cliente',
                     'observaciones' => 'Observaciones',
@@ -204,11 +206,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="text-end sortable-header cam-th-entra" role="button" data-col="dev_cantidad" title="Producto que entra">Cantidad <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-entra" role="button" data-col="dev_producto" title="Producto que entra">Producto <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-entra" role="button" data-col="dev_lote" title="Producto que entra">Lote <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="sortable-header cam-th-entra" role="button" data-col="dev_nup" title="NUP del producto que entra">NUP <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-entra" role="button" data-col="dev_bodega" title="Bodega a la que entra">Bodega <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-entra" role="button" data-col="dev_factura" title="Factura de venta de la que viene">Factura <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="text-end sortable-header cam-th-sale cam-lado-sale" role="button" data-col="ent_cantidad" title="Producto que sale">Cantidad <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-sale" role="button" data-col="ent_producto" title="Producto que sale">Producto <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-sale" role="button" data-col="ent_lote" title="Producto que sale">Lote <i class="bi bi-arrow-down-up small ms-1"></i></th>
+                        <th class="sortable-header cam-th-sale" role="button" data-col="ent_nup" title="NUP del producto que sale">NUP <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-sale" role="button" data-col="ent_bodega" title="Bodega de la que sale">Bodega <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="sortable-header cam-th-sale" role="button" data-col="cliente">Cliente <i class="bi bi-arrow-down-up small ms-1"></i></th>
                         <th class="pe-3 sortable-header cam-th-sale" role="button" data-col="observaciones">Observaciones <i class="bi bi-arrow-down-up small ms-1"></i></th>
@@ -217,7 +221,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="grid-body">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="12" class="text-center py-5 text-muted">
+                            <td colspan="14" class="text-center py-5 text-muted">
                                 <i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>
                                 No se encontraron cambios.
                             </td>

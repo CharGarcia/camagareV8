@@ -351,12 +351,14 @@ class CambioProductoCvRepository extends BaseRepository
         'dev_cantidad'  => 'dv.cantidad IS NULL, dv.cantidad',
         'dev_producto'  => 'pdv.nombre IS NULL, pdv.nombre',
         'dev_lote'      => "COALESCE(dv.lote, '') = '', dv.lote",
+        'dev_nup'       => "COALESCE(dv.nup, '') = '', dv.nup",
         'dev_bodega'    => 'bdv.nombre IS NULL, bdv.nombre',
         'dev_factura'   => self::SQL_ORIGEN_DEV . ' IS NULL, ' . self::SQL_ORIGEN_DEV,
         // Lo que SALE (entrega)
         'ent_cantidad'  => 'en.cantidad IS NULL, en.cantidad',
         'ent_producto'  => 'pen.nombre IS NULL, pen.nombre',
         'ent_lote'      => "COALESCE(en.lote, '') = '', en.lote",
+        'ent_nup'       => "COALESCE(en.nup, '') = '', en.nup",
         'ent_bodega'    => 'ben.nombre IS NULL, ben.nombre',
         'cliente'       => 'c.nombre',
         'observaciones' => "COALESCE(r.observaciones, '') = '', r.observaciones",
@@ -427,6 +429,7 @@ class CambioProductoCvRepository extends BaseRepository
                    pdv.nombre     AS dev_producto_nombre,
                    pdv.codigo     AS dev_producto_codigo,
                    dv.lote        AS dev_lote,
+                   dv.nup         AS dev_nup,
                    bdv.nombre     AS dev_bodega,
                    dv.origen_tipo AS dev_origen_tipo,
                    dv.id_origen   AS dev_id_origen,
@@ -436,6 +439,7 @@ class CambioProductoCvRepository extends BaseRepository
                    pen.nombre     AS ent_producto_nombre,
                    pen.codigo     AS ent_producto_codigo,
                    en.lote        AS ent_lote,
+                   en.nup         AS ent_nup,
                    ben.nombre     AS ent_bodega
             FROM pares p
             INNER JOIN cambios_producto_cv r ON r.id = p.id_cambio

@@ -64,11 +64,13 @@ $dataRow = $h(json_encode([
     <td class="text-end" data-col="dev_cantidad"><?= $cantidad($r['dev_cantidad'] ?? null) ?></td>
     <td data-col="dev_producto"><?= $producto($r['dev_producto_nombre'] ?? null, $r['dev_producto_codigo'] ?? null) ?></td>
     <td data-col="dev_lote"><?= $h($r['dev_lote'] ?? '') ?></td>
+    <td class="text-nowrap" data-col="dev_nup"><?= $h($r['dev_nup'] ?? '') ?></td>
     <td data-col="dev_bodega"><?= $h($r['dev_bodega'] ?? '') ?></td>
     <td class="text-nowrap" data-col="dev_factura"><?= $factura ?></td>
     <td class="text-end cam-lado-sale" data-col="ent_cantidad"><?= $cantidad($r['ent_cantidad'] ?? null) ?></td>
     <td data-col="ent_producto"><?= $producto($r['ent_producto_nombre'] ?? null, $r['ent_producto_codigo'] ?? null) ?></td>
     <td data-col="ent_lote"><?= $h($r['ent_lote'] ?? '') ?></td>
+    <td class="text-nowrap" data-col="ent_nup"><?= $h($r['ent_nup'] ?? '') ?></td>
     <td data-col="ent_bodega"><?= $h($r['ent_bodega'] ?? '') ?></td>
     <td class="text-truncate" style="max-width:230px" data-col="cliente" title="<?= $h($r['cliente_nombre'] ?? '') ?>"><?= $h($r['cliente_nombre'] ?? '') ?></td>
     <td class="text-truncate pe-3" style="max-width:260px" data-col="observaciones" title="<?= $h($r['observaciones'] ?? '') ?>"><?= $h($r['observaciones'] ?? '') ?></td>

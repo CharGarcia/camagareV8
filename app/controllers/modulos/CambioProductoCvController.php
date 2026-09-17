@@ -144,7 +144,7 @@ class CambioProductoCvController extends BaseModuloController
 
         $rowsHtml = '';
         if (empty($rows)) {
-            $rowsHtml = '<tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>No se encontraron cambios.</td></tr>';
+            $rowsHtml = '<tr><td colspan="14" class="text-center py-5 text-muted"><i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>No se encontraron cambios.</td></tr>';
         } else {
             $decCant = self::decimalesCantidad($this->getEmpresaConfig($idEmpresa));
             foreach ($rows as $r) {
@@ -323,22 +323,24 @@ class CambioProductoCvController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th class="fecha" rowspan="2" style="width:7%">Fecha</th>
-                            <th class="entra c" colspan="5">Entra</th>
-                            <th class="sale c" colspan="6">Sale</th>
+                            <th class="fecha" rowspan="2" style="width:5%">Fecha</th>
+                            <th class="entra c" colspan="6">Entra</th>
+                            <th class="sale c" colspan="7">Sale</th>
                         </tr>
                         <tr>
-                            <th class="entra r" style="width:5%">Cantidad</th>
-                            <th class="entra" style="width:14%">Producto</th>
-                            <th class="entra" style="width:7%">Lote</th>
-                            <th class="entra" style="width:8%">Bodega</th>
-                            <th class="entra" style="width:10%">Factura</th>
-                            <th class="sale r" style="width:5%">Cantidad</th>
-                            <th class="sale" style="width:14%">Producto</th>
-                            <th class="sale" style="width:7%">Lote</th>
-                            <th class="sale" style="width:8%">Bodega</th>
-                            <th class="sale" style="width:9%">Cliente</th>
-                            <th class="sale" style="width:6%">Observaciones</th>
+                            <th class="entra r" style="width:4%">Cantidad</th>
+                            <th class="entra" style="width:11%">Producto</th>
+                            <th class="entra" style="width:5%">Lote</th>
+                            <th class="entra" style="width:7%">NUP</th>
+                            <th class="entra" style="width:6%">Bodega</th>
+                            <th class="entra" style="width:9%">Factura</th>
+                            <th class="sale r" style="width:4%">Cantidad</th>
+                            <th class="sale" style="width:11%">Producto</th>
+                            <th class="sale" style="width:5%">Lote</th>
+                            <th class="sale" style="width:7%">NUP</th>
+                            <th class="sale" style="width:6%">Bodega</th>
+                            <th class="sale" style="width:12%">Cliente</th>
+                            <th class="sale" style="width:8%">Observaciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -350,11 +352,13 @@ class CambioProductoCvController extends BaseModuloController
                             <td class="r"><?= $cant($r['dev_cantidad'] ?? null) ?></td>
                             <td><?= $h($r['dev_producto_nombre'] ?? '') ?><?php if (($r['dev_producto_codigo'] ?? '') !== ''): ?><br><span class="cod"><?= $h($r['dev_producto_codigo']) ?></span><?php endif; ?></td>
                             <td><?= $h($r['dev_lote'] ?? '') ?></td>
+                            <td><?= $h($r['dev_nup'] ?? '') ?></td>
                             <td><?= $h($r['dev_bodega'] ?? '') ?></td>
                             <td><?= $h(self::textoFacturaDev($r)) ?></td>
                             <td class="r"><?= $cant($r['ent_cantidad'] ?? null) ?></td>
                             <td><?= $h($r['ent_producto_nombre'] ?? '') ?><?php if (($r['ent_producto_codigo'] ?? '') !== ''): ?><br><span class="cod"><?= $h($r['ent_producto_codigo']) ?></span><?php endif; ?></td>
                             <td><?= $h($r['ent_lote'] ?? '') ?></td>
+                            <td><?= $h($r['ent_nup'] ?? '') ?></td>
                             <td><?= $h($r['ent_bodega'] ?? '') ?></td>
                             <td><?= $h($r['cliente_nombre'] ?? '') ?></td>
                             <td><?= $h($r['observaciones'] ?? '') ?></td>
@@ -396,10 +400,10 @@ class CambioProductoCvController extends BaseModuloController
             // Mismas columnas que el listado; en Excel el código va en su propia columna.
             $headers = [
                 'Fecha',
-                'Entra: cantidad', 'Entra: código', 'Entra: producto', 'Entra: lote', 'Entra: bodega', 'Entra: factura',
-                'Sale: cantidad', 'Sale: código', 'Sale: producto', 'Sale: lote', 'Sale: bodega', 'Cliente', 'Observaciones',
+                'Entra: cantidad', 'Entra: código', 'Entra: producto', 'Entra: lote', 'Entra: NUP', 'Entra: bodega', 'Entra: factura',
+                'Sale: cantidad', 'Sale: código', 'Sale: producto', 'Sale: lote', 'Sale: NUP', 'Sale: bodega', 'Cliente', 'Observaciones',
             ];
-            $numEntra = 6; // A: fecha; B-G: lo que entra; H-N: lo que sale
+            $numEntra = 7; // A: fecha; B-H: lo que entra; I-P: lo que sale
 
             $exportData = [];
             foreach ($rows as $r) {
@@ -409,12 +413,14 @@ class CambioProductoCvController extends BaseModuloController
                     (string) ($r['dev_producto_codigo'] ?? ''),
                     (string) ($r['dev_producto_nombre'] ?? ''),
                     (string) ($r['dev_lote'] ?? ''),
+                    (string) ($r['dev_nup'] ?? ''),
                     (string) ($r['dev_bodega'] ?? ''),
                     self::textoFacturaDev($r),
                     $r['ent_cantidad'] !== null ? (float) $r['ent_cantidad'] : null,
                     (string) ($r['ent_producto_codigo'] ?? ''),
                     (string) ($r['ent_producto_nombre'] ?? ''),
                     (string) ($r['ent_lote'] ?? ''),
+                    (string) ($r['ent_nup'] ?? ''),
                     (string) ($r['ent_bodega'] ?? ''),
                     (string) ($r['cliente_nombre'] ?? ''),
                     (string) ($r['observaciones'] ?? ''),
@@ -425,7 +431,7 @@ class CambioProductoCvController extends BaseModuloController
             $fmtCant = '#,##0' . ($decCant > 0 ? '.' . str_repeat('0', $decCant) : '');
 
             $reportService = new \App\Services\ReportService();
-            $spreadsheet = $reportService->construirSpreadsheet($headers, $exportData, 'Cambios de productos', 'Cambios de productos - ' . $nombreEmpresa, [], [2 => $fmtCant, 8 => $fmtCant]);
+            $spreadsheet = $reportService->construirSpreadsheet($headers, $exportData, 'Cambios de productos', 'Cambios de productos - ' . $nombreEmpresa, [], [2 => $fmtCant, 2 + $numEntra => $fmtCant]);
 
             // Encabezados en rojo (entra) y verde (sale), como en pantalla. La fila de
             // encabezados se ubica por su primer texto para no depender de dónde la deja ReportService.
