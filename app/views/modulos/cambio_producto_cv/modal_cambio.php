@@ -118,15 +118,14 @@
                                     <tr class="small">
                                         <th>Origen</th>
                                         <th>Producto</th>
-                                        <th>Lote / NUP</th>
                                         <th style="width:140px">Bodega</th>
-                                        <th class="text-end">Saldo</th>
+                                        <th>Lote / NUP</th>
                                         <th class="text-end" style="width:110px">Cantidad</th>
                                         <th style="width:34px"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="cam_dev_body">
-                                    <tr><td colspan="7" class="text-center text-muted py-3">Seleccione un cliente y busque el producto a devolver.</td></tr>
+                                    <tr><td colspan="6" class="text-center text-muted py-3">Seleccione un cliente y busque el producto a devolver.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -226,7 +225,7 @@
     }
     function vaciarDev() {
         document.getElementById('cam_dev_body').innerHTML =
-            '<tr class="cam-dev-empty"><td colspan="7" class="text-center text-muted py-3">Seleccione un cliente y busque el producto a devolver.</td></tr>';
+            '<tr class="cam-dev-empty"><td colspan="6" class="text-center text-muted py-3">Seleccione un cliente y busque el producto a devolver.</td></tr>';
         document.getElementById('cam_dev_info').textContent = '';
     }
     function vaciarEnt() {
@@ -703,14 +702,14 @@
         tr.dataset.origenTipo = l.origen_tipo;
         tr.dataset.idOrigenDetalle = l.id_origen_detalle;
         tr.dataset.saldo = saldo;
-        // Bodega de la que salió la unidad (la de la línea de origen): ahí vuelve a entrar.
+        // Bodega de la que salió la unidad (la de la línea de origen): ahí vuelve a entrar. El saldo no
+        // tiene columna: es el valor propuesto y el tope de la cantidad (camOnCantDev).
         tr.innerHTML = `
             <td class="small">${camBadgeOrigenDev(l.origen_tipo, l.doc_numero, l.factura_afectada)}</td>
             <td class="small">${esc(l.producto_codigo ? l.producto_codigo + ' · ' : '')}${esc(l.producto_nombre)}</td>
-            <td class="small">${esc(camLoteNup(l))}</td>
             <td class="small">${esc(l.bodega_nombre || '—')}</td>
-            <td class="text-end small">${fmt(saldo, DEC_C)}</td>
-            <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-dev-cant" min="0" max="${saldo}" step="any" value="${saldo}" oninput="camOnCantDev(this)" style="height:26px;font-size:.8rem;"></td>
+            <td class="small">${esc(camLoteNup(l))}</td>
+            <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-dev-cant" min="0" max="${saldo}" step="any" value="${saldo}" oninput="camOnCantDev(this)" title="Máximo: ${fmt(saldo, DEC_C)}" style="height:26px;font-size:.8rem;"></td>
             <td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'dev')" title="Quitar"><i class="bi bi-x-lg"></i></button></td>`;
         document.getElementById('cam_dev_body').appendChild(tr);
         camOnCantDev(tr.querySelector('.cam-dev-cant'));
@@ -940,9 +939,8 @@
         tr.innerHTML = `
             <td class="small">${camBadgeOrigenDev(d.origen_tipo, d.origen_numero, d.factura_afectada)}</td>
             <td class="small">${esc(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${esc(d.producto_nombre)}</td>
-            <td class="small">${esc(loteNup)}</td>
             <td class="small">${esc(d.bodega_nombre || '—')}</td>
-            <td class="text-end small">${editable ? '—' : fmt(d.cantidad, DEC_C)}</td>
+            <td class="small">${esc(loteNup)}</td>
             <td class="p-0 text-end">${cantCell}</td>
             <td class="text-center p-0">${editable ? `<button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'dev')"><i class="bi bi-x-lg"></i></button>` : ''}</td>`;
         document.getElementById('cam_dev_body').appendChild(tr);

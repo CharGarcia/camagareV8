@@ -680,7 +680,11 @@ $base = BASE_URL;
                     html += `<br><span class="text-success small">🔗 ${fmt(d.registros_enlazados)} producto(s) entregado(s) enlazado(s) a su registro en Facturación de consignaciones.</span>`;
                 }
                 if (d.nup_completados > 0) {
-                    html += `<br><span class="text-success small">🔢 ${fmt(d.nup_completados)} NUP completado(s) en cambios de productos.</span>`;
+                    // nup_reconsignacion está dentro de nup_completados: lo devuelto cuya unidad se dedujo porque volvió a consignarse.
+                    const deducidos = d.nup_reconsignacion > 0
+                        ? ` (${fmt(d.nup_reconsignacion)} de lo devuelto, deducidos porque esa unidad volvió a consignarse después del cambio)`
+                        : '';
+                    html += `<br><span class="text-success small">🔢 ${fmt(d.nup_completados)} NUP completado(s) en cambios de productos${deducidos}.</span>`;
                 }
                 if (d.sin_factura > 0) {
                     const muestra = (d.sin_factura_muestra && d.sin_factura_muestra.length)

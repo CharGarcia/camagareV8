@@ -6,7 +6,7 @@ ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
 etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver
-version: 1.8
+version: 1.9
 orden: 2
 estado: activo
 ---
@@ -210,8 +210,22 @@ guardaba de cada cambio y que antes no se traía:
   consignación de la que salió y su NUP, y en Facturación de consignaciones
   ese documento aparece marcado como *Cambio*. Sin ese enlace, la misma unidad
   aparecía dos veces para devolver.
-- El sistema anterior **no guardaba el NUP de lo devuelto**: solo se completa
-  cuando no hay duda de cuál unidad es.
+- El sistema anterior **no guardaba el NUP de lo devuelto** (ni en el cambio,
+  ni en la factura, ni en el inventario). La migración lo toma de la unidad
+  vendida en la facturación de consignación de esa factura cuando hay **una
+  sola** posible: mismo producto, mismo lote (o sin lote) y todavía sin
+  devolver, sin contar las facturaciones que el sistema anterior creaba con
+  cada cambio. Si la factura vendió varias unidades de ese producto, se usa
+  una segunda pista: una unidad vendida solo vuelve a aparecer en otra
+  consignación si regresó a la empresa. Por cada factura y producto, si las
+  unidades que volvieron a consignarse desde el primero de esos cambios son
+  tantas como los cambios, y ordenando por fecha a cada cambio le corresponde
+  una sola, se asigna esa. Si algo no calza (volvieron más o menos unidades
+  que cambios, o dos cambios podrían tener la misma unidad), no se asigna
+  nada y queda sin NUP. Cada vez que se ejecuta, vuelve a revisar las que
+  quedaron sin NUP. Para ver cuántas quedan y por qué:
+  `database/diagnosticos/20260916_cambios_migrados_nup_devoluciones.sql`
+  (solo lectura).
 
 **Facturas de venta** y **Facturación de consignación** se migran antes que
 **Cambios de productos** (es el orden de la lista). Si se migraron en otro
@@ -311,6 +325,17 @@ Qué respeta la migración:
 
 ## Historial de cambios
 
+- **1.9** — **Cambios de productos**: se completan más NUP de lo devuelto. Ya
+  no se toman como posibles las facturaciones que el sistema anterior creaba
+  con cada cambio, la facturación se encuentra también por el número de
+  factura cuando quedó sin enlace a la venta, y si el lote guardado no
+  coincide se prueba con las unidades sin lote. Cuando la factura vendió
+  varias unidades, se asigna la que volvió a consignarse después del cambio,
+  solo si en esa factura y producto calza para todos los cambios. Cada
+  ejecución vuelve a revisar lo que quedó sin NUP; el resumen informa cuántos
+  se dedujeron así. Nuevos diagnósticos de solo lectura:
+  `database/diagnosticos/20260916_cambios_migrados_nup_devoluciones.sql` y
+  `database/diagnosticos/20260916_cambios_migrados_nup_por_reconsignacion.sql`.
 - **1.8** — **Cambios de productos**: la migración enlaza lo devuelto con su
   factura de venta (el número que guardaba el sistema anterior), enlaza lo
   entregado con la facturación de consignación que el sistema anterior creaba

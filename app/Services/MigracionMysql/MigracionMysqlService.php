@@ -2650,7 +2650,7 @@ class MigracionMysqlService
      */
     private function enlazarCambiosMigrados(PDO $pg, PDO $mysql, int $idEmpresa, string $base, int $idUsuario): array
     {
-        $out = ['registros_enlazados' => 0, 'facturas_enlazadas' => 0, 'nup_completados' => 0,
+        $out = ['registros_enlazados' => 0, 'facturas_enlazadas' => 0, 'nup_completados' => 0, 'nup_reconsignacion' => 0,
                 'sin_factura' => 0, 'sin_factura_muestra' => [], 'errores' => 0];
         $conRegistro = \App\repositories\modulos\CambioProductoCvRepository::registroFacturacionDisponible();
 
@@ -2684,6 +2684,13 @@ class MigracionMysqlService
                                                             AND x.eliminado = false)
                         ELSE true
                     END AS resuelve,
+                    (COALESCE(d.origen_tipo, '') = 'FACTURA'
+                     AND NOT EXISTS (SELECT 1 FROM consignaciones_facturas_detalles x
+                                      WHERE x.id = d.id_origen_detalle AND x.id_consignacion_factura = d.id_origen
+                                        AND x.id_producto = d.id_producto)
+                     AND EXISTS (SELECT 1 FROM ventas_detalle x
+                                  WHERE x.id = d.id_origen_detalle AND x.id_venta = d.id_origen
+                                    AND x.id_producto = d.id_producto)) AS a_linea_venta,
                     $registrada AS registrada
                FROM migracion_mysql_map m
                JOIN cambios_producto_cv c ON c.id = m.id_destino AND c.id_empresa = m.id_empresa AND c.eliminado = false
@@ -2698,8 +2705,9 @@ class MigracionMysqlService
             $idViejo = (int) $r['id_viejo'];
             $cambios[$idViejo] ??= ['id' => (int) $r['id_cambio'], 'id_cliente' => (int) $r['id_cliente'],
                                     'numero' => $r['serie'] . '-' . $r['secuencial'], 'dev' => [], 'ent' => []];
-            $r['resuelve']   = $esVerdad($r['resuelve']);
-            $r['registrada'] = $esVerdad($r['registrada']);
+            $r['resuelve']      = $esVerdad($r['resuelve']);
+            $r['a_linea_venta'] = $esVerdad($r['a_linea_venta']);
+            $r['registrada']    = $esVerdad($r['registrada']);
             $cambios[$idViejo][$r['tipo_linea'] === 'devolucion' ? 'dev' : 'ent'][] = $r;
         }
         // Un cambio migrado tiene una línea de cada lado; si se editó después, se deja como está.
@@ -2771,6 +2779,23 @@ class MigracionMysqlService
         }
         $detalleViejo = $this->precargarDetalleConsignacion($mysql, $base, 'codigo_unico, lote, nup', $codigos);
         $mapFactCv    = $this->mapaDe($pg, $idEmpresa, 'consignaciones_fact');
+        // Esas facturaciones son unidades ENTREGADAS a cambio: nunca son la factura de lo que se devuelve,
+        // estén o no enlazadas ya como registro (sin la migración 20260916 no se pueden enlazar).
+        $cfDeCambios = [];
+        foreach ($factCvViejas as $idsViejos) {
+            foreach ($idsViejos as $o) {
+                if (isset($mapFactCv[(string) $o])) { $cfDeCambios[$mapFactCv[(string) $o]] = true; }
+            }
+        }
+        // Facturaciones que quedaron sin enlace a su venta (solo guardan el número), para buscarlas por
+        // número sin recorrer la tabla en cada consulta.
+        $cfSinVenta = [];
+        $st = $pg->prepare("SELECT id, TRIM(numero_factura) AS numero FROM consignaciones_facturas
+                             WHERE id_empresa = ? AND eliminado = false AND estado = 'facturada' AND id_factura IS NULL
+                               AND COALESCE(TRIM(numero_factura), '') <> ''");
+        $st->execute([$idEmpresa]);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) { $cfSinVenta[$r['numero']][] = (int) $r['id']; }
+        $idsSinVenta = static fn(string $numero): string => '{' . implode(',', $cfSinVenta[$numero] ?? []) . '}';
 
         $bloquear   = $pg->prepare("SELECT id FROM cambios_producto_cv WHERE id = ? FOR UPDATE");
         $updLinea   = $pg->prepare("UPDATE cambios_producto_cv_detalles SET origen_tipo = ?, id_origen = ?, id_origen_detalle = ?,
@@ -2863,6 +2888,9 @@ class MigracionMysqlService
         }
 
         // ── 2. Devoluciones: la factura de venta (o el cambio anterior) de la que viene la unidad ──
+        // El viejo no guardaba el NUP de lo devuelto: sale de la unidad enlazada cuando es UNA sola. Se
+        // revisan las que no tienen enlace, las que no tienen NUP y las enlazadas solo a la línea de la
+        // factura de venta, así una corrida posterior completa lo que antes no se pudo.
         $saldoDevuelto = "COALESCE((SELECT SUM(x.cantidad)
                                       FROM cambios_producto_cv_detalles x
                                       JOIN cambios_producto_cv xc ON xc.id = x.id_cambio
@@ -2876,85 +2904,213 @@ class MigracionMysqlService
                JOIN cambios_producto_cv pc ON pc.id = e.id_cambio
               WHERE pc.id_empresa = ? AND pc.eliminado = false AND pc.estado = 'Emitida' AND pc.id_cliente = ?
                 AND pc.id = ANY (CAST(? AS INTEGER[]))
-                AND e.tipo_linea = 'entrega' AND COALESCE(e.eliminado, false) = false AND e.id_producto = ?
-                AND (CAST(? AS TEXT) = '' OR COALESCE(NULLIF(UPPER(TRIM(COALESCE(e.lote, ''))), 'SIN_LOTE'), '') = ?)"
+                AND e.tipo_linea = 'entrega' AND COALESCE(e.eliminado, false) = false AND e.id_producto = ?"
         );
+        // Líneas de la facturación de consignación de la venta: por su id o, si la facturación quedó sin
+        // enlazar a la venta, por el número de factura que guardó ($idsSinVenta).
         $selLineaCf = $pg->prepare(
-            "SELECT d.id, d.id_consignacion_factura AS id_cf, d.cantidad, COALESCE(d.lote, '') AS lote, COALESCE(d.nup, '') AS nup,
+            "SELECT d.id, d.id_consignacion_factura AS id_cf, d.id_consignacion, d.cantidad,
+                    COALESCE(d.lote, '') AS lote, COALESCE(d.nup, '') AS nup,
                     d.cantidad - " . sprintf($saldoDevuelto, 'd.id', 'd.id_consignacion_factura') . " AS saldo
                FROM consignaciones_facturas_detalles d
                JOIN consignaciones_facturas cf ON cf.id = d.id_consignacion_factura
-              WHERE cf.id_empresa = ? AND cf.eliminado = false AND cf.estado = 'facturada' AND cf.id_factura = ?
+              WHERE cf.id_empresa = ? AND cf.eliminado = false AND cf.estado = 'facturada'
+                AND (cf.id_factura = ? OR cf.id = ANY (CAST(? AS INTEGER[])))
                 " . \App\repositories\modulos\CambioProductoCvRepository::sqlNoEsRegistroDeCambio('cf') . "
-                AND COALESCE(d.eliminado, false) = false AND d.id_producto = ?
-                AND (CAST(? AS TEXT) = '' OR COALESCE(NULLIF(UPPER(TRIM(COALESCE(d.lote, ''))), 'SIN_LOTE'), '') = ?)"
+                AND COALESCE(d.eliminado, false) = false AND d.id_producto = ?"
         );
         $selLineaVenta = $pg->prepare("SELECT id, cantidad, COALESCE(numero_lote, '') AS lote, COALESCE(nup, '') AS nup
                                          FROM ventas_detalle WHERE id_venta = ? AND id_producto = ? ORDER BY id");
+        // Unidad a la que ya apunta una devolución (para completar solo su NUP).
+        $unidadEnlazada = [
+            'FACTURA' => $pg->prepare("SELECT cantidad, COALESCE(nup, '') AS nup FROM consignaciones_facturas_detalles WHERE id = ? AND id_consignacion_factura = ?"),
+            'CAMBIO'  => $pg->prepare("SELECT cantidad, COALESCE(nup, '') AS nup FROM cambios_producto_cv_detalles WHERE id = ? AND id_cambio = ?"),
+        ];
+        // Candidatas con saldo; si lo devuelto trae lote, las de ese lote o, si ninguna lo tiene, las que no tienen lote.
+        $depurar = static function (array $filas, float $cantidad, string $loteDev): array {
+            $filas = array_values(array_filter($filas, fn($x) => (float) $x['saldo'] + 0.000001 >= $cantidad));
+            if ($loteDev === '') { return $filas; }
+            $mismo = array_values(array_filter($filas, fn($x) => self::loteComparable($x['lote']) === $loteDev));
+            return $mismo ?: array_values(array_filter($filas, fn($x) => self::loteComparable($x['lote']) === ''));
+        };
         foreach ($cambios as $idViejo => $c) {
-            $dev = $c['dev'][0];
-            if ($dev['origen_tipo'] !== '' && $dev['resuelve']) { continue; }
+            $dev    = $c['dev'][0];
+            $valida = $dev['origen_tipo'] !== '' && $dev['resuelve'];
+            if ($valida && !$dev['a_linea_venta'] && $dev['nup'] !== '') { continue; }
             $f = $factura[$idViejo] ?? null;
             try {
                 $pg->beginTransaction();
                 $bloquear->execute([$c['id']]);
-                $origen  = [null, null, null];
-                $lote    = $dev['lote'];
-                $nup     = $dev['nup'];
-                $motivo  = 'el sistema anterior no guardó el número de la factura';
-                $idVenta = $f !== null ? $ventaDe($f) : null;
-                if ($f !== null && $idVenta === null) {
-                    $motivo = 'la factura ' . $f['numero'] . ' no está en el sistema';
-                } elseif ($idVenta !== null) {
-                    $loteDev  = self::loteComparable($dev['lote']);
-                    $cantidad = (float) $dev['cantidad'];
-                    $conSaldo = fn(array $filas): array => array_values(array_filter($filas, fn($x) => (float) $x['saldo'] + 0.000001 >= $cantidad));
-                    // Recambio: la entrega de un cambio migrado ANTERIOR del mismo cliente con esa factura.
-                    $previos = [];
-                    foreach ($porFactura[$f['numero']] ?? [] as $o) {
-                        if ($o < $idViejo) { $previos[] = $cambios[$o]['id']; }
-                    }
-                    $candCambio = [];
-                    if ($previos) {
-                        $selRecambio->execute(['CAMBIO', (int) $dev['id'], $idEmpresa, $c['id_cliente'], '{' . implode(',', $previos) . '}',
-                                               (int) $dev['id_producto'], $loteDev, $loteDev]);
-                        $candCambio = $conSaldo($selRecambio->fetchAll(PDO::FETCH_ASSOC));
-                    }
-                    // La línea de la facturación de consignación de esa venta (sin los registros de cambios).
-                    $selLineaCf->execute(['FACTURA', (int) $dev['id'], $idEmpresa, $idVenta, (int) $dev['id_producto'], $loteDev, $loteDev]);
-                    $candFactura = $conSaldo($selLineaCf->fetchAll(PDO::FETCH_ASSOC));
+                $origen = self::origenLinea($dev);
+                $lote   = $dev['lote'];
+                $nup    = $dev['nup'];
 
-                    if (count($candCambio) + count($candFactura) === 1) {
-                        $x = $candCambio[0] ?? $candFactura[0];
-                        $origen = $candCambio ? ['CAMBIO', (int) $x['id_cambio'], (int) $x['id']] : ['FACTURA', (int) $x['id_cf'], (int) $x['id']];
-                        if ($nup === '' && (float) $x['cantidad'] <= 1.000001) { $nup = trim((string) $x['nup']); }
-                        if ($lote === '') { $lote = trim((string) $x['lote']); }
-                    } else {
-                        // Ninguna o varias candidatas: la línea de la factura de venta con ese producto solo identifica la factura.
-                        $selLineaVenta->execute([$idVenta, (int) $dev['id_producto']]);
-                        $lineas    = $selLineaVenta->fetchAll(PDO::FETCH_ASSOC);
-                        $mismoLote = $loteDev !== '' ? array_values(array_filter($lineas, fn($x) => self::loteComparable($x['lote']) === $loteDev)) : [];
-                        $elegibles = $mismoLote ?: $lineas;
-                        if ($elegibles) {
-                            $origen = ['FACTURA', $idVenta, (int) $elegibles[0]['id']];
-                            if (count($elegibles) === 1 && $nup === '' && (float) $elegibles[0]['cantidad'] <= 1.000001) {
-                                $nup = trim((string) $elegibles[0]['nup']);
+                if ($valida && !$dev['a_linea_venta']) {
+                    // Ya apunta a su unidad (línea de facturación o entrega de un cambio): solo falta el NUP.
+                    $st = $unidadEnlazada[$dev['origen_tipo']] ?? null;
+                    if ($st) {
+                        $st->execute([(int) $dev['id_origen_detalle'], (int) $dev['id_origen']]);
+                        $u = $st->fetch(PDO::FETCH_ASSOC);
+                        if ($u && (float) $u['cantidad'] <= 1.000001) { $nup = trim((string) $u['nup']); }
+                    }
+                } else {
+                    $motivo  = 'el sistema anterior no guardó el número de la factura';
+                    $idVenta = $f !== null ? $ventaDe($f) : null;
+                    if ($f !== null && $idVenta === null) {
+                        $motivo = 'la factura ' . $f['numero'] . ' no está en el sistema';
+                    } elseif ($idVenta !== null) {
+                        $loteDev  = self::loteComparable($dev['lote']);
+                        $cantidad = (float) $dev['cantidad'];
+                        // Recambio: la entrega de un cambio migrado ANTERIOR del mismo cliente con esa factura.
+                        $previos = [];
+                        foreach ($porFactura[$f['numero']] ?? [] as $o) {
+                            if ($o < $idViejo) { $previos[] = $cambios[$o]['id']; }
+                        }
+                        $candCambio = [];
+                        if ($previos) {
+                            $selRecambio->execute(['CAMBIO', (int) $dev['id'], $idEmpresa, $c['id_cliente'], '{' . implode(',', $previos) . '}', (int) $dev['id_producto']]);
+                            $candCambio = $depurar($selRecambio->fetchAll(PDO::FETCH_ASSOC), $cantidad, $loteDev);
+                        }
+                        // La unidad vendida en la facturación de consignación de esa venta.
+                        $selLineaCf->execute(['FACTURA', (int) $dev['id'], $idEmpresa, $idVenta, $idsSinVenta($f['numero']), (int) $dev['id_producto']]);
+                        $filasCf     = array_values(array_filter($selLineaCf->fetchAll(PDO::FETCH_ASSOC), fn($x) => !isset($cfDeCambios[(int) $x['id_cf']])));
+                        $candFactura = $depurar($filasCf, $cantidad, $loteDev);
+
+                        if (count($candCambio) + count($candFactura) === 1) {
+                            $x = $candCambio[0] ?? $candFactura[0];
+                            $origen = $candCambio ? ['CAMBIO', (int) $x['id_cambio'], (int) $x['id']] : ['FACTURA', (int) $x['id_cf'], (int) $x['id']];
+                            if ($nup === '' && (float) $x['cantidad'] <= 1.000001) { $nup = trim((string) $x['nup']); }
+                            if ($lote === '') { $lote = trim((string) $x['lote']); }
+                        } elseif (!$valida) {
+                            // Ninguna o varias candidatas: la línea de la factura de venta con ese producto solo identifica la factura.
+                            $selLineaVenta->execute([$idVenta, (int) $dev['id_producto']]);
+                            $lineas    = $selLineaVenta->fetchAll(PDO::FETCH_ASSOC);
+                            $mismoLote = $loteDev !== '' ? array_values(array_filter($lineas, fn($x) => self::loteComparable($x['lote']) === $loteDev)) : [];
+                            $elegibles = $mismoLote ?: $lineas;
+                            if ($elegibles) {
+                                $origen = ['FACTURA', $idVenta, (int) $elegibles[0]['id']];
+                                if (count($elegibles) === 1 && $nup === '' && (float) $elegibles[0]['cantidad'] <= 1.000001) {
+                                    $nup = trim((string) $elegibles[0]['nup']);
+                                }
+                            } else {
+                                $motivo = 'la factura ' . $f['numero'] . ' no tiene ese producto';
                             }
-                        } else {
-                            $motivo = 'la factura ' . $f['numero'] . ' no tiene ese producto';
                         }
                     }
-                }
-                if ($origen[0] !== null) {
-                    $out['facturas_enlazadas']++;
-                } else {
-                    $out['sin_factura']++;
-                    if (count($out['sin_factura_muestra']) < 8) { $out['sin_factura_muestra'][] = 'Cambio ' . $c['numero'] . ': ' . $motivo; }
+                    if (!$valida) {
+                        if ($origen[0] !== null) {
+                            $out['facturas_enlazadas']++;
+                        } else {
+                            $out['sin_factura']++;
+                            if (count($out['sin_factura_muestra']) < 8) { $out['sin_factura_muestra'][] = 'Cambio ' . $c['numero'] . ': ' . $motivo; }
+                        }
+                    }
                 }
                 $guardarLinea($dev, $origen, $lote, $nup, $dev['id_bodega']);
                 $pg->commit();
             } catch (Throwable $ex) {
                 $fallo($ex, $c);
+            }
+        }
+
+        // ── 3. NUP de lo devuelto que sigue sin determinar: por reconsignación ──
+        // Queda sin NUP cuando la factura vendió varias unidades del producto. Una unidad vendida solo
+        // vuelve a aparecer en otra consignación si regresó a la empresa. Por factura y producto: si las
+        // unidades que volvieron a consignarse desde el primero de esos cambios son tantas como los
+        // cambios, y recorriéndolos del más reciente al más antiguo a cada uno le corresponde UNA sola
+        // unidad consignada de nuevo desde su fecha, esa es la que devolvió. Si algo no calza en el
+        // grupo, no se asigna nada en él.
+        $st = $pg->prepare(
+            "SELECT m.id_origen AS id_viejo, d.id, d.id_cambio, c.fecha_cambio, c.serie, c.secuencial,
+                    d.id_producto, d.cantidad, COALESCE(d.origen_tipo, '') AS origen_tipo, d.id_origen, d.id_origen_detalle,
+                    COALESCE(d.lote, '') AS lote, COALESCE(d.nup, '') AS nup, d.id_bodega,
+                    vc.id AS id_venta, vc.fecha_emision AS fecha_venta,
+                    vc.establecimiento || '-' || vc.punto_emision || '-' || vc.secuencial AS numero_venta
+               FROM migracion_mysql_map m
+               JOIN cambios_producto_cv c
+                 ON c.id = m.id_destino AND c.id_empresa = m.id_empresa AND c.eliminado = false AND c.estado = 'Emitida'
+               JOIN cambios_producto_cv_detalles d
+                 ON d.id_cambio = c.id AND d.tipo_linea = 'devolucion' AND d.origen_tipo = 'FACTURA'
+                AND COALESCE(d.eliminado, false) = false AND COALESCE(TRIM(d.nup), '') = ''
+               JOIN ventas_detalle vd ON vd.id = d.id_origen_detalle AND vd.id_venta = d.id_origen AND vd.id_producto = d.id_producto
+               JOIN ventas_cabecera vc ON vc.id = vd.id_venta
+              WHERE m.id_empresa = ? AND m.entidad = 'cambios_producto' AND m.vinculado IS NOT TRUE
+                AND NOT EXISTS (SELECT 1 FROM consignaciones_facturas_detalles z
+                                 WHERE z.id = d.id_origen_detalle AND z.id_consignacion_factura = d.id_origen
+                                   AND z.id_producto = d.id_producto)
+              ORDER BY vc.id, d.id_producto, c.fecha_cambio DESC, d.id DESC"
+        );
+        $st->execute([$idEmpresa]);
+        $grupos = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $grupos[$r['id_venta'] . ':' . $r['id_producto']][] = $r;   // cada grupo, del cambio más reciente al más antiguo
+        }
+        $lotesCompatibles = static function (string $a, string $b): bool {
+            $a = self::loteComparable($a);
+            $b = self::loteComparable($b);
+            return $a === '' || $b === '' || $a === $b;
+        };
+        foreach ($grupos as $devs) {
+            if (array_filter($devs, fn($d) => (float) $d['cantidad'] > 1.000001)) { continue; }
+            $g      = $devs[0];
+            $numero = $factura[(int) $g['id_viejo']]['numero'] ?? $g['numero_venta'];
+            // Unidades de ese producto en la facturación de la venta, de una unidad, con NUP y todavía sin devolver.
+            $selLineaCf->execute(['FACTURA', 0, $idEmpresa, (int) $g['id_venta'], $idsSinVenta($numero), (int) $g['id_producto']]);
+            $unidades = [];
+            foreach ($selLineaCf->fetchAll(PDO::FETCH_ASSOC) as $u) {
+                $u['nup_norm'] = mb_strtoupper(trim((string) $u['nup']));
+                if (!isset($cfDeCambios[(int) $u['id_cf']]) && $u['nup_norm'] !== ''
+                    && (float) $u['cantidad'] <= 1.000001 && (float) $u['saldo'] >= 0.999999) {
+                    $unidades[] = $u;
+                }
+            }
+            if (count($unidades) < count($devs)) { continue; }
+
+            // Primera vez que cada unidad volvió a una consignación (distinta de la suya) después de venderse.
+            $vueltas = [];
+            $stV = $pg->prepare("SELECT UPPER(TRIM(r.nup)) AS nup, r.id_consignacion, rv.fecha_emision
+                                   FROM consignaciones_ventas_detalles r
+                                   JOIN consignaciones_ventas rv ON rv.id = r.id_consignacion AND rv.eliminado = false
+                                  WHERE r.id_empresa = ? AND r.id_producto = ? AND r.eliminado = false
+                                    AND UPPER(TRIM(r.nup)) IN (" . implode(',', array_fill(0, count($unidades), '?')) . ")");
+            $stV->execute(array_merge([$idEmpresa, (int) $g['id_producto']], array_column($unidades, 'nup_norm')));
+            foreach ($stV->fetchAll(PDO::FETCH_ASSOC) as $v) { $vueltas[$v['nup']][] = $v; }
+            $desde     = min(array_column($devs, 'fecha_cambio'));
+            $volvieron = [];
+            foreach ($unidades as $u) {
+                $primera = null;
+                foreach ($vueltas[$u['nup_norm']] ?? [] as $v) {
+                    if ((int) $v['id_consignacion'] !== (int) $u['id_consignacion'] && $v['fecha_emision'] >= $g['fecha_venta']
+                        && ($primera === null || $v['fecha_emision'] < $primera)) {
+                        $primera = $v['fecha_emision'];
+                    }
+                }
+                if ($primera !== null && $primera >= $desde) {
+                    $u['volvio'] = $primera;
+                    $volvieron[] = $u;
+                }
+            }
+            if (count($volvieron) !== count($devs)) { continue; }
+
+            $asignacion = [];
+            foreach ($devs as $d) {
+                $eleg = array_keys(array_filter($volvieron, fn($u) => $u['volvio'] >= $d['fecha_cambio'] && $lotesCompatibles($d['lote'], $u['lote'])));
+                if (count($eleg) !== 1) { $asignacion = []; break; }
+                $asignacion[] = [$d, $volvieron[$eleg[0]]];
+                unset($volvieron[$eleg[0]]);
+            }
+            if (!$asignacion) { continue; }
+            try {
+                $pg->beginTransaction();
+                foreach ($asignacion as [$d, $u]) {
+                    $bloquear->execute([(int) $d['id_cambio']]);
+                    $guardarLinea($d, ['FACTURA', (int) $u['id_cf'], (int) $u['id']],
+                                  $d['lote'] !== '' ? $d['lote'] : trim((string) $u['lote']), trim((string) $u['nup']), $d['id_bodega']);
+                }
+                $pg->commit();
+                $out['nup_reconsignacion'] += count($asignacion);
+            } catch (Throwable $ex) {
+                $fallo($ex, ['numero' => $g['serie'] . '-' . $g['secuencial']]);
             }
         }
         return $out;
@@ -2966,7 +3122,7 @@ class MigracionMysqlService
      */
     private static function sumarEnlaceCambios(array &$res, array $enlace, bool $conSinFactura): void
     {
-        foreach (['registros_enlazados', 'facturas_enlazadas', 'nup_completados'] as $k) {
+        foreach (['registros_enlazados', 'facturas_enlazadas', 'nup_completados', 'nup_reconsignacion'] as $k) {
             $res[$k] = ($res[$k] ?? 0) + (int) ($enlace[$k] ?? 0);
         }
         if ($conSinFactura) {
