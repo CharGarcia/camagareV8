@@ -38,10 +38,10 @@ if ($afectada !== '') {
 } elseif (trim((string) ($r['factura_cambio'] ?? '')) !== '') {
     $factura = '<span class="text-muted" title="Factura de la que vino este cambio de productos">' . $h($r['factura_cambio']) . '</span>';
 } elseif ($r['dev_cantidad'] !== null && in_array($r['dev_origen_tipo'] ?? '', ['', 'FACTURA'], true)) {
-    // Sin factura de venta que mostrar: devolución migrada del sistema anterior (no guarda de qué
-    // factura vino) o de una factura de consignación que no tiene factura de venta enlazada.
+    // Sin factura de venta que mostrar: devolución migrada que la migración no pudo enlazar a su
+    // factura o de una factura de consignación que no tiene factura de venta enlazada.
     $motivo  = ($r['dev_origen_tipo'] ?? '') === ''
-        ? 'Cambio migrado: el sistema anterior no guardaba la factura'
+        ? 'Cambio migrado sin factura enlazada'
         : 'La factura de consignación de esta unidad no tiene factura de venta enlazada';
     $factura = '<span class="small text-muted" title="' . $motivo . '">Sin factura</span>';
 }

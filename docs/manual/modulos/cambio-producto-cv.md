@@ -6,7 +6,7 @@ ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados
-version: 1.9
+version: 1.10
 orden: 47
 estado: activo
 ---
@@ -100,13 +100,13 @@ dónde viene cada línea:
   igual la factura de venta de la que vino (el número de ese cambio aparece al
   pasar el mouse); solo si no se encuentra la factura se ve *Cambio …*. Los
   cambios registrados antes del 16-09-2026, cuando lo devuelto se tomaba de la
-  factura de venta directa, también muestran esa factura. Dice *Sin factura*
-  cuando no hay factura de venta que mostrar: en los cambios **migrados del
-  sistema anterior** (aquel sistema no guardaba de qué factura venía lo
-  devuelto) y cuando la factura de consignación de la unidad **no tiene factura
-  de venta enlazada** (pasa con algunas migradas). En el buscador, esa factura
-  de consignación aparece como *Sin factura · F. consig. …* con su número
-  propio.
+  factura de venta directa, también muestran esa factura, y los **migrados del
+  sistema anterior** muestran la que ese sistema guardaba (con su NUP cuando no
+  hay duda de cuál unidad es). Dice *Sin factura* cuando no hay factura de
+  venta que mostrar: en un cambio migrado cuya factura no está en el sistema, o
+  cuando la factura de consignación de la unidad **no tiene factura de venta
+  enlazada** (pasa con algunas migradas). En el buscador, esa factura de
+  consignación aparece como *Sin factura · F. consig. …* con su número propio.
 - **Lo que se entrega**: *Consignación 001-001-000000012*, el número de la
   consignación de la que se tomó la unidad; o *Existencias*, *Catálogo* o
   *Bodega* si sale de bodega.
@@ -226,7 +226,7 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Motivo / Observaciones | No | Texto libre. |
 | Productos que devuelve | Sí (al menos uno) | Ítems de facturas de consignación (estado *facturada*) o de cambios anteriores con saldo pendiente. Columnas: origen (n.º de la factura de venta o del cambio), producto, lote / NUP, bodega, saldo y cantidad. |
 | Productos que entrega a cambio | No | Ítems desde consignación, existencias o catálogo. Columnas: origen, producto, bodega, lote / NUP y cantidad. |
-| Estado | Solo al editar | Borrador, Emitida o Anulada. |
+| Estado | Solo al editar | Borrador, Emitida o Anulada. Está a la derecha de la barra de botones (PDF, Excel, correo y WhatsApp). |
 
 ## Permisos
 
@@ -277,7 +277,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   bodega): *Inventario* contra *Costo de ventas* por el neto entre lo devuelto
   y lo entregado desde bodega; lo entregado desde consignación sale de
   *Mercadería en consignación* contra *Costo de ventas*. Se puede revisar y
-  completar en la pestaña **Asiento contable** antes de guardar.
+  completar en la pestaña **Asiento contable** antes de guardar. Los cambios
+  **migrados** del sistema anterior no llevan asiento por ninguna vía (ese
+  sistema no contabilizaba los cambios): la pestaña lo indica y no deja armar
+  uno.
 - **Facturación de consignaciones**: lo entregado desde una consignación queda
   como documento **Facturada** con la factura de venta de lo devuelto (etiqueta
   *Cambio*, solo lectura). Ver *Registro en Facturación de consignaciones*.
@@ -308,10 +311,17 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   mismo cliente del cambio y tener saldo (no retornado, no facturado, no
   entregado en otro cambio).
 - **La factura dice *Sin factura***: no hay número de factura de venta que
-  mostrar. O el cambio se migró del sistema anterior, que no guardaba de qué
-  factura venía lo devuelto, o la factura de consignación de esa unidad no tiene
-  factura de venta enlazada. Al pasar el mouse sobre el texto, el listado dice
-  cuál de los dos casos es. No es un error del cambio.
+  mostrar. Al pasar el mouse sobre el texto, el listado dice cuál de estos casos
+  es:
+  - *Cambio migrado sin factura enlazada*: se migró con una versión anterior de
+    la herramienta, o su factura no está en el sistema. El superadministrador lo
+    completa volviendo a ejecutar **Cambios de productos** en *Migración desde
+    MySQL*. Si sigue igual, el resumen de la migración dice el motivo.
+  - *La factura de consignación de esta unidad no tiene factura de venta
+    enlazada*: no es un error del cambio.
+- **Un cambio migrado no muestra los NUP o la consignación de lo entregado**:
+  mismo caso y misma solución que el anterior. El NUP de lo devuelto solo se
+  completa cuando no hay duda de cuál unidad es.
 - **"Secuencial no configurado"**: configure *Cambios de productos* en
   *Empresa → Secuenciales* para el punto de emisión.
 - **"No se pudo registrar en Facturación de consignaciones lo entregado desde
@@ -330,6 +340,15 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.10** — Los cambios **migrados** del sistema anterior muestran la factura de
+  venta de lo devuelto (ese sistema sí la guardaba), los NUP y, en lo entregado,
+  la consignación de la que salió. Los que ya estaban migrados se completan
+  volviendo a ejecutar **Cambios de productos** en *Migración desde MySQL*; solo
+  dicen *Sin factura* si esa factura no está en el sistema. Los cambios migrados
+  no llevan asiento contable por ninguna vía (antes se les podía generar al
+  abrir la pestaña *Asiento contable* o al sincronizar la contabilidad). En el
+  formulario, el **Estado** pasa a la derecha de la barra de botones (PDF,
+  Excel, correo y WhatsApp) y *Observaciones* ocupa su lugar.
 - **1.9** — Nueva primera columna **Fecha** (fecha de emisión del cambio, encabezado
   celeste) en el listado y en su PDF y Excel. Corregido: en los cambios
   registrados antes del 16-09-2026 (lo devuelto venía de la factura de venta

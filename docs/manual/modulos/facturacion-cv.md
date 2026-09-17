@@ -6,7 +6,7 @@ ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar
-version: 1.12
+version: 1.13
 orden: 47
 estado: activo
 ---
@@ -49,6 +49,11 @@ Se reconoce por la etiqueta **Cambio** junto al estado y por el aviso del modal:
 Esa unidad cuenta como **facturada** en el saldo de la consignación. El
 *entregado a cambio* de la fórmula solo queda para cambios anteriores a estos
 registros.
+
+El sistema anterior hacía lo mismo con cada cambio. Esas facturaciones migradas
+quedan marcadas **Cambio** y en solo lectura cuando se migran (o se vuelven a
+migrar) los Cambios de productos, que las enlazan a su cambio. Conservan su
+número y sus observaciones originales.
 
 ## Requisitos previos
 
@@ -253,6 +258,11 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.13** — Las facturaciones que el sistema anterior creaba con cada cambio de
+  productos quedan enlazadas a ese cambio al migrar Cambios de productos: se
+  ven con la etiqueta **Cambio** y son de solo lectura, como los registros de
+  los cambios hechos aquí. Así la unidad entregada ya no se ofrece dos veces
+  para devolver.
 - **1.12** — **Generar factura** reingresa la mercadería a la bodega solo si
   **"La facturación afecta al inventario"** está activada en el establecimiento, que es
   cuando la factura la vuelve a descontar. Con la opción apagada no se hace ninguno de

@@ -794,6 +794,12 @@ class CambioProductoCvService
         return (new AsientoBuilderService())->generarAsientoCambioProductoCv($idEmpresa, $idCambio);
     }
 
+    /** ¿Cambio migrado del sistema anterior? No lleva asiento contable (ver procesarAsientoContable). */
+    public function esMigrado(int $idCambio, int $idEmpresa): bool
+    {
+        return $this->repository->esMigrado($idCambio, $idEmpresa);
+    }
+
     private function procesarAsientoSeguro(int $idCambio, array $data): void
     {
         try {
@@ -833,6 +839,12 @@ class CambioProductoCvService
         $cab = $this->repository->find($idCambio, $idEmpresa);
         if (!$cab) return;
         if (($cab['estado'] ?? '') !== 'Emitida') {
+            return;
+        }
+        // Un cambio migrado del sistema anterior no lleva asiento por ninguna vía (sincronización,
+        // Auditoría, pestaña Asiento contable, cambio de estado o guardado): ese sistema no
+        // contabilizaba los cambios de productos.
+        if ($this->repository->esMigrado($idCambio, $idEmpresa)) {
             return;
         }
 

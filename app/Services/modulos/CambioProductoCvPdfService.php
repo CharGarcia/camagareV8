@@ -181,8 +181,8 @@ class CambioProductoCvPdfService
             if ($factura !== '') {
                 return 'Factura ' . $factura;
             }
-            // Sin factura de venta que mostrar: devolución migrada del sistema anterior (no guarda de
-            // qué factura vino) o de una factura de consignación sin factura de venta enlazada.
+            // Sin factura de venta que mostrar: devolución migrada que la migración no pudo enlazar a su
+            // factura o de una factura de consignación sin factura de venta enlazada.
             if ($tipo === '' || ($tipo === 'FACTURA' && $num === '')) {
                 return 'Sin factura';
             }

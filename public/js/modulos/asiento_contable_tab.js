@@ -16,7 +16,7 @@
  * Uso (ids: los que genera app/views/partials/asiento_tab.php con el mismo prefijo):
  *   const tab = crearAsientoTab({
  *     prefijo: 'mc',                                     // → mc-asiento-tbody, mc-asiento-save, …
- *     previewUrl: `${CMG_urlBase}/getAsientoSugeridoAjax`, // { ok, detalles, es_guardado, asiento, cuadre_documento }
+ *     previewUrl: `${CMG_urlBase}/getAsientoSugeridoAjax`, // { ok, detalles, es_guardado, asiento, cuadre_documento, aviso? }
  *     cuentasUrl: `${BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
  *     asientosUrl: `${BASE_URL}/modulos/asientos-contables`,
  *     onGuardado: () => { … }                            // opcional: refrescar el documento
@@ -417,6 +417,12 @@
                         'text-muted');
                 } else if (!json.ok) {
                     placeholder('<i class="bi bi-exclamation-triangle-fill me-1"></i> ' + (json.error || 'No se pudo generar el asiento.'), 'text-danger');
+                    setStatus('');
+                } else if (json.aviso) {
+                    // El documento no lleva asiento (p. ej. un cambio migrado): se explica y no se deja armar uno.
+                    editable = false;
+                    pintarBotones();
+                    placeholder('<i class="bi bi-info-circle me-1"></i> ' + json.aviso);
                     setStatus('');
                 } else {
                     placeholder('<i class="bi bi-info-circle me-1"></i> Sin asiento: guarda o actualiza el documento para generarlo.');

@@ -631,8 +631,10 @@ class SincronizadorAsientosService
 
         // 7c-bis. Cambios de productos (devuelve/entrega): asiento a costo del inventario movido.
         //         Solo los 'Emitida' tienen impacto contable (Borrador/Anulada no se contabilizan).
+        //         Los migrados tampoco: el sistema anterior no contabilizaba consignaciones ni cambios.
         $trabajos[] = [
-            'sql'    => "SELECT id FROM cambios_producto_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'",
+            'sql'    => "SELECT id FROM cambios_producto_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'"
+                        . $excMig('cambios_producto', 'cambios_producto_cv.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\CambioProductoCvService(

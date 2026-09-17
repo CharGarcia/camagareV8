@@ -271,7 +271,7 @@ class CambioProductoCvController extends BaseModuloController
         $num = trim((string) ($r['dev_origen_numero'] ?? ''));
         if ($num === '') {
             $facturaCambio = trim((string) ($r['factura_cambio'] ?? ''));
-            // Devolución migrada del sistema anterior o de una factura de consignación sin factura de venta.
+            // Devolución migrada sin factura enlazada o de una factura de consignación sin factura de venta.
             if ($facturaCambio === '' && $r['dev_cantidad'] !== null && in_array($r['dev_origen_tipo'] ?? '', ['', 'FACTURA'], true)) {
                 return 'Sin factura';
             }
@@ -596,6 +596,13 @@ class CambioProductoCvController extends BaseModuloController
             $cab = $this->service->getPorId($idCambio, $idEmpresa) ?? [];
             $this->requireRegistroPropio($cab ?: null);
             $idAsiento = (int) ($cab['id_asiento_contable'] ?? 0);
+
+            // Cambio migrado sin asiento: no se genera ni se ofrece vista previa.
+            if ($idAsiento <= 0 && !empty($cab) && $this->service->esMigrado($idCambio, $idEmpresa)) {
+                echo json_encode(['ok' => true, 'detalles' => [], 'es_guardado' => false,
+                                  'aviso' => 'Cambio migrado del sistema anterior: no lleva asiento contable, porque ese sistema no contabilizaba los cambios de productos.']);
+                exit;
+            }
 
             if ($idAsiento <= 0 && !empty($cab)) {
                 try {

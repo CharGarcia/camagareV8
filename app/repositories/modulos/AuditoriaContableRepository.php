@@ -222,7 +222,7 @@ class AuditoriaContableRepository extends BaseRepository
             'chequear_monto' => 'informativo', // asiento a costo; el total del documento no es comparable
             'regenerable'    => true,  // CambioProductoCvService ya expone procesarAsientoContablePorSincronizacion
             'tiene_id_asiento' => true,
-            'entidad_mig'    => null,
+            'entidad_mig'    => 'cambios_producto',
         ],
         'FACTURACION_CV' => [
             'tabla'          => 'consignaciones_facturas',

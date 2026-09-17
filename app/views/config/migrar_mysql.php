@@ -671,6 +671,23 @@ $base = BASE_URL;
                 if (d.pagos_enlazados > 0) {
                     html += `<br><span class="text-success small">🔗 ${fmt(d.pagos_enlazados)} pago(s) ya migrado(s) se enlazaron a su liquidación.</span>`;
                 }
+                // Cambios de productos (y Facturación de consignación, que los re-enlaza): lo que el
+                // sistema anterior guardaba y la migración no traía. También completa los ya migrados.
+                if (d.facturas_enlazadas > 0) {
+                    html += `<br><span class="text-success small">🔗 ${fmt(d.facturas_enlazadas)} producto(s) devuelto(s) enlazado(s) a su factura de venta.</span>`;
+                }
+                if (d.registros_enlazados > 0) {
+                    html += `<br><span class="text-success small">🔗 ${fmt(d.registros_enlazados)} producto(s) entregado(s) enlazado(s) a su registro en Facturación de consignaciones.</span>`;
+                }
+                if (d.nup_completados > 0) {
+                    html += `<br><span class="text-success small">🔢 ${fmt(d.nup_completados)} NUP completado(s) en cambios de productos.</span>`;
+                }
+                if (d.sin_factura > 0) {
+                    const muestra = (d.sin_factura_muestra && d.sin_factura_muestra.length)
+                        ? ': ' + d.sin_factura_muestra.map(x => String(x).replace(/</g, '&lt;')).join('; ') + (d.sin_factura > d.sin_factura_muestra.length ? '…' : '')
+                        : '';
+                    html += `<br><span class="text-warning small">ℹ ${fmt(d.sin_factura)} cambio(s) de productos siguen sin factura${muestra}. Si falta migrar las Facturas de venta, vuelva a ejecutar Cambios de productos después.</span>`;
+                }
                 if (d.serie_omitida > 0) {
                     // El sistema anterior numera estos documentos POR ESTABLECIMIENTO: el mismo número
                     // puede existir dos veces y solo uno puede ocupar la serie de destino.

@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado
-version: 1.16
+version: 1.17
 orden: 20
 estado: activo
 ---
@@ -329,6 +329,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.17** — Los **cambios de productos migrados** no reciben asiento por ninguna vía: ni en la generación en masa, ni desde Auditoría Contable, ni al abrir su pestaña *Asiento contable* (que ahora lo indica), ni al cambiarles el estado. Antes se les podía generar, aunque el sistema anterior no contabilizaba los cambios. Los que ya lo recibieron se detectan y se quitan (eliminación lógica) con `database/diagnosticos/20260916_cambios_migrados_con_asiento.sql`.
 - **1.16** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas del asiento (salvo Tipo, Origen y
   Estado) y en observaciones, usuario y documentos/referencias de las líneas.

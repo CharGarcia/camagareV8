@@ -18,12 +18,22 @@
                     <div class="spinner-border text-primary mb-2" role="status"></div>
                     <div class="small text-muted">Cargando información del cambio...</div>
                 </div>
-                <!-- Barra de acciones superior (PDF / Correo / WhatsApp) -->
+                <!-- Barra de acciones superior (PDF / Excel / Correo / WhatsApp) y, a la derecha, el Estado -->
                 <div class="d-flex gap-1 align-items-center flex-wrap mb-3 pb-2 border-bottom">
                     <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="camPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
                     <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="camExcel()" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
                     <button type="button" class="btn btn-outline-info btn-sm px-2" onclick="camEmail()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
                     <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="camWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
+
+                    <!-- Estado (solo al abrir un cambio ya guardado) -->
+                    <div class="ms-auto d-flex align-items-center gap-2 d-none" id="cam_estado_wrapper">
+                        <label for="cam_estado_selector" class="form-label small fw-bold mb-0 text-muted">Estado:</label>
+                        <select id="cam_estado_selector" class="form-select form-select-sm fw-bold" style="width:auto;" onchange="camCambiarEstado(this.value)">
+                            <option value="Borrador">Borrador</option>
+                            <option value="Emitida">Emitida</option>
+                            <option value="Anulada">Anulada</option>
+                        </select>
+                    </div>
                 </div>
 
                 <ul class="nav nav-tabs mb-3" id="tabsCambio" role="tablist">
@@ -80,23 +90,15 @@
                         </div>
                     </div>
 
-                    <!-- Motivo, Observaciones y Estado -->
+                    <!-- Motivo y Observaciones (el Estado va en la barra de acciones) -->
                     <div class="row g-2 mb-2 align-items-end">
                         <div class="col-md-4">
                             <label class="form-label small mb-1">Motivo</label>
                             <input type="text" id="cam_motivo" class="form-control form-control-sm" placeholder="Motivo del cambio (opcional)">
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-8">
                             <label class="form-label small mb-1">Observaciones</label>
                             <input type="text" id="cam_observaciones" class="form-control form-control-sm" placeholder="Observaciones (opcional)">
-                        </div>
-                        <div class="col-md-2 d-none" id="cam_estado_wrapper">
-                            <label class="form-label small mb-1">Estado</label>
-                            <select id="cam_estado_selector" class="form-select form-select-sm fw-bold" onchange="camCambiarEstado(this.value)">
-                                <option value="Borrador">Borrador</option>
-                                <option value="Emitida">Emitida</option>
-                                <option value="Anulada">Anulada</option>
-                            </select>
                         </div>
                     </div>
 
@@ -559,11 +561,11 @@
         if (facturaAfectada) {
             return camBadgeOrigen(tipo, 'Factura ' + facturaAfectada, tipo === 'CAMBIO' ? 'Entregada en el cambio ' + (numeroOrigen || '') : '');
         }
-        // Sin factura de venta que mostrar: devolución migrada del sistema anterior (no guarda de qué
-        // factura vino) o de una factura de consignación que no tiene factura de venta enlazada.
+        // Sin factura de venta que mostrar: devolución migrada que la migración no pudo enlazar a su
+        // factura o de una factura de consignación que no tiene factura de venta enlazada.
         if (!tipo || (tipo === 'FACTURA' && !numeroOrigen)) {
             const motivo = !tipo
-                ? 'Cambio migrado: el sistema anterior no guardaba la factura'
+                ? 'Cambio migrado sin factura enlazada'
                 : 'La factura de consignación de esta unidad no tiene factura de venta enlazada';
             return `<span class="badge bg-secondary bg-opacity-10 text-secondary" title="${motivo}">Sin factura</span>`;
         }

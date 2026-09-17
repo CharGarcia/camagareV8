@@ -140,6 +140,29 @@ class CambioProductoCvRepository extends BaseRepository
     }
 
     /**
+     * ¿El cambio lo insertó la migración desde el sistema anterior? Esos cambios no llevan asiento
+     * contable: aquel sistema no contabilizaba los cambios de productos (misma regla que
+     * SincronizadorAsientosService y Auditoría contable, que miran el mismo mapa).
+     */
+    public function esMigrado(int $idCambio, int $idEmpresa): bool
+    {
+        static $hayMapa = null;
+        if ($hayMapa === null) {
+            $hayMapa = (bool) $this->db->query("SELECT to_regclass('public.migracion_mysql_map')")->fetchColumn();
+        }
+        if (!$hayMapa) {
+            return false;
+        }
+        $st = $this->db->prepare(
+            "SELECT 1 FROM migracion_mysql_map
+              WHERE entidad = 'cambios_producto' AND id_destino = :id AND id_empresa = :e AND vinculado IS NOT TRUE
+              LIMIT 1"
+        );
+        $st->execute([':id' => $idCambio, ':e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
      * Factura de venta en la que quedó registrada una línea de ENTREGA de un cambio (registro
      * vigente en Facturación de consignaciones). Null si no hay registro.
      */

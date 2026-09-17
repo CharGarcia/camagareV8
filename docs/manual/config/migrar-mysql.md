@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas
-version: 1.7
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver
+version: 1.8
 orden: 2
 estado: activo
 ---
@@ -190,7 +190,64 @@ Qué respeta la migración:
   tienen ninguna**. Una marca puesta a mano aquí nunca se pisa.
 - Volver a correr **Marcas** no duplica nada: corrige y completa.
 
+## Cambios de productos: factura, NUP y Facturación de consignaciones
+
+Cada cambio del sistema anterior se migra con lo que devolvió el cliente y lo
+que recibió a cambio. Además, la migración completa lo que ese sistema
+guardaba de cada cambio y que antes no se traía:
+
+- **Factura de lo devuelto**: el sistema anterior guardaba el número de la
+  factura de venta. La migración enlaza lo devuelto con esa factura ya
+  migrada, así el número se ve en el listado, el formulario y el PDF del
+  cambio, y se puede buscar por él. Si en esa factura hay **una sola** unidad
+  que calce (mismo producto y lote, todavía sin devolver), la enlaza a esa
+  unidad y trae su NUP. En un **recambio** (el cliente devuelve lo que recibió
+  en un cambio anterior de la misma factura) la enlaza a ese cambio.
+- **Lo entregado a cambio**: con cada cambio, el sistema anterior registraba
+  la unidad entregada como una facturación de consignación, que llega con
+  **Facturación de consignación**. La migración la enlaza al cambio como su
+  **registro**, igual que hace un cambio emitido aquí: lo entregado muestra la
+  consignación de la que salió y su NUP, y en Facturación de consignaciones
+  ese documento aparece marcado como *Cambio*. Sin ese enlace, la misma unidad
+  aparecía dos veces para devolver.
+- El sistema anterior **no guardaba el NUP de lo devuelto**: solo se completa
+  cuando no hay duda de cuál unidad es.
+
+**Facturas de venta** y **Facturación de consignación** se migran antes que
+**Cambios de productos** (es el orden de la lista). Si se migraron en otro
+orden, o los cambios se migraron con una versión anterior de la herramienta,
+basta con **volver a ejecutar Cambios de productos**: completa los que ya
+estaban migrados, sin duplicarlos. **No use *Eliminar migrados*** para esto:
+los cambios hechos en este sistema que devolvieron una unidad de un cambio
+migrado perderían su enlace.
+
+Qué respeta la migración:
+
+- Solo completa lo vacío. No cambia un enlace válido ni toca los cambios
+  hechos en este sistema.
+- Si se vuelven a migrar Facturas de venta o Facturación de consignación, los
+  enlaces que quedaron apuntando a documentos borrados se rehacen: la
+  facturación de consignación re-enlaza sola sus registros, y volver a correr
+  Cambios de productos rehace el resto.
+- Los cambios migrados **no llevan asiento contable** por ninguna vía
+  (sincronización, Auditoría, pestaña *Asiento contable* o cambio de estado):
+  el sistema anterior no contabilizaba los cambios de productos. Si alguno ya
+  recibió uno antes de este ajuste, se detecta y se quita con
+  `database/diagnosticos/20260916_cambios_migrados_con_asiento.sql`.
+- El resumen informa cuántos productos devueltos quedaron con su factura,
+  cuántos entregados con su registro, cuántos NUP se completaron y qué cambios
+  siguen sin factura, con el motivo (por ejemplo, *la factura
+  001-001-000012345 no está en el sistema*).
+
 ## Errores frecuentes
+
+- **Los cambios de productos migrados dicen "Sin factura" o no muestran los
+  NUP**: se migraron con una versión anterior de la herramienta, o antes que
+  Facturas de venta o Facturación de consignación. Se corrige volviendo a
+  ejecutar **Cambios de productos**, sin *Eliminar migrados* (ver *Cambios de
+  productos: factura, NUP y Facturación de consignaciones*). Los que sigan sin
+  factura aparecen en el resumen con el motivo.
+
 
 - **Los clientes migrados no traen el vendedor asignado**: se migraron con una
   versión anterior de la herramienta, o se migraron antes que los Vendedores.
@@ -254,6 +311,15 @@ Qué respeta la migración:
 
 ## Historial de cambios
 
+- **1.8** — **Cambios de productos**: la migración enlaza lo devuelto con su
+  factura de venta (el número que guardaba el sistema anterior), enlaza lo
+  entregado con la facturación de consignación que el sistema anterior creaba
+  con cada cambio (queda como su registro, igual que un cambio emitido aquí) y
+  completa los NUP. Antes lo devuelto salía *Sin factura* y la unidad entregada
+  aparecía dos veces para devolver. Volver a ejecutar Cambios de productos
+  completa los ya migrados; Facturación de consignación re-enlaza sola sus
+  registros. Los cambios migrados ya no reciben asiento contable por ninguna
+  vía.
 - **1.7** — Nueva entidad **Marcas**: se trae el catálogo de marcas del
   sistema anterior y se escribe la marca de cada producto (antes se perdían
   las dos cosas). **Marcas** se migra **antes** que Productos, y al correrla
