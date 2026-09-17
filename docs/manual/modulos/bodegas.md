@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/bodegas
 tipo: modulo
 visibilidad: todos
-etiquetas: bodegas, bodega, almacen, deposito, sucursal, ubicacion, stock por bodega, responsable, establecimiento de la bodega, local, en que establecimiento esta la bodega
-version: 1.1
+etiquetas: bodegas, bodega, almacen, deposito, sucursal, ubicacion, stock por bodega, responsable, establecimiento de la bodega, local, en que establecimiento esta la bodega, acceso por usuario, quitar acceso a una bodega, bodegas asignadas, no veo una bodega
+version: 1.2
 orden: 30
 estado: activo
 ---
@@ -45,6 +45,14 @@ solo que sus transferencias nunca se considerarán entre establecimientos.
 Se puede limitar qué usuarios trabajan con cada bodega. Es útil cuando cada
 sucursal debe ver solo su propia mercadería.
 
+Por defecto todos los usuarios ven todas las bodegas de la empresa: aquí se
+quita el acceso a las que no correspondan. El administrador (nivel 2) y el
+superadministrador (nivel 3) las ven todas de todos modos.
+
+Lo que se decide aquí vale también para la **información**, no solo para los
+selectores: el *Reporte de inventarios* deja fuera de sus listados, indicadores
+y exportaciones las bodegas sin acceso, aunque se deje el filtro en *Todas*.
+
 Si alguien reporta que no ve una bodega al procesar una entrada o al facturar,
 revise esta configuración antes que sus permisos del módulo.
 
@@ -63,6 +71,9 @@ movimientos. Si ya no se usa, es preferible dejarla sin stock y no operar con el
 
 ## Historial de cambios
 
+- **1.2** — El acceso por usuario ahora también filtra la **información** del
+  *Reporte de inventarios* (existencias, movimientos, valorización,
+  consignaciones y auditoría), no solo los selectores de bodega.
 - **1.1** — Se agrega el campo **Establecimiento**: indica en qué local está la
   bodega y permite que las Transferencias de Inventario detecten los traslados
   entre establecimientos.

@@ -19,6 +19,8 @@ use App\models\Empresa;
 class ReporteInventariosController extends BaseModuloController
 {
     private ReporteInventarioRepository $repository;
+    /** Ids de bodegas sin acceso para el usuario de la sesión; null = todavía sin consultar. */
+    private ?array $bodegasDenegadas = null;
     private const RUTA_MODULO = 'modulos/reporte_inventarios';
 
     /** Desgloses de Existencias por debajo de producto×bodega (ver resolverDesglose()). */
@@ -79,6 +81,39 @@ class ReporteInventariosController extends BaseModuloController
     {
         parent::__construct();
         $this->repository = new ReporteInventarioRepository();
+    }
+
+    /**
+     * Bodegas que este usuario NO puede ver, según Bodegas → pestaña "Accesos"
+     * (usuarios_bodegas.denegado = true; niveles 2 y 3 ven todas). Viajan dentro de los
+     * filtros de cada pestaña para que el repositorio las descarte en TODAS sus consultas
+     * —pantalla, KPIs y exportaciones— y no solo en el selector de bodega de la vista:
+     * el selector ya venía filtrado, pero bastaba con dejarlo en "Todas", o escribir el
+     * id de la bodega ajena en la URL de una exportación, para ver su stock igual.
+     * Se resuelve una sola vez por petición; lista vacía (lo normal) = ve todas.
+     */
+    private function bodegasDenegadas(): array
+    {
+        if ($this->bodegasDenegadas === null) {
+            $this->bodegasDenegadas = (new BodegaRepository())->getIdsBodegasDenegadas(
+                (int) $_SESSION['id_usuario'],
+                (int) $_SESSION['id_empresa'],
+                (int) ($_SESSION['nivel'] ?? 1)
+            );
+        }
+        return $this->bodegasDenegadas;
+    }
+
+    /**
+     * Corta una acción que apunta a una bodega concreta (ajuste, mínimo/máximo, corrección
+     * de stock). Los listados ya no la muestran, pero la petición llega con el id_bodega
+     * puesto a mano y escribe en el inventario: se valida antes de tocar nada.
+     */
+    private function requireBodegaPermitida(int $idBodega): void
+    {
+        if (in_array($idBodega, $this->bodegasDenegadas(), true)) {
+            throw new \RuntimeException('No tiene acceso a esa bodega.');
+        }
     }
 
     /**
@@ -201,6 +236,7 @@ class ReporteInventariosController extends BaseModuloController
             'orden'        => $_REQUEST['orden'] ?? '',
             'dir'          => $_REQUEST['dir'] ?? 'ASC',
             'buscar'       => trim($_REQUEST['buscar']  ?? ''),
+            'bodegas_denegadas' => $this->bodegasDenegadas(),
         ];
     }
 
@@ -223,6 +259,7 @@ class ReporteInventariosController extends BaseModuloController
             'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
             'observaciones'   => trim($_REQUEST['observaciones'] ?? ''),
             'buscar'          => trim($_REQUEST['buscar'] ?? ''),
+            'bodegas_denegadas' => $this->bodegasDenegadas(),
         ];
     }
 
@@ -234,6 +271,7 @@ class ReporteInventariosController extends BaseModuloController
             'id_categoria' => $_REQUEST['id_categoria'] ?? '',
             'id_marca'     => $_REQUEST['id_marca']     ?? '',
             'id_producto'  => $_REQUEST['id_producto']  ?? '',
+            'bodegas_denegadas' => $this->bodegasDenegadas(),
         ];
     }
 
@@ -254,6 +292,7 @@ class ReporteInventariosController extends BaseModuloController
             'fecha_caducidad_desde' => $_REQUEST['fecha_caducidad_desde'] ?? '',
             'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
             'secuencial'         => trim($_REQUEST['secuencial'] ?? ''),
+            'bodegas_denegadas' => $this->bodegasDenegadas(),
         ];
     }
 
@@ -263,6 +302,7 @@ class ReporteInventariosController extends BaseModuloController
             'id_bodega'      => $_REQUEST['id_bodega']   ?? '',
             'id_producto'    => $_REQUEST['id_producto'] ?? '',
             'buscar'         => trim($_REQUEST['buscar'] ?? ''),
+            'bodegas_denegadas' => $this->bodegasDenegadas(),
         ];
     }
 
@@ -724,6 +764,7 @@ class ReporteInventariosController extends BaseModuloController
             if ($idProducto <= 0 || $idBodega <= 0) {
                 throw new \InvalidArgumentException('Producto o bodega no válidos.');
             }
+            $this->requireBodegaPermitida($idBodega);
             if ($stockMinimo < 0 || $stockMaximo < 0) {
                 throw new \InvalidArgumentException('El mínimo y el máximo no pueden ser negativos.');
             }
@@ -821,6 +862,7 @@ class ReporteInventariosController extends BaseModuloController
             if ($data['id_producto'] <= 0 || $data['id_bodega'] <= 0) {
                 throw new \InvalidArgumentException('Producto o bodega no válidos.');
             }
+            $this->requireBodegaPermitida($data['id_bodega']);
             if (!in_array($data['tipo_movimiento'], ['entrada', 'salida'], true)) {
                 throw new \InvalidArgumentException('Tipo de ajuste no válido.');
             }
@@ -854,6 +896,7 @@ class ReporteInventariosController extends BaseModuloController
             if ($idProducto <= 0 || $idBodega <= 0) {
                 throw new \InvalidArgumentException('Producto o bodega no válidos.');
             }
+            $this->requireBodegaPermitida($idBodega);
 
             $resultado = $this->repository->corregirStockAuditoria($idProducto, $idBodega, $idEmpresa, $idUsuario);
 
@@ -936,6 +979,9 @@ class ReporteInventariosController extends BaseModuloController
                 )
                 : [];
             $hayFiltros = !empty(array_filter($filtrosLinea, fn($v) => $v !== '' && $v !== null));
+            // Aparte de $hayFiltros: no es un filtro de la búsqueda sino lo que este usuario
+            // puede ver, así que también se aplica con "Ver todas las líneas".
+            $filtrosLinea['bodegas_denegadas'] = $this->bodegasDenegadas();
 
             $lineas = $this->repository->getConsignacionDetalleLineas($idEmpresa, $idConsignacion, $filtrosLinea);
             if (empty($lineas)) {
@@ -1050,6 +1096,12 @@ class ReporteInventariosController extends BaseModuloController
             if ($idDetalle <= 0 || !in_array($tipo, ['retorno', 'factura'], true)) {
                 throw new \InvalidArgumentException('Parámetros no válidos.');
             }
+            // La línea llega por id: si está en una bodega que el usuario no ve, el sub-modal
+            // responde igual que con un id inválido (no se filtra el motivo).
+            $denegadas = $this->bodegasDenegadas();
+            if ($denegadas && !$this->repository->lineaConsignacionVisible($idEmpresa, $idDetalle, $denegadas)) {
+                throw new \InvalidArgumentException('Parámetros no válidos.');
+            }
 
             $rows = $tipo === 'retorno'
                 ? $this->repository->getRetornosDeLineaConsignacion($idEmpresa, $idDetalle)
@@ -1105,7 +1157,10 @@ class ReporteInventariosController extends BaseModuloController
                 new LogSistemaService()
             );
             $cons = $service->getDetalleCompleto($idConsignacion, $idEmpresa);
-            if (!$cons) {
+            // Mismo 404 que un documento inexistente: si ninguna de sus líneas está en una
+            // bodega visible para este usuario, el documento no existe para él.
+            $denegadas = $this->bodegasDenegadas();
+            if (!$cons || ($denegadas && !$this->repository->consignacionVisible($idEmpresa, $idConsignacion, $denegadas))) {
                 http_response_code(404);
                 echo 'No se encontró la consignación o no pertenece a esta empresa.';
                 exit;

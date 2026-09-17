@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente
-version: 1.16
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega
+version: 1.17
 orden: 40
 estado: activo
 ---
@@ -237,6 +237,25 @@ histórico del kardex, y sin acotar la fecha la consulta tarda unos segundos
 para luego mostrar un listado recortado igualmente. Se puede poner *Todos*
 cuando haga falta.
 
+## Qué bodegas ve cada usuario
+
+El reporte muestra únicamente las bodegas a las que el usuario tiene acceso,
+según *Bodegas → pestaña Accesos*. Por defecto todos ven todas las bodegas de su
+empresa: solo se ocultan aquellas cuyo acceso se le haya quitado expresamente
+ahí.
+
+- El filtro **Bodega** de cada pestaña ofrece solo las bodegas permitidas.
+- **También se aplica con el filtro en *Todas***: el listado, los indicadores, el
+  PDF y el Excel de las cinco pestañas cuentan únicamente esas bodegas. Escribir
+  a mano el número de una bodega ajena en la dirección no devuelve nada.
+- Lo mismo vale para el detalle de una consignación y su PDF de estado: si todas
+  sus líneas están en bodegas que el usuario no puede ver, responde como si el
+  documento no existiera.
+- Ajustar inventario, editar mínimo/máximo y corregir la auditoría rechazan una
+  bodega sin acceso con *No tiene acceso a esa bodega*.
+- **Administrador (nivel 2) y superadministrador (nivel 3)** ven todas las
+  bodegas de la empresa, sin excepción.
+
 ## Permisos
 
 - El permiso de **ver** sobre este módulo abre la página. Qué pestañas aparecen depende del acceso a los módulos de los que sale cada información:
@@ -251,6 +270,9 @@ cuando haga falta.
 ## Errores frecuentes
 
 - **Un producto no aparece**: no es inventariable.
+- **Falta una bodega, o su stock no suma en los totales**: a ese usuario se le
+  quitó el acceso a esa bodega en *Bodegas → Accesos*. Es una restricción de
+  acceso, no un filtro: poner *Todas* en el selector no la trae de vuelta.
 - **El stock está en otra bodega**: revise el filtro de bodega.
 - **El valor no coincide con la contabilidad**: compare contra el mayor de la
   cuenta de inventario; las diferencias suelen venir de compras sin procesar sus
@@ -268,6 +290,13 @@ cuando haga falta.
 
 ## Historial de cambios
 
+- **1.17** — El reporte respeta las **bodegas asignadas al usuario**. Antes el
+  selector de bodega ya venía filtrado, pero los datos no: con el filtro en
+  *Todas* —o escribiendo el número de la bodega en la dirección de una
+  exportación— se veía el stock, el kardex y las consignaciones de bodegas sin
+  acceso. Ahora la restricción se aplica a las cinco pestañas, a sus
+  indicadores, a su PDF y Excel, al detalle de una consignación y a las acciones
+  que escriben (ajuste, mínimo/máximo y corrección de auditoría).
 - **1.16** — Lo que un cambio de productos entrega desde una consignación ahora
   se registra en Facturación de consignaciones y se ve en **Facturado** (con la
   factura de venta de lo devuelto), no en *A cambio*. El saldo no cambia.
