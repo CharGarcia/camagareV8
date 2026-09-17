@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, buscar factura, buscador, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar
-version: 2.12
+etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar
+version: 2.13
 orden: 20
 estado: activo
 ---
@@ -203,16 +203,30 @@ Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
 búsqueda y los botones de columnas, PDF y Excel.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
-solo, sin menús ni sugerencias. Busca en las columnas de la factura y
-en sus datos relacionados: número, secuencial, fecha, cliente, RUC o cédula,
-subtotal, descuento, IVA, ICE, propina, total, **saldo**, vendedor,
-observaciones y usuario. Las columnas **Estado**, **Estado correo** y **Estado
-pago** no entran en la búsqueda libre: para filtrar por ellas use la ventana de
-filtros (botón del embudo). Además
-busca en la clave de acceso, la guía de remisión, la placa y los **códigos y
-descripciones de los productos vendidos**. Puede escribir varias palabras en
-cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el
-texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro; cuando desaparece, el listado ya muestra el resultado. Mientras tanto la tabla se ve atenuada.
+solo, sin menús ni sugerencias. Busca en lo que se ve en el listado: número,
+secuencial, fecha, cliente, RUC o cédula, subtotal, descuento, IVA, ICE,
+propina, total, **saldo**, vendedor y observaciones; además, en la guía de
+remisión y la placa. Puede escribir varias palabras en cualquier orden y no
+importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el
+cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro;
+cuando desaparece, el listado ya muestra el resultado. Mientras tanto la tabla
+se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** Para que el cuadro
+devuelva solo facturas donde se vea por qué coinciden, estos datos se consultan
+en la ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Clave de acceso | Pestaña *Factura* → **Clave de acceso** |
+| Usuario que registró | Pestaña *Factura* → **Usuario que registró** |
+| Productos vendidos (código, descripción, lote, NUP) | Pestaña *Detalles* |
+| Estado, Estado correo, Estado de pago | Pestaña *Factura* |
+
+La clave de acceso son 49 dígitos que llevan dentro la fecha, el RUC y el número
+del documento, así que al escribir un número de factura en el cuadro aparecían
+facturas ajenas cuya clave contenía por casualidad esa secuencia. Ahora ese
+número solo encuentra la factura que realmente lo tiene.
 
 **Montos y fechas.** Las fechas y los montos solo se comparan cuando lo escrito
 tiene números. El **saldo** se busca cuando se escribe un monto con decimales
@@ -337,6 +351,15 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.13** — Corregido: al buscar un **número de factura** en el cuadro aparecían
+  también facturas que no lo tenían. La búsqueda libre miraba dentro de la **clave
+  de acceso** —49 dígitos que llevan la fecha, el RUC y el número del documento— y
+  cualquier número corto caía ahí por casualidad. Ahora la clave de acceso se
+  consulta en la ventana de filtros (pestaña *Factura*), igual que el **usuario que
+  registró** y los **productos vendidos**, que pasan a la pestaña *Detalles*: esa
+  pestaña sí muestra qué línea coincidió, mientras que desde el cuadro la factura
+  aparecía sin que se viera el motivo. El cuadro de búsqueda queda para lo que se
+  ve en el listado.
 - **2.12** — **Búsquedas mucho más rápidas** y sin cambiar lo que encuentran: el
   buscador del listado deja de revisar todas las facturas de la empresa en cada tecla
   (en la prueba con 30.000 facturas pasó de cerca de un segundo a una décima), y el

@@ -20,8 +20,8 @@
 -- Reversible: sí (bloque comentado del final).
 -- Cuándo     : en horario de baja actividad — CREATE INDEX bloquea las escrituras de
 --             cada tabla mientras se construye (las lecturas no). Medido en local con
---             volúmenes de producción: ventas_cabecera 5,7 s · ventas_detalle 2,7 s ·
---             productos 0,9 s. Espacio: ~40 MB en total.
+--             volúmenes de producción: ventas_cabecera 5,7 s · productos 0,9 s.
+--             Espacio: ~30 MB en total.
 -- Cómo       : pgAdmin → Query Tool sobre producción → pegar todo → F5.
 -- =============================================================================
 
@@ -38,12 +38,17 @@ STRICT
 AS $$ SELECT public.unaccent('public.unaccent'::regdictionary, $1) $$;
 
 -- 2. Listado de Facturas de Venta --------------------------------------------
--- Factura: número, observaciones, clave de acceso, guía, placa, fecha e importes
--- (subtotal, descuento, IVA calculado, ICE, propina y total).
-CREATE INDEX IF NOT EXISTS idx_trgm_ventas_cabecera ON ventas_cabecera USING gin (f_unaccent(COALESCE(establecimiento, '') || '-' || COALESCE(punto_emision, '') || '-' || COALESCE(secuencial, '') || ' ' || COALESCE(observaciones, '') || ' ' || COALESCE(clave_acceso, '') || ' ' || COALESCE(guia_remision, '') || ' ' || COALESCE(placa, '') || ' ' || COALESCE(lpad(extract(year FROM fecha_emision)::int::text, 4, '0') || '-' || lpad(extract(month FROM fecha_emision)::int::text, 2, '0') || '-' || lpad(extract(day FROM fecha_emision)::int::text, 2, '0'), '') || ' ' || COALESCE(total_sin_impuestos::text, '') || ' ' || COALESCE(total_descuento::text, '') || ' ' || COALESCE((importe_total - total_sin_impuestos + total_descuento - COALESCE(total_ice, 0) - COALESCE(propina, 0))::text, '') || ' ' || COALESCE(total_ice::text, '') || ' ' || COALESCE(propina::text, '') || ' ' || COALESCE(importe_total::text, '')) gin_trgm_ops);
-
--- Productos facturados: código principal, código auxiliar y descripción de la línea.
-CREATE INDEX IF NOT EXISTS idx_trgm_ventas_detalle ON ventas_detalle USING gin (f_unaccent(COALESCE(codigo_principal, '') || ' ' || COALESCE(codigo_auxiliar, '') || ' ' || COALESCE(descripcion, '')) gin_trgm_ops);
+-- Factura: número, observaciones, guía, placa, fecha e importes (subtotal,
+-- descuento, IVA calculado, ICE, propina y total).
+--
+-- La CLAVE DE ACCESO no está aquí a propósito (17-09-2026): son 49 dígitos, así que
+-- cualquier número de factura corto caía dentro de la clave de otras facturas por azar
+-- y el listado devolvía filas sin coincidencia visible. Se busca con el filtro clave:…
+-- Tampoco están los productos del detalle (pestaña "Detalles" del modal de filtros) ni
+-- el usuario que registró (filtro usuario:…), por la misma decisión.
+-- Si esta base YA tenía el índice con la expresión anterior, hay que recrearlo:
+-- ver database/20260917b_ajuste_busqueda_facturas.sql.
+CREATE INDEX IF NOT EXISTS idx_trgm_ventas_cabecera ON ventas_cabecera USING gin (f_unaccent(COALESCE(establecimiento, '') || '-' || COALESCE(punto_emision, '') || '-' || COALESCE(secuencial, '') || ' ' || COALESCE(observaciones, '') || ' ' || COALESCE(guia_remision, '') || ' ' || COALESCE(placa, '') || ' ' || COALESCE(lpad(extract(year FROM fecha_emision)::int::text, 4, '0') || '-' || lpad(extract(month FROM fecha_emision)::int::text, 2, '0') || '-' || lpad(extract(day FROM fecha_emision)::int::text, 2, '0'), '') || ' ' || COALESCE(total_sin_impuestos::text, '') || ' ' || COALESCE(total_descuento::text, '') || ' ' || COALESCE((importe_total - total_sin_impuestos + total_descuento - COALESCE(total_ice, 0) - COALESCE(propina, 0))::text, '') || ' ' || COALESCE(total_ice::text, '') || ' ' || COALESCE(propina::text, '') || ' ' || COALESCE(importe_total::text, '')) gin_trgm_ops);
 
 -- Cliente (lo comparten todos los módulos; si ya se creó, esta línea no hace nada).
 CREATE INDEX IF NOT EXISTS idx_trgm_clientes ON clientes USING gin (f_unaccent(COALESCE(nombre, '') || ' ' || COALESCE(identificacion, '')) gin_trgm_ops);
@@ -57,17 +62,16 @@ CREATE INDEX IF NOT EXISTS idx_trgm_productos_codigos ON productos USING gin (f_
 
 -- 4. Estadísticas ------------------------------------------------------------
 ANALYZE ventas_cabecera;
-ANALYZE ventas_detalle;
 ANALYZE productos;
 ANALYZE clientes;
 
 -- =============================================================================
--- COMPROBACIÓN (opcional) — deben salir 4 filas, todas con "creado"
+-- COMPROBACIÓN (opcional) — deben salir 3 filas, todas con "creado"
 -- =============================================================================
 -- SELECT i.indice,
 --        CASE WHEN c.oid IS NULL THEN 'FALTA' ELSE 'creado' END AS estado,
 --        COALESCE(pg_size_pretty(pg_relation_size(c.oid)), '-') AS tamano
--- FROM (VALUES ('idx_trgm_ventas_cabecera'), ('idx_trgm_ventas_detalle'),
+-- FROM (VALUES ('idx_trgm_ventas_cabecera'),
 --              ('idx_trgm_clientes'), ('idx_trgm_productos_codigos')) AS i(indice)
 -- LEFT JOIN pg_class c ON c.relname = i.indice AND c.relkind = 'i'
 -- ORDER BY 1;
@@ -76,7 +80,6 @@ ANALYZE clientes;
 -- REVERTIR
 -- =============================================================================
 -- DROP INDEX IF EXISTS idx_trgm_ventas_cabecera;
--- DROP INDEX IF EXISTS idx_trgm_ventas_detalle;
 -- DROP INDEX IF EXISTS idx_trgm_productos_codigos;
 -- (idx_trgm_clientes lo usan también otros módulos: no borrarlo)
 

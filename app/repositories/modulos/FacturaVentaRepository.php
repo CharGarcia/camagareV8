@@ -64,21 +64,27 @@ class FacturaVentaRepository extends BaseRepository
 
     /**
      * Texto propio de la factura que entra en la búsqueda libre: número, secuencial,
-     * observaciones, clave de acceso, guía de remisión, placa, fecha de emisión y los
-     * importes (subtotal, descuento, IVA calculado, ICE, propina y total) como texto.
+     * observaciones, guía de remisión, placa, fecha de emisión y los importes
+     * (subtotal, descuento, IVA calculado, ICE, propina y total) como texto.
      * `$a` es el prefijo del alias ('v.' en la consulta, '' en el CREATE INDEX): la MISMA
      * expresión alimenta la consulta y el índice, así que no se pueden desalinear.
      *
      * Los importes van aquí —y no como columnas numéricas aparte, que era lo de antes—
      * porque así buscar "298" o "45.50" también usa el índice. El resultado es el mismo:
      * una palabra sin dígitos nunca podía coincidir con un número.
+     *
+     * La CLAVE DE ACCESO quedó FUERA a propósito (17-09-2026). Son 49 dígitos —fecha,
+     * RUC, serie, secuencial y un código numérico aleatorio de 8— así que buscar un
+     * número de factura corto caía dentro de la clave de otras facturas por puro azar y
+     * el listado devolvía filas sin ninguna coincidencia visible: buscar "556605" traía
+     * facturas ajenas (medido en local: "657400", un trozo del RUC, devolvía TODAS).
+     * Para buscar por clave está el filtro `clave:…` / `clave_acceso:…`.
      */
     private static function exprFactura(string $a = ''): string
     {
         $m = \App\Helpers\MotorBusqueda::class;
         return "COALESCE({$a}establecimiento, '') || '-' || COALESCE({$a}punto_emision, '') || '-' || COALESCE({$a}secuencial, '')"
              . " || ' ' || COALESCE({$a}observaciones, '')"
-             . " || ' ' || COALESCE({$a}clave_acceso, '')"
              . " || ' ' || COALESCE({$a}guia_remision, '')"
              . " || ' ' || COALESCE({$a}placa, '')"
              . " || ' ' || " . $m::fechaIso("{$a}fecha_emision")
@@ -96,11 +102,17 @@ class FacturaVentaRepository extends BaseRepository
      * de recorrer todas las facturas de la empresa quitándole las tildes al texto de cada
      * una y juntando las líneas de su detalle.
      *
-     * Busca exactamente lo mismo que antes: número, secuencial, observaciones, clave de
-     * acceso, guía, placa, fecha, importes, saldo pendiente, cliente (nombre e
-     * identificación), vendedor, usuario que registró y los productos facturados (código y
-     * descripción de cada línea). Estado, Estado correo y Estado pago siguen fuera del texto
-     * libre (decisión del usuario): se filtran desde el modal.
+     * Qué busca: número, secuencial, observaciones, guía, placa, fecha, importes, saldo
+     * pendiente, cliente (nombre e identificación) y vendedor.
+     *
+     * Qué NO busca, por decisión del usuario (17-09-2026), y dónde se busca en su lugar:
+     *   - Clave de acceso  → filtro `clave:…` (ver exprFactura(): traía filas al azar).
+     *   - Usuario que registró → filtro `usuario:…`.
+     *   - Productos del detalle (código y descripción) → pestaña "Detalles" del modal de
+     *     filtros, que llama a buscarEnDetalles() y SÍ dice qué línea coincidió; desde el
+     *     listado la factura aparecía sin que se viera el motivo.
+     * Estado, Estado correo y Estado pago siguen fuera del texto libre (misma decisión, de
+     * antes): se filtran desde el modal.
      *
      * @param string $saldo Expresión del saldo (usa el LATERAL de abonos `ab`).
      */
@@ -134,15 +146,8 @@ class FacturaVentaRepository extends BaseRepository
                 'expr'   => "COALESCE(cx.nombre, '') || ' ' || COALESCE(cx.identificacion, '')",
                 'indice' => ['tabla' => 'clientes', 'nombre' => 'idx_trgm_clientes', 'expr' => "COALESCE(nombre, '') || ' ' || COALESCE(identificacion, '')"],
             ],
-            // Vendedor y usuario que registró: tablas chicas, sin índice.
+            // Vendedor: tabla chica, sin índice.
             ['sql' => "v.id_vendedor IN (SELECT vx.id FROM vendedores vx WHERE {cond})", 'expr' => "COALESCE(vx.nombre, '')"],
-            ['sql' => "v.id_usuario IN (SELECT ux.id FROM usuarios ux WHERE {cond})", 'expr' => "COALESCE(ux.nombre, '')"],
-            // Productos facturados: código principal, código auxiliar y descripción de la línea
-            [
-                'sql'    => "v.id IN (SELECT dx.id_venta FROM ventas_detalle dx WHERE {cond})",
-                'expr'   => "COALESCE(dx.codigo_principal, '') || ' ' || COALESCE(dx.codigo_auxiliar, '') || ' ' || COALESCE(dx.descripcion, '')",
-                'indice' => ['tabla' => 'ventas_detalle', 'nombre' => 'idx_trgm_ventas_detalle', 'expr' => "COALESCE(codigo_principal, '') || ' ' || COALESCE(codigo_auxiliar, '') || ' ' || COALESCE(descripcion, '')"],
-            ],
         ];
     }
 
@@ -183,12 +188,12 @@ class FacturaVentaRepository extends BaseRepository
         $sqlAbonos = 'ab.abonos';
         $saldo = '(v.importe_total - ab.abonos)';
 
-        // Texto libre: las columnas del listado (incluidas las calculadas IVA y Saldo)
-        // y sus relacionadas. El buscador de la vista no sugiere campos; lo escrito se
-        // busca en todo. Los productos vendidos viven en el detalle: se agregan como
-        // una sola cadena por factura.
-        // Decisión del usuario: las columnas Estado, Estado correo y Estado pago NO
-        // entran en el texto libre (se filtran solo desde el modal de filtros).
+        // Texto libre: las columnas del listado (incluidas las calculadas IVA y Saldo) y
+        // sus relacionadas. El buscador de la vista no sugiere campos; lo escrito se busca
+        // en todo LO QUE SE VE en el listado — ni más ni menos. Lo que quedó fuera a
+        // propósito y dónde se busca en su lugar está en fuentesBusqueda(): clave de
+        // acceso, usuario que registró, productos del detalle, Estado, Estado correo y
+        // Estado pago.
         if ($textoLibre !== '') {
             // Conjuntos indexables (ver fuentesBusqueda() y App\Helpers\MotorBusqueda): cada
             // fuente se resuelve una vez por palabra con su índice trigram. El SALDO —que
