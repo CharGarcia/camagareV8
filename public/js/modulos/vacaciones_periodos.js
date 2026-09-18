@@ -30,7 +30,7 @@
     const SITUACION = {
         pendiente:      ['warning',   'Pendiente'],
         parcial:        ['warning',   'Parcial'],
-        tomado:         ['success',   'Tomado antes del sistema'],
+        tomado:         ['success',   'Vacaciones tomadas'],
         pagado:         ['primary',   'Pagado antes del sistema'],
         gozado:         ['info',      'Gozado en el sistema'],
         en_curso:       ['secondary', 'En curso'],

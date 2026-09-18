@@ -5,8 +5,8 @@ categoria: Impuestos
 ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
-etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, formula, suma de casilleros, casillero en blanco, no calcula
-version: 1.6
+etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula
+version: 1.7
 orden: 10
 estado: activo
 ---
@@ -95,6 +95,33 @@ Esos casilleros salen igualmente en el Excel: al final de la hoja *Resumen 104*
 y marcados en rojo en la hoja *Por Casillero* con la observación "Sin fila en la
 estructura". Para que aparezcan también en el formulario hay que crear la fila
 correspondiente en la configuración de casilleros.
+
+## Retenciones de IVA: de dónde sale cada valor
+
+El formulario toma las retenciones de IVA del periodo de dos módulos:
+
+| Retenciones | Módulo de origen | Casilleros (configuración estándar) | Cuáles cuentan |
+| --- | --- | --- | --- |
+| Las que **le hicieron** sus clientes | Retenciones en ventas | 609 | Todas las no eliminadas con fecha del periodo |
+| Las que **usted emitió** como agente de retención | Retenciones en compras | 721 (10 %), 723 (20 %), 725 (30 %), 727 (50 %), 729 (70 %), 731 (100 %) | Solo las **autorizadas por el SRI** con fecha del periodo |
+
+Cada línea de la retención se relaciona por su **código de retención del SRI**
+(9 = 10 %, 10 = 20 %, 1 = 30 %, 11 = 50 %, 2 = 70 %, 3 = 100 %), no por el
+porcentaje. Con ese código el sistema ubica el concepto en *Empresa → Form 104
+IVA → Retenciones SRI - IVA* y usa el casillero escrito en **Cas. Ventas** (las
+que le hicieron) o en **Cas. Compras** (las que emitió). Esa configuración es
+**por establecimiento**: cada uno debe tener sus casilleros llenos.
+
+Si una retención no aparece en el formulario:
+
+- Revise que en ese establecimiento el concepto de la retención tenga el
+  casillero lleno. La pantalla muestra el concepto y el porcentaje, pero no el
+  código: si hay dos conceptos con el mismo porcentaje, el que vale es el del
+  código que trae el documento.
+- Si es una retención emitida, confirme que esté **autorizada**; las que siguen en
+  borrador o pendientes no cuentan.
+- Compruebe que la fecha de emisión de la retención caiga dentro del periodo.
+- Presione **GENERAR** para que el sistema vuelva a leer los documentos.
 
 ## Casilleros que suman otros (fórmulas)
 
@@ -216,9 +243,18 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
 - **Un casillero configurado con fórmula sale en blanco**: lea el aviso amarillo
   sobre el formulario, que dice exactamente por qué no se aplicó (ver
   *Casilleros que suman otros*).
+- **No salen las retenciones de IVA**: siga la lista de *Retenciones de IVA: de
+  dónde sale cada valor*. Si son retenciones emitidas (721 a 731) de periodos
+  generados antes de la versión 1.7, vuelva a presionar GENERAR y guarde de nuevo.
 
 ## Historial de cambios
 
+- **1.7** — Las retenciones de IVA emitidas como agente de retención (casilleros 721 a
+  731) ya llegan al formulario. Antes ninguna entraba: el módulo buscaba las retenciones de
+  compra con un estado que nunca tienen y, al presionar GENERAR, borraba incluso las que se
+  habían registrado al guardarlas. Si las fórmulas de su formulario suman esos casilleros al
+  total a pagar (799, 801, 859, 902), ese total y el egreso cambian al regenerar el periodo.
+  Se documenta de dónde sale cada retención y con qué código se relaciona.
 - **1.6** — El egreso se genera por el casillero 902 tal como se ve en el formulario: si el
   902 tiene fórmula configurada, esa manda sobre el neto calculado internamente. Antes la
   pantalla mostraba el resultado de la fórmula y el egreso salía por otro importe, y además

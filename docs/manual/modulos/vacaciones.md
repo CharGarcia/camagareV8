@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/vacaciones
 tipo: modulo
 visibilidad: todos
-etiquetas: vacaciones, dias de vacaciones, descanso, saldo de vacaciones, antiguedad, gozadas, periodo vacacional, buscar vacaciones, buscador, filtros, filtrar vacaciones, vacaciones por empleado, chips, periodos, periodos de vacaciones, periodos tomados, periodos pagados, vacaciones pagadas, vacaciones no gozadas, vacaciones acumuladas, saldo inicial de vacaciones, ajustar saldo, empleados de otro sistema, migracion de empleados, vacaciones al dia
-version: 1.2
+etiquetas: vacaciones, dias de vacaciones, descanso, saldo de vacaciones, antiguedad, gozadas, periodo vacacional, buscar vacaciones, buscador, filtros, filtrar vacaciones, vacaciones por empleado, chips, periodos, periodos de vacaciones, periodos tomados, periodos pagados, vacaciones tomadas, vacaciones pagadas, vacaciones no gozadas, vacaciones acumuladas, saldo inicial de vacaciones, ajustar saldo, empleados de otro sistema, migracion de empleados, vacaciones al dia
+version: 1.3
 orden: 40
 estado: activo
 ---
@@ -69,7 +69,7 @@ saldo de días.
 | Antes del sistema | Días marcados como tomados o pagados antes de usar el sistema |
 | En el sistema | Días de las vacaciones registradas en este módulo que se descuentan de ese período |
 | Pendiente | Días que al empleado todavía le quedan de ese período |
-| Situación | Pendiente, Parcial, Tomado o Pagado antes del sistema, Gozado en el sistema o En curso |
+| Situación | Pendiente, Parcial, Vacaciones tomadas (marcado como tomado), Pagado antes del sistema, Gozado en el sistema o En curso |
 
 Las vacaciones registradas en el sistema se descuentan del **período pendiente
 más antiguo** que no esté marcado. Por eso, si registró vacaciones antes de
@@ -174,6 +174,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   Empleados); sin ella no hay períodos que mostrar.
 
 ## Historial de cambios
+
+- **1.3** — En la columna *Situación* del cuadro de períodos, los marcados como
+  tomados se muestran como *Vacaciones tomadas* (antes *Tomado antes del
+  sistema*). Aplica aquí y en la pestaña *Vacaciones* del módulo Empleados.
 
 - **1.2** — Períodos ya tomados o pagados antes del sistema: al elegir un
   empleado se ve el cuadro de sus años de trabajo y se marcan los que ya gozó o

@@ -32,6 +32,10 @@ class DeclaracionIvaRepository extends BaseRepository
             $estadoFilter = "AND COALESCE(deducible, '') = 'declaracion_iva'";
         } elseif ($tabla === 'retencion_venta_cabecera') {
             $estadoFilter = ""; // Estas tablas no tienen columna estado, solo nos guiamos por eliminado
+        } elseif ($tabla === 'retencion_compra_cabecera') {
+            // Estado en femenino: el CHECK de la tabla solo admite 'autorizada' (así la marca
+            // SriEnvioService); con 'autorizado' ninguna retención emitida llegaba al 721-731.
+            $estadoFilter = "AND estado = 'autorizada'";
         } elseif ($tabla === 'importaciones_cabecera') {
             // No es comprobante SRI: no tiene fecha_emision, y el crédito solo es real una
             // vez nacionalizada (o cerrada); antes es un borrador sin IVA declarable todavía.
@@ -188,6 +192,9 @@ class DeclaracionIvaRepository extends BaseRepository
 
     /**
      * Limpia los casilleros huérfanos (documentos eliminados o anulados)
+     *
+     * La retención de compra se autoriza como 'autorizada' (femenino); el resto de documentos,
+     * como 'autorizado'. Con el literal equivocado aquí se borran casilleros válidos.
      */
     public function limpiarCasillerosHuerfanos(int $idEmpresa, string $fechaDesde, string $fechaHasta): void
     {
@@ -205,7 +212,7 @@ class DeclaracionIvaRepository extends BaseRepository
                     OR
                     (c.origen = 'notas de debito' AND NOT EXISTS (SELECT 1 FROM nota_debito_cabecera nd WHERE nd.id = CAST(c.id_origen AS INTEGER) AND COALESCE(nd.eliminado, false) = false AND nd.estado = 'autorizado'))
                     OR
-                    (c.origen = 'retenciones_compras' AND NOT EXISTS (SELECT 1 FROM retencion_compra_cabecera rc WHERE rc.id = CAST(c.id_origen AS INTEGER) AND COALESCE(rc.eliminado, false) = false AND rc.estado = 'autorizado'))
+                    (c.origen = 'retenciones_compras' AND NOT EXISTS (SELECT 1 FROM retencion_compra_cabecera rc WHERE rc.id = CAST(c.id_origen AS INTEGER) AND COALESCE(rc.eliminado, false) = false AND rc.estado = 'autorizada'))
                     OR
                     (c.origen = 'retenciones_ventas' AND NOT EXISTS (SELECT 1 FROM retencion_venta_cabecera rv WHERE rv.id = CAST(c.id_origen AS INTEGER) AND COALESCE(rv.eliminado, false) = false))
                     OR

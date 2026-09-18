@@ -203,9 +203,6 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
                             <li class="nav-item">
                                 <a class="nav-link py-2 small" id="tab-credenciales-btn" data-bs-toggle="tab" href="#tab-credenciales" role="tab" onclick="window.empCredCargar && window.empCredCargar()"><i class="bi bi-person-vcard me-1"></i>Credenciales</a>
                             </li>
-                            <li class="nav-item">
-                                <a class="nav-link py-2 small" id="tab-atrasos-btn" data-bs-toggle="tab" href="#tab-atrasos" role="tab"><i class="bi bi-clock-history me-1"></i>Atrasos</a>
-                            </li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
@@ -595,28 +592,83 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
                             <input type="hidden" name="rubros_json" id="rubros_json">
                         </div>
 
-                        <!-- Panel Horario: asignación de turno + punto por vigencia -->
+                        <!-- Panel Horario: tratamiento de atrasos (arriba) + asignación de turno y punto por vigencia -->
                         <div class="tab-pane fade" id="tab-horario" role="tabpanel">
-                            <p class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>Asigna a este empleado su turno y (opcional) su punto de servicio, con vigencia. El motor de Jornadas usa el turno vigente para calcular atrasos, extras y faltas.</p>
-                            <div class="border rounded overflow-hidden">
-                                <div class="table-responsive" style="max-height: 300px;">
-                                    <table class="table table-sm emp-grid mb-0 text-nowrap" id="tablaAsignaciones">
-                                        <thead>
-                                            <tr class="table-light border-bottom">
-                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:32%;">Turno</th>
-                                                <th class="py-2 small fw-bold text-muted" style="width:28%;">Punto de servicio</th>
-                                                <th class="py-2 small fw-bold text-muted" style="width:18%;">Vigente desde</th>
-                                                <th class="py-2 small fw-bold text-muted" style="width:18%;">Vigente hasta</th>
-                                                <th style="width:40px;"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody></tbody>
-                                    </table>
+                            <!-- Sección Atrasos: cómo pasan al rol los atrasos que calcula Jornadas -->
+                            <h6 class="fw-bold small text-uppercase text-muted mb-2">
+                                <i class="bi bi-alarm me-1"></i>Atrasos
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-md-5">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Tratamiento de atrasos</label>
+                                    <select class="form-select form-select-sm shadow-none" name="atraso_modo" id="emp_atraso_modo">
+                                        <option value="descuento">Se descuenta según horas</option>
+                                        <option value="no_descuenta" selected>No se descuenta</option>
+                                        <option value="informativo_reg">Solo informativo</option>
+                                    </select>
                                 </div>
-                                <div class="p-2 border-top bg-light">
-                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="window.agregarFilaAsignacion()">
-                                        <i class="bi bi-plus-circle me-1"></i> Agregar asignación
-                                    </button>
+                            </div>
+
+                            <div class="accordion accordion-flush border rounded mt-3" id="accAtrasoAyuda">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed small py-2 fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAtrasoAyuda" aria-expanded="false" aria-controls="collapseAtrasoAyuda">
+                                            <i class="bi bi-question-circle me-2 text-primary"></i>Aquí la explicación con ejemplo
+                                        </button>
+                                    </h2>
+                                    <div id="collapseAtrasoAyuda" class="accordion-collapse collapse" data-bs-parent="#accAtrasoAyuda">
+                                        <div class="accordion-body small">
+                                            <p class="mb-2"><i class="bi bi-info-circle me-1 text-primary"></i><b>¿Qué es?</b> Si el empleado marca su asistencia, el sistema calcula sus jornadas y acumula los <b>minutos de atraso</b> del mes. Al usar «Generar Novedades» (módulo Jornadas), esos atrasos se convierten (o no) en una novedad para el rol según esta regla:</p>
+                                            <ul class="mb-2 ps-3">
+                                                <li><b>Se descuenta según horas:</b> crea una novedad de <b>Descuento</b> = horas de atraso × (sueldo base ÷ 240). El 240 = horas laborables al mes (8 h × 30 días).</li>
+                                                <li><b>No se descuenta:</b> no genera ninguna novedad. El atraso queda visible solo en Jornadas.</li>
+                                                <li><b>Solo informativo:</b> genera una novedad de <b>registro con valor $0</b> (no descuenta), para que quede constancia del atraso en el rol.</li>
+                                            </ul>
+                                            <div class="p-2 bg-white rounded border">
+                                                <b class="d-block mb-1"><i class="bi bi-lightbulb me-1 text-warning"></i>Ejemplo</b>
+                                                Empleado con sueldo base <b>$480</b> que acumula <b>3 horas</b> de atraso en el mes:
+                                                <div class="table-responsive mt-2">
+                                                    <table class="table table-sm mb-0">
+                                                        <tbody>
+                                                            <tr><td style="width:190px;"><b>Se descuenta según horas</b></td><td>3 h × ($480 ÷ 240) = 3 × $2.00 = <b>$6.00</b> → novedad Descuento de $6.00.</td></tr>
+                                                            <tr><td><b>No se descuenta</b></td><td>Nada. El atraso solo se ve en Jornadas.</td></tr>
+                                                            <tr><td><b>Solo informativo</b></td><td>Novedad de registro por las <b>3 h</b> con valor <b>$0.00</b> (no afecta el pago).</td></tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                            <div class="mt-2 text-muted"><i class="bi bi-exclamation-circle me-1"></i>Solo aplica si el empleado usa el módulo de asistencia (marca y se generan jornadas).</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sección Horarios: turno y (opcional) punto de servicio, con vigencia -->
+                            <div class="border-top mt-3 pt-3">
+                                <h6 class="fw-bold small text-uppercase text-muted mb-2">
+                                    <i class="bi bi-calendar-week me-1"></i>Horarios
+                                </h6>
+                                <p class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>Asigna a este empleado su turno y (opcional) su punto de servicio, con vigencia. El motor de Jornadas usa el turno vigente para calcular atrasos, extras y faltas.</p>
+                                <div class="border rounded overflow-hidden">
+                                    <div class="table-responsive" style="max-height: 300px;">
+                                        <table class="table table-sm emp-grid mb-0 text-nowrap" id="tablaAsignaciones">
+                                            <thead>
+                                                <tr class="table-light border-bottom">
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width:32%;">Turno</th>
+                                                    <th class="py-2 small fw-bold text-muted" style="width:28%;">Punto de servicio</th>
+                                                    <th class="py-2 small fw-bold text-muted" style="width:18%;">Vigente desde</th>
+                                                    <th class="py-2 small fw-bold text-muted" style="width:18%;">Vigente hasta</th>
+                                                    <th style="width:40px;"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody></tbody>
+                                        </table>
+                                    </div>
+                                    <div class="p-2 border-top bg-light">
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="window.agregarFilaAsignacion()">
+                                            <i class="bi bi-plus-circle me-1"></i> Agregar asignación
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <input type="hidden" name="asignaciones_horario_json" id="asignaciones_horario_json" value="[]">
@@ -693,54 +745,6 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- Panel Atrasos: tratamiento de atrasos del empleado -->
-                        <div class="tab-pane fade" id="tab-atrasos" role="tabpanel">
-                            <div class="row g-3">
-                                <div class="col-md-5">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Tratamiento de atrasos</label>
-                                    <select class="form-select form-select-sm shadow-none" name="atraso_modo" id="emp_atraso_modo">
-                                        <option value="descuento">Se descuenta según horas</option>
-                                        <option value="no_descuenta" selected>No se descuenta</option>
-                                        <option value="informativo_reg">Solo informativo</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div class="accordion accordion-flush border rounded mt-3" id="accAtrasoAyuda">
-                              <div class="accordion-item">
-                                <h2 class="accordion-header">
-                                  <button class="accordion-button collapsed small py-2 fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAtrasoAyuda" aria-expanded="false" aria-controls="collapseAtrasoAyuda">
-                                    <i class="bi bi-question-circle me-2 text-primary"></i>Aquí la explicación con ejemplo
-                                  </button>
-                                </h2>
-                                <div id="collapseAtrasoAyuda" class="accordion-collapse collapse" data-bs-parent="#accAtrasoAyuda">
-                                  <div class="accordion-body small">
-                                <p class="mb-2"><i class="bi bi-info-circle me-1 text-primary"></i><b>¿Qué es?</b> Si el empleado marca su asistencia, el sistema calcula sus jornadas y acumula los <b>minutos de atraso</b> del mes. Al usar «Generar Novedades» (módulo Jornadas), esos atrasos se convierten (o no) en una novedad para el rol según esta regla:</p>
-                                <ul class="mb-2 ps-3">
-                                    <li><b>Se descuenta según horas:</b> crea una novedad de <b>Descuento</b> = horas de atraso × (sueldo base ÷ 240). El 240 = horas laborables al mes (8 h × 30 días).</li>
-                                    <li><b>No se descuenta:</b> no genera ninguna novedad. El atraso queda visible solo en Jornadas.</li>
-                                    <li><b>Solo informativo:</b> genera una novedad de <b>registro con valor $0</b> (no descuenta), para que quede constancia del atraso en el rol.</li>
-                                </ul>
-                                <div class="p-2 bg-white rounded border">
-                                    <b class="d-block mb-1"><i class="bi bi-lightbulb me-1 text-warning"></i>Ejemplo</b>
-                                    Empleado con sueldo base <b>$480</b> que acumula <b>3 horas</b> de atraso en el mes:
-                                    <div class="table-responsive mt-2">
-                                        <table class="table table-sm mb-0">
-                                            <tbody>
-                                                <tr><td style="width:190px;"><b>Se descuenta según horas</b></td><td>3 h × ($480 ÷ 240) = 3 × $2.00 = <b>$6.00</b> → novedad Descuento de $6.00.</td></tr>
-                                                <tr><td><b>No se descuenta</b></td><td>Nada. El atraso solo se ve en Jornadas.</td></tr>
-                                                <tr><td><b>Solo informativo</b></td><td>Novedad de registro por las <b>3 h</b> con valor <b>$0.00</b> (no afecta el pago).</td></tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                                <div class="mt-2 text-muted"><i class="bi bi-exclamation-circle me-1"></i>Solo aplica si el empleado usa el módulo de asistencia (marca y se generan jornadas).</div>
-                                  </div>
-                                </div>
-                              </div>
                             </div>
                         </div>
 

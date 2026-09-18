@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
-etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema
-version: 1.5
+etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos
+version: 1.6
 orden: 10
 estado: activo
 ---
@@ -77,6 +77,10 @@ empresa.
 4. Pulse **Marcar como tomados** o **Marcar como pagados** y confirme. El saldo
    se actualiza al momento.
 
+En la columna **Situación**, los períodos marcados como tomados se ven como
+*Vacaciones tomadas* y los marcados como pagados, como *Pagado antes del
+sistema*.
+
 Las marcas se guardan al pulsar esos botones: no hace falta el botón *Guardar*
 del empleado. Para quitar una marca, use la flecha circular de la fila.
 
@@ -88,6 +92,39 @@ Marcar períodos requiere el permiso de **crear** de ese módulo, y quitar una
 marca, el de **eliminar**. Los detalles (cómo se reparten las vacaciones entre
 los períodos, marcas parciales, avisos) están en el artículo del módulo
 *Vacaciones*.
+
+## Pestaña Horario: tratamiento de atrasos y turnos
+
+La pestaña **Horario** reúne lo que el control de asistencia necesita del
+empleado, en dos secciones: **Atrasos** arriba y **Horarios** debajo. Ambas se
+guardan con el botón **Guardar** del empleado.
+
+> El tratamiento de atrasos estaba antes en una pestaña propia, *Atrasos*, que
+> ya no existe: ahora es la primera sección de esta pestaña.
+
+### Atrasos
+
+El campo **Tratamiento de atrasos** decide qué pasa con los atrasos que el
+empleado acumula en el mes cuando se usa *Generar Novedades* en el módulo
+Jornadas:
+
+| Opción | Qué genera para el rol |
+|--------|------------------------|
+| Se descuenta según horas | Una novedad de **Descuento** = horas de atraso × (sueldo base ÷ 240) |
+| No se descuenta | Nada: el atraso solo se ve en Jornadas. Es la opción que trae un empleado nuevo |
+| Solo informativo | Una novedad de registro con valor **$0**, para que quede constancia del atraso en el rol |
+
+Por ejemplo, con un sueldo base de $480 y 3 horas de atraso en el mes, *Se
+descuenta según horas* genera un descuento de 3 × ($480 ÷ 240) = **$6,00**. El
+desplegable *Aquí la explicación con ejemplo*, debajo del campo, muestra este
+mismo detalle. Solo aplica a empleados que marcan asistencia.
+
+### Horarios
+
+Asigne al empleado su **turno** y, si hace falta, su **punto de servicio**, con
+las fechas *Vigente desde* y *Vigente hasta*. Use **Agregar asignación** para
+sumar una fila. El módulo Jornadas usa el turno vigente para calcular atrasos,
+horas extra y faltas.
 
 ## Credencial de asistencia (QR personal y rostro)
 
@@ -146,6 +183,10 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Historial de cambios
 
+- **1.6** — Se quita la pestaña *Atrasos*: el tratamiento de atrasos pasa a la
+  pestaña *Horario*, en su propia sección arriba de los horarios. En la pestaña
+  *Vacaciones*, la situación de los períodos marcados como tomados se muestra
+  como *Vacaciones tomadas* (antes *Tomado antes del sistema*).
 - **1.5** — Pestaña *Vacaciones* después de *Periodos*: saldo de vacaciones del
   empleado y cuadro de sus años de trabajo, donde se marcan los períodos ya
   tomados o pagados antes de usar el sistema.
