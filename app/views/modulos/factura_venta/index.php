@@ -165,6 +165,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         padding: 2px 8px !important;
     }
 
+    .modal-factura .table-detalle .input-codigo {
+        field-sizing: content;
+        min-width: 100%;
+        max-width: 320px;
+    }
+
     .modal-factura .card-header {
         padding: 0.4rem 1rem !important;
     }
