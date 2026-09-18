@@ -120,6 +120,8 @@ class NotaCreditoService
                         'id_bodega'       => $data['id_bodega'],
                         'cantidad'        => $det['cantidad'],
                         'id_referencia'   => $idNC,
+                        'num_doc_modificado' => $data['num_doc_modificado'] ?? '',
+                        'cod_doc_modificado' => $data['cod_doc_modificado'] ?? '01',
                         'descripcion'     => "Devolución NC {$data['establecimiento']}-{$data['punto_emision']}-{$data['secuencial']}",
                         'id_usuario'      => $data['id_usuario']
                     ]);
@@ -334,6 +336,8 @@ class NotaCreditoService
                         'id_bodega'       => $data['id_bodega'],
                         'cantidad'        => $det['cantidad'],
                         'id_referencia'   => $id,
+                        'num_doc_modificado' => $data['num_doc_modificado'] ?? '',
+                        'cod_doc_modificado' => $data['cod_doc_modificado'] ?? '01',
                         'descripcion'     => "Devolución NC Actualizada {$data['secuencial']}",
                         'id_usuario'      => $data['id_usuario']
                     ]);

@@ -311,35 +311,10 @@ class IngresosController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-wallet2 fs-3 d-block mb-2"></i>No se encontraron ingresos.</td></tr>';
+            echo '<tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-wallet2 fs-3 d-block mb-2"></i>No se encontraron ingresos.</td></tr>';
         } else {
             foreach ($rows as $r) {
-                $rowData = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
-                $fecha   = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
-
-                $tipoLabel = \App\Helpers\TipoDocumentoHelper::ingresoLabel(
-                    $r['tipos_detalle'] ?? null,
-                    $r['tipo_ingreso'] ?? null,
-                    $r['concepto_nombre'] ?? null
-                );
-
-                $estado  = $r['estado'] ?? 'registrado';
-                $estadoClass = match ($estado) {
-                    'anulado'    => 'bg-danger bg-opacity-10 text-danger border-danger',
-                    'borrador'   => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
-                    default      => 'bg-success bg-opacity-10 text-success border-success',
-                };
-                $estadoBadge = '<span class="badge ' . $estadoClass . ' border border-opacity-25">' . ucfirst($estado) . '</span>';
-
-                echo '<tr class="ingreso-row" role="button" tabindex="0" data-id="' . $r['id'] . '" onclick="abrirModalIngresoVer(' . $r['id'] . ')">
-                        <td class="ps-3" data-col="numero_ingreso"><code class="text-secondary">' . htmlspecialchars($r['numero_ingreso'] ?? '') . '</code></td>
-                        <td data-col="fecha_emision">' . $fecha . '</td>
-                        <td data-col="tipo_ingreso"><span class="badge bg-light text-dark border">' . htmlspecialchars($tipoLabel) . '</span></td>
-                        <td class="fw-medium text-truncate" data-col="recibo_de" style="max-width:200px">' . htmlspecialchars($r['recibo_de'] ?? $r['cliente_nombre'] ?? $r['concepto_nombre'] ?? '—') . '</td>
-                        <td data-col="observaciones" class="text-truncate text-muted" style="max-width:200px">' . htmlspecialchars($r['observaciones'] ?? '') . '</td>
-                        <td class="text-end fw-bold" data-col="monto_total">$' . number_format((float)($r['monto_total'] ?? 0), 2) . '</td>
-                        <td class="text-center pe-3" data-col="estado">' . $estadoBadge . '</td>
-                      </tr>';
+                echo $this->renderFila($r);
             }
         }
         $rowsHtml = ob_get_clean();
@@ -362,6 +337,43 @@ class IngresosController extends BaseModuloController
             'excel_url'  => $urlBase . '/export-excel?b='  . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden)),
         ]);
         exit;
+    }
+
+    /**
+     * Una fila del listado. El HTML vive en un único partial que incluyen la carga inicial
+     * (index.php), el refresco AJAX y la fila del ingreso recién guardado.
+     */
+    private function renderFila(array $r): string
+    {
+        ob_start();
+        include MVC_APP . '/views/modulos/ingresos/_fila.php';
+        return (string) ob_get_clean();
+    }
+
+    /**
+     * HTML de la fila del ingreso recién guardado (nuevo o editado), con el mismo alcance que
+     * el listado (registros propios incluidos). La vista lo usa para actualizar ese registro
+     * en el listado sin perder la página, el orden ni los filtros. El ingreso YA se guardó:
+     * si algo falla aquí se registra y se devuelve null (la vista igual recarga el listado),
+     * nunca un error que haga creer que no se guardó y lleve a registrarlo dos veces.
+     */
+    private function filaGuardada(int $id): ?string
+    {
+        $nivelBuffer = ob_get_level();
+        try {
+            $perm = $this->getPermisos();
+            $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            $r = $this->service->getFilaListado($id, (int) $_SESSION['id_empresa'], $idUsuarioFiltro);
+            return $r ? $this->renderFila($r) : null;
+        } catch (\Throwable $e) {
+            // Un fallo a mitad del partial dejaría su buffer abierto y ese HTML suelto saldría
+            // delante del JSON de la respuesta.
+            while (ob_get_level() > $nivelBuffer) {
+                ob_end_clean();
+            }
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return null;
+        }
     }
 
     /** Saldo de un anticipo de cliente para el cliente seleccionado. */
@@ -552,7 +564,7 @@ class IngresosController extends BaseModuloController
                 $sec   = str_pad((string)($data['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
                 $data['numero_ingreso'] = "{$est}-{$punto}-{$sec}";
                 $this->service->actualizar($id, $data);
-                echo json_encode(['ok' => true, 'mensaje' => 'Ingreso actualizado correctamente.', 'id' => $id]);
+                echo json_encode(['ok' => true, 'mensaje' => 'Ingreso actualizado correctamente.', 'id' => $id, 'fila' => $this->filaGuardada($id)]);
             } else {
                 // Alta: el número lo asigna el SERVIDOR, no el navegador. El secuencial que llega en
                 // el POST lo calculó getSecuencialAjax() al abrir el modal y puede tener minutos de
@@ -561,7 +573,7 @@ class IngresosController extends BaseModuloController
                 // pg_advisory_xact_lock de obtenerSiguienteSecuencial() lo proteja hasta el INSERT
                 // (CLAUDE.md §8: abrir la transacción ANTES de calcular y mantenerla hasta escribir).
                 $newId = $this->crearConSecuencialReservado($data);
-                echo json_encode(['ok' => true, 'mensaje' => 'Ingreso registrado correctamente.', 'id' => $newId]);
+                echo json_encode(['ok' => true, 'mensaje' => 'Ingreso registrado correctamente.', 'id' => $newId, 'fila' => $this->filaGuardada($newId)]);
             }
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

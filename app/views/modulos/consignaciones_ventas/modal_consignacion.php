@@ -61,6 +61,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             box-shadow: inset 0 0 0 1px #0d6efd;
                             outline: none;
                         }
+                        /* Código del producto: solo se muestra (se llena al elegir el producto) y
+                           ensancha la columna lo justo para que se lea completo. */
+                        #consTablaDetalles .input-codigo {
+                            field-sizing: content;
+                            min-width: 100%;
+                            max-width: 220px;
+                            cursor: default;
+                        }
+                        #consTablaDetalles .input-codigo:focus {
+                            box-shadow: none;
+                        }
                         .row-detalle-cons:hover {
                             background-color: rgba(13, 110, 253, 0.03);
                         }
@@ -269,7 +280,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                     <table class="table table-sm table-detalle mb-0 text-nowrap" id="consTablaDetalles">
                                         <thead>
                                             <tr class="table-light border-bottom">
-                                                <th class="ps-3 py-2 small fw-bold text-muted">Producto</th>
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:110px;">Código</th>
+                                                <th class="py-2 small fw-bold text-muted">Producto</th>
                                                 <th class="py-2 small fw-bold text-muted" style="width:120px;">Precios</th>
                                                 <th class="py-2 small fw-bold text-muted text-end" style="width:120px;">Precio</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width:100px;">Cantidad</th>
@@ -875,10 +887,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             const tr = document.createElement('tr');
             tr.className = 'row-detalle-cons';
             tr.innerHTML = `
-                <td class="ps-3 position-relative">
+                <td class="ps-3">
+                    <input type="text" class="form-control form-control-sm input-detalle input-codigo" readonly tabindex="-1" placeholder="—" title="Código del producto">
+                </td>
+                <td class="position-relative">
                     <input type="text" class="form-control form-control-sm input-detalle input-descripcion" placeholder="Buscar producto..." autocomplete="off">
                     <input type="hidden" class="input-id-producto">
-                    <input type="hidden" class="input-codigo">
                     <input type="hidden" class="input-precio-base-original" value="0">
                     <input type="hidden" class="input-id-pedido-detalle" value="">
                 </td>
@@ -2893,13 +2907,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     const badgeCls = saldoGeneral > 0
                         ? 'bg-primary bg-opacity-10 text-primary border-primary'
                         : 'bg-secondary bg-opacity-10 text-secondary border-secondary';
+                    const codigo = r.producto_codigo || '';
+                    const tituloProducto = (codigo ? codigo + ' - ' : '') + (r.producto_nombre || '');
                     return `<tr>
                         <td class="ps-3">${consFmtFecha(r.fecha)}</td>
                         <td>${consBadgeTipoMovimiento(r.tipo)}</td>
                         <td class="fw-bold text-primary">${consEscHtml(r.documento || '')}</td>
                         <td>
                             <div class="d-flex justify-content-between align-items-center gap-2">
-                                <span class="text-truncate" style="max-width:180px" title="${consEscHtml(r.producto_nombre || '')}">${consEscHtml(r.producto_nombre || '')}</span>
+                                <span class="text-truncate" style="max-width:260px" title="${consEscHtml(tituloProducto)}">${codigo ? `<code class="text-secondary me-1">${consEscHtml(codigo)}</code>` : ''}${consEscHtml(r.producto_nombre || '')}</span>
                                 <span class="badge ${badgeCls} border border-opacity-25" title="Saldo general del producto en esta consignación">${saldoGeneral.toFixed(2)}</span>
                             </div>
                         </td>

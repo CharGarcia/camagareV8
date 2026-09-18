@@ -62,6 +62,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         background-color: rgba(0, 0, 0, .04);
     }
 
+    /* Fila del ingreso recién guardado (nuevo o editado): se resalta un momento para que
+       se vea en el listado qué registro cambió. */
+    @keyframes ing-fila-guardada {
+        from { background-color: rgba(25, 135, 84, .22); }
+        to   { background-color: transparent; }
+    }
+
+    .ingreso-row.fila-guardada > td {
+        animation: ing-fila-guardada 3s ease-out;
+    }
+
     .table-detalle th {
         font-size: 0.75rem;
         text-transform: uppercase;
@@ -285,28 +296,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
-                            <?php
-                            $tipoLabel = \App\Helpers\TipoDocumentoHelper::ingresoLabel(
-                                $r['tipos_detalle'] ?? null,
-                                $r['tipo_ingreso'] ?? null,
-                                $r['concepto_nombre'] ?? null
-                            );
-                            $estado  = $r['estado'] ?? 'registrado';
-                            $estadoClass = match ($estado) {
-                                'anulado'  => 'bg-danger bg-opacity-10 text-danger border-danger',
-                                'borrador' => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
-                                default    => 'bg-success bg-opacity-10 text-success border-success',
-                            };
-                            ?>
-                            <tr class="ingreso-row" role="button" onclick="abrirModalIngresoVer(<?= $r['id'] ?>)">
-                                <td class="ps-3" data-col="numero_ingreso"><code class="text-secondary"><?= htmlspecialchars($r['numero_ingreso'] ?? '') ?></code></td>
-                                <td data-col="fecha_emision"><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
-                                <td data-col="tipo_ingreso"><span class="badge bg-light text-dark border"><?= htmlspecialchars($tipoLabel) ?></span></td>
-                                <td class="fw-medium text-truncate" data-col="recibo_de" style="max-width:200px"><?= htmlspecialchars($r['recibo_de'] ?? $r['cliente_nombre'] ?? $r['concepto_nombre'] ?? '-') ?></td>
-                                <td data-col="observaciones" class="text-truncate text-muted" style="max-width:200px"><?= htmlspecialchars($r['observaciones'] ?? '') ?></td>
-                                <td class="text-end fw-bold" data-col="monto_total">$<?= number_format((float)$r['monto_total'], 2) ?></td>
-                                <td class="text-center pe-3" data-col="estado"><span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst($estado) ?></span></td>
-                            </tr>
+                            <?php include __DIR__ . '/_fila.php'; ?>
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </tbody>
@@ -2203,8 +2193,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     const modal = bootstrap.Modal.getInstance(modalEl);
                     if (modal) modal.hide();
 
-                    // Refrescar tabla
-                    window.ING_fetchSearch(1);
+                    // Actualizar el registro en el listado (misma página, orden y filtros)
+                    ING_mostrarRegistroGuardado(res.id, res.fila);
 
                     // Alerta visual atractiva
                     Toast.fire({ icon: 'success', title: res.mensaje });
@@ -2538,9 +2528,53 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
     window.currentSorts = <?= $ordenJson ?? '[]' ?>;
     let ING_sorter = null;
+    // Página que se está viendo: al guardar, el listado se repinta en ESTA página.
+    window.ING_currentPage = <?= (int) $page ?>;
 
     window.ING_cambiarPaginaAjax = function(pag) {
         window.ING_fetchSearch(pag);
+    }
+
+    /**
+     * Tras guardar un ingreso (nuevo o editado): repinta el listado en la misma página, con
+     * el mismo buscador/filtros y orden, y resalta la fila del ingreso guardado. Esa fila se
+     * pone con el HTML que devolvió el servidor al guardar (el mismo partial del listado):
+     * así se ve actualizada aunque el refresco fallara, y aparece arriba de todo aunque no
+     * caiga en la página actual (un ingreso nuevo viendo la página 3, o uno que el filtro
+     * vigente ya no incluye). En la siguiente búsqueda o cambio de página vuelve a su sitio.
+     */
+    async function ING_mostrarRegistroGuardado(id, filaHtml) {
+        await window.ING_fetchSearch(window.ING_currentPage || 1);
+
+        const tbody = document.getElementById('tbodyIngresos');
+        if (!tbody || !id || !filaHtml) return;
+        const tmp = document.createElement('tbody');
+        tmp.innerHTML = filaHtml.trim();
+        const fila = tmp.querySelector('tr');
+        if (!fila) return;
+
+        const actual = tbody.querySelector(`tr[data-id="${id}"]`);
+        if (actual) {
+            actual.replaceWith(fila);
+        } else {
+            // Quitar el aviso "No se encontraron ingresos" si el listado quedó vacío
+            tbody.querySelector('td[colspan]')?.closest('tr')?.remove();
+            tbody.prepend(fila);
+        }
+        fila.classList.add('fila-guardada');
+        setTimeout(() => fila.classList.remove('fila-guardada'), 3000);
+
+        // Que se vea: si quedó fuera del área visible, desplazar solo lo necesario,
+        // descontando el encabezado fijo (sticky) de la tabla, que si no la taparía.
+        const cont = fila.closest('.ingreso-scroll');
+        if (cont) {
+            const rc = cont.getBoundingClientRect();
+            const rf = fila.getBoundingClientRect();
+            const arriba = rc.top + cont.clientTop + (cont.querySelector('thead')?.offsetHeight || 0);
+            const abajo  = rc.top + cont.clientTop + cont.clientHeight;
+            if (rf.top < arriba) cont.scrollBy({ top: rf.top - arriba, behavior: 'smooth' });
+            else if (rf.bottom > abajo) cont.scrollBy({ top: rf.bottom - abajo, behavior: 'smooth' });
+        }
     }
 
     window.ING_fetchSearch = async function(page = 1) {
@@ -2564,6 +2598,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('tbodyIngresos').innerHTML = data.rows;
             document.getElementById('paginationContainer').innerHTML = data.pagination;
             document.getElementById('paginationInfo').innerText = data.info;
+            window.ING_currentPage = page;
 
             // Actualizar enlaces de exportación
             const btnPdf = document.getElementById('btnExportPdf');

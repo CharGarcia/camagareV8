@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen
-version: 1.18
+etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo
+version: 1.19
 orden: 20
 estado: activo
 ---
@@ -134,7 +134,11 @@ refleja; si al guardar hay diferencia, se avisa y usted decide.
 
 - Mientras el documento **no tenga asiento**: la pestaña muestra la vista previa
   de lo que armarán las reglas contables, y no hay nada que guardar todavía. El
-  asiento se crea al guardar el documento o al generar la contabilidad.
+  asiento se crea al guardar el documento o al generar la contabilidad. En
+  facturas y recibos de venta ya guardados, la vista previa usa los datos reales
+  del documento (incluido el Costo de Ventas que salió del inventario), así que
+  muestra lo mismo que se va a registrar; solo mientras se editan sus líneas se
+  calcula con los importes de la pantalla, y ahí todavía no puede incluir el costo.
 - En un asiento **anulado** que no sea de tipo Diario.
 
 **Excepción: consignaciones de venta, retornos y cambios de producto.** En estos
@@ -337,6 +341,7 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.19** — En facturas y recibos de venta guardados que aún no tienen asiento, la vista previa de la pestaña *Asiento contable* se arma con los datos reales del documento: ahora muestra el Costo de Ventas y el Inventario, el IVA por tarifa y el reparto por categoría, igual que el asiento que se registrará. Antes se calculaba con los importes de la pantalla y el costo salía siempre en 0 (o aparecía «El asiento no cuadra»).
 - **1.18** — La búsqueda del listado y la de la pestaña *Detalles* son mucho más rápidas con muchos asientos: medido con 200.000 asientos, la búsqueda libre pasa de 7 a 33 segundos a entre 1,5 y 3 segundos, y en *Detalles* lo que aparece poco (un número de documento, un monto) pasa de hasta 40 segundos a entre 1 y 1,5 segundos. Encuentran lo mismo que antes; además, el total ahora también se encuentra escrito con coma decimal. Mientras se busca, el resto del sistema ya no queda esperando, y una búsqueda nueva cancela la anterior. El selector *Origen* de la ventana de filtros lista todos los orígenes con su nombre, aunque la empresa todavía no tenga asientos de alguno.
 - **1.17** — Los **cambios de productos migrados** no reciben asiento por ninguna vía: ni en la generación en masa, ni desde Auditoría Contable, ni al abrir su pestaña *Asiento contable* (que ahora lo indica), ni al cambiarles el estado. Antes se les podía generar, aunque el sistema anterior no contabilizaba los cambios. Los que ya lo recibieron se detectan y se quitan (eliminación lógica) con `database/diagnosticos/20260916_cambios_migrados_con_asiento.sql`.
 - **1.16** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;

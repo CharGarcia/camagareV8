@@ -1129,18 +1129,20 @@ class CargaFacturasValidacionService
     }
 
     /**
-     * Detecta facturas que ya existen en el sistema.
+     * Detecta facturas que se parecen a una que ya existe en el sistema.
      *
      * El control por hash del archivo solo ve el libro byte a byte idéntico; en
      * cuanto alguien lo abre y lo vuelve a guardar, Excel cambia los metadatos y
      * el hash deja de coincidir. Esta segunda capa mira el CONTENIDO: una factura
-     * emitida al mismo cliente, con la misma fecha, el mismo total y el mismo
-     * número de líneas es, casi con certeza, la misma que se está recargando.
+     * al mismo cliente, con la misma fecha, el mismo total y el mismo número de
+     * líneas que una ya emitida.
      *
-     * Se bloquea en vez de avisar porque el daño es asimétrico: un duplicado es
-     * un documento fiscal de más que hay que anular, mientras que un falso
-     * positivo solo obliga a quitar esa fila del archivo. El mensaje nombra la
-     * factura existente para que se pueda comprobar en un segundo.
+     * Solo AVISA, no bloquea (decisión del usuario, 18-09-2026): facturar varias
+     * veces lo mismo al mismo cliente el mismo día es un caso real (el mismo
+     * servicio para varios vehículos, contratos o sucursales del cliente), y el
+     * bloqueo impedía cargarlas. El archivo idéntico sigue rechazándose entero
+     * por el hash. El aviso nombra la factura existente para que, si de verdad
+     * es una recarga, se pueda comprobar en un segundo y quitar la fila.
      */
     private function validarNoDuplicadas(array &$facturas, int $idEmpresa): void
     {
@@ -1184,10 +1186,10 @@ class CargaFacturasValidacionService
                 . '|' . count($f['detalles']);
 
             if (isset($indice[$k])) {
-                $facturas[$clave]['errores'][] = 'Ya existe una factura igual para este cliente, '
-                    . 'con la misma fecha, el mismo total y el mismo número de líneas: '
-                    . implode(', ', $indice[$k]) . '. Si de verdad hay que emitirla otra vez, '
-                    . 'hágalo desde Facturas de Venta; si no, quite esta fila del archivo.';
+                $facturas[$clave]['avisos'][] = 'Ya existe una factura para este cliente con la '
+                    . 'misma fecha, el mismo total y el mismo número de líneas: '
+                    . implode(', ', $indice[$k]) . '. Se creará igual; si es una factura que ya '
+                    . 'se había cargado, quite esta fila del archivo antes de crear las facturas.';
             }
         }
     }

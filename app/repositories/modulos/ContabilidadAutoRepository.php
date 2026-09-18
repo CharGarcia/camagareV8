@@ -269,6 +269,28 @@ class ContabilidadAutoRepository extends BaseRepository
         ]);
     }
 
+    /**
+     * Saca de la lista los fallos cuyo motivo empieza con $prefijoMotivo y cuyo documento
+     * ya no tiene asiento. Existe para el costo de ventas pendiente: ese fallo solo evita
+     * regenerar en cada pasada un documento que YA tiene asiento; si después se lo anulan
+     * (p. ej. desde Asientos Contables), vuelve a faltarle el asiento entero y la pasada
+     * debe generárselo como a cualquier otro, sin esperar a que cambie la configuración.
+     */
+    public function reactivarFallosSinAsiento(int $idEmpresa, string $moduloClave, string $tabla, string $colAsiento, string $prefijoMotivo, int $idUsuario): void
+    {
+        if ($prefijoMotivo === '' || !preg_match('/^[a-z0-9_]+$/', $tabla) || !preg_match('/^[a-z0-9_]+$/', $colAsiento)) {
+            return;
+        }
+        $st = $this->db->prepare(
+            "UPDATE contabilidad_auto_fallos f
+                SET eliminado = TRUE, deleted_at = NOW(), deleted_by = ?, updated_at = NOW(), updated_by = ?
+              WHERE f.id_empresa = ? AND f.modulo_clave = ? AND f.eliminado = FALSE
+                AND f.motivo LIKE ?
+                AND EXISTS (SELECT 1 FROM {$tabla} d WHERE d.id = f.id_documento AND d.{$colAsiento} IS NULL)"
+        );
+        $st->execute([$idUsuario, $idUsuario, $idEmpresa, $moduloClave, $prefijoMotivo . '%']);
+    }
+
     /** Un documento que sí se generó deja de estar en la lista de fallos. */
     public function limpiarFallos(int $idEmpresa, string $moduloClave, array $ids, int $idUsuario): void
     {

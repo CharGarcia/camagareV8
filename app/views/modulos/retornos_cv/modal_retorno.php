@@ -3,8 +3,24 @@
 /** @var array $perm */
 /** @var array $puntos */
 ?>
+<style>
+    /* El modal no tiene barra de scroll propia (sin modal-dialog-scrollable): solo la grilla
+       de productos se desplaza, y su tope se ajusta al alto de la ventana para que todo el
+       modal quepa en pantalla. Los 520px son lo fijo —márgenes del diálogo, encabezado, barra
+       de acciones, pestañas, las dos filas del formulario, título de la grilla, etiquetas de
+       consignaciones y pie— más holgura: si se agrega otra fila al formulario, subirlo.
+       La clase NO lleva "-scroll": en esta página (app-shell) app.css le quitaría el tope. */
+    #modalRetorno .ret-lineas-wrap {
+        max-height: max(120px, calc(100dvh - 520px));
+        overflow: auto;
+    }
+    /* Tablet y móvil: el modal va a pantalla completa y hace scroll en el cuerpo (scripts.php). */
+    @media (max-width: 991.98px) {
+        #modalRetorno .ret-lineas-wrap { max-height: 40vh; }
+    }
+</style>
 <div class="modal fade" id="modalRetorno" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow">
             <div class="modal-header py-2">
                 <h5 class="modal-title" id="tituloModalRetorno">
@@ -20,12 +36,22 @@
                     <div class="spinner-border text-primary mb-2" role="status"></div>
                     <div class="small text-muted">Cargando información del retorno...</div>
                 </div>
-                <!-- Barra de acciones superior (estándar del sistema: PDF / Correo / WhatsApp) -->
+                <!-- Barra de acciones superior (PDF / Excel / Correo / WhatsApp) y, a la derecha, el Estado -->
                 <div class="d-flex gap-1 align-items-center flex-wrap mb-3 pb-2 border-bottom">
                     <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="retPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
                     <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="retExcel()" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
                     <button type="button" class="btn btn-outline-info btn-sm px-2" onclick="retEmail()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
                     <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="retWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
+
+                    <!-- Estado (solo al abrir un retorno ya guardado) -->
+                    <div class="ms-auto d-flex align-items-center gap-2 d-none" id="ret_estado_wrapper">
+                        <label for="ret_estado_selector" class="form-label small fw-bold mb-0 text-muted">Estado:</label>
+                        <select id="ret_estado_selector" class="form-select form-select-sm fw-bold" style="width:auto;" onchange="retCambiarEstado(this.value)">
+                            <option value="Borrador">Borrador</option>
+                            <option value="Emitida">Emitida</option>
+                            <option value="Anulada">Anulada</option>
+                        </select>
+                    </div>
                 </div>
 
                 <ul class="nav nav-tabs mb-3" id="tabsRetorno" role="tablist">
@@ -81,33 +107,23 @@
                         </div>
                     </div>
 
-                    <!-- Cliente (lo determina la consignación agregada), motivo, observaciones y estado -->
+                    <!-- Cliente (lo determina la consignación agregada), motivo y observaciones.
+                         El Estado va en la barra de acciones superior. -->
                     <div class="row g-2 mb-2 align-items-end">
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <label class="form-label small mb-1">Cliente</label>
                             <input type="text" id="ret_cliente_busqueda" class="form-control form-control-sm bg-light" readonly
                                    placeholder="Se completa con la consignación" title="El cliente es el de la consignación agregada">
                             <input type="hidden" id="ret_id_cliente">
                             <input type="hidden" id="ret_cliente_email">
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-3">
                             <label class="form-label small mb-1">Motivo</label>
                             <input type="text" id="ret_motivo" class="form-control form-control-sm" placeholder="Motivo del retorno (opcional)">
                         </div>
-                    </div>
-
-                    <div class="row g-2 mb-2 align-items-end">
-                        <div class="col-md-10">
+                        <div class="col-md-4">
                             <label class="form-label small mb-1">Observaciones</label>
                             <input type="text" id="ret_observaciones" class="form-control form-control-sm" placeholder="Observaciones (opcional)">
-                        </div>
-                        <div class="col-md-2 d-none" id="ret_estado_wrapper">
-                            <label class="form-label small mb-1">Estado</label>
-                            <select id="ret_estado_selector" class="form-select form-select-sm fw-bold" onchange="retCambiarEstado(this.value)">
-                                <option value="Borrador">Borrador</option>
-                                <option value="Emitida">Emitida</option>
-                                <option value="Anulada">Anulada</option>
-                            </select>
                         </div>
                     </div>
 
@@ -118,7 +134,7 @@
                     </div>
                     <!-- Consignaciones agregadas al retorno: la grilla muestra únicamente sus ítems. -->
                     <div id="ret_consig_chips" class="d-flex flex-wrap gap-1 mb-1"></div>
-                    <div class="table-responsive border rounded-3" style="max-height:40vh; overflow:auto;">
+                    <div class="table-responsive border rounded-3 ret-lineas-wrap">
                         <table class="table table-sm table-hover mb-0 align-middle" id="tablaRetLineas">
                             <thead class="table-light">
                                 <tr class="small">

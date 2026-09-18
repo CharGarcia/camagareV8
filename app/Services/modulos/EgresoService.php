@@ -47,6 +47,12 @@ class EgresoService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $ordenMulti, $idUsuario);
     }
 
+    /** Fila del listado del egreso recién guardado (null si no se vería en el listado). */
+    public function getFilaListado(int $id, int $idEmpresa, ?int $idUsuario = null): ?array
+    {
+        return $this->repository->getFilaListado($id, $idEmpresa, $idUsuario);
+    }
+
     /** Búsqueda libre dentro de los egresos (documentos pagados y formas de pago). */
     public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
     {

@@ -289,7 +289,11 @@ class SincronizadorAsientosService
      * sincronizar() (para generar) como contarPendientes() (para solo contar), garantizando que
      * ambos miren exactamente los mismos documentos.
      *
-     * @return array<int, array{sql:string, params:array, factory:callable, nombre:string, dondeConfigurar:string, tablaVerif:?string, colAsiento:string}>
+     * 'tipoCosteo' (solo Facturas, Recibos y Notas de Crédito) es el tipo_documento de ese módulo en
+     * ventas_costeo_seguimiento, el mismo literal que usa su SQL. No lo lee la sincronización manual:
+     * lo usa ContabilidadAutoService para no regenerar en cada pasada lo que sigue con el costo pendiente.
+     *
+     * @return array<int, array{sql:string, params:array, factory:callable, nombre:string, dondeConfigurar:string, tablaVerif:?string, colAsiento:string, tipoCosteo?:string}>
      */
     private function construirTrabajos(int $idEmpresa, callable $excMig): array
     {
@@ -356,6 +360,7 @@ class SincronizadorAsientosService
             'tablaVerif' => 'ventas_cabecera',
             'colAsiento' => 'id_asiento_contable',
             'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
+            'tipoCosteo' => 'factura_venta',
         ];
 
         // 1b. Recibos de Venta (espejo de la factura, reusa el concepto 'ventas_factura').
@@ -404,6 +409,7 @@ class SincronizadorAsientosService
             'tablaVerif' => 'recibos_venta_cabecera',
             'colAsiento' => 'id_asiento_contable',
             'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
+            'tipoCosteo' => 'recibo_venta',
         ];
 
         // 2. Liquidaciones de Compra
@@ -497,6 +503,7 @@ class SincronizadorAsientosService
             'tablaVerif' => 'notas_credito_cabecera',
             'colAsiento' => 'id_asiento_contable',
             'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
+            'tipoCosteo' => 'nota_credito_venta',
         ];
 
         // 5. Retenciones en Ventas (no se autorizan en SRI: solo se filtra por asiento faltante)

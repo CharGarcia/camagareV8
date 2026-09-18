@@ -284,24 +284,35 @@ class IngresoRepository extends BaseRepository
         // Rendimiento (2026-09-16): conteo + página en UNA consulta, y los tipos del
         // detalle (subconsulta por fila) calculados solo para las filas de la página.
         // Ver App\Helpers\ListadoPaginado.
-        $joins = "LEFT JOIN clientes c  ON i.id_cliente        = c.id
-                LEFT JOIN clientes rc ON i.id_recibo_cliente  = rc.id
-                LEFT JOIN usuarios u ON i.id_usuario = u.id
-                LEFT JOIN empresa_opciones_ingreso_egreso eic ON i.id_ingreso_concepto = eic.id";
-
         return \App\Helpers\ListadoPaginado::consultar(
             fn(string $sql, array $p) => $this->query($sql, $p)->fetchAll(PDO::FETCH_ASSOC),
             [
                 'tabla'       => 'ingresos_cabecera',
                 'alias'       => 'i',
-                'joinsFiltro' => $joins,
-                'joinsFinal'  => $joins,
+                'joinsFiltro' => self::LISTADO_JOINS,
+                'joinsFinal'  => self::LISTADO_JOINS,
                 'where'       => $where,
                 'orderBy'     => $orderBy,
                 'perPage'     => $perPage,
                 'conBusqueda' => trim($buscar) !== '',   // sin buscar: forma liviana (ids por índice + COUNT aparte)
                 'offset'      => $offset,
-                'select'      => "i.*,
+                'select'      => self::LISTADO_SELECT,
+            ],
+            $params
+        );
+    }
+
+    /**
+     * Joins y columnas de cada fila del listado. Los comparten getListado() y
+     * getFilaListado(): la fila del ingreso recién guardado debe salir igual que en el
+     * listado, y escribirlas dos veces dejaría una de las dos desfasada.
+     */
+    private const LISTADO_JOINS = "LEFT JOIN clientes c  ON i.id_cliente        = c.id
+                LEFT JOIN clientes rc ON i.id_recibo_cliente  = rc.id
+                LEFT JOIN usuarios u ON i.id_usuario = u.id
+                LEFT JOIN empresa_opciones_ingreso_egreso eic ON i.id_ingreso_concepto = eic.id";
+
+    private const LISTADO_SELECT = "i.*,
                        c.nombre AS cliente_nombre,
                        c.identificacion AS cliente_ruc,
                        rc.nombre AS recibo_cliente_nombre,
@@ -312,10 +323,31 @@ class IngresoRepository extends BaseRepository
                            FROM ingresos_detalle idt
                            WHERE idt.id_ingreso = i.id
                            ORDER BY t
-                       ) sub) AS tipos_detalle",
-            ],
-            $params
-        );
+                       ) sub) AS tipos_detalle";
+
+    /**
+     * Una fila del listado (mismas columnas que getListado()) para el ingreso recién
+     * guardado: la vista la usa para actualizar ese registro en el listado sin perder la
+     * página, el orden ni los filtros. Mismo alcance que el listado (empresa, no eliminado,
+     * ambiente y registros propios): null si el ingreso no se vería en él.
+     */
+    public function getFilaListado(int $id, int $idEmpresa, ?int $idUsuario = null): ?array
+    {
+        $params = [':id' => $id, ':id_empresa' => $idEmpresa];
+        $where  = "WHERE i.id = :id AND i.id_empresa = :id_empresa AND i.eliminado = false
+                     AND i.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        if ($idUsuario !== null) {
+            $where .= " AND i.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $idUsuario;
+        }
+
+        $sql = "SELECT " . self::LISTADO_SELECT . "
+                FROM ingresos_cabecera i
+                " . self::LISTADO_JOINS . "
+                $where";
+
+        $fila = $this->query($sql, $params)->fetch(PDO::FETCH_ASSOC);
+        return $fila ?: null;
     }
 
     /**

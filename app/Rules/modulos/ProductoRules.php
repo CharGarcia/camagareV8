@@ -7,6 +7,14 @@ use Exception;
 
 class ProductoRules
 {
+    /**
+     * Largo máximo del nombre. Es el mismo tope que el SRI admite en la
+     * descripción de cada ítem del comprobante (ver SriFichaTecnica): el nombre
+     * del producto es lo que viaja en esa etiqueta, así que no tiene sentido
+     * aceptar uno más largo ni cortar uno que el SRI sí recibiría.
+     */
+    public const MAX_NOMBRE = 300;
+
     public function validar(array $data): void
     {
         $errores = [];
@@ -27,8 +35,8 @@ class ProductoRules
 
         if (empty(trim($data['nombre'] ?? ''))) {
             $errores[] = 'El nombre del producto es obligatorio.';
-        } elseif (mb_strlen(trim($data['nombre'])) > 200) {
-            $errores[] = 'El nombre no puede exceder 200 caracteres.';
+        } elseif (mb_strlen(trim($data['nombre'])) > self::MAX_NOMBRE) {
+            $errores[] = 'El nombre no puede exceder ' . self::MAX_NOMBRE . ' caracteres.';
         }
 
         if (isset($data['precio_base']) && !is_numeric($data['precio_base'])) {

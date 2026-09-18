@@ -543,31 +543,106 @@ class InventarioService
 
         $this->repo->lockStock($idProducto, $idBodega, $idEmpresa);
         $stockActual  = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa);
-        $stockPost    = $stockActual + $cantidad;
         $costoUnit    = $this->repo->getCostoPromedio($idProducto, $idBodega, $idEmpresa);
 
-        $kardexData = [
-            'id_empresa'      => $idEmpresa,
-            'id_producto'     => $idProducto,
-            'id_bodega'       => $idBodega,
-            'tipo_movimiento' => 'entrada',
-            'referencia_tipo' => 'nota_credito',
-            'referencia_id'   => $idRef,
-            'cantidad'        => $cantidad,
-            'costo_unitario'  => $costoUnit,
-            'costo_total'     => round($costoUnit * $cantidad, 2),
-            'stock_anterior'  => $stockActual,
-            'stock_posterior' => $stockPost,
-            'numero_lote'     => null,
-            'fecha_caducidad' => null,
-            'nup'             => null,
-            'id_medida'       => !empty($prodData['id_medida']) ? (int)$prodData['id_medida'] : null,
-            'observaciones'   => $descripcion,
-            'id_usuario'      => $idUsuario,
-        ];
+        // La devolución regresa al mismo lote / NUP / caducidad que salió en la factura.
+        $tramos = $this->repartirDevolucionPorOrigen(
+            $idEmpresa,
+            $idProducto,
+            (string) ($data['num_doc_modificado'] ?? ''),
+            (string) ($data['cod_doc_modificado'] ?? '01'),
+            $cantidad
+        );
 
-        $this->repo->registrarMovimiento($kardexData);
-        $this->repo->actualizarStock($idProducto, $idBodega, $idEmpresa, $stockPost, $idUsuario);
+        foreach ($tramos as $t) {
+            $stockPost = $stockActual + $t['cantidad'];
+
+            $this->repo->registrarMovimiento([
+                'id_empresa'      => $idEmpresa,
+                'id_producto'     => $idProducto,
+                'id_bodega'       => $idBodega,
+                'tipo_movimiento' => 'entrada',
+                'referencia_tipo' => 'nota_credito',
+                'referencia_id'   => $idRef,
+                'cantidad'        => $t['cantidad'],
+                'costo_unitario'  => $costoUnit,
+                'costo_total'     => round($costoUnit * $t['cantidad'], 2),
+                'stock_anterior'  => $stockActual,
+                'stock_posterior' => $stockPost,
+                'numero_lote'     => $t['lote'],
+                'fecha_caducidad' => $t['caducidad'],
+                'nup'             => $t['nup'],
+                'id_medida'       => !empty($prodData['id_medida']) ? (int)$prodData['id_medida'] : null,
+                'observaciones'   => $descripcion,
+                'id_usuario'      => $idUsuario,
+            ]);
+            $this->repo->actualizarStock($idProducto, $idBodega, $idEmpresa, $stockPost, $idUsuario);
+            $stockActual = $stockPost;
+        }
+    }
+
+    /**
+     * Divide lo devuelto por una NC entre los lotes/NUP que la factura original sacó, descontando
+     * lo que otras NC vigentes del mismo documento ya devolvieron. Lo que no se pueda atribuir a un
+     * lote (documento sin factura, sin salida registrada o exceso) queda sin lote, como antes.
+     *
+     * @return array<int,array{lote:?string,caducidad:?string,nup:?string,cantidad:float}>
+     */
+    private function repartirDevolucionPorOrigen(int $idEmpresa, int $idProducto, string $numDoc, string $codDoc, float $cantidad): array
+    {
+        $sinOrigen = [['lote' => null, 'caducidad' => null, 'nup' => null, 'cantidad' => $cantidad]];
+
+        $numDoc = trim($numDoc);
+        if ($numDoc === '' || $codDoc !== '01') return $sinOrigen;
+
+        $idVenta = $this->repo->getIdVentaPorNumero($idEmpresa, $numDoc);
+        if (!$idVenta) return $sinOrigen;
+
+        $origen = $this->repo->getSalidasVentaProducto($idEmpresa, $idProducto, $idVenta);
+        if (!$origen) {
+            $origen = $this->repo->getLotesDetalleVenta($idProducto, $idVenta);
+        }
+
+        // Agrupar por lote+NUP: el disponible para devolver de cada uno.
+        $disponibles = [];
+        foreach ($origen as $o) {
+            $lote = trim((string) ($o['numero_lote'] ?? ''));
+            $nup  = trim((string) ($o['nup'] ?? ''));
+            $cad  = trim((string) ($o['fecha_caducidad'] ?? ''));
+            if ($lote === '' && $nup === '' && $cad === '') continue;
+            $k = $lote . '|' . $nup;
+            if (!isset($disponibles[$k])) {
+                $disponibles[$k] = ['lote' => $lote, 'nup' => $nup, 'caducidad' => $cad, 'cantidad' => 0.0];
+            }
+            $disponibles[$k]['cantidad'] += abs((float) $o['cantidad']);
+            if ($disponibles[$k]['caducidad'] === '' && $cad !== '') $disponibles[$k]['caducidad'] = $cad;
+        }
+        if (!$disponibles) return $sinOrigen;
+
+        foreach ($this->repo->getDevueltoPorNcDeDocumento($idEmpresa, $idProducto, $numDoc) as $d) {
+            $k = $d['lote'] . '|' . $d['nup'];
+            if (isset($disponibles[$k])) $disponibles[$k]['cantidad'] -= (float) $d['cantidad'];
+        }
+
+        $tramos = [];
+        $restante = round($cantidad, 6);
+        foreach ($disponibles as $d) {
+            if ($restante <= 0) break;
+            $disp = round($d['cantidad'], 6);
+            if ($disp <= 0) continue;
+            $toma = min($restante, $disp);
+            $tramos[] = [
+                'lote'      => $d['lote'] !== '' ? $d['lote'] : null,
+                'caducidad' => $d['caducidad'] !== '' ? $d['caducidad'] : null,
+                'nup'       => $d['nup'] !== '' ? $d['nup'] : null,
+                'cantidad'  => $toma,
+            ];
+            $restante = round($restante - $toma, 6);
+        }
+        if ($restante > 0) {
+            $tramos[] = ['lote' => null, 'caducidad' => null, 'nup' => null, 'cantidad' => $restante];
+        }
+        return $tramos;
     }
 
     public function revertirMovimientosPorReferencia(string $tipoRef, int $idRef, int $idEmpresa, int $idUsuario, bool $permitirNegativo = false): void

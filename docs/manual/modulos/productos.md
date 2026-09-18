@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
-version: 1.7
+version: 1.8
 orden: 10
 estado: activo
 ---
@@ -42,7 +42,7 @@ Al cambiarlo, el formulario muestra u oculta los campos que aplican a cada caso.
 | Código principal | Sí | Identificador con el que aparece en los documentos. Se propone automáticamente |
 | Código auxiliar | No | Segundo código propio de la empresa |
 | Código de barras | No | Para lectura con pistola en el punto de venta |
-| Nombre | Sí | Descripción que sale impresa en la factura |
+| Nombre | Sí | Descripción que sale impresa en la factura. Hasta 300 caracteres: es el máximo que el SRI admite en la descripción de cada ítem del comprobante electrónico |
 | Categoría / Marca | No | Sirven para agrupar y filtrar el catálogo |
 | Unidad de medida | No | Unidad en la que se vende (unidad, caja, kilo…) |
 | Precio base | Sí | Precio de venta antes de impuestos |
@@ -239,6 +239,11 @@ aparecer al facturar.
   compras que lo afectan quedaron vinculadas a este producto del catálogo.
 
 ## Historial de cambios
+
+- **1.8** — El **nombre del producto admite hasta 300 caracteres** (antes 200), el
+  mismo máximo que el SRI acepta en la descripción de cada ítem de la factura. Aplica
+  al formulario de Productos, a la creación rápida desde los documentos (facturas,
+  compras, proformas…) y a las cargas por Excel.
 
 - **1.7** — **Las búsquedas de productos dejan de tardar.** El buscador de los
   documentos (factura, punto de venta, compras, comandas) responde en milésimas de

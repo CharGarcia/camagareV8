@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.16
+etiquetas: retorno, retornos, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado
+version: 1.17
 orden: 46
 estado: activo
 ---
@@ -67,6 +67,21 @@ devuelto y lo que el cliente se quedó como reposición en un
 entregó a cambio ya es del cliente y **no aparece** para retornar: el cambio la
 registra como facturada en *Facturación de consignaciones*, así que cuenta dentro
 de *facturado*.
+
+## Cambiar el estado del retorno
+
+Al abrir un retorno ya guardado, su **Estado** (*Borrador*, *Emitida* o
+*Anulada*) se cambia en el selector que está a la **derecha de la barra de
+botones** (PDF, Excel, correo y WhatsApp), arriba del formulario. El cambio se
+aplica en ese momento, sin pulsar Guardar.
+
+- Pasar a *Anulada*, o de *Emitida* a *Borrador*, pide confirmación: si el
+  retorno estaba emitido, la mercadería vuelve a salir del inventario y el saldo
+  queda libre para otro retorno.
+- Solo un retorno en *Borrador* se puede editar.
+- Hace falta el permiso **Actualizar**; sin él, el selector se ve pero no se
+  puede cambiar.
+- En un retorno nuevo el selector no aparece: primero se guarda.
 
 ## Exportar
 
@@ -230,6 +245,12 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.17** — En el formulario, el **Estado** pasa a la derecha de la barra de
+  botones (PDF, Excel, correo y WhatsApp) y *Observaciones* sube a la fila de
+  *Cliente* y *Motivo*. La ventana ya no tiene barra de desplazamiento propia: la
+  tabla de productos se ajusta al alto de la pantalla y, si hay muchos, solo ella
+  se desplaza. Nueva sección *Cambiar el estado del retorno*.
 
 - **1.16** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla: fecha,
   número, cliente, motivo y observaciones. Así el listado solo devuelve retornos donde

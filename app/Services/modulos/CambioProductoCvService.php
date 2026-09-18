@@ -391,24 +391,25 @@ class CambioProductoCvService
                     'tipo_produccion'   => $origen['tipo_produccion'] ?? null,
                 ];
             } elseif (strtoupper((string) ($det['origen_tipo'] ?? '')) === 'CONSIGNACION') {
-                // Entrega tomada de una CONSIGNACIÓN que el cliente ya tiene en su poder:
-                // producto, bodega, lote y NUP son los de esa línea (autoritativo, no se confía
-                // en el navegador); el precio llega oculto desde el formulario y el IVA es el
-                // vigente del producto. Consume el saldo de la consignación y NO mueve stock (la
-                // mercadería ya salió de bodega con la consignación; ver moverInventarioLinea).
+                // Entrega tomada de una CONSIGNACIÓN entregada: producto, bodega, lote y NUP son
+                // los de esa línea (autoritativo, no se confía en el navegador); el precio llega
+                // oculto desde el formulario y el IVA es el vigente del producto. Consume el saldo
+                // de la consignación y NO mueve stock (la mercadería ya salió de bodega con la
+                // consignación; ver moverInventarioLinea).
+                // La consignación puede ser de OTRO cliente (decisión del usuario, 18-09-2026): lo
+                // entregado sale del saldo de esa consignación y va al cliente del cambio, que lo
+                // fijan las devoluciones (esas sí deben ser suyas). El registro en Facturación de
+                // consignaciones queda a nombre del cliente del cambio.
                 $idOrigenDet = (int) ($det['id_origen_detalle'] ?? 0);
                 $origen = $this->repository->getDatosLineaConsignacion($idOrigenDet, $idEmpresa);
                 if (!$origen) {
                     throw new Exception("La línea de consignación #{$idOrigenDet} no existe o la consignación ya no está Entregada.");
                 }
-                if ((int) ($origen['id_cliente'] ?? 0) !== $idCliente) {
-                    throw new Exception("La consignación {$origen['doc_numero']} es de otro cliente: no se puede entregar desde ella en este cambio.");
-                }
 
                 $saldo = $this->repository->getSaldoLineaConsignacion($idOrigenDet, $idEmpresa, $idCambio);
                 if ($cant > $saldo + 1e-9) {
                     $nombre = $origen['producto_nombre'] ?? 'Producto';
-                    throw new Exception("No puede entregar {$cant} de \"{$nombre}\" desde la consignación {$origen['doc_numero']}: el saldo en poder del cliente es {$saldo}.");
+                    throw new Exception("No puede entregar {$cant} de \"{$nombre}\" desde la consignación {$origen['doc_numero']}: su saldo pendiente es {$saldo}.");
                 }
 
                 $precio  = isset($det['precio_unitario']) ? (float) $det['precio_unitario'] : (float) $origen['precio_unitario'];

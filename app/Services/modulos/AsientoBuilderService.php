@@ -246,12 +246,15 @@ class AsientoBuilderService
         }
 
         // 3. Combinar la plantilla base con las cuentas de la entidad (fallback a General).
+        //    '__cuenta_de_entidad__' distingue la cuenta que puso la entidad de la General: el
+        //    bloque de costo la necesita (ver el reparto de Costo/Inventario en cada armarDistribucion…).
         foreach ($reglasBase as &$r) {
             $idAsientoTipo = (int)$r['id_asiento_tipo'];
             if (isset($customAccounts[$idAsientoTipo])) {
                 $r['id_cuenta'] = $customAccounts[$idAsientoTipo]['id_cuenta'];
                 $r['cuenta_codigo'] = $customAccounts[$idAsientoTipo]['cuenta_codigo'];
                 $r['cuenta_nombre'] = $customAccounts[$idAsientoTipo]['cuenta_nombre'];
+                $r['__cuenta_de_entidad__'] = true;
             }
         }
         unset($r);
@@ -737,20 +740,30 @@ class AsientoBuilderService
         }
 
         if ($idReferencia > 0 && $tipoReferencia !== '') {
+            // Solo las reglas de los conceptos de ESTE tipo de asiento. La misma entidad guarda
+            // también su cuenta de IVA por tarifa (id_asiento_tipo = 0, cascada de IVA propia e
+            // independiente) y reglas de otros documentos (p. ej. Recibos de Venta, que tienen su
+            // catálogo). Contarlas hacía que un cliente con solo su cuenta de IVA "tuviera reglas":
+            // se apagaba el reparto por producto/categoría/marca de toda la factura y el costo de
+            // ventas configurado por producto o categoría no se contabilizaba.
             $sql = "SELECT ap.id_asiento_tipo, ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
                     FROM asientos_programados ap
                     INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
-                    WHERE ap.id_empresa = :id_empresa 
-                      AND ap.tipo_referencia = :tipo_ref 
-                      AND ap.id_referencia = :id_ref 
+                    INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                                               AND at.tipo_asiento = :tipo_asiento
+                                               AND at.eliminado = false
+                    WHERE ap.id_empresa = :id_empresa
+                      AND ap.tipo_referencia = :tipo_ref
+                      AND ap.id_referencia = :id_ref
                       AND ap.eliminado = false";
-            
+
             $db = \App\core\Database::getConnection();
             $st = $db->prepare($sql);
             $st->execute([
-                ':id_empresa' => $idEmpresa,
-                ':tipo_ref' => $tipoReferencia,
-                ':id_ref' => $idReferencia
+                ':id_empresa'   => $idEmpresa,
+                ':tipo_asiento' => $tipoAsiento,
+                ':tipo_ref'     => $tipoReferencia,
+                ':id_ref'       => $idReferencia
             ]);
 
             while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
@@ -1694,12 +1707,25 @@ class AsientoBuilderService
         // Arranca con las tarifas de IVA sin cuenta: son la causa más frecuente del descuadre.
         $reglasSinCuenta = $ivaTarifasSinCuenta;
 
-        // Reparto por categoría (Producto → Categoría → Marca → General/Cliente): activo solo cuando
-        // la entidad NO tiene reglas propias y no hay cuenta de Descuento (misma restricción que ya
-        // tenía Subtotal — ver "Diseño: reparto completo por categoría", 2026-07-31). Cuenta por
-        // Cobrar, Subtotal, ICE, Costo de Ventas e Inventario participan; Descuento y Propina NO
-        // (Propina por decisión del usuario: siempre Cliente/General; Descuento queda pendiente).
+        // Reparto por línea (Producto → Categoría → Marca → Tipo de producción → General/Cliente).
+        // Cada concepto repartible decide por su cuenta (ver $porLinea en el bucle):
+        //  - Subtotal: solo si el cliente no tiene reglas propias y NO hay cuenta de Descuento. Con
+        //    ella el Subtotal va BRUTO y su reparto por línea sigue pendiente (ver "Diseño: reparto
+        //    completo por categoría", 2026-07-31).
+        //  - Cuenta por Cobrar e ICE: si el cliente no tiene reglas propias. Su valor por línea no
+        //    depende del descuento: antes la cuenta de Descuento apagaba también su reparto y las
+        //    cuentas configuradas por categoría se ignoraban en toda factura con descuento.
+        //  - Costo de Ventas e Inventario: SIEMPRE por línea, salvo que el propio cliente haya
+        //    configurado ese concepto. El costo es del producto, no del cliente: sale del Kardex
+        //    de cada producto y el crédito a Inventario debe ir a la misma cuenta por la que entró
+        //    la mercadería. Antes un cliente con reglas propias (o la cuenta de Descuento) mandaba
+        //    el costo a la General, y si la General no lo tenía el costo no se contabilizaba aunque
+        //    estuviera configurado por producto o categoría. Si ninguna regla aplicable tiene cuenta,
+        //    no hay costo (el bloque se descarta entero, como antes).
+        // Descuento y Propina NO se reparten (Propina por decisión del usuario: siempre
+        // Cliente/General; Descuento queda pendiente).
         $aplicaRepartoPorCategoria = $repartePorLinea && !$tieneReglaDescuento && $idVenta > 0;
+        $aplicaRepartoLineas       = $repartePorLinea && $idVenta > 0;
 
         // Joins reutilizables para sumar el valor real POR LÍNEA de cada concepto repartible, sin
         // fan-out (1 fila por línea, JOIN 1:1 a `d`). LATERAL y no subconsulta agregada: la agregada
@@ -1755,13 +1781,21 @@ class AsientoBuilderService
             $esIce        = str_contains($codigo, 'ICE')        || str_contains($concepto, 'ice');
             $esCosto      = str_contains($codigo, 'COSTO')      || str_contains($concepto, 'costo');
             $esInventario = str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario');
-            $esRepartible = $esPorCobrar || $esSubtotal || $esIce || $esCosto || $esInventario;
 
-            // Si NO hay cuenta General/Cliente para este concepto, solo se perdona cuando el reparto
-            // por categoría está activo Y el concepto participa de él — puede que la cuenta exista
-            // solo a nivel de Producto/Categoría/Marca (antes esto se descartaba sin más, aunque la
-            // categoría SÍ tuviera la cuenta configurada).
-            if (empty($r['id_cuenta']) && !($aplicaRepartoPorCategoria && $esRepartible)) {
+            // ¿Este concepto se resuelve línea por línea? Mismo orden de prioridad que los bloques
+            // de abajo (Cobrar → Subtotal → ICE → Costo/Inventario).
+            $porLinea = match (true) {
+                $esPorCobrar               => $aplicaRepartoLineas,
+                $esSubtotal                => $aplicaRepartoPorCategoria,
+                $esIce                     => $aplicaRepartoLineas,
+                $esCosto || $esInventario  => $idVenta > 0 && empty($r['__cuenta_de_entidad__']),
+                default                    => false,
+            };
+
+            // Si NO hay cuenta General/Cliente para este concepto, solo se perdona cuando se reparte
+            // por línea — puede que la cuenta exista solo a nivel de Producto/Categoría/Marca/Tipo de
+            // producción (antes esto se descartaba sin más, aunque la categoría SÍ tuviera la cuenta).
+            if (empty($r['id_cuenta']) && !$porLinea) {
                 $reglasSinCuenta[] = $r['asiento_tipo_referencia'] ?? $r['concepto']
                                   ?? $r['asiento_tipo_codigo'] ?? $r['codigo'] ?? 'sin nombre';
                 continue;
@@ -1775,7 +1809,7 @@ class AsientoBuilderService
             // (no existe por línea en la BD) — se agrega aparte, a la cuenta General/Cliente, para
             // que la suma total siga cuadrando contra el importe real de la factura.
             if ($esPorCobrar) {
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoria(
                         $db, $idEmpresa, $idVenta, $r, round($importeTotal - $propina, 2),
                         '(d.precio_total_sin_impuesto + COALESCE(imp_cxc.total_impuestos, 0))', $joinImpuestosPorLinea,
@@ -1807,7 +1841,7 @@ class AsientoBuilderService
             if ($esSubtotal) {
                 $valorMapeado = $tieneReglaDescuento ? ($subtotal + $descuento) : $subtotal;
                 if ($valorMapeado <= 0) continue;
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoria(
                         $db, $idEmpresa, $idVenta, $r, $valorMapeado,
                         'd.precio_total_sin_impuesto', '',
@@ -1827,7 +1861,7 @@ class AsientoBuilderService
             // ventas_detalle_impuestos, codigo_impuesto='3').
             if ($esIce) {
                 if ($totalIce <= 0) continue;
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoria(
                         $db, $idEmpresa, $idVenta, $r, $totalIce,
                         'COALESCE(imp_ice.total_ice, 0)', $joinIcePorLinea,
@@ -1856,12 +1890,13 @@ class AsientoBuilderService
                 continue;
             }
 
-            // Costo de Ventas / Inventario (bloque de costo): por categoría, con el costo real del
+            // Costo de Ventas / Inventario (bloque de costo): por línea, con el costo real del
             // Kardex de cada producto dentro de esta venta. Costo e Inventario se reparten cada uno
             // con SU PROPIA cascada (pueden tener cuentas distintas configuradas por categoría).
+            // Solo la cuenta que configuró el propio cliente para el concepto va entera, sin reparto.
             if ($esCosto || $esInventario) {
                 if ($costoRealInventario <= 0) continue;
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoria(
                         $db, $idEmpresa, $idVenta, $r, $costoRealInventario,
                         'COALESCE(kc.costo_total, 0)', $joinCostoPorLinea,
@@ -1955,8 +1990,9 @@ class AsientoBuilderService
         // "costo_generado" nunca queda en true para un asiento que en realidad no se guardó
         // (bug corregido: antes se escribía justo después del bloque de costo, ANTES de estas
         // validaciones, y un descuadre de redondeo no relacionado con el costo dejaba la tabla
-        // diciendo "generado" para un asiento que nunca llegó a guardarse).
-        if ($idVenta > 0) {
+        // diciendo "generado" para un asiento que nunca llegó a guardarse). La vista previa de la
+        // pestaña «Asiento contable» usa los datos reales de la factura pero no guarda nada.
+        if ($idVenta > 0 && empty($data['__vista_previa__'])) {
             $this->costeoRepo->registrar(
                 $idEmpresa, 'factura_venta', $idVenta,
                 $costoRealInventario > 0, $costoGenerado, $costoRealInventario,
@@ -2163,7 +2199,9 @@ class AsientoBuilderService
         $costoLineas = [];
         $reglasSinCuenta = $ivaTarifasSinCuenta;
 
+        // Qué concepto se reparte por línea y por qué: ver la misma nota en armarDistribucionVentasFactura().
         $aplicaRepartoPorCategoria = $repartePorLinea && !$tieneReglaDescuento && $idRecibo > 0;
+        $aplicaRepartoLineas       = $repartePorLinea && $idRecibo > 0;
 
         // LATERAL por línea, no subconsulta agregada sobre toda la tabla: mismo motivo que en
         // armarDistribucionVentasFactura(). Usa idx_recibos_venta_detalle_impuestos_detalle.
@@ -2206,9 +2244,16 @@ class AsientoBuilderService
             $esIce        = str_contains($codigo, 'ICE')        || str_contains($concepto, 'ice');
             $esCosto      = str_contains($codigo, 'COSTO')      || str_contains($concepto, 'costo');
             $esInventario = str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario');
-            $esRepartible = $esPorCobrar || $esSubtotal || $esIce || $esCosto || $esInventario;
 
-            if (empty($r['id_cuenta']) && !($aplicaRepartoPorCategoria && $esRepartible)) {
+            $porLinea = match (true) {
+                $esPorCobrar               => $aplicaRepartoLineas,
+                $esSubtotal                => $aplicaRepartoPorCategoria,
+                $esIce                     => $aplicaRepartoLineas,
+                $esCosto || $esInventario  => $idRecibo > 0 && empty($r['__cuenta_de_entidad__']),
+                default                    => false,
+            };
+
+            if (empty($r['id_cuenta']) && !$porLinea) {
                 $reglasSinCuenta[] = $r['asiento_tipo_referencia'] ?? $r['concepto']
                                   ?? $r['asiento_tipo_codigo'] ?? $r['codigo'] ?? 'sin nombre';
                 continue;
@@ -2218,7 +2263,7 @@ class AsientoBuilderService
             $lado    = (($r['debe_haber'] ?? 'debe') === 'debe') ? 'debe' : 'haber';
 
             if ($esPorCobrar) {
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoriaRecibos(
                         $db, $idEmpresa, $idRecibo, $r, round($importeTotal - $propina, 2),
                         '(d.precio_total_sin_impuesto + COALESCE(imp_cxc.total_impuestos, 0))', $joinImpuestosPorLinea,
@@ -2248,7 +2293,7 @@ class AsientoBuilderService
             if ($esSubtotal) {
                 $valorMapeado = $tieneReglaDescuento ? ($subtotal + $descuento) : $subtotal;
                 if ($valorMapeado <= 0) continue;
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoriaRecibos(
                         $db, $idEmpresa, $idRecibo, $r, $valorMapeado,
                         'd.precio_total_sin_impuesto', '',
@@ -2266,7 +2311,7 @@ class AsientoBuilderService
 
             if ($esIce) {
                 if ($totalIce <= 0) continue;
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoriaRecibos(
                         $db, $idEmpresa, $idRecibo, $r, $totalIce,
                         'COALESCE(imp_ice.total_ice, 0)', $joinIcePorLinea,
@@ -2294,9 +2339,11 @@ class AsientoBuilderService
                 continue;
             }
 
+            // Costo / Inventario: por línea salvo la cuenta que configuró el propio cliente (ver la
+            // nota en armarDistribucionVentasFactura()).
             if ($esCosto || $esInventario) {
                 if ($costoRealInventario <= 0) continue;
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoriaRecibos(
                         $db, $idEmpresa, $idRecibo, $r, $costoRealInventario,
                         'COALESCE(kc.costo_total, 0)', $joinCostoPorLinea,
@@ -2375,7 +2422,7 @@ class AsientoBuilderService
         $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'recibos de venta', $reglasSinCuenta, $cuentaRedondeoCategoria);
 
         // Seguimiento de costeo, al final — ver la misma nota en armarDistribucionVentasFactura().
-        if ($idRecibo > 0) {
+        if ($idRecibo > 0 && empty($data['__vista_previa__'])) {
             $this->costeoRepo->registrar(
                 $idEmpresa, 'recibo_venta', $idRecibo,
                 $costoRealInventario > 0, $costoGenerado, $costoRealInventario,
@@ -3329,9 +3376,14 @@ class AsientoBuilderService
                 $rr['id_cuenta']     = $customAccounts[$idTipo]['id_cuenta'];
                 $rr['cuenta_codigo'] = $customAccounts[$idTipo]['cuenta_codigo'];
                 $rr['cuenta_nombre'] = $customAccounts[$idTipo]['cuenta_nombre'];
+                $rr['__cuenta_de_entidad__'] = true;
             }
         }
         unset($rr);
+        // Cuenta por Cobrar y Subtotal: por línea solo si el cliente no tiene reglas propias.
+        // Costo e Inventario: siempre por línea, salvo la cuenta que configuró el propio cliente —
+        // la NC revierte el costo de la factura y debe ir a las mismas cuentas (ver la nota en
+        // armarDistribucionVentasFactura()).
         $aplicaRepartoPorCategoria = !$entidadTieneReglas && $idNotaCredito > 0;
 
         // LATERAL por línea, no subconsulta agregada sobre toda la tabla: mismo motivo que en
@@ -3360,13 +3412,17 @@ class AsientoBuilderService
 
             $refBase = ($r['concepto'] ?? $r['referencia'] ?? '') . ' (NC)';
 
-            if (empty($r['id_cuenta']) && !$aplicaRepartoPorCategoria) {
+            $porLinea = ($esPorCobrar || $esSubtotal)
+                ? $aplicaRepartoPorCategoria
+                : $idNotaCredito > 0 && empty($r['__cuenta_de_entidad__']);
+
+            if (empty($r['id_cuenta']) && !$porLinea) {
                 $reglasSinCuenta[] = $refBase;
                 continue;
             }
 
             if ($esPorCobrar) {
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoriaNC(
                         $db, $idEmpresa, $idNotaCredito, $r, $importeTotal,
                         '(d.precio_total_sin_impuesto + COALESCE(imp_cxc.total_impuestos, 0))', $joinImpuestosPorLinea,
@@ -3382,7 +3438,7 @@ class AsientoBuilderService
                 }
             } elseif ($esSubtotal) {
                 if ($subtotal <= 0) continue;
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoriaNC(
                         $db, $idEmpresa, $idNotaCredito, $r, $subtotal,
                         'd.precio_total_sin_impuesto', '',
@@ -3398,7 +3454,7 @@ class AsientoBuilderService
                 }
             } elseif ($esCosto || $esInventario) {
                 if ($costo <= 0) continue;
-                if ($aplicaRepartoPorCategoria) {
+                if ($porLinea) {
                     $this->aplicarRepartoPorCategoriaNC(
                         $db, $idEmpresa, $idNotaCredito, $r, $costo,
                         'COALESCE(kc.costo_total, 0)', $joinCostoPorLinea,

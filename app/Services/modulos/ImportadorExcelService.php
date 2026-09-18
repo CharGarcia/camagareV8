@@ -5,6 +5,7 @@ namespace App\Services\modulos;
 
 use App\Services\LogSistemaService;
 use App\repositories\modulos\ProductoRepository;
+use App\Rules\modulos\ProductoRules;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PDO;
 use Exception;
@@ -964,7 +965,7 @@ class ImportadorExcelService
         $codigoPrincipal = $this->sanitizarTexto(trim((string)($fila[0] ?? '')), 50);
         $codigoAuxiliar  = $this->sanitizarTexto(trim((string)($fila[1] ?? '')), 50);
         $codigoBarras    = $this->sanitizarTexto(trim((string)($fila[2] ?? '')), 50);
-        $nombre          = $this->sanitizarTexto(trim((string)($fila[3] ?? '')), 255);
+        $nombre          = $this->sanitizarTexto(trim((string)($fila[3] ?? '')), ProductoRules::MAX_NOMBRE);
         $tipoRaw         = strtolower(trim((string)($fila[4] ?? 'producto')));
         $precio          = abs(floatval($fila[5] ?? 0));
         $codigoIvaRaw    = $this->sanitizarTexto(trim((string)($fila[6] ?? '')), 50);

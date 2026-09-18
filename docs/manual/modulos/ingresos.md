@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo
-version: 2.7
+etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada
+version: 2.8
 orden: 10
 estado: activo
 ---
@@ -144,6 +144,19 @@ Al pulsar **Actualizar** el sistema vuelve a validar el cuadre, el saldo real de
 cada documento (por si otro ingreso lo cobró mientras tanto), el periodo
 contable y regenera el asiento contable con los datos nuevos. El cambio queda en
 el historial de auditoría con los datos anteriores y los nuevos.
+
+## Qué pasa en el listado al guardar
+
+Al pulsar **Guardar** (ingreso nuevo) o **Actualizar** (ingreso editado), el
+modal se cierra y el listado se actualiza **sin moverse de donde estaba**: sigue
+en la misma página, con el mismo texto de búsqueda, los mismos filtros y el mismo
+orden. La fila del ingreso guardado se resalta en verde unos segundos, ya con los
+datos nuevos (fecha, Recibo de, observaciones, monto y tipo).
+
+Si ese ingreso no cae en la página que se está viendo —por ejemplo, uno nuevo
+mientras se ve la página 3, o uno que ya no cumple el filtro activo—, se muestra
+igual arriba de todo para que se vea qué se guardó. Al buscar, filtrar o cambiar
+de página vuelve a su lugar.
 
 ## El periodo contable manda
 
@@ -334,6 +347,13 @@ deseable; para el contador o el administrador, active el acceso total.
   sola.
 
 ## Historial de cambios
+
+- **2.8** — Al guardar un ingreso nuevo o editado, el listado se actualiza en la
+  misma página, con la búsqueda, los filtros y el orden que tenía, y resalta la
+  fila del ingreso guardado con sus datos nuevos. Antes volvía siempre a la
+  primera página, así que un ingreso editado en otra página (o con el listado
+  ordenado por otra columna) no se veía actualizado. Nueva sección *Qué pasa en
+  el listado al guardar*.
 
 - **2.7** — Al pulsar **Anticipo Cliente**, las líneas de "Otros conceptos" toman
   la cuenta del anticipo aunque ya haya facturas o recibos cargados (antes

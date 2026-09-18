@@ -180,7 +180,7 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                 <!-- Fila 2: Descripción (ancho completo)-->
                                 <div class="col-md-12">
                                     <label class="form-label mb-1 small fw-bold text-muted text-primary">Descripción / Nombre *</label>
-                                    <textarea name="nombre" id="prod_nombre" class="form-control form-control-sm shadow-none border-secondary-subtle" required maxlength="200" rows="2" placeholder="Nombre del producto o servicio"></textarea>
+                                    <textarea name="nombre" id="prod_nombre" class="form-control form-control-sm shadow-none border-secondary-subtle" required maxlength="<?= \App\Rules\modulos\ProductoRules::MAX_NOMBRE ?>" rows="2" placeholder="Nombre del producto o servicio"></textarea>
                                 </div>
 
                                 <!-- Fila 3: Tipo Medida, Unidad de Medida, Concepto ICE, Valor ICE -->

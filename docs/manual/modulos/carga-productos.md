@@ -6,7 +6,7 @@ ruta_modulo: modulos/carga-productos
 tipo: modulo
 visibilidad: todos
 etiquetas: carga masiva, importar productos, excel, plantilla, actualizar precios, catalogo masivo, subir productos
-version: 1.0
+version: 1.1
 orden: 15
 estado: activo
 ---
@@ -43,6 +43,7 @@ producto inactivo deja de aparecer al facturar pero conserva su historial.
 
 | Columna | Regla |
 |---------|-------|
+| NOMBRE | Obligatorio, hasta 300 caracteres (el máximo que el SRI admite en la descripción del ítem) |
 | TIPO | Debe ser exactamente `Producto` o `Servicio` |
 | PRECIO_BASE | Numérico y no negativo |
 | CODIGO_AUXILIAR / CODIGO_BARRAS | No pueden exceder su longitud máxima |
@@ -64,4 +65,6 @@ es mucho más caro de corregir que de prevenir.
 
 ## Historial de cambios
 
+- **1.1** — La columna **NOMBRE** admite hasta 300 caracteres (antes 200), igual que
+  el formulario de Productos.
 - **1.0** — Versión inicial.

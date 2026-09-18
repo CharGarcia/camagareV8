@@ -24,7 +24,9 @@
  *   4. FALLOS QUE NO SE REINTENTAN. Un documento sin cuenta configurada, o con
  *      el período contable cerrado, va a fallar igual las próximas mil veces.
  *      Se registra con la firma de la configuración vigente y se salta hasta que
- *      esa configuración cambie.
+ *      esa configuración cambie. Igual el costo de ventas pendiente de Facturas,
+ *      Recibos y Notas de Crédito: el documento conserva su asiento, pero no se
+ *      regenera en cada pasada mientras falte la cuenta de Costo/Inventario.
  *
  * La detección de "a este documento le falta el asiento" y la generación en sí
  * NO se reimplementan aquí: son las de SincronizadorAsientosService, el mismo
@@ -37,6 +39,7 @@ namespace App\Services\modulos;
 
 use App\Helpers\ContabilidadModulos;
 use App\repositories\modulos\ContabilidadAutoRepository;
+use App\repositories\modulos\CosteoVentaSeguimientoRepository;
 use App\Services\ErrorLogService;
 use App\Services\LogSistemaService;
 
@@ -48,11 +51,19 @@ class ContabilidadAutoService
     /** Si no cambió la configuración y no quedó trabajo pendiente, no se repite la pasada tan seguido. */
     private const THROTTLE_SEGUNDOS = 60;
 
+    /**
+     * Inicio del motivo con que se anota el costo de ventas pendiente en contabilidad_auto_fallos.
+     * Además de explicarlo, lo distingue de los demás fallos: ver reactivarFallosSinAsiento().
+     */
+    public const MOTIVO_COSTO_PENDIENTE = 'Costo de ventas pendiente';
+
     public function __construct(
         private ContabilidadAutoRepository $repo,
         private SincronizadorAsientosService $sincronizador,
-        private LogSistemaService $log
+        private LogSistemaService $log,
+        private ?CosteoVentaSeguimientoRepository $costeo = null
     ) {
+        $this->costeo ??= new CosteoVentaSeguimientoRepository();
     }
 
     public static function crear(): self
@@ -60,7 +71,8 @@ class ContabilidadAutoService
         return new self(
             new ContabilidadAutoRepository(),
             new SincronizadorAsientosService(),
-            new LogSistemaService()
+            new LogSistemaService(),
+            new CosteoVentaSeguimientoRepository()
         );
     }
 
@@ -149,7 +161,19 @@ class ContabilidadAutoService
             return ['omitido' => 'sin trabajo en SincronizadorAsientosService'];
         }
 
+        // Solo Facturas, Recibos y Notas de Crédito: su tipo en ventas_costeo_seguimiento.
+        $tipoCosteo = (string) ($trabajo['tipoCosteo'] ?? '');
+        $tablaVerif = (string) ($trabajo['tablaVerif'] ?? '');
+        $colAsiento = (string) ($trabajo['colAsiento'] ?? 'id_asiento_contable');
+
         try {
+            if ($tipoCosteo !== '') {
+                // El fallo de costo pendiente solo evita regenerar un documento que YA tiene
+                // asiento. Si se lo anularon, vuelve a faltarle el asiento entero y esta pasada
+                // debe generárselo como a cualquier otro.
+                $this->repo->reactivarFallosSinAsiento($idEmpresa, $clave, $tablaVerif, $colAsiento, self::MOTIVO_COSTO_PENDIENTE, $idUsuario);
+            }
+
             $ids = $this->repo->idsPendientes(
                 $trabajo['sql'],
                 $trabajo['params'],
@@ -170,7 +194,7 @@ class ContabilidadAutoService
 
         if ($ids === []) {
             $this->repo->guardarEstado($idEmpresa, $clave, $hashConfig, 0, 0, false, $idUsuario);
-            return ['generados' => 0, 'fallidos' => 0, 'pendientes' => 0];
+            return ['generados' => 0, 'fallidos' => 0, 'costo_pendiente' => 0, 'pendientes' => 0];
         }
 
         $service = ($trabajo['factory'])();
@@ -195,11 +219,7 @@ class ContabilidadAutoService
         // Varios services retornan en silencio cuando el asiento queda vacío por falta de
         // reglas: sin esta comprobación esos documentos se contarían como generados y nadie
         // volvería a mirarlos. Mismo criterio que SincronizadorAsientosService.
-        $sinAsiento = $this->repo->idsSinAsiento(
-            (string) ($trabajo['tablaVerif'] ?? ''),
-            (string) ($trabajo['colAsiento'] ?? 'id_asiento_contable'),
-            $intentados
-        );
+        $sinAsiento = $this->repo->idsSinAsiento($tablaVerif, $colAsiento, $intentados);
         foreach ($sinAsiento as $id) {
             $this->repo->registrarFallo(
                 $idEmpresa,
@@ -212,32 +232,73 @@ class ContabilidadAutoService
             $fallidos++;
         }
 
-        $generadosIds = array_values(array_diff($intentados, $sinAsiento));
+        // Facturas, Recibos y Notas de Crédito con asiento pero con el costo de ventas todavía sin
+        // contabilizar (falta la cuenta de Costo/Inventario). El SQL de detección los vuelve a traer
+        // mientras sigan así, de modo que sin anotarlos se regenerarían en CADA pasada —el mismo
+        // asiento y otra línea «Actualizar Asiento» en log_sistema— hasta que alguien configure la
+        // cuenta. Se anotan como fallo con la configuración vigente: se reintentan cuando esta cambie,
+        // igual que cualquier otro fallo. La sincronización manual no lee esta lista y sigue avisándolo.
+        $costoPendiente = $tipoCosteo !== ''
+            ? $this->costeo->getMotivosPendientes($idEmpresa, $tipoCosteo, array_values(array_diff($intentados, $sinAsiento)))
+            : [];
+        foreach ($costoPendiente as $id => $motivoCosto) {
+            $this->repo->registrarFallo($idEmpresa, $clave, $id, self::motivoCostoPendiente($motivoCosto), $hashConfig, $idUsuario);
+        }
+
+        $generadosIds = array_values(array_diff($intentados, $sinAsiento, array_keys($costoPendiente)));
         $this->repo->limpiarFallos($idEmpresa, $clave, $generadosIds, $idUsuario);
 
         $quedanPendientes = count($ids) >= self::TOPE_POR_PASADA;
-        $this->repo->guardarEstado($idEmpresa, $clave, $hashConfig, count($generadosIds), $fallidos, $quedanPendientes, $idUsuario);
+        $this->repo->guardarEstado($idEmpresa, $clave, $hashConfig, count($generadosIds), $fallidos + count($costoPendiente), $quedanPendientes, $idUsuario);
 
-        if ($generadosIds !== []) {
-            $this->auditar($idEmpresa, $idUsuario, $clave, $definicion, $generadosIds, $fallidos);
+        if ($generadosIds !== [] || $costoPendiente !== []) {
+            $this->auditar($idEmpresa, $idUsuario, $clave, $definicion, $generadosIds, $fallidos, array_keys($costoPendiente));
         }
         if ($fallidos > 0) {
             error_log("[ContabilidadAuto] {$clave} (empresa {$idEmpresa}): {$fallidos} documento(s) sin asiento — ver contabilidad_auto_fallos");
         }
+        if ($costoPendiente !== []) {
+            error_log("[ContabilidadAuto] {$clave} (empresa {$idEmpresa}): " . count($costoPendiente)
+                . " documento(s) con el costo de ventas pendiente; no se regeneran hasta que cambie la configuración contable");
+        }
 
         return [
-            'generados'  => count($generadosIds),
-            'fallidos'   => $fallidos,
-            'pendientes' => $quedanPendientes ? 1 : 0,
+            'generados'       => count($generadosIds),
+            'fallidos'        => $fallidos,
+            'costo_pendiente' => count($costoPendiente),
+            'pendientes'      => $quedanPendientes ? 1 : 0,
         ];
+    }
+
+    /** Motivo del fallo de costo pendiente, a partir de ventas_costeo_seguimiento.motivo_pendiente. */
+    private static function motivoCostoPendiente(string $motivo): string
+    {
+        return self::MOTIVO_COSTO_PENDIENTE . match ($motivo) {
+            'cuenta_no_configurada'         => ': falta la cuenta de Costo de Ventas y/o Inventario (General, o por cliente, producto, categoría, marca o tipo de producción).',
+            'bloque_incompleto_descuadrado' => ': Costo de Ventas e Inventario no resuelven cuenta para todas las líneas del documento.',
+            default                         => '.',
+        };
     }
 
     /**
      * Una línea en log_sistema por pasada con resultado, no una por documento:
      * el detalle de cada asiento ya lo registra el service del módulo al crearlo.
+     *
+     * @param int[] $costoPendienteIds Documentos cuyo asiento se generó sin el costo de ventas.
      */
-    private function auditar(int $idEmpresa, int $idUsuario, string $clave, array $definicion, array $generadosIds, int $fallidos): void
+    private function auditar(int $idEmpresa, int $idUsuario, string $clave, array $definicion, array $generadosIds, int $fallidos, array $costoPendienteIds = []): void
     {
+        $datos = [
+            'modulo'      => $definicion['nombre'] ?? $clave,
+            'clave'       => $clave,
+            'generados'   => count($generadosIds),
+            'fallidos'    => $fallidos,
+            'documentos'  => $generadosIds,
+        ];
+        if ($costoPendienteIds !== []) {
+            $datos['costo_pendiente'] = $costoPendienteIds;
+        }
+
         try {
             $this->log->registrar(
                 $idUsuario,
@@ -246,13 +307,7 @@ class ContabilidadAutoService
                 'contabilidad_auto_estado',
                 null,
                 null,
-                [
-                    'modulo'      => $definicion['nombre'] ?? $clave,
-                    'clave'       => $clave,
-                    'generados'   => count($generadosIds),
-                    'fallidos'    => $fallidos,
-                    'documentos'  => $generadosIds,
-                ]
+                $datos
             );
         } catch (\Throwable $e) {
             // La auditoría nunca puede tumbar la generación.

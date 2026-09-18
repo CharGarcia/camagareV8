@@ -4,8 +4,8 @@ resumen: Al abrir un módulo, el sistema genera solo y en silencio los asientos 
 categoria: Contabilidad
 tipo: guia
 visibilidad: todos
-etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano
-version: 1.3
+etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano, costo de ventas pendiente, asiento sin costo, actualizar asiento repetido
+version: 1.4
 orden: 30
 estado: activo
 ---
@@ -84,6 +84,13 @@ Si quiere ver el resultado, revise **Asientos Contables** o **Mayores**.
   anotado y se lo salta. **Se vuelve a intentar automáticamente en cuanto usted
   corrija la configuración contable** del módulo — no hay que pedirlo ni volver
   a nada.
+- **Con el costo de ventas pasa lo mismo.** Si a una factura, recibo o nota de
+  crédito le falta la cuenta de Costo de Ventas o la de Inventario, su asiento se
+  genera igual, sin el costo, y el documento queda anotado: no se vuelve a
+  generar cada vez que se abre el módulo. Cuando se configure la cuenta en
+  Configuración Contable, el asiento se completa solo con el costo. Si mientras
+  tanto alguien anula ese asiento, el documento se vuelve a contabilizar en la
+  siguiente pasada, como cualquier otro que no tenga asiento.
 - **El asiento queda a nombre del usuario que abrió el módulo**, que es quien
   disparó la generación.
 - **Un documento anulado no se contabiliza nunca**, en ningún módulo. Tampoco los
@@ -154,6 +161,12 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 ## Historial de cambios
 
+- **1.4** — Las facturas, recibos y notas de crédito con el costo de ventas pendiente
+  por falta de cuenta ya no se vuelven a contabilizar cada vez que se abre el módulo.
+  Antes se regeneraban en cada pasada (hasta 50 por vez) sin ningún cambio y dejaban
+  una línea «Actualizar Asiento» en el registro del sistema cada vez. Ahora se
+  reintentan al corregir la configuración contable, igual que los demás pendientes.
+  El aviso de Asientos Contables, Mayores y Estados Financieros los sigue mostrando.
 - **1.3** — Los cobros y pagos resuelven su cuenta recorriendo la cascada completa
   (cliente/proveedor → General → cuenta única), no solo la regla General. Antes, una
   empresa con las cuentas configuradas por proveedor o por categoría veía sus documentos

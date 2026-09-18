@@ -15,6 +15,10 @@
  *     de gestión manda sobre el repositorio y nunca se pisa.
  *   - Existe, origen='archivo', mismo hash  → sin cambios (no se toca).
  *   - Existe, origen='archivo', otro hash   → se ACTUALIZA.
+ *     El hash es el del .md MÁS la versión del conversor (MarkdownSimple::
+ *     VERSION): cuando el conversor cambia su salida, el siguiente Sincronizar
+ *     regenera el HTML de todos los artículos de archivo aunque ningún .md
+ *     haya cambiado.
  *   - Artículo de origen='archivo' cuyo .md ya no está → se marca 'obsoleto'
  *     (no se elimina: su contenido puede seguir sirviendo de referencia).
  *
@@ -152,7 +156,10 @@ class DocumentacionSyncService
             throw new \RuntimeException('No se pudo leer el archivo.');
         }
 
-        $hash = hash('sha256', $crudo);
+        // La versión del conversor entra en el hash: el HTML guardado depende del
+        // .md y de cómo se convierte, y si solo se mirara el .md un arreglo del
+        // conversor nunca llegaría a los artículos ya publicados.
+        $hash = hash('sha256', 'conversor:' . MarkdownSimple::VERSION . "\n" . $crudo);
         [$meta, $cuerpo] = MarkdownSimple::separarFrontMatter($crudo);
 
         $slug = trim((string) ($meta['slug'] ?? '')) ?: $this->slugDesdeRuta($relativo);

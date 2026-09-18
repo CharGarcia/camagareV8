@@ -381,30 +381,7 @@ class EgresosController extends BaseModuloController
             echo '<tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-cash-stack fs-3 d-block mb-2"></i>No se encontraron egresos.</td></tr>';
         } else {
             foreach ($rows as $r) {
-                $fecha  = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
-
-                $tipoLabel = \App\Helpers\TipoDocumentoHelper::egresoLabel(
-                    $r['tipos_detalle'] ?? null,
-                    $r['tipo_egreso'] ?? null,
-                    $r['concepto_nombre'] ?? null
-                );
-
-                $estado = $r['estado'] ?? 'registrado';
-                $estCls = match ($estado) {
-                    'anulado' => 'bg-danger bg-opacity-10 text-danger border-danger',
-                    default   => 'bg-primary bg-opacity-10 text-primary border-primary',
-                };
-                $badge = '<span class="badge ' . $estCls . ' border border-opacity-25">' . ucfirst($estado) . '</span>';
-
-                echo '<tr class="egreso-row" role="button" onclick="abrirModalEgresoVer(' . $r['id'] . ')">
-                        <td class="ps-3" data-col="numero_egreso"><code>' . htmlspecialchars($r['numero_egreso'] ?? '') . '</code></td>
-                        <td data-col="fecha_emision">' . $fecha . '</td>
-                        <td data-col="tipo_egreso"><span class="badge bg-light text-dark border">' . htmlspecialchars($tipoLabel) . '</span></td>
-                        <td class="fw-medium text-truncate" data-col="sujeto_nombre" style="max-width:200px">' . htmlspecialchars($r['sujeto_nombre'] ?? '') . '</td>
-                        <td class="text-truncate text-muted" data-col="observaciones" style="max-width:200px">' . htmlspecialchars($r['observaciones'] ?? '') . '</td>
-                        <td class="text-end fw-bold" data-col="monto_total">$' . number_format((float)$r['monto_total'], 2) . '</td>
-                        <td class="text-center pe-3" data-col="estado">' . $badge . '</td>
-                      </tr>';
+                echo $this->renderFila($r);
             }
         }
         $rowsHtml = ob_get_clean();
@@ -423,6 +400,43 @@ class EgresosController extends BaseModuloController
             'info'       => "$from-$to/$total"
         ]);
         exit;
+    }
+
+    /**
+     * Una fila del listado. El HTML vive en un único partial que incluyen la carga inicial
+     * (index.php), el refresco AJAX y la fila del egreso recién guardado.
+     */
+    private function renderFila(array $r): string
+    {
+        ob_start();
+        include MVC_APP . '/views/modulos/egresos/_fila.php';
+        return (string) ob_get_clean();
+    }
+
+    /**
+     * HTML de la fila del egreso recién guardado (nuevo o editado), con el mismo alcance que
+     * el listado (registros propios incluidos). La vista lo usa para actualizar ese registro
+     * en el listado sin perder la página, el orden ni los filtros. El egreso YA se guardó:
+     * si algo falla aquí se registra y se devuelve null (la vista igual recarga el listado),
+     * nunca un error que haga creer que no se guardó y lleve a registrarlo dos veces.
+     */
+    private function filaGuardada(int $id): ?string
+    {
+        $nivelBuffer = ob_get_level();
+        try {
+            $perm = $this->getPermisos();
+            $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            $r = $this->service->getFilaListado($id, (int) $_SESSION['id_empresa'], $idUsuarioFiltro);
+            return $r ? $this->renderFila($r) : null;
+        } catch (\Throwable $e) {
+            // Un fallo a mitad del partial dejaría su buffer abierto y ese HTML suelto saldría
+            // delante del JSON de la respuesta.
+            while (ob_get_level() > $nivelBuffer) {
+                ob_end_clean();
+            }
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return null;
+        }
     }
 
     public function getEgresoAjax(): void
@@ -540,7 +554,7 @@ class EgresosController extends BaseModuloController
             // transacción para que el pg_advisory_xact_lock lo proteja hasta el INSERT (CLAUDE.md §8).
             $id = $this->registrarConSecuencialReservado($data);
 
-            echo json_encode(['ok' => true, 'mensaje' => 'Egreso registrado satisfactoriamente.', 'id' => $id]);
+            echo json_encode(['ok' => true, 'mensaje' => 'Egreso registrado satisfactoriamente.', 'id' => $id, 'fila' => $this->filaGuardada($id)]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
@@ -643,7 +657,7 @@ class EgresosController extends BaseModuloController
 
             $this->service->actualizarPagos($id, $pagos, $idEmpresa, $idUsuario, $fechaEmision, $data);
 
-            echo json_encode(['ok' => true, 'mensaje' => 'Egreso actualizado correctamente.']);
+            echo json_encode(['ok' => true, 'mensaje' => 'Egreso actualizado correctamente.', 'id' => $id, 'fila' => $this->filaGuardada($id)]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

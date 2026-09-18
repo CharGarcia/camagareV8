@@ -479,7 +479,7 @@
     };
     /**
      * Limpia por completo la selección de cliente (input visible + ocultos + dropdown) y
-     * las devoluciones, que dependen del cliente.
+     * las devoluciones, que dependen del cliente. Lo que se entrega a cambio se conserva.
      */
     function camLimpiarCliente() {
         document.getElementById('cam_cliente_busqueda').value = '';
@@ -496,14 +496,11 @@
 
     /**
      * Quita las líneas que dependen del cliente: todas las devoluciones (vienen de SUS
-     * facturas de consignación/cambios) y las entregas tomadas de una consignación (de SU consignación).
-     * Las entregas desde bodega/catálogo (solo en borradores guardados antes del 18-09-2026,
-     * ya no se agregan) no dependen del cliente y se conservan.
+     * facturas de consignación/cambios). Lo que se entrega a cambio se conserva: puede salir de
+     * la consignación de cualquier cliente (18-09-2026), así que no depende del cliente del cambio.
      */
     function camQuitarLineasDelCliente() {
         vaciarDev();
-        document.querySelectorAll('#cam_ent_body tr[data-key^="CONSIGNACION-"]').forEach(tr => tr.remove());
-        if (!document.querySelector('#cam_ent_body tr[data-prod]')) vaciarEnt();
     }
 
     // Con un cliente ya fijado el input muestra una etiqueta ("identificación — nombre"):
@@ -522,9 +519,9 @@
         document.getElementById('cam_cliente_email').value = c.email || '';
         document.getElementById('cam_cliente_busqueda').value = (c.identificacion || '') + ' — ' + (c.nombre || '');
         document.getElementById('cam_clientes_dropdown').classList.add('d-none');
-        // Al CAMBIAR de cliente se limpian las líneas que dependen de él (devoluciones y
-        // entregas desde consignación). Si el cliente se fija por primera vez a partir de un
-        // ítem buscado por NUP / número, no hay nada que limpiar.
+        // Al CAMBIAR de cliente se limpian las líneas que dependen de él (las devoluciones).
+        // Si el cliente se fija por primera vez a partir de un ítem buscado por NUP / número,
+        // no hay nada que limpiar.
         if (prev && String(prev) !== String(c.id)) camQuitarLineasDelCliente();
         camRecalcular();
     }
@@ -583,9 +580,10 @@
     }
 
     /**
-     * Fija el cliente del cambio a partir de una línea (factura de consignación, cambio previo o
-     * consignación) cuando todavía no hay cliente: así se puede empezar por el NUP o
-     * por el número del documento. Devuelve false si la línea es de OTRO cliente.
+     * Fija el cliente del cambio a partir de una línea que se DEVUELVE (factura de consignación o
+     * cambio previo) cuando todavía no hay cliente: así se puede empezar por el NUP o por el
+     * número del documento. Devuelve false si la línea es de OTRO cliente. Lo que se entrega a
+     * cambio no pasa por aquí: puede salir de la consignación de cualquier cliente.
      */
     function camAsegurarClienteDeLinea(l) {
         if (!l.id_cliente) return true; // existencias / catálogo: no dependen del cliente
@@ -597,7 +595,7 @@
         if (String(actual) !== String(l.id_cliente)) {
             camSwal({
                 icon: 'warning', title: 'Es de otro cliente',
-                html: `El documento <strong>${esc(l.doc_numero || l.doc_numero_consignacion || '')}</strong> pertenece a <strong>${esc(l.cliente_nombre || 'otro cliente')}</strong>.<br>Un cambio es de un solo cliente: quite el cliente actual (Backspace en el campo Cliente) o registre otro cambio.`
+                html: `El documento <strong>${esc(l.doc_numero || l.doc_numero_consignacion || '')}</strong> pertenece a <strong>${esc(l.cliente_nombre || 'otro cliente')}</strong>.<br>Lo que se devuelve en un cambio es de un solo cliente: quite el cliente actual (Backspace en el campo Cliente) o registre otro cambio.`
             });
             return false;
         }
@@ -608,16 +606,20 @@
      * Pinta un dropdown AGRUPADO POR DOCUMENTO (factura / cambio / consignación): una
      * cabecera por documento con "Agregar todos" y, debajo, cada ítem del documento por
      * separado (el cambio se hace por unidad / NUP, así que cada uno se agrega solo).
-     * opts: { mostrarCliente, existe(l) → bool, onAdd(l, silencioso) }
+     * opts: { mostrarCliente, idClienteCambio, existe(l) → bool, onAdd(l, silencioso) }
+     * Con `idClienteCambio` (solo lo pasa la búsqueda de lo que se entrega), los documentos de
+     * OTRO cliente llevan el nombre de su cliente y la marca "Otro cliente", para que se note de
+     * qué consignación sale lo entregado; se agregan igual que los demás.
      */
     function camRenderGrupos(dd, rows, opts) {
         const grupos = new Map();
         rows.forEach(l => {
             const g = l.origen_tipo + '-' + l.id_origen;
-            if (!grupos.has(g)) grupos.set(g, { tipo: l.origen_tipo, numero: l.doc_numero, numeroConsig: l.doc_numero_consignacion, fecha: l.doc_fecha, cliente: l.cliente_nombre, items: [] });
+            if (!grupos.has(g)) grupos.set(g, { tipo: l.origen_tipo, numero: l.doc_numero, numeroConsig: l.doc_numero_consignacion, fecha: l.doc_fecha, cliente: l.cliente_nombre, idCliente: l.id_cliente, items: [] });
             grupos.get(g).items.push(l);
         });
         grupos.forEach(g => {
+            const otroCliente = !!opts.idClienteCambio && !!g.idCliente && String(g.idCliente) !== String(opts.idClienteCambio);
             const head = document.createElement('div');
             head.className = 'list-group-item py-1 bg-light d-flex align-items-center gap-2 flex-wrap';
             // Factura de consignación sin factura de venta enlazada: se identifica por su número propio.
@@ -627,7 +629,8 @@
             head.innerHTML = `${camBadgeOrigen(g.tipo)}
                 ${numero}
                 <span class="small text-muted">${camFechaCorta(g.fecha)}</span>
-                ${opts.mostrarCliente && g.cliente ? `<span class="small text-muted">· ${esc(g.cliente)}</span>` : ''}
+                ${(opts.mostrarCliente || otroCliente) && g.cliente ? `<span class="small ${otroCliente ? 'fw-semibold text-dark' : 'text-muted'}">· ${esc(g.cliente)}</span>` : ''}
+                ${otroCliente ? '<span class="badge bg-warning bg-opacity-25 text-dark border border-warning" title="Esta consignación es de otro cliente: lo que se entregue sale de su saldo y va al cliente del cambio">Otro cliente</span>' : ''}
                 <span class="small text-muted ms-auto">${g.items.length} ítem(s)</span>`;
             const btn = document.createElement('button');
             btn.type = 'button';
@@ -727,11 +730,14 @@
         camRecalcular();
     };
 
-    // ─── Entregas (solo desde consignaciones del cliente, por su número) ──────
+    // ─── Entregas (desde consignaciones de cualquier cliente, por su número) ──────
     // Se busca SOLO por el número de la consignación: completo (001-001-000000012) o solo el
     // secuencial, con o sin ceros. Salen las líneas de esa consignación ENTREGADA con saldo en
     // poder del cliente, cada ítem por separado (o "Agregar todos"). Desde el 18-09-2026 ya no
     // se ofrecen existencias de bodega ni el catálogo, ni se busca por NUP, lote o producto.
+    // La búsqueda NO se acota al cliente del cambio: se puede entregar desde la consignación de
+    // otro cliente (decisión del usuario, 18-09-2026; el servidor también lo admite). Esas
+    // consignaciones salen con el nombre de su cliente y la marca "Otro cliente".
     window.camBuscarEntregas = function (q, desdeFocus) {
         clearTimeout(camEntTimer);
         const dd = document.getElementById('cam_ent_dropdown');
@@ -742,7 +748,7 @@
         if (!/\d/.test(q)) { dd.classList.add('d-none'); return; }
         camEntTimer = setTimeout(async () => {
             const excl = document.getElementById('cam_id').value || 0;
-            const res = await fetch(`${RUTA}/buscarEntregasAjax?id_cliente=${idCliente || 0}&excluir=${excl}&q=${encodeURIComponent(q)}`);
+            const res = await fetch(`${RUTA}/buscarEntregasAjax?id_cliente=0&excluir=${excl}&q=${encodeURIComponent(q)}`);
             const data = await res.json();
             dd.innerHTML = '';
             if (!data.ok) {
@@ -752,10 +758,11 @@
             }
             const consig = data.consignaciones || [];
             if (!consig.length) {
-                dd.innerHTML = `<span class="list-group-item small text-muted">No hay una consignación entregada con ese número y saldo pendiente${idCliente ? ' para el cliente del cambio' : ''}.</span>`;
+                dd.innerHTML = '<span class="list-group-item small text-muted">No hay una consignación entregada con ese número y saldo pendiente.</span>';
             } else {
                 camRenderGrupos(dd, consig, {
                     mostrarCliente: !idCliente,
+                    idClienteCambio: idCliente,
                     existe: (l) => !!document.querySelector(`#cam_ent_body tr[data-key="CONSIGNACION-${l.id_origen_detalle}"]`),
                     onAdd: (l, silencioso) => { camAgregarEntregaFila(l, silencioso); document.getElementById('cam_ent_busqueda').value = ''; }
                 });
@@ -765,13 +772,12 @@
     };
 
     /**
-     * Agrega una fila de entrega desde una línea de consignación del cliente: bodega, lote y
-     * NUP son los de la consignación (fijos) y la cantidad propone el saldo en poder del
-     * cliente, que es también su máximo.
+     * Agrega una fila de entrega desde una línea de consignación: bodega, lote y NUP son los de
+     * la consignación (fijos) y la cantidad propone su saldo pendiente, que es también su
+     * máximo. La consignación puede ser de cualquier cliente, así que no fija ni exige el
+     * cliente del cambio: ese lo fijan las devoluciones.
      */
     function camAgregarEntregaFila(o, silencioso) {
-        if (!camAsegurarClienteDeLinea(o)) return;
-
         const key = `CONSIGNACION-${o.id_origen_detalle}`;
         if (document.querySelector(`#cam_ent_body tr[data-key="${key}"]`)) {
             if (!silencioso) camSwal({ icon: 'info', title: 'Ya agregado', text: 'Ese ítem ya está en la lista.', timer: 1200, showConfirmButton: false });

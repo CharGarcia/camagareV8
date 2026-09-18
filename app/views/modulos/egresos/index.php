@@ -54,6 +54,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     .egreso-row:hover {
         background-color: rgba(0, 0, 0, .04);
     }
+    /* Fila del egreso recién guardado (nuevo o editado): se resalta un momento para que
+       se vea en el listado qué registro cambió. */
+    @keyframes eg-fila-guardada {
+        from { background-color: rgba(25, 135, 84, .22); }
+        to   { background-color: transparent; }
+    }
+    .egreso-row.fila-guardada > td {
+        animation: eg-fila-guardada 3s ease-out;
+    }
     .table-detalle th {
         font-size: 0.75rem;
         text-transform: uppercase;
@@ -291,27 +300,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
-                            <?php
-                            $tipoLabel = \App\Helpers\TipoDocumentoHelper::egresoLabel(
-                                $r['tipos_detalle'] ?? null,
-                                $r['tipo_egreso'] ?? null,
-                                $r['concepto_nombre'] ?? null
-                            );
-                            $estado  = $r['estado'] ?? 'registrado';
-                            $estadoClass = match ($estado) {
-                                'anulado' => 'bg-danger bg-opacity-10 text-danger border-danger',
-                                default   => 'bg-primary bg-opacity-10 text-primary border-primary',
-                            };
-                            ?>
-                            <tr class="egreso-row" role="button" onclick="abrirModalEgresoVer(<?= $r['id'] ?>)">
-                                <td class="ps-3" data-col="numero_egreso"><code class="text-secondary"><?= htmlspecialchars($r['numero_egreso'] ?? '') ?></code></td>
-                                <td data-col="fecha_emision"><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
-                                <td data-col="tipo_egreso"><span class="badge bg-light text-dark border"><?= htmlspecialchars($tipoLabel) ?></span></td>
-                                <td class="fw-medium text-truncate" data-col="sujeto_nombre" style="max-width:200px"><?= htmlspecialchars($r['sujeto_nombre'] ?? '') ?></td>
-                                <td data-col="observaciones" class="text-truncate text-muted" style="max-width:200px"><?= htmlspecialchars($r['observaciones'] ?? '') ?></td>
-                                <td class="text-end fw-bold" data-col="monto_total">$<?= number_format((float)$r['monto_total'], 2) ?></td>
-                                <td class="text-center pe-3" data-col="estado"><span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst($estado) ?></span></td>
-                            </tr>
+                            <?php include __DIR__ . '/_fila.php'; ?>
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </tbody>
@@ -2105,7 +2094,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             b.disabled = false;
             if(res.ok) {
                 bootstrap.Modal.getInstance(document.getElementById('modalNuevoEgreso')).hide();
-                window.EGR_fetchSearch(1);
+                // Actualizar el registro en el listado (misma página, orden y filtros)
+                EGR_mostrarRegistroGuardado(res.id, res.fila);
                 Toast.fire({ icon: 'success', title: res.mensaje });
             } else {
                 Swal.fire('Error al guardar', res.mensaje, 'error');
@@ -2504,7 +2494,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             btn.innerHTML = oldHtml;
             if (res.ok) {
                 bootstrap.Modal.getInstance(document.getElementById('modalNuevoEgreso')).hide();
-                window.EGR_fetchSearch(1);
+                // Actualizar el registro en el listado (misma página, orden y filtros)
+                EGR_mostrarRegistroGuardado(res.id || id, res.fila);
                 Toast.fire({ icon: 'success', title: res.mensaje });
             } else {
                 Swal.fire('Error al actualizar', res.mensaje, 'error');
@@ -2554,7 +2545,51 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
     window.currentSorts = <?= $ordenJson ?? '[]' ?>;
     let EGR_sorter = null;
+    // Página que se está viendo: al guardar, el listado se repinta en ESTA página.
+    window.EGR_currentPage = <?= (int) $page ?>;
     window.EGR_cambiarPaginaAjax = (p) => window.EGR_fetchSearch(p);
+
+    /**
+     * Tras guardar un egreso (nuevo o editado): repinta el listado en la misma página, con
+     * el mismo buscador/filtros y orden, y resalta la fila del egreso guardado. Esa fila se
+     * pone con el HTML que devolvió el servidor al guardar (el mismo partial del listado):
+     * así se ve actualizada aunque el refresco fallara, y aparece arriba de todo aunque no
+     * caiga en la página actual (un egreso nuevo viendo la página 3, o uno que el filtro
+     * vigente ya no incluye). En la siguiente búsqueda o cambio de página vuelve a su sitio.
+     */
+    async function EGR_mostrarRegistroGuardado(id, filaHtml) {
+        await window.EGR_fetchSearch(window.EGR_currentPage || 1);
+
+        const tbody = document.getElementById('tbodyEgresos');
+        if (!tbody || !id || !filaHtml) return;
+        const tmp = document.createElement('tbody');
+        tmp.innerHTML = filaHtml.trim();
+        const fila = tmp.querySelector('tr');
+        if (!fila) return;
+
+        const actual = tbody.querySelector(`tr[data-id="${id}"]`);
+        if (actual) {
+            actual.replaceWith(fila);
+        } else {
+            // Quitar el aviso "No se encontraron egresos" si el listado quedó vacío
+            tbody.querySelector('td[colspan]')?.closest('tr')?.remove();
+            tbody.prepend(fila);
+        }
+        fila.classList.add('fila-guardada');
+        setTimeout(() => fila.classList.remove('fila-guardada'), 3000);
+
+        // Que se vea: si quedó fuera del área visible, desplazar solo lo necesario,
+        // descontando el encabezado fijo (sticky) de la tabla, que si no la taparía.
+        const cont = fila.closest('.egreso-scroll');
+        if (cont) {
+            const rc = cont.getBoundingClientRect();
+            const rf = fila.getBoundingClientRect();
+            const arriba = rc.top + cont.clientTop + (cont.querySelector('thead')?.offsetHeight || 0);
+            const abajo  = rc.top + cont.clientTop + cont.clientHeight;
+            if (rf.top < arriba) cont.scrollBy({ top: rf.top - arriba, behavior: 'smooth' });
+            else if (rf.bottom > abajo) cont.scrollBy({ top: rf.bottom - abajo, behavior: 'smooth' });
+        }
+    }
 
     window.EGR_fetchSearch = async function(p = 1) {
         const b = document.getElementById('buscarEgreso').value.trim();
@@ -2574,6 +2609,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('tbodyEgresos').innerHTML = res.rows;
             document.getElementById('paginationContainer').innerHTML = res.pagination;
             document.getElementById('paginationInfo').innerText = res.info;
+            window.EGR_currentPage = p;
 
             // Actualizar enlaces de exportación para que bajen con el filtro/orden vigente
             const btnPdf = document.getElementById('btnExportPdf');

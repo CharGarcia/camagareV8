@@ -129,4 +129,41 @@ class CosteoVentaSeguimientoRepository
         }
         return $out;
     }
+
+    /**
+     * De estos documentos, los que siguen con el costo pendiente, con su motivo
+     * (id_documento => motivo_pendiente, '' si no lo tiene). Lo usa la generación
+     * automática al terminar cada pasada. Si la consulta falla devuelve [] y la
+     * pasada sigue como antes: nunca debe impedir abrir el módulo.
+     *
+     * @param int[] $ids
+     * @return array<int,string>
+     */
+    public function getMotivosPendientes(int $idEmpresa, string $tipoDocumento, array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        if ($idEmpresa <= 0 || $ids === []) {
+            return [];
+        }
+
+        $ph = implode(', ', array_fill(0, count($ids), '?'));
+        try {
+            $st = $this->db->prepare(
+                "SELECT id_documento, COALESCE(motivo_pendiente, '') AS motivo
+                 FROM ventas_costeo_seguimiento
+                 WHERE id_empresa = ? AND tipo_documento = ?
+                   AND requiere_costo = TRUE AND costo_generado = FALSE AND eliminado = FALSE
+                   AND id_documento IN ({$ph})"
+            );
+            $st->execute(array_merge([$idEmpresa, $tipoDocumento], $ids));
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+            $out[(int) $row['id_documento']] = (string) $row['motivo'];
+        }
+        return $out;
+    }
 }

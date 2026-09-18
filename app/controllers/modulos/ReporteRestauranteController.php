@@ -124,7 +124,9 @@ class ReporteRestauranteController extends BaseModuloController
     {
         return match ($filtros['ver_por']) {
             'MESERO'     => $this->repository->getVentasPorMesero($idEmpresa, $filtros),
-            'FORMA_PAGO' => $this->repository->getVentasPorFormaPago($idEmpresa, $filtros),
+            // Con impuestos, desde los comprobantes: lo que entró a la caja, igual
+            // que el cierre. Las demás vistas van sin impuestos (líneas de comanda).
+            'FORMA_PAGO' => $this->repository->getCobrosPorFormaPago($idEmpresa, $filtros),
             'MENU'       => $this->repository->getVentasPorMenu($idEmpresa, $filtros),
             'CATEGORIA'  => $this->repository->getVentasPorCategoria($idEmpresa, $filtros),
             default      => $this->repository->getVentasPorMesa($idEmpresa, $filtros),
@@ -238,7 +240,7 @@ class ReporteRestauranteController extends BaseModuloController
     private function armarExportacion(array $rows, string $verPor): array
     {
         if ($verPor === 'FORMA_PAGO') {
-            $headers = ['Forma de pago', 'Tipo', 'Cobros', 'Total'];
+            $headers = ['Forma de pago', 'Tipo', 'Cobros', 'Total cobrado (con impuestos)'];
             $exportData = array_map(fn($r) => [
                 $r['forma_pago_nombre'], $r['forma_pago_tipo'], (int) $r['cantidad_documentos'], (float) $r['total'],
             ], $rows);
@@ -298,7 +300,7 @@ class ReporteRestauranteController extends BaseModuloController
                 <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
                 <h3>Reporte Restaurante</h3>
                 <p>Fecha de reporte: <?= date('d-m-Y H:i:s') ?></p>
-                <p>Comandas: <?= (int) $stats['cantidad_comandas'] ?> — Documentos: <?= (int) $stats['cantidad_documentos'] ?> — Total: $<?= number_format((float) $stats['total_vendido'], 2) ?></p>
+                <p><?= $this->lineaTotalesPdf($stats) ?></p>
             </div>
             <table>
                 <thead>
@@ -340,14 +342,16 @@ class ReporteRestauranteController extends BaseModuloController
         $rows  = $this->getRows($idEmpresa, $filtros);
         $stats = $this->repository->getEstadisticas($idEmpresa, $filtros);
 
-        // Resumen por forma de pago, como el que manda el correo del cierre de
-        // caja: sale en toda vista, con los mismos filtros. Si la vista activa ya
-        // es la de forma de pago, el detalle de arriba es esa misma tabla, así
-        // que en la tirilla solo se repiten el total y las propinas.
+        // El detalle de arriba es la misma vista de la pantalla. Los dos bloques
+        // de abajo salen de los comprobantes y van CON impuestos, como el correo
+        // del cierre de caja: el detalle de impuestos lleva del Total vendido
+        // (sin impuestos) al total cobrado, y el resumen por forma de pago dice
+        // cuánto entró por cada una. Si la vista activa ya es la de forma de
+        // pago, el detalle es esa misma lista —también con impuestos—, así que
+        // el resumen no la repite: solo el total y las propinas.
         $esVistaFormaPago = $filtros['ver_por'] === 'FORMA_PAGO';
-        $formasPago = $esVistaFormaPago
-            ? $rows
-            : $this->repository->getVentasPorFormaPago($idEmpresa, $filtros);
+        $impuestos = $this->repository->getResumenImpuestos($idEmpresa, $filtros);
+        $cobros    = $esVistaFormaPago ? $rows : $this->repository->getCobrosPorFormaPago($idEmpresa, $filtros);
 
         $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
 
@@ -357,14 +361,91 @@ class ReporteRestauranteController extends BaseModuloController
             'resumen'       => $this->resumenFiltros($idEmpresa, $filtros),
             'filas'         => $this->armarFilasTirilla($rows, $filtros['ver_por']),
             'stats'         => $stats,
+            'impuestos'     => $this->armarDetalleImpuestos($impuestos),
+            // Cobros cuyo comprobante se anuló o eliminó: siguen en el Total
+            // vendido (el reporte parte de la comanda cobrada), pero ya no tienen
+            // impuestos ni cobro que mostrar. Cada cobro emite un solo comprobante.
+            'sinComprobante' => max(0, (int) ($stats['cantidad_documentos'] ?? 0) - (int) ($stats['documentos_vigentes'] ?? 0)),
             'arqueo'        => [
-                'formas_pago'      => $esVistaFormaPago ? [] : $this->armarFilasTirilla($formasPago, 'FORMA_PAGO'),
-                'total'            => round(array_sum(array_map(fn($r) => (float) ($r['total'] ?? 0), $formasPago)), 2),
+                'formas_pago'      => $esVistaFormaPago ? [] : $this->armarFilasTirilla($cobros, 'FORMA_PAGO'),
+                'total'            => round(array_sum(array_map(fn($r) => (float) ($r['total'] ?? 0), $cobros)), 2),
                 'propinas'         => $this->repository->getPropinas($idEmpresa, $filtros),
             ],
             'anchoTirilla'  => (new \App\Services\modulos\ConfiguracionRestauranteService())
                 ->getAnchoTirilla($idEmpresa),
         ]);
+    }
+
+    /**
+     * Líneas del bloque "Detalle de impuestos" de la tirilla, en el orden del
+     * RIDE de la factura: subtotal por tarifa, subtotal sin impuestos, cada
+     * impuesto y el servicio. El total va aparte.
+     *
+     * Se agrupa como el RIDE (FacturaVentaPdfService): con tarifa mayor a 0
+     * manda el porcentaje; con tarifa 0 manda el código SRI, porque 0%, No
+     * objeto (6) y Exento (7) comparten tarifa y no son lo mismo. Salen solo las
+     * líneas con valor —en papel térmico cada renglón cuenta—, salvo el subtotal
+     * sin impuestos, que es el punto de partida y siempre se imprime.
+     *
+     * @return array{lineas: list<array{etiqueta:string, valor:float}>, total:float}
+     */
+    private function armarDetalleImpuestos(array $resumen): array
+    {
+        $pct = static fn(float $t): string => rtrim(rtrim(number_format($t, 2, '.', ''), '0'), '.') . '%';
+
+        $bases     = []; // etiqueta => [orden, base]
+        $impuestos = []; // etiqueta => [orden, valor]
+        foreach ($resumen['impuestos'] as $i) {
+            $tarifa = (float) $i['tarifa'];
+
+            if ($i['codigo_impuesto'] !== '2') {
+                // ICE u otro impuesto que no es IVA: sin subtotal propio, su base
+                // ya está dentro de la del IVA.
+                $etiqueta = match ($i['codigo_impuesto']) {
+                    '3'     => 'ICE',
+                    '5'     => 'IRBPNR',
+                    default => 'Impuesto ' . $i['codigo_impuesto'],
+                };
+                $impuestos[$etiqueta] = [1000, ($impuestos[$etiqueta][1] ?? 0) + $i['valor']];
+                continue;
+            }
+
+            if ($tarifa > 0) {
+                // De mayor a menor tarifa, como el RIDE: 15% antes que 5%.
+                $etiquetaBase = 'Subtotal ' . $pct($tarifa);
+                $orden        = -$tarifa;
+                $etiquetaIva  = 'IVA ' . $pct($tarifa);
+                $impuestos[$etiquetaIva] = [$orden, ($impuestos[$etiquetaIva][1] ?? 0) + $i['valor']];
+            } else {
+                [$etiquetaBase, $orden] = match ($i['codigo_porcentaje']) {
+                    '6'     => ['Subtotal no objeto de IVA', 2],
+                    '7'     => ['Subtotal exento de IVA', 3],
+                    default => ['Subtotal 0%', 1],
+                };
+            }
+            $bases[$etiquetaBase] = [$orden, ($bases[$etiquetaBase][1] ?? 0) + $i['base']];
+        }
+
+        $conValor = static function (array $grupo): array {
+            uasort($grupo, static fn(array $a, array $b): int => $a[0] <=> $b[0]);
+            $lineas = [];
+            foreach ($grupo as $etiqueta => [, $valor]) {
+                if (abs($valor) >= 0.005) {
+                    $lineas[] = ['etiqueta' => (string) $etiqueta, 'valor' => round($valor, 2)];
+                }
+            }
+            return $lineas;
+        };
+
+        $lineas   = $conValor($bases);
+        $lineas[] = ['etiqueta' => 'Subtotal sin impuestos', 'valor' => $resumen['subtotal']];
+        $lineas   = array_merge($lineas, $conValor($impuestos));
+        if (abs($resumen['servicio']) >= 0.005) {
+            // El campo <propina> del comprobante es el recargo por servicio.
+            $lineas[] = ['etiqueta' => 'Servicio', 'valor' => $resumen['servicio']];
+        }
+
+        return ['lineas' => $lineas, 'total' => $resumen['total']];
     }
 
     /**
@@ -485,7 +566,8 @@ class ReporteRestauranteController extends BaseModuloController
                         ' . $filasResumen . '
                         <tr><td style="padding:4px 12px;color:#666;">Comandas</td><td style="padding:4px 12px;"><strong>' . (int) ($stats['cantidad_comandas'] ?? 0) . '</strong></td></tr>
                         <tr><td style="padding:4px 12px;color:#666;">Documentos</td><td style="padding:4px 12px;">' . (int) ($stats['cantidad_documentos'] ?? 0) . '</td></tr>
-                        <tr><td style="padding:4px 12px;color:#666;">Total vendido</td><td style="padding:4px 12px;">$ ' . number_format((float) ($stats['total_vendido'] ?? 0), 2) . '</td></tr>
+                        <tr><td style="padding:4px 12px;color:#666;">Total vendido (sin impuestos)</td><td style="padding:4px 12px;">$ ' . number_format((float) ($stats['total_vendido'] ?? 0), 2) . '</td></tr>
+                        <tr><td style="padding:4px 12px;color:#666;">Total cobrado (con impuestos)</td><td style="padding:4px 12px;">$ ' . number_format((float) ($stats['total_cobrado'] ?? 0), 2) . '</td></tr>
                     </table>
                     <p style="color:#888;font-size:12px;margin-top:24px;">Reporte generado el ' . date('d-m-Y H:i:s') . '.</p>
                 </div>';
@@ -513,6 +595,20 @@ class ReporteRestauranteController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Línea de totales de la cabecera del PDF (el que se descarga y el adjunto
+     * del correo). Nombra los dos totales porque no son lo mismo: el vendido va
+     * sin impuestos y el cobrado con ellos, y en la vista por forma de pago la
+     * tabla suma el segundo.
+     */
+    private function lineaTotalesPdf(array $stats): string
+    {
+        return 'Comandas: ' . (int) ($stats['cantidad_comandas'] ?? 0)
+            . ' — Documentos: ' . (int) ($stats['cantidad_documentos'] ?? 0)
+            . ' — Total vendido (sin impuestos): $' . number_format((float) ($stats['total_vendido'] ?? 0), 2)
+            . ' — Total cobrado (con impuestos): $' . number_format((float) ($stats['total_cobrado'] ?? 0), 2);
+    }
+
     /** Tabla del reporte en HTML, compartida por el PDF que se descarga y el que se envía por correo. */
     private function construirHtmlPdf(string $nombreEmpresa, string $tituloVista, array $headers, array $exportData, array $stats): string
     {
@@ -529,7 +625,7 @@ class ReporteRestauranteController extends BaseModuloController
             <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
             <h3><?= htmlspecialchars($tituloVista) ?></h3>
             <p>Fecha de reporte: <?= date('d-m-Y H:i:s') ?></p>
-            <p>Comandas: <?= (int) ($stats['cantidad_comandas'] ?? 0) ?> — Documentos: <?= (int) ($stats['cantidad_documentos'] ?? 0) ?> — Total: $<?= number_format((float) ($stats['total_vendido'] ?? 0), 2) ?></p>
+            <p><?= $this->lineaTotalesPdf($stats) ?></p>
         </div>
         <table>
             <thead>

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/carga-facturas
 tipo: modulo
 visibilidad: todos
-etiquetas: carga masiva facturas, importar facturas excel, subir facturas, facturar en lote, plantilla facturas, cargar ventas desde excel, migrar facturas, xlsx facturas
-version: 1.0
+etiquetas: carga masiva facturas, importar facturas excel, subir facturas, facturar en lote, plantilla facturas, cargar ventas desde excel, migrar facturas, xlsx facturas, facturas iguales, mismo cliente mismo monto, factura repetida, factura duplicada
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -130,7 +130,8 @@ Dos cosas que **no** hace, a propósito:
 - **Un código de producto que no exista se crea automáticamente**, según la
   columna `TIPO`: como servicio (sin inventario) o como bien **con inventario y
   stock en cero**. Un bien nuevo no trae existencias: se ingresan aparte, desde
-  Cargas de Inventario.
+  Cargas de Inventario. El producto toma como nombre la `DESCRIPCION` de la línea,
+  completa: admite hasta 300 caracteres, lo mismo que el SRI.
 - **Cada factura lleva una sola forma de pago**, por el total del documento, y no
   se escribe en el archivo: el sistema la elige igual que la pantalla de Factura
   de Venta — primero la configurada en la **ficha del cliente**, si no la del
@@ -168,13 +169,15 @@ Dos cosas que **no** hace, a propósito:
 - **Aplicación parcial**: las facturas con errores se omiten y las correctas se
   crean igual. Si una falla al escribirse, se informa y la carga continúa con las
   siguientes.
-- **No se puede cargar dos veces lo mismo.** Hay dos controles:
+- **Controles contra cargas repetidas.** Hay dos:
   - Si sube **el mismo archivo** que ya aplicó, se rechaza entero, diciéndole
     cuándo se cargó y qué facturas creó.
-  - Si edita el archivo y lo vuelve a subir, se comparan las facturas contra las
-    ya emitidas: una factura al mismo cliente, con la misma fecha, el mismo total
-    y el mismo número de líneas se bloquea, nombrando la que ya existe. Si de
-    verdad necesita emitirla otra vez, hágalo desde Facturas de Venta.
+  - Si una factura del archivo tiene el mismo cliente, la misma fecha, el mismo
+    total y el mismo número de líneas que una que ya existe, **se avisa pero se
+    crea igual**: facturar lo mismo al mismo cliente el mismo día es normal (el
+    mismo servicio para varios vehículos, contratos o sucursales). El aviso nombra
+    la factura existente; si en realidad está recargando algo que ya subió, quite
+    esa fila del archivo antes de pulsar "Crear facturas".
 - **Un archivo aplicado no se puede volver a aplicar.** Si quiere corregir algo,
   ajuste el Excel y súbalo de nuevo — pero quite las filas de las facturas que sí
   se crearon.
@@ -249,14 +252,20 @@ Dos cosas que **no** hace, a propósito:
 - **"Este archivo YA SE CARGÓ el …"**: está subiendo un archivo que ya se aplicó.
   Las facturas están en Facturas de Venta; si necesita cargar otras, prepare un
   archivo solo con las filas nuevas.
-- **"Ya existe una factura igual para este cliente"**: hay una factura emitida con
-  el mismo cliente, fecha, total y número de líneas. Casi siempre es que se está
-  recargando algo ya cargado. Compruébelo con el número que indica el mensaje.
+- **Aviso "Ya existe una factura para este cliente con la misma fecha, el mismo
+  total…"**: no bloquea; la factura se crea igual. Solo le recuerda que ya hay una
+  parecida (el mensaje dice su número). Si son facturas distintas, siga adelante;
+  si está recargando algo que ya subió, quite esa fila del archivo.
 - **"La carga expiró o no existe"**: pasaron más de dos horas entre revisar y
   crear, o cambió de empresa. Vuelva a subir el archivo.
 
 ## Historial de cambios
 
+- **1.1** — Se pueden cargar **varias facturas iguales al mismo cliente** (misma
+  fecha, mismo total, mismas líneas): lo que antes bloqueaba ahora es solo un aviso.
+  Subir otra vez el mismo archivo ya aplicado sigue rechazándose. Además, los
+  productos que la carga crea aceptan una `DESCRIPCION` de hasta 300 caracteres
+  (antes fallaban por encima de 200).
 - **1.0** — Versión inicial: carga masiva de facturas en borrador con secuencial
   automático, forma de pago heredada del cliente o del establecimiento, alta
   automática de productos y servicios según la columna `TIPO`, validación previa

@@ -19,7 +19,7 @@ class CargaProductosRules
 {
     /** Longitudes máximas, alineadas con ProductoRules y con el esquema de la BD. */
     public const MAX_CODIGO         = 50;
-    public const MAX_NOMBRE         = 200;
+    public const MAX_NOMBRE         = ProductoRules::MAX_NOMBRE;
     public const MAX_CODIGO_AUX     = 100;
     public const MAX_CODIGO_BARRAS  = 100;
     public const MAX_NOMBRE_PRECIO  = 100;

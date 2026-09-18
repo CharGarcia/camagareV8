@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.17
+etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion
+version: 1.18
 orden: 47
 estado: activo
 ---
@@ -86,9 +86,12 @@ producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
    Aparecen los ítems de la consignación que el cliente todavía tiene en su
    poder (consignación *Entregada* y con saldo), **cada uno por separado**;
    pulse el que se entrega o **Agregar todos**. Bodega, lote y NUP son los de la
-   consignación y no se editan. Si el cambio todavía no tiene cliente, queda
-   fijado con el de la consignación; si ya lo tiene, solo se buscan las
-   consignaciones de ese cliente.
+   consignación y no se editan. La consignación puede ser de **cualquier
+   cliente**: si no es del cliente del cambio, aparece con el nombre de su
+   cliente y la marca **Otro cliente**, y se agrega igual. Lo entregado sale del
+   saldo de esa consignación y va al cliente del cambio. Agregar lo que se
+   entrega **no fija el cliente** del cambio (ese lo fija lo que se devuelve), y
+   quitar o cambiar el cliente borra las devoluciones, no lo que se entrega.
 5. Pulse **Guardar**. El documento se emite, mueve el inventario y genera el
    asiento.
 
@@ -131,6 +134,10 @@ esa unidad pasa a estar vendida: reemplaza a la que devolvió. Por eso, al
   anteriores al 18-09-2026 no se registra ahí.
 - Lleva el precio de la consignación y el **IVA vigente del producto**, igual
   que si esa unidad se facturara en Facturación de consignaciones.
+- Queda a nombre del **cliente del cambio**, aunque la unidad haya salido de la
+  consignación de otro cliente. En esa consignación, la salida se ve en la
+  pestaña *Resumen* como *Facturación*, con el número de la factura de venta del
+  cliente del cambio.
 - Cada unidad que sale va con la factura de la unidad que entra **en la misma
   posición** (la primera con la primera, la segunda con la segunda…, igual que
   en el listado); las que sobran van con la factura de la última que entra. Se
@@ -256,9 +263,12 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   saldo = cantidad original − lo ya devuelto en cambios emitidos. No se puede
   devolver más que ese saldo, y el sistema lo revalida al guardar y al volver a
   emitir.
-- **Un solo cliente por documento**: todas las devoluciones y las entregas
-  desde consignación deben ser del mismo cliente. Si se intenta agregar un
-  ítem de otro cliente, el sistema avisa y no lo agrega.
+- **Lo que se devuelve es de un solo cliente**: todas las devoluciones deben ser
+  del cliente del cambio. Si se intenta agregar un ítem de otro cliente, el
+  sistema avisa y no lo agrega.
+- **Lo que se entrega puede salir de la consignación de cualquier cliente**
+  (desde el 18-09-2026): sale del saldo de esa consignación y va al cliente del
+  cambio.
 - **Entrega desde consignación**: consume el saldo de esa línea de
   consignación (consignado − retornado − facturado − ya entregado en otros
   cambios) y no se puede entregar más que ese saldo. Como la mercadería ya
@@ -327,9 +337,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 - **"Indique un NUP, un número de documento o un producto, o seleccione el
   cliente"**: sin cliente el buscador necesita al menos dos caracteres.
-- **"El documento … pertenece a otro cliente"**: el cambio ya tiene un cliente
-  distinto. Quite el cliente actual (Backspace en el campo Cliente) o registre
-  otro cambio.
+- **"El documento … pertenece a otro cliente"**: lo que intenta **devolver** es
+  de un cliente distinto al del cambio. Quite el cliente actual (Backspace en el
+  campo Cliente) o registre otro cambio. Lo que se **entrega** no tiene esta
+  restricción.
 - **No aparece la factura**: solo se ofrecen **facturas de consignación** en
   estado **facturada** (las de venta directa no salen aquí), ítems
   que sean bienes (no servicios) y con saldo pendiente de devolver. Búsquela
@@ -381,6 +392,13 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.18** — Lo que se entrega a cambio puede salir de la consignación de **otro cliente**.
+  Al buscarla por su número, aparece con el nombre de su cliente y la marca *Otro cliente*, y
+  se agrega como cualquier otra; antes decía que no había ninguna consignación con ese
+  número. Lo entregado sale del saldo de esa consignación y el registro en Facturación de
+  consignaciones queda a nombre del cliente del cambio. Lo que se devuelve sigue siendo de un
+  solo cliente. Agregar lo que se entrega ya no fija el cliente del cambio, y quitar o cambiar
+  el cliente ya no borra lo entregado.
 - **1.17** — *Productos que entrega a cambio* se busca **solo por el número de
   la consignación**: completo (`001-001-000000012`, entonces solo esa serie) o
   solo el secuencial, con o sin ceros. Ya no busca por NUP, lote, producto ni

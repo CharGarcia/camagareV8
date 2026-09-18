@@ -10,8 +10,11 @@
  *   ## Título          → <h2>   (también # se convierte en h2: el h1 de la
  *   ### Subtítulo      → <h3>    página ya es el título del artículo)
  *   #### Apartado      → <h4>
- *   - item / * item    → <ul>  (con un nivel de sublista por sangría)
+ *   - item / * item    → <ul>  (sublistas por sangría)
  *   1. item            → <ol>
+ *     Un ítem puede ocupar varias líneas: las que siguen, con más sangría que
+ *     su marcador, lo continúan —así se escriben los .md del manual, cortados a
+ *     ~80 columnas—. Ver bloqueLista().
  *   > cita             → <blockquote>
  *   ```                → <pre><code>
  *   | a | b |          → <table> (tabla estilo GitHub, con fila separadora)
@@ -33,6 +36,18 @@ namespace App\lib;
 
 final class MarkdownSimple
 {
+    /**
+     * Versión del HTML que genera el conversor. SUBIRLA en todo cambio que altere
+     * la salida para un mismo Markdown: DocumentacionSyncService la mezcla en el
+     * hash de cada archivo, así el siguiente "Sincronizar" vuelve a convertir
+     * todos los artículos aunque sus .md no hayan cambiado. Sin eso, el arreglo
+     * solo llegaría a los artículos que alguien editara después.
+     *
+     *   1 — versión inicial.
+     *   2 — ítems de lista en varias líneas (18-09-2026).
+     */
+    public const VERSION = '2';
+
     /** Marcador interno para proteger el código en línea del resto del formateo. */
     private const MARCA = "\x00CODE%d\x00";
 
@@ -228,34 +243,106 @@ final class MarkdownSimple
         return $html . "</tbody>\n</table>";
     }
 
-    /** Consume las líneas de una lista y la construye con sus sublistas. */
+    /**
+     * Consume las líneas de una lista y la construye con sus sublistas.
+     *
+     * Un ítem puede ocupar varias líneas. Toda línea no vacía que no sea otro
+     * ítem ni el inicio de un bloque (```, |, >, ##, ---) y tenga MÁS sangría
+     * que el marcador de un ítem abierto continúa ese ítem —el más interno que
+     * cumpla—, y su texto se une al del ítem con un espacio antes de darle
+     * formato (así una negrita puede partirse entre dos líneas):
+     *
+     *   - **Faltan consumos del día**: hay comandas todavía abiertas; el
+     *     reporte cuenta las cerradas.
+     *
+     * Si ese ítem ya tiene una sublista debajo —la línea viene después de los
+     * subítems, con menos sangría que ellos—, el texto no se une al del ítem,
+     * que lo pondría ANTES de la sublista: queda como entrada 'continua' y se
+     * imprime después de ella, dentro del mismo <li> (ver renderLista()).
+     *
+     * Una línea sin sangría suficiente, o un bloque, cierran la lista; una
+     * línea en blanco solo la cierra si lo que sigue no es otro ítem.
+     */
     private static function bloqueLista(array $lineas, int &$i, int $n): string
     {
-        $items = [];
+        $items    = []; // entradas planas: ítems y textos que siguen a una sublista
+        $abiertos = []; // posiciones en $items de los ítems abiertos, del externo al interno
+
         while ($i < $n) {
-            $item = self::itemLista($lineas[$i]);
-            if ($item === null) {
+            $linea = $lineas[$i];
+            $item  = self::itemLista($linea);
+
+            if ($item !== null) {
+                // Un ítem cierra a sus hermanos y a los que tenían más sangría.
+                while ($abiertos !== [] && $items[end($abiertos)]['sangria'] >= $item['sangria']) {
+                    array_pop($abiertos);
+                }
+                $items[]    = $item;
+                $abiertos[] = array_key_last($items);
+                $i++;
+                continue;
+            }
+
+            $trim = trim($linea);
+            if ($trim === '') {
                 // Una línea en blanco entre dos items no corta la lista.
-                if (trim($lineas[$i]) === ''
-                    && isset($lineas[$i + 1])
-                    && self::itemLista($lineas[$i + 1]) !== null) {
+                if (isset($lineas[$i + 1]) && self::itemLista($lineas[$i + 1]) !== null) {
                     $i++;
                     continue;
                 }
                 break;
             }
-            $items[] = $item;
+            if (self::iniciaBloque($trim)) {
+                break;
+            }
+
+            // ¿De qué ítem abierto es continuación? Del más interno cuyo marcador
+            // tenga menos sangría que la línea.
+            $sangria = self::anchoSangria($linea);
+            $nivel   = null;
+            for ($k = count($abiertos) - 1; $k >= 0; $k--) {
+                if ($items[$abiertos[$k]]['sangria'] < $sangria) {
+                    $nivel = $k;
+                    break;
+                }
+            }
+            if ($nivel === null) {
+                break;
+            }
+
+            $dueno  = $abiertos[$nivel];
+            $ultimo = array_key_last($items);
+            if ($ultimo === $dueno) {
+                $items[$dueno]['texto'] = self::unir($items[$dueno]['texto'], $trim);
+            } elseif ($items[$ultimo]['tipo'] === 'continua' && $items[$ultimo]['dueno'] === $dueno) {
+                $items[$ultimo]['texto'] = self::unir($items[$ultimo]['texto'], $trim);
+            } else {
+                $items[] = [
+                    'sangria' => $items[$dueno]['sangria'],
+                    'tipo'    => 'continua',
+                    'texto'   => $trim,
+                    'dueno'   => $dueno,
+                ];
+            }
+            // Los subítems de ese ítem quedan atrás: lo que venga ya no es suyo.
+            $abiertos = array_slice($abiertos, 0, $nivel + 1);
             $i++;
         }
 
-        $pos = 0;
-        return self::renderLista($items, $pos, $items[0]['sangria']);
+        // Normalmente es una sola vuelta. Si un ítem posterior tiene menos
+        // sangría que el primero, se abre otra lista en vez de perderlo.
+        $pos  = 0;
+        $html = [];
+        while ($pos < count($items)) {
+            $html[] = self::renderLista($items, $pos, $items[$pos]['sangria']);
+        }
+        return implode("\n", $html);
     }
 
     /**
      * Construye <ul>/<ol> desde la lista plana de items, anidando por sangría.
      *
-     * @param array<int,array{sangria:int,tipo:string,texto:string}> $items
+     * @param array<int,array{sangria:int,tipo:string,texto:string,dueno?:int}> $items
      */
     private static function renderLista(array $items, int &$pos, int $sangria): string
     {
@@ -272,6 +359,13 @@ final class MarkdownSimple
                 } else {
                     $partes[] = $sub;
                 }
+                continue;
+            }
+            if ($items[$pos]['tipo'] === 'continua' && $partes !== []) {
+                // Texto del ítem que sigue a su sublista: va después de ella,
+                // dentro del mismo <li>.
+                $partes[count($partes) - 1] .= "\n" . self::enLinea($items[$pos]['texto']);
+                $pos++;
                 continue;
             }
             $partes[] = self::enLinea($items[$pos]['texto']);
@@ -302,10 +396,23 @@ final class MarkdownSimple
         }
 
         return [
-            'sangria' => strlen(str_replace("\t", '    ', $m[1])),
+            'sangria' => self::anchoSangria($m[1]),
             'tipo'    => ctype_digit($m[2][0]) ? 'ol' : 'ul',
             'texto'   => trim($m[3]),
         ];
+    }
+
+    /** Sangría de una línea en columnas; un tabulador cuenta como 4 espacios. */
+    private static function anchoSangria(string $linea): int
+    {
+        $espacios = substr($linea, 0, strlen($linea) - strlen(ltrim($linea)));
+        return strlen(str_replace("\t", '    ', $espacios));
+    }
+
+    /** Une dos tramos de texto de un mismo ítem con un espacio. */
+    private static function unir(string $texto, string $mas): string
+    {
+        return $texto === '' ? $mas : $texto . ' ' . $mas;
     }
 
     /** ¿La línea abre un bloque distinto a un párrafo? (corta el párrafo actual) */

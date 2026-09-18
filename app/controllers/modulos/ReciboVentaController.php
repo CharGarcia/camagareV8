@@ -442,6 +442,20 @@ class ReciboVentaController extends BaseModuloController
                                       'es_guardado' => true, 'total_documento' => $totalDoc]);
                     exit;
                 }
+
+                // Recibo guardado que aún no tiene asiento: vista previa con sus datos reales (costo
+                // del Kardex incluido), igual que en Facturas de Venta. Va por 'id_recibo', nunca
+                // 'id_venta': los recibos tienen su propia numeración de ids.
+                if ($reciboDB && (int) ($data['id_venta'] ?? $idRecibo) > 0) {
+                    $detallesSugeridos = $this->service->obtenerAsientoSugerido($idEmpresa, [
+                        'id_recibo'        => $idRecibo,
+                        'id_empresa'       => $idEmpresa,
+                        'id_cliente'       => (int) ($reciboDB['id_cliente'] ?? 0),
+                        '__vista_previa__' => true,
+                    ]);
+                    echo json_encode(['ok' => true, 'data' => $detallesSugeridos, 'detalles' => $detallesSugeridos, 'es_guardado' => false]);
+                    exit;
+                }
             }
 
             $normalizedData = [

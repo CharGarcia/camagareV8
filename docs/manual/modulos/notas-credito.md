@@ -83,6 +83,13 @@ establecimiento tiene activado **"La facturación afecta al inventario"** (Empre
 Facturación): con esa opción apagada la venta no descontó nada, así que tampoco hay
 nada que devolver.
 
+La mercadería vuelve **con el mismo lote, NUP / serial y fecha de caducidad** con que
+salió en la factura que la nota modifica; no hay que digitarlos. Si la devolución abarca
+varios lotes, se reparte entre ellos en el orden en que salieron, descontando lo que
+otras notas de crédito de la misma factura ya devolvieron. Lo que no se pueda atribuir a
+un lote (nota sobre un saldo inicial, factura sin lote, o unidades de más sobre lo
+vendido) entra al inventario sin lote, como antes.
+
 ## Exportar el documento
 
 En la barra de acciones superior del modal, además de **PDF** y **XML**, hay
@@ -189,6 +196,9 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.12** — La devolución de stock de la nota de crédito ahora regresa el producto con
+  el **lote, NUP y fecha de caducidad** de la factura original (antes entraba sin ellos).
+  Las notas ya emitidas se corrigen con el script `database/nc_reparar_lote_nup_caducidad.sql`.
 - **1.11** — Corregido: al buscar un **número de documento** en el cuadro aparecían
   también notas que no lo tenían. La búsqueda libre miraba dentro de la **clave de
   acceso** y del **número de autorización** —el mismo número de 49 dígitos, que lleva

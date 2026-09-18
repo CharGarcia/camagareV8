@@ -143,6 +143,76 @@ class InventarioRepository extends BaseRepository
         return (float) ($st->fetchColumn() ?: 0);
     }
 
+    /** Id de la factura de venta a partir de su número «001-001-000000123» (null si no existe). */
+    public function getIdVentaPorNumero(int $idEmpresa, string $numDoc): ?int
+    {
+        if (!preg_match('/^(\d+)-(\d+)-(\d+)$/', trim($numDoc), $m)) {
+            return null;
+        }
+        $st = $this->db->prepare(
+            "SELECT id FROM ventas_cabecera
+             WHERE id_empresa = :e AND eliminado = false
+               AND LPAD(establecimiento::text, 3, '0') = :est
+               AND LPAD(punto_emision::text, 3, '0') = :pto
+               AND LPAD(secuencial::text, 9, '0') = :sec
+             ORDER BY id DESC LIMIT 1"
+        );
+        $st->execute([
+            ':e'   => $idEmpresa,
+            ':est' => str_pad($m[1], 3, '0', STR_PAD_LEFT),
+            ':pto' => str_pad($m[2], 3, '0', STR_PAD_LEFT),
+            ':sec' => str_pad($m[3], 9, '0', STR_PAD_LEFT),
+        ]);
+        $id = $st->fetchColumn();
+        return $id ? (int) $id : null;
+    }
+
+    /** Lo que la factura sacó de inventario para un producto, con su lote/caducidad/NUP. */
+    public function getSalidasVentaProducto(int $idEmpresa, int $idProducto, int $idVenta): array
+    {
+        $st = $this->db->prepare(
+            "SELECT numero_lote, fecha_caducidad, nup, ABS(cantidad) AS cantidad
+             FROM inventario_kardex
+             WHERE id_empresa = :e AND id_producto = :p AND referencia_id = :v
+               AND referencia_tipo = 'factura_venta' AND tipo_movimiento = 'salida'
+               AND eliminado = false
+             ORDER BY id"
+        );
+        $st->execute([':e' => $idEmpresa, ':p' => $idProducto, ':v' => $idVenta]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Lote/caducidad/NUP escritos en la línea de la factura (respaldo cuando el kardex no lo trae). */
+    public function getLotesDetalleVenta(int $idProducto, int $idVenta): array
+    {
+        $st = $this->db->prepare(
+            "SELECT numero_lote, fecha_caducidad, nup, cantidad
+             FROM ventas_detalle
+             WHERE id_venta = :v AND id_producto = :p
+             ORDER BY id"
+        );
+        $st->execute([':v' => $idVenta, ':p' => $idProducto]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Lo ya devuelto por notas de crédito vigentes del mismo documento, por lote y NUP. */
+    public function getDevueltoPorNcDeDocumento(int $idEmpresa, int $idProducto, string $numDoc): array
+    {
+        $st = $this->db->prepare(
+            "SELECT COALESCE(numero_lote, '') AS lote, COALESCE(nup, '') AS nup, SUM(cantidad) AS cantidad
+             FROM inventario_kardex
+             WHERE id_empresa = :e AND id_producto = :p
+               AND referencia_tipo = 'nota_credito' AND eliminado = false
+               AND referencia_id IN (
+                   SELECT id FROM notas_credito_cabecera
+                   WHERE id_empresa = :e2 AND num_doc_modificado = :n AND eliminado = false
+               )
+             GROUP BY 1, 2"
+        );
+        $st->execute([':e' => $idEmpresa, ':p' => $idProducto, ':e2' => $idEmpresa, ':n' => $numDoc]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
     /**
      * Bloqueo transaccional (se libera solo al COMMIT/ROLLBACK) por producto+bodega.
      * DEBE llamarse antes de leer el stock (getStockActual/getStockCache) en cualquier

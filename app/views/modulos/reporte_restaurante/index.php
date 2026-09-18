@@ -135,11 +135,28 @@
                         <div class="cmg-control-card__stat-label">Documentos</div>
                     </div>
                 </div>
-                <div class="cmg-control-card__stat">
+                <div class="cmg-control-card__stat" title="Suma de lo consumido según la comanda, sin IVA ni servicio.">
                     <i class="bi bi-cash-coin bg-success bg-opacity-10 text-success"></i>
                     <div>
                         <div class="cmg-control-card__stat-value text-success" id="rres-kpi-total">$0.00</div>
-                        <div class="cmg-control-card__stat-label">Total vendido</div>
+                        <div class="cmg-control-card__stat-label">Total vendido (sin imp.)</div>
+                    </div>
+                </div>
+                <!-- Lo que entró a la caja: el importe de las facturas y recibos, con
+                     IVA y servicio. Es la cifra que cuadra con el cierre de caja y la
+                     que suma la vista "Resumen por forma de pago". -->
+                <div class="cmg-control-card__stat" title="Importe de las facturas y recibos emitidos, con IVA y servicio: lo que cuadra con el cierre de caja.">
+                    <i class="bi bi-wallet2 bg-info bg-opacity-10 text-info"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-info" id="rres-kpi-cobrado">$0.00</div>
+                        <!-- El aviso lleva el número a la vista, no solo en el title: en
+                             tablet no hay "pasar el ratón" que muestre un tooltip. -->
+                        <div class="cmg-control-card__stat-label">
+                            Total cobrado (con imp.)
+                            <span class="text-warning ms-1 d-none" id="rres-kpi-cobrado-aviso">
+                                <i class="bi bi-exclamation-triangle-fill"></i> <span id="rres-kpi-cobrado-aviso-n">0</span> anulado(s)
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -173,7 +190,8 @@
                         </tr>
                         <tr id="rres-head-forma-pago" class="d-none">
                             <th class="ps-3">Forma de pago</th><th>Tipo</th>
-                            <th class="text-center">Cobros</th><th class="text-end pe-3">Total</th>
+                            <th class="text-center">Cobros</th>
+                            <th class="text-end pe-3" title="Importe de las facturas y recibos, con IVA y servicio: suma el Total cobrado, igual que el cierre de caja.">Total cobrado <span class="fw-normal text-muted">(con imp.)</span></th>
                         </tr>
                         <tr id="rres-head-menu" class="d-none">
                             <th class="ps-3">Ítem</th><th>Categoría</th><th class="text-center">Cant. Vendida</th><th class="text-end pe-3">Total</th>
@@ -268,6 +286,19 @@
             $('rres-kpi-comandas').textContent   = json.stats.cantidad_comandas ?? 0;
             $('rres-kpi-documentos').textContent = json.stats.cantidad_documentos ?? 0;
             $('rres-kpi-total').textContent      = money(json.stats.total_vendido);
+            $('rres-kpi-cobrado').textContent    = money(json.stats.total_cobrado);
+
+            // Cobros cuya factura o recibo se anuló o eliminó: siguen en el Total
+            // vendido pero ya no en el cobrado. Se avisa para que esa diferencia
+            // no se confunda con la de los impuestos.
+            const sinComprobante = (parseInt(json.stats.cantidad_documentos, 10) || 0)
+                                 - (parseInt(json.stats.documentos_vigentes, 10) || 0);
+            const $aviso = $('rres-kpi-cobrado-aviso');
+            $aviso.classList.toggle('d-none', sinComprobante <= 0);
+            $('rres-kpi-cobrado-aviso-n').textContent = sinComprobante;
+            $aviso.title = sinComprobante > 0
+                ? `${sinComprobante} cobro(s) con la factura o el recibo anulado o eliminado: cuentan en el Total vendido, pero no en el Total cobrado.`
+                : '';
 
             $('rres-count-label').textContent = json.total === 1
                 ? '1 resultado'

@@ -43,6 +43,12 @@ class IngresoService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuario, $ordenMulti);
     }
 
+    /** Fila del listado del ingreso recién guardado (null si no se vería en el listado). */
+    public function getFilaListado(int $id, int $idEmpresa, ?int $idUsuario = null): ?array
+    {
+        return $this->repository->getFilaListado($id, $idEmpresa, $idUsuario);
+    }
+
     /** Búsqueda libre dentro de los ingresos (líneas cobradas y formas de cobro). */
     public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
     {

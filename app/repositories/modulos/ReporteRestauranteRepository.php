@@ -16,6 +16,14 @@ use PDO;
  * línea del pool compartido 1/total_partes por cada parte ya cobrada (ver
  * ComandaService::crearGruposPartesIguales/cobrarGrupo) — así una parte
  * cobrada sí cuenta aunque las otras N-1 sigan pendientes.
+ *
+ * Dos fuentes, dos importes distintos:
+ *   · Las líneas de la comanda (CTE "ventas"): precio SIN IVA ni servicio. De
+ *     ahí salen las vistas por mesa, mesero, menú y categoría, y el Total
+ *     vendido.
+ *   · Los comprobantes que emitió cada cobro (CTE "docs", ver cteDocumentos()):
+ *     importe CON impuestos. De ahí salen la vista por forma de pago, el Total
+ *     cobrado y el detalle de impuestos — lo mismo que suma el cierre de caja.
  */
 class ReporteRestauranteRepository extends BaseRepository
 {
@@ -247,57 +255,15 @@ class ReporteRestauranteRepository extends BaseRepository
     }
 
     /**
-     * Resumen por forma de pago: cuánto entró por cada una (Efectivo, un banco,
-     * Payphone…).
+     * KPIs generales (tarjetas resumen arriba de la tabla).
      *
-     * La forma no está en la cuenta cobrada —ahí solo vive el código SRI—, así
-     * que se resuelve por el Ingreso que generó ese cobro. Va como LEFT JOIN
-     * LATERAL ... LIMIT 1 y no como JOIN normal por la misma razón que el filtro
-     * usa EXISTS: un ingreso puede tener varias filas de pago y un documento
-     * varios ingresos, y un JOIN llano multiplicaría las líneas de venta.
-     *
-     * Los cobros sin Ingreso registrado caen en "Sin forma de pago registrada".
-     * No es ruido: es justo lo que hay que ir a corregir al módulo Ingresos.
+     * Dos totales que no son lo mismo: `total_vendido` suma las líneas de la
+     * comanda, SIN IVA ni servicio; `total_cobrado` suma el importe de las
+     * facturas y recibos, CON impuestos, y es la cifra que cuadra con el cierre
+     * de caja. `documentos_vigentes` cuenta esos comprobantes: si es menor que
+     * `cantidad_documentos` (los cobros), hay cobros cuyo comprobante se anuló o
+     * eliminó —siguen en el Total vendido, pero ya no en el Total cobrado—.
      */
-    public function getVentasPorFormaPago(int $idEmpresa, array $filtros): array
-    {
-        [$cte, $params] = $this->cteVentas($idEmpresa, $filtros);
-        $condComanda = $this->condComanda($filtros, $params);
-
-        $sql = $cte . "
-            SELECT COALESCE(fp.id, 0) AS id_forma_pago,
-                   COALESCE(fp.nombre, 'Sin forma de pago registrada') AS forma_pago_nombre,
-                   COALESCE(fp.tipo, '') AS forma_pago_tipo,
-                   COUNT(DISTINCT ventas.id_grupo) AS cantidad_documentos,
-                   SUM(ventas.monto) AS total
-            FROM ventas
-            JOIN comandas c ON c.id = ventas.id_comanda
-            LEFT JOIN LATERAL (
-                SELECT ip.id_forma_cobro
-                  FROM comanda_grupos_cobro g2
-                  JOIN ingresos_detalle idet ON idet.id_referencia_documento = g2.id_documento
-                                            AND idet.tipo_documento = g2.tipo_documento
-                  JOIN ingresos_cabecera ic ON ic.id = idet.id_ingreso
-                                           AND ic.eliminado = false
-                                           AND ic.estado <> 'anulado'
-                  JOIN ingresos_pagos ip ON ip.id_ingreso = ic.id
-                 WHERE g2.id = ventas.id_grupo
-                 ORDER BY ic.id DESC, ip.id ASC
-                 LIMIT 1
-            ) fpago ON true
-            LEFT JOIN empresa_formas_pago fp ON fp.id = fpago.id_forma_cobro
-            WHERE 1=1 {$condComanda}
-            GROUP BY COALESCE(fp.id, 0),
-                     COALESCE(fp.nombre, 'Sin forma de pago registrada'),
-                     COALESCE(fp.tipo, '')
-            ORDER BY total DESC
-        ";
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /** KPIs generales (tarjetas resumen arriba de la tabla). */
     public function getEstadisticas(int $idEmpresa, array $filtros): array
     {
         [$cte, $params] = $this->cteVentas($idEmpresa, $filtros);
@@ -313,7 +279,21 @@ class ReporteRestauranteRepository extends BaseRepository
         ";
         $st = $this->db->prepare($sql);
         $st->execute($params);
-        return $st->fetch(PDO::FETCH_ASSOC) ?: ['cantidad_documentos' => 0, 'cantidad_comandas' => 0, 'total_vendido' => 0];
+        $stats = $st->fetch(PDO::FETCH_ASSOC) ?: ['cantidad_documentos' => 0, 'cantidad_comandas' => 0, 'total_vendido' => 0];
+
+        [$cteDocs, $paramsDocs] = $this->cteDocumentos($idEmpresa, $filtros);
+        $st = $this->db->prepare($cteDocs . "
+            SELECT COUNT(*) AS documentos_vigentes,
+                   COALESCE(SUM(importe_total), 0) AS total_cobrado
+            FROM docs
+        ");
+        $st->execute($paramsDocs);
+        $docs = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $stats['documentos_vigentes'] = (int) ($docs['documentos_vigentes'] ?? 0);
+        $stats['total_cobrado']       = round((float) ($docs['total_cobrado'] ?? 0), 2);
+
+        return $stats;
     }
 
     /**
@@ -384,6 +364,185 @@ class ReporteRestauranteRepository extends BaseRepository
         return [
             'servicio'   => round((float) ($r['servicio'] ?? 0), 2),
             'voluntaria' => round((float) ($r['voluntaria'] ?? 0), 2),
+        ];
+    }
+
+    /**
+     * CTE "docs" (tipo, id, total_sin_impuestos, propina, importe_total): los
+     * comprobantes —Factura o Recibo— que emitieron los cobros que entran en el
+     * reporte, cada uno una sola vez, con los mismos filtros que el resto.
+     *
+     * Es la fuente de lo que tiene impuestos: la CTE "ventas" parte de las líneas
+     * de la comanda, que guardan el precio SIN IVA ni servicio; el IVA, el
+     * servicio y el total cobrado solo existen en el comprobante. Los anulados o
+     * eliminados no entran, igual que en el cierre de caja
+     * (CajaSesionRepository::getCobrosPorFormaPagoEnTurno()).
+     */
+    private function cteDocumentos(int $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteVentas($idEmpresa, $filtros);
+        $condComanda = $this->condComanda($filtros, $params);
+        $params[':ed1'] = $idEmpresa;
+        $params[':ed2'] = $idEmpresa;
+
+        $sql = $cte . ",
+            grupos_doc AS (
+                SELECT DISTINCT g2.tipo_documento, g2.id_documento
+                FROM ventas
+                JOIN comandas c ON c.id = ventas.id_comanda
+                JOIN comanda_grupos_cobro g2 ON g2.id = ventas.id_grupo
+                WHERE g2.id_documento IS NOT NULL {$condComanda}
+            ),
+            docs AS (
+                SELECT 'FACTURA' AS tipo, v.id, v.total_sin_impuestos, v.propina, v.importe_total
+                  FROM grupos_doc gd
+                  JOIN ventas_cabecera v ON v.id = gd.id_documento
+                 WHERE gd.tipo_documento = 'FACTURA'
+                   AND v.id_empresa = :ed1 AND v.eliminado = false AND v.estado <> 'anulado'
+                UNION ALL
+                SELECT 'RECIBO', r.id, r.total_sin_impuestos, r.propina, r.importe_total
+                  FROM grupos_doc gd
+                  JOIN recibos_venta_cabecera r ON r.id = gd.id_documento
+                 WHERE gd.tipo_documento = 'RECIBO'
+                   AND r.id_empresa = :ed2 AND r.eliminado = false AND r.estado <> 'anulado'
+            )
+        ";
+
+        return [$sql, $params];
+    }
+
+    /**
+     * Resumen por forma de pago (vista de pantalla, PDF, Excel, correo y
+     * tirilla): cuánto entró por cada una —Efectivo, un banco, Payphone…— CON
+     * impuestos, es decir, el importe total de cada factura o recibo (subtotal +
+     * IVA + servicio). Mismo cálculo que el correo del cierre de caja
+     * (CajaSesionRepository::getCobrosPorFormaPagoEnTurno()), solo que acotado
+     * por los filtros del reporte y no por turno. Suma el Total cobrado, no el
+     * Total vendido (que va sin impuestos).
+     *
+     * La forma no está en la cuenta cobrada —ahí solo vive el código SRI—, así
+     * que se resuelve por el Ingreso que generó cada comprobante. Va como LEFT
+     * JOIN LATERAL ... LIMIT 1 y no como JOIN llano: un ingreso puede tener
+     * varias filas de pago y un documento varios ingresos (cobros parciales), y
+     * un JOIN contaría el mismo comprobante más de una vez.
+     *
+     * Los cobros sin Ingreso registrado caen en "Sin forma de pago registrada".
+     * No es ruido: es justo lo que hay que ir a corregir al módulo Ingresos.
+     */
+    public function getCobrosPorFormaPago(int $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteDocumentos($idEmpresa, $filtros);
+        $params[':ei'] = $idEmpresa;
+
+        $sql = $cte . "
+            SELECT COALESCE(fp.id, 0) AS id_forma_pago,
+                   COALESCE(fp.nombre, 'Sin forma de pago registrada') AS forma_pago_nombre,
+                   COALESCE(fp.tipo, '') AS forma_pago_tipo,
+                   COUNT(*) AS cantidad_documentos,
+                   COALESCE(SUM(d.importe_total), 0) AS total
+            FROM docs d
+            LEFT JOIN LATERAL (
+                SELECT ip.id_forma_cobro
+                  FROM ingresos_detalle idet
+                  JOIN ingresos_cabecera ic ON ic.id = idet.id_ingreso
+                                           AND ic.id_empresa = :ei
+                                           AND ic.eliminado = false
+                                           AND ic.estado <> 'anulado'
+                  JOIN ingresos_pagos ip ON ip.id_ingreso = ic.id
+                 WHERE idet.id_referencia_documento = d.id
+                   AND idet.tipo_documento = d.tipo
+                 ORDER BY ic.id DESC, ip.id ASC
+                 LIMIT 1
+            ) fpago ON true
+            LEFT JOIN empresa_formas_pago fp ON fp.id = fpago.id_forma_cobro
+            GROUP BY COALESCE(fp.id, 0),
+                     COALESCE(fp.nombre, 'Sin forma de pago registrada'),
+                     COALESCE(fp.tipo, '')
+            ORDER BY total DESC
+        ";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Detalle de impuestos de los comprobantes del reporte, para la tirilla:
+     * los totales de cabecera (subtotal sin impuestos, servicio, importe total)
+     * y, aparte, base y valor de cada impuesto agrupados por código y tarifa,
+     * tal como se guardaron línea por línea en el comprobante.
+     *
+     * Una línea sin fila de IVA se cuenta como base 0%, igual que el RIDE de la
+     * factura (FacturaVentaPdfService): así las bases siempre suman el subtotal.
+     *
+     * @return array{documentos:int, subtotal:float, servicio:float, total:float,
+     *               impuestos: list<array{codigo_impuesto:string, codigo_porcentaje:string,
+     *                                     tarifa:float, base:float, valor:float}>}
+     */
+    public function getResumenImpuestos(int $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteDocumentos($idEmpresa, $filtros);
+
+        $st = $this->db->prepare($cte . "
+            SELECT COUNT(*) AS documentos,
+                   COALESCE(SUM(total_sin_impuestos), 0) AS subtotal,
+                   COALESCE(SUM(propina), 0) AS servicio,
+                   COALESCE(SUM(importe_total), 0) AS total
+            FROM docs
+        ");
+        $st->execute($params);
+        $tot = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $st = $this->db->prepare($cte . ",
+            impuestos AS (
+                SELECT vi.codigo_impuesto, vi.codigo_porcentaje, vi.tarifa, vi.base_imponible AS base, vi.valor
+                  FROM docs d
+                  JOIN ventas_detalle vd ON vd.id_venta = d.id
+                  JOIN ventas_detalle_impuestos vi ON vi.id_venta_detalle = vd.id
+                 WHERE d.tipo = 'FACTURA'
+                UNION ALL
+                SELECT '2', '0', 0, vd.precio_total_sin_impuesto, 0
+                  FROM docs d
+                  JOIN ventas_detalle vd ON vd.id_venta = d.id
+                 WHERE d.tipo = 'FACTURA'
+                   AND NOT EXISTS (SELECT 1 FROM ventas_detalle_impuestos vi
+                                    WHERE vi.id_venta_detalle = vd.id AND TRIM(vi.codigo_impuesto) = '2')
+                UNION ALL
+                SELECT ri.codigo_impuesto, ri.codigo_porcentaje, ri.tarifa, ri.base_imponible, ri.valor
+                  FROM docs d
+                  JOIN recibos_venta_detalle rd ON rd.id_recibo = d.id
+                  JOIN recibos_venta_detalle_impuestos ri ON ri.id_recibo_detalle = rd.id
+                 WHERE d.tipo = 'RECIBO'
+                UNION ALL
+                SELECT '2', '0', 0, rd.precio_total_sin_impuesto, 0
+                  FROM docs d
+                  JOIN recibos_venta_detalle rd ON rd.id_recibo = d.id
+                 WHERE d.tipo = 'RECIBO'
+                   AND NOT EXISTS (SELECT 1 FROM recibos_venta_detalle_impuestos ri
+                                    WHERE ri.id_recibo_detalle = rd.id AND TRIM(ri.codigo_impuesto) = '2')
+            )
+            SELECT TRIM(codigo_impuesto) AS codigo_impuesto,
+                   TRIM(codigo_porcentaje) AS codigo_porcentaje,
+                   COALESCE(tarifa, 0) AS tarifa,
+                   COALESCE(SUM(base), 0) AS base,
+                   COALESCE(SUM(valor), 0) AS valor
+            FROM impuestos
+            GROUP BY TRIM(codigo_impuesto), TRIM(codigo_porcentaje), COALESCE(tarifa, 0)
+            ORDER BY 1, 3 DESC, 2
+        ");
+        $st->execute($params);
+
+        return [
+            'documentos' => (int) ($tot['documentos'] ?? 0),
+            'subtotal'   => round((float) ($tot['subtotal'] ?? 0), 2),
+            'servicio'   => round((float) ($tot['servicio'] ?? 0), 2),
+            'total'      => round((float) ($tot['total'] ?? 0), 2),
+            'impuestos'  => array_map(static fn(array $r): array => [
+                'codigo_impuesto'   => (string) $r['codigo_impuesto'],
+                'codigo_porcentaje' => (string) $r['codigo_porcentaje'],
+                'tarifa'            => (float) $r['tarifa'],
+                'base'              => round((float) $r['base'], 2),
+                'valor'             => round((float) $r['valor'], 2),
+            ], $st->fetchAll(PDO::FETCH_ASSOC)),
         ];
     }
 

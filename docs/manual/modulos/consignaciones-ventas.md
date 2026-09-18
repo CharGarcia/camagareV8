@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.23
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo
+version: 1.24
 orden: 45
 estado: activo
 ---
@@ -32,6 +32,14 @@ evidencia: ubicación, hora y firma de quien recibe.
 
 Marcar una entrega como realizada desde la web también deja registro del usuario,
 la hora y el canal.
+
+### Las líneas de productos
+
+Cada línea del modal empieza con el **código** del producto, en su propia columna,
+y al lado el nombre. El código se llena solo al elegir el producto, ya sea
+buscándolo por nombre o por código, o al cargarlo desde un pedido. No se escribe
+a mano: sale del catálogo de productos. La pestaña **Resumen** también muestra el
+código antes del nombre de cada producto.
 
 ## El asesor se llena solo al elegir el cliente
 
@@ -353,6 +361,8 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.24** — Las líneas de productos del modal muestran el **código** del producto en su
+  propia columna, antes del nombre; la pestaña **Resumen** también lo muestra.
 - **1.23** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla: fecha,
   número, cliente, asesor y observaciones. Así el listado solo devuelve consignaciones donde
   se vea POR QUÉ coinciden. Los **productos** (con su lote y NUP) y los **documentos

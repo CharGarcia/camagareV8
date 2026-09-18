@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales
-version: 1.11
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente
+version: 1.12
 orden: 5
 estado: activo
 ---
@@ -47,6 +47,25 @@ configuración) y **Recibos de Venta**, el orden exacto de la cascada es:
    (solo existen dos valores posibles), por eso se evalúa al final, justo antes
    de caer a General.
 4. **General** — lo que ningún nivel anterior resolvió.
+
+Qué cuenta como «el cliente tiene reglas»: solo las cuentas que se le asignaron
+en ese mismo tipo de asiento. Su **cuenta de IVA por tarifa** no cuenta (el IVA
+tiene su propia cascada) ni tampoco las reglas que tenga en otro tipo de asiento,
+por ejemplo en Recibos de Venta.
+
+### Costo de Ventas e Inventario
+
+El costo sale del kardex de cada producto, así que estos dos conceptos se
+resuelven **siempre por línea** (Producto → Categoría → Marca → Tipo de
+Producción → General), aunque el cliente tenga reglas propias y aunque la
+factura lleve descuento. La única excepción es que el propio cliente tenga
+configurado Costo de Ventas o Inventario: entonces manda su cuenta para ese
+concepto.
+
+Si ninguna regla que aplique al producto tiene cuenta de costo, el asiento se
+genera **sin** el costo. Lo mismo ocurre si solo una de las dos cuentas (Costo de
+Ventas o Inventario) resuelve y la otra no: el bloque de costo entra completo o
+no entra.
 
 ## Cómo se leen las reglas por entidad
 
@@ -256,6 +275,12 @@ documento o en la ficha de la entidad implicada.
 - **El sistema no propone copiar la cuenta entre dos formas del mismo banco**:
   revise en *Formas de Cobros y Pagos* que las dos tengan el número de cuenta
   escrito y que su tipo sea Banco o Cheque. Sin número de cuenta no se emparejan.
+- **El asiento de la factura sale sin Costo de Ventas**: revise, en este orden,
+  que el producto sea inventariable, que la línea tenga bodega y que la salida de
+  inventario tenga costo (si el producto se vendió sin haber entrado antes con
+  costo, la salida queda en 0 y no hay costo que contabilizar). Si todo eso está
+  bien, falta la cuenta de Costo de Ventas o la de Inventario en algún nivel de
+  la cascada.
 - **Todas las facturas debitan una cuenta de ventas en lugar de la cartera**:
   hay una regla por Cliente o por Producto con la cuenta de ingresos puesta en el
   concepto *Cuenta por cobrar*. Corríjala en la pestaña de esa dimensión (o
@@ -264,6 +289,14 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.12** — Costo de Ventas e Inventario se resuelven siempre por producto,
+  categoría, marca y tipo de producción, salvo que el cliente los tenga
+  configurados. Antes el costo no se contabilizaba en tres casos aunque estuviera
+  configurado por producto o categoría: cuando el cliente tenía reglas propias,
+  cuando solo tenía una cuenta de IVA propia (o reglas de otro tipo de asiento) y
+  cuando la factura llevaba descuento con cuenta de Descuento configurada. En ese
+  último caso la Cuenta por Cobrar y el ICE configurados por categoría también se
+  ignoraban. Aplica a Facturas de Venta, Recibos de Venta y Notas de Crédito.
 - **1.11** — Se retiró el botón "Configurar cuentas sugeridas" de Configuración
   General, porque asignaba cuentas equivocadas. Las cuentas se asignan a mano en
   cada concepto. Las cuentas que ese botón ya había asignado no cambian:

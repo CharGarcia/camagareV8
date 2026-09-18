@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo
-version: 1.20
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada
+version: 1.21
 orden: 20
 estado: activo
 ---
@@ -183,6 +183,19 @@ mientras tanto) y el periodo contable, regenera el asiento contable y, si el
 egreso paga nómina (roles semanales/quincenas, anticipos o préstamos),
 resincroniza el rol afectado con lo realmente pagado. El cambio queda en el
 historial de auditoría con los datos anteriores y los nuevos.
+
+## Qué pasa en el listado al guardar
+
+Al pulsar **Guardar** (egreso nuevo) o **Actualizar** (egreso editado), el modal
+se cierra y el listado se actualiza **sin moverse de donde estaba**: sigue en la
+misma página, con el mismo texto de búsqueda, los mismos filtros y el mismo
+orden. La fila del egreso guardado se resalta en verde unos segundos, ya con los
+datos nuevos (fecha, beneficiario, observaciones, monto y tipo).
+
+Si ese egreso no cae en la página que se está viendo —por ejemplo, uno nuevo
+mientras se ve la página 3, o uno que ya no cumple el filtro activo—, se muestra
+igual arriba de todo para que se vea qué se guardó. Al buscar, filtrar o cambiar
+de página vuelve a su lugar.
 
 ## El periodo contable manda
 
@@ -444,6 +457,13 @@ ve solo los que registró.
   y se pone sola.
 
 ## Historial de cambios
+
+- **1.21** — Al guardar un egreso nuevo o editado, el listado se actualiza en la
+  misma página, con la búsqueda, los filtros y el orden que tenía, y resalta la
+  fila del egreso guardado con sus datos nuevos. Antes volvía siempre a la
+  primera página, así que un egreso editado en otra página (o con el listado
+  ordenado por otra columna) no se veía actualizado. Nueva sección *Qué pasa en
+  el listado al guardar*.
 
 - **1.20** — Al pulsar **Anticipo Proveedor**, las líneas de "Otros conceptos"
   toman la cuenta del anticipo aunque ya haya compras, liquidaciones o roles

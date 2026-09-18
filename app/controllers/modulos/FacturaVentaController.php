@@ -581,6 +581,22 @@ class FacturaVentaController extends BaseModuloController
                                       'es_guardado' => true, 'total_documento' => $totalDoc]);
                     exit;
                 }
+
+                // Factura guardada que aún no tiene asiento: la vista previa se arma con sus datos
+                // reales (costo del Kardex, IVA por tarifa, reparto por línea), es decir, lo mismo
+                // que generará la sincronización. Con los importes del formulario el costo salía
+                // siempre en 0. Solo se usan esos importes cuando se pide la vista previa de lo que
+                // se está editando (id_venta=0, ver previewParams en la vista).
+                if ($ventaDB && (int) ($data['id_venta'] ?? $idVenta) > 0) {
+                    $detallesSugeridos = $this->service->obtenerAsientoSugerido($idEmpresa, [
+                        'id_venta'         => $idVenta,
+                        'id_empresa'       => $idEmpresa,
+                        'id_cliente'       => (int) ($ventaDB['id_cliente'] ?? 0),
+                        '__vista_previa__' => true,
+                    ]);
+                    echo json_encode(['ok' => true, 'data' => $detallesSugeridos, 'detalles' => $detallesSugeridos, 'es_guardado' => false]);
+                    exit;
+                }
             }
             $normalizedData = [
                 'importe_total' => $data['importe_total'] ?? $data['total'] ?? 0,

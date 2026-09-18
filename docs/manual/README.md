@@ -16,8 +16,15 @@ El sincronizador cruza por `slug` y decide solo:
 | El artículo no existe | Lo **crea** |
 | Existe y el archivo no cambió | No lo toca |
 | Existe y el archivo cambió | Lo **actualiza** |
+| Cambió el conversor Markdown → HTML | **Actualiza todos** los artículos de archivo, aunque ningún `.md` haya cambiado |
 | Existe pero se escribió desde la pantalla | Lo **omite** (lo editado a mano manda) |
 | El `.md` ya no está | Lo marca **obsoleto** (no lo borra) |
+
+Para saber si un archivo cambió se compara un hash del `.md` junto con la
+versión del conversor (`MarkdownSimple::VERSION`). Quien cambie el conversor de
+forma que el HTML salga distinto **debe subir esa versión**: así el siguiente
+Sincronizar vuelve a convertir todo el manual. Un Sincronizar que actualiza
+todos los artículos justo después de un despliegue así es lo esperado.
 
 ## Dónde va cada archivo
 
@@ -52,3 +59,25 @@ Formato admitido: encabezados `##`/`###`/`####`, listas, tablas, `> citas`,
 bloques de código, **negrita**, *cursiva*, `código` y enlaces. El HTML crudo se
 muestra como texto: si necesita algo más, escriba ese artículo desde la pantalla
 de gestión (pasará a origen "manual" y el sincronizador dejará de tocarlo).
+
+### Listas
+
+Un ítem puede ocupar varias líneas: las que siguen, con **más sangría que el
+guion o el número**, continúan el ítem (así se puede cortar el texto a ~80
+columnas, y una negrita puede partirse entre dos líneas). Una sublista va con
+más sangría que su ítem padre. Si después de la sublista viene texto con la
+sangría de los subítems, ese texto sigue siendo del ítem padre y sale debajo de
+la sublista:
+
+```
+- **Un ítem largo**: el texto sigue en la línea de abajo, con dos espacios
+  de sangría.
+  - Un subítem, que también puede
+    seguir en otra línea.
+  Esta línea es del ítem de arriba y sale debajo de su sublista.
+- Otro ítem.
+```
+
+Una línea en blanco entre dos ítems no corta la lista. En cambio, una línea sin
+sangría, un bloque (tabla, código, cita, título) o un párrafo después de una
+línea en blanco la terminan y salen fuera de ella.
