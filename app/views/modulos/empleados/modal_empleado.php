@@ -22,6 +22,10 @@ if (($rutaModulo ?? '') !== 'modulos/empleados') {
 }
 
 $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
+
+// 3. Pestaña Vacaciones: sus datos y acciones son del módulo Vacaciones (endpoints de
+// modulos/vacaciones), así que se rige por los permisos de ESE módulo, no por los de Empleados.
+$permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
 ?>
 <style>
     /* Ancho del modal: un poco más angosto que modal-xl, pero suficiente para las pestañas */
@@ -185,6 +189,11 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                             <li class="nav-item">
                                 <a class="nav-link py-2 small" id="tab-periodos-btn" data-bs-toggle="tab" href="#tab-periodos" role="tab"><i class="bi bi-clock-history me-1"></i>Periodos</a>
                             </li>
+                            <?php if (!empty($permVacEmp['ver'])): ?>
+                            <li class="nav-item">
+                                <a class="nav-link py-2 small" id="tab-vacaciones-btn" data-bs-toggle="tab" href="#tab-vacaciones" role="tab" onclick="window.empVacCargar && window.empVacCargar()"><i class="bi bi-umbrella me-1"></i>Vacaciones</a>
+                            </li>
+                            <?php endif; ?>
                             <li class="nav-item">
                                 <a class="nav-link py-2 small" id="tab-rubros-btn" data-bs-toggle="tab" href="#tab-rubros" role="tab"><i class="bi bi-calculator me-1"></i>Rubros Fijos</a>
                             </li>
@@ -206,8 +215,11 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                 'tab-puesto-btn' => 'Puesto',
                                 'tab-financiera-btn' => 'Bancarios',
                                 'tab-periodos-btn' => 'Historial',
-                                'tab-rubros-btn' => 'Rubros Fijos'
                             ];
+                            if (!empty($permVacEmp['ver'])) {
+                                $pestanasConfigEmp['tab-vacaciones-btn'] = 'Vacaciones';
+                            }
+                            $pestanasConfigEmp['tab-rubros-btn'] = 'Rubros Fijos';
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigEmp, $vistaConfigEmp ?? [], 'empleados');
                             ?>
                         </div>
@@ -539,6 +551,25 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                             <input type="hidden" name="periodos_json" id="periodos_json">
                         </div>
 
+                        <?php if (!empty($permVacEmp['ver'])): ?>
+                        <!-- Panel Vacaciones: sus años de trabajo y los ya tomados o pagados antes del
+                             sistema (mismo cuadro que el módulo Vacaciones) -->
+                        <div class="tab-pane fade" id="tab-vacaciones" role="tabpanel">
+                            <div id="empVacNoGuardado" class="alert alert-secondary small py-2 mb-0 d-none">
+                                <i class="bi bi-info-circle me-1"></i> Guarda el empleado primero para ver sus períodos de vacaciones.
+                            </div>
+                            <div id="empVacContenido" class="d-none">
+                                <?php
+                                $cuadroPeriodos = ['id' => 'empVacCuadro', 'puede_marcar' => !empty($permVacEmp['crear']), 'con_resumen' => true];
+                                include MVC_APP . '/views/modulos/vacaciones/_cuadro_periodos.php';
+                                ?>
+                                <div class="small text-muted mt-2">
+                                    <i class="bi bi-info-circle me-1"></i>Se calcula con la fecha de ingreso guardada en la pestaña Periodos: si la cambia, guarde el empleado para ver aquí los períodos corregidos.
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+
                         <div class="tab-pane fade" id="tab-rubros" role="tabpanel">
                             <div class="border rounded overflow-hidden">
                                 <div class="table-responsive" style="max-height: 300px;">
@@ -755,6 +786,39 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
     <div class="s">Abre este QR una sola vez en tu celular para vincular tu credencial</div>
     <img id="empCredPrintImg" src="" alt="QR">
 </div>
+
+<?php if (!empty($permVacEmp['ver'])): ?>
+<script src="<?= $baseEmp ?>/js/modulos/vacaciones_periodos.js?v=<?= asset_ver('/js/modulos/vacaciones_periodos.js') ?>"></script>
+<script>
+// Pestaña Vacaciones: el mismo cuadro de períodos del módulo Vacaciones (mismos datos,
+// permisos y acciones; ver vacaciones_periodos.js).
+(function () {
+    'use strict';
+    const $ = (id) => document.getElementById(id);
+    const raiz = $('empVacCuadro');
+    if (!raiz || !window.CuadroPeriodosVacaciones) return;
+    const cuadro = new window.CuadroPeriodosVacaciones(raiz);
+
+    // Se carga cada vez que se abre la pestaña, siempre con lo guardado del empleado.
+    window.empVacCargar = function () {
+        const id = $('emp_id') ? $('emp_id').value : '';
+        $('empVacNoGuardado').classList.toggle('d-none', !!id);
+        $('empVacContenido').classList.toggle('d-none', !id);
+        if (id) cuadro.cargar(id); else cuadro.limpiar();
+    };
+
+    $('tab-vacaciones-btn')?.addEventListener('shown.bs.tab', () => cuadro.scrollAlPrimerPendiente());
+
+    // Guardó el empleado con esta pestaña a la vista (p. ej. corrigió la fecha de ingreso): refrescar.
+    window.addEventListener('empleadoGuardado', () => {
+        if ($('tab-vacaciones')?.classList.contains('active')) window.empVacCargar();
+    });
+
+    // Al cerrar, que el próximo empleado no vea por un instante el cuadro de este.
+    $('modalEmpleado')?.addEventListener('hidden.bs.modal', () => cuadro.limpiar());
+})();
+</script>
+<?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
 <script>window.CASIS_FACE_MODELS = window.CASIS_FACE_MODELS || null;</script>

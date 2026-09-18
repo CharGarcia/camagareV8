@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar
-version: 2.13
+etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar
+version: 2.15
 orden: 20
 estado: activo
 ---
@@ -33,6 +33,24 @@ Para emitir facturas electrónicas la empresa necesita tener configurado:
 5. Guarde la factura.
 
 Una factura guardada queda en borrador hasta que se envía al SRI.
+
+### Ver el código y la descripción completos
+
+En la tabla de productos de la factura:
+
+- La **descripción** crece en alto con su texto, así que se lee completa sin
+  desplazarse dentro del campo. Si es muy larga (más de unas diez líneas), el
+  campo muestra una barra para desplazarse.
+- Las columnas **Código** y **Descripción** se pueden ensanchar o estrechar:
+  - **Arrastrando** el borde derecho de su encabezado.
+  - Con **doble clic** en ese mismo borde, la columna se ajusta sola al texto más
+    largo de la factura (la descripción, hasta un máximo; lo que no quepa baja a
+    otra línea).
+
+El ancho que elija se **guarda para su usuario** y se mantiene en las siguientes
+facturas, sin afectar a los demás usuarios ni a las columnas del listado. Si al
+ensanchar ya no cabe toda la tabla, aparece una barra para desplazarse a los lados
+en lugar de achicar Cantidad, Precio o IVA.
 
 ### Saldo del producto en el buscador
 
@@ -117,6 +135,25 @@ ni líneas en campos vacíos:
   y la columna *Plazo* lleva **solo la unidad**: *Días*, *Meses* o *Años*. Un
   crédito a 15 días se lee «15» y «Días», no «15» y «15 dias». Cuando el pago es
   de contado (plazo 0), la columna *Plazo* muestra un guion.
+
+### Tamaño de letra del PDF
+
+Todo el cuerpo de la factura usa la misma letra y el mismo tamaño: los **datos
+del cliente** (razón social, identificación, fecha, dirección, teléfono,
+correo), la tabla de **ítems**, la **Información Adicional**, las
+**Observaciones**, las **formas de pago** y los **totales**. Los títulos de cada
+tabla van en negrita y el contenido en letra normal. En los datos del cliente, el
+valor de cada campo va en negrita junto a su etiqueta, y en los totales el
+**Valor total** va en negrita sobre fondo gris.
+
+Como la letra es más grande que antes, un nombre de cliente, una dirección o un
+correo largos pasan a una segunda línea en lugar de salirse del recuadro, y una
+factura con muchos ítems e información adicional puede ocupar una página más. Si
+la Información Adicional no cabe, continúa en la página siguiente repitiendo su
+título; nunca se parte una fila entre dos páginas.
+
+Los importes de los totales y de las formas de pago se ven completos hasta
+9,999,999.99; uno mayor se estrecha ligeramente para no salirse de su casilla.
 
 ### Vendedor y Cajero en la Información Adicional
 
@@ -351,6 +388,24 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.15** — En la tabla de productos de la factura, la **descripción** se ve
+  completa: crece en alto con su texto (antes quedaba en poco más de una línea y el
+  resto se escondía tras una barra). Las columnas **Código** y **Descripción** se
+  ensanchan arrastrando el borde del encabezado, o con doble clic para ajustarlas
+  al texto más largo; el ancho se guarda por usuario. Ver *"Ver el código y la
+  descripción completos"*.
+- **2.14** — **PDF de la factura**: los **datos del cliente**, la **Información
+  Adicional**, las **Observaciones**, las **formas de pago** y los **totales** usan
+  ahora la misma letra y tamaño que la tabla de ítems (antes iban más pequeños).
+  Las etiquetas del cliente se ajustan a su texto, así que ninguna se monta sobre
+  su valor, y un nombre largo pasa a una segunda línea. En la Información
+  Adicional, el concepto y el valor de cada fila quedan del mismo alto aunque el
+  valor ocupe dos líneas. La casilla del valor en los totales es más ancha (a este
+  tamaño, los importes desde 1,000,000.00 se salían) y, en las formas de pago, el
+  nombre gana ancho para no pasar a una tercera línea. Corregido de paso: si la
+  Información Adicional, las *Observaciones* o las formas de pago llegaban al pie
+  de la página, un título podía quedar solo en una hoja casi vacía; ahora el
+  bloque pasa entero a la página siguiente. Ver *"Tamaño de letra del PDF"*.
 - **2.13** — Corregido: al buscar un **número de factura** en el cuadro aparecían
   también facturas que no lo tenían. La búsqueda libre miraba dentro de la **clave
   de acceso** —49 dígitos que llevan la fecha, el RUC y el número del documento— y

@@ -591,6 +591,23 @@ th[data-col] {
   border-right: 2px solid var(--bs-primary, #0d6efd);
 }
 
+/* Tabla de detalle de los documentos de venta (Factura de Venta, Recibos de
+   Venta): columnas Código y Descripción redimensionables por el usuario. Las arma
+   CMG_detalleColumnas (public/js/components/detalle_columnas.js) con la misma
+   asa .cmg-resizer de los listados. */
+th[data-det-col] {
+  position: relative;
+}
+th[data-det-col] .cmg-resizer {
+  touch-action: none;
+}
+/* Solo cuando el usuario eligió un ancho: las demás columnas conservan un mínimo
+   y, si no cabe todo, la tabla se desplaza en horizontal en vez de aplastar
+   Cantidad, Precio o IVA. Sin anchos elegidos, el reparto de siempre. */
+.cmg-det-anchos-usuario th:not([data-det-col]):not(:last-child) {
+  min-width: 70px;
+}
+
 /* Ordenamiento por varias columnas (Shift+clic): prioridad de cada criterio.
    Lo inyecta CMG_initSort en public/js/favoritos.js y solo aparece cuando hay
    más de una columna en el orden. */

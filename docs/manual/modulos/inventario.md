@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips
-version: 1.4
+etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes
+version: 1.5
 orden: 20
 estado: activo
 ---
@@ -30,15 +30,27 @@ búsqueda y los botones de columnas, PDF y Excel. Al lado queda el interruptor
 **Ver anulados**, que muestra solo los movimientos anulados.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
-solo, sin menús ni sugerencias. Busca en las columnas del listado: fecha (tal
-como se ve, por ejemplo *02-09-2026*), producto y su código, bodega, cantidad,
-unidad de medida, lote, fecha de caducidad, NUP/serial, usuario y observaciones.
-También encuentra el producto por su código auxiliar o de barras. Las columnas
-**Tipo** (entrada o salida) y el **Origen** del movimiento no entran en la
-búsqueda libre: para filtrar por ellas use la ventana de filtros. Puede escribir
-varias palabras en cualquier orden y no importan mayúsculas ni tildes. Para
-limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un
-**círculo girando** al final del cuadro y la tabla se ve atenuada.
+solo, sin menús ni sugerencias. Busca en: fecha (tal como se ve, *02-09-2026*, o
+al revés, *2026-09*, para un mes entero), producto y su código, cantidad, lote,
+fecha de caducidad, NUP/serial y observaciones. Puede escribir varias palabras en
+cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el texto
+o pulse Escape en el cuadro. Mientras busca, aparece un **círculo girando** al
+final del cuadro y la tabla se ve atenuada.
+
+Las observaciones llevan el número del documento que originó el movimiento
+(*Salida por Factura # 001-101-000000127*, *Ingreso por Compra #015-915-000066550*),
+así que escribir ese número trae todos los movimientos de ese documento.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo:**
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Bodega | Selector *Bodega* de la ventana de filtros, o `bodega:central` en el cuadro |
+| Unidad de medida | Selector *Unidad de medida*, o `medida:unidad` |
+| Usuario | Selector *Usuario*, o `usuario:carlos` |
+| Código de barras del producto | `barras:7861234567890` en el cuadro |
+| Código auxiliar del producto | `auxiliar:ABC-12` en el cuadro |
+| Tipo (entrada / salida) y Origen | Ventana de filtros |
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios.
 Llene los que necesite y pulse **Aplicar**; nada se aplica hasta ese momento.
@@ -112,6 +124,15 @@ problema pero no aparece en el kardex ni tiene stock.
   que originó el movimiento; revise el precio de esa compra.
 
 ## Historial de cambios
+
+- **1.5** — El cuadro de búsqueda queda para fecha, producto y código, cantidad, lote,
+  caducidad, NUP y observaciones. **Bodega**, **unidad de medida** y **usuario** pasan a
+  buscarse desde sus selectores de la ventana de filtros (o con `bodega:`, `medida:` y
+  `usuario:`), y los **códigos de barras y auxiliar** con `barras:` y `auxiliar:`. La fecha
+  ahora también se encuentra escrita al revés (`2026-09` para todo el mes). Y la búsqueda
+  responde más rápido: ya no formatea la fecha, la caducidad y la cantidad de todos los
+  movimientos cuando lo que se escribe son letras, y resuelve el producto una sola vez en
+  el catálogo en lugar de hacerlo movimiento por movimiento.
 
 - **1.4** — La ventana de ajuste manual ya no ofrece "Registrar seriales
   individuales (NUP)": las series escritas ahí nunca se guardaban. Al editar un

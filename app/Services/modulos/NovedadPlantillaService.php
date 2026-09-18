@@ -19,7 +19,9 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * Arma la plantilla Excel para cargar novedades: una hoja "Novedades" con UNA
  * FILA POR EMPLEADO (todo el personal activo de la empresa) y UNA COLUMNA POR
  * CADA TIPO de novedad del catálogo, más una hoja "Referencia" con las
- * instrucciones y los códigos.
+ * instrucciones y los códigos. Los ingresos que se marcan con o sin IESS (Otros
+ * Ingresos y horas, ver CatalogoNovedades::CODS_OPCION_IESS) tienen DOS
+ * columnas, una CON IESS y otra SIN IESS: la columna elegida es la marca.
  *
  * El usuario solo escribe el valor en las columnas de novedad que le
  * correspondan a cada empleado: las celdas vacías (o en 0) no crean nada al
@@ -33,6 +35,9 @@ class NovedadPlantillaService
 
     /** Columnas después de las de novedad: aplican a todas las novedades de la fila. */
     public const COLS_FILA = ['MES', 'ANIO', 'AFECTA_A', 'FECHA', 'OBSERVACION'];
+
+    /** Ejemplos que acompañan al nombre del tipo en el encabezado de su columna. */
+    private const EJEMPLOS_TIPO = ['1' => 'Bonos, comisiones'];
 
     /** Filas extra (debajo del personal) que también llevan las listas desplegables. */
     private const FILAS_EXTRA_LISTAS = 50;
@@ -48,11 +53,32 @@ class NovedadPlantillaService
     }
 
     /**
-     * Encabezado de la columna de un tipo de novedad: su nombre y, entre
-     * paréntesis, qué se escribe en ella. El importador reconoce la columna por el
-     * nombre e ignora el paréntesis.
+     * Columnas de novedad de la hoja, en orden: una por tipo, y dos seguidas (con
+     * IESS y sin IESS) en los ingresos que llevan esa marca. 'iess' es null en
+     * los tipos sin la opción.
      */
-    public static function encabezadoTipo(string $codigo): string
+    public static function columnasNovedad(): array
+    {
+        $cols = [];
+        foreach (CatalogoNovedades::TIPOS as $t) {
+            $codigo = (string) $t['codigo'];
+            if (CatalogoNovedades::admiteOpcionIess($codigo)) {
+                $cols[] = ['codigo' => $codigo, 'iess' => true];
+                $cols[] = ['codigo' => $codigo, 'iess' => false];
+            } else {
+                $cols[] = ['codigo' => $codigo, 'iess' => null];
+            }
+        }
+        return $cols;
+    }
+
+    /**
+     * Encabezado de la columna de un tipo de novedad: su nombre, "CON IESS" o "SIN
+     * IESS" si lleva esa marca, los ejemplos si los tiene y, entre paréntesis, qué
+     * se escribe en ella. El importador reconoce la columna por el nombre y la
+     * marca, e ignora todo lo que va entre paréntesis.
+     */
+    public static function encabezadoTipo(string $codigo, ?bool $iess = null): string
     {
         $unidad = match (CatalogoNovedades::unidadValor($codigo)) {
             'horas'   => 'HORAS',
@@ -60,17 +86,32 @@ class NovedadPlantillaService
             'ninguno' => 'MOTIVO',
             default   => '$',
         };
-        return mb_strtoupper((string) CatalogoNovedades::nombreTipo($codigo), 'UTF-8') . " ({$unidad})";
+        $nombre = (string) CatalogoNovedades::nombreTipo($codigo);
+        if ($iess !== null) {
+            $nombre .= $iess ? ' con IESS' : ' sin IESS';
+        }
+        if (isset(self::EJEMPLOS_TIPO[$codigo])) {
+            $nombre .= ' (' . self::EJEMPLOS_TIPO[$codigo] . ')';
+        }
+        return mb_strtoupper($nombre, 'UTF-8') . " ({$unidad})";
+    }
+
+    /** "Otros Ingresos (Bonos, comisiones)": el nombre del tipo con sus ejemplos, si tiene. */
+    private static function nombreConEjemplos(string $codigo): string
+    {
+        $nombre = (string) CatalogoNovedades::nombreTipo($codigo);
+        return isset(self::EJEMPLOS_TIPO[$codigo]) ? $nombre . ' (' . self::EJEMPLOS_TIPO[$codigo] . ')' : $nombre;
     }
 
     public function construir(int $idEmpresa, int $mes, int $anio, string $aplicaEn): Spreadsheet
     {
-        $hoy   = date('Y-m-d');
-        $tipos = array_column(CatalogoNovedades::TIPOS, 'codigo');
+        $hoy     = date('Y-m-d');
+        $colsNov = self::columnasNovedad();
+        $nNov    = count($colsNov);
 
         $encabezados = self::COLS_EMPLEADO;
-        foreach ($tipos as $codigo) {
-            $encabezados[] = self::encabezadoTipo((string) $codigo);
+        foreach ($colsNov as $c) {
+            $encabezados[] = self::encabezadoTipo($c['codigo'], $c['iess']);
         }
         $encabezados = array_merge($encabezados, self::COLS_FILA);
 
@@ -78,12 +119,13 @@ class NovedadPlantillaService
         $letra     = fn(int $n) => Coordinate::stringFromColumnIndex($n);
         $nEmpleado = count(self::COLS_EMPLEADO);
         $primNov   = $letra($nEmpleado + 1);
-        $ultNov    = $letra($nEmpleado + count($tipos));
+        $ultNov    = $letra($nEmpleado + $nNov);
         $colFila   = [];
         foreach (self::COLS_FILA as $i => $campo) {
-            $colFila[$campo] = $letra($nEmpleado + count($tipos) + 1 + $i);
+            $colFila[$campo] = $letra($nEmpleado + $nNov + 1 + $i);
         }
-        $colAviso = $letra($nEmpleado + 1 + (int) array_search(CatalogoNovedades::COD_AVISO_SALIDA, $tipos, true));
+        $idxAviso = (int) array_search(CatalogoNovedades::COD_AVISO_SALIDA, array_column($colsNov, 'codigo'), true);
+        $colAviso = $letra($nEmpleado + 1 + $idxAviso);
         $ultCol   = $letra(count($encabezados));
 
         $ss = new Spreadsheet();
@@ -117,12 +159,12 @@ class NovedadPlantillaService
 
         $this->darFormatoEncabezado($hoja, $ultCol, $primNov, $ultNov);
 
-        // Con 11 columnas de novedad la hoja es ancha: el empleado queda fijo a la
-        // izquierda y los encabezados arriba al desplazarse.
+        // Con tantas columnas de novedad la hoja es ancha: el empleado queda fijo a
+        // la izquierda y los encabezados arriba al desplazarse.
         $hoja->freezePane('C2');
         for ($c = 1; $c <= count($encabezados); $c++) {
             $col = $letra($c);
-            if ($c > $nEmpleado && $c <= $nEmpleado + count($tipos)) {
+            if ($c > $nEmpleado && $c <= $nEmpleado + $nNov) {
                 $hoja->getColumnDimension($col)->setWidth(17);
             } else {
                 $hoja->getColumnDimension($col)->setAutoSize(true);
@@ -157,8 +199,9 @@ class NovedadPlantillaService
         $nov->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::COLOR_ENC_NOVEDAD);
         $nov->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        // Los nombres largos ("PRÉSTAMO QUIROGRAFARIO ($)") ocupan hasta 3 líneas.
-        $hoja->getRowDimension(1)->setRowHeight(45);
+        // Los nombres largos ("OTROS INGRESOS CON IESS (BONOS, COMISIONES) ($)")
+        // ocupan hasta 4 líneas.
+        $hoja->getRowDimension(1)->setRowHeight(60);
     }
 
     private function listaDesplegable(Worksheet $hoja, string $rango, string $formula): void
@@ -193,22 +236,27 @@ class NovedadPlantillaService
         foreach ([
             '• Hay una fila por empleado y una columna por cada tipo de novedad. Escriba el valor solo en las novedades que le correspondan: las celdas vacías o en 0 no crean nada.',
             '• MES, ANIO, AFECTA_A y FECHA valen para todas las novedades de la fila. Si una novedad va a otro período u otro pago, póngala en una copia de la fila del empleado con esos datos.',
+            '• En la quincena y la semana solo hay ingresos y descuentos: los DÍAS NO LABORADOS y el AVISO DE SALIDA van siempre al rol mensual, aunque AFECTA_A diga quincena o semanal.',
             '• OBSERVACION es opcional: si queda vacía, cada novedad se guarda con "Tipo - Mes Año".',
             '• En la columna AVISO DE SALIDA no va un valor: se elige (o se escribe) el motivo de salida.',
+            '• Otros Ingresos y las horas tienen dos columnas, CON IESS y SIN IESS: escriba el valor en la que corresponda. Si el empleado no aporta al IESS, se registra sin IESS aunque esté en la columna CON IESS.',
         ] as $linea) {
             $ref->setCellValue('A' . $fila++, $linea);
         }
         $fila++;
 
         $titulo('TIPOS DE NOVEDAD');
-        $ref->fromArray(['CÓDIGO', 'NOVEDAD', 'QUÉ SE ESCRIBE EN SU COLUMNA'], null, 'A' . $fila);
-        $ref->getStyle("A{$fila}:C{$fila}")->getFont()->setBold(true);
+        $ref->fromArray(['CÓDIGO', 'NOVEDAD', 'QUÉ SE ESCRIBE EN SU COLUMNA', 'APORTA AL IESS'], null, 'A' . $fila);
+        $ref->getStyle("A{$fila}:D{$fila}")->getFont()->setBold(true);
         $fila++;
         foreach (CatalogoNovedades::TIPOS as $t) {
             $que = CatalogoNovedades::esAvisoSalida($t['codigo'])
                 ? 'Motivo de salida (ver abajo)'
                 : CatalogoNovedades::labelValor($t['codigo']);
-            $ref->fromArray([$t['codigo'], $t['nombre'], $que], null, 'A' . $fila++);
+            $iess = CatalogoNovedades::admiteOpcionIess($t['codigo'])
+                ? 'Según la columna: CON IESS o SIN IESS'
+                : 'No aplica';
+            $ref->fromArray([$t['codigo'], self::nombreConEjemplos($t['codigo']), $que, $iess], null, 'A' . $fila++);
         }
         $fila++;
 
@@ -227,8 +275,9 @@ class NovedadPlantillaService
         }
 
         $ref->getColumnDimension('A')->setWidth(12);
-        $ref->getColumnDimension('B')->setAutoSize(true);
-        $ref->getColumnDimension('C')->setAutoSize(true);
+        foreach (['B', 'C', 'D'] as $col) {
+            $ref->getColumnDimension($col)->setAutoSize(true);
+        }
 
         return 'Referencia!$A$' . $primMotivo . ':$A$' . ($fila - 1);
     }

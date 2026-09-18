@@ -18,6 +18,17 @@ class FacturaVentaPdfService
     private int $decCantidad = 2;
     private int $decPrecio   = 2;
 
+    /**
+     * Tipografía del cuerpo del RIDE. La fija la tabla de ítems (celdas a 9 pt,
+     * encabezados en negrita 8.5) y la comparten los datos del cliente y la
+     * información adicional, para que los tres bloques se vean iguales: si se
+     * cambia aquí, cambian los tres.
+     */
+    private const FUENTE_CUERPO           = 9.0;
+    private const FUENTE_ENCABEZADO_TABLA = 8.5;
+    private const LINEA_CUERPO            = 4.2;  // mm por línea de texto
+    private const ALTO_MIN_FILA           = 4.8;  // mm, fila de una sola línea
+
     public function generar(array $cabecera, array $detalles, array $pagos, array $infoAdicional, array $empresa, string $outputDest = 'D')
     {
         $this->renderizar($cabecera, $detalles, $pagos, $infoAdicional, $empresa);
@@ -401,7 +412,24 @@ class FacturaVentaPdfService
         $cW  = $this->contentW;
 
         $pdf->SetLineWidth(0.3);
-        $lh = 5;
+
+        // Misma tipografía que la tabla de ítems (ver FUENTE_CUERPO): etiqueta
+        // normal, valor en negrita. Los anchos se MIDEN con el texto real: las
+        // celdas fijas de antes estaban calculadas para 7.5 pt y a este tamaño la
+        // etiqueta se montaba sobre su valor (Cell() no recorta el texto).
+        $fs    = self::FUENTE_CUERPO;
+        $lineH = self::LINEA_CUERPO;
+        $pads  = $pdf->getCellPaddings();
+        $padLR = (float)$pads['L'] + (float)$pads['R'];
+        $gap   = 1.5;           // etiqueta → valor
+        $sep   = 5.0;           // entre un par y el siguiente
+        $x0    = $mL + 2;       // sangría interior de la caja
+        $util  = $cW - 4;       // ancho útil dentro de la caja
+
+        $anchoTexto = function (string $txt, string $estilo) use ($pdf, $fs, $padLR): float {
+            $pdf->SetFont('helvetica', $estilo, $fs);
+            return $pdf->GetStringWidth($txt) + $padLR;
+        };
 
         $fecha = '';
         if (!empty($cab['fecha_emision'])) {
@@ -409,89 +437,80 @@ class FacturaVentaPdfService
             $fecha = $ts ? date('d/m/Y', $ts) : $cab['fecha_emision'];
         }
 
-        $yBox = $y;
+        $rowY = $y + 1.5;
 
-        // Fila 1: Razón Social / Nombres y Apellidos
-        $pdf->SetFont('helvetica', '', 7.5);
-        $pdf->SetXY($mL + 2, $yBox + 1.5);
-        $pdf->Cell(48, $lh, 'Razón Social / Nombres y Apellidos:', 0, 0, 'L');
-        $pdf->SetFont('helvetica', 'B', 7.5);
-        $pdf->Cell($cW - 50, $lh, $cab['cliente_nombre'] ?? '', 0, 1, 'L');
-        $yBox += $lh + 1;
+        // Fila 1: Razón Social / Nombres y Apellidos. Un nombre largo se envuelve
+        // en vez de salirse de la caja.
+        $lbl  = 'Razón Social / Nombres y Apellidos:';
+        $wLbl = $anchoTexto($lbl, '') + $gap;
+        $pdf->SetXY($x0, $rowY);
+        $pdf->Cell($wLbl, $lineH, $lbl, 0, 0, 'L');
+        $nombre = (string)($cab['cliente_nombre'] ?? '');
+        $pdf->SetFont('helvetica', 'B', $fs);
+        $wNom = $util - $wLbl;
+        $nNom = max(1, $pdf->getNumLines($nombre, $wNom));
+        $pdf->SetXY($x0 + $wLbl, $rowY);
+        $pdf->MultiCell($wNom, $lineH, $nombre, 0, 'L', false, 1);
+        $rowY += $nNom * $lineH + 1;
 
-        // Fila 2: Identificación | Fecha | Placa/Matrícula | Guía
-        $pdf->SetFont('helvetica', '', 7.5);
-        $pdf->SetXY($mL + 2, $yBox + 1);
-        $pdf->Cell(20, $lh, 'Identificación:', 0, 0, 'L');
-        $pdf->SetFont('helvetica', 'B', 7.5);
-        $pdf->Cell(30, $lh, $cab['cliente_ruc'] ?? '', 0, 0, 'L');
-        
-        $pdf->SetFont('helvetica', '', 7.5);
-        $pdf->Cell(22, $lh, 'Fecha emisión:', 0, 0, 'L');
-        $pdf->SetFont('helvetica', 'B', 7.5);
-        $pdf->Cell(22, $lh, $fecha, 0, 0, 'L');
-        
+        // Fila 2: Identificación | Fecha | Placa/Matrícula | Guía, en flujo. Si un
+        // par no cabe en lo que queda de la línea pasa entero a la siguiente: la
+        // etiqueta nunca se separa de su valor.
+        $pares = [
+            ['Identificación:', (string)($cab['cliente_ruc'] ?? '')],
+            ['Fecha emisión:',  $fecha],
+        ];
         if (!empty($cab['placa'])) {
-            $pdf->SetFont('helvetica', '', 7.5);
-            $pdf->Cell(25, $lh, 'Placa / Matrícula:', 0, 0, 'L');
-            $pdf->SetFont('helvetica', 'B', 7.5);
-            $pdf->Cell(20, $lh, $cab['placa'], 0, 0, 'L');
+            $pares[] = ['Placa / Matrícula:', (string)$cab['placa']];
         }
+        $pares[] = ['Guía remisión:', (string)($cab['guia_remision'] ?? '')];
 
-        $pdf->SetFont('helvetica', '', 7.5);
-        $pdf->Cell(22, $lh, 'Guía remisión:', 0, 0, 'L');
-        $pdf->SetFont('helvetica', 'B', 7.5);
-        $pdf->Cell(28, $lh, $cab['guia_remision'] ?? '', 0, 1, 'L');
-        
-        $yBox += $lh + 1;
+        $x = $x0;
+        foreach ($pares as [$lbl, $val]) {
+            $wL = $anchoTexto($lbl, '') + $gap;
+            // Mínimo: que una etiqueta sin valor no quede pegada a la siguiente.
+            $wV = min(max($anchoTexto($val, 'B'), 12.0), $util - $wL);
+            if ($x > $x0 && $x + $wL + $wV > $x0 + $util) {
+                $x = $x0;
+                $rowY += $lineH + 1;
+            }
+            $pdf->SetFont('helvetica', '', $fs);
+            $pdf->SetXY($x, $rowY);
+            $pdf->Cell($wL, $lineH, $lbl, 0, 0, 'L');
+            $pdf->SetFont('helvetica', 'B', $fs);
+            // stretch 1: solo condensa si un valor no cupiera ni en la línea entera.
+            $pdf->Cell($wV, $lineH, $val, 0, 0, 'L', false, '', 1);
+            $x += $wL + $wV + $sep;
+        }
+        $rowY += $lineH + 1;
 
-        // Fila 3: Dirección | Teléfono | Correo
-        // Cualquiera de los tres puede traer texto largo (dirección extensa,
-        // varios correos separados por coma). En vez de comprimir el texto en
-        // una sola línea (se monta/se sale de la caja), cada valor se envuelve
-        // en varias líneas con MultiCell, y el recuadro crece según el más
-        // alto de los tres bloques.
-        $pdf->SetFont('helvetica', '', 7.5);
-        $lineH3 = 3.6;
+        // Fila 3: Dirección | Teléfono | Correo. Cualquiera puede traer texto largo
+        // (dirección extensa, varios correos separados por coma): cada valor se
+        // envuelve y la fila crece según el más alto de los tres.
+        $wLDir = $anchoTexto('Direccion:', '') + $gap;
+        $wLTel = $anchoTexto('Telefono:', '') + $gap;
+        $wLCor = $anchoTexto('Correo:', '') + $gap;
+        $wVDir = 60.0;
+        $wVTel = 26.0;
+        $wVCor = $util - $wLDir - $wVDir - $wLTel - $wVTel - $wLCor;
 
-        $dirLabelW = 15;
-        $dirValW   = 60;
-        $telLabelW = 16;
-        $telValW   = 26;
-        $corLabelW = 14;
-        $corValW   = $cW - 2 - $dirLabelW - $dirValW - $telLabelW - $telValW - $corLabelW;
-
-        $rowX = $mL + 2;
-        $rowY = $yBox + 1;
-
-        // Dirección
-        $pdf->SetXY($rowX, $rowY);
-        $pdf->Cell($dirLabelW, $lh, 'Direccion:', 0, 0, 'L');
-        $dirVal = $cab['cliente_direccion'] ?? '';
-        $nDir = max(1, $pdf->getNumLines($dirVal, $dirValW));
-        $pdf->SetXY($rowX + $dirLabelW, $rowY);
-        $pdf->MultiCell($dirValW, $lineH3, $dirVal, 0, 'L', false, 1);
-
-        // Teléfono
-        $telX = $rowX + $dirLabelW + $dirValW;
-        $pdf->SetXY($telX, $rowY);
-        $pdf->Cell($telLabelW, $lh, 'Telefono:', 0, 0, 'L');
-        $telVal = $cab['cliente_telefono'] ?? '';
-        $nTel = max(1, $pdf->getNumLines($telVal, $telValW));
-        $pdf->SetXY($telX + $telLabelW, $rowY);
-        $pdf->MultiCell($telValW, $lineH3, $telVal, 0, 'L', false, 1);
-
-        // Correo
-        $corX = $telX + $telLabelW + $telValW;
-        $pdf->SetXY($corX, $rowY);
-        $pdf->Cell($corLabelW, $lh, 'Correo:', 0, 0, 'L');
-        $corVal = $cab['cliente_email'] ?? '';
-        $nCor = max(1, $pdf->getNumLines($corVal, $corValW));
-        $pdf->SetXY($corX + $corLabelW, $rowY);
-        $pdf->MultiCell($corValW, $lineH3, $corVal, 0, 'L', false, 1);
-
-        $fila3H = max($lh, $nDir * $lineH3, $nTel * $lineH3, $nCor * $lineH3);
-        $yBox = $rowY + $fila3H + 1;
+        $bloques = [
+            [$wLDir, 'Direccion:', $wVDir, (string)($cab['cliente_direccion'] ?? '')],
+            [$wLTel, 'Telefono:',  $wVTel, (string)($cab['cliente_telefono']  ?? '')],
+            [$wLCor, 'Correo:',    $wVCor, (string)($cab['cliente_email']     ?? '')],
+        ];
+        $pdf->SetFont('helvetica', '', $fs);
+        $x    = $x0;
+        $nMax = 1;
+        foreach ($bloques as [$wL, $lbl, $wV, $val]) {
+            $pdf->SetXY($x, $rowY);
+            $pdf->Cell($wL, $lineH, $lbl, 0, 0, 'L');
+            $nMax = max($nMax, $pdf->getNumLines($val, $wV));
+            $pdf->SetXY($x + $wL, $rowY);
+            $pdf->MultiCell($wV, $lineH, $val, 0, 'L', false, 1);
+            $x += $wL + $wV;
+        }
+        $yBox = $rowY + $nMax * $lineH + 1;
 
         // Borde de la caja
         $pdf->Rect($mL, $y, $cW, $yBox - $y, 'D');
@@ -554,7 +573,7 @@ class FacturaVentaPdfService
         // encima de la columna siguiente en vez de ensanchar la suya. Se mide
         // con la misma fuente de las filas y se acota entre el ancho base y un
         // máximo, para no dejar sin sitio a la Descripción.
-        $pdf->SetFont('helvetica', '', 9);
+        $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
         $campoCod = ['codp' => 'codigo_principal', 'coda' => 'codigo_auxiliar'];
         $maxCod   = ['codp' => 42.0,               'coda' => 26.0];
         $minCod   = [];
@@ -608,7 +627,7 @@ class FacturaVentaPdfService
         // de cada página cuando el detalle no cabe en una sola.
         $hdrH = 9.8; // 2 líneas * 4.9
         $dibujarEncabezado = function (float $yEnc) use ($pdf, $cols, $mL, $hdrH): float {
-            $pdf->SetFont('helvetica', 'B', 8.5);
+            $pdf->SetFont('helvetica', 'B', self::FUENTE_ENCABEZADO_TABLA);
             $pdf->SetFillColor(230, 230, 230);
             $pdf->SetXY($mL, $yEnc);
             foreach ($cols as $col) {
@@ -631,7 +650,7 @@ class FacturaVentaPdfService
         }
 
         // Filas de detalle
-        $pdf->SetFont('helvetica', '', 9);
+        $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
         $altColor = false;
 
         // Alto útil de la página para el detalle. Se deja sitio para el bloque de
@@ -662,7 +681,7 @@ class FacturaVentaPdfService
             // Calcular altura de fila según columnas multilinea
             $nDesc = $wDesc > 0 ? max(1, $pdf->getNumLines($vals['desc'], $wDesc)) : 1;
             $nDeta = $wDeta > 0 ? max(1, $pdf->getNumLines($vals['deta'], $wDeta)) : 1;
-            $ch    = max(4.8, max($nDesc, $nDeta) * 4.2);
+            $ch    = max(self::ALTO_MIN_FILA, max($nDesc, $nDeta) * self::LINEA_CUERPO);
 
             $xCur = $mL;
             $yRow = $pdf->GetY();
@@ -676,7 +695,7 @@ class FacturaVentaPdfService
                 $pdf->AddPage();
                 // Tras AddPage, GetY() ya está en el margen superior de la página.
                 $yRow = $dibujarEncabezado($pdf->GetY());
-                $pdf->SetFont('helvetica', '', 9);
+                $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
                 $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
             }
 
@@ -810,8 +829,11 @@ class FacturaVentaPdfService
             $y = 12;
         }
 
-        // Layout
-        $totW = 72;
+        // Layout. La columna de totales mide 52 mm de etiqueta + 22 de valor: a
+        // FUENTE_CUERPO la etiqueta más larga ("SUBTOTAL NO OBJETO DE IVA") ocupa
+        // 49 mm y un importe de 9,999,999.99 unos 20.5 mm (con 18 mm, los importes
+        // desde 1,000,000 se salían de la celda).
+        $totW = 74;
         $izqW = $cW - $totW - 2;
         $totX = $mL + $izqW + 2;
         $lh   = 5;
@@ -820,7 +842,7 @@ class FacturaVentaPdfService
         $yTot = $y;
         $pdf->SetLineWidth(0.3);
 
-        $lblW = 54; // ancho etiqueta
+        $lblW = 52; // ancho etiqueta
         $valW = $totW - $lblW;
 
         // Subtotales por concepto de IVA (codigo_porcentaje)
@@ -867,12 +889,13 @@ class FacturaVentaPdfService
             $yTot += $lh;
         }
 
-        // VALOR TOTAL (negrita, fondo)
-        $pdf->SetFont('helvetica', 'B', 8);
+        // VALOR TOTAL (negrita, fondo). Mismo tamaño que el resto: lo distinguen
+        // la negrita y el fondo gris.
+        $pdf->SetFont('helvetica', 'B', self::FUENTE_CUERPO);
         $pdf->SetFillColor(210, 210, 210);
         $pdf->SetXY($totX, $yTot);
         $pdf->Cell($lblW, $lh, 'VALOR TOTAL', 1, 0, 'L', true);
-        $pdf->Cell($valW, $lh, number_format($total, 2), 1, 1, 'R', true);
+        $pdf->Cell($valW, $lh, number_format($total, 2), 1, 1, 'R', true, '', 1);
         $yTot += $lh;
 
         if ($totalSubsidio > 0) {
@@ -880,39 +903,66 @@ class FacturaVentaPdfService
             $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'VALOR TOTAL SIN SUBSIDIO', $valorTotalSinSubsidio);
             $yTot += $lh;
 
-            // AHORRO POR SUBSIDIO (2 líneas)
-            $pdf->SetFont('helvetica', '', 6.5);
+            // AHORRO POR SUBSIDIO (2 líneas; cada una cabe en $lblW a este tamaño)
+            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
             $pdf->SetFillColor(255, 255, 255);
             $pdf->SetXY($totX, $yTot);
             $pdf->MultiCell($lblW, $lh, "AHORRO POR SUBSIDIO:\n(Incluye IVA cuando corresponda)", 1, 'L', false, 0);
             
             $pdf->SetXY($totX + $lblW, $yTot);
-            $pdf->Cell($valW, $lh * 2, number_format($totalSubsidio, 2), 1, 1, 'R');
+            $pdf->Cell($valW, $lh * 2, number_format($totalSubsidio, 2), 1, 1, 'R', false, '', 1);
             $yTot += $lh * 2;
         }
 
         // ── Columna izquierda: Información Adicional + Forma de pago ──────────
-        $yIzq = $y;
+        $yIzq      = $y;
+        $paginaPie = $pdf->getPage();   // página donde quedaron los totales
+        $limiteY   = $pdf->getPageHeight() - $pdf->getBreakMargin();
 
-        // Información Adicional
+        // Información Adicional — misma tipografía que la tabla de ítems: título
+        // en negrita FUENTE_ENCABEZADO_TABLA y filas en FUENTE_CUERPO.
         if (!empty($infoAdicional)) {
-            $pdf->SetFont('helvetica', 'B', 7.5);
-            $pdf->SetFillColor(230, 230, 230);
-            $pdf->SetXY($mL, $yIzq);
-            $pdf->Cell($izqW, $lh, 'Información Adicional', 1, 1, 'C', true);
-            $yIzq += $lh;
-
             $etiqW = 40;
             $valIW = $izqW - $etiqW;
-            $pdf->SetFont('helvetica', '', 7);
-            $pdf->SetFillColor(255, 255, 255);
+
+            $dibujarTitulo = function (float $yT) use ($pdf, $mL, $izqW, $lh): float {
+                $pdf->SetFont('helvetica', 'B', self::FUENTE_ENCABEZADO_TABLA);
+                $pdf->SetFillColor(230, 230, 230);
+                $pdf->SetXY($mL, $yT);
+                $pdf->Cell($izqW, $lh, 'Información Adicional', 1, 1, 'C', true);
+                $pdf->SetFillColor(255, 255, 255);
+                return $yT + $lh;
+            };
+            $yIzq = $dibujarTitulo($yIzq);
+
             foreach ($infoAdicional as $info) {
+                $nombre = (string)($info['nombre'] ?? '');
+                $valor  = (string)($info['valor']  ?? '');
+
+                // Alto de la fila según el más largo de los dos textos, como en la
+                // tabla de ítems: concepto y valor quedan en recuadros del mismo
+                // alto. Antes el concepto iba en una celda de alto fijo y, si el
+                // valor ocupaba dos líneas, los bordes quedaban desparejos.
+                $pdf->SetFont('helvetica', 'B', self::FUENTE_CUERPO);
+                $nNom = max(1, $pdf->getNumLines($nombre, $etiqW));
+                $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+                $nVal = max(1, $pdf->getNumLines($valor, $valIW));
+                $h    = max(self::ALTO_MIN_FILA, max($nNom, $nVal) * self::LINEA_CUERPO);
+
+                // Salto de página controlado (mismo patrón que dibujarDetalle): el
+                // automático de TCPDF podía caer entre las dos celdas de una fila y
+                // partirla en dos páginas. En la página nueva se repite el título.
+                if ($yIzq + $h > $limiteY) {
+                    $pdf->AddPage();
+                    $yIzq = $dibujarTitulo($pdf->GetY());
+                }
+
+                $pdf->SetFont('helvetica', 'B', self::FUENTE_CUERPO);
                 $pdf->SetXY($mL, $yIzq);
-                $pdf->SetFont('helvetica', 'B', 7);
-                $pdf->Cell($etiqW, $lh, $info['nombre'] ?? '', 1, 0, 'L');
-                $pdf->SetFont('helvetica', '', 7);
-                $pdf->MultiCell($valIW, $lh, $info['valor'] ?? '', 1, 'L', false, 1);
-                $yIzq = $pdf->GetY();
+                $pdf->MultiCell($etiqW, $h, $nombre, 1, 'L', false, 0, '', '', true, 0, false, true, $h, 'M');
+                $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+                $pdf->MultiCell($valIW, $h, $valor, 1, 'L', false, 1, '', '', true, 0, false, true, $h, 'M');
+                $yIzq += $h;
             }
         }
 
@@ -922,33 +972,59 @@ class FacturaVentaPdfService
         // en el XML): si no, el RIDE imprimiría dos veces lo mismo.
         if (!empty($cab['observaciones']) && !$this->observacionesYaEnInfoAdicional($infoAdicional, (string) $cab['observaciones'])) {
             $yIzq += 1;
-            $pdf->SetFont('helvetica', 'B', 7.5);
+            // Título y primeras líneas juntos, con salto controlado. Con el salto
+            // automático, si el bloque llegaba al pie el título quedaba SOLO en una
+            // página y el texto en la siguiente (SetXY con la Y de la página
+            // anterior): una página casi vacía. El texto largo sí puede seguir en
+            // la página siguiente: lo parte el propio MultiCell.
+            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+            $nObs = max(1, $pdf->getNumLines((string) $cab['observaciones'], $izqW));
+            if ($yIzq + $lh + min($nObs, 2) * self::LINEA_CUERPO > $limiteY) {
+                $pdf->AddPage();
+                $yIzq = $pdf->GetY();
+            }
+            // Misma tipografía que la tabla de ítems: título en negrita
+            // FUENTE_ENCABEZADO_TABLA y texto a FUENTE_CUERPO.
+            $pdf->SetFont('helvetica', 'B', self::FUENTE_ENCABEZADO_TABLA);
             $pdf->SetFillColor(230, 230, 230);
             $pdf->SetXY($mL, $yIzq);
             $pdf->Cell($izqW, $lh, 'Observaciones', 1, 1, 'C', true);
             $yIzq += $lh;
-            $pdf->SetFont('helvetica', '', 7);
+            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
             $pdf->SetFillColor(255, 255, 255);
             $pdf->SetXY($mL, $yIzq);
-            $pdf->MultiCell($izqW, 4.5, $cab['observaciones'], 1, 'L', false, 1);
+            $pdf->MultiCell($izqW, self::LINEA_CUERPO, $cab['observaciones'], 1, 'L', false, 1);
             $yIzq = $pdf->GetY();
         }
 
         // Forma de pago
         if (!empty($pagos)) {
             $yIzq += 1;
-            // Encabezado tabla pagos
-            $wNombre = $izqW - 28 - 22 - 22;
-            $pdf->SetFont('helvetica', 'B', 7);
+            // Encabezado tabla pagos. Anchos medidos a la tipografía del cuerpo:
+            // Valor cabe 9,999,999.99 (20.5 mm), "Días Crédito" 19.7 mm y "Meses"
+            // 11.4 mm. Lo que sobra va al nombre de la forma de pago, que es lo
+            // largo: "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO" queda en dos
+            // líneas en vez de tres.
+            $wValor  = 24;
+            $wDias   = 21;
+            $wPlazo  = 16;
+            $wNombre = $izqW - $wValor - $wDias - $wPlazo;
+            // Encabezado y primera fila juntos: que el título no quede huérfano al
+            // pie de la página.
+            if ($yIzq + $lh * 2 > $limiteY) {
+                $pdf->AddPage();
+                $yIzq = $pdf->GetY();
+            }
+            $pdf->SetFont('helvetica', 'B', self::FUENTE_ENCABEZADO_TABLA);
             $pdf->SetFillColor(230, 230, 230);
             $pdf->SetXY($mL, $yIzq);
             $pdf->Cell($wNombre, $lh, 'Forma de pago', 1, 0, 'C', true);
-            $pdf->Cell(28,       $lh, 'Valor',         1, 0, 'C', true);
-            $pdf->Cell(22,       $lh, 'Días Crédito',  1, 0, 'C', true);
-            $pdf->Cell(22,       $lh, 'Plazo',         1, 1, 'C', true);
+            $pdf->Cell($wValor,  $lh, 'Valor',         1, 0, 'C', true);
+            $pdf->Cell($wDias,   $lh, 'Días Crédito',  1, 0, 'C', true);
+            $pdf->Cell($wPlazo,  $lh, 'Plazo',         1, 1, 'C', true);
             $yIzq += $lh;
 
-            $pdf->SetFont('helvetica', '', 7);
+            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
             $pdf->SetFillColor(255, 255, 255);
             foreach ($pagos as $p) {
                 $nombreP = $p['nombre_forma_pago'] ?? ($p['forma_pago'] ?? '');
@@ -965,16 +1041,24 @@ class FacturaVentaPdfService
                 // Si getNumLines retorna 0 o algo menor a 1, usar 1
                 if ($numLines < 1) $numLines = 1;
                 
-                $rowH = $numLines * $lh;
+                // Mismo alto de fila que la tabla de ítems.
+                $rowH = max(self::ALTO_MIN_FILA, $numLines * self::LINEA_CUERPO);
+
+                // Salto controlado: con el salto automático, una fila partida entre
+                // páginas dejaba $yIzq en la página anterior y descolocaba el resto.
+                if ($yIzq + $rowH > $limiteY) {
+                    $pdf->AddPage();
+                    $yIzq = $pdf->GetY();
+                }
 
                 $pdf->SetXY($mL, $yIzq);
                 // MultiCell recibe un height mínimo ($rowH) y dibujará el borde hasta allí
-                $pdf->MultiCell($wNombre, $rowH, $nombreP, 1, 'L', false, 0);
-                
+                $pdf->MultiCell($wNombre, $rowH, $nombreP, 1, 'L', false, 0, '', '', true, 0, false, true, $rowH, 'M');
+
                 // Las celdas adyacentes usarán el mismo alto total ($rowH)
-                $pdf->Cell(28, $rowH, $valorP,  1, 0, 'R');
-                $pdf->Cell(22, $rowH, $diasLbl, 1, 0, 'C');
-                $pdf->Cell(22, $rowH, $plazoLbl, 1, 1, 'C');
+                $pdf->Cell($wValor, $rowH, $valorP,   1, 0, 'R', false, '', 1);
+                $pdf->Cell($wDias,  $rowH, $diasLbl,  1, 0, 'C');
+                $pdf->Cell($wPlazo, $rowH, $plazoLbl, 1, 1, 'C');
                 
                 $yIzq += $rowH;
             }
@@ -985,7 +1069,9 @@ class FacturaVentaPdfService
         $leyendaMensaje = $empresa['leyenda_pdf_mensaje'] ?? '';
         if (!empty($leyendaTitulo) || !empty($leyendaMensaje)) {
             // Posicionar debajo del máximo entre la columna izquierda y derecha
-            $yFinal = max($yIzq, $yTot) + 4;
+            // Si la columna izquierda siguió en otra página, los totales quedaron en
+            // la anterior: en esta solo cuenta lo último de la columna izquierda.
+            $yFinal = ($pdf->getPage() > $paginaPie ? $yIzq : max($yIzq, $yTot)) + 4;
             
             // Verificar salto de página manual si no cabe (aprox 30 unidades)
             if ($yFinal + 30 > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
@@ -1016,11 +1102,12 @@ class FacturaVentaPdfService
         float $lblW, float $valW, float $h,
         string $lbl, float $val
     ): void {
-        $pdf->SetFont('helvetica', '', 7);
+        $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
         $pdf->SetFillColor(255, 255, 255);
         $pdf->SetXY($x, $y);
-        $pdf->Cell($lblW, $h, $lbl, 1, 0, 'L');
-        $pdf->Cell($valW, $h, number_format($val, 2), 1, 0, 'R');
+        // stretch 1 en ambas: solo condensa si un texto no cupiera en su celda.
+        $pdf->Cell($lblW, $h, $lbl, 1, 0, 'L', false, '', 1);
+        $pdf->Cell($valW, $h, number_format($val, 2), 1, 0, 'R', false, '', 1);
     }
 
     /**

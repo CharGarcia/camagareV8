@@ -84,6 +84,7 @@ class AuditoriaEtiquetas
         'transportistas'                 => 'Transportistas',
         'unidades_medida'                => 'Unidades de medida',
         'vacaciones'                     => 'Vacaciones',
+        'vacaciones_periodos'            => 'Vacaciones: períodos tomados/pagados',
         'vehiculos'                      => 'Vehículos',
         'vendedores'                     => 'Vendedores',
         'ventas_cabecera'                => 'Facturas de venta',

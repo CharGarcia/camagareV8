@@ -6,7 +6,7 @@ ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.16
+version: 1.17
 orden: 47
 estado: activo
 ---
@@ -17,8 +17,8 @@ ejemplo, uno que salió con falla) y los productos que **recibe a cambio**. Es e
 documento de garantías, reposiciones y canjes. Se relaciona con
 [Facturación de consignaciones](modulos/facturacion-cv) (de ahí salen los ítems que se
 devuelven), con [Consignaciones](modulos/consignacion-venta) y
-[Retornos de consignación](modulos/retornos-cv) (de una consignación puede
-salir lo que se entrega a cambio) y con Inventario y Contabilidad.
+[Retornos de consignación](modulos/retornos-cv) (de una consignación sale lo
+que se entrega a cambio) y con Inventario y Contabilidad.
 
 ## Qué es y para qué sirve
 
@@ -34,10 +34,12 @@ producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
   En pantalla y en el PDF se identifican por el **número de la factura de
   venta** que generó esa factura de consignación, que es el comprobante que
   tiene el cliente.
-- **Productos que entrega a cambio** → salen hacia el cliente. Pueden tomarse
-  de **tres sitios**: de una **consignación** que el cliente ya tiene en su
-  poder, de las **existencias** de una bodega (eligiendo lote y NUP) o del
-  **catálogo** de productos.
+- **Productos que entrega a cambio** → salen hacia el cliente. Se toman de una
+  **consignación** que el cliente ya tiene en su poder, buscándola por su
+  **número**. Los cambios registrados antes del 18-09-2026 pueden tener también
+  entregas desde las **existencias** de una bodega o del **catálogo**: se siguen
+  viendo y, si el cambio está en borrador, se pueden reducir o quitar, pero ya
+  no se agregan nuevas ni se aumentan.
 - La **diferencia** entre lo entregado y lo devuelto es solo **informativa**:
   el documento no genera cobro ni cuenta por cobrar. No aparece en el
   formulario, el PDF, el Excel ni el listado; solo se puede filtrar por ella
@@ -74,17 +76,19 @@ producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
    propone el saldo y nunca puede superarlo (el máximo aparece al pasar el
    mouse sobre la cantidad). La columna **Bodega** indica de qué bodega salió
    la unidad: a esa bodega vuelve a entrar.
-4. **Busque lo que se entrega a cambio** en el buscador de la segunda tabla.
-   Los resultados salen en tres grupos:
-   - **Consignación**: ítems de las consignaciones *entregadas* que el
-     cliente todavía tiene en su poder. Se buscan por **número de
-     consignación**, NUP, lote o producto. Bodega, lote y NUP son los de la
-     consignación y no se editan.
-   - **Existencias en bodega**: unidades con stock, una fila por bodega, lote
-     y NUP. Al agregarla, la bodega, el lote y el NUP quedan precargados
-     (editables).
-   - **Catálogo**: cualquier producto, aunque no tenga stock registrado. Se
-     elige la bodega y, si aplica, se escriben lote y NUP.
+4. **Busque lo que se entrega a cambio** en el buscador de la segunda tabla
+   escribiendo el **número de la consignación**, que es lo único que busca:
+   completo (`001-001-000000012`) o solo el secuencial, con o sin ceros
+   (`000000012` o `12`). Con el número completo sale solo la consignación de
+   esa serie; con solo el secuencial, la de ese número en todas las series
+   (cada una con su número completo, para distinguirlas). No busca por NUP,
+   lote, producto ni cliente, y no ofrece existencias de bodega ni el catálogo.
+   Aparecen los ítems de la consignación que el cliente todavía tiene en su
+   poder (consignación *Entregada* y con saldo), **cada uno por separado**;
+   pulse el que se entrega o **Agregar todos**. Bodega, lote y NUP son los de la
+   consignación y no se editan. Si el cambio todavía no tiene cliente, queda
+   fijado con el de la consignación; si ya lo tiene, solo se buscan las
+   consignaciones de ese cliente.
 5. Pulse **Guardar**. El documento se emite, mueve el inventario y genera el
    asiento.
 
@@ -108,8 +112,8 @@ dónde viene cada línea:
   enlazada** (pasa con algunas migradas). En el buscador, esa factura de
   consignación aparece como *Sin factura · F. consig. …* con su número propio.
 - **Lo que se entrega**: *Consignación 001-001-000000012*, el número de la
-  consignación de la que se tomó la unidad; o *Existencias*, *Catálogo* o
-  *Bodega* si sale de bodega.
+  consignación de la que se tomó la unidad. En los cambios registrados antes
+  del 18-09-2026 que entregaron desde bodega o catálogo dice *Bodega*.
 
 ## Registro en Facturación de consignaciones
 
@@ -122,8 +126,9 @@ esa unidad pasa a estar vendida: reemplaza a la que devolvió. Por eso, al
 - **No se crea una factura de venta nueva** y la factura original **no se
   modifica**. El registro tampoco mueve inventario ni genera asiento: eso ya lo
   hace el cambio.
-- Solo lleva lo entregado **desde consignación**. Lo que sale de bodega o del
-  catálogo no se registra ahí.
+- Solo lleva lo entregado **desde consignación**, que es de donde sale todo lo
+  que se entrega a cambio. Lo que salió de bodega o del catálogo en cambios
+  anteriores al 18-09-2026 no se registra ahí.
 - Lleva el precio de la consignación y el **IVA vigente del producto**, igual
   que si esa unidad se facturara en Facturación de consignaciones.
 - Cada unidad que sale va con la factura de la unidad que entra **en la misma
@@ -232,7 +237,7 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Cliente | Sí | Se fija solo con el primer ítem agregado (factura de consignación, cambio o consignación) o se elige a mano. Backspace en el campo lo limpia junto con las líneas que dependen de él. |
 | Motivo / Observaciones | No | Texto libre. |
 | Productos que devuelve | Sí (al menos uno) | Ítems de facturas de consignación (estado *facturada*) o de cambios anteriores con saldo pendiente. Columnas: origen (n.º de la factura de venta o del cambio), producto, bodega, lote, NUP y cantidad (propone el saldo pendiente y no puede superarlo). |
-| Productos que entrega a cambio | No | Ítems desde consignación, existencias o catálogo. Columnas: origen, producto, bodega, lote, NUP y cantidad. |
+| Productos que entrega a cambio | No | Ítems de consignaciones *Entregadas* con saldo en poder del cliente, buscados **solo por el número de la consignación**. Columnas: origen (n.º de la consignación), producto, bodega, lote, NUP y cantidad (propone el saldo y no puede superarlo). |
 | Estado | Solo al editar | Borrador, Emitida o Anulada. Está a la derecha de la barra de botones (PDF, Excel, correo y WhatsApp). |
 
 ## Permisos
@@ -260,9 +265,15 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   salió de bodega con la consignación, esta entrega **no vuelve a mover el
   stock**; queda registrada como **facturada** en Facturación de
   consignaciones, dentro de la factura de venta de lo devuelto.
-- **Entrega desde bodega o catálogo**: sale de la bodega elegida (si el
-  producto es inventariable y el control de inventario de facturación está
-  activo).
+- **Solo se entrega desde consignación**: al guardar, el sistema **rechaza**
+  cualquier entrega que no venga de una consignación, aunque no se haya
+  agregado desde el formulario.
+- **Entrega desde bodega o catálogo** (solo en cambios anteriores al
+  18-09-2026): sale de la bodega elegida (si el producto es inventariable y el
+  control de inventario de facturación está activo). Un borrador que las tiene
+  las conserva al guardarlo: se pueden reducir o quitar y corregir su bodega,
+  lote y NUP, pero no aumentar la cantidad (el formulario no deja pasar de la
+  guardada) ni cambiar el producto.
 - **Estados**: solo *Emitida* mantiene los movimientos de inventario y el
   asiento. Pasar a *Borrador* o *Anulada* los reversa y libera los saldos;
   volver a *Emitida* revalida saldos y los vuelve a aplicar. Solo se editan
@@ -285,10 +296,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Integraciones con otros módulos
 
-- **Inventario**: las devoluciones generan una **entrada** y las entregas
-  desde bodega una **salida**, ambas con referencia *Cambio de producto*
-  (visibles en el kardex y en el reporte de inventario). Las entregas desde
-  consignación no mueven stock.
+- **Inventario**: las devoluciones generan una **entrada**, con referencia
+  *Cambio de producto* (visible en el kardex y en el reporte de inventario).
+  Las entregas desde consignación no mueven stock; solo las entregas desde
+  bodega de cambios anteriores al 18-09-2026 generaron una **salida**.
 - **Contabilidad**: asiento **a costo** (costo promedio del producto en su
   bodega): *Inventario* contra *Costo de ventas* por el neto entre lo devuelto
   y lo entregado desde bodega; lo entregado desde consignación sale de
@@ -323,9 +334,20 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   estado **facturada** (las de venta directa no salen aquí), ítems
   que sean bienes (no servicios) y con saldo pendiente de devolver. Búsquela
   por el número de la factura de venta que generó la factura de consignación.
-- **No aparece la consignación**: debe estar en estado **Entregada**, ser del
-  mismo cliente del cambio y tener saldo (no retornado, no facturado, no
-  entregado en otro cambio).
+- **No aparece la consignación** (*"No hay una consignación entregada con ese
+  número y saldo pendiente"*): búsquela por su **número**, no por NUP, lote o
+  producto. Debe estar en estado **Entregada**, ser del mismo cliente del
+  cambio y tener saldo (no retornado, no facturado, no entregado en otro
+  cambio). Si escribió el número completo, revise también la serie.
+- **No encuentro un producto de bodega o del catálogo para entregar**: desde el
+  18-09-2026 lo que se entrega a cambio sale solo de consignaciones.
+- **"Lo que se entrega a cambio debe salir de una consignación (fila …)"**: el
+  cambio trae una entrega desde bodega o catálogo que no estaba guardada en el
+  borrador. Quítela y busque la consignación por su número.
+- **"La entrega desde bodega de … no puede aumentar su cantidad"** o **"…no
+  puede cambiar de producto"**: es una entrega desde bodega de un borrador
+  anterior al 18-09-2026. Déjela como estaba o redúzcala; lo que se agregue
+  debe salir de una consignación.
 - **La factura dice *Sin factura***: no hay número de factura de venta que
   mostrar. Al pasar el mouse sobre el texto, el listado dice cuál de estos casos
   es:
@@ -351,13 +373,22 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 - **"…la base de datos aún no lo admite: aplique
   database/migrations/20260916_facturacion_cv_registro_cambio.sql"**: falta
   actualizar la base de datos; avise al administrador del sistema. Mientras
-  tanto se pueden emitir cambios que entregan desde bodega o catálogo.
+  tanto solo se pueden emitir cambios que no entregan productos.
 - **El asiento tiene una cuenta vacía**: falta configurar la cuenta en
   *Configuración contable* (Inventario y Costo de ventas del concepto Ventas,
   Mercadería en consignación del concepto Consignación). Se puede completar en
   la pestaña Asiento contable.
 
 ## Historial de cambios
+
+- **1.17** — *Productos que entrega a cambio* se busca **solo por el número de
+  la consignación**: completo (`001-001-000000012`, entonces solo esa serie) o
+  solo el secuencial, con o sin ceros. Ya no busca por NUP, lote, producto ni
+  cliente, con el campo vacío ya no lista las consignaciones del cliente, y ya
+  no ofrece existencias de bodega ni el catálogo: todo lo que se entrega sale de
+  una consignación, y el sistema rechaza al guardar cualquier otra entrega. Los
+  cambios que ya tenían entregas desde bodega o catálogo las conservan; en un
+  borrador se pueden reducir o quitar, pero no aumentar ni cambiar de producto.
 
 - **1.16** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla. Como
   esta tabla muestra las dos patas del cambio línea a línea, el producto, el lote, el NUP,

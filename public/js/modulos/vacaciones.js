@@ -1,5 +1,11 @@
 /**
- * Modal de Vacaciones (Nómina): empleado con buscador, saldo y valor.
+ * Modal de Vacaciones (Nómina): empleado con buscador, saldo, valor y el cuadro de
+ * períodos de servicio (CuadroPeriodosVacaciones, en vacaciones_periodos.js), donde se
+ * marcan los ya tomados o pagados antes del sistema.
+ *
+ * Dos modos sobre el mismo modal:
+ *   - 'vacacion': registrar/editar una vacación (el cuadro de períodos se puede plegar).
+ *   - 'periodos': solo el empleado y su cuadro (botón "Períodos" del listado).
  */
 (function (window, document) {
     'use strict';
@@ -8,19 +14,97 @@
     let modalInst = null;
     const form = document.getElementById('formVacacion');
     let sueldoEmp = 0;
+    let modo = 'vacacion';
+    let periodosAbiertos = leerPreferencia();
 
     const $ = (id) => document.getElementById(id);
     const money = (v) => '$' + (parseFloat(v) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const dias = (v) => {
+        const t = (Math.round((parseFloat(v) || 0) * 100) / 100).toLocaleString('es-EC', { maximumFractionDigits: 2 });
+        return t + (t === '1' ? ' día' : ' días');
+    };
+    const fmtFecha = (ymd) => ymd ? `${ymd.substring(8, 10)}-${ymd.substring(5, 7)}-${ymd.substring(0, 4)}` : '—';
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    const empBuscar = $('vac_empleado_buscar');
+    const empHidden = $('vac_id_empleado');
+    const empResultados = $('vac_empleado_resultados');
 
     function getModal() {
         if (!modalInst && typeof bootstrap !== 'undefined') modalInst = new bootstrap.Modal($('modalVacacion'));
         return modalInst;
     }
 
+    // Preferencia del usuario: cuadro de períodos abierto o plegado al registrar vacaciones.
+    function leerPreferencia() {
+        try { return localStorage.getItem('cmg_vac_periodos') !== '0'; } catch (e) { return true; }
+    }
+    function guardarPreferencia(v) {
+        try { localStorage.setItem('cmg_vac_periodos', v ? '1' : '0'); } catch (e) { }
+    }
+
+    function aplicarModo(nuevo, titulo) {
+        modo = nuevo;
+        const soloPeriodos = nuevo === 'periodos';
+        $('tituloModalVac').textContent = titulo;
+        $('iconoModalVac').className = `bi ${soloPeriodos ? 'bi-calendar-check' : 'bi-umbrella'} me-2 text-primary`;
+        $('vac_campos').classList.toggle('d-none', soloPeriodos);
+        $('vac_container_estado').classList.toggle('d-none', soloPeriodos);
+        $('vac_container_empleado').classList.toggle('col-md-8', !soloPeriodos);
+        $('vac_container_empleado').classList.toggle('col-12', soloPeriodos);
+        $('btnGuardarVac').classList.toggle('d-none', soloPeriodos);
+        $('btnCancelarVacTxt').textContent = soloPeriodos ? 'Cerrar' : 'Cancelar';
+        // En modo períodos el cuadro siempre está abierto: el botón de plegar sobra.
+        $('vac_btn_periodos').classList.toggle('d-none', soloPeriodos);
+    }
+
+    // ─── Cuadro de períodos + panel de saldo ─────────────────────────────────
+    // Tras marcar o quitar una marca, el cuadro se recarga solo; aquí se repinta el panel.
+    const cuadro = new window.CuadroPeriodosVacaciones($('vac_cuadro_periodos'), { onCambio: pintarPanel });
+
+    function pintarPanel(d) {
+        const saldo = parseFloat(d.saldo) || 0;
+        sueldoEmp = parseFloat(d.sueldo_base) || 0;
+        $('vac_info_antig').textContent = d.antiguedad || '—';
+        $('vac_info_derecho').textContent = d.fecha_ingreso ? `Derecho del año: ${dias(d.derecho_anio_actual)}` : '';
+        $('vac_info_acumulado').textContent = dias(d.total_derecho);
+        $('vac_info_marcados').textContent = dias(d.dias_marcados);
+        $('vac_info_gozados').textContent = dias(d.dias_gozados_total);
+        $('vac_info_saldo').textContent = dias(saldo);
+        $('vac_info_saldo').classList.toggle('text-danger', saldo < 0);
+        $('vac_info_saldo').classList.toggle('text-primary', saldo >= 0);
+        $('vac_info_sueldo').textContent = money(d.sueldo_base);
+        $('vac_info_ingreso').textContent = d.fecha_ingreso ? fmtFecha(d.fecha_ingreso) : 'sin registrar';
+        $('vac_info').classList.remove('d-none');
+        actualizarSeccionPeriodos();
+        cuadro.scrollAlPrimerPendiente();
+        recalcularValor();
+    }
+
+    async function cargarInfoEmpleado(idEmpleado) {
+        // Al editar, la vacación abierta no cuenta en el saldo (se está reemplazando).
+        const d = await cuadro.cargar(idEmpleado, { exclude: $('vac_id').value || 0 });
+        if (d) pintarPanel(d);
+    }
+
+    function actualizarSeccionPeriodos() {
+        const hayEmpleado = !!(empHidden && empHidden.value) && !$('vac_info').classList.contains('d-none');
+        const abierto = modo === 'periodos' || periodosAbiertos;
+        $('vac_periodos').classList.toggle('d-none', !(hayEmpleado && abierto));
+        const txt = abierto ? 'Ocultar períodos' : 'Ver períodos';
+        const n = cuadro.pendientes;
+        $('vac_btn_periodos_txt').textContent = n > 0 ? `${txt} (${n} pendiente${n === 1 ? '' : 's'})` : txt;
+        $('vac_btn_periodos_chev').className = `bi ${abierto ? 'bi-chevron-up' : 'bi-chevron-down'} ms-1`;
+    }
+
+    $('vac_btn_periodos').addEventListener('click', () => {
+        periodosAbiertos = !periodosAbiertos;
+        guardarPreferencia(periodosAbiertos);
+        actualizarSeccionPeriodos();
+        cuadro.scrollAlPrimerPendiente();
+    });
+
     // ─── Buscador de empleado ────────────────────────────────────────────────
-    const empBuscar = $('vac_empleado_buscar');
-    const empHidden = $('vac_id_empleado');
-    const empResultados = $('vac_empleado_resultados');
     let empTimer = null;
 
     const ocultarResultados = () => empResultados && empResultados.classList.add('d-none');
@@ -29,8 +113,15 @@
         if (empHidden) empHidden.value = id || '';
         if (empBuscar) empBuscar.value = texto || '';
         ocultarResultados();
-        if (id) cargarInfoEmpleado(id);
-        else { $('vac_info').classList.add('d-none'); sueldoEmp = 0; recalcularValor(); }
+        if (id) {
+            cargarInfoEmpleado(id);
+        } else {
+            cuadro.limpiar();
+            $('vac_info').classList.add('d-none');
+            $('vac_periodos').classList.add('d-none');
+            sueldoEmp = 0;
+            recalcularValor();
+        }
     }
 
     async function buscarEmpleados(q) {
@@ -44,9 +135,9 @@
                 return;
             }
             empResultados.innerHTML = json.data.map(e => {
-                const texto = `${e.nombres_apellidos} (${e.identificacion})`.replace(/"/g, '&quot;');
-                return `<button type="button" class="list-group-item list-group-item-action py-1 small" data-id="${e.id}" data-texto="${texto}">
-                            <span class="fw-medium">${e.nombres_apellidos}</span> <span class="text-muted">${e.identificacion}</span>
+                const texto = esc(`${e.nombres_apellidos} (${e.identificacion})`);
+                return `<button type="button" class="list-group-item list-group-item-action py-1 small" data-id="${esc(e.id)}" data-texto="${texto}">
+                            <span class="fw-medium">${esc(e.nombres_apellidos)}</span> <span class="text-muted">${esc(e.identificacion)}</span>
                         </button>`;
             }).join('');
             empResultados.classList.remove('d-none');
@@ -55,11 +146,18 @@
 
     if (empBuscar) {
         empBuscar.addEventListener('input', () => {
-            if (empHidden) empHidden.value = '';
+            if (empHidden && empHidden.value) setEmpleado('', empBuscar.value);
             const q = empBuscar.value.trim();
             clearTimeout(empTimer);
             if (q.length < 2) { ocultarResultados(); return; }
             empTimer = setTimeout(() => buscarEmpleados(q), 300);
+        });
+        // Con un empleado ya elegido, Retroceso/Suprimir limpian la selección entera.
+        empBuscar.addEventListener('keydown', (ev) => {
+            if ((ev.key === 'Backspace' || ev.key === 'Delete') && empHidden && empHidden.value) {
+                ev.preventDefault();
+                setEmpleado('', '');
+            }
         });
         empBuscar.addEventListener('blur', () => setTimeout(ocultarResultados, 200));
     }
@@ -72,28 +170,10 @@
         });
     }
 
-    async function cargarInfoEmpleado(idEmpleado) {
-        const excl = $('vac_id').value || 0;
-        try {
-            const resp = await fetch(`${urlModulo}/getInfoEmpleadoAjax?id_empleado=${idEmpleado}&exclude=${excl}`);
-            const json = await resp.json();
-            if (!json.ok) return;
-            const d = json.data;
-            sueldoEmp = parseFloat(d.sueldo_base) || 0;
-            $('vac_info_antig').textContent = d.antiguedad || '—';
-            $('vac_info_derecho').textContent = d.derecho_anio_actual + ' días';
-            $('vac_info_gozados').textContent = d.dias_gozados_total + ' días';
-            $('vac_info_saldo').textContent = d.saldo + ' días';
-            $('vac_info_sueldo').textContent = money(d.sueldo_base);
-            $('vac_info').classList.remove('d-none');
-            recalcularValor();
-        } catch (e) {}
-    }
-
     // ─── Valor y días ────────────────────────────────────────────────────────
     function recalcularValor() {
-        const dias = parseFloat($('vac_dias').value) || 0;
-        $('vac_valor_preview').value = money((sueldoEmp / 30) * dias);
+        const d = parseFloat($('vac_dias').value) || 0;
+        $('vac_valor_preview').value = money((sueldoEmp / 30) * d);
     }
 
     function diasEntreFechas() {
@@ -122,7 +202,7 @@
         if (!form) return;
         form.reset();
         $('vac_id').value = '';
-        $('tituloModalVac').textContent = 'Nueva Vacación';
+        aplicarModo('vacacion', 'Nueva Vacación');
         $('btnEliminarVac')?.classList.add('d-none');
         setEmpleado('', '');
         $('vac_afecta_rol').checked = true;
@@ -132,13 +212,31 @@
         getModal()?.show();
     };
 
+    // Solo los períodos del empleado (botón "Períodos" del listado).
+    window.abrirModalPeriodos = function () {
+        if (!form) return;
+        form.reset();
+        $('vac_id').value = '';
+        aplicarModo('periodos', 'Períodos de vacaciones');
+        $('btnEliminarVac')?.classList.add('d-none');
+        setEmpleado('', '');
+        getModal()?.show();
+    };
+
+    $('modalVacacion').addEventListener('shown.bs.modal', () => {
+        // Al crear o abrir períodos, directo al buscador. Al editar no: con el empleado
+        // ya elegido, un Retroceso ahí limpiaría la selección.
+        if (!$('vac_id').value && !empHidden.value) empBuscar?.focus();
+        cuadro.scrollAlPrimerPendiente();
+    });
+
     window.abrirModalEditar = async function (tr) {
         const rowData = (tr instanceof HTMLElement) ? JSON.parse(tr.dataset.row) : tr;
         const id = rowData.id;
         if (!form || !id) return;
         form.reset();
         $('vac_id').value = id;
-        $('tituloModalVac').textContent = 'Editar Vacación';
+        aplicarModo('vacacion', 'Editar Vacación');
         $('btnEliminarVac')?.classList.remove('d-none');
         $('vac_estado').disabled = false;
         getModal()?.show();
@@ -167,6 +265,7 @@
 
     if (form) {
         form.addEventListener('submit', async () => {
+            if (modo === 'periodos') return; // en ese modo no hay vacación que guardar
             if (!empHidden.value) { Swal.fire({ icon: 'info', title: 'Seleccione un empleado' }); return; }
             const id = $('vac_id').value;
             const btn = $('btnGuardarVac');
@@ -205,7 +304,7 @@
             } else {
                 Swal.fire({ icon: 'error', title: 'Error', text: json.error });
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 
     window.eliminarRegistro = (id) => eliminarConSwal(id, false);

@@ -13,15 +13,24 @@ use App\models\CatalogoNovedades;
  * Reglas (confirmadas):
  *  - Base: MENSUAL=sueldo_base prorrateado por días trabajados (ingreso/salida),
  *    QUINCENA=valor_quincena, SEMANAL=valor_semanal.
- *  - Prorrateo (solo MENSUAL): factor = díasTrabajados/30. Aplica a sueldo, décimo
- *    tercero/cuarto mensualizados y fondos de reserva. La base del IESS hereda el
- *    sueldo ya prorrateado. Las faltas adicionales se cargan con la novedad 10.
+ *  - Prorrateo (solo MENSUAL): factor = díasTrabajados/30 (días de contrato en el
+ *    mes). Aplica a sueldo, décimo tercero/cuarto mensualizados y fondos de reserva.
+ *    La base del IESS hereda el sueldo ya prorrateado.
+ *  - Días no laborados (novedad 10) en el MENSUAL: restan del sueldo ganado. Van como
+ *    ingreso NEGATIVO marcado "aporta IESS" (no como egreso), así bajan la base del
+ *    IESS y del IR, los fondos de reserva y el 13º mensualizados (calculados sobre
+ *    los días laborados) y, sin tocar nada más, las provisiones y el 13º del módulo
+ *    Décimo Tercero, que suman los ingresos gravados. El 14º sigue por días de
+ *    contrato, igual que el módulo Décimo Cuarto. En QUINCENA/SEMANAL siguen siendo
+ *    egreso: así el neteo del mensual los respeta (ver "Descuentos aplicados...").
  *  - Horas (novedades 4/5/6): tarifa = sueldo/hora_normal * (1+recargo%) * nº horas.
+ *  - Otros Ingresos (1) y horas llevan la marca "aporta IESS" de la novedad
+ *    (CatalogoNovedades::aportaIess); sin marca, las horas sí y Otros Ingresos no.
  *  - IESS personal (solo MENSUAL): base_iess * empleado.aporte_personal%. La base
- *    incluye sueldo + horas + rubros/ingresos marcados "aporta IESS".
+ *    incluye sueldo + horas/otros ingresos/rubros fijos marcados "aporta IESS" + vacaciones.
  *  - Fondos de reserva 8.33% del sueldo si fondos_reserva='rol' (solo MENSUAL).
  *  - Décimos si 'mensualiza' (13º = sueldo/12, 14º = SBU/12) (solo MENSUAL).
- *  - Días no laborados (novedad 10): días * sueldo/30 como egreso.
+ *  - Días no laborados (novedad 10): días * sueldo/30 (ver arriba cómo se aplica).
  *  - Anticipo (novedad 3): NO se descuenta al registrarse; se paga por egreso y el rol
  *    descuenta solo lo pagado ($anticiposPagados[id_novedad]).
  *  - Descuento (2): egreso directo por su valor.
@@ -32,11 +41,17 @@ use App\models\CatalogoNovedades;
  *    por la empresa (pagado por egreso); si no, no descuenta ($prestamosNoDesembolsados[id_novedad]).
  *  - Neteo (solo MENSUAL): resta lo ya pagado en SEMANAL/QUINCENA del mes, MÁS los
  *    descuentos que ya se aplicaron en esas corridas (sin esto, un descuento de quincena
- *    no afecta el total del mes: solo se corre de la quincena al cierre de mes).
+ *    no afecta el total del mes: solo se corre de la quincena al cierre de mes). Y
+ *    vuelve a sumar, como ingreso, lo que esas corridas pagaron además de su base
+ *    (horas, otros ingresos, rubros fijos): como el neteo resta TODO lo pagado, sin eso
+ *    esos ingresos se pagaban en la quincena y se descontaban a fin de mes. Los que
+ *    aportan al IESS entran a la base del mes (en quincena/semana no hay IESS).
+ *  - En quincena/semana solo hay ingresos y descuentos: los días no laborados y el
+ *    aviso de salida van siempre al mensual (NovedadService los fija en 'rol').
  */
 class RolCalculoService
 {
-    public function calcular(array $emp, string $tipo, array $salario, array $rubrosFijos, array $novedades, float $neteo = 0.0, float $vacaciones = 0.0, int $diasTrabajados = 30, array $anticiposPagados = [], array $prestamosNoDesembolsados = [], array $tramosIr = [], float $rebajaGastosPersonalesAnual = 0.0, float $descuentosNeteo = 0.0): array
+    public function calcular(array $emp, string $tipo, array $salario, array $rubrosFijos, array $novedades, float $neteo = 0.0, float $vacaciones = 0.0, int $diasTrabajados = 30, array $anticiposPagados = [], array $prestamosNoDesembolsados = [], array $tramosIr = [], float $rebajaGastosPersonalesAnual = 0.0, float $descuentosNeteo = 0.0, array $ingresosNeteo = []): array
     {
         $esMensual = $tipo === 'MENSUAL';
         $rubros = [];
@@ -73,6 +88,11 @@ class RolCalculoService
         $recSuplement = (float) ($salario['hora_suplementaria'] ?? 50);
         $recExtra     = (float) ($salario['hora_extraordinaria'] ?? 100);
         $tarifaHora   = $sueldoBase > 0 ? $sueldoBase / $horaNormal : 0.0;
+        // Si el empleado aporta al IESS, el concepto avisa cuál ingreso va sin IESS
+        // (si no aporta, ninguno va: sería ruido en cada línea).
+        $empAportaIess = $this->esVerdadero($emp['aporta_iess'] ?? true);
+        // Días no laborados ya restados del sueldo del mensual (valorizados).
+        $descuentoDias = 0.0;
 
         foreach ($novedades as $n) {
             $cod = (string) $n['tipo_codigo'];
@@ -88,9 +108,11 @@ class RolCalculoService
             if (in_array($cod, CatalogoNovedades::CODS_HORAS, true)) {
                 $rec = match ($cod) { '4' => $recNocturna, '5' => $recSuplement, default => $recExtra };
                 $monto = round($tarifaHora * (1 + $rec / 100) * $val, 2);
-                $rubros[] = $this->r('ingreso', $nom . ' (' . $val . 'h)', $cod, 'novedad', $monto, true, $idn);
+                $ai = CatalogoNovedades::aportaIess($cod, $n['aporta_iess'] ?? null);
+                $sinIess = $empAportaIess && !$ai ? ', sin IESS' : '';
+                $rubros[] = $this->r('ingreso', $nom . ' (' . $val . 'h' . $sinIess . ')', $cod, 'novedad', $monto, $ai, $idn);
                 $ingresos += $monto;
-                if ($esMensual) $baseIess += $monto;
+                if ($esMensual && $ai) $baseIess += $monto;
                 continue;
             }
 
@@ -116,14 +138,25 @@ class RolCalculoService
             }
 
             switch ($cod) {
-                case '1': // Otros Ingresos
-                    $rubros[] = $this->r('ingreso', $nom, $cod, 'novedad', $val, false, $idn);
+                case '1': // Otros Ingresos (bonos, comisiones): aporta al IESS según su marca
+                    $ai = CatalogoNovedades::aportaIess($cod, $n['aporta_iess'] ?? null);
+                    $rubros[] = $this->r('ingreso', $nom . ($empAportaIess && !$ai ? ' (sin IESS)' : ''), $cod, 'novedad', $val, $ai, $idn);
                     $ingresos += $val;
+                    if ($esMensual && $ai) $baseIess += $val;
                     break;
-                case '10': // Días no laborados -> egreso valorizado
+                case '10': // Días no laborados, valorizados a sueldo/30
                     $monto = round($val * $sueldoDiario, 2);
-                    $rubros[] = $this->r('egreso', $nom . ' (' . $val . 'd)', $cod, 'novedad', $monto, false, $idn);
-                    $egresos += $monto;
+                    if ($esMensual) {
+                        // Restan del sueldo ganado (ver cabecera): nunca más que el sueldo del mes.
+                        $monto = min($monto, max(0.0, round($base - $descuentoDias, 2)));
+                        $rubros[] = $this->r('ingreso', $nom . ' (' . $val . 'd)', $cod, 'novedad', -$monto, true, $idn);
+                        $ingresos      -= $monto;
+                        $baseIess      -= $monto;
+                        $descuentoDias += $monto;
+                    } else {
+                        $rubros[] = $this->r('egreso', $nom . ' (' . $val . 'd)', $cod, 'novedad', $monto, false, $idn);
+                        $egresos += $monto;
+                    }
                     break;
                 default: // 2 Descuento, 7 Préstamo Quirografario, 8 Préstamo Hipotecario: descuento directo, sin egreso
                     $rubros[] = $this->r('egreso', $nom, $cod, 'novedad', $val, false, $idn);
@@ -155,10 +188,29 @@ class RolCalculoService
             $baseIess += $vacaciones;
         }
 
+        // 3c) Ingresos ya pagados en las quincenas/semanas del mes, sin su base (ver
+        // cabecera). Conservan código, origen y marca de IESS, así el asiento, las
+        // provisiones y el módulo Décimo Tercero los tratan igual que si fueran del mes.
+        if ($esMensual) {
+            foreach ($ingresosNeteo as $in) {
+                $val = round((float) ($in['valor'] ?? 0), 2);
+                if ($val == 0.0) continue;
+                $ai = $this->esVerdadero($in['aporta_iess'] ?? false);
+                $codigo = ($in['codigo'] ?? '') !== '' ? (string) $in['codigo'] : null;
+                $rubros[] = $this->r('ingreso', $in['concepto'] . ' — ' . $this->nombreCorrida($in), $codigo, (string) $in['origen'], $val, $ai);
+                $ingresos += $val;
+                if ($ai) $baseIess += $val;
+            }
+        }
+
         // 4) Beneficios (solo MENSUAL)
         $aportePatronal = 0.0;
         if ($esMensual) {
-            // Fondos de reserva (proporcional a días trabajados).
+            // Sueldo de los días laborados: el de los días de contrato menos los días
+            // no laborados. Es la base de los fondos de reserva y del 13º mensualizados.
+            $sueldoLaborado = max(0.0, $sueldoBase * $factor - $descuentoDias);
+
+            // Fondos de reserva (proporcional a días laborados).
             // 'desde_anio' = se paga solo una vez cumplido el año de servicio; quien
             // resuelve si ya corresponde en este período es RolPagoService, que sí
             // conoce el mes del rol y los períodos del empleado (fondos_reserva_aplica).
@@ -168,16 +220,22 @@ class RolCalculoService
 
             if ($pagaFR && $sueldoBase > 0) {
                 $pctFR = (float) ($salario['fondo_reserva'] ?? 8.33);
-                $fr = round($sueldoBase * $factor * $pctFR / 100, 2);
-                $rubros[] = $this->r('ingreso', 'Fondos de Reserva', null, 'fondos', $fr, false);
-                $ingresos += $fr;
+                $fr = round($sueldoLaborado * $pctFR / 100, 2);
+                if ($fr > 0) {
+                    $rubros[] = $this->r('ingreso', 'Fondos de Reserva', null, 'fondos', $fr, false);
+                    $ingresos += $fr;
+                }
             }
-            // Décimos mensualizados (proporcional a días trabajados)
+            // Décimo tercero mensualizado (proporcional a días laborados)
             if (($emp['decimo_tercero'] ?? '') === 'mensualiza' && $sueldoBase > 0) {
-                $dt = round($sueldoBase * $factor / 12, 2);
-                $rubros[] = $this->r('ingreso', 'Décimo Tercero', null, 'decimo', $dt, false);
-                $ingresos += $dt;
+                $dt = round($sueldoLaborado / 12, 2);
+                if ($dt > 0) {
+                    $rubros[] = $this->r('ingreso', 'Décimo Tercero', null, 'decimo', $dt, false);
+                    $ingresos += $dt;
+                }
             }
+            // Décimo cuarto mensualizado: por días de contrato (no descuenta días no
+            // laborados), igual que el módulo Décimo Cuarto.
             if (($emp['decimo_cuarto'] ?? '') === 'mensualiza') {
                 $dc = round(((float) ($salario['sbu'] ?? 0)) * $factor / 12, 2);
                 if ($dc > 0) {
@@ -254,6 +312,14 @@ class RolCalculoService
             'tipo' => $tipo, 'concepto' => $concepto, 'codigo' => $codigo,
             'origen' => $origen, 'valor' => round($valor, 2), 'aporta_iess' => $aportaIess, 'id_novedad' => $idNovedad,
         ];
+    }
+
+    /** "Quincena 1", "Semana 3": la corrida en la que se pagó un ingreso que se netea. */
+    private function nombreCorrida(array $in): string
+    {
+        $nombre = ($in['tipo_rol'] ?? '') === 'SEMANAL' ? 'Semana' : 'Quincena';
+        $n = (int) ($in['numero_periodo'] ?? 0);
+        return $n > 0 ? "{$nombre} {$n}" : $nombre;
     }
 
     /** Un rubro fijo aplica al MENSUAL si su frecuencia es rol/mensual/vacía; a QUINCENA/SEMANAL solo si coincide. */

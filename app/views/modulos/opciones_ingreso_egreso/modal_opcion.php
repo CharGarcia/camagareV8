@@ -282,7 +282,14 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                         if (res.ok) {
                             if (typeof window.onOpcionCreada === 'function') {
                                 const comp = formData.get('comportamiento') || 'GENERAL';
-                                window.onOpcionCreada(res.id, formData.get('nombre'), comp);
+                                // La cuenta viaja para que Ingresos/Egresos la prellenen sin recargar;
+                                // no en los conceptos de cartera, a los que el servidor se la ignora.
+                                const inpCta = document.getElementById('oie-idcuenta');
+                                const idCta  = parseInt(formData.get('id_cuenta_contable') || '0') || 0;
+                                const cuenta = (idCta && !OIE_COMPORTAMIENTOS_CUENTA_BLOQUEADA.includes(comp))
+                                    ? { id: idCta, codigo: inpCta.dataset.codigo || '', nombre: inpCta.dataset.nombre || '' }
+                                    : null;
+                                window.onOpcionCreada(res.id, formData.get('nombre'), comp, cuenta);
                                 if (modalInstanciaOIE) modalInstanciaOIE.hide();
                             } else {
                                 Swal.fire({
@@ -318,6 +325,9 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
 
         if (item) {
             inpId.value = item.id;
+            // Código y nombre por separado para window.onOpcionCreada (ver el submit).
+            inpId.dataset.codigo = item.codigo || '';
+            inpId.dataset.nombre = item.nombre || '';
             if (inpSrc) {
                 inpSrc.value = `${item.codigo} - ${item.nombre}`;
                 inpSrc.classList.add('bg-light', 'fw-medium', 'text-primary');
@@ -326,6 +336,8 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
             if (btnClear) btnClear.classList.remove('d-none');
         } else {
             inpId.value = '';
+            delete inpId.dataset.codigo;
+            delete inpId.dataset.nombre;
             if (inpSrc) {
                 inpSrc.value = '';
                 inpSrc.classList.remove('bg-light', 'fw-medium', 'text-primary');

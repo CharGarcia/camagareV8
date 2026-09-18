@@ -6,7 +6,7 @@ ruta_modulo: modulos/jornadas
 tipo: modulo
 visibilidad: todos
 etiquetas: jornadas, horas trabajadas, atrasos, faltas, horas extra, suplementarias, asistencia diaria, resumen del dia, recalcular, jornada incompleta, requieren revision, sin salida, generar novedades, rol de pagos, exportar, pdf, excel, buscar jornadas, buscador, filtros, filtrar jornadas, jornadas por punto, jornadas sin salida, chips
-version: 2.1
+version: 2.2
 orden: 40
 estado: activo
 ---
@@ -90,7 +90,10 @@ desde ese módulo.
 ### Generar Novedades
 
 Traduce las jornadas del período en novedades para la nómina. Se elige **mes**,
-**año** y a qué **afecta**: *Rol de Pagos*, *Quincena* o *Pago Semanal*.
+**año** y a qué **afecta**: *Rol de Pagos*, *Quincena* o *Pago Semanal*. Las
+faltas (y la fracción de día por atrasos) se registran siempre como *Días no
+laborados* del **rol mensual**, aunque se elija quincena o semana: en la quincena
+y en la semana solo hay ingresos y descuentos.
 
 Es **manual a propósito**: nada se traslada al rol sin que alguien lo pida. Y se
 puede repetir las veces que haga falta — no duplica, actualiza (ver *Reglas de
@@ -260,6 +263,8 @@ ese período ya está pagado, esas novedades se omiten y el resumen final lo dic
 
 ## Historial de cambios
 
+- **2.2** — Generar Novedades registra las faltas (y la fracción de día por
+  atrasos) siempre en el rol mensual, aunque se elija quincena o semana.
 - **2.1** — Nuevo buscador del listado: búsqueda libre en todas las columnas
   (sin Estado), observación, punto y horario; botón embudo con la ventana de
   filtros (se suman novedad generada, punto de servicio, horario, horas de

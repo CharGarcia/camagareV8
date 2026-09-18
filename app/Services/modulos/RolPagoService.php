@@ -317,6 +317,7 @@ class RolPagoService
         $anticiposMap     = $this->repo->getAnticiposPagadosMasivo($idEmpresa, $idsNovAnticipo);
         $prestamosNoDesemb = $this->repo->getPrestamosNoDesembolsadosMasivo($idEmpresa, $idsNovPrestamo);
         $neteoMap         = $esMensual ? $this->repo->getPagadoNeteoMasivo($idEmpresa, $ids, $anio, $mes) : [];
+        $ingNeteoMap      = $esMensual ? $this->repo->getIngresosNeteoMasivo($idEmpresa, $ids, $anio, $mes) : [];
         $vacMap           = $esMensual ? $vacRepo->getValorParaRolMasivo($idEmpresa, $ids, $anio, $mes) : [];
         $mensualPagadoSet = $esParcial ? $this->repo->getMensualPagadoMasivo($idEmpresa, $ids, $anio, $mes) : [];
 
@@ -366,7 +367,7 @@ class RolPagoService
                     }
                 }
 
-                $calc = $this->calc->calcular($emp, $tipo, $salario, $rubrosF, $noveds, $neteo, $vacacion, $dias, $anticiposMap, $prestamosNoDesemb, $tramosIr, (float) ($rebajaGastoMap[$idEmp] ?? 0.0), $descuentosNeteo);
+                $calc = $this->calc->calcular($emp, $tipo, $salario, $rubrosF, $noveds, $neteo, $vacacion, $dias, $anticiposMap, $prestamosNoDesemb, $tramosIr, (float) ($rebajaGastoMap[$idEmp] ?? 0.0), $descuentosNeteo, $ingNeteoMap[$idEmp] ?? []);
 
                 // Omite empleados sin ningún concepto (p. ej. base 0 y sin novedades).
                 if ($calc['total_ingresos'] == 0 && $calc['total_egresos'] == 0) {

@@ -30,9 +30,13 @@ $colores = ['registrado' => 'info', 'pagado' => 'success', 'anulado' => 'danger'
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-umbrella me-2 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
-    <?php if ($perm['crear']): ?>
-        <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalCrear()"><i class="bi bi-plus-lg me-1"></i> Nueva</button>
-    <?php endif; ?>
+    <div class="d-flex gap-2">
+        <?php // Períodos de un empleado: ver su cuadro y marcar los ya tomados o pagados antes del sistema. ?>
+        <button type="button" class="btn btn-outline-primary btn-sm px-3" onclick="abrirModalPeriodos()" title="Ver los períodos de un empleado y marcar los ya tomados o pagados"><i class="bi bi-calendar-check me-1"></i> Períodos</button>
+        <?php if ($perm['crear']): ?>
+            <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalCrear()"><i class="bi bi-plus-lg me-1"></i> Nueva</button>
+        <?php endif; ?>
+    </div>
 </div>
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
@@ -167,6 +171,7 @@ $colores = ['registrado' => 'info', 'pagado' => 'success', 'anulado' => 'danger'
 
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include 'modal_vacacion.php'; ?>
+<script src="<?= $base ?>/js/modulos/vacaciones_periodos.js?v=<?= asset_ver('/js/modulos/vacaciones_periodos.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/vacaciones.js?v=<?= asset_ver('/js/modulos/vacaciones.js') ?>"></script>
 
 <script>

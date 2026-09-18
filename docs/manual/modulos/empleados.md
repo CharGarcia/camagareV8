@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
-etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce
-version: 1.4
+etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema
+version: 1.5
 orden: 10
 estado: activo
 ---
@@ -59,6 +59,35 @@ verde descarga el **Excel**. Ambos incluyen los mismos datos —generales,
 laborales, bancarios, historial de periodos y rubros fijos—; el Excel los
 organiza en secciones con pares etiqueta/valor. Los dos quedan deshabilitados
 (avisan "Guarde primero") mientras el empleado no se ha guardado.
+
+## Pestaña Vacaciones: períodos y saldo
+
+La pestaña **Vacaciones**, después de *Periodos*, muestra el saldo de vacaciones
+del empleado y el cuadro de sus años de trabajo, contados desde la fecha de
+ingreso. Es el mismo cuadro del módulo **Vacaciones**: ahí se marcan los
+períodos que el empleado ya **tomó** o **cobró** antes de usar el sistema, para
+dejar al día el saldo de quien viene de otro sistema con varios años en la
+empresa.
+
+1. Abra el empleado (debe estar guardado) y pase a la pestaña **Vacaciones**.
+2. Arriba ve el resumen: ingreso, antigüedad, derecho acumulado, lo tomado o
+   pagado antes del sistema, lo gozado en el sistema y el saldo pendiente.
+3. Marque la casilla de cada período ya tomado o pagado. Si solo tomó una parte,
+   cambie los días de la fila.
+4. Pulse **Marcar como tomados** o **Marcar como pagados** y confirme. El saldo
+   se actualiza al momento.
+
+Las marcas se guardan al pulsar esos botones: no hace falta el botón *Guardar*
+del empleado. Para quitar una marca, use la flecha circular de la fila.
+
+El cuadro usa la fecha de ingreso **guardada** en la pestaña *Periodos*. Si la
+corrige, guarde el empleado y el cuadro se recalcula.
+
+La pestaña aparece solo a quien tiene permiso para **ver** el módulo Vacaciones.
+Marcar períodos requiere el permiso de **crear** de ese módulo, y quitar una
+marca, el de **eliminar**. Los detalles (cómo se reparten las vacaciones entre
+los períodos, marcas parciales, avisos) están en el artículo del módulo
+*Vacaciones*.
 
 ## Credencial de asistencia (QR personal y rostro)
 
@@ -117,6 +146,9 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Historial de cambios
 
+- **1.5** — Pestaña *Vacaciones* después de *Periodos*: saldo de vacaciones del
+  empleado y cuadro de sus años de trabajo, donde se marcan los períodos ya
+  tomados o pagados antes de usar el sistema.
 - **1.4** — Botón *Probar reconocimiento* en la pestaña *Credenciales*: comprueba
   con la cámara si el sistema reconoce el rostro ya registrado, sin guardar nada.
 - **1.3** — Se documenta la pestaña *Credenciales*. El enlace y el QR personal

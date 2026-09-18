@@ -663,7 +663,7 @@ window.RI_Consignaciones = {
         const tbody = document.getElementById('ri-cv-modal-tbody');
         const tfoot = document.getElementById('ri-cv-modal-tfoot');
         const aviso = document.getElementById('ri-cv-modal-aviso');
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
         if (tfoot) tfoot.innerHTML = '';
         if (aviso) aviso.classList.add('d-none');
         ['secuencial', 'fecha', 'cliente', 'vendedor', 'responsable', 'estado'].forEach(k => {
@@ -678,7 +678,7 @@ window.RI_Consignaciones = {
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) {
-                    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">${res.error || 'No se pudo cargar el detalle'}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger">${res.error || 'No se pudo cargar el detalle'}</td></tr>`;
                     return;
                 }
                 const c = res.cabecera;
@@ -693,7 +693,7 @@ window.RI_Consignaciones = {
 
                 if (tfoot && res.totales) {
                     tfoot.innerHTML = `<tr class="table-light fw-bold">
-                        <td colspan="4" class="small text-end">Totales</td>
+                        <td colspan="5" class="small text-end">Totales</td>
                         <td class="text-end small">${res.totales.consignado}</td>
                         <td class="text-end small">${res.totales.retornado}</td>
                         <td class="text-end small">${res.totales.facturado}</td>
@@ -713,7 +713,7 @@ window.RI_Consignaciones = {
             })
             .catch(err => {
                 console.error(err);
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">Error al cargar el detalle</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger">Error al cargar el detalle</td></tr>`;
             });
     },
 

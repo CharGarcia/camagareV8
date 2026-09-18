@@ -518,7 +518,8 @@ class RolPagoRepository extends BaseRepository
         $map = array_fill_keys(array_map('intval', $ids), []);
         if (empty($ids)) return $map;
         $in = implode(',', array_map('intval', $ids));
-        $st = $this->db->prepare("SELECT id_empleado, id, tipo_codigo, tipo_nombre, valor, motivo_nombre
+        $colIess = $this->colMarcaIessNovedad();
+        $st = $this->db->prepare("SELECT id_empleado, id, tipo_codigo, tipo_nombre, valor, motivo_nombre, {$colIess}
                                   FROM novedades
                                   WHERE id_empresa = :emp AND id_empleado IN ($in) AND periodo_anio = :a
                                     AND periodo_mes = :m AND aplica_en = :ap AND estado = 'activo' AND eliminado = false
@@ -535,10 +536,11 @@ class RolPagoRepository extends BaseRepository
      *                  'descuentos'=>total_egresos de esas mismas corridas]] para el neteo mensual.
      *
      * 'neteo' es lo que ya salió de caja (se resta del rol mensual). 'descuentos' son los
-     * egresos (descuentos, préstamos cobrados, días no laborados, etc.) que YA redujeron
-     * ese pago de quincena/semana: sin restarlos también en el mensual, el descuento no
+     * egresos (descuentos, anticipos y préstamos cobrados, etc.) que YA redujeron ese
+     * pago de quincena/semana: sin restarlos también en el mensual, el descuento no
      * afecta el total del mes (solo se corre de la quincena al cierre de mes). Se agregan
      * por id de rol_detalle (no por fila de pago) para no duplicar si hubo pagos parciales.
+     * Los INGRESOS de esas mismas corridas los da getIngresosNeteoMasivo().
      */
     public function getPagadoNeteoMasivo(int $idEmpresa, array $ids, int $anio, int $mes): array
     {
@@ -568,6 +570,47 @@ class RolPagoRepository extends BaseRepository
             }
         } catch (\Throwable $e) {
             // egresos no disponible → todos en 0
+        }
+        return $map;
+    }
+
+    /**
+     * [id_empleado => rubros] con los INGRESOS de las corridas SEMANAL/QUINCENA del mes
+     * que entran al neteo (las mismas líneas que getPagadoNeteoMasivo: con algún pago
+     * por egreso no anulado), sin su base (origen 'sueldo'): horas, otros ingresos y
+     * rubros fijos de esas corridas. El rol mensual los vuelve a sumar como ingreso
+     * —el neteo ya resta todo lo pagado— y lleva a la base del IESS los que aportan.
+     */
+    public function getIngresosNeteoMasivo(int $idEmpresa, array $ids, int $anio, int $mes): array
+    {
+        $map = array_fill_keys(array_map('intval', $ids), []);
+        if (empty($ids)) return $map;
+        $in = implode(',', array_map('intval', $ids));
+        $sql = "SELECT d.id_empleado, c.tipo_rol, c.numero_periodo,
+                       rr.concepto, rr.codigo, rr.origen, rr.valor, rr.aporta_iess
+                FROM rol_detalle_rubro rr
+                JOIN rol_detalle d ON d.id = rr.id_detalle
+                JOIN rol_cabecera c ON c.id = d.id_rol
+                WHERE rr.tipo = 'ingreso' AND rr.origen <> 'sueldo'
+                  AND d.id_empresa = :emp AND d.id_empleado IN ($in)
+                  AND c.periodo_anio = :a AND c.periodo_mes = :m
+                  AND c.tipo_rol IN ('SEMANAL','QUINCENA') AND c.eliminado = false
+                  AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
+                  AND EXISTS (
+                      SELECT 1 FROM egresos_detalle ed
+                      JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                      WHERE ed.tipo_documento = 'ROL' AND ed.id_referencia_documento = d.id
+                        AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false
+                  )
+                ORDER BY d.id_empleado, c.tipo_rol, c.numero_periodo, rr.id";
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute([':emp' => $idEmpresa, ':a' => $anio, ':m' => $mes]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $map[(int) $r['id_empleado']][] = $r;
+            }
+        } catch (\Throwable $e) {
+            // egresos no disponible → sin ingresos que netear
         }
         return $map;
     }
@@ -1158,9 +1201,20 @@ class RolPagoRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Columna de la marca "aporta al IESS" de la novedad para los SELECT. Sin el SQL
+     * novedades_aporta_iess.sql aplicado sale NULL, y RolCalculoService usa lo de
+     * siempre según el tipo (CatalogoNovedades::aportaIessPorDefecto).
+     */
+    private function colMarcaIessNovedad(): string
+    {
+        return $this->columnaExiste('novedades', 'aporta_iess') ? 'aporta_iess' : 'NULL AS aporta_iess';
+    }
+
     public function getNovedades(int $idEmpresa, int $idEmpleado, int $anio, int $mes, string $aplicaEn): array
     {
-        $st = $this->db->prepare("SELECT id, tipo_codigo, tipo_nombre, valor, motivo_nombre
+        $colIess = $this->colMarcaIessNovedad();
+        $st = $this->db->prepare("SELECT id, tipo_codigo, tipo_nombre, valor, motivo_nombre, {$colIess}
                                   FROM novedades
                                   WHERE id_empresa = :emp AND id_empleado = :e AND periodo_anio = :a
                                     AND periodo_mes = :m AND aplica_en = :ap AND estado = 'activo' AND eliminado = false

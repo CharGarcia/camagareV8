@@ -145,6 +145,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'fecha'          => 'Fecha',
                     'periodo'        => 'Período',
                     'valor'          => 'Valor',
+                    'iess'           => 'Aporta IESS',
                     'aplica_en'      => 'Afecta a',
                     'motivo'         => 'Motivo',
                     'estado'         => 'Estado',
@@ -179,6 +180,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header" data-sort="fecha" role="button" data-col="fecha">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th data-col="periodo">Período</th>
                         <th class="text-end sortable-header" data-sort="valor" role="button" data-col="valor">Valor <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center" data-col="iess" title="Aporta al IESS (Otros Ingresos y horas)">IESS</th>
                         <th data-col="aplica_en">Afecta a</th>
                         <th data-col="motivo">Motivo</th>
                         <th class="text-center sortable-header" data-sort="estado" role="button" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
@@ -188,12 +190,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 </thead>
                 <tbody id="tbodyNovedades">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="11" class="text-center py-5 text-muted">No se encontraron novedades registradas.</td></tr>
+                        <tr><td colspan="12" class="text-center py-5 text-muted">No se encontraron novedades registradas.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $row):
                             $mes = $meses[(int) $row['periodo_mes']] ?? $row['periodo_mes'];
                             $estadoOk = ($row['estado'] ?? 'activo') === 'activo';
                             $pagada = !empty($row['pagada']);
+                            $pagaIess = CatalogoNovedades::pagaIess((string) $row['tipo_codigo'], $row['aporta_iess'] ?? null, $row['empleado_aporta_iess'] ?? null);
                         ?>
                             <tr class="novedad-row" onclick="abrirModalEditar(this)" data-row='<?= htmlspecialchars(json_encode($row), ENT_QUOTES) ?>'>
                                 <td class="ps-3 fw-medium" data-col="empleado"><?= htmlspecialchars((string) ($row['empleado_nombre'] ?? '')) ?></td>
@@ -202,6 +205,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="fecha"><?= $row['fecha'] ? date('d-m-Y', strtotime((string) $row['fecha'])) : '—' ?></td>
                                 <td data-col="periodo"><?= htmlspecialchars($mes . ' ' . $row['periodo_anio']) ?></td>
                                 <td class="text-end fw-bold" data-col="valor"><?= htmlspecialchars(CatalogoNovedades::formatValor((string) $row['tipo_codigo'], $row['valor'])) ?></td>
+                                <td class="text-center" data-col="iess">
+                                    <?php if ($pagaIess === null): ?>
+                                        <span class="text-muted">—</span>
+                                    <?php elseif ($pagaIess): ?>
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Sí</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">No</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td data-col="aplica_en"><span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25"><?= htmlspecialchars(CatalogoNovedades::nombreAplicaEn((string) ($row['aplica_en'] ?? 'rol'))) ?></span></td>
                                 <td data-col="motivo" class="small text-muted"><?= htmlspecialchars((string) ($row['motivo_nombre'] ?? '—')) ?></td>
                                 <td class="text-center" data-col="estado">

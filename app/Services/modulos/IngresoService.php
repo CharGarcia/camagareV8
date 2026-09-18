@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\IngresoRepository;
+use App\repositories\modulos\AsientoProgramadoRepository;
 use App\Rules\modulos\IngresoRules;
 use App\Services\LogSistemaService;
 use App\core\Database;
@@ -488,9 +489,28 @@ class IngresoService
         $this->recalcularSaldosInicialesCxc($idsSaldo, $idEmpresa);
     }
 
+    /**
+     * Conceptos de ingreso para el modal. `cuenta_id`/`cuenta_codigo`/`cuenta_nombre` es la
+     * cuenta que el concepto presta por defecto a las líneas de "Otros conceptos": la vigente en
+     * Configuración Contable (ver IngresoRepository::getConceptosIngreso()).
+     *
+     * Los conceptos de cartera (Factura y Recibo de venta) no prestan ninguna: su contrapartida es
+     * la Cuenta por Cobrar que Configuración Contable resuelve desde el documento, y lo que quede
+     * en su columna es una cuenta legada que el asiento ya no usa para el concepto. Si esa cuenta
+     * se colara en una línea manual, el asiento la tomaría tal cual, porque la cuenta de la línea
+     * manda sobre la del concepto (AsientoBuilderService::contrapartidaPorCuenta()).
+     */
     public function getConceptosIngreso(int $idEmpresa): array
     {
-        return $this->repository->getConceptosIngreso($idEmpresa);
+        $programadoRepo = new AsientoProgramadoRepository();
+        return array_map(static function (array $c) use ($programadoRepo): array {
+            if ($programadoRepo->tieneCuentaOficialPorComportamiento((string) ($c['comportamiento'] ?? ''))) {
+                $c['cuenta_id']     = null;
+                $c['cuenta_codigo'] = null;
+                $c['cuenta_nombre'] = null;
+            }
+            return $c;
+        }, $this->repository->getConceptosIngreso($idEmpresa));
     }
 
     public function getFacturasPendientes(int $idCliente, int $idEmpresa, ?int $excluirIngresoId = null): array

@@ -164,7 +164,22 @@ class GeneracionNovedadesService
         // $valor decide crear/eliminar (>0 crea, ≤0 elimina). Si $valorPersistir viene,
         // ese es el valor que se guarda (p. ej. 0 para el registro "Solo informativo").
         $marcadorTag = "[{$marcador} {$anio}-" . str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . ']';
-        $existente = $this->novedadRepo->getByMarcador($idEmpresa, $idEmpleado, $tipoCodigo, $aplicaEn, $mes, $anio, $marcadorTag);
+
+        // Las faltas (días no laborados) solo afectan al rol mensual, se haya elegido
+        // quincena o semana. Las que se generaron antes con otro "afecta a" se buscan
+        // igual, para actualizarlas (pasan al rol mensual) en vez de duplicarlas.
+        $destinos = [$aplicaEn];
+        if (CatalogoNovedades::soloRolMensual($tipoCodigo)) {
+            $aplicaEn = 'rol';
+            $destinos = array_values(array_unique(array_merge(['rol'], array_keys(CatalogoNovedades::APLICA_EN))));
+        }
+        $existente = null;
+        foreach ($destinos as $destino) {
+            $existente = $this->novedadRepo->getByMarcador($idEmpresa, $idEmpleado, $tipoCodigo, $destino, $mes, $anio, $marcadorTag);
+            if ($existente) {
+                break;
+            }
+        }
 
         try {
             if ($valor <= 0) {

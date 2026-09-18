@@ -63,7 +63,8 @@ class RolAsientoService
      * agregados "Gasto Sueldos y Salarios" (todo ingreso) y "Anticipos y
      * Descuentos" (todo egreso salvo IESS personal):
      *
-     *   - sueldo_base:           origen='sueldo'.
+     *   - sueldo_base:           origen='sueldo', menos los días no laborados del rol mensual
+     *                            (novedad 10, que llega como ingreso negativo: ver RolCalculoService).
      *   - horas_extra:           origen='novedad', codigo 4/5/6 (nocturna/suplementaria/extraordinaria).
      *   - ingresos_gravados:     resto de ingresos con aporta_iess=true (rubro_fijo, vacaciones).
      *   - ingresos_no_gravados:  resto de ingresos con aporta_iess=false (otros ingresos, rubro_fijo,
@@ -74,7 +75,7 @@ class RolAsientoService
      *   - prestamos:             cuotas de préstamo descontadas en ESTE rol, por código de novedad
      *                            (7 quirografario, 8 hipotecario, 9 empresa): cada una va a su propio
      *                            concepto (ver PRESTAMOS), o a Descuentos si no tiene cuenta.
-     *   - descuentos:            todo lo demás: descuento directo, días no laborados, retención IR,
+     *   - descuentos:            todo lo demás: descuento directo, retención IR,
      *                            rubro_fijo egreso, y "Descuentos aplicados en quincenas/semanas del
      *                            mes" — este último incluye también las cuotas de préstamo cobradas en
      *                            esas corridas, que llegan sumadas y sin código de novedad.
@@ -99,7 +100,7 @@ class RolAsientoService
             $aportaIess = in_array($r['aporta_iess'] ?? false, [true, 't', '1', 1], true);
 
             if ($tipo === 'ingreso') {
-                if ($origen === 'sueldo') {
+                if ($origen === 'sueldo' || ($origen === 'novedad' && $codigo === '10')) {
                     $grp['sueldo_base'] += $valor;
                 } elseif ($origen === 'novedad' && in_array($codigo, ['4', '5', '6'], true)) {
                     $grp['horas_extra'] += $valor;

@@ -14,7 +14,10 @@ use PDO;
  *     origen es una línea de FACTURA DE CONSIGNACIÓN (consignaciones_facturas_detalles,
  *     módulo Facturación de consignaciones, estado 'facturada') o una línea de
  *     ENTREGA de un cambio anterior (encadenado). Se controla el saldo.
- *   - líneas de ENTREGA (tipo_linea='entrega') → salida de inventario (catálogo).
+ *   - líneas de ENTREGA (tipo_linea='entrega') → tomadas de una línea de CONSIGNACIÓN que el
+ *     cliente tiene en su poder, buscada por el número de la consignación. Los cambios
+ *     anteriores al 18-09-2026 pueden tener además entregas desde bodega o catálogo
+ *     (salida de inventario).
  */
 class CambioProductoCvRepository extends BaseRepository
 {
@@ -1057,19 +1060,34 @@ class CambioProductoCvRepository extends BaseRepository
      * saldo = consignado − retornado (Retornos Emitida) − facturado (Facturación CV)
      *         − entregado en otros cambios Emitida.
      *
-     * $idCliente: null = todas las consignaciones (el cliente del cambio se fija después
-     *   con el de la consignación elegida). $q: número de consignación (completo o solo
-     *   el secuencial), cliente, NUP, lote, código o nombre del producto. Vacío solo se
-     *   admite con cliente.
+     * $q: SOLO el número de la consignación (decisión del usuario, 18-09-2026): completo
+     *   (`001-001-000000012`) o solo el secuencial, con o sin ceros (`000000012`, `12`). El
+     *   secuencial se compara por su valor (numeroDesnudo); con el número completo también
+     *   debe coincidir la serie, y con solo el secuencial sale esa consignación de todas las
+     *   series. No busca por cliente, NUP, lote ni producto; sin un número no devuelve nada.
+     * $idCliente: null = consignaciones de todos los clientes (el cliente del cambio se fija
+     *   después con el de la consignación elegida); con cliente, solo las suyas.
      */
     public function getLineasConsignacionDisponibles(int $idEmpresa, string $q, ?int $idCliente, ?int $excluirCambio = null): array
     {
-        $q = trim($q);
-        if ($q === '' && ($idCliente === null || $idCliente <= 0)) {
+        $qnum = self::numeroDesnudo($q);
+        if ($qnum === '') {
             return [];
         }
 
-        $params = [':e' => $idEmpresa];
+        $params = [':e' => $idEmpresa, ':qnum' => $qnum];
+
+        // Número completo (001-001-000000012): los dos segmentos anteriores al secuencial son
+        // la serie. Se rellenan a 3 dígitos, igual que se guardan ("1-1-12" → serie 001-001).
+        $filtroSerie = '';
+        $partes = preg_split('/[-\s]+/', trim($q)) ?: [];
+        if (count($partes) >= 3) {
+            [$est, $pto] = array_map(fn ($s) => preg_replace('/\D/', '', $s), array_slice($partes, -3, 2));
+            if ($est !== '' && $pto !== '') {
+                $filtroSerie = ' AND cv.serie = :serie';
+                $params[':serie'] = str_pad($est, 3, '0', STR_PAD_LEFT) . '-' . str_pad($pto, 3, '0', STR_PAD_LEFT);
+            }
+        }
 
         $filtroCli = '';
         if ($idCliente !== null && $idCliente > 0) {
@@ -1083,20 +1101,7 @@ class CambioProductoCvRepository extends BaseRepository
             $params[':exc'] = $excluirCambio;
         }
 
-        $numero  = "(COALESCE(cv.serie,'') || '-' || COALESCE(cv.secuencial,''))";
-        $filtroQ = '';
-        if ($q !== '') {
-            $params[':q'] = '%' . $q . '%';
-            $filtroQ = " AND (p.nombre ILIKE :q OR p.codigo ILIKE :q OR cvd.nup ILIKE :q OR cvd.lote ILIKE :q
-                              OR $numero ILIKE :q OR cv.secuencial ILIKE :q
-                              OR c.nombre ILIKE :q OR c.identificacion ILIKE :q";
-            $qnum = self::numeroDesnudo($q);
-            if ($qnum !== '') {
-                $params[':qnum'] = $qnum;
-                $filtroQ .= " OR regexp_replace(TRIM(COALESCE(cv.secuencial, '')), '^0+', '') = :qnum";
-            }
-            $filtroQ .= ')';
-        }
+        $numero = "(COALESCE(cv.serie,'') || '-' || COALESCE(cv.secuencial,''))";
 
         $sql = "
             SELECT * FROM (
@@ -1135,13 +1140,16 @@ class CambioProductoCvRepository extends BaseRepository
                 WHERE cv.id_empresa = :e AND cv.eliminado = false
                   AND cv.estado = 'Entregada'
                   AND cvd.eliminado = false
+                  AND regexp_replace(TRIM(COALESCE(cv.secuencial, '')), '^0+', '') = :qnum
+                  {$filtroSerie}
                   {$filtroCli}
                   AND COALESCE(p.tipo_produccion,'01') = '01'   -- solo bienes/productos, no servicios
-                  {$filtroQ}
             ) t
             WHERE (t.cantidad_origen - t.cantidad_retornada - t.cantidad_facturada - t.cantidad_entregada) > 0
             ORDER BY t.doc_fecha DESC, t.id_origen DESC, t.id_origen_detalle ASC
-            LIMIT 100
+            -- Tope defensivo: el número ya acota a una consignación por serie, y Agregar todos
+            -- debe traer todos sus ítems (una consignación por NUP puede pasar de 100 líneas).
+            LIMIT 500
         ";
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -1209,49 +1217,7 @@ class CambioProductoCvRepository extends BaseRepository
         return $row ?: null;
     }
 
-    // ─── INVENTARIO: stock por bodega / lote / NUP (para entregar desde bodega) ─
-
-    /**
-     * Existencias con stock > 0 que coinciden con $q, una fila por producto + bodega +
-     * lote + NUP (kardex agrupado, mismo ambiente de la empresa). Permite localizar la
-     * unidad exacta a entregar por su NUP o lote, además de por código o nombre.
-     */
-    public function buscarInventario(int $idEmpresa, string $q, int $limite = 30): array
-    {
-        $q = trim($q);
-        if ($q === '') {
-            return [];
-        }
-        $limite = max(1, min($limite, 100));
-
-        $sql = "SELECT k.id_producto,
-                       p.codigo                       AS producto_codigo,
-                       p.nombre                       AS producto_nombre,
-                       p.inventariable,
-                       p.tipo_produccion,
-                       k.id_bodega,
-                       b.nombre                       AS bodega_nombre,
-                       COALESCE(k.numero_lote, '')    AS lote,
-                       COALESCE(k.nup, '')            AS nup,
-                       MAX(k.fecha_caducidad)         AS fecha_caducidad,
-                       ROUND(SUM(k.cantidad), 6)      AS stock
-                FROM inventario_kardex k
-                INNER JOIN productos p ON p.id = k.id_producto
-                INNER JOIN bodegas b ON b.id = k.id_bodega
-                WHERE k.id_empresa = :e AND k.eliminado = false
-                  AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
-                  AND p.eliminado = false AND b.eliminado = false
-                  AND COALESCE(p.tipo_produccion,'01') = '01'
-                  AND (p.nombre ILIKE :q OR p.codigo ILIKE :q OR k.nup ILIKE :q OR k.numero_lote ILIKE :q)
-                GROUP BY k.id_producto, p.codigo, p.nombre, p.inventariable, p.tipo_produccion,
-                         k.id_bodega, b.nombre, COALESCE(k.numero_lote, ''), COALESCE(k.nup, '')
-                HAVING ROUND(SUM(k.cantidad), 6) > 0
-                ORDER BY p.nombre ASC, b.nombre ASC, lote ASC, nup ASC
-                LIMIT {$limite}";
-        $st = $this->db->prepare($sql);
-        $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
-    }
+    // ─── GUARDADO: numeración y producto de las entregas antiguas desde bodega ─
 
     /**
      * ¿Ya está usado ese secuencial en el mismo punto de emisión y ambiente?
@@ -1287,7 +1253,11 @@ class CambioProductoCvRepository extends BaseRepository
         return (int) $st->fetchColumn() > 0;
     }
 
-    /** Datos del producto de catálogo para una línea de ENTREGA (autoritativo). */
+    /**
+     * Datos del producto de catálogo para una línea de ENTREGA sin consignación (autoritativo).
+     * Solo la usan las entregas desde bodega o catálogo que un borrador anterior al 18-09-2026
+     * conserva al guardarse (CambioProductoCvRules::validarCreacion rechaza las nuevas).
+     */
     public function getProductoParaEntrega(int $idProducto, int $idEmpresa): ?array
     {
         $sql = "SELECT p.id AS id_producto, p.nombre AS producto_nombre, p.codigo AS producto_codigo,

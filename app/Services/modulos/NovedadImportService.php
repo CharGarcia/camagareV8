@@ -24,9 +24,13 @@ use Exception;
  *    columna por tipo de novedad. Columnas IDENTIFICACION, NOMBRE, una por tipo,
  *    MES, ANIO, AFECTA_A, FECHA y OBSERVACION. Cada celda de novedad con valor es
  *    una novedad; en la de Aviso de salida va el motivo en lugar del valor.
+ *    Otros Ingresos y las horas tienen una columna CON IESS y otra SIN IESS: la
+ *    columna es la marca "aporta al IESS" de la novedad. Una columna con solo el
+ *    nombre del tipo (plantillas anteriores) deja la novedad sin marca.
  *  - Formato anterior: una fila por novedad, con IDENTIFICACION, NOMBRE, TIPO,
- *    VALOR, MES, ANIO, AFECTA_A, FECHA, OBSERVACION y MOTIVO. Se sigue aceptando
- *    para las plantillas que ya se descargaron así.
+ *    VALOR, MES, ANIO, AFECTA_A, FECHA, OBSERVACION y MOTIVO, y opcionalmente
+ *    APORTA_IESS (SI/NO). Se sigue aceptando para las plantillas que ya se
+ *    descargaron así.
  *
  * Cada importación queda registrada como una CARGA (novedades_cargas) y todas sus
  * novedades guardan el id_carga, para poder revertirla completa desde el módulo
@@ -46,6 +50,7 @@ class NovedadImportService
         'fecha'          => ['FECHA', 'FECHAREGISTRO'],
         'observacion'    => ['OBSERVACION', 'OBSERVACIONES', 'DETALLE', 'CONCEPTO'],
         'motivo'         => ['MOTIVO', 'MOTIVOSALIDA'],
+        'aporta_iess'    => ['APORTAIESS', 'APORTAALIESS', 'IESS', 'CONIESS'],
     ];
 
     private NovedadService $svc;
@@ -106,7 +111,7 @@ class NovedadImportService
             foreach ($res['novedades'] as $data) {
                 $clave = $this->claveNovedad($data);
                 if (isset($enArchivo[$clave])) {
-                    $this->agregarError($errores, $nf, $this->nombreTipo($data),
+                    $this->agregarError($errores, $nf, $this->etiqueta($data),
                         'Repetida en la plantilla: ese empleado ya la tiene para el mismo período en la fila ' . $enArchivo[$clave] . '.');
                     continue;
                 }
@@ -118,14 +123,17 @@ class NovedadImportService
         // Duplicados contra lo ya registrado (una sola consulta para todo el archivo).
         if (!empty($preparadas)) {
             $datos = array_column($preparadas, 'data');
-            $existentes = $this->repo->getClavesExistentes(
+            $existentes = [];
+            foreach ($this->repo->getParaDuplicados(
                 $idEmpresa,
                 array_column($datos, 'id_empleado'),
                 array_column($datos, 'periodo_anio')
-            );
+            ) as $r) {
+                $existentes[$this->claveNovedad($r)] = true;
+            }
             foreach ($preparadas as $k => $p) {
                 if (isset($existentes[$this->claveNovedad($p['data'])])) {
-                    $this->agregarError($errores, $p['fila'], $this->nombreTipo($p['data']),
+                    $this->agregarError($errores, $p['fila'], $this->etiqueta($p['data']),
                         'Ya está registrada para ' . $p['data']['_nombre_empleado'] . ' en ' . $this->nombrePeriodo($p['data']) . '.');
                     unset($preparadas[$k]);
                 }
@@ -136,7 +144,7 @@ class NovedadImportService
         foreach ($preparadas as $k => $p) {
             $msg = $this->svc->validarParaCrear($p['data']);
             if ($msg !== null) {
-                $this->agregarError($errores, $p['fila'], $this->nombreTipo($p['data']), $msg);
+                $this->agregarError($errores, $p['fila'], $this->etiqueta($p['data']), $msg);
                 unset($preparadas[$k]);
             }
         }
@@ -168,7 +176,7 @@ class NovedadImportService
         $aCrear = [];
         foreach ($preparadas as $p) {
             $data = $p['data'];
-            $etiqueta = $p['fila'] . ' · ' . $this->nombreTipo($data);
+            $etiqueta = $p['fila'] . ' · ' . $this->etiqueta($data);
             unset($data['_nombre_empleado']);
             $data['id_carga'] = $idCarga;
             $aCrear[$etiqueta] = $data;
@@ -198,8 +206,9 @@ class NovedadImportService
      * Plantilla actual: la fila es un empleado y hay una columna por tipo de
      * novedad. Cada celda de novedad con valor es una novedad; las vacías o en 0
      * no (a ese empleado no le aplica ese tipo). En la columna de Aviso de salida
-     * va el motivo de salida en lugar del valor. MES, ANIO, AFECTA_A, FECHA y
-     * OBSERVACION valen para todas las novedades de la fila.
+     * va el motivo de salida en lugar del valor, y en Otros Ingresos y horas la
+     * columna (CON IESS / SIN IESS) da la marca de IESS. MES, ANIO, AFECTA_A,
+     * FECHA y OBSERVACION valen para todas las novedades de la fila.
      *
      * Revisa la fila entera aunque encuentre un error, para informarlos todos de
      * una vez: cada error es [nombre de la novedad, o null si es de toda la fila,
@@ -207,11 +216,11 @@ class NovedadImportService
      */
     private function leerFilaEmpleado(array $f, array $cols, int $idEmpresa, int $idUsuario): array
     {
-        $celdas = []; // código del tipo => texto de la celda
-        foreach ($cols['tipos'] as $idx => $codigo) {
+        $celdas = []; // [codigo, iess (true/false/null), texto] de cada celda con valor
+        foreach ($cols['tipos'] as $idx => $col) {
             $txt = trim((string) ($f[$idx] ?? ''));
             if ($txt !== '' && !$this->esCero($txt)) {
-                $celdas[$codigo] = $txt;
+                $celdas[] = ['codigo' => $col['codigo'], 'iess' => $col['iess'], 'txt' => $txt];
             }
         }
         if (empty($celdas)) {
@@ -258,14 +267,14 @@ class NovedadImportService
         ];
 
         $novedades = [];
-        foreach ($celdas as $codigo => $txt) {
-            $codigo  = (string) $codigo;
+        foreach ($celdas as $c) {
+            $codigo  = $c['codigo'];
             $esAviso = CatalogoNovedades::esAvisoSalida($codigo);
             try {
-                $valor  = $esAviso ? 0.0 : $this->numero($txt);
-                $motivo = $esAviso ? $this->resolverMotivo($txt) : '';
+                $valor  = $esAviso ? 0.0 : $this->numero($c['txt']);
+                $motivo = $esAviso ? $this->resolverMotivo($c['txt']) : '';
             } catch (\Throwable $e) {
-                $errores[] = [CatalogoNovedades::nombreTipo($codigo), $e->getMessage()];
+                $errores[] = [$this->etiquetaTipo($codigo, $c['iess']), $e->getMessage()];
                 continue;
             }
             if ($idEmp === null || $aplicaEn === null) {
@@ -275,6 +284,7 @@ class NovedadImportService
                 'tipo_codigo'   => $codigo,
                 'valor'         => $valor,
                 'motivo_codigo' => $motivo,
+                'aporta_iess'   => $c['iess'], // null: columna sin CON/SIN IESS → la del tipo
                 'observacion'   => $obs !== '' ? $obs : $this->observacionPorDefecto($codigo, $mes, $anio),
             ];
         }
@@ -327,17 +337,35 @@ class NovedadImportService
         return $lista;
     }
 
-    /** Clave de duplicidad: mismo empleado, mismo tipo y mismo período (mes/año). */
+    /**
+     * Clave de duplicidad: mismo empleado, mismo tipo, mismo período (mes/año) y,
+     * en Otros Ingresos y horas, misma marca de IESS (se puede tener uno con IESS
+     * y otro sin IESS en el mes). Sirve para las filas del archivo y para las
+     * novedades ya registradas (NovedadRepository::getParaDuplicados).
+     */
     private function claveNovedad(array $d): string
     {
-        return ((int) $d['id_empleado']) . '|' . trim((string) $d['tipo_codigo'])
-            . '|' . ((int) $d['periodo_mes']) . '|' . ((int) $d['periodo_anio']);
+        $tipo  = trim((string) $d['tipo_codigo']);
+        $marca = CatalogoNovedades::admiteOpcionIess($tipo)
+            ? (CatalogoNovedades::aportaIess($tipo, $d['aporta_iess'] ?? null) ? '|I' : '|N')
+            : '';
+        return ((int) $d['id_empleado']) . '|' . $tipo
+            . '|' . ((int) $d['periodo_mes']) . '|' . ((int) $d['periodo_anio']) . $marca;
     }
 
-    private function nombreTipo(array $d): string
+    /** Nombre de la novedad para los mensajes: "Descuento", "Horas Nocturnas con IESS"... */
+    private function etiqueta(array $d): string
     {
-        $codigo = (string) $d['tipo_codigo'];
-        return CatalogoNovedades::nombreTipo($codigo) ?? $codigo;
+        return $this->etiquetaTipo((string) $d['tipo_codigo'], $d['aporta_iess'] ?? null);
+    }
+
+    private function etiquetaTipo(string $codigo, $iess): string
+    {
+        $nombre = CatalogoNovedades::nombreTipo($codigo) ?? $codigo;
+        if ($iess === null || !CatalogoNovedades::admiteOpcionIess($codigo)) {
+            return $nombre;
+        }
+        return $nombre . ($iess ? ' con IESS' : ' sin IESS');
     }
 
     private function nombrePeriodo(array $d): string
@@ -355,27 +383,38 @@ class NovedadImportService
 
     /**
      * Resuelve en qué columna está cada campo leyendo la fila de encabezados:
-     * 'campos' => campo => índice, y 'tipos' => índice => código del tipo de
-     * novedad de esa columna (solo en la plantilla actual; vacío en el formato
-     * anterior, que trae una columna TIPO).
+     * 'campos' => campo => índice, y 'tipos' => índice => ['codigo', 'iess'] del
+     * tipo de novedad de esa columna (solo en la plantilla actual; vacío en el
+     * formato anterior, que trae una columna TIPO). 'iess' es true/false en las
+     * columnas CON IESS / SIN IESS, y null en las demás.
      */
     private function mapearColumnas(array $encabezados): array
     {
         $porNombre = [];
         foreach (CatalogoNovedades::TIPOS as $t) {
-            $porNombre[$this->normalizarEncabezado($t['nombre'])] = (string) $t['codigo'];
+            $codigo = (string) $t['codigo'];
+            $nombre = $this->normalizarEncabezado($t['nombre']);
+            $porNombre[$nombre] = ['codigo' => $codigo, 'iess' => null];
+            if (CatalogoNovedades::admiteOpcionIess($codigo)) {
+                $porNombre[$nombre . 'CONIESS'] = ['codigo' => $codigo, 'iess' => true];
+                $porNombre[$nombre . 'SINIESS'] = ['codigo' => $codigo, 'iess' => false];
+            }
         }
 
         $campos = [];
         $tipos  = [];
+        $vistos = []; // una sola columna por tipo y marca
         foreach ($encabezados as $idx => $texto) {
             $norm = $this->normalizarEncabezado((string) $texto);
             if ($norm === '') {
                 continue;
             }
             if (isset($porNombre[$norm])) {
-                if (!in_array($porNombre[$norm], $tipos, true)) {
-                    $tipos[(int) $idx] = $porNombre[$norm];
+                $col = $porNombre[$norm];
+                $clave = $col['codigo'] . '|' . var_export($col['iess'], true);
+                if (!isset($vistos[$clave])) {
+                    $vistos[$clave] = true;
+                    $tipos[(int) $idx] = $col;
                 }
                 continue;
             }
@@ -442,6 +481,7 @@ class NovedadImportService
         $afecta   = trim((string) $this->celda($f, $campos, 'aplica_en', 'rol'));
         $obs      = trim((string) $this->celda($f, $campos, 'observacion'));
         $motivo   = trim((string) $this->celda($f, $campos, 'motivo'));
+        $iessTxt  = trim((string) $this->celda($f, $campos, 'aporta_iess')); // opcional; vacío = la del tipo
 
         if ($ident === '') {
             throw new Exception('Falta la IDENTIFICACION del empleado.');
@@ -473,6 +513,7 @@ class NovedadImportService
             'fecha'            => $this->normalizarFecha($this->celda($f, $campos, 'fecha', '')),
             'observacion'      => $obs !== '' ? $obs : $this->observacionPorDefecto($tipo, $mes, $anio),
             'motivo_codigo'    => $motivo !== '' ? $this->resolverMotivo($motivo) : '',
+            'aporta_iess'      => $iessTxt !== '' && CatalogoNovedades::admiteOpcionIess($tipo) ? $this->resolverSiNo($iessTxt) : null,
             'estado'           => 'activo',
             // Solo para los mensajes de error; se quita antes de guardar.
             '_nombre_empleado' => $nombre !== '' ? $nombre : $ident,
@@ -543,6 +584,15 @@ class NovedadImportService
         if (str_contains($raw, 'semana')) return 'semanal';
         if (str_contains($raw, 'quincena')) return 'quincena';
         throw new Exception("AFECTA_A no reconocido: '{$raw}' (use rol, quincena o semanal).");
+    }
+
+    /** APORTA_IESS del formato anterior: SI/NO (también S/N, 1/0, true/false). */
+    private function resolverSiNo(string $raw): bool
+    {
+        $v = mb_strtolower(trim($raw), 'UTF-8');
+        if (in_array($v, ['si', 'sí', 's', '1', 'true', 'x'], true)) return true;
+        if (in_array($v, ['no', 'n', '0', 'false'], true)) return false;
+        throw new Exception("APORTA_IESS no reconocido: '{$raw}' (use SI o NO).");
     }
 
     /**

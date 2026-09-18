@@ -142,12 +142,73 @@ class VacacionesController extends BaseModuloController
         $excl  = (int) ($_GET['exclude'] ?? 0) ?: null;
         try {
             $info = $this->service->getInfoEmpleado($idEmp, (int) $_SESSION['id_empresa'], $excl);
+            $perm = $this->getPermisos();
+            foreach ($info['periodos'] as &$p) {
+                if ($p['marca'] !== null) {
+                    $p['marca']['puede_desmarcar'] = $this->puedeDesmarcar($p['marca'], $perm);
+                }
+            }
+            unset($p);
             echo json_encode(['ok' => true, 'data' => $info]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Marca como tomados o pagados antes del sistema los períodos elegidos del empleado.
+     * POST: id_empleado, estado (tomado|pagado), periodos[número] = días, observacion.
+     */
+    public function marcarPeriodosAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        try {
+            $dias = $_POST['periodos'] ?? [];
+            $n = $this->service->marcarPeriodos(
+                (int) $_SESSION['id_empresa'],
+                (int) ($_POST['id_empleado'] ?? 0),
+                trim((string) ($_POST['estado'] ?? '')),
+                is_array($dias) ? $dias : [],
+                trim((string) ($_POST['observacion'] ?? '')),
+                (int) $_SESSION['id_usuario']
+            );
+            echo json_encode(['ok' => true, 'msg' => $n === 1 ? 'Período marcado.' : "{$n} períodos marcados."]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Quita la marca de un período (sus días vuelven al saldo). POST: id_periodo. */
+    public function desmarcarPeriodoAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+        try {
+            $id = (int) ($_POST['id_periodo'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $marca = $this->service->getPeriodoMarcado($id, $idEmpresa);
+            if (!$marca) throw new \Exception('Ese período ya no está marcado. Actualice la ventana.');
+            $this->requireRegistroPropio($marca);
+            $this->service->desmarcarPeriodo($id, $idEmpresa, (int) $_SESSION['id_usuario']);
+            echo json_encode(['ok' => true, 'msg' => 'Se quitó la marca del período.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** ¿Puede quitar la marca? Permiso de eliminar y, sin acceso total, solo las que él marcó (requireRegistroPropio). */
+    private function puedeDesmarcar(array $marca, array $perm): bool
+    {
+        if (empty($perm['eliminar'])) return false;
+        if (!empty($perm['todo']) || (int) ($_SESSION['nivel'] ?? 1) >= 3) return true;
+        return (int) ($marca['created_by'] ?? 0) === (int) ($_SESSION['id_usuario'] ?? 0);
     }
 
     public function store(): void

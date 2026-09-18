@@ -21,6 +21,72 @@ final class CatalogoNovedades
     public const CODS_DIAS = ['10'];
 
     /**
+     * Tipos que solo afectan al rol MENSUAL, sin importar el "afecta a" que se elija:
+     * los días no laborados (restan del sueldo ganado del mes) y el aviso de salida.
+     * En la quincena y en la semana solo hay ingresos (con o sin IESS) y descuentos.
+     */
+    public const CODS_SOLO_ROL = ['10', self::COD_AVISO_SALIDA];
+
+    public static function soloRolMensual(string $codigo): bool
+    {
+        return in_array($codigo, self::CODS_SOLO_ROL, true);
+    }
+
+    /**
+     * Ingresos en los que el usuario marca si aportan al IESS (Sí / No), igual que
+     * en los rubros fijos del empleado: Otros Ingresos y las horas nocturnas,
+     * suplementarias y extraordinarias. En los demás tipos la marca no aplica.
+     */
+    public const CODS_OPCION_IESS = ['1', '4', '5', '6'];
+
+    public static function admiteOpcionIess(string $codigo): bool
+    {
+        return in_array($codigo, self::CODS_OPCION_IESS, true);
+    }
+
+    /**
+     * Si aporta al IESS una novedad que NO trae la marca (registrada antes de que
+     * existiera la opción, migrada o de una plantilla que no la tiene): lo que el
+     * rol hacía siempre, que las horas aportan y Otros Ingresos no.
+     */
+    public static function aportaIessPorDefecto(string $codigo): bool
+    {
+        return in_array($codigo, self::CODS_HORAS, true);
+    }
+
+    /**
+     * Marca efectiva de una novedad: la guardada (bool, 't'/'f', 'si'/'no'...) o,
+     * si no tiene, la del tipo. Siempre false en los tipos sin la opción.
+     */
+    public static function aportaIess(string $codigo, $marca): bool
+    {
+        if (!self::admiteOpcionIess($codigo)) {
+            return false;
+        }
+        if ($marca === null || $marca === '') {
+            return self::aportaIessPorDefecto($codigo);
+        }
+        if (is_bool($marca)) {
+            return $marca;
+        }
+        return in_array(mb_strtolower(trim((string) $marca)), ['1', 't', 'true', 'si', 'sí', 's'], true);
+    }
+
+    /**
+     * Para mostrar en el listado y en los reportes: null si el tipo no lleva la
+     * opción; si la lleva, si el ingreso realmente paga IESS (está marcado y el
+     * empleado aporta al IESS; sin dato del empleado, se asume que aporta).
+     */
+    public static function pagaIess(string $codigo, $marca, $empleadoAporta): ?bool
+    {
+        if (!self::admiteOpcionIess($codigo)) {
+            return null;
+        }
+        $empAporta = $empleadoAporta === null || in_array($empleadoAporta, [true, 't', 1, '1', 'true'], true);
+        return $empAporta && self::aportaIess($codigo, $marca);
+    }
+
+    /**
      * Tipos que NO se descuentan en el rol al registrarse: se ENTREGAN al empleado y
      * se pagan primero con un egreso (aparecen en Egresos → Nómina); el rol descuenta
      * solo lo pagado por egreso. Solo el ANTICIPO (3), que es de un único mes.
@@ -189,10 +255,16 @@ final class CatalogoNovedades
             $unidades[$t['codigo']] = self::unidadValor($t['codigo']);
             $labels[$t['codigo']]   = self::labelValor($t['codigo']);
         }
+        $iessPorDefecto = [];
+        foreach (self::CODS_OPCION_IESS as $cod) {
+            $iessPorDefecto[$cod] = self::aportaIessPorDefecto($cod);
+        }
         return [
             'cod_aviso_salida' => self::COD_AVISO_SALIDA,
             'unidades'         => $unidades,
             'labels'           => $labels,
+            'iess_por_defecto' => $iessPorDefecto, // solo los tipos con la opción
+            'cods_solo_rol'    => self::CODS_SOLO_ROL,
         ];
     }
 }

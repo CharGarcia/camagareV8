@@ -54,6 +54,42 @@ class VacacionCalculoService
         ];
     }
 
+    /**
+     * Períodos de servicio (años de trabajo) a una fecha de referencia: uno por cada
+     * año completo y, al final, el año en curso, que lleva su derecho acumulado en
+     * proporción. Sale del mismo cálculo que antiguedad(), así que la suma de
+     * dias_acumulados cuadra con total_derecho.
+     *
+     * @return list<array{numero:int, fecha_inicio:string, fecha_fin:string, dias_derecho:int, dias_acumulados:float, completo:bool}>
+     */
+    public function periodos(string $fechaIngreso, ?string $fechaRef = null): array
+    {
+        $ant = $this->antiguedad($fechaIngreso, $fechaRef);
+        $ini = new DateTime(substr($fechaIngreso, 0, 10));
+        $completos = $ant['anios_completos'];
+
+        $periodos = [];
+        $derechoCompletos = 0;
+        for ($k = 1; $k <= $completos + 1; $k++) {
+            $completo = $k <= $completos;
+            $derecho  = $this->derechoDelAnio($k);
+            $periodos[] = [
+                'numero'          => $k,
+                'fecha_inicio'    => (clone $ini)->modify('+' . ($k - 1) . ' year')->format('Y-m-d'),
+                'fecha_fin'       => (clone $ini)->modify('+' . $k . ' year')->modify('-1 day')->format('Y-m-d'),
+                'dias_derecho'    => $derecho,
+                'dias_acumulados' => $completo
+                    ? (float) $derecho
+                    : max(0.0, round($ant['total_derecho'] - $derechoCompletos, 2)),
+                'completo'        => $completo,
+            ];
+            if ($completo) {
+                $derechoCompletos += $derecho;
+            }
+        }
+        return $periodos;
+    }
+
     /** Valor a pagar de las vacaciones gozadas. */
     public function valor(float $sueldoBase, float $diasGozados): float
     {

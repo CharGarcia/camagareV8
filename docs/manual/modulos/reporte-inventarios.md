@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega
-version: 1.17
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle
+version: 1.18
 orden: 40
 estado: activo
 ---
@@ -135,8 +135,9 @@ documento completo. El N° de consignación acepta tanto el secuencial solo
 ### Detalle de una consignación
 
 Al hacer clic en una fila se abre el detalle con sus líneas de producto:
-producto, bodega, lote, NUP, consignado, retornado, facturado y saldo, con una
-fila de **totales** al pie.
+**código del producto** (primera columna), producto, bodega, lote, NUP,
+consignado, retornado, facturado, a cambio y saldo, con una fila de
+**totales** al pie.
 
 La barra superior del detalle tiene un botón **PDF** que descarga el **estado
 completo de la consignación**: el mismo diseño del comprobante de Consignaciones
@@ -290,6 +291,9 @@ ahí.
 
 ## Historial de cambios
 
+- **1.18** — Pestaña **Consignaciones**: el detalle de una consignación muestra
+  el **código del producto** como primera columna, y la ventana del detalle es
+  más ancha para que la columna nueva quepa sin apretar el nombre del producto.
 - **1.17** — El reporte respeta las **bodegas asignadas al usuario**. Antes el
   selector de bodega ya venía filtrado, pero los datos no: con el filtro en
   *Todas* —o escribiendo el número de la bodega en la dirección de una

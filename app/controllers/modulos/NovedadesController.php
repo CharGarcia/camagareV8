@@ -121,7 +121,7 @@ class NovedadesController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="11" class="text-center py-5 text-muted">No se encontraron novedades.</td></tr>';
+            echo '<tr><td colspan="12" class="text-center py-5 text-muted">No se encontraron novedades.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 echo $this->renderFila($r);
@@ -162,6 +162,12 @@ class NovedadesController extends BaseModuloController
         $pagoBadge = !empty($r['pagada'])
             ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-circle me-1"></i>Pagada</span>'
             : '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Pendiente</span>';
+        $pagaIess = CatalogoNovedades::pagaIess((string) $r['tipo_codigo'], $r['aporta_iess'] ?? null, $r['empleado_aporta_iess'] ?? null);
+        $iessBadge = $pagaIess === null
+            ? '<span class="text-muted">—</span>'
+            : ($pagaIess
+                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Sí</span>'
+                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">No</span>');
         $accionCelda = !empty($r['bloqueada'])
             ? '<span class="text-muted" title="Bloqueada: el rol ya está pagado o ya fue desembolsada por egreso"><i class="bi bi-lock-fill"></i></span>'
             : '<button class="btn btn-outline-danger btn-xs border-0 px-2" onclick="eliminarRegistro(' . (int) $r['id'] . ')" title="Eliminar"><i class="bi bi-trash"></i></button>';
@@ -173,6 +179,7 @@ class NovedadesController extends BaseModuloController
             . '<td data-col="fecha">' . $h($fecha) . '</td>'
             . '<td data-col="periodo">' . $periodo . '</td>'
             . '<td class="text-end fw-bold" data-col="valor">' . $h($valor) . '</td>'
+            . '<td class="text-center" data-col="iess">' . $iessBadge . '</td>'
             . '<td data-col="aplica_en"><span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">' . $h(CatalogoNovedades::nombreAplicaEn((string) ($r['aplica_en'] ?? 'rol'))) . '</span></td>'
             . '<td data-col="motivo" class="small text-muted">' . $h($r['motivo_nombre'] ?? '—') . '</td>'
             . '<td class="text-center" data-col="estado">' . $estadoBadge . '</td>'
@@ -254,6 +261,9 @@ class NovedadesController extends BaseModuloController
             'id'                => (int) $r['id'],
             'identificacion'    => $r['identificacion'],
             'nombres_apellidos' => $r['nombres_apellidos'],
+            // El modal fija "Aporta IESS" en No si el empleado no aporta (como los rubros
+            // fijos). Sin dato cuenta como que aporta; en pgsql puede llegar 't'/'f'.
+            'aporta_iess'       => !in_array($r['aporta_iess'] ?? null, [false, 'f', 0, '0', 'false'], true),
         ], $result['rows']);
 
         echo json_encode(['ok' => true, 'data' => $data]);
@@ -283,7 +293,7 @@ class NovedadesController extends BaseModuloController
         $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, 'fecha', 'DESC', $idUsuarioFiltro);
 
         try {
-            $headers = ['Empleado', 'Identificación', 'Tipo', 'Fecha', 'Mes', 'Año', 'Valor', 'Afecta a', 'Motivo', 'Estado'];
+            $headers = ['Empleado', 'Identificación', 'Tipo', 'Fecha', 'Mes', 'Año', 'Valor', 'Aporta IESS', 'Afecta a', 'Motivo', 'Estado'];
             $exportData = [];
             foreach ($data['rows'] as $r) {
                 $exportData[] = [
@@ -294,6 +304,7 @@ class NovedadesController extends BaseModuloController
                     CatalogoNovedades::MESES[(int) $r['periodo_mes']] ?? $r['periodo_mes'],
                     $r['periodo_anio'],
                     CatalogoNovedades::formatValor((string) $r['tipo_codigo'], $r['valor']),
+                    $this->textoIess($r),
                     CatalogoNovedades::nombreAplicaEn((string) ($r['aplica_en'] ?? 'rol')),
                     $r['motivo_nombre'] ?? '',
                     $r['estado'],
@@ -328,20 +339,21 @@ class NovedadesController extends BaseModuloController
 
             $html = '<h3>Listado de Novedades</h3><table border="0.5" cellpadding="3">'
                 . '<tr style="background-color:#e9ecef;font-weight:bold;font-size:8px;">'
-                . '<th width="19%">Empleado</th><th width="11%">Identificación</th><th width="15%">Tipo</th>'
-                . '<th width="9%">Fecha</th><th width="12%">Período</th><th width="9%">Valor</th>'
-                . '<th width="10%">Afecta a</th><th width="10%">Motivo</th><th width="7%">Estado</th></tr>';
+                . '<th width="18%">Empleado</th><th width="10%">Identificación</th><th width="15%">Tipo</th>'
+                . '<th width="8%">Fecha</th><th width="11%">Período</th><th width="9%">Valor</th><th width="5%">IESS</th>'
+                . '<th width="10%">Afecta a</th><th width="9%">Motivo</th><th width="7%">Estado</th></tr>';
             foreach ($data['rows'] as $r) {
                 $mes = CatalogoNovedades::MESES[(int) $r['periodo_mes']] ?? $r['periodo_mes'];
                 $html .= '<tr style="font-size:7.5px;">'
-                    . '<td width="19%">' . htmlspecialchars((string) $r['empleado_nombre']) . '</td>'
-                    . '<td width="11%">' . htmlspecialchars((string) $r['empleado_identificacion']) . '</td>'
+                    . '<td width="18%">' . htmlspecialchars((string) $r['empleado_nombre']) . '</td>'
+                    . '<td width="10%">' . htmlspecialchars((string) $r['empleado_identificacion']) . '</td>'
                     . '<td width="15%">' . htmlspecialchars((string) $r['tipo_nombre']) . '</td>'
-                    . '<td width="9%">' . ($r['fecha'] ? date('d-m-Y', strtotime((string) $r['fecha'])) : '') . '</td>'
-                    . '<td width="12%">' . htmlspecialchars($mes . ' ' . $r['periodo_anio']) . '</td>'
+                    . '<td width="8%">' . ($r['fecha'] ? date('d-m-Y', strtotime((string) $r['fecha'])) : '') . '</td>'
+                    . '<td width="11%">' . htmlspecialchars($mes . ' ' . $r['periodo_anio']) . '</td>'
                     . '<td width="9%" align="right">' . htmlspecialchars(CatalogoNovedades::formatValor((string) $r['tipo_codigo'], $r['valor'])) . '</td>'
+                    . '<td width="5%" align="center">' . htmlspecialchars($this->textoIess($r)) . '</td>'
                     . '<td width="10%">' . htmlspecialchars(CatalogoNovedades::nombreAplicaEn((string) ($r['aplica_en'] ?? 'rol'))) . '</td>'
-                    . '<td width="10%">' . htmlspecialchars((string) ($r['motivo_nombre'] ?? '')) . '</td>'
+                    . '<td width="9%">' . htmlspecialchars((string) ($r['motivo_nombre'] ?? '')) . '</td>'
                     . '<td width="7%">' . htmlspecialchars((string) $r['estado']) . '</td></tr>';
             }
             $html .= '</table>';
@@ -472,6 +484,13 @@ class NovedadesController extends BaseModuloController
         exit;
     }
 
+    /** "Sí"/"No" si el ingreso paga IESS; vacío en los tipos que no llevan la opción (exportaciones). */
+    private function textoIess(array $r): string
+    {
+        $paga = CatalogoNovedades::pagaIess((string) $r['tipo_codigo'], $r['aporta_iess'] ?? null, $r['empleado_aporta_iess'] ?? null);
+        return $paga === null ? '' : ($paga ? 'Sí' : 'No');
+    }
+
     private function recogerDatos(): array
     {
         return [
@@ -485,6 +504,8 @@ class NovedadesController extends BaseModuloController
             'motivo_codigo' => trim($_POST['motivo_codigo'] ?? ''),
             'observacion'   => trim($_POST['observacion'] ?? ''),
             'estado'        => trim($_POST['estado'] ?? 'activo'),
+            // 'si'/'no'; null si no vino (selector deshabilitado): el Service decide.
+            'aporta_iess'   => isset($_POST['aporta_iess']) ? trim((string) $_POST['aporta_iess']) : null,
         ];
     }
 }

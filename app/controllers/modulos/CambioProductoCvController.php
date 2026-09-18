@@ -6,7 +6,6 @@ namespace App\controllers\modulos;
 
 use App\Helpers\OrdenListado;
 use App\repositories\modulos\CambioProductoCvRepository;
-use App\repositories\modulos\ProductoRepository;
 use App\Rules\modulos\CambioProductoCvRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\CambioProductoCvService;
@@ -945,12 +944,11 @@ class CambioProductoCvController extends BaseModuloController
     }
 
     /**
-     * Qué se puede ENTREGAR a cambio, en una sola respuesta con tres grupos:
-     *  - `consignaciones`: líneas de consignaciones Entregadas con saldo en poder del
-     *    cliente (por número de consignación, cliente, NUP, lote o producto);
-     *  - `inventario`: existencias por bodega / lote / NUP que coinciden con la búsqueda;
-     *  - `catalogo`: productos del catálogo (bienes), aunque no tengan stock registrado.
-     * Con `id_cliente` las consignaciones se acotan a ese cliente.
+     * Qué se puede ENTREGAR a cambio: líneas de consignaciones Entregadas con saldo en poder
+     * del cliente, buscadas SOLO por el número de la consignación (completo o solo el
+     * secuencial, con o sin ceros). Desde el 18-09-2026 ya no se ofrecen existencias de
+     * bodega ni productos del catálogo, ni se busca por cliente, NUP, lote o producto.
+     * Con `id_cliente` se acota a las consignaciones de ese cliente.
      */
     public function buscarEntregasAjax(): void
     {
@@ -962,83 +960,11 @@ class CambioProductoCvController extends BaseModuloController
             $idCliente = (int) ($_GET['id_cliente'] ?? 0);
             $q         = trim($_GET['q'] ?? '');
             $excluir   = (int) ($_GET['excluir'] ?? 0);
-            if ($idCliente <= 0 && $q === '') throw new Exception("Indique un número de consignación, un NUP, un lote o un producto.");
+            if (!preg_match('/\d/', $q)) throw new Exception("Indique el número de la consignación.");
 
             $consignaciones = $this->service->getLineasConsignacionDisponibles($idEmpresa, $q, $idCliente > 0 ? $idCliente : null, $excluir > 0 ? $excluir : null);
 
-            $inventario = [];
-            $catalogo   = [];
-            if ($q !== '') {
-                $inventario = $this->service->buscarInventario($idEmpresa, $q, 30);
-
-                $repo = new ProductoRepository();
-                $res  = $repo->getListado($idEmpresa, $q, 1, 15, 'nombre', 'ASC', null, null, true);
-                foreach (($res['rows'] ?? []) as $p) {
-                    // Solo bienes/productos, no servicios.
-                    if ((string)($p['tipo_produccion'] ?? '01') === '02') continue;
-                    $catalogo[] = [
-                        'id'              => (int) $p['id'],
-                        'codigo'          => $p['codigo'] ?? '',
-                        'nombre'          => $p['nombre'] ?? '',
-                        'inventariable'   => $p['inventariable'] ?? null,
-                        'tipo_produccion' => $p['tipo_produccion'] ?? '01',
-                    ];
-                }
-            }
-
-            echo json_encode(['ok' => true, 'consignaciones' => $consignaciones, 'inventario' => $inventario, 'catalogo' => $catalogo]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-
-    /** Busca productos de catálogo (para la entrega). */
-    public function buscarProductosAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $q = trim($_GET['q'] ?? '');
-        if (mb_strlen($q) < 2) { echo json_encode(['ok' => true, 'data' => []]); exit; }
-
-        try {
-            $repo = new ProductoRepository();
-            $res  = $repo->getListado($idEmpresa, $q, 1, 15, 'nombre', 'ASC', null, null, true);
-            $data = [];
-            foreach (($res['rows'] ?? []) as $p) {
-                // Solo bienes/productos, no servicios.
-                if ((string)($p['tipo_produccion'] ?? '01') === '02') continue;
-                $data[] = [
-                    'id'              => (int) $p['id'],
-                    'codigo'          => $p['codigo'] ?? '',
-                    'nombre'          => $p['nombre'] ?? '',
-                    'inventariable'   => $p['inventariable'] ?? null,
-                    'tipo_produccion' => $p['tipo_produccion'] ?? '01',
-                ];
-            }
-            echo json_encode(['ok' => true, 'data' => $data]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-
-    /** Precios de lista de un producto (para la entrega). */
-    public function getPreciosAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-
-        $idEmpresa  = (int) $_SESSION['id_empresa'];
-        $idProducto = (int) ($_GET['id_producto'] ?? 0);
-        try {
-            $repo = new ProductoRepository();
-            $precios = $idProducto > 0 ? $repo->getPrecios($idProducto, $idEmpresa) : [];
-            echo json_encode(['ok' => true, 'data' => $precios]);
+            echo json_encode(['ok' => true, 'consignaciones' => $consignaciones]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -1066,38 +992,6 @@ class CambioProductoCvController extends BaseModuloController
     }
 
     // ─── Secuencial (mismo patrón que Consignaciones/Retornos) ────────────────
-
-    public function getEstablecimientosAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-
-        $empresaModel = new \App\models\Empresa();
-        $establecimientos = $empresaModel->getEstablecimientos((int) $_SESSION['id_empresa']);
-        echo json_encode(['ok' => true, 'data' => $establecimientos]);
-        exit;
-    }
-
-    public function getPuntosEmisionAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-
-        $idEst = (int) ($_GET['id_establecimiento'] ?? 0);
-        $empresaModel = new \App\models\Empresa();
-        $puntos = $empresaModel->getPuntosEmision($idEst);
-
-        $repoSecuencial = new \App\repositories\SecuencialRepository();
-        $puntosFiltrados = [];
-        foreach ($puntos as $p) {
-            $config = $repoSecuencial->getConfigSecuencial((int) $p['id'], self::TIPO_SECUENCIAL);
-            if (!empty($config['id'])) {
-                $puntosFiltrados[] = $p;
-            }
-        }
-        echo json_encode(['ok' => true, 'data' => array_values($puntosFiltrados)]);
-        exit;
-    }
 
     public function getSecuencialAjax(): void
     {

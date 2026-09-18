@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento
-version: 1.10
+etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar
+version: 1.11
 orden: 35
 estado: activo
 ---
@@ -45,6 +45,25 @@ Para volver a ver todas las fechas, devuelva el lote a *Lote...*.
 
 Al **abrir un recibo ya guardado**, la línea muestra el lote y el vencimiento **con
 los que se emitió**, aunque el inventario haya cambiado desde entonces.
+
+### Ver el código y la descripción completos
+
+En la tabla de productos del recibo:
+
+- La **descripción** crece en alto con su texto, así que se lee completa sin
+  desplazarse dentro del campo. Si es muy larga (más de unas diez líneas), el
+  campo muestra una barra para desplazarse.
+- Las columnas **Código** y **Descripción** se pueden ensanchar o estrechar:
+  - **Arrastrando** el borde derecho de su encabezado.
+  - Con **doble clic** en ese mismo borde, la columna se ajusta sola al texto más
+    largo del recibo (la descripción, hasta un máximo; lo que no quepa baja a
+    otra línea).
+
+El ancho que elija se **guarda para su usuario** y se mantiene en los siguientes
+recibos, sin afectar a los demás usuarios, a las columnas del listado ni a los
+anchos que tenga en Facturas de Venta (cada módulo guarda los suyos). Si al
+ensanchar ya no cabe toda la tabla, aparece una barra para desplazarse a los lados
+en lugar de achicar Cantidad, Precio o IVA.
 
 ## Qué genera
 
@@ -156,6 +175,12 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.11** — En la tabla de productos del recibo, la **descripción** se ve
+  completa: crece en alto con su texto (antes quedaba en poco más de una línea y el
+  resto se escondía tras una barra). Las columnas **Código** y **Descripción** se
+  ensanchan arrastrando el borde del encabezado, o con doble clic para ajustarlas
+  al texto más largo; el ancho se guarda por usuario. Es el mismo comportamiento de
+  Facturas de Venta. Ver *"Ver el código y la descripción completos"*.
 - **1.10** — Con **"La facturación afecta al inventario"** apagado en Empresa, el
   recibo ya no descuenta stock (lo hacía igual por un error al leer la opción). Con
   **"Obligatorio usar Lotes"** apagado, la línea sin lote toma el lote que vence primero.

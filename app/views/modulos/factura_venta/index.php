@@ -719,11 +719,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <div class="p-3">
                                 <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
                                     <div class="table-responsive" style="max-height: 350px;">
-                                        <table class="table table-sm table-detalle mb-0 text-nowrap">
+                                        <table class="table table-sm table-detalle mb-0 text-nowrap" id="m-tabla-detalle">
                                             <thead>
                                                 <tr class="table-light border-bottom">
-                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 9%;">Código</th>
-                                                    <th class="py-2 small fw-bold text-muted" style="width: 26%;">Descripción</th>
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" data-det-col="codigo" style="width: 9%;">Código</th>
+                                                    <th class="py-2 small fw-bold text-muted" data-det-col="descripcion" style="width: 26%;">Descripción</th>
                                                     <th class="py-2 small fw-bold text-muted" style="width: 7%;">Adicional</th>
                                                     <th class="py-2 small fw-bold text-muted col-medida-header col-medida d-none" style="width: 8%;">Medida</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
@@ -1443,6 +1443,7 @@ $page       = $pageOriginal;
 $totalPages = $totalPagesOriginal;
 ?>
 
+<script src="<?= BASE_URL ?>/js/components/detalle_columnas.js?v=<?= asset_ver('/js/components/detalle_columnas.js') ?>"></script>
 <script>
     // Ajustar z-index de los backdrops dinámicamente para modales anidados
     document.addEventListener('show.bs.modal', function(event) {
@@ -1527,6 +1528,22 @@ $totalPages = $totalPagesOriginal;
     // FacturaVentaService::eliminar(). El backend valida esto igual, esto es solo UI.
     const ES_SUPERADMIN = <?= ((int) ($_SESSION['nivel'] ?? 1) === 3) ? 'true' : 'false' ?>;
     const PERM_ELIMINAR = <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>;
+    // Código y Descripción del detalle: la descripción crece con su texto y las dos
+    // columnas se ensanchan arrastrando el borde del encabezado (doble clic: ajustar
+    // al texto). El ancho se guarda por usuario. Ver public/js/components/detalle_columnas.js.
+    // Si el componente no cargó (archivo ausente tras un despliegue, caché), el
+    // módulo sigue funcionando igual que antes: sin esta guarda, el error cortaría
+    // todo este bloque de script y con él la factura entera.
+    const FV_DET = typeof CMG_detalleColumnas !== 'function'
+        ? { engancharDescripcion() {}, ajustarDescripciones() {} }
+        : CMG_detalleColumnas({
+            tabla:   '#m-tabla-detalle',
+            tbody:   '#m-tbodyDetalle',
+            modal:   '#modalNuevaFactura',
+            anchos:  <?= json_encode((object) \App\Helpers\PreferenciasHelper::getAnchosDetalle($vistaConfig ?? [])) ?>,
+            modulo:  RUTA_MODULO,
+            urlBase: B_URL,
+        });
     const DEC_PRECIO = EMPRESA_CONFIG.decimales_precio;
     const DEC_CANT = EMPRESA_CONFIG.decimales_cantidad;
 
@@ -4141,6 +4158,7 @@ $totalPages = $totalPagesOriginal;
         tbody.appendChild(tr);
 
         const inputDesc = tr.querySelector('.input-descripcion');
+        FV_DET.engancharDescripcion(inputDesc);
         const inputCodigoVisible = tr.querySelector('.input-codigo');
         // Concepto libre: no permitir Enter (evita saltos de línea) y, al salir del campo,
         // colapsar espacios dobles y recortar los extremos.

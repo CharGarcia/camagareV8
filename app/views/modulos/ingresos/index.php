@@ -467,7 +467,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <option value="" data-comportamiento="GENERAL"></option>
                                         <?php foreach ($conceptos as $c): ?>
                                             <option value="<?= $c['id'] ?>" data-comportamiento="<?= htmlspecialchars($c['comportamiento'] ?? 'GENERAL') ?>"
-                                                    data-cuenta-id="<?= (int)($c['id_cuenta_contable'] ?? 0) ?>"
+                                                    data-cuenta-id="<?= (int)($c['cuenta_id'] ?? 0) ?>"
                                                     data-cuenta-codigo="<?= htmlspecialchars($c['cuenta_codigo'] ?? '') ?>"
                                                     data-cuenta-nombre="<?= htmlspecialchars($c['cuenta_nombre'] ?? '') ?>">
                                                 <?= htmlspecialchars($c['nombre']) ?>
@@ -694,6 +694,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     const RUTA_MODULO_JS = '<?= $rutaModulo ?>';
 
+    // Conceptos cuyo botón busca documentos pendientes (mismos que deciden si el botón se
+    // muestra, arriba en la barra de conceptos). Ver ingConceptoCuentaActual().
+    const ING_COMP_CON_DOCUMENTOS = <?= json_encode($comportamientosDocDriven) ?>;
+
     document.addEventListener('DOMContentLoaded', () => {
         const puntoSel = document.getElementById('m-select-punto');
         if (puntoSel) {
@@ -876,23 +880,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         sincronizarBotonesConcepto(sel.value);
         document.getElementById('m-input-tipo-ingreso').value = comp;
 
-        // Rellenar la cuenta contable del concepto en las líneas manuales que todavía no
-        // tienen una propia: la fila en blanco que crea renderDetalles() al abrir el modal
-        // se genera ANTES de elegir concepto (ingConceptoCuentaActual() no tiene nada que
-        // copiar en ese momento), y como ya existe una fila, no se vuelve a crear otra al
-        // seleccionar el concepto — sin esto, esa fila se quedaba sin cuenta para siempre.
-        if (docPendientes.length === 0) {
-            const cuenta = ingConceptoCuentaActual();
-            if (cuenta.id_cuenta) {
-                detalleManual.forEach(d => {
-                    if (!d.id_cuenta) {
-                        d.id_cuenta = cuenta.id_cuenta;
-                        d.cuenta_codigo = cuenta.cuenta_codigo;
-                        d.cuenta_nombre = cuenta.cuenta_nombre;
-                    }
-                });
-            }
-        }
+        // Llevar la cuenta contable del concepto a las líneas manuales: la fila en blanco que
+        // crea renderDetalles() al abrir el modal se genera ANTES de elegir concepto
+        // (ingConceptoCuentaActual() no tiene nada que copiar en ese momento), y como ya existe
+        // una fila, no se vuelve a crear otra al seleccionar el concepto — sin esto, esa fila se
+        // quedaba sin cuenta para siempre. Ya no se corta cuando hay documentos cargados: un
+        // Anticipo tocado después de cargar una factura presta su cuenta igual (ver
+        // ingConceptoCuentaActual()).
+        ingAplicarCuentaConceptoALineas();
 
         renderDetalles();
         renderPagos();
@@ -926,6 +921,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         manejarCambioConceptoIngreso(sel);
         if (['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'].includes(comp)) {
             setTimeout(abrirModalDocsPendientes, 150);
+        } else if (detalleManual.length === 0) {
+            // Concepto sin documentos (Anticipo Cliente…): dejar una línea manual lista con su
+            // cuenta, igual que el selector de "Otro concepto…". Con documentos ya cargados puede
+            // no quedar ninguna línea, y entonces no había dónde ver la cuenta del anticipo.
+            agregarFilaManualIngreso();
         }
     }
 
@@ -1678,19 +1678,43 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     // ── Cuenta contable por línea ─────────────────────────────────────────────
-    // Cuenta por defecto = la del último concepto tocado (puede cambiarse por línea).
-    // Si ya hay documentos de módulo cargados (Factura/Recibo), NO se prellena: ese
-    // "último concepto tocado" normalmente es el del documento (p. ej. su cuenta de
-    // Cuentas por Cobrar), que sería la incorrecta para un renglón de "otros conceptos"
-    // sin relación con esa cartera — mejor forzar la elección explícita.
+    // Cuenta por defecto = la del último concepto tocado (puede cambiarse por línea): la que
+    // tiene en Configuración Contable → Ingresos y Egresos, la misma que usa el asiento.
+    // - Los conceptos de cartera (Factura/Recibo de venta) no traen ninguna desde el servidor:
+    //   su cuenta es la de Cuentas por Cobrar, nunca la de un renglón sin documento (ver
+    //   IngresoService::getConceptosIngreso()).
+    // - Con documentos ya cargados, un concepto que busca documentos (Factura de reembolso) no
+    //   presta la suya: ese "último concepto tocado" es el del documento, y su cuenta sería la
+    //   incorrecta para un renglón de "otros conceptos" — mejor forzar la elección explícita.
+    // - Un concepto libre (Anticipo Cliente, "Otro concepto…") la presta siempre, haya o no
+    //   documentos: es justo la cuenta de ese renglón (p. ej. cobrar una factura y dejar el
+    //   excedente como anticipo). Antes se cortaba con cualquier documento cargado, así que el
+    //   Anticipo quedaba sin cuenta y el guardado la exigía.
     function ingConceptoCuentaActual() {
-        if (docPendientes.length > 0) return {};
         const sel = document.getElementById('m-select-concepto');
         const opt = sel ? sel.options[sel.selectedIndex] : null;
         if (!opt) return {};
+        const comp = opt.dataset.comportamiento || 'GENERAL';
+        if (docPendientes.length > 0 && ING_COMP_CON_DOCUMENTOS.includes(comp)) return {};
         const id = parseInt(opt.dataset.cuentaId || '0') || 0;
         if (!id) return {};
-        return { id_cuenta: id, cuenta_codigo: opt.dataset.cuentaCodigo || '', cuenta_nombre: opt.dataset.cuentaNombre || '' };
+        // cuenta_auto: la puso el concepto, no el usuario (ver ingAplicarCuentaConceptoALineas).
+        return { id_cuenta: id, cuenta_codigo: opt.dataset.cuentaCodigo || '', cuenta_nombre: opt.dataset.cuentaNombre || '', cuenta_auto: true };
+    }
+
+    /**
+     * Lleva la cuenta del concepto recién tocado a las líneas de "Otros conceptos" sin cuenta, y
+     * a las que siguen en blanco (sin descripción ni monto) con la que les dejó el concepto
+     * anterior. Nunca pisa una cuenta elegida en el buscador ni la de una línea ya escrita: los
+     * conceptos se combinan, así que esa línea puede ser del concepto anterior.
+     */
+    function ingAplicarCuentaConceptoALineas() {
+        const cuenta = ingConceptoCuentaActual();
+        if (!cuenta.id_cuenta) return;
+        detalleManual.forEach(d => {
+            const enBlanco = !String(d.descripcion || '').trim() && !(d.monto > 0);
+            if (!d.id_cuenta || (d.cuenta_auto && enBlanco)) Object.assign(d, cuenta);
+        });
     }
 
     let _ingCuentaTimer = null;
@@ -1733,6 +1757,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             detalleManual[idx].id_cuenta     = item.id;
             detalleManual[idx].cuenta_codigo = item.codigo;
             detalleManual[idx].cuenta_nombre = item.nombre;
+            detalleManual[idx].cuenta_auto   = false; // elegida a mano: ningún concepto la pisa
         }
         document.getElementById('m-cuenta-drop').classList.add('d-none');
         renderDetalles();
@@ -3008,8 +3033,9 @@ window.modalCrearOpcionIngreso = function () {
     abrirModalOpcion();
 };
 
-// Callback tras guardar opción: agrega el nuevo botón de concepto dinámicamente
-window.onOpcionCreada = function (id, nombre, comportamiento) {
+// Callback tras guardar opción: agrega el nuevo botón de concepto dinámicamente.
+// `cuenta` ({id, codigo, nombre} o null) es la cuenta con la que se creó el concepto.
+window.onOpcionCreada = function (id, nombre, comportamiento, cuenta) {
     comportamiento = comportamiento || 'GENERAL';
     const grupo  = document.getElementById('concepto-btns-group');
     const sel    = document.getElementById('m-select-concepto');
@@ -3020,6 +3046,13 @@ window.onOpcionCreada = function (id, nombre, comportamiento) {
         const opt = document.createElement('option');
         opt.value = id;
         opt.dataset.comportamiento = comportamiento;
+        // Con su cuenta, igual que los que vienen del servidor: sin esto, el concepto recién
+        // creado no prellenaba su cuenta en las líneas manuales hasta recargar la página.
+        if (cuenta && cuenta.id) {
+            opt.dataset.cuentaId     = cuenta.id;
+            opt.dataset.cuentaCodigo = cuenta.codigo || '';
+            opt.dataset.cuentaNombre = cuenta.nombre || '';
+        }
         opt.textContent = nombre;
         sel.appendChild(opt);
     }

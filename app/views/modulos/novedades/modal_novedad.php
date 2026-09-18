@@ -62,6 +62,16 @@ $mesActual  = (int) date('n');
                             <input type="number" step="0.01" class="form-control form-control-sm shadow-none fw-bold" name="valor" id="nov_valor" value="0.00">
                         </div>
 
+                        <!-- Solo Otros Ingresos y horas: si el ingreso aporta al IESS (como los rubros fijos del empleado) -->
+                        <div class="col-md-3 d-none" id="nov_container_iess">
+                            <label class="form-label mb-1 small fw-bold text-muted" for="nov_aporta_iess">Aporta IESS</label>
+                            <select class="form-select form-select-sm shadow-none" name="aporta_iess" id="nov_aporta_iess">
+                                <option value="si">Sí</option>
+                                <option value="no">No</option>
+                            </select>
+                            <div class="form-text small mt-1 d-none" id="nov_iess_aviso">El empleado no aporta al IESS.</div>
+                        </div>
+
                         <div class="col-md-6 d-none" id="nov_container_motivo">
                             <label class="form-label mb-1 small fw-bold text-muted">Motivo de Salida *</label>
                             <select class="form-select form-select-sm shadow-none" name="motivo_codigo" id="nov_motivo_codigo">
@@ -95,6 +105,7 @@ $mesActual  = (int) date('n');
                                     <option value="<?= htmlspecialchars($val) ?>"><?= htmlspecialchars($lbl) ?></option>
                                 <?php endforeach; ?>
                             </select>
+                            <div class="form-text small mt-1 d-none" id="nov_aplica_aviso">Este tipo solo afecta al rol mensual.</div>
                         </div>
 
                         <div class="col-12">

@@ -21,12 +21,20 @@
     const empHidden = document.getElementById('nov_id_empleado');
     const empResultados = document.getElementById('nov_empleado_resultados');
     let empTimer = null;
+    // ¿El empleado elegido aporta al IESS? Si no, sus ingresos tampoco (como en los rubros fijos).
+    let empAportaIess = true;
+
+    // En pgsql el booleano puede llegar como 't'/'f'.
+    const esNo = (v) => v === false || v === 'f' || v === 0 || v === '0' || v === 'false';
+    const esSi = (v) => v === true || v === 't' || v === 1 || v === '1' || v === 'true';
 
     function ocultarResultadosEmp() { if (empResultados) empResultados.classList.add('d-none'); }
 
-    function setEmpleado(id, texto) {
+    function setEmpleado(id, texto, aportaIess = true) {
         if (empHidden) empHidden.value = id || '';
         if (empBuscar) empBuscar.value = texto || '';
+        empAportaIess = aportaIess !== false;
+        novSincronizarIess();
         ocultarResultadosEmp();
     }
 
@@ -42,7 +50,7 @@
             }
             empResultados.innerHTML = json.data.map(e => {
                 const texto = `${e.nombres_apellidos} (${e.identificacion})`.replace(/"/g, '&quot;');
-                return `<button type="button" class="list-group-item list-group-item-action py-1 small" data-id="${e.id}" data-texto="${texto}">
+                return `<button type="button" class="list-group-item list-group-item-action py-1 small" data-id="${e.id}" data-texto="${texto}" data-aporta-iess="${e.aporta_iess === false ? '0' : '1'}">
                             <span class="fw-medium">${e.nombres_apellidos}</span> <span class="text-muted">${e.identificacion}</span>
                         </button>`;
             }).join('');
@@ -53,6 +61,7 @@
     if (empBuscar) {
         empBuscar.addEventListener('input', () => {
             if (empHidden) empHidden.value = ''; // obliga a re-seleccionar del listado
+            if (!empAportaIess) { empAportaIess = true; novSincronizarIess(); }
             const q = empBuscar.value.trim();
             clearTimeout(empTimer);
             if (q.length < 2) { ocultarResultadosEmp(); return; }
@@ -66,7 +75,7 @@
             const btn = ev.target.closest('[data-id]');
             if (!btn) return;
             ev.preventDefault();
-            setEmpleado(btn.dataset.id, btn.dataset.texto);
+            setEmpleado(btn.dataset.id, btn.dataset.texto, btn.dataset.aportaIess !== '0');
         });
     }
 
@@ -114,13 +123,16 @@
     });
     document.getElementById('nov_periodo_anio')?.addEventListener('input', actualizarObservacion);
 
-    // Muestra/oculta Valor y Motivo según el tipo, y ajusta la etiqueta del valor.
+    // Muestra/oculta Valor, Aporta IESS y Motivo según el tipo, y ajusta la etiqueta del valor.
     window.novToggleCampos = function () {
         const cod = document.getElementById('nov_tipo_codigo').value;
         const cat = window.NOVEDAD_CATALOGO || {};
         const esAviso = cod !== '' && cod === cat.cod_aviso_salida;
+        // Otros Ingresos y horas: los únicos con la opción de IESS.
+        const conIess = cod !== '' && Object.prototype.hasOwnProperty.call(cat.iess_por_defecto || {}, cod);
 
         const contValor = document.getElementById('nov_container_valor');
+        const contIess = document.getElementById('nov_container_iess');
         const contMotivo = document.getElementById('nov_container_motivo');
         const lblValor = document.getElementById('nov_label_valor');
         const inpValor = document.getElementById('nov_valor');
@@ -136,7 +148,79 @@
             if (selMotivo) selMotivo.value = '';
             if (lblValor) lblValor.textContent = (cat.labels && cat.labels[cod]) ? cat.labels[cod] : 'Monto ($)';
         }
+        // Con el selector de IESS, el valor comparte la fila con él.
+        contIess?.classList.toggle('d-none', !conIess);
+        contValor.classList.toggle('col-md-6', !conIess);
+        contValor.classList.toggle('col-md-3', conIess);
+        novSincronizarIess();
+        novSincronizarAplica((cat.cods_solo_rol || []).includes(cod));
     };
+
+    // Días no laborados y aviso de salida solo afectan al rol mensual (en la quincena
+    // y la semana solo hay ingresos y descuentos): "Afecta a" queda en Rol de Pagos y
+    // bloqueado; al cambiar a otro tipo se recupera lo que estaba elegido. El backend
+    // aplica la misma regla.
+    function novSincronizarAplica(soloRol) {
+        const sel = document.getElementById('nov_aplica_en');
+        const aviso = document.getElementById('nov_aplica_aviso');
+        if (!sel) return;
+        if (soloRol) {
+            if (!sel.classList.contains('nov-aplica-off')) sel.dataset.antes = sel.value;
+            sel.value = 'rol';
+            sel.disabled = true;
+            sel.classList.add('nov-aplica-off');
+            aviso?.classList.remove('d-none');
+        } else {
+            if (sel.classList.contains('nov-aplica-off')) {
+                sel.classList.remove('nov-aplica-off');
+                if (!sel.classList.contains('nov-lock-off')) sel.disabled = false;
+                if (sel.dataset.antes) sel.value = sel.dataset.antes;
+            }
+            aviso?.classList.add('d-none');
+        }
+    }
+
+    function novReiniciarAplica() {
+        const sel = document.getElementById('nov_aplica_en');
+        if (!sel) return;
+        sel.classList.remove('nov-aplica-off');
+        sel.disabled = false;
+        delete sel.dataset.antes;
+        document.getElementById('nov_aplica_aviso')?.classList.add('d-none');
+    }
+
+    // Si el empleado no aporta al IESS, el selector queda en "No" y bloqueado (igual
+    // que los rubros fijos de su ficha); al volver a un empleado que aporta se
+    // recupera lo que estaba elegido. El backend aplica la misma regla.
+    function novSincronizarIess() {
+        const sel = document.getElementById('nov_aporta_iess');
+        const aviso = document.getElementById('nov_iess_aviso');
+        if (!sel) return;
+        if (!empAportaIess) {
+            if (!sel.classList.contains('nov-iess-off')) sel.dataset.antes = sel.value;
+            sel.value = 'no';
+            sel.disabled = true;
+            sel.classList.add('nov-iess-off');
+            aviso?.classList.remove('d-none');
+        } else {
+            if (sel.classList.contains('nov-iess-off')) {
+                sel.classList.remove('nov-iess-off');
+                if (!sel.classList.contains('nov-lock-off')) sel.disabled = false;
+                sel.value = sel.dataset.antes || 'si';
+            }
+            aviso?.classList.add('d-none');
+        }
+    }
+
+    function novReiniciarIess(valor) {
+        const sel = document.getElementById('nov_aporta_iess');
+        if (!sel) return;
+        sel.classList.remove('nov-iess-off');
+        sel.disabled = false;
+        delete sel.dataset.antes;
+        sel.value = valor;
+        empAportaIess = true;
+    }
 
     // ─── Bloqueo de solo lectura (rol del período ya pagado/contabilizado) ──
     // El backend ya rechaza el guardado (NovedadService::bloquearSiRolPagado); esto
@@ -174,6 +258,9 @@
         document.getElementById('nov_id').value = '';
         document.getElementById('tituloModalNov').textContent = 'Nueva Novedad';
         document.getElementById('btnEliminarNov')?.classList.add('d-none');
+        // Nueva novedad: "Aporta IESS" arranca en Sí (lo habitual en bonos, comisiones y horas).
+        novReiniciarIess('si');
+        novReiniciarAplica();
         setEmpleado('', '');
         obsAuto = '';
         // Toda novedad nace activa: el selector se muestra pero en solo lectura.
@@ -211,7 +298,14 @@
             if (!res.ok) return;
             const d = res.data;
 
-            setEmpleado(d.id_empleado || '', d.empleado_nombre ? `${d.empleado_nombre} (${d.empleado_identificacion || ''})` : '');
+            // Marca guardada; sin marca (novedad anterior a la opción), la del tipo:
+            // horas sí, Otros Ingresos no — lo mismo que aplica el rol.
+            const porDefecto = !!((window.NOVEDAD_CATALOGO || {}).iess_por_defecto || {})[d.tipo_codigo];
+            const marca = (d.aporta_iess === null || d.aporta_iess === undefined || d.aporta_iess === '') ? porDefecto : esSi(d.aporta_iess);
+            novReiniciarIess(marca ? 'si' : 'no');
+            novReiniciarAplica();
+
+            setEmpleado(d.id_empleado || '', d.empleado_nombre ? `${d.empleado_nombre} (${d.empleado_identificacion || ''})` : '', !esNo(d.empleado_aporta_iess));
             document.getElementById('nov_estado').value = d.estado || 'activo';
             document.getElementById('nov_tipo_codigo').value = d.tipo_codigo || '';
             document.getElementById('nov_fecha').value = d.fecha || '';

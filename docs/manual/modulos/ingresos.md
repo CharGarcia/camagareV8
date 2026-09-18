@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado
-version: 2.6
+etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo
+version: 2.7
 orden: 10
 estado: activo
 ---
@@ -85,6 +85,27 @@ concepto que se usó para armarlo. Si el ingreso combina más de un tipo (ver
 "Combinar varios conceptos" arriba), la columna los junta con `+`. Si es un
 concepto sin documento (Anticipo Cliente, Préstamos…), muestra directamente el
 nombre del concepto elegido.
+
+## Cuenta contable de las líneas de "Otros conceptos"
+
+Cada línea de "Otros conceptos" lleva su cuenta contable, y el sistema la propone
+sola a partir del **concepto** que se pulsa: es la cuenta que ese concepto tiene
+en *Configuración Contable → Ingresos y Egresos* (la misma que se ve en
+*Opciones de Ingreso/Egreso* y la que usa el asiento).
+
+- **Anticipo Cliente** pone su cuenta aunque ya haya facturas o recibos
+  cargados: así se cobra una factura y el excedente queda como anticipo en la
+  misma operación, sin buscar la cuenta a mano. Si no queda ninguna línea, el
+  botón agrega una.
+- La cuenta propuesta llega a las líneas que no tienen cuenta y a las que siguen
+  en blanco (sin descripción ni monto). **Nunca cambia** una cuenta elegida a
+  mano en el buscador, ni la de una línea ya escrita con otro concepto.
+- **Factura de venta** y **Recibo de venta** no proponen cuenta: la suya es
+  Cuentas por Cobrar, que el asiento toma del propio documento. Con documentos
+  ya cargados tampoco la propone **Factura de reembolso**. En esos casos, la
+  línea sin documento necesita que se elija la cuenta.
+- Si un concepto no propone ninguna cuenta, revise que la tenga asignada en
+  *Configuración Contable → Ingresos y Egresos*.
 
 ## Campos obligatorios
 
@@ -193,8 +214,9 @@ cuántos documentos admite cada periodo) está en el manual de **Empresa**, secc
 Cada ingreso genera su asiento automáticamente según la configuración contable de
 la empresa. Al modificarlo, el asiento se regenera; al anularlo, se anula.
 
-En las líneas de concepto general se puede elegir la cuenta contable por línea,
-cuando el concepto no tiene una cuenta fija.
+Las líneas de "Otros conceptos" van al asiento con la cuenta de cada línea: la
+que propone el concepto o la que se elija a mano (ver *Cuenta contable de las
+líneas de "Otros conceptos"*).
 
 ## Buscar y filtrar el listado
 
@@ -306,8 +328,22 @@ deseable; para el contador o el administrador, active el acceso total.
   Pagos, y reverse ahí.
 - **No encuentro la factura a cobrar**: compruebe que está a nombre de ese
   cliente, que no está ya cobrada y que no fue anulada.
+- **"Falta cuenta contable"**: el ingreso mezcla facturas o recibos con una línea
+  de "Otros conceptos" que no tiene cuenta. Elíjala en la columna *Cuenta
+  contable* de esa línea; si es un anticipo, pulse **Anticipo Cliente** y se pone
+  sola.
 
 ## Historial de cambios
+
+- **2.7** — Al pulsar **Anticipo Cliente**, las líneas de "Otros conceptos" toman
+  la cuenta del anticipo aunque ya haya facturas o recibos cargados (antes
+  quedaban sin cuenta y el guardado la exigía). La cuenta propuesta es la de
+  *Configuración Contable → Ingresos y Egresos*: antes solo se leía la del módulo
+  de Opciones, así que una cuenta asignada únicamente allá no aparecía. También
+  reemplaza la que otro concepto haya dejado en una línea aún en blanco, sin tocar
+  las elegidas a mano. **Factura de venta** y **Recibo de venta** ya no proponen
+  su cuenta de cartera en esas líneas, y un concepto creado desde el propio modal
+  propone su cuenta sin recargar la página.
 
 - **2.6** — El cuadro encuentra el ingreso escribiendo su número completo `001-001-000000001`, aunque el
   documento tenga el número guardado sin la serie o con el secuencial sin los ceros de

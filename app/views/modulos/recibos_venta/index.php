@@ -673,11 +673,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <div class="p-3">
                                 <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
                                     <div class="table-responsive" style="max-height: 350px;">
-                                        <table class="table table-sm table-detalle mb-0 text-nowrap">
+                                        <table class="table table-sm table-detalle mb-0 text-nowrap" id="m-tabla-detalle">
                                             <thead>
                                                 <tr class="table-light border-bottom">
-                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 9%;">Código</th>
-                                                    <th class="py-2 small fw-bold text-muted" style="width: 15%;">Descripción</th>
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" data-det-col="codigo" style="width: 9%;">Código</th>
+                                                    <th class="py-2 small fw-bold text-muted" data-det-col="descripcion" style="width: 15%;">Descripción</th>
                                                     <th class="py-2 small fw-bold text-muted" style="width: 10%;">Adicional</th>
                                                     <th class="py-2 small fw-bold text-muted col-medida-header <?= (($empresa['mostrar_unidad_medida'] ?? true) === 'true' || ($empresa['mostrar_unidad_medida'] ?? true) === true) ? '' : 'd-none' ?>" style="width: 8%;">Medida</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
@@ -1065,6 +1065,7 @@ $page       = $pageOriginal;
 $totalPages = $totalPagesOriginal;
 ?>
 
+<script src="<?= BASE_URL ?>/js/components/detalle_columnas.js?v=<?= asset_ver('/js/components/detalle_columnas.js') ?>"></script>
 <script>
     // Ajustar z-index de los backdrops dinámicamente para modales anidados
     document.addEventListener('show.bs.modal', function(event) {
@@ -1136,6 +1137,22 @@ $totalPages = $totalPagesOriginal;
     const USUARIO_NOMBRE = '<?= htmlspecialchars($_SESSION['nombre'] ?? '', ENT_QUOTES) ?>';
     // Alias cortos para uso frecuente
     const PERM_ACTUALIZAR = <?= !empty($perm['actualizar']) ? 'true' : 'false' ?>;
+    // Código y Descripción del detalle: la descripción crece con su texto y las dos
+    // columnas se ensanchan arrastrando el borde del encabezado (doble clic: ajustar
+    // al texto). El ancho se guarda por usuario. Mismo componente que Factura de Venta: public/js/components/detalle_columnas.js.
+    // Si el componente no cargó (archivo ausente tras un despliegue, caché), el
+    // módulo sigue funcionando igual que antes: sin esta guarda, el error cortaría
+    // todo este bloque de script y con él la factura entera.
+    const RV_DET = typeof CMG_detalleColumnas !== 'function'
+        ? { engancharDescripcion() {}, ajustarDescripciones() {} }
+        : CMG_detalleColumnas({
+            tabla:   '#m-tabla-detalle',
+            tbody:   '#m-tbodyDetalle',
+            modal:   '#modalNuevaFactura',
+            anchos:  <?= json_encode((object) \App\Helpers\PreferenciasHelper::getAnchosDetalle($vistaConfig ?? [])) ?>,
+            modulo:  RUTA_MODULO,
+            urlBase: B_URL,
+        });
     // Facturar desde recibo exige, además, permiso de CREAR en Facturas de venta.
     const PERM_CREAR_FACTURA = <?= \App\Helpers\Permisos::puedeCrear('modulos/factura-venta') ? 'true' : 'false' ?>;
     const DEC_PRECIO = EMPRESA_CONFIG.decimales_precio;
@@ -3360,6 +3377,7 @@ $totalPages = $totalPagesOriginal;
         tbody.appendChild(tr);
 
         const inputDesc = tr.querySelector('.input-descripcion');
+        RV_DET.engancharDescripcion(inputDesc);
         const inputCodigoVisible = tr.querySelector('.input-codigo');
         // Concepto libre: no permitir Enter (evita saltos de línea) y, al salir del campo,
         // colapsar espacios dobles y recortar los extremos.

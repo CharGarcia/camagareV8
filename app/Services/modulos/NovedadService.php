@@ -16,6 +16,9 @@ class NovedadService
     private NovedadRules $rules;
     private LogSistemaService $logService;
 
+    /** "idEmpresa|idEmpleado" => ¿aporta al IESS? (la importación normaliza muchas novedades por persona). */
+    private array $aportaIessEmpleado = [];
+
     public function __construct(NovedadRepository $repository, NovedadRules $rules, LogSistemaService $logService)
     {
         $this->repository = $repository;
@@ -52,7 +55,7 @@ class NovedadService
 
     public function crear(array $data): int
     {
-        $data = $this->normalizar($data);
+        $data = $this->normalizar($data, (int) $data['id_empresa']);
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
 
@@ -89,7 +92,7 @@ class NovedadService
         $this->repository->beginTransaction();
         try {
             foreach ($filas as $i => $data) {
-                $data = $this->normalizar($data);
+                $data = $this->normalizar($data, $idEmpresa);
                 try {
                     $ids[] = $this->crearInterno($data);
                 } catch (\Throwable $e) {
@@ -145,7 +148,7 @@ class NovedadService
     public function validarParaCrear(array $data): ?string
     {
         try {
-            $data = $this->normalizar($data);
+            $data = $this->normalizar($data, (int) $data['id_empresa']);
             $this->rules->validate($data);
             $this->bloquearSiRolPagado(
                 (int) $data['id_empresa'],
@@ -162,13 +165,17 @@ class NovedadService
 
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
-        $data = $this->normalizar($data);
-        $this->rules->validate($data);
-
         $old = $this->repository->getDetalle($id, $idEmpresa);
         if (!$old) {
             throw new Exception('Novedad no encontrada.');
         }
+        // Sin marca de IESS en la edición (selector deshabilitado, o la regeneración
+        // desde asistencia que no la conoce) se conserva la que ya tenía.
+        if (($data['aporta_iess'] ?? null) === null) {
+            $data['aporta_iess'] = $old['aporta_iess'] ?? null;
+        }
+        $data = $this->normalizar($data, $idEmpresa);
+        $this->rules->validate($data);
 
         // Bloquear si el destino ANTERIOR o el NUEVO corresponden a un rol ya pagado.
         $this->bloquearSiRolPagado($idEmpresa, $old['id_empleado'] ?? 0, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0);
@@ -332,7 +339,7 @@ class NovedadService
     /**
      * Denormaliza nombres desde el catálogo y limpia campos según el tipo.
      */
-    private function normalizar(array $data): array
+    private function normalizar(array $data, int $idEmpresa): array
     {
         $tipo = trim((string) ($data['tipo_codigo'] ?? ''));
         $data['tipo_nombre'] = CatalogoNovedades::nombreTipo($tipo) ?? '';
@@ -347,6 +354,38 @@ class NovedadService
             $data['motivo_nombre'] = null;
         }
 
+        // Días no laborados y aviso de salida solo afectan al rol mensual: en la
+        // quincena y la semana solo hay ingresos y descuentos.
+        if (CatalogoNovedades::soloRolMensual($tipo)) {
+            $data['aplica_en'] = 'rol';
+        }
+
+        // Aporta al IESS: solo Otros Ingresos y horas; sin marca, la del tipo. Igual
+        // que en los rubros fijos, si el empleado no aporta al IESS sus ingresos
+        // tampoco. En los demás tipos la marca no aplica (NULL).
+        if (CatalogoNovedades::admiteOpcionIess($tipo)) {
+            $aporta = CatalogoNovedades::aportaIess($tipo, $data['aporta_iess'] ?? null);
+            if ($aporta && $this->empleadoAportaIess($idEmpresa, (int) ($data['id_empleado'] ?? 0)) === false) {
+                $aporta = false;
+            }
+            $data['aporta_iess'] = $aporta;
+        } else {
+            $data['aporta_iess'] = null;
+        }
+
         return $data;
+    }
+
+    /** ¿El empleado aporta al IESS? null si no existe (las reglas lo rechazan después). */
+    private function empleadoAportaIess(int $idEmpresa, int $idEmpleado): ?bool
+    {
+        if ($idEmpleado <= 0) {
+            return null;
+        }
+        $clave = $idEmpresa . '|' . $idEmpleado;
+        if (!array_key_exists($clave, $this->aportaIessEmpleado)) {
+            $this->aportaIessEmpleado[$clave] = $this->repository->empleadoAportaIess($idEmpleado, $idEmpresa);
+        }
+        return $this->aportaIessEmpleado[$clave];
     }
 }

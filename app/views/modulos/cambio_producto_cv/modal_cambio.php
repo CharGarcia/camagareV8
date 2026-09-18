@@ -139,7 +139,7 @@
                             <span id="cam_ent_info" class="small text-muted"></span>
                         </div>
                         <div class="position-relative mb-2" id="cam_ent_search_wrap">
-                            <input type="text" id="cam_ent_busqueda" class="form-control form-control-sm" placeholder="N° de consignación, NUP, lote, código o nombre del producto… (consignaciones del cliente, existencias por bodega y catálogo)" oninput="camBuscarEntregas(this.value)" onfocus="camBuscarEntregas(this.value, true)" autocomplete="off">
+                            <input type="text" id="cam_ent_busqueda" class="form-control form-control-sm" placeholder="N° de consignación: completo (001-001-000000012) o solo el secuencial (12)…" oninput="camBuscarEntregas(this.value)" onfocus="camBuscarEntregas(this.value, true)" autocomplete="off">
                             <div id="cam_ent_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1075; max-height:320px; overflow:auto;"></div>
                         </div>
                         <div class="table-responsive border rounded-3 bg-white" style="max-height:26vh; overflow:auto;">
@@ -156,7 +156,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="cam_ent_body">
-                                    <tr><td colspan="7" class="text-center text-muted py-3">Busque por N° de consignación, NUP, lote o producto lo que se entrega a cambio.</td></tr>
+                                    <tr><td colspan="7" class="text-center text-muted py-3">Busque por N° de consignación lo que se entrega a cambio.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -232,13 +232,14 @@
     }
     function vaciarEnt() {
         document.getElementById('cam_ent_body').innerHTML =
-            '<tr class="cam-ent-empty"><td colspan="7" class="text-center text-muted py-3">Busque por N° de consignación, NUP, lote o producto lo que se entrega a cambio.</td></tr>';
+            '<tr class="cam-ent-empty"><td colspan="7" class="text-center text-muted py-3">Busque por N° de consignación lo que se entrega a cambio.</td></tr>';
         document.getElementById('cam_ent_info').textContent = '';
     }
 
     function setCamposEditables(editable) {
-        // Los dos buscadores funcionan también SIN cliente: el ítem se localiza por NUP,
-        // lote o número de documento y el cliente del cambio se fija con el ítem elegido.
+        // Los dos buscadores funcionan también SIN cliente: lo que se devuelve se localiza por
+        // NUP, lote o número de documento, y lo que se entrega por el número de la consignación;
+        // el cliente del cambio se fija con el ítem elegido.
         ['cam_select_serie','cam_fecha_cambio','cam_cliente_busqueda','cam_motivo','cam_observaciones',
          'cam_dev_busqueda','cam_ent_busqueda'].forEach(id => {
             const el = document.getElementById(id);
@@ -496,7 +497,8 @@
     /**
      * Quita las líneas que dependen del cliente: todas las devoluciones (vienen de SUS
      * facturas de consignación/cambios) y las entregas tomadas de una consignación (de SU consignación).
-     * Las entregas desde bodega/catálogo no dependen del cliente y se conservan.
+     * Las entregas desde bodega/catálogo (solo en borradores guardados antes del 18-09-2026,
+     * ya no se agregan) no dependen del cliente y se conservan.
      */
     function camQuitarLineasDelCliente() {
         vaciarDev();
@@ -725,18 +727,19 @@
         camRecalcular();
     };
 
-    // ─── Entregas (consignación del cliente, existencias por bodega o catálogo) ─
-    // Un solo buscador con tres grupos: (1) líneas de consignaciones ENTREGADAS con saldo
-    // en poder del cliente, por N° de consignación, NUP, lote o producto (cada ítem se
-    // agrega por separado, o "Agregar todos"); (2) existencias en bodega por lote / NUP;
-    // (3) productos del catálogo aunque no tengan stock registrado.
+    // ─── Entregas (solo desde consignaciones del cliente, por su número) ──────
+    // Se busca SOLO por el número de la consignación: completo (001-001-000000012) o solo el
+    // secuencial, con o sin ceros. Salen las líneas de esa consignación ENTREGADA con saldo en
+    // poder del cliente, cada ítem por separado (o "Agregar todos"). Desde el 18-09-2026 ya no
+    // se ofrecen existencias de bodega ni el catálogo, ni se busca por NUP, lote o producto.
     window.camBuscarEntregas = function (q, desdeFocus) {
         clearTimeout(camEntTimer);
         const dd = document.getElementById('cam_ent_dropdown');
         const idCliente = document.getElementById('cam_id_cliente').value;
         q = (q || '').trim();
-        if (!q && !idCliente) { dd.classList.add('d-none'); return; }
-        if (q && q.length < 2 && !idCliente) { dd.classList.add('d-none'); return; }
+        // Sin un número no hay nada que buscar (con el campo vacío ya no se listan todas las
+        // consignaciones del cliente).
+        if (!/\d/.test(q)) { dd.classList.add('d-none'); return; }
         camEntTimer = setTimeout(async () => {
             const excl = document.getElementById('cam_id').value || 0;
             const res = await fetch(`${RUTA}/buscarEntregasAjax?id_cliente=${idCliente || 0}&excluir=${excl}&q=${encodeURIComponent(q)}`);
@@ -747,108 +750,55 @@
                 dd.classList.remove('d-none');
                 return;
             }
-            const consig = data.consignaciones || [], inv = data.inventario || [], cat = data.catalogo || [];
-            const limpiar = () => { document.getElementById('cam_ent_busqueda').value = ''; };
-
-            if (consig.length) {
+            const consig = data.consignaciones || [];
+            if (!consig.length) {
+                dd.innerHTML = `<span class="list-group-item small text-muted">No hay una consignación entregada con ese número y saldo pendiente${idCliente ? ' para el cliente del cambio' : ''}.</span>`;
+            } else {
                 camRenderGrupos(dd, consig, {
                     mostrarCliente: !idCliente,
                     existe: (l) => !!document.querySelector(`#cam_ent_body tr[data-key="CONSIGNACION-${l.id_origen_detalle}"]`),
-                    onAdd: (l, silencioso) => { camAgregarEntregaFila(Object.assign({ tipo: 'CONSIGNACION' }, l), silencioso); limpiar(); }
+                    onAdd: (l, silencioso) => { camAgregarEntregaFila(l, silencioso); document.getElementById('cam_ent_busqueda').value = ''; }
                 });
-            }
-            if (inv.length) {
-                const head = document.createElement('div');
-                head.className = 'list-group-item py-1 bg-light d-flex align-items-center gap-2';
-                head.innerHTML = `${camBadgeOrigen('BODEGA', 'Existencias en bodega')} <span class="small text-muted ms-auto">${inv.length} ítem(s)</span>`;
-                dd.appendChild(head);
-                inv.forEach(r => {
-                    const a = document.createElement('a');
-                    a.href = '#'; a.className = 'list-group-item list-group-item-action py-1 ps-4';
-                    a.innerHTML = `<i class="bi bi-plus-circle text-primary me-1"></i>
-                        <span class="small fw-semibold">${esc(r.producto_codigo ? r.producto_codigo + ' · ' : '')}${esc(r.producto_nombre)}</span>
-                        <span class="small text-muted ms-1">· ${esc(r.bodega_nombre || '')}</span>
-                        <span class="small text-muted ms-1">Lote/NUP: ${esc(camLoteNup(r))}</span>
-                        <span class="small text-success ms-1">Stock: ${fmt(r.stock, DEC_C)}</span>`;
-                    a.onclick = (ev) => { ev.preventDefault(); camAgregarEntregaFila(Object.assign({ tipo: 'INVENTARIO' }, r), false); dd.classList.add('d-none'); limpiar(); };
-                    dd.appendChild(a);
-                });
-            }
-            if (cat.length) {
-                const head = document.createElement('div');
-                head.className = 'list-group-item py-1 bg-light d-flex align-items-center gap-2';
-                head.innerHTML = `${camBadgeOrigen('BODEGA', 'Catálogo')} <span class="small text-muted ms-auto">${cat.length} producto(s)</span>`;
-                dd.appendChild(head);
-                cat.forEach(p => {
-                    const a = document.createElement('a');
-                    a.href = '#'; a.className = 'list-group-item list-group-item-action py-1 ps-4';
-                    a.innerHTML = `<i class="bi bi-plus-circle text-primary me-1"></i><span class="small fw-semibold">${esc(p.codigo ? p.codigo + ' · ' : '')}${esc(p.nombre)}</span>`;
-                    a.onclick = (ev) => { ev.preventDefault(); camAgregarEntregaFila({ tipo: 'CATALOGO', id_producto: p.id, producto_codigo: p.codigo, producto_nombre: p.nombre }, false); dd.classList.add('d-none'); limpiar(); };
-                    dd.appendChild(a);
-                });
-            }
-            if (!consig.length && !inv.length && !cat.length) {
-                dd.innerHTML = '<span class="list-group-item small text-muted">Sin resultados: ni consignaciones con saldo, ni existencias, ni productos del catálogo.</span>';
             }
             dd.classList.remove('d-none');
         }, desdeFocus ? 0 : 300);
     };
 
     /**
-     * Agrega una fila de entrega. o.tipo:
-     *  - 'CONSIGNACION': línea de consignación del cliente (bodega, lote y NUP fijos; el
-     *    máximo es el saldo en poder del cliente; precio el de la consignación).
-     *  - 'INVENTARIO': existencia en bodega (bodega, lote y NUP precargados, editables).
-     *  - 'CATALOGO': producto suelto (todo editable).
+     * Agrega una fila de entrega desde una línea de consignación del cliente: bodega, lote y
+     * NUP son los de la consignación (fijos) y la cantidad propone el saldo en poder del
+     * cliente, que es también su máximo.
      */
-    async function camAgregarEntregaFila(o, silencioso) {
-        const esConsig = o.tipo === 'CONSIGNACION';
-        if (esConsig && !camAsegurarClienteDeLinea(o)) return;
+    function camAgregarEntregaFila(o, silencioso) {
+        if (!camAsegurarClienteDeLinea(o)) return;
 
-        const key = esConsig
-            ? `CONSIGNACION-${o.id_origen_detalle}`
-            : `${o.tipo}-${o.id_producto}-${o.id_bodega || 0}-${o.lote || ''}-${o.nup || ''}`;
-        if (document.querySelector(`#cam_ent_body tr[data-key="${CSS.escape(key)}"]`)) {
+        const key = `CONSIGNACION-${o.id_origen_detalle}`;
+        if (document.querySelector(`#cam_ent_body tr[data-key="${key}"]`)) {
             if (!silencioso) camSwal({ icon: 'info', title: 'Ya agregado', text: 'Ese ítem ya está en la lista.', timer: 1200, showConfirmButton: false });
             return;
         }
         const empty = document.querySelector('#cam_ent_body .cam-ent-empty');
         if (empty) empty.parentElement.removeChild(empty);
 
-        // Precio: el de la consignación, o el primer precio de lista del producto. No se
-        // muestra en pantalla: viaja oculto en la fila para que el servidor calcule la
-        // diferencia informativa y el registro en Facturación de consignaciones. El IVA no
-        // viaja: lo pone el servidor con la tarifa vigente del producto.
-        let precio = esConsig ? num(o.precio_unitario) : 0;
-        if (!esConsig) {
-            try {
-                const res = await fetch(`${RUTA}/getPreciosAjax?id_producto=${o.id_producto}`);
-                const data = await res.json();
-                const precios = (data.ok && data.data) ? data.data : [];
-                if (precios.length) precio = num(precios[0].precio);
-            } catch (e) {}
-        }
-
-        const saldo   = esConsig ? num(o.saldo_pendiente) : 0;
-        const cantIni = esConsig ? saldo : 1;
+        // Precio: el de la consignación. No se muestra en pantalla: viaja oculto en la fila
+        // para que el servidor calcule la diferencia informativa y el registro en Facturación
+        // de consignaciones. El IVA no viaja: lo pone el servidor con la tarifa vigente del producto.
+        const saldo = num(o.saldo_pendiente);
         const tr = document.createElement('tr');
         tr.setAttribute('data-key', key);
         tr.setAttribute('data-prod', o.id_producto);
-        tr.dataset.origenTipo = esConsig ? 'CONSIGNACION' : '';
-        tr.dataset.idOrigenDetalle = esConsig ? o.id_origen_detalle : '';
-        tr.dataset.saldo = esConsig ? saldo : '';
+        tr.dataset.origenTipo = 'CONSIGNACION';
+        tr.dataset.idOrigenDetalle = o.id_origen_detalle;
+        tr.dataset.saldo = saldo;
         tr.dataset.caducidad = o.fecha_caducidad ? String(o.fecha_caducidad).slice(0, 10) : '';
-        tr.dataset.precio = precio;
-        const origenCell = esConsig
-            ? camBadgeOrigenConsignacion(o.doc_numero)
-            : camBadgeOrigen('BODEGA', o.tipo === 'INVENTARIO' ? 'Existencias' : 'Catálogo');
+        tr.dataset.precio = num(o.precio_unitario);
         tr.innerHTML = `
-            <td class="small">${origenCell}</td>
+            <td class="small">${camBadgeOrigenConsignacion(o.doc_numero)}</td>
             <td class="small">${esc(o.producto_codigo ? o.producto_codigo + ' · ' : '')}${esc(o.producto_nombre)}</td>
-            <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" ${esConsig ? 'disabled title="La bodega es la de la consignación"' : ''} style="height:26px;font-size:.78rem;">${bodegaOptions(o.id_bodega || '')}</select></td>
-            <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(o.lote || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;"></td>
-            <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(o.nup || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;"></td>
-            <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" ${esConsig ? `max="${saldo}"` : ''} step="any" value="${cantIni}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
+            <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" disabled title="La bodega es la de la consignación" style="height:26px;font-size:.78rem;">${bodegaOptions(o.id_bodega || '')}</select></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(o.lote || '')}" readonly style="height:26px;font-size:.75rem;"></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(o.nup || '')}" readonly style="height:26px;font-size:.75rem;"></td>
+            <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" max="${saldo}" step="any" value="${saldo}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
             <td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'ent')" title="Quitar"><i class="bi bi-x-lg"></i></button></td>`;
         document.getElementById('cam_ent_body').appendChild(tr);
         camOnEnt(tr.querySelector('.cam-ent-cant'));
@@ -955,22 +905,28 @@
             : `GUARDADA-${d.id || ''}-${d.id_producto}-${d.id_bodega || 0}-${d.lote || ''}-${d.nup || ''}`);
         tr.dataset.origenTipo = esConsig ? 'CONSIGNACION' : '';
         tr.dataset.idOrigenDetalle = esConsig ? (d.id_origen_detalle || '') : '';
-        tr.dataset.saldo = ''; // en edición el máximo real se revalida en el server
+        // Entrega desde bodega o catálogo de un borrador anterior al 18-09-2026: viaja con el id de
+        // su línea para que el servidor la reconozca (las nuevas se rechazan) y su cantidad no
+        // puede subir (camOnEnt la topa en el saldo). Desde consignación, el máximo real se
+        // revalida en el server.
+        tr.dataset.idDetalle = esConsig ? '' : (d.id || '');
+        tr.dataset.saldo = esConsig ? '' : num(d.cantidad);
         tr.dataset.caducidad = d.fecha_caducidad ? String(d.fecha_caducidad).slice(0, 10) : '';
         // Precio guardado: no se muestra, pero al editar un borrador se reenvía tal cual (el IVA
         // lo vuelve a poner el servidor).
         tr.dataset.precio = num(d.precio_unitario);
         const origenCell = esConsig
             ? camBadgeOrigenConsignacion(d.origen_numero)
-            : camBadgeOrigen('BODEGA');
+            : camBadgeOrigen('BODEGA', null, 'Entrega desde bodega o catálogo registrada antes del 18-09-2026: se conserva, pero ya no se agregan nuevas');
         if (editable) {
+            const topeCant = esConsig ? '' : `max="${num(d.cantidad)}" title="Máximo ${fmt(d.cantidad, DEC_C)}: se puede reducir, no aumentar (lo que se agregue debe salir de una consignación)"`;
             tr.innerHTML = `
                 <td class="small">${origenCell}</td>
                 <td class="small">${esc(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${esc(d.producto_nombre)}</td>
                 <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" ${esConsig ? 'disabled title="La bodega es la de la consignación"' : ''} style="height:26px;font-size:.78rem;">${bodegaOptions(d.id_bodega)}</select></td>
                 <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(d.lote || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;"></td>
                 <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(d.nup || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;"></td>
-                <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" step="any" value="${num(d.cantidad)}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
+                <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" ${topeCant} step="any" value="${num(d.cantidad)}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
                 <td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'ent')"><i class="bi bi-x-lg"></i></button></td>`;
             document.getElementById('cam_ent_body').appendChild(tr);
             camOnEnt(tr.querySelector('.cam-ent-cant'));
@@ -1024,6 +980,8 @@
                 // Desde consignación: el servidor toma producto/bodega/lote/NUP de esa línea.
                 origen_tipo: tr.dataset.origenTipo || '',
                 id_origen_detalle: tr.dataset.idOrigenDetalle ? parseInt(tr.dataset.idOrigenDetalle, 10) : null,
+                // Desde bodega o catálogo: solo la línea que el borrador ya tenía (ver camPintarEntExistente).
+                id_detalle: tr.dataset.idDetalle ? parseInt(tr.dataset.idDetalle, 10) : null,
                 lote: (tr.querySelector('.cam-ent-lote')?.value || '').trim(),
                 nup: (tr.querySelector('.cam-ent-nup')?.value || '').trim(),
                 fecha_caducidad: tr.dataset.caducidad || ''

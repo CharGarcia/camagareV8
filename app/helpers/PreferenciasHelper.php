@@ -86,6 +86,32 @@ class PreferenciasHelper
     }
 
     /**
+     * Anchos (px) que el usuario fijó a las columnas de la tabla de detalle de un
+     * documento (Código, Descripción) desde el modal —CMG_detalleColumnas, en
+     * public/js/components/detalle_columnas.js—.
+     *
+     * Viven en la clave propia __detalle_anchos__ de __vista__, no en
+     * __columnas_anchos__ (la del listado): guardarVistaAjax reemplaza la clave
+     * entera, así que compartirla haría que el listado y el modal se pisaran. Solo
+     * se devuelven las claves conocidas con enteros positivos: es un JSON de
+     * preferencias y la vista lo imprime dentro de un <script>.
+     */
+    public static function getAnchosDetalle(array $vistaConfig): array
+    {
+        $raw = $vistaConfig['__detalle_anchos__'] ?? [];
+        $anchos = [];
+        if (is_array($raw)) {
+            foreach (['codigo', 'descripcion'] as $col) {
+                $px = (int) ($raw[$col] ?? 0);
+                if ($px > 0) {
+                    $anchos[$col] = $px;
+                }
+            }
+        }
+        return $anchos;
+    }
+
+    /**
      * Renderiza el bloque CSS que personaliza la vista (columnas ocultas y anchos).
      */
     public static function renderEstilosColumnasOcultas(array $vistaConfig, string $idStyle = 'estiloVistaColumnas'): string

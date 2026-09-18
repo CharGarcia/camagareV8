@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
-etiquetas: novedades, novedad, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
-version: 1.4
+etiquetas: novedades, novedad, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
+version: 1.7
 orden: 20
 estado: activo
 ---
@@ -23,7 +23,8 @@ el sueldo.
 3. Elija el **tipo de novedad** del catálogo.
 4. Indique la **fecha** y el **periodo** (mes y año) al que se imputa.
 5. Escriba el **valor** que corresponda al tipo elegido.
-6. Guarde.
+6. En Otros Ingresos y horas, indique si **aporta al IESS** (ver más abajo).
+7. Guarde.
 
 ## El valor depende del tipo
 
@@ -33,6 +34,46 @@ corresponde en cada caso.
 
 Nunca puede ser negativo: para descontar se usa el tipo de novedad que
 corresponde, no un valor en negativo.
+
+## Aporta al IESS: Otros Ingresos y horas
+
+Igual que los rubros fijos de la ficha del empleado, los ingresos variables se
+marcan **con IESS** o **sin IESS**. La opción **Aporta IESS (Sí / No)** aparece
+junto al valor solo en estos tipos:
+
+- **Otros Ingresos** (bonos, comisiones...).
+- **Horas nocturnas**, **suplementarias** y **extraordinarias**.
+
+En los demás tipos no aplica: descuentos, anticipos y préstamos se restan del
+líquido, los días no laborados restan sueldo y el aviso de salida no tiene valor.
+
+Lo que se marque decide el cálculo del rol mensual:
+
+| Aporta IESS | Qué pasa en el rol |
+|-------------|--------------------|
+| **Sí** | El valor suma a la base del IESS: sube el aporte personal (que se descuenta al empleado) y el patronal, y entra en la base de las provisiones (décimo tercero, vacaciones, fondos de reserva) y del Impuesto a la Renta. |
+| **No** | Se paga igual, pero no suma a esa base. En el rol se ve como *"Otros Ingresos (sin IESS)"* o *"Horas Suplementarias (8h, sin IESS)"*. |
+
+En el asiento contable, los Otros Ingresos van a *ingresos gravados* o *no
+gravados* según esta marca; las horas van siempre a su cuenta de horas extra.
+
+Al crear una novedad nueva, la opción viene en **Sí**. Si el empleado **no aporta
+al IESS** (pestaña *Laboral* de su ficha), queda en **No** y bloqueada, igual que
+en sus rubros fijos.
+
+> Las novedades registradas antes de que existiera esta opción conservan el
+> cálculo de siempre: las horas **con** IESS y Otros Ingresos **sin** IESS. Al
+> editarlas se ve y se puede cambiar su marca.
+
+La columna **IESS** del listado muestra *Sí* o *No* en esos tipos (y *—* en los
+demás), y también sale en los botones PDF y Excel.
+
+## Días no laborados
+
+Se registran en **días** y solo afectan al **rol mensual**. Ahí restan del
+sueldo ganado (sueldo / 30 por cada día): bajan el aporte al IESS, los fondos de
+reserva y el décimo tercero, que se calculan sobre los días laborados. El décimo
+cuarto no cambia. El detalle está en el manual de **Roles de pago**.
 
 ## Aviso de salida
 
@@ -45,6 +86,19 @@ su causa, que es lo que después determina la liquidación.
 Una novedad tiene fecha (cuándo ocurrió) y periodo (a qué mes se imputa). No
 siempre coinciden: una hora extra del 31 de julio puede pagarse en el rol de
 agosto. El mes debe estar entre 1 y 12.
+
+## A qué pago afecta
+
+El campo **Afecta a** indica en qué rol se paga o se descuenta la novedad: el
+**rol de pagos** mensual, la **quincena** o el **pago semanal**. En la quincena y
+en la semana solo hay **ingresos** (con o sin IESS) y **descuentos**; por eso,
+al elegir **Días no laborados** o **Aviso de salida**, *Afecta a* queda fijo en
+**Rol de Pagos** y no se puede cambiar. Lo mismo se aplica al importar la
+plantilla y al generar novedades desde Control de Asistencia.
+
+Un ingreso registrado para la quincena se paga en ella y el rol mensual lo toma
+en cuenta al cerrar el mes: no lo descuenta y, si aporta al IESS, lo suma a la
+base del mes.
 
 ## Carga masiva desde una plantilla Excel
 
@@ -64,9 +118,13 @@ periodo. No hace falta elegir el tipo de novedad.
 | Columnas | Qué contienen |
 |----------|---------------|
 | IDENTIFICACION, NOMBRE | El empleado (ya vienen escritos) |
-| Una por tipo: OTROS INGRESOS, DESCUENTO, ANTICIPO, HORAS NOCTURNAS, HORAS SUPLEMENTARIAS, HORAS EXTRAORDINARIAS, los tres PRÉSTAMOS, DÍAS NO LABORADOS y AVISO DE SALIDA | Vacías: aquí se escribe. Entre paréntesis dice qué va: **$** (monto), **HORAS**, **DÍAS** o **MOTIVO** |
+| Dos por cada ingreso que aporta o no al IESS: OTROS INGRESOS (bonos, comisiones), HORAS NOCTURNAS, HORAS SUPLEMENTARIAS y HORAS EXTRAORDINARIAS, cada una **CON IESS** y **SIN IESS** | Vacías: aquí se escribe |
+| Una por tipo: DESCUENTO, ANTICIPO, los tres PRÉSTAMOS, DÍAS NO LABORADOS y AVISO DE SALIDA | Vacías: aquí se escribe |
 | MES, ANIO, AFECTA_A, FECHA | Ya escritos con lo que eligió en pantalla y la fecha de hoy |
 | OBSERVACION | Opcional |
+
+En cada columna de novedad, entre paréntesis, dice qué va: **$** (monto),
+**HORAS**, **DÍAS** o **MOTIVO**.
 
 > Mes, año y *afecta a* son solo **sugerencias para crear la plantilla con datos**:
 > el archivo baja con esos valores ya escritos en cada fila para no tener que
@@ -75,13 +133,17 @@ periodo. No hace falta elegir el tipo de novedad.
 
 **2. Subir la plantilla completada.** En la fila de cada empleado escriba el
 valor **solo en las columnas de las novedades que le correspondan**: por ejemplo
-8 en *HORAS SUPLEMENTARIAS* y 25 en *DESCUENTO*. Cada celda con valor se
+8 en *HORAS SUPLEMENTARIAS CON IESS* y 25 en *DESCUENTO*. Cada celda con valor se
 registra como una novedad aparte. **Las celdas vacías o en 0 no crean nada** y
 los empleados sin ningún valor se omiten; no hace falta borrar filas ni columnas.
 Elija el archivo y pulse **Importar**.
 
 Cómo se llenan los casos especiales:
 
+- **Con IESS o sin IESS**: en Otros Ingresos y en las horas, la columna donde
+  escriba el valor es la marca de *Aporta IESS*. Puede usar las dos en la misma
+  fila (por ejemplo un bono con IESS y otro sin IESS). Si el empleado no aporta
+  al IESS, se registra sin IESS aunque esté en la columna CON IESS.
 - **Aviso de salida**: en su columna no va un número sino el **motivo de
   salida**. La celda tiene una lista desplegable con los motivos (*T -
   Terminación del contrato*, *V - Renuncia voluntaria*...); también puede
@@ -89,7 +151,8 @@ Cómo se llenan los casos especiales:
 - **Mes, año, afecta a y fecha** valen para **todas** las novedades de esa fila.
   Si a un empleado le toca una novedad de otro periodo o de otro pago (por
   ejemplo un anticipo que va a la quincena), copie su fila debajo, cambie esos
-  datos y deje en ella solo esa novedad.
+  datos y deje en ella solo esa novedad. Los días no laborados y el aviso de
+  salida van siempre al rol mensual, aunque la fila diga quincena o semanal.
 - **Observación**: si la deja vacía, cada novedad se guarda con el texto
   *"Tipo - Mes Año"* (por ejemplo *Descuento - Septiembre 2026*), el mismo que
   propone el formulario de **Nuevo**. Si la escribe, se usa para todas las
@@ -101,8 +164,11 @@ columna, los valores de *afecta a* y los motivos de salida). La identificación 
 el nombre quedan fijos a la izquierda al desplazarse por las columnas, y están
 guardados como texto para que una cédula que empieza en cero no pierda ese cero.
 
-> Las plantillas descargadas antes de este cambio (una fila por novedad, con las
-> columnas TIPO y VALOR) se siguen aceptando al importar.
+> Las plantillas descargadas antes se siguen aceptando al importar. Las de una
+> fila por novedad (columnas TIPO y VALOR) pueden llevar además una columna
+> APORTA_IESS con SI o NO. Las que tienen una sola columna por tipo, sin CON IESS
+> ni SIN IESS, registran esas novedades con el cálculo de siempre: las horas con
+> IESS y Otros Ingresos sin IESS.
 
 ### La importación es todo o nada
 
@@ -118,10 +184,11 @@ periodo ya está pagado), se muestra una sola vez con todas ellas. Se revisa que
 - el *afecta a* y el motivo de salida existan en el catálogo;
 - el valor sea un número y el periodo sea válido;
 - el rol de ese empleado y periodo **no esté ya pagado**;
-- **no exista ya la misma novedad**: mismo empleado, mismo tipo y mismo mes/año.
-  Vale tanto contra lo ya registrado como contra la propia plantilla (si repite
-  la fila de un empleado, las dos filas no pueden traer el mismo tipo de novedad
-  para el mismo periodo).
+- **no exista ya la misma novedad**: mismo empleado, mismo tipo y mismo mes/año
+  (en Otros Ingresos y horas, además, la misma marca de IESS: se puede tener una
+  con IESS y otra sin IESS). Vale tanto contra lo ya registrado como contra la
+  propia plantilla (si repite la fila de un empleado, las dos filas no pueden
+  traer la misma novedad para el mismo periodo).
 
 Ese último control es el que evita subir dos veces la misma carga. Si de verdad
 necesita dos novedades del mismo tipo y periodo para una persona, regístrelas a
@@ -167,7 +234,7 @@ identificación, fecha (tal como se ve, por ejemplo *07-07-2026*), período (por
 ejemplo *Julio 2026*) y valor. Además busca en la observación y en el usuario
 que registró la novedad. Las columnas **Tipo**, **Afecta a**, **Motivo**,
 **Estado** y **Pago** no entran en la búsqueda libre: para filtrar por ellas use
-la ventana de filtros. Puede escribir varias palabras en cualquier orden y no
+la ventana de filtros. La columna **IESS** tampoco entra y no tiene filtro. Puede escribir varias palabras en cualquier orden y no
 importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el
 cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y la
 tabla se ve atenuada.
@@ -230,9 +297,22 @@ filtrado.
 
 ## Historial de cambios
 
+- **1.7** — Días no laborados y aviso de salida afectan siempre al rol mensual
+  (*Afecta a* queda fijo en Rol de Pagos; también al importar y al generar desde
+  asistencia). Los ingresos registrados para la quincena o la semana ya no se
+  descuentan al cerrar el mes.
+- **1.6** — Los días no laborados restan del sueldo ganado en el rol mensual: el
+  aporte al IESS, los fondos de reserva y el décimo tercero se calculan sobre los
+  días laborados.
+- **1.5** — Otros Ingresos y las horas nocturnas, suplementarias y
+  extraordinarias se marcan con IESS o sin IESS (opción *Aporta IESS* en el
+  formulario y columnas CON IESS / SIN IESS en la plantilla), y el rol de pagos
+  suma a la base del IESS solo lo marcado. Nueva columna IESS en el listado, el
+  PDF y el Excel.
 - **1.4** — La plantilla de importación pasa a tener una fila por empleado y una
   columna por cada tipo de novedad, así que ya no se elige el tipo antes de
-  descargarla. En *Aviso de salida* se elige el motivo de una lista desplegable.
+  descargarla. La columna de Otros Ingresos indica *(Bonos, comisiones)* y en
+  *Aviso de salida* se elige el motivo de una lista desplegable.
   La observación vacía se completa con *"Tipo - Mes Año"* y los errores indican
   la fila y la novedad. Las plantillas anteriores (una fila por novedad) se
   siguen aceptando.

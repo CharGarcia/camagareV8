@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\EgresoRepository;
+use App\repositories\modulos\AsientoProgramadoRepository;
 use App\Rules\modulos\EgresoRules;
 use App\Services\LogSistemaService;
 use App\core\Database;
@@ -694,9 +695,29 @@ class EgresoService
         unset($d);
     }
 
+    /**
+     * Conceptos de egreso para el modal. `cuenta_id`/`cuenta_codigo`/`cuenta_nombre` es la
+     * cuenta que el concepto presta por defecto a las líneas de "Otros conceptos": la vigente en
+     * Configuración Contable (ver EgresoRepository::getConceptosEgreso()).
+     *
+     * Los conceptos de cartera (Compra, Liquidación, Rol) no prestan ninguna: su contrapartida es
+     * la Cuenta por Pagar / Sueldos por Pagar que Configuración Contable resuelve desde el
+     * documento, y lo que quede en su columna es una cuenta legada que el asiento ya no usa para
+     * el concepto. Si esa cuenta se colara en una línea manual, el asiento la tomaría tal cual,
+     * porque la cuenta de la línea manda sobre la del concepto
+     * (AsientoBuilderService::contrapartidaPorCuenta()).
+     */
     public function getConceptosEgreso(int $idEmpresa): array
     {
-        return $this->repository->getConceptosEgreso($idEmpresa);
+        $programadoRepo = new AsientoProgramadoRepository();
+        return array_map(static function (array $c) use ($programadoRepo): array {
+            if ($programadoRepo->tieneCuentaOficialPorComportamiento((string) ($c['comportamiento'] ?? ''))) {
+                $c['cuenta_id']     = null;
+                $c['cuenta_codigo'] = null;
+                $c['cuenta_nombre'] = null;
+            }
+            return $c;
+        }, $this->repository->getConceptosEgreso($idEmpresa));
     }
 
     public function getDocumentosPendientesProveedor(int $idProveedor, int $idEmpresa): array

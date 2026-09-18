@@ -731,7 +731,10 @@ class ReporteInventariosController extends BaseModuloController
         $tdCambiado = '<td class="text-end small"' . ($cambiado > 0 ? ' title="Entregado al cliente a cambio de otro producto (módulo Cambios de productos)"' : '') . '>'
             . number_format($cambiado, 2) . '</td>';
 
+        $codigo = trim((string) ($r['producto_codigo'] ?? ''));
+
         return '<tr>'
+            . '<td class="small text-nowrap">' . htmlspecialchars($codigo !== '' ? $codigo : '-') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['numero_lote'] ?? '-') . '</td>'
@@ -1011,7 +1014,7 @@ class ReporteInventariosController extends BaseModuloController
                     'cambiado'   => number_format($suma('cantidad_cambiada'), 2),
                     'saldo'      => number_format($suma('saldo'), 2),
                 ],
-                'rows' => $this->renderRows($lineas, fn($r) => $this->filaConsignacionDetalleLinea($r), 9),
+                'rows' => $this->renderRows($lineas, fn($r) => $this->filaConsignacionDetalleLinea($r), 10),
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

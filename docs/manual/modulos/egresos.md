@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado
-version: 1.19
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo
+version: 1.20
 orden: 20
 estado: activo
 ---
@@ -101,6 +101,28 @@ Si el egreso combina más de un tipo (ver "Combinar varios conceptos" arriba),
 la columna los junta con `+` (p. ej. "Compra + Otros Conceptos"). Si es un
 concepto sin documento (Anticipo Proveedor, SRI, IESS…), muestra directamente
 el nombre del concepto elegido.
+
+## Cuenta contable de las líneas de "Otros conceptos"
+
+Cada línea de "Otros conceptos" lleva su cuenta contable, y el sistema la propone
+sola a partir del **concepto** que se pulsa: es la cuenta que ese concepto tiene
+en *Configuración Contable → Ingresos y Egresos* (la misma que se ve en
+*Opciones de Ingreso/Egreso* y la que usa el asiento).
+
+- **Anticipo Proveedor** pone su cuenta aunque ya haya compras, liquidaciones o
+  roles cargados: así se paga una factura y se entrega un anticipo para el
+  próximo pedido en la misma operación, sin buscar la cuenta a mano. Si no queda
+  ninguna línea, el botón agrega una.
+- La cuenta propuesta llega a las líneas que no tienen cuenta y a las que siguen
+  en blanco (sin descripción ni monto). **Nunca cambia** una cuenta elegida a
+  mano en el buscador, ni la de una línea ya escrita con otro concepto.
+- **Compra**, **Liquidación** y **Nómina** no proponen cuenta: la suya es
+  Cuentas por Pagar o Sueldos por Pagar, que el asiento toma del propio
+  documento. Con documentos ya cargados tampoco la proponen **Quincena** ni
+  **Préstamo**. En esos casos, la línea sin documento necesita que se elija la
+  cuenta.
+- Si un concepto no propone ninguna cuenta, revise que la tenga asignada en
+  *Configuración Contable → Ingresos y Egresos*.
 
 ## Reglas que aplica el sistema
 
@@ -296,8 +318,9 @@ cuántos documentos admite cada periodo) está en el manual de **Empresa**, secc
 ## Asiento contable
 
 Cada egreso genera su asiento automáticamente según la configuración contable de
-la empresa; al anularlo, el asiento se anula. En las líneas de concepto general
-se puede elegir la cuenta contable línea por línea.
+la empresa; al anularlo, el asiento se anula. Las líneas de "Otros conceptos" van
+al asiento con la cuenta de cada línea: la que propone el concepto o la que se
+elija a mano (ver *Cuenta contable de las líneas de "Otros conceptos"*).
 
 ## Buscar y filtrar el listado
 
@@ -415,8 +438,22 @@ ve solo los que registró.
   modal de Compras.
 - **"La compra ... fue rechazada en la aprobación"** o **"... está anulada: no se
   puede pagar"**: esa compra no se paga. Revise el motivo en el modal de Compras.
+- **"Falta cuenta contable"**: el egreso mezcla compras, liquidaciones o roles con
+  una línea de "Otros conceptos" que no tiene cuenta. Elíjala en la columna
+  *Cuenta contable* de esa línea; si es un anticipo, pulse **Anticipo Proveedor**
+  y se pone sola.
 
 ## Historial de cambios
+
+- **1.20** — Al pulsar **Anticipo Proveedor**, las líneas de "Otros conceptos"
+  toman la cuenta del anticipo aunque ya haya compras, liquidaciones o roles
+  cargados (antes quedaban sin cuenta y el guardado la exigía). La cuenta
+  propuesta es la de *Configuración Contable → Ingresos y Egresos*: antes solo se
+  leía la del módulo de Opciones, así que una cuenta asignada únicamente allá no
+  aparecía. También reemplaza la que otro concepto haya dejado en una línea aún en
+  blanco, sin tocar las elegidas a mano. **Compra**, **Liquidación** y **Nómina**
+  ya no proponen su cuenta de cartera en esas líneas, y un concepto creado desde
+  el propio modal propone su cuenta sin recargar la página.
 
 - **1.19** — El cuadro encuentra el egreso escribiendo su número completo `001-001-000000001`, aunque el
   documento tenga el número guardado sin la serie o con el secuencial sin los ceros de

@@ -91,7 +91,8 @@ class NovedadRepository extends BaseRepository
         $stTotal->execute($params);
         $total = (int) $stTotal->fetchColumn();
 
-        $sql = "SELECT n.*, e.nombres_apellidos AS empleado_nombre, e.identificacion AS empleado_identificacion
+        $sql = "SELECT n.*, e.nombres_apellidos AS empleado_nombre, e.identificacion AS empleado_identificacion,
+                       e.aporta_iess AS empleado_aporta_iess
                 {$from}
                 ORDER BY {$orderExpr} {$ordenDir}, n.id DESC";
         if ($perPage > 0) {
@@ -351,6 +352,19 @@ class NovedadRepository extends BaseRepository
         return $set;
     }
 
+    /** ¿Ya se aplicó database/novedades_aporta_iess.sql? Sin la columna, la marca no se guarda. */
+    public function tieneMarcaIess(): bool
+    {
+        return $this->columnaExiste('novedades', 'aporta_iess');
+    }
+
+    /** Valor para la columna aporta_iess: 'true'/'false', o null si la novedad no lleva marca. */
+    private static function paramMarcaIess(array $d)
+    {
+        $v = $d['aporta_iess'] ?? null;
+        return $v === null ? null : ($v ? 'true' : 'false');
+    }
+
     public function create(array $d): int
     {
         // La columna id_carga solo se escribe cuando la novedad viene de una carga
@@ -358,16 +372,20 @@ class NovedadRepository extends BaseRepository
         $idCarga    = isset($d['id_carga']) && (int) $d['id_carga'] > 0 ? (int) $d['id_carga'] : null;
         $colCarga   = $idCarga !== null ? ', id_carga' : '';
         $valCarga   = $idCarga !== null ? ', :id_carga' : '';
+        // Igual con la marca de IESS: solo si ya existe la columna.
+        $conIess    = $this->tieneMarcaIess();
+        $colIess    = $conIess ? ', aporta_iess' : '';
+        $valIess    = $conIess ? ', :aporta_iess' : '';
 
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, id_empleado, tipo_codigo, tipo_nombre, fecha,
                     periodo_mes, periodo_anio, valor, aplica_en, motivo_codigo, motivo_nombre,
-                    observacion, estado, tipo_ambiente, created_by, updated_by, created_at, updated_at, eliminado{$colCarga}
+                    observacion, estado, tipo_ambiente, created_by, updated_by, created_at, updated_at, eliminado{$colCarga}{$colIess}
                 ) VALUES (
                     :id_empresa, :id_empleado, :tipo_codigo, :tipo_nombre, :fecha,
                     :periodo_mes, :periodo_anio, :valor, :aplica_en, :motivo_codigo, :motivo_nombre,
                     :observacion, :estado, (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa),
-                    :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false{$valCarga}
+                    :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false{$valCarga}{$valIess}
                 )";
         $params = [
             ':id_empresa'    => $d['id_empresa'],
@@ -388,6 +406,9 @@ class NovedadRepository extends BaseRepository
         if ($idCarga !== null) {
             $params[':id_carga'] = $idCarga;
         }
+        if ($conIess) {
+            $params[':aporta_iess'] = self::paramMarcaIess($d);
+        }
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $this->lastInsertId();
@@ -395,6 +416,8 @@ class NovedadRepository extends BaseRepository
 
     public function update(int $id, int $idEmpresa, array $d): bool
     {
+        $conIess = $this->tieneMarcaIess();
+        $setIess = $conIess ? 'aporta_iess = :aporta_iess,' : '';
         $sql = "UPDATE {$this->table} SET
                     id_empleado = :id_empleado,
                     tipo_codigo = :tipo_codigo,
@@ -408,11 +431,11 @@ class NovedadRepository extends BaseRepository
                     motivo_nombre = :motivo_nombre,
                     observacion = :observacion,
                     estado = :estado,
+                    {$setIess}
                     updated_by = :id_u,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
-        $st = $this->db->prepare($sql);
-        return $st->execute([
+        $params = [
             ':id_empleado'   => $d['id_empleado'],
             ':tipo_codigo'   => $d['tipo_codigo'],
             ':tipo_nombre'   => $d['tipo_nombre'],
@@ -428,7 +451,12 @@ class NovedadRepository extends BaseRepository
             ':id_u'          => $d['id_usuario'],
             ':id'            => $id,
             ':id_empresa'    => $idEmpresa,
-        ]);
+        ];
+        if ($conIess) {
+            $params[':aporta_iess'] = self::paramMarcaIess($d);
+        }
+        $st = $this->db->prepare($sql);
+        return $st->execute($params);
     }
 
     public function deleteLogic(int $id, int $idEmpresa, int $idUsuario): bool
@@ -442,7 +470,8 @@ class NovedadRepository extends BaseRepository
     /** Detalle con datos del empleado. */
     public function getDetalle(int $id, int $idEmpresa): ?array
     {
-        $sql = "SELECT n.*, e.nombres_apellidos AS empleado_nombre, e.identificacion AS empleado_identificacion
+        $sql = "SELECT n.*, e.nombres_apellidos AS empleado_nombre, e.identificacion AS empleado_identificacion,
+                       e.aporta_iess AS empleado_aporta_iess
                 FROM {$this->table} n
                 JOIN empleados e ON e.id = n.id_empleado
                 WHERE n.id = :id AND n.id_empresa = :id_empresa AND n.eliminado = false";
@@ -521,12 +550,12 @@ class NovedadRepository extends BaseRepository
         return $st->rowCount();
     }
     /**
-     * Claves "idEmpleado|tipoCodigo|mes|anio" de las novedades vigentes de esos
-     * empleados y años, en el ambiente actual de la empresa. La importación la usa
-     * para rechazar filas duplicadas (misma persona, mismo tipo y mismo período)
-     * antes de escribir nada. Una sola consulta para todo el archivo.
+     * Novedades vigentes de esos empleados y años, en el ambiente actual de la
+     * empresa (empleado, tipo, período y marca de IESS). La importación arma con
+     * ellas la clave de duplicado para rechazar lo que ya está registrado antes
+     * de escribir nada. Una sola consulta para todo el archivo.
      */
-    public function getClavesExistentes(int $idEmpresa, array $idsEmpleado, array $anios): array
+    public function getParaDuplicados(int $idEmpresa, array $idsEmpleado, array $anios): array
     {
         $idsEmpleado = array_values(array_unique(array_filter(array_map('intval', $idsEmpleado))));
         $anios       = array_values(array_unique(array_filter(array_map('intval', $anios))));
@@ -535,22 +564,32 @@ class NovedadRepository extends BaseRepository
         }
         $inEmp  = implode(',', $idsEmpleado);
         $inAnio = implode(',', $anios);
+        $colIess = $this->tieneMarcaIess() ? 'aporta_iess' : 'NULL AS aporta_iess';
 
-        $sql = "SELECT id_empleado, tipo_codigo, periodo_mes, periodo_anio
+        $sql = "SELECT id_empleado, tipo_codigo, periodo_mes, periodo_anio, {$colIess}
                   FROM {$this->table}
                  WHERE id_empresa = :id_empresa AND eliminado = false
                    AND id_empleado IN ($inEmp) AND periodo_anio IN ($inAnio)
                    AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
 
-        $set = [];
-        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            $clave = ((int) $r['id_empleado']) . '|' . trim((string) $r['tipo_codigo'])
-                . '|' . ((int) $r['periodo_mes']) . '|' . ((int) $r['periodo_anio']);
-            $set[$clave] = true;
+    /** ¿El empleado aporta al IESS (pestaña Laboral de su ficha)? null si no existe en la empresa. */
+    public function empleadoAportaIess(int $idEmpleado, int $idEmpresa): ?bool
+    {
+        $st = $this->db->prepare("SELECT aporta_iess FROM empleados WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $idEmpleado, ':e' => $idEmpresa]);
+        // fetch() y no fetchColumn(): un aporta_iess = false también devolvería false.
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return null;
         }
-        return $set;
+        $v = $row['aporta_iess'];
+        // Sin dato cuenta como que aporta (igual que RolCalculoService). En pgsql el
+        // booleano puede llegar como 't'/'f', y 'f' es truthy en PHP.
+        return $v === null || in_array($v, [true, 't', 1, '1', 'true'], true);
     }
 
     /** Resuelve el id de un empleado por su identificación exacta (para importar). */

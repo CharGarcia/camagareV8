@@ -708,7 +708,7 @@ $riSubtitulo = count($riNombres) > 1
 <!-- MODAL: DETALLE DE PRODUCTOS DE UNA CONSIGNACIÓN -->
 <!-- ════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="ri-cv-modal-detalle" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header py-2">
                 <h6 class="modal-title fw-bold mb-0">
@@ -738,14 +738,14 @@ $riSubtitulo = count($riNombres) > 1
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">
                             <tr class="text-secondary">
-                                <th>Producto</th><th>Bodega</th><th>Lote</th><th>NUP</th>
+                                <th>Código</th><th>Producto</th><th>Bodega</th><th>Lote</th><th>NUP</th>
                                 <th class="text-end">Consignado</th><th class="text-end">Retornado</th><th class="text-end">Facturado</th>
                                 <th class="text-end" title="Entregado al cliente a cambio de otro producto (Cambios de productos)">A cambio</th>
                                 <th class="text-end">Saldo</th>
                             </tr>
                         </thead>
                         <tbody id="ri-cv-modal-tbody">
-                            <tr><td colspan="9" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                            <tr><td colspan="10" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
                         </tbody>
                         <tfoot id="ri-cv-modal-tfoot"></tfoot>
                     </table>

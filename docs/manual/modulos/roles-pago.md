@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips
-version: 1.4
+etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips
+version: 1.7
 orden: 30
 estado: activo
 ---
@@ -33,6 +33,39 @@ descuenta del siguiente rol: el sistema **netea** para que el empleado no cobre
 dos veces lo mismo. Por eso el orden de generación importa: primero la quincena
 1, después la 2.
 
+En la **quincena** y la **semana** solo hay **ingresos** (con o sin IESS) y
+**descuentos**. Los **días no laborados** y el **aviso de salida** afectan
+siempre al rol **mensual**, aunque al registrarlos se elija quincena o semana.
+
+Al cerrar el mes, el rol mensual:
+
+- **resta** lo que ya se pagó en las quincenas o semanas del mes (*Neteo
+  semanas/quincenas del mes*) y los descuentos que se aplicaron en ellas;
+- **vuelve a sumar** los ingresos que esas corridas pagaron además de su base
+  (horas, otros ingresos, rubros fijos quincenales). Aparecen con el nombre de la
+  corrida, por ejemplo *"Otros Ingresos — Quincena 1"*. Así el mensual no los
+  descuenta, y los que aportan al IESS entran a la base del mes (en la quincena
+  no se calcula IESS).
+
+Ejemplo con sueldo de 480, quincena de 240 y un bono de 50 con IESS registrado
+para la quincena:
+
+| Rol | Concepto | Valor |
+|-----|----------|-------|
+| Quincena 1 | Quincena + bono | 290,00 (pagado) |
+| Mensual | Sueldo | 480,00 |
+| Mensual | Otros Ingresos — Quincena 1 | 50,00 |
+| Mensual | Aporte IESS (9,45% de 530) | −50,09 |
+| Mensual | Neteo semanas/quincenas del mes | −290,00 |
+| Mensual | Neto a pagar | 189,91 |
+
+En el mes el empleado recibe 290,00 + 189,91 = 479,91: el sueldo más el bono,
+menos el IESS de ambos.
+
+Solo se netean las quincenas y semanas que **ya tienen un pago** registrado en
+Egresos; si una quincena todavía no se pagó, sus ingresos se cobran cuando se
+pague esa quincena.
+
 ## De dónde salen las cifras
 
 - El **sueldo** viene de la ficha del empleado.
@@ -42,6 +75,44 @@ dos veces lo mismo. Por eso el orden de generación importa: primero la quincena
 
 Por eso, antes de generar un rol conviene revisar que todas las novedades del
 periodo estén registradas: lo que no esté cargado, no se paga ni se descuenta.
+
+## Qué suma a la base del IESS
+
+El aporte personal y el patronal se calculan solo en el rol **mensual** y solo
+si el empleado aporta al IESS (pestaña *Laboral* de su ficha). Suman a la base:
+
+- el **sueldo** del mes, menos los **días no laborados** (ver más abajo);
+- las **horas** nocturnas, suplementarias y extraordinarias, y los **Otros
+  Ingresos** (bonos, comisiones), cuando la novedad está marcada **Aporta IESS:
+  Sí**;
+- los **rubros fijos** de ingreso marcados con IESS en la ficha del empleado;
+- las **vacaciones** que se pagan en el rol.
+
+Lo que no suma aparece en el rol con *(sin IESS)*, por ejemplo *"Otros Ingresos
+(sin IESS)"*. Esa misma base es la de las provisiones (décimo tercero,
+vacaciones, fondos de reserva) y la del Impuesto a la Renta. Los roles en estado
+*generado* se recalculan solos al cambiar la marca de una novedad.
+
+## Días no laborados
+
+En el rol **mensual**, los días no laborados (novedad *Días no laborados*)
+restan del **sueldo ganado**: aparecen en la columna de ingresos con valor
+negativo, junto al sueldo. Por ejemplo, con sueldo de 500 y 3 días no laborados:
+
+| Concepto | Valor |
+|----------|-------|
+| Sueldo | 500,00 |
+| Días no laborados (3d) | −50,00 |
+| Sueldo de los días laborados | 450,00 |
+
+Sobre esos 450 se calculan el **aporte al IESS** (42,53 en lugar de 47,25), el
+**Impuesto a la Renta**, los **fondos de reserva** y el **décimo tercero** que se
+pagan en el rol, las **provisiones** y la base del módulo *Décimo Tercero*. El
+**décimo cuarto** no cambia: se sigue calculando por los días de contrato del
+mes, igual que en el módulo *Décimo Cuarto*.
+
+Los días no laborados se aplican **siempre en el rol mensual**, aunque al
+registrarlos se elija quincena o semana.
 
 ## Ficha del empleado dentro del rol
 
@@ -149,6 +220,9 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.7** — El rol mensual vuelve a sumar los ingresos pagados en las quincenas y semanas del mes (antes el neteo los descontaba a fin de mes) y los que aportan al IESS entran a la base del mes. En quincena y semana solo hay ingresos y descuentos: los días no laborados y el aviso de salida van siempre al rol mensual.
+- **1.6** — En el rol mensual los días no laborados restan del sueldo ganado (ingreso negativo): bajan el aporte al IESS, el Impuesto a la Renta, las provisiones y la base del décimo tercero, y los fondos de reserva y el décimo tercero pagados en el rol se calculan sobre los días laborados. El décimo cuarto sigue por días de contrato.
+- **1.5** — Las horas y los Otros Ingresos suman a la base del IESS según la marca *Aporta IESS* de la novedad (antes las horas siempre sumaban y Otros Ingresos nunca). Lo que va sin IESS se señala en el concepto del rubro.
 - **1.4** — Nuevo buscador del listado: búsqueda libre en todas las columnas (sin Tipo ni Estado) y en los empleados incluidos, botón embudo con la ventana de filtros (se suman asiento, corrida, descripción, usuario, totales, número de empleados y empleado incluido) y pestaña Detalles para buscar dentro de las líneas de empleado y los rubros. Los filtros activos se ven como chips dentro del cuadro.
 - **1.3** — El asiento del rol mensual lleva las cuotas de préstamo quirografario, hipotecario y empresa a su propia cuenta cuando está configurada en Configuración Contable → Nómina.
 - **1.2** — El desglose de ingresos/egresos del empleado (modal, PDF individual y Excel) muestra la observación de la novedad que originó cada rubro.

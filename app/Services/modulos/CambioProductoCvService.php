@@ -5,7 +5,6 @@ namespace App\Services\modulos;
 
 use App\repositories\modulos\CambioProductoCvRepository;
 use App\repositories\modulos\InventarioRepository;
-use App\repositories\modulos\ProductoRepository;
 use App\Rules\modulos\CambioProductoCvRules;
 use App\Services\LogSistemaService;
 use App\core\Database;
@@ -17,10 +16,12 @@ use Exception;
  * Un cambio registra, en un solo documento y por cliente:
  *   - DEVOLUCIONES → ENTRADA de inventario (el cliente regresa mercadería de una
  *     factura de consignación o de un cambio anterior). Se copia "tal cual" del origen y se valida saldo.
- *   - ENTREGAS → SALIDA de inventario (el cliente recibe otros productos a cambio),
- *     desde bodega (catálogo / existencias por lote y NUP) o tomadas de una
- *     CONSIGNACIÓN que el cliente ya tiene (origen_tipo 'CONSIGNACION': consume el saldo
- *     de esa línea de consignación y no mueve stock, porque ya salió con la consignación).
+ *   - ENTREGAS (el cliente recibe otros productos a cambio) → tomadas de una CONSIGNACIÓN
+ *     que el cliente ya tiene (origen_tipo 'CONSIGNACION': consume el saldo de esa línea de
+ *     consignación y no mueve stock, porque ya salió con la consignación). Desde el
+ *     18-09-2026 es el único origen aceptado (CambioProductoCvRules::validarCreacion); los
+ *     cambios anteriores pueden tener entregas desde bodega (catálogo / existencias), que
+ *     son SALIDA de inventario y un borrador conserva al editarlo.
  *
  * La diferencia de valor (entregado − devuelto) es informativa. Inventario y
  * asiento contable (a costo) van ligados al estado 'Emitida', igual que los registros en
@@ -37,7 +38,6 @@ class CambioProductoCvService
     private CambioProductoCvRules $rules;
     private LogSistemaService $logService;
     private InventarioRepository $inventarioRepo;
-    private ProductoRepository $productoRepo;
 
     /** Número (serie-secuencial) que el servidor asignó en el último crear(); lo muestra el controlador. */
     private ?string $ultimoNumeroGenerado = null;
@@ -57,7 +57,6 @@ class CambioProductoCvService
         $this->rules          = $rules;
         $this->logService     = $logService;
         $this->inventarioRepo = new InventarioRepository();
-        $this->productoRepo   = new ProductoRepository();
     }
 
     /** Número (serie-secuencial) que el servidor asignó en el último crear(). */
@@ -178,12 +177,6 @@ class CambioProductoCvService
     public function getLineasConsignacionDisponibles(int $idEmpresa, string $q, ?int $idCliente, ?int $excluirCambio = null): array
     {
         return $this->repository->getLineasConsignacionDisponibles($idEmpresa, $q, $idCliente, $excluirCambio);
-    }
-
-    /** Existencias por bodega / lote / NUP que coinciden con la búsqueda (entrega desde bodega). */
-    public function buscarInventario(int $idEmpresa, string $q, int $limite = 30): array
-    {
-        return $this->repository->buscarInventario($idEmpresa, $q, $limite);
     }
 
     /**
@@ -440,6 +433,8 @@ class CambioProductoCvService
                     'tipo_produccion'   => $origen['tipo_produccion'] ?? null,
                 ];
             } else { // entrega desde bodega (catálogo / existencias)
+                // Solo llega aquí la que un borrador anterior al 18-09-2026 ya tenía guardada:
+                // CambioProductoCvRules::validarCreacion rechaza las nuevas.
                 $idProducto = (int) ($det['id_producto'] ?? 0);
                 $prod = $this->repository->getProductoParaEntrega($idProducto, $idEmpresa);
                 if (!$prod) {
@@ -531,7 +526,7 @@ class CambioProductoCvService
 
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
-        $this->rules->validarCreacion($data);
+        $this->rules->validarCreacion($data, $this->entregasSinOrigenGuardadas($id, $idEmpresa));
 
         $cab = $this->repository->find($id, $idEmpresa);
         if (!$cab) {
@@ -578,6 +573,21 @@ class CambioProductoCvService
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Entregas desde bodega o catálogo (sin origen) que el borrador tiene guardadas, por id de
+     * línea: las únicas de ese tipo que CambioProductoCvRules acepta al volver a guardarlo.
+     */
+    private function entregasSinOrigenGuardadas(int $idCambio, int $idEmpresa): array
+    {
+        $out = [];
+        foreach ($this->repository->getDetalles($idCambio, $idEmpresa) as $d) {
+            if (($d['tipo_linea'] ?? '') === 'entrega' && trim((string) ($d['origen_tipo'] ?? '')) === '') {
+                $out[(int) $d['id']] = $d;
+            }
+        }
+        return $out;
     }
 
     // ─── ELIMINAR ─────────────────────────────────────────────────────────────

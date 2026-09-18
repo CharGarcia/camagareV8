@@ -513,26 +513,41 @@ class InventarioRepository extends BaseRepository
         // Ver §9 CLAUDE.md — mismo patrón que Proveedores.
         $parsed = \App\Helpers\FiltrosBusqueda::parsear((string)($filtros['buscar'] ?? ''));
         if ($parsed['texto_libre'] !== '') {
-            // Texto libre sobre las columnas del listado de Movimientos de Inventario (único
-            // llamador que manda texto) + lo que identifica al producto. Decisión del
-            // usuario: Tipo (entrada/salida) y Origen (referencia_tipo) NO entran en el
-            // texto libre; se filtran desde el modal de filtros.
+            // Texto libre del listado de Movimientos de Inventario (único llamador que manda
+            // texto): fecha, producto (nombre y código), cantidad, lote, caducidad, NUP y
+            // observaciones — estas llevan el nº del documento de origen ("Salida por Factura
+            // # 001-101-000000127"), así que buscar ese número trae sus movimientos.
+            //
+            // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar:
+            //   - Tipo (entrada/salida) y Origen (referencia_tipo) → modal de filtros
+            //     (decisión anterior).
+            //   - Bodega, medida y usuario (18-09-2026; aunque son columnas, el usuario los
+            //     quiso fuera) → selectores del modal y filtros `bodega:`, `medida:`, `usuario:`.
+            //   - Código auxiliar y código de barras del producto (no se ven en la tabla) →
+            //     filtros `auxiliar:` y `barras:`.
+            //
+            // Rendimiento (18-09-2026). El kardex es la tabla más grande del sistema, y antes
+            // cada búsqueda formateaba fecha, caducidad y cantidad como texto en TODOS los
+            // movimientos de la empresa aunque se escribieran letras, y comparaba el producto
+            // movimiento por movimiento. Ahora esas tres columnas solo se evalúan si la palabra
+            // puede ser una fecha o un número, y el producto se resuelve UNA vez por palabra en
+            // su propia tabla (conjunto `col` + `sql`). Encuentra lo mismo.
+            $fecha  = \App\Helpers\FiltrosBusqueda::SI_FECHA;
+            $numero = \App\Helpers\FiltrosBusqueda::SI_NUMERO;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "TO_CHAR(k.fecha_movimiento, 'DD-MM-YYYY HH24:MI:SS')", // Fecha (como se muestra)
-                    'p.nombre',                                             // Producto
-                    'p.codigo',                                             // Producto (código)
-                    'p.codigo_auxiliar',
-                    'p.codigo_barras',
-                    'b.nombre',                                             // Bodega
-                    'ROUND(ABS(k.cantidad), 2)::text',                      // Cant.
-                    'um.nombre',                                            // Medida
-                    'um.abreviatura',
                     'k.numero_lote',                                        // Lote
-                    "TO_CHAR(k.fecha_caducidad, 'DD-MM-YYYY')",             // Caducidad
                     'k.nup',                                                // NUP/Serial
-                    'u.nombre',                                             // Usuario
                     'k.observaciones',                                      // Obs.
+                    // Producto: nombre y código (los dos se ven en la celda).
+                    ['col' => "CONCAT_WS(' ', px.codigo, px.nombre)",
+                     'sql' => "k.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond})"],
+                    ['sql' => "TO_CHAR(k.fecha_movimiento, 'DD-MM-YYYY HH24:MI:SS')", 'si' => $fecha], // Fecha (como se muestra)
+                    // La misma fecha en formato ISO: "2026-08" encuentra el mes, igual que en
+                    // Facturas, Consignaciones y Pedidos.
+                    ['sql' => "TO_CHAR(k.fecha_movimiento, 'YYYY-MM-DD')", 'si' => $fecha],
+                    ['sql' => "TO_CHAR(k.fecha_caducidad, 'DD-MM-YYYY')", 'si' => $fecha],            // Caducidad
+                    ['sql' => 'ROUND(ABS(k.cantidad), 2)', 'si' => $numero],                           // Cant.
                 ],
                 $parsed['texto_libre'],
                 $params,
@@ -550,6 +565,14 @@ class InventarioRepository extends BaseRepository
                 'nup'      => 'k.nup',
                 'obs'      => 'k.observaciones',
                 'bodega'   => 'b.nombre',
+                // Salieron del texto libre el 18-09-2026: estos filtros son ahora la forma de
+                // buscarlos a propósito (los JOIN um y u ya están en el conteo y en las filas).
+                'medida'          => 'um.nombre',
+                'usuario'         => 'u.nombre',
+                'barras'          => 'p.codigo_barras',
+                'codigo_barras'   => 'p.codigo_barras',
+                'auxiliar'        => 'p.codigo_auxiliar',
+                'codigo_auxiliar' => 'p.codigo_auxiliar',
             ],
             'exacto' => [
                 'tipo'       => 'k.tipo_movimiento',

@@ -494,11 +494,36 @@ class EgresoRepository extends BaseRepository
             [':b' => ($nombre !== null && $nombre !== '') ? $nombre : null, ':id' => $idPago]);
     }
 
+    /**
+     * Conceptos de egreso activos, con la cuenta VIGENTE del concepto en Egresos
+     * (`cuenta_id` / `cuenta_codigo` / `cuenta_nombre`): manda el asiento programado de la
+     * naturaleza ('opcion_egreso') y la columna del módulo queda de respaldo. Es el mismo
+     * COALESCE que usan el asiento (AsientoBuilderService::generarAsientoEgreso), Configuración
+     * Contable y el módulo de Opciones; antes aquí se leía solo la columna, así que una cuenta
+     * configurada únicamente en Configuración Contable no llegaba al modal. `id_cuenta_contable`
+     * (de o.*) sigue siendo esa columna tal cual.
+     *
+     * LATERAL + LIMIT 1: asientos_programados no tiene índice único por referencia, y una regla
+     * duplicada no debe duplicar el botón del concepto.
+     */
     public function getConceptosEgreso(int $idEmpresa): array
     {
-        $sql = "SELECT o.*, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+        $sql = "SELECT o.*,
+                       COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS cuenta_id,
+                       pc.codigo AS cuenta_codigo,
+                       pc.nombre AS cuenta_nombre
                 FROM empresa_opciones_ingreso_egreso o
-                LEFT JOIN plan_cuentas pc ON pc.id = o.id_cuenta_contable
+                LEFT JOIN LATERAL (
+                    SELECT ap.id_cuenta
+                    FROM asientos_programados ap
+                    WHERE ap.id_referencia = o.id
+                      AND ap.tipo_referencia = 'opcion_egreso'
+                      AND ap.id_empresa = o.id_empresa
+                      AND ap.eliminado = false
+                    ORDER BY ap.id DESC
+                    LIMIT 1
+                ) ap ON true
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap.id_cuenta, o.id_cuenta_contable)
                 WHERE o.id_empresa = :id_empresa
                   AND o.aplica_egresos = TRUE
                   AND UPPER(o.estado) = 'ACTIVO'

@@ -476,7 +476,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <option value="" data-comportamiento="GENERAL"></option>
                                         <?php foreach ($conceptos as $c): ?>
                                             <option value="<?= $c['id'] ?>" data-comportamiento="<?= htmlspecialchars($c['comportamiento'] ?? 'GENERAL') ?>"
-                                                    data-cuenta-id="<?= (int)($c['id_cuenta_contable'] ?? 0) ?>"
+                                                    data-cuenta-id="<?= (int)($c['cuenta_id'] ?? 0) ?>"
                                                     data-cuenta-codigo="<?= htmlspecialchars($c['cuenta_codigo'] ?? '') ?>"
                                                     data-cuenta-nombre="<?= htmlspecialchars($c['cuenta_nombre'] ?? '') ?>">
                                                 <?= htmlspecialchars($c['nombre']) ?>
@@ -715,6 +715,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     let esEgresoSoloLectura = false; // anulado O periodo contable cerrado: nada del egreso se edita
     const EGR_URL = '<?= BASE_URL ?>/<?= $rutaModulo ?>';
 
+    // Conceptos cuyo botón busca documentos pendientes (mismos que deciden si el botón se
+    // muestra, arriba en la barra de conceptos). Ver egConceptoCuentaActual().
+    const EGR_COMP_CON_DOCUMENTOS = <?= json_encode($comportamientosDocDriven) ?>;
+
     // ── Modal secundario: selección de documentos pendientes de pago ──────────
     let _egDocsModal    = [];
     let _egSelModal     = {};
@@ -799,6 +803,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 setTimeout(() => abrirModalEgDocsPendientes(comp), 150);
             } else if (['ROL', 'QUINCENA', 'PRESTAMO'].includes(comp)) {
                 setTimeout(() => abrirModalEgDocsPendientes('ROL'), 150);
+            } else if (manualEgreso.length === 0) {
+                // Concepto sin documentos (Anticipo Proveedor…): dejar una línea manual lista con
+                // su cuenta, igual que el selector de "Otro concepto…". Con documentos ya cargados
+                // puede no quedar ninguna línea, y entonces no había dónde ver la cuenta del anticipo.
+                agregarFilaManualEgreso();
             }
         });
     }
@@ -954,22 +963,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             sincronizarBotonesConceptoEgreso(id);
             document.getElementById('eg-input-tipo-egreso').value = comp;
 
-            // Rellenar la cuenta contable del concepto en las líneas manuales que aún no
-            // tienen una propia (mismo fix que manejarCambioConceptoEgreso): como sel.value
-            // se fija por código en vez de por interacción del usuario, no dispara el evento
-            // 'change' de ese handler, así que hay que repetirlo aquí antes de renderizar.
-            if (docsEgreso.length === 0) {
-                const cuenta = egConceptoCuentaActual();
-                if (cuenta.id_cuenta) {
-                    manualEgreso.forEach(m => {
-                        if (!m.id_cuenta) {
-                            m.id_cuenta = cuenta.id_cuenta;
-                            m.cuenta_codigo = cuenta.cuenta_codigo;
-                            m.cuenta_nombre = cuenta.cuenta_nombre;
-                        }
-                    });
-                }
-            }
+            // Llevar la cuenta contable del concepto a las líneas manuales (mismo fix que
+            // manejarCambioConceptoEgreso): como sel.value se fija por código en vez de por
+            // interacción del usuario, no dispara el evento 'change' de ese handler, así que hay
+            // que repetirlo aquí antes de renderizar.
+            egAplicarCuentaConceptoALineas();
 
             if (nuevoSujeto !== selSuj.value) {
                 selSuj.value = nuevoSujeto;
@@ -1005,23 +1003,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const comp = opt.dataset.comportamiento || 'GENERAL';
         document.getElementById('eg-input-tipo-egreso').value = comp;
 
-        // Rellenar la cuenta contable del concepto en las líneas manuales que todavía no
-        // tienen una propia: la fila en blanco que crea renderManualEgreso() al abrir el
-        // modal se genera ANTES de elegir concepto (egConceptoCuentaActual() no tiene nada
-        // que copiar en ese momento), y como ya existe una fila, no se vuelve a crear otra
-        // al seleccionar el concepto — sin esto, esa fila se quedaba sin cuenta para siempre.
-        if (docsEgreso.length === 0) {
-            const cuenta = egConceptoCuentaActual();
-            if (cuenta.id_cuenta) {
-                manualEgreso.forEach(m => {
-                    if (!m.id_cuenta) {
-                        m.id_cuenta = cuenta.id_cuenta;
-                        m.cuenta_codigo = cuenta.cuenta_codigo;
-                        m.cuenta_nombre = cuenta.cuenta_nombre;
-                    }
-                });
-            }
-        }
+        // Llevar la cuenta contable del concepto a las líneas manuales: la fila en blanco que
+        // crea renderManualEgreso() al abrir el modal se genera ANTES de elegir concepto
+        // (egConceptoCuentaActual() no tiene nada que copiar en ese momento), y como ya existe
+        // una fila, no se vuelve a crear otra al seleccionar el concepto — sin esto, esa fila se
+        // quedaba sin cuenta para siempre. Ya no se corta cuando hay documentos cargados: un
+        // Anticipo tocado después de cargar una compra presta su cuenta igual (ver
+        // egConceptoCuentaActual()).
+        egAplicarCuentaConceptoALineas();
 
         renderDocsEgreso();
         renderPagosEgreso();
@@ -1253,19 +1242,43 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     // ── Cuenta contable por línea ─────────────────────────────────────────────
-    // Cuenta por defecto = la del último concepto tocado (puede cambiarse por línea).
-    // Si ya hay documentos de módulo cargados (Compra/Liquidación/Nómina), NO se prellena:
-    // ese "último concepto tocado" normalmente es el del documento (p. ej. su cuenta de
-    // Cuentas por Pagar), que sería la cuenta incorrecta para un renglón de "otros
-    // conceptos" sin relación con esa cartera — mejor forzar la elección explícita.
+    // Cuenta por defecto = la del último concepto tocado (puede cambiarse por línea): la que
+    // tiene en Configuración Contable → Ingresos y Egresos, la misma que usa el asiento.
+    // - Los conceptos de cartera (Compra, Liquidación, Rol) no traen ninguna desde el servidor:
+    //   su cuenta es la de Cuentas por Pagar / Sueldos por Pagar, nunca la de un renglón sin
+    //   documento (ver EgresoService::getConceptosEgreso()).
+    // - Con documentos ya cargados, un concepto que busca documentos (Quincena, Préstamo) no
+    //   presta la suya: ese "último concepto tocado" es el del documento, y su cuenta sería la
+    //   incorrecta para un renglón de "otros conceptos" — mejor forzar la elección explícita.
+    // - Un concepto libre (Anticipo Proveedor, "Otro concepto…") la presta siempre, haya o no
+    //   documentos: es justo la cuenta de ese renglón (p. ej. pagar una compra y dejar un
+    //   anticipo para el próximo pedido). Antes se cortaba con cualquier documento cargado, así
+    //   que el Anticipo quedaba sin cuenta y el guardado la exigía.
     function egConceptoCuentaActual() {
-        if (docsEgreso.length > 0) return {};
         const sel = document.getElementById('eg-select-concepto');
         const opt = sel ? sel.options[sel.selectedIndex] : null;
         if (!opt) return {};
+        const comp = opt.dataset.comportamiento || 'GENERAL';
+        if (docsEgreso.length > 0 && EGR_COMP_CON_DOCUMENTOS.includes(comp)) return {};
         const id = parseInt(opt.dataset.cuentaId || '0') || 0;
         if (!id) return {};
-        return { id_cuenta: id, cuenta_codigo: opt.dataset.cuentaCodigo || '', cuenta_nombre: opt.dataset.cuentaNombre || '' };
+        // cuenta_auto: la puso el concepto, no el usuario (ver egAplicarCuentaConceptoALineas).
+        return { id_cuenta: id, cuenta_codigo: opt.dataset.cuentaCodigo || '', cuenta_nombre: opt.dataset.cuentaNombre || '', cuenta_auto: true };
+    }
+
+    /**
+     * Lleva la cuenta del concepto recién tocado a las líneas de "Otros conceptos" sin cuenta, y
+     * a las que siguen en blanco (sin descripción ni monto) con la que les dejó el concepto
+     * anterior. Nunca pisa una cuenta elegida en el buscador ni la de una línea ya escrita: los
+     * conceptos se combinan, así que esa línea puede ser del concepto anterior.
+     */
+    function egAplicarCuentaConceptoALineas() {
+        const cuenta = egConceptoCuentaActual();
+        if (!cuenta.id_cuenta) return;
+        manualEgreso.forEach(m => {
+            const enBlanco = !String(m.desc || '').trim() && !(m.monto > 0);
+            if (!m.id_cuenta || (m.cuenta_auto && enBlanco)) Object.assign(m, cuenta);
+        });
     }
 
     let _egCuentaTimer = null;
@@ -1308,6 +1321,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             manualEgreso[idx].id_cuenta     = item.id;
             manualEgreso[idx].cuenta_codigo = item.codigo;
             manualEgreso[idx].cuenta_nombre = item.nombre;
+            manualEgreso[idx].cuenta_auto   = false; // elegida a mano: ningún concepto la pisa
         }
         document.getElementById('eg-cuenta-drop').classList.add('d-none');
         renderDocsEgreso();
@@ -3061,7 +3075,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (rdoEgr) rdoEgr.checked = true;
         abrirModalOpcion();
     };
-    window.onOpcionCreada = function (id, nombre, comportamiento) {
+    // `cuenta` ({id, codigo, nombre} o null) es la cuenta con la que se creó el concepto.
+    window.onOpcionCreada = function (id, nombre, comportamiento, cuenta) {
         comportamiento = comportamiento || 'GENERAL';
         // Agregar al select oculto (fuente de verdad del concepto seleccionado)
         const sel = document.getElementById('eg-select-concepto');
@@ -3069,6 +3084,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const opt = document.createElement('option');
             opt.value = id;
             opt.dataset.comportamiento = comportamiento;
+            // Con su cuenta, igual que los que vienen del servidor: sin esto, el concepto recién
+            // creado no prellenaba su cuenta en las líneas manuales hasta recargar la página.
+            if (cuenta && cuenta.id) {
+                opt.dataset.cuentaId     = cuenta.id;
+                opt.dataset.cuentaCodigo = cuenta.codigo || '';
+                opt.dataset.cuentaNombre = cuenta.nombre || '';
+            }
             opt.textContent = nombre;
             sel.appendChild(opt);
         }
