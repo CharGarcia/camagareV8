@@ -332,20 +332,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <div class="border rounded-3 p-3 mb-3 bg-light bg-opacity-50">
                         <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">1</span> Descargar la plantilla</h6>
                         <p class="small text-muted mb-2">
-                            Lo que elija aquí son solo <b>sugerencias para crear la plantilla con datos</b>: el archivo
-                            se descarga con todo el personal activo y con estos valores ya escritos en cada fila, para
-                            no tener que llenarlos a mano. Puede cambiarlos dentro del Excel —incluso fila por fila— y,
-                            al importar, manda lo que diga el archivo, no lo que quedó seleccionado aquí.
+                            El archivo trae <b>una fila por cada empleado activo</b> y <b>una columna por cada tipo de
+                            novedad</b>. El mes, el año y a qué pago afecta son solo <b>sugerencias para crear la
+                            plantilla con datos</b>: quedan escritos en cada fila para no llenarlos a mano. Puede
+                            cambiarlos dentro del Excel —incluso fila por fila— y, al importar, manda lo que diga el
+                            archivo, no lo que quedó seleccionado aquí.
                         </p>
                         <div class="row g-2 align-items-end">
-                            <div class="col-md-4">
-                                <label class="form-label mb-1 small fw-bold text-muted d-block" for="nov_imp_tipo">Tipo de novedad</label>
-                                <select id="nov_imp_tipo" class="form-select form-select-sm shadow-none">
-                                    <?php foreach ($tipos as $t): ?>
-                                        <option value="<?= htmlspecialchars($t['codigo']) ?>"><?= htmlspecialchars($t['nombre']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
                             <div class="col-md-3">
                                 <label class="form-label mb-1 small fw-bold text-muted d-block" for="nov_imp_mes">Mes</label>
                                 <select id="nov_imp_mes" class="form-select form-select-sm shadow-none">
@@ -367,18 +360,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                        </div>
-                        <div class="mt-2">
-                            <a href="<?= $urlBaseNov ?>/plantilla-excel" id="btnPlantillaNov" class="btn btn-outline-secondary btn-sm">
-                                <i class="bi bi-download me-1"></i>Descargar plantilla
-                            </a>
+                            <div class="col-md-auto">
+                                <a href="<?= $urlBaseNov ?>/plantilla-excel" id="btnPlantillaNov" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-download me-1"></i>Descargar plantilla
+                                </a>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Paso 2: se importa lo que diga el archivo, nada más -->
                     <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">2</span> Subir la plantilla completada</h6>
                     <p class="small text-muted mb-2">
-                        Cargue la plantilla en formato Excel con la información necesaria.
+                        Escriba el valor en la columna de cada novedad que le corresponda al empleado (monto, horas,
+                        días o, en <i>Aviso de salida</i>, el motivo). Las celdas vacías o en 0 no crean nada.
                     </p>
                     <input type="file" id="nov_import_file" class="form-control form-control-sm" accept=".xlsx,.xls">
                     <div id="nov_import_result" class="mt-3"></div>
@@ -413,13 +407,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         let modalImp = null;
         const esc = (s) => (s == null ? '' : String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
 
-        // ── Plantilla: la URL lleva el tipo y el período elegidos ────────────
+        // ── Plantilla: la URL lleva el período y el "afecta a" elegidos ──────
         function urlPlantillaNov() {
-            const tipo = document.getElementById('nov_imp_tipo')?.value || '';
             const mes = document.getElementById('nov_imp_mes')?.value || '';
             const anio = document.getElementById('nov_imp_anio')?.value || '';
             const aplica = document.getElementById('nov_imp_aplica')?.value || 'rol';
-            return `${urlImport}/plantilla-excel?tipo=${encodeURIComponent(tipo)}&mes=${encodeURIComponent(mes)}`
+            return `${urlImport}/plantilla-excel?mes=${encodeURIComponent(mes)}`
                 + `&anio=${encodeURIComponent(anio)}&aplica_en=${encodeURIComponent(aplica)}`;
         }
 
@@ -429,7 +422,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (btn) btn.href = url;
         }
 
-        ['nov_imp_tipo', 'nov_imp_mes', 'nov_imp_anio', 'nov_imp_aplica'].forEach(id => {
+        ['nov_imp_mes', 'nov_imp_anio', 'nov_imp_aplica'].forEach(id => {
             const el = document.getElementById(id);
             el?.addEventListener('change', refrescarUrlPlantillaNov);
             el?.addEventListener('input', refrescarUrlPlantillaNov);
@@ -559,16 +552,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     // Todo o nada: no se registró ninguna fila; hay que corregir y volver a subir.
                     let html = `<div class="alert alert-danger small py-2 mb-2">
                             <b>No se importó ninguna novedad.</b> Corrija ${json.errores.length} error(es) de la plantilla
-                            (de ${json.total} fila(s)) y vuelva a subirla.
+                            y vuelva a subirla.
                         </div>
                         <div class="alert alert-warning small py-2 mb-0" style="max-height:220px;overflow:auto;">
                             <b>Filas con error:</b><ul class="mb-0 mt-1 ps-3">`;
-                    json.errores.forEach(e => { html += `<li>Fila ${e.fila}: ${esc(e.error)}</li>`; });
+                    // e.novedad: columna(s) de novedad de esa fila a las que aplica el error (null = toda la fila).
+                    json.errores.forEach(e => {
+                        html += `<li>Fila ${e.fila}${e.novedad ? ' · <b>' + esc(e.novedad) + '</b>' : ''}: ${esc(e.error)}</li>`;
+                    });
                     html += '</ul></div>';
                     cont.innerHTML = html;
                 } else {
-                    const omit = json.omitidas > 0 ? ` <span class="text-muted">(${json.omitidas} fila(s) sin VALOR se omitieron)</span>` : "";
-                    cont.innerHTML = `<div class="alert alert-success small py-2 mb-0"><b>${json.creadas}</b> novedad(es) importada(s) de ${json.total}.${omit}</div>`;
+                    const omit = json.omitidas > 0 ? ` <span class="text-muted">(${json.omitidas} empleado(s) sin novedades se omitieron)</span>` : "";
+                    cont.innerHTML = `<div class="alert alert-success small py-2 mb-0"><b>${json.creadas}</b> novedad(es) importada(s).${omit}</div>`;
                     window.cargarCargasNov();
                     if (json.creadas > 0) window.dispatchEvent(new CustomEvent('novedadGuardada'));
                 }

@@ -16,12 +16,17 @@ use Exception;
  * Es TODO O NADA: primero se revisa el archivo completo (formato, empleados,
  * catálogos, reglas de negocio, rol pagado y duplicados) y solo si NO hay ni un
  * error se graba, en una sola transacción vía NovedadService::crearLote(). Si
- * algo falla no se crea ninguna fila: se devuelve el detalle por número de fila
- * para que el usuario corrija la plantilla y la vuelva a subir.
+ * algo falla no se crea ninguna novedad: se devuelve el detalle por número de
+ * fila (y novedad) para que el usuario corrija la plantilla y la vuelva a subir.
  *
- * Columnas de la plantilla: IDENTIFICACION, NOMBRE, TIPO, VALOR, MES, ANIO,
- * AFECTA_A, FECHA, OBSERVACION, MOTIVO. El orden real se resuelve leyendo los
- * encabezados, así que también se aceptan plantillas antiguas (sin NOMBRE).
+ * Formatos aceptados (se reconocen por los encabezados, en cualquier orden):
+ *  - Plantilla actual (NovedadPlantillaService): una fila por empleado y una
+ *    columna por tipo de novedad. Columnas IDENTIFICACION, NOMBRE, una por tipo,
+ *    MES, ANIO, AFECTA_A, FECHA y OBSERVACION. Cada celda de novedad con valor es
+ *    una novedad; en la de Aviso de salida va el motivo en lugar del valor.
+ *  - Formato anterior: una fila por novedad, con IDENTIFICACION, NOMBRE, TIPO,
+ *    VALOR, MES, ANIO, AFECTA_A, FECHA, OBSERVACION y MOTIVO. Se sigue aceptando
+ *    para las plantillas que ya se descargaron así.
  *
  * Cada importación queda registrada como una CARGA (novedades_cargas) y todas sus
  * novedades guardan el id_carga, para poder revertirla completa desde el módulo
@@ -29,12 +34,6 @@ use Exception;
  */
 class NovedadImportService
 {
-    /** Orden por defecto si la plantilla no trae encabezados reconocibles. */
-    private const ORDEN_DEFECTO = [
-        'identificacion' => 0, 'nombre' => 1, 'tipo' => 2, 'valor' => 3, 'mes' => 4,
-        'anio' => 5, 'aplica_en' => 6, 'fecha' => 7, 'observacion' => 8, 'motivo' => 9,
-    ];
-
     /** Encabezados aceptados por campo (normalizados: mayúsculas, sin tildes ni separadores). */
     private const SINONIMOS = [
         'identificacion' => ['IDENTIFICACION', 'CEDULA', 'RUC', 'CEDULARUC', 'DOCUMENTO'],
@@ -65,18 +64,23 @@ class NovedadImportService
         $spreadsheet = IOFactory::load($archivoTmp);
         // La plantilla trae la hoja "Novedades" y una de "Referencia": se lee siempre
         // la de datos, aunque el usuario guarde el archivo con otra hoja activa.
-        $hoja  = $spreadsheet->getSheetByName('Novedades') ?? $spreadsheet->getActiveSheet();
-        $filas = $hoja->toArray();
+        $hoja = $spreadsheet->getSheetByName('Novedades') ?? $spreadsheet->getActiveSheet();
+        // Valores crudos, no el texto formateado: un monto con formato de moneda o de
+        // miles ("$ 1,250.00") sigue siendo el número 1250, y una fecha, su serial.
+        $filas = $hoja->toArray(null, true, false, false);
         if (count($filas) <= 1) {
             throw new Exception('El archivo está vacío o solo contiene los encabezados.');
         }
 
         $cols = $this->mapearColumnas($filas[0]);
+        $porEmpleado = !empty($cols['tipos']); // plantilla actual: una columna por novedad
+        $this->validarColumnas($cols['campos'], $porEmpleado);
 
         // ── Fase 1: leer y validar TODO el archivo, sin escribir nada ────────
-        $preparadas = [];   // nº de fila => datos listos para crear
-        $errores    = [];
-        $omitidas   = 0;    // filas de la plantilla sin VALOR (no aplican)
+        $preparadas = [];   // ['fila' => nº de fila, 'data' => datos listos para crear]
+        $errores    = [];   // ver agregarError()
+        $leidas     = 0;    // novedades encontradas en el archivo, válidas o no
+        $omitidas   = 0;    // filas sin ningún valor: a ese empleado no le aplica nada
         $enArchivo  = [];   // clave duplicidad => nº de fila donde apareció primero
 
         for ($i = 1; $i < count($filas); $i++) {
@@ -86,107 +90,241 @@ class NovedadImportService
             }
             $nf = $i + 1;
 
-            try {
-                $data = $this->mapearFila($fila, $cols, $idEmpresa, $idUsuario);
-            } catch (\Throwable $e) {
-                $errores[] = ['fila' => $nf, 'error' => $e->getMessage()];
+            $res = $porEmpleado
+                ? $this->leerFilaEmpleado($fila, $cols, $idEmpresa, $idUsuario)
+                : $this->leerFilaNovedad($fila, $cols['campos'], $idEmpresa, $idUsuario);
+
+            if ($res['leidas'] === 0) {
+                $omitidas++;
                 continue;
             }
-            if ($data === null) {
-                $omitidas++;   // sin VALOR: a ese empleado no le aplica esta novedad
-                continue;
+            $leidas += $res['leidas'];
+            foreach ($res['errores'] as [$novedad, $msg]) {
+                $this->agregarError($errores, $nf, $novedad, $msg);
             }
 
-            $clave = $this->claveNovedad($data);
-            if (isset($enArchivo[$clave])) {
-                $errores[] = [
-                    'fila'  => $nf,
-                    'error' => 'Repetida en la plantilla: ya está la misma novedad (empleado, tipo y período) en la fila '
-                        . $enArchivo[$clave] . '.',
-                ];
-                continue;
+            foreach ($res['novedades'] as $data) {
+                $clave = $this->claveNovedad($data);
+                if (isset($enArchivo[$clave])) {
+                    $this->agregarError($errores, $nf, $this->nombreTipo($data),
+                        'Repetida en la plantilla: ese empleado ya la tiene para el mismo período en la fila ' . $enArchivo[$clave] . '.');
+                    continue;
+                }
+                $enArchivo[$clave] = $nf;
+                $preparadas[] = ['fila' => $nf, 'data' => $data];
             }
-            $enArchivo[$clave] = $nf;
-            $preparadas[$nf] = $data;
         }
 
         // Duplicados contra lo ya registrado (una sola consulta para todo el archivo).
         if (!empty($preparadas)) {
+            $datos = array_column($preparadas, 'data');
             $existentes = $this->repo->getClavesExistentes(
                 $idEmpresa,
-                array_column($preparadas, 'id_empleado'),
-                array_column($preparadas, 'periodo_anio')
+                array_column($datos, 'id_empleado'),
+                array_column($datos, 'periodo_anio')
             );
-            foreach ($preparadas as $nf => $data) {
-                if (isset($existentes[$this->claveNovedad($data)])) {
-                    $mes = CatalogoNovedades::MESES[(int) $data['periodo_mes']] ?? $data['periodo_mes'];
-                    $errores[] = [
-                        'fila'  => $nf,
-                        'error' => 'Ya existe una novedad de "' . CatalogoNovedades::nombreTipo((string) $data['tipo_codigo'])
-                            . '" para ' . $data['_nombre_empleado'] . ' en ' . $mes . ' ' . (int) $data['periodo_anio'] . '.',
-                    ];
-                    unset($preparadas[$nf]);
+            foreach ($preparadas as $k => $p) {
+                if (isset($existentes[$this->claveNovedad($p['data'])])) {
+                    $this->agregarError($errores, $p['fila'], $this->nombreTipo($p['data']),
+                        'Ya está registrada para ' . $p['data']['_nombre_empleado'] . ' en ' . $this->nombrePeriodo($p['data']) . '.');
+                    unset($preparadas[$k]);
                 }
             }
         }
 
         // Reglas de negocio y candado de rol pagado (tampoco escribe nada).
-        foreach ($preparadas as $nf => $data) {
-            $msg = $this->svc->validarParaCrear($data);
+        foreach ($preparadas as $k => $p) {
+            $msg = $this->svc->validarParaCrear($p['data']);
             if ($msg !== null) {
-                $errores[] = ['fila' => $nf, 'error' => $msg];
-                unset($preparadas[$nf]);
+                $this->agregarError($errores, $p['fila'], $this->nombreTipo($p['data']), $msg);
+                unset($preparadas[$k]);
             }
         }
 
-        $total = count($errores) + count($preparadas);
-
-        // ── Todo o nada: con un solo error no se importa NINGUNA fila ────────
+        // ── Todo o nada: con un solo error no se importa NINGUNA novedad ─────
         if (!empty($errores)) {
-            usort($errores, fn($a, $b) => $a['fila'] <=> $b['fila']);
             return [
                 'creadas'  => 0,
-                'errores'  => $errores,
-                'total'    => $total,
+                'errores'  => $this->listarErrores($errores),
+                'total'    => $leidas,
                 'omitidas' => $omitidas,
                 'id_carga' => null,
                 'abortada' => true,
             ];
         }
         if (empty($preparadas)) {
-            throw new Exception($omitidas > 0
-                ? 'Ninguna fila tiene VALOR: complete la columna VALOR de los empleados a los que aplica la novedad.'
-                : 'El archivo no tiene ninguna fila con datos.');
+            if ($omitidas === 0) {
+                throw new Exception('El archivo no tiene ninguna fila con datos.');
+            }
+            throw new Exception($porEmpleado
+                ? 'Ningún empleado tiene novedades: escriba el valor en la columna de la novedad que le corresponda (monto, horas, días o, en Aviso de salida, el motivo).'
+                : 'Ninguna fila tiene VALOR: complete la columna VALOR de los empleados a los que aplica la novedad.');
         }
 
         // ── Fase 2: grabar la carga completa en una sola transacción ─────────
         $idCarga = $this->cargaSvc?->abrirCarga($idEmpresa, $idUsuario, $nombreArchivo);
 
+        // La clave es la etiqueta con la que crearLote() informa un error ("5 · Descuento").
         $aCrear = [];
-        foreach ($preparadas as $nf => $data) {
+        foreach ($preparadas as $p) {
+            $data = $p['data'];
+            $etiqueta = $p['fila'] . ' · ' . $this->nombreTipo($data);
             unset($data['_nombre_empleado']);
             $data['id_carga'] = $idCarga;
-            $aCrear[$nf] = $data;
+            $aCrear[$etiqueta] = $data;
         }
 
         try {
             $ids = $this->svc->crearLote($aCrear, $idEmpresa, $idUsuario);
         } catch (\Throwable $e) {
-            $this->cargaSvc?->cerrarCarga($idCarga, $idEmpresa, $idUsuario, $total, 0, $total);
-            throw new Exception('No se importó ninguna fila: ' . $e->getMessage());
+            $this->cargaSvc?->cerrarCarga($idCarga, $idEmpresa, $idUsuario, $leidas, 0, $leidas);
+            throw new Exception('No se importó ninguna novedad: ' . $e->getMessage());
         }
 
         $creadas = count($ids);
-        $this->cargaSvc?->cerrarCarga($idCarga, $idEmpresa, $idUsuario, $total, $creadas, 0);
+        $this->cargaSvc?->cerrarCarga($idCarga, $idEmpresa, $idUsuario, $leidas, $creadas, 0);
 
         return [
             'creadas'  => $creadas,
             'errores'  => [],
-            'total'    => $total,
+            'total'    => $leidas,
             'omitidas' => $omitidas,
             'id_carga' => $idCarga,
             'abortada' => false,
         ];
+    }
+
+    /**
+     * Plantilla actual: la fila es un empleado y hay una columna por tipo de
+     * novedad. Cada celda de novedad con valor es una novedad; las vacías o en 0
+     * no (a ese empleado no le aplica ese tipo). En la columna de Aviso de salida
+     * va el motivo de salida en lugar del valor. MES, ANIO, AFECTA_A, FECHA y
+     * OBSERVACION valen para todas las novedades de la fila.
+     *
+     * Revisa la fila entera aunque encuentre un error, para informarlos todos de
+     * una vez: cada error es [nombre de la novedad, o null si es de toda la fila,
+     * mensaje].
+     */
+    private function leerFilaEmpleado(array $f, array $cols, int $idEmpresa, int $idUsuario): array
+    {
+        $celdas = []; // código del tipo => texto de la celda
+        foreach ($cols['tipos'] as $idx => $codigo) {
+            $txt = trim((string) ($f[$idx] ?? ''));
+            if ($txt !== '' && !$this->esCero($txt)) {
+                $celdas[$codigo] = $txt;
+            }
+        }
+        if (empty($celdas)) {
+            return ['novedades' => [], 'errores' => [], 'leidas' => 0];
+        }
+
+        $campos  = $cols['campos'];
+        $errores = [];
+
+        $ident  = trim((string) $this->celda($f, $campos, 'identificacion'));
+        $nombre = trim((string) $this->celda($f, $campos, 'nombre'));
+        $idEmp  = null;
+        if ($ident === '') {
+            $errores[] = [null, 'Falta la IDENTIFICACION del empleado.'];
+        } else {
+            $idEmp = $this->resolverEmpleado($idEmpresa, $ident);
+            if (!$idEmp) {
+                $errores[] = [null, "No existe un empleado con identificación '{$ident}'"
+                    . ($nombre !== '' ? " ({$nombre})" : '') . '.'];
+            }
+        }
+        $aplicaEn = null;
+        try {
+            $aplicaEn = $this->resolverAplicaEn(trim((string) $this->celda($f, $campos, 'aplica_en', 'rol')));
+        } catch (\Throwable $e) {
+            $errores[] = [null, $e->getMessage()];
+        }
+        $mes  = (int) $this->celda($f, $campos, 'mes', 0);
+        $anio = (int) $this->celda($f, $campos, 'anio', 0);
+        $obs  = trim((string) $this->celda($f, $campos, 'observacion'));
+
+        // Lo común a todas las novedades de la fila.
+        $base = [
+            'id_empresa'       => $idEmpresa,
+            'id_usuario'       => $idUsuario,
+            'id_empleado'      => $idEmp,
+            'periodo_mes'      => $mes,
+            'periodo_anio'     => $anio,
+            'aplica_en'        => $aplicaEn,
+            'fecha'            => $this->normalizarFecha($this->celda($f, $campos, 'fecha', '')),
+            'estado'           => 'activo',
+            // Solo para los mensajes de error; se quita antes de guardar.
+            '_nombre_empleado' => $nombre !== '' ? $nombre : $ident,
+        ];
+
+        $novedades = [];
+        foreach ($celdas as $codigo => $txt) {
+            $codigo  = (string) $codigo;
+            $esAviso = CatalogoNovedades::esAvisoSalida($codigo);
+            try {
+                $valor  = $esAviso ? 0.0 : $this->numero($txt);
+                $motivo = $esAviso ? $this->resolverMotivo($txt) : '';
+            } catch (\Throwable $e) {
+                $errores[] = [CatalogoNovedades::nombreTipo($codigo), $e->getMessage()];
+                continue;
+            }
+            if ($idEmp === null || $aplicaEn === null) {
+                continue; // la fila ya tiene su error: no se arma la novedad
+            }
+            $novedades[] = $base + [
+                'tipo_codigo'   => $codigo,
+                'valor'         => $valor,
+                'motivo_codigo' => $motivo,
+                'observacion'   => $obs !== '' ? $obs : $this->observacionPorDefecto($codigo, $mes, $anio),
+            ];
+        }
+
+        return ['novedades' => $novedades, 'errores' => $errores, 'leidas' => count($celdas)];
+    }
+
+    /**
+     * Formato anterior: la fila es UNA novedad (columnas TIPO y VALOR). Una fila
+     * sin VALOR no cuenta: esa plantilla traía a todo el personal y se completaba
+     * solo a quien le aplicaba la novedad.
+     */
+    private function leerFilaNovedad(array $f, array $campos, int $idEmpresa, int $idUsuario): array
+    {
+        try {
+            $data = $this->mapearFila($f, $campos, $idEmpresa, $idUsuario);
+        } catch (\Throwable $e) {
+            return ['novedades' => [], 'errores' => [[null, $e->getMessage()]], 'leidas' => 1];
+        }
+        return $data === null
+            ? ['novedades' => [], 'errores' => [], 'leidas' => 0]
+            : ['novedades' => [$data], 'errores' => [], 'leidas' => 1];
+    }
+
+    /**
+     * Suma un error a la fila $fila. Si esa fila ya tiene el mismo mensaje para
+     * otra de sus novedades (p. ej. el rol del período ya está pagado), se agrega
+     * el nombre de la novedad a ese error en vez de repetirlo.
+     */
+    private function agregarError(array &$errores, int $fila, ?string $novedad, string $msg): void
+    {
+        $clave = $fila . '|' . $msg;
+        if (!isset($errores[$clave])) {
+            $errores[$clave] = ['fila' => $fila, 'novedades' => [], 'error' => $msg];
+        }
+        if ($novedad !== null && !in_array($novedad, $errores[$clave]['novedades'], true)) {
+            $errores[$clave]['novedades'][] = $novedad;
+        }
+    }
+
+    /** Errores para la respuesta, en orden de fila: [fila, novedad (o null), error]. */
+    private function listarErrores(array $errores): array
+    {
+        $lista = array_map(fn(array $e) => [
+            'fila'    => $e['fila'],
+            'novedad' => $e['novedades'] ? implode(', ', $e['novedades']) : null,
+            'error'   => $e['error'],
+        ], array_values($errores));
+        usort($lista, fn($a, $b) => $a['fila'] <=> $b['fila']);
+        return $lista;
     }
 
     /** Clave de duplicidad: mismo empleado, mismo tipo y mismo período (mes/año). */
@@ -196,80 +334,126 @@ class NovedadImportService
             . '|' . ((int) $d['periodo_mes']) . '|' . ((int) $d['periodo_anio']);
     }
 
+    private function nombreTipo(array $d): string
+    {
+        $codigo = (string) $d['tipo_codigo'];
+        return CatalogoNovedades::nombreTipo($codigo) ?? $codigo;
+    }
+
+    private function nombrePeriodo(array $d): string
+    {
+        return (CatalogoNovedades::MESES[(int) $d['periodo_mes']] ?? (string) $d['periodo_mes'])
+            . ' ' . (int) $d['periodo_anio'];
+    }
+
+    /** "Tipo - Mes Año": el mismo texto que autocompleta el modal de novedades. */
+    private function observacionPorDefecto(string $tipo, int $mes, int $anio): string
+    {
+        $texto = (CatalogoNovedades::nombreTipo($tipo) ?? '') . ' - ' . (CatalogoNovedades::MESES[$mes] ?? '') . ' ' . $anio;
+        return trim((string) preg_replace('/\s+/', ' ', $texto));
+    }
+
     /**
-     * Resuelve en qué columna está cada campo leyendo la fila de encabezados. Si la
-     * plantilla no trae encabezados reconocibles se usa el orden por defecto, de
-     * modo que una plantilla antigua (sin la columna NOMBRE) también se importa.
+     * Resuelve en qué columna está cada campo leyendo la fila de encabezados:
+     * 'campos' => campo => índice, y 'tipos' => índice => código del tipo de
+     * novedad de esa columna (solo en la plantilla actual; vacío en el formato
+     * anterior, que trae una columna TIPO).
      */
     private function mapearColumnas(array $encabezados): array
     {
-        $cols = [];
+        $porNombre = [];
+        foreach (CatalogoNovedades::TIPOS as $t) {
+            $porNombre[$this->normalizarEncabezado($t['nombre'])] = (string) $t['codigo'];
+        }
+
+        $campos = [];
+        $tipos  = [];
         foreach ($encabezados as $idx => $texto) {
             $norm = $this->normalizarEncabezado((string) $texto);
             if ($norm === '') {
                 continue;
             }
+            if (isset($porNombre[$norm])) {
+                if (!in_array($porNombre[$norm], $tipos, true)) {
+                    $tipos[(int) $idx] = $porNombre[$norm];
+                }
+                continue;
+            }
             foreach (self::SINONIMOS as $campo => $alias) {
-                if (!isset($cols[$campo]) && in_array($norm, $alias, true)) {
-                    $cols[$campo] = (int) $idx;
+                if (!isset($campos[$campo]) && in_array($norm, $alias, true)) {
+                    $campos[$campo] = (int) $idx;
                     break;
                 }
             }
         }
-
-        // Sin encabezados útiles (identificación y tipo son los mínimos), se asume
-        // el orden de la plantilla actual.
-        if (!isset($cols['identificacion']) || !isset($cols['tipo'])) {
-            return self::ORDEN_DEFECTO;
-        }
-        return $cols;
+        return ['campos' => $campos, 'tipos' => $tipos];
     }
 
-    /** MAYÚSCULAS sin tildes, espacios ni separadores: "Afecta_a" → "AFECTAA". */
+    /** Columnas sin las que el archivo no se puede leer: se avisa antes de revisar fila por fila. */
+    private function validarColumnas(array $campos, bool $porEmpleado): void
+    {
+        $recarga = ' Descargue la plantilla de nuevo desde este cuadro y no cambie sus encabezados.';
+        if (!$porEmpleado) {
+            if (!isset($campos['identificacion'], $campos['tipo'])) {
+                throw new Exception('No se reconocen las columnas del archivo.' . $recarga);
+            }
+            return;
+        }
+        foreach (['identificacion' => 'IDENTIFICACION', 'mes' => 'MES', 'anio' => 'ANIO'] as $campo => $titulo) {
+            if (!isset($campos[$campo])) {
+                throw new Exception("Falta la columna {$titulo}." . $recarga);
+            }
+        }
+    }
+
+    /**
+     * MAYÚSCULAS sin tildes, separadores ni lo que vaya entre paréntesis:
+     * "Afecta_a" → "AFECTAA", "PRÉSTAMO EMPRESA ($)" → "PRESTAMOEMPRESA".
+     */
     private function normalizarEncabezado(string $texto): string
     {
         $t = mb_strtoupper(trim($texto), 'UTF-8');
         $t = strtr($t, ['Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U', 'Ñ' => 'N', 'Ü' => 'U']);
+        $t = (string) preg_replace('/\([^)]*\)/', '', $t);
         return (string) preg_replace('/[^A-Z0-9]/', '', $t);
     }
 
-    /**
-     * Convierte una fila de la plantilla en datos de novedad. Devuelve null cuando
-     * la fila viene SIN valor: la plantilla trae a todo el personal y se completa
-     * solo a quien le aplica, así que una fila en blanco no es un error, se salta.
-     */
-    private function mapearFila(array $f, array $cols, int $idEmpresa, int $idUsuario): ?array
+    /** Valor crudo de la celda del campo, o $porDefecto si la columna no está o la celda está vacía. */
+    private function celda(array $f, array $campos, string $campo, $porDefecto = '')
     {
-        $val = function (string $campo, $porDefecto = '') use ($f, $cols) {
-            $idx = $cols[$campo] ?? null;
-            return $idx !== null && array_key_exists($idx, $f) && $f[$idx] !== null ? $f[$idx] : $porDefecto;
-        };
+        $idx = $campos[$campo] ?? null;
+        return $idx !== null && array_key_exists($idx, $f) && $f[$idx] !== null ? $f[$idx] : $porDefecto;
+    }
 
-        $ident   = trim((string) $val('identificacion'));
-        $nombre  = trim((string) $val('nombre'));
-        $tipoRaw = trim((string) $val('tipo'));
-        $valor   = $val('valor', '');  // vacío = no aplica a ese empleado
-        $mes     = (int) $val('mes', 0);
-        $anio    = (int) $val('anio', 0);
-        $afecta  = trim((string) $val('aplica_en', 'rol'));
-        $fecha   = $val('fecha', '');
-        $obs     = trim((string) $val('observacion'));
-        $motivo  = trim((string) $val('motivo'));
+    /**
+     * Formato anterior: convierte la fila en datos de novedad. Devuelve null cuando
+     * la fila viene SIN valor: la plantilla traía a todo el personal y se
+     * completaba solo a quien le aplicaba, así que una fila en blanco no es un
+     * error, se salta.
+     */
+    private function mapearFila(array $f, array $campos, int $idEmpresa, int $idUsuario): ?array
+    {
+        $ident    = trim((string) $this->celda($f, $campos, 'identificacion'));
+        $nombre   = trim((string) $this->celda($f, $campos, 'nombre'));
+        $tipoRaw  = trim((string) $this->celda($f, $campos, 'tipo'));
+        $valorTxt = trim((string) $this->celda($f, $campos, 'valor')); // vacío = no aplica a ese empleado
+        $mes      = (int) $this->celda($f, $campos, 'mes', 0);
+        $anio     = (int) $this->celda($f, $campos, 'anio', 0);
+        $afecta   = trim((string) $this->celda($f, $campos, 'aplica_en', 'rol'));
+        $obs      = trim((string) $this->celda($f, $campos, 'observacion'));
+        $motivo   = trim((string) $this->celda($f, $campos, 'motivo'));
 
         if ($ident === '') {
             throw new Exception('Falta la IDENTIFICACION del empleado.');
         }
 
-        $tipo = $this->resolverTipo($tipoRaw);
-        $valorTxt = trim((string) $valor);
+        $tipo  = $this->resolverTipo($tipoRaw);
+        $valor = 0.0;
         if (!CatalogoNovedades::esAvisoSalida($tipo)) {
             if ($valorTxt === '') {
                 return null; // a este empleado no le aplica la novedad
             }
-            if (!is_numeric(str_replace(',', '.', $valorTxt))) {
-                throw new Exception("El VALOR «{$valorTxt}» no es un número.");
-            }
-            $valor = (float) str_replace(',', '.', $valorTxt);
+            $valor = $this->numero($valorTxt);
         }
         $idEmp = $this->resolverEmpleado($idEmpresa, $ident);
         if (!$idEmp) {
@@ -282,17 +466,34 @@ class NovedadImportService
             'id_usuario'       => $idUsuario,
             'id_empleado'      => $idEmp,
             'tipo_codigo'      => $tipo,
-            'valor'            => (float) $valor,
+            'valor'            => $valor,
             'periodo_mes'      => $mes,
             'periodo_anio'     => $anio,
             'aplica_en'        => $this->resolverAplicaEn($afecta),
-            'fecha'            => $this->normalizarFecha($fecha),
-            'observacion'      => $obs,
+            'fecha'            => $this->normalizarFecha($this->celda($f, $campos, 'fecha', '')),
+            'observacion'      => $obs !== '' ? $obs : $this->observacionPorDefecto($tipo, $mes, $anio),
             'motivo_codigo'    => $motivo !== '' ? $this->resolverMotivo($motivo) : '',
             'estado'           => 'activo',
             // Solo para los mensajes de error; se quita antes de guardar.
             '_nombre_empleado' => $nombre !== '' ? $nombre : $ident,
         ];
+    }
+
+    /** ¿La celda es un 0? En la plantilla por empleado, un 0 equivale a dejarla vacía. */
+    private function esCero(string $txt): bool
+    {
+        $n = str_replace(',', '.', $txt);
+        return is_numeric($n) && (float) $n == 0.0;
+    }
+
+    /** Número de la celda; acepta coma decimal ("2,5"). */
+    private function numero(string $txt): float
+    {
+        $n = str_replace(',', '.', trim($txt));
+        if (!is_numeric($n)) {
+            throw new Exception("El valor «{$txt}» no es un número.");
+        }
+        return (float) $n;
     }
 
     /**
@@ -344,14 +545,25 @@ class NovedadImportService
         throw new Exception("AFECTA_A no reconocido: '{$raw}' (use rol, quincena o semanal).");
     }
 
+    /**
+     * Motivo de salida por código ("T", también en minúscula), por nombre, o como
+     * lo pone la lista desplegable de la plantilla: "T - Terminación del contrato".
+     */
     private function resolverMotivo(string $raw): string
     {
-        $raw = trim($raw);
-        if (CatalogoNovedades::esMotivoValido($raw)) return $raw;
-        foreach (CatalogoNovedades::MOTIVOS_SALIDA as $m) {
-            if (mb_strtolower($m['nombre']) === mb_strtolower($raw)) return $m['codigo'];
+        $raw    = trim($raw);
+        $codigo = mb_strtoupper($raw, 'UTF-8');
+        if (CatalogoNovedades::esMotivoValido($codigo)) return $codigo;
+        if (preg_match('/^([A-Za-z])\s*-\s*\S/', $raw, $m) && CatalogoNovedades::esMotivoValido(strtoupper($m[1]))) {
+            return strtoupper($m[1]);
         }
-        throw new Exception("MOTIVO de salida no reconocido: '{$raw}'.");
+        foreach (CatalogoNovedades::MOTIVOS_SALIDA as $mot) {
+            if (mb_strtolower($mot['nombre']) === mb_strtolower($raw)) return $mot['codigo'];
+        }
+        $codigos = array_column(CatalogoNovedades::MOTIVOS_SALIDA, 'codigo');
+        $ultimo  = array_pop($codigos);
+        throw new Exception("Motivo de salida no reconocido: «{$raw}». Elíjalo de la lista o escriba su código ("
+            . implode(', ', $codigos) . " o {$ultimo}).");
     }
 
     private function normalizarFecha($valor): string

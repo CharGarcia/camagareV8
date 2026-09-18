@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
-etiquetas: novedades, novedad, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, multa, carga masiva, importar, importacion, excel, plantilla, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
-version: 1.3
+etiquetas: novedades, novedad, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
+version: 1.4
 orden: 20
 estado: activo
 ---
@@ -48,46 +48,80 @@ agosto. El mes debe estar entre 1 y 12.
 
 ## Carga masiva desde una plantilla Excel
 
-Cuando hay muchas novedades del mismo periodo (por ejemplo las horas extra de
-todo el personal) conviene subirlas de una vez en lugar de una por una. El botón
-**Importar** del listado abre un cuadro con dos pestañas: **Importar** e
-**Historial**.
+Cuando hay muchas novedades del mismo periodo (por ejemplo las horas extra, los
+descuentos y los anticipos de todo el personal) conviene subirlas de una vez en
+lugar de una por una. El botón **Importar** del listado abre un cuadro con dos
+pestañas: **Importar** e **Historial**.
 
 La pestaña **Importar** tiene dos pasos:
 
-**1. Descargar la plantilla.** Elija el **tipo de novedad**, el **mes**, el **año**
-y a qué pago **afecta**, y pulse **Descargar plantilla**. El archivo sale con esos
-datos ya escritos y con **todo el personal activo** de la empresa: una fila por
-empleado, con su identificación, su nombre, el tipo, el periodo, la fecha de
-registro y la observación *"Tipo - Mes Año"*.
+**1. Descargar la plantilla.** Elija el **mes**, el **año** y a qué pago
+**afecta**, y pulse **Descargar plantilla**. El archivo sale con **una fila por
+cada empleado activo** de la empresa y **una columna por cada tipo de novedad**
+del catálogo, así que en una sola plantilla se cargan todas las novedades del
+periodo. No hace falta elegir el tipo de novedad.
 
-> Esas cuatro opciones son solo **sugerencias para crear la plantilla con datos**:
+| Columnas | Qué contienen |
+|----------|---------------|
+| IDENTIFICACION, NOMBRE | El empleado (ya vienen escritos) |
+| Una por tipo: OTROS INGRESOS, DESCUENTO, ANTICIPO, HORAS NOCTURNAS, HORAS SUPLEMENTARIAS, HORAS EXTRAORDINARIAS, los tres PRÉSTAMOS, DÍAS NO LABORADOS y AVISO DE SALIDA | Vacías: aquí se escribe. Entre paréntesis dice qué va: **$** (monto), **HORAS**, **DÍAS** o **MOTIVO** |
+| MES, ANIO, AFECTA_A, FECHA | Ya escritos con lo que eligió en pantalla y la fecha de hoy |
+| OBSERVACION | Opcional |
+
+> Mes, año y *afecta a* son solo **sugerencias para crear la plantilla con datos**:
 > el archivo baja con esos valores ya escritos en cada fila para no tener que
 > llenarlos a mano. Puede cambiarlos dentro del Excel —incluso fila por fila— y, al
 > importar, manda lo que diga el archivo, no lo que quedó seleccionado en pantalla.
 
-**2. Subir la plantilla completada.** Complete la columna **VALOR** solo de los
-empleados a los que les corresponde la novedad —**las filas que deje sin valor se
-ignoran**, no hace falta borrarlas—, elija el archivo y pulse **Importar**.
+**2. Subir la plantilla completada.** En la fila de cada empleado escriba el
+valor **solo en las columnas de las novedades que le correspondan**: por ejemplo
+8 en *HORAS SUPLEMENTARIAS* y 25 en *DESCUENTO*. Cada celda con valor se
+registra como una novedad aparte. **Las celdas vacías o en 0 no crean nada** y
+los empleados sin ningún valor se omiten; no hace falta borrar filas ni columnas.
+Elija el archivo y pulse **Importar**.
+
+Cómo se llenan los casos especiales:
+
+- **Aviso de salida**: en su columna no va un número sino el **motivo de
+  salida**. La celda tiene una lista desplegable con los motivos (*T -
+  Terminación del contrato*, *V - Renuncia voluntaria*...); también puede
+  escribir solo la letra del código.
+- **Mes, año, afecta a y fecha** valen para **todas** las novedades de esa fila.
+  Si a un empleado le toca una novedad de otro periodo o de otro pago (por
+  ejemplo un anticipo que va a la quincena), copie su fila debajo, cambie esos
+  datos y deje en ella solo esa novedad.
+- **Observación**: si la deja vacía, cada novedad se guarda con el texto
+  *"Tipo - Mes Año"* (por ejemplo *Descuento - Septiembre 2026*), el mismo que
+  propone el formulario de **Nuevo**. Si la escribe, se usa para todas las
+  novedades de la fila.
 
 La plantilla tiene dos hojas: **Novedades** (la que se llena, y la que se abre al
-abrir el archivo) y **Referencia** (los códigos válidos de tipo, *afecta a* y
-motivos de salida). La identificación y el nombre están guardados como texto para
-que una cédula que empieza en cero no pierda ese cero.
+abrir el archivo) y **Referencia** (instrucciones, qué se escribe en cada
+columna, los valores de *afecta a* y los motivos de salida). La identificación y
+el nombre quedan fijos a la izquierda al desplazarse por las columnas, y están
+guardados como texto para que una cédula que empieza en cero no pierda ese cero.
+
+> Las plantillas descargadas antes de este cambio (una fila por novedad, con las
+> columnas TIPO y VALOR) se siguen aceptando al importar.
 
 ### La importación es todo o nada
 
-Antes de guardar nada, el sistema revisa el archivo completo. **Si una sola fila
-tiene un error, no se registra ninguna novedad**: se muestra el detalle fila por
-fila para que corrija la plantilla y la vuelva a subir. Se revisa que:
+Antes de guardar nada, el sistema revisa el archivo completo. **Si una sola
+celda tiene un error, no se registra ninguna novedad**: se muestra el detalle
+para que corrija la plantilla y la vuelva a subir. Cada error indica la **fila**
+y la **novedad** (columna) a la que corresponde, por ejemplo
+*"Fila 7 · Horas Nocturnas: El valor «ocho» no es un número"*; si el mismo
+problema afecta a varias novedades de una fila (por ejemplo, el rol de ese
+periodo ya está pagado), se muestra una sola vez con todas ellas. Se revisa que:
 
 - la identificación corresponda a un empleado de la empresa;
-- el tipo, el *afecta a* y el motivo existan en el catálogo;
+- el *afecta a* y el motivo de salida existan en el catálogo;
 - el valor sea un número y el periodo sea válido;
 - el rol de ese empleado y periodo **no esté ya pagado**;
 - **no exista ya la misma novedad**: mismo empleado, mismo tipo y mismo mes/año.
-  Vale tanto contra lo ya registrado como contra la propia plantilla (dos filas
-  iguales dentro del archivo también se rechazan).
+  Vale tanto contra lo ya registrado como contra la propia plantilla (si repite
+  la fila de un empleado, las dos filas no pueden traer el mismo tipo de novedad
+  para el mismo periodo).
 
 Ese último control es el que evita subir dos veces la misma carga. Si de verdad
 necesita dos novedades del mismo tipo y periodo para una persona, regístrelas a
@@ -171,13 +205,22 @@ filtrado.
   imputó.
 - **"No existe un empleado con identificación ..."** al importar: la cédula o RUC
   de esa fila no coincide con ningún empleado activo de la empresa.
-- **"Ya existe una novedad de ... para ... en ..."**: esa persona ya tiene
-  registrada una novedad de ese tipo en ese mes; quite la fila de la plantilla o
-  corrija el periodo.
-- **"Repetida en la plantilla ..."**: el archivo trae dos filas con el mismo
-  empleado, tipo y periodo; deje solo una.
-- **"Ninguna fila tiene VALOR"**: descargó la plantilla y la subió sin completar
-  la columna VALOR.
+- **"Fila N · Tipo: Ya está registrada para ... en ..."**: esa persona ya tiene
+  registrada una novedad de ese tipo en ese mes; borre el valor de esa celda o
+  corrija el periodo de la fila.
+- **"Fila N · Tipo: Repetida en la plantilla ..."**: el empleado aparece en dos
+  filas con el mismo tipo de novedad y el mismo periodo; deje el valor en una
+  sola de ellas.
+- **"El valor «...» no es un número"**: en las columnas de monto, horas o días
+  solo van números (se acepta coma o punto decimal).
+- **"Motivo de salida no reconocido"**: en la columna *AVISO DE SALIDA* va el
+  motivo, no un valor ni una "X". Elíjalo de la lista desplegable o escriba su
+  código (T, V, B, R, S, D, I, F o A).
+- **"Ningún empleado tiene novedades"**: descargó la plantilla y la subió sin
+  escribir ningún valor en las columnas de novedad.
+- **"Falta la columna MES"** (o IDENTIFICACION, ANIO) / **"No se reconocen las
+  columnas del archivo"**: se borró o se renombró un encabezado. Descargue la
+  plantilla de nuevo y no cambie la primera fila.
 - **"No se puede eliminar esta carga: N novedad(es) ya se usaron..."**: el rol de
   ese periodo ya está pagado o el anticipo/préstamo ya se desembolsó. Anule ese
   rol o egreso, o elimine una a una las novedades que aún no se usaron.
@@ -187,6 +230,12 @@ filtrado.
 
 ## Historial de cambios
 
+- **1.4** — La plantilla de importación pasa a tener una fila por empleado y una
+  columna por cada tipo de novedad, así que ya no se elige el tipo antes de
+  descargarla. En *Aviso de salida* se elige el motivo de una lista desplegable.
+  La observación vacía se completa con *"Tipo - Mes Año"* y los errores indican
+  la fila y la novedad. Las plantillas anteriores (una fila por novedad) se
+  siguen aceptando.
 - **1.3** — Nuevo buscador del listado: búsqueda libre en todas las columnas
   (sin Tipo, Afecta a, Motivo, Estado ni Pago) y botón embudo con la ventana de
   filtros; se suman los filtros de afecta a, motivo de salida, pago, origen,

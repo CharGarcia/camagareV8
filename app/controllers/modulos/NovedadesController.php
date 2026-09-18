@@ -354,20 +354,15 @@ class NovedadesController extends BaseModuloController
     }
 
     /**
-     * Descarga la plantilla Excel para cargar novedades, ya prellenada con el
-     * personal activo de la empresa. El tipo de novedad, el mes y el año vienen por
-     * querystring desde el modal (por defecto: primer tipo del catálogo y período
-     * actual) y se usan para llenar cada fila, incluida la observación
-     * "Tipo - Mes Año", el mismo texto que arma el modal de novedades.
+     * Descarga la plantilla Excel para cargar novedades: una fila por cada
+     * empleado activo de la empresa y una columna por cada tipo de novedad. El
+     * mes, el año y el "afecta a" vienen por querystring desde el modal (por
+     * defecto: período actual y rol de pagos) y quedan escritos en cada fila.
      */
     public function plantillaExcel(): void
     {
         $this->requireCrear();
 
-        $tipo = trim($_GET['tipo'] ?? '');
-        if (!CatalogoNovedades::esTipoValido($tipo)) {
-            $tipo = (string) CatalogoNovedades::TIPOS[0]['codigo'];
-        }
         $mes = (int) ($_GET['mes'] ?? 0);
         if ($mes < 1 || $mes > 12) {
             $mes = (int) date('n');
@@ -382,7 +377,7 @@ class NovedadesController extends BaseModuloController
         }
 
         $ss = (new NovedadPlantillaService(new EmpleadoRepository()))
-            ->construir((int) $_SESSION['id_empresa'], $tipo, $mes, $anio, $aplicaEn);
+            ->construir((int) $_SESSION['id_empresa'], $mes, $anio, $aplicaEn);
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="plantilla_novedades.xlsx"');

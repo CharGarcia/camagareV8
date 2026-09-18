@@ -93,7 +93,8 @@ class NovedadService
                 try {
                     $ids[] = $this->crearInterno($data);
                 } catch (\Throwable $e) {
-                    // El número de fila lo conoce el llamador (clave del array).
+                    // La clave del array es la etiqueta de la fila que arma el
+                    // llamador (el importador usa "5 · Descuento").
                     throw new Exception('Fila ' . $i . ': ' . $e->getMessage(), 0, $e);
                 }
                 $clave = ($data['aplica_en'] ?? 'rol') . '|' . (int) $data['periodo_anio'] . '|' . (int) $data['periodo_mes'];
