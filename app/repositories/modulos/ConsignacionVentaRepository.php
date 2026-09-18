@@ -174,21 +174,26 @@ class ConsignacionVentaRepository extends BaseRepository
 
     /**
      * Texto propio de la consignación que entra en la búsqueda libre: número (serie-secuencial),
-     * observaciones, punto de partida, punto de llegada, la fecha en los dos formatos en que se
-     * puede escribir (como se muestra y como la guarda PostgreSQL) y el total.
+     * observaciones y la fecha en los dos formatos en que se puede escribir (como se muestra y
+     * como la guarda PostgreSQL). Son las columnas que se VEN en el listado.
      * `$a` es el prefijo del alias ('cv.' en la consulta, '' en el CREATE INDEX): la MISMA
      * expresión alimenta la consulta y el índice, así que no se pueden desalinear.
+     *
+     * El punto de partida, el punto de llegada y el total salieron de aquí el 17-09-2026 con
+     * el resto de campos que no son columna del listado (ver fuentesBusqueda()). Al cambiar la
+     * expresión cambia el índice: database/20260917c_ajuste_busqueda_consignaciones.sql.
      */
     private static function exprConsignacion(string $a = ''): string
     {
         $m = \App\Helpers\MotorBusqueda::class;
+        // El número va dos veces: como lo guarda el documento (serie + secuencial) y en el
+        // formato canónico 000-000-000000000 (SecuencialFormato::sqlNumeroCompleto), para que
+        // se encuentre escribiéndolo como se lee aunque la serie o el secuencial estén cortos.
         return "COALESCE({$a}serie, '') || '-' || COALESCE({$a}secuencial, '')"
+             . " || ' ' || " . \App\Helpers\SecuencialFormato::sqlNumeroCompleto("{$a}establecimiento", "{$a}punto_emision", "{$a}secuencial")
              . " || ' ' || COALESCE({$a}observaciones, '')"
-             . " || ' ' || COALESCE({$a}punto_partida, '')"
-             . " || ' ' || COALESCE({$a}punto_llegada, '')"
              . " || ' ' || " . $m::fechaDmy("{$a}fecha_emision")
-             . " || ' ' || " . $m::fechaIso("{$a}fecha_emision")
-             . " || ' ' || COALESCE({$a}total::text, '')";
+             . " || ' ' || " . $m::fechaIso("{$a}fecha_emision");
     }
 
     /**
@@ -198,15 +203,28 @@ class ConsignacionVentaRepository extends BaseRepository
      * tildes al nombre de los 26.000 clientes o de los 68.000 productos en cada búsqueda, y el
      * número, las observaciones y los puntos se comparaban consignación por consignación.
      *
-     * Busca exactamente lo mismo que antes: número, observaciones, punto de partida y de
-     * llegada, fecha, total, cliente (nombre e identificación), asesor, responsable de traslado,
-     * usuario que registró, productos consignados (código y nombre), lote y NUP de las líneas, y
-     * los números de las facturaciones, retornos y cambios de producto de esa consignación.
+     * Qué busca: lo que se VE en el listado — número (serie-secuencial), observaciones, fecha,
+     * cliente (nombre) y asesor.
+     *
+     * Qué NO busca, por decisión del usuario (17-09-2026), y dónde se busca en su lugar. El
+     * criterio es el mismo de Facturas, Compras, notas y retenciones: si un dato no está en una
+     * columna del listado, la consignación aparecía sin que se viera por qué:
+     *   - Identificación del cliente → filtro `ruc:` / `identificacion:`.
+     *   - Punto de partida y punto de llegada → filtros `partida:` y `llegada:`.
+     *   - Total → filtro numérico `total:`.
+     *   - Responsable de traslado → filtro `responsable:`.
+     *   - Usuario que registró → selector "Usuario que registró" del modal (`id_usuario`).
+     *   - Productos consignados, lote y NUP → pestaña "Detalles" del modal de filtros
+     *     (buscarEnDetalles()), que SÍ dice qué línea coincidió.
+     *   - Números de las facturaciones, retornos y cambios de producto de la consignación →
+     *     pestaña "Detalles"; son documentos distintos y su número no se ve en esta tabla.
+     * Con eso quedan sin uso los índices idx_trgm_cons_det_lote_nup,
+     * idx_trgm_consignaciones_facturas, idx_trgm_retornos_numero e idx_trgm_cambios_numero
+     * (idx_trgm_productos NO: lo usa también PedidoRepository). Ver
+     * database/20260917c_ajuste_busqueda_consignaciones.sql.
      */
     private function fuentesBusqueda(): array
     {
-        $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
-
         return [
             // Datos propios de la consignación
             [
@@ -214,67 +232,17 @@ class ConsignacionVentaRepository extends BaseRepository
                 'expr'   => self::exprConsignacion('bx.'),
                 'indice' => ['tabla' => 'consignaciones_ventas', 'nombre' => 'idx_trgm_consignaciones_ventas', 'expr' => self::exprConsignacion()],
             ],
-            // Total escrito con coma decimal ("34,78"): el texto indexado lo guarda con punto,
-            // así que esa forma se compara aparte, y solo cuando la palabra es un monto así.
-            ['expr' => 'cv.total', 'crudo' => true, 'si' => '/^\d+,\d{1,2}$/'],
-            // Cliente: nombre e identificación (mismo índice que usan los demás módulos)
+            // Cliente: SOLO el nombre, que es la columna del listado. El índice compartido
+            // idx_trgm_clientes indexa "nombre + identificación" y un GIN trigram solo sirve
+            // para la MISMA expresión, así que este módulo lleva el suyo sobre el nombre; sin
+            // él, cada búsqueda recorrería los 26.000 clientes de la empresa.
             [
                 'sql'    => "cv.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})",
-                'expr'   => "COALESCE(cx.nombre, '') || ' ' || COALESCE(cx.identificacion, '')",
-                'indice' => ['tabla' => 'clientes', 'nombre' => 'idx_trgm_clientes', 'expr' => "COALESCE(nombre, '') || ' ' || COALESCE(identificacion, '')"],
+                'expr'   => "COALESCE(cx.nombre, '')",
+                'indice' => ['tabla' => 'clientes', 'nombre' => 'idx_trgm_clientes_nombre', 'expr' => "COALESCE(nombre, '')"],
             ],
-            // Asesor, responsable de traslado y usuario que registró: tablas chicas, sin índice.
+            // Asesor (columna del listado): tabla chica, sin índice.
             ['sql' => "cv.id_vendedor IN (SELECT vx.id FROM vendedores vx WHERE vx.id_empresa = :e AND {cond})", 'expr' => "COALESCE(vx.nombre, '')"],
-            ['sql' => "cv.id_responsable_traslado IN (SELECT rx.id FROM responsables_traslado rx WHERE rx.id_empresa = :e AND {cond})", 'expr' => "COALESCE(rx.nombre, '')"],
-            ['sql' => "cv.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})", 'expr' => "COALESCE(ux.nombre, '')"],
-            // Productos consignados: código y nombre del catálogo
-            [
-                'sql'    => "cv.id IN (SELECT d.id_consignacion
-                                         FROM consignaciones_ventas_detalles d
-                                        WHERE d.id_empresa = :e AND d.eliminado = false
-                                          AND d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond}))",
-                'expr'   => "COALESCE(px.codigo, '') || ' ' || COALESCE(px.nombre, '')",
-                'indice' => ['tabla' => 'productos', 'nombre' => 'idx_trgm_productos', 'expr' => "COALESCE(codigo, '') || ' ' || COALESCE(nombre, '')"],
-            ],
-            // Lote y NUP de las líneas
-            [
-                'sql'    => "cv.id IN (SELECT d.id_consignacion
-                                         FROM consignaciones_ventas_detalles d
-                                        WHERE d.id_empresa = :e AND d.eliminado = false AND {cond})",
-                'expr'   => "COALESCE(d.lote, '') || ' ' || COALESCE(d.nup, '')",
-                'indice' => ['tabla' => 'consignaciones_ventas_detalles', 'nombre' => 'idx_trgm_cons_det_lote_nup', 'expr' => "COALESCE(lote, '') || ' ' || COALESCE(nup, '')"],
-            ],
-            // Facturaciones de la consignación: nº interno y nº de la factura de venta
-            [
-                'sql'    => "cv.id IN (SELECT cfd.id_consignacion
-                                         FROM consignaciones_facturas cf
-                                         JOIN consignaciones_facturas_detalles cfd ON cfd.id_consignacion_factura = cf.id
-                                        WHERE cf.id_empresa = :e AND cf.eliminado = false AND {cond})",
-                'expr'   => "COALESCE(cf.serie, '') || '-' || COALESCE(cf.secuencial, '') || ' ' || COALESCE(cf.numero_factura, '')",
-                'indice' => ['tabla' => 'consignaciones_facturas', 'nombre' => 'idx_trgm_consignaciones_facturas', 'expr' => "COALESCE(serie, '') || '-' || COALESCE(secuencial, '') || ' ' || COALESCE(numero_factura, '')"],
-            ],
-            // Retornos de esta consignación
-            [
-                'sql'    => "cv.id IN (SELECT rd.id_consignacion
-                                         FROM retornos_cv r
-                                         JOIN retornos_cv_detalles rd ON rd.id_retorno = r.id
-                                        WHERE r.id_empresa = :e AND r.eliminado = false AND {cond})",
-                'expr'   => "COALESCE(r.serie, '') || '-' || COALESCE(r.secuencial, '')",
-                'si'     => $digitos,
-                'indice' => ['tabla' => 'retornos_cv', 'nombre' => 'idx_trgm_retornos_numero', 'expr' => "COALESCE(serie, '') || '-' || COALESCE(secuencial, '')"],
-            ],
-            // Cambios de producto que entregan desde esta consignación
-            [
-                'sql'    => "cv.id IN (SELECT ccd.id_origen
-                                         FROM cambios_producto_cv cc
-                                         JOIN cambios_producto_cv_detalles ccd ON ccd.id_cambio = cc.id
-                                              AND ccd.origen_tipo = 'CONSIGNACION' AND ccd.eliminado = false
-                                        WHERE cc.id_empresa = :e AND cc.eliminado = false
-                                          AND ccd.id_origen IS NOT NULL AND {cond})",
-                'expr'   => "COALESCE(cc.serie, '') || '-' || COALESCE(cc.secuencial, '')",
-                'si'     => $digitos,
-                'indice' => ['tabla' => 'cambios_producto_cv', 'nombre' => 'idx_trgm_cambios_numero', 'expr' => "COALESCE(serie, '') || '-' || COALESCE(secuencial, '')"],
-            ],
         ];
     }
 
@@ -331,6 +299,11 @@ class ConsignacionVentaRepository extends BaseRepository
                 'observacion'    => 'cv.observaciones',
                 'observaciones'  => 'cv.observaciones',
                 'punto_llegada'  => 'cv.punto_llegada',
+                // Los puntos salieron del texto libre (no son columnas del listado): estos
+                // filtros son ahora la forma de buscarlos a propósito.
+                'llegada'        => 'cv.punto_llegada',
+                'punto_partida'  => 'cv.punto_partida',
+                'partida'        => 'cv.punto_partida',
             ],
             'exacto' => [
                 'estado'         => 'cv.estado',

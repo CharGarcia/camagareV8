@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura
-version: 1.15
+etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
+version: 1.16
 orden: 47
 estado: activo
 ---
@@ -181,13 +181,18 @@ búsqueda y los botones de columnas, PDF y Excel.
 solo, sin menús ni sugerencias. Busca en lo que muestra el listado —productos
 que entran y salen (código, nombre, lote, NUP y bodega), número de la **factura
 de venta** (también sirve el de la factura de consignación), cliente y
-observaciones— y además en la fecha y el número del cambio, el RUC o cédula, el
-motivo, la diferencia, el responsable de traslado y el usuario que lo registró.
-La búsqueda es **por cambio**: si un cambio coincide, se listan todas sus filas.
-El **estado** no entra en la búsqueda libre: para filtrar por él use la ventana
-de filtros. Puede escribir varias palabras en cualquier orden y no importan
-mayúsculas ni tildes. Mientras busca, aparece un **círculo girando** al final
-del cuadro y la tabla se ve atenuada.
+observaciones— y además en la fecha, el número del cambio y el motivo. La
+búsqueda es **por cambio**: si un cambio coincide, se listan todas sus filas.
+Puede escribir varias palabras en cualquier orden y no importan mayúsculas ni
+tildes. Mientras busca, aparece un **círculo girando** al final del cuadro y la
+tabla se ve atenuada.
+
+Es el módulo de consignaciones donde el cuadro busca **más** cosas, porque su
+tabla muestra las dos patas del cambio línea a línea: el producto, el lote, el
+NUP, la bodega y la factura de origen sí se ven, así que siguen dentro. Quedan
+para la ventana de filtros los datos que no son columna: **RUC o cédula** del
+cliente, **diferencia**, **responsable de traslado**, **usuario que registró** y
+**estado**.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -353,6 +358,12 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   la pestaña Asiento contable.
 
 ## Historial de cambios
+
+- **1.16** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla. Como
+  esta tabla muestra las dos patas del cambio línea a línea, el producto, el lote, el NUP,
+  la bodega y la factura de origen siguen dentro del cuadro; salen solo los datos que no
+  son columna: RUC o cédula del cliente, diferencia, responsable de traslado y usuario que
+  registró, que se consultan en la ventana de filtros.
 
 - **1.15** — La búsqueda del listado y la de la pestaña **Detalles** responden más
   rápido en empresas con muchos cambios, y encuentran exactamente lo mismo. Si se

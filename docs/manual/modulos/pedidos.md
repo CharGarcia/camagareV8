@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
-etiquetas: pedidos, pedido de cliente, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes
-version: 1.6
+etiquetas: pedidos, pedido de cliente, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado
+version: 1.7
 orden: 0
 estado: activo
 ---
@@ -88,18 +88,30 @@ búsqueda y los botones de columnas, PDF y Excel.
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas del pedido: número, fecha
 de emisión, fecha de entrega, rango horario, cliente, responsable de entrega,
-observaciones y observaciones internas. Además busca en la identificación del
-cliente, el usuario que registró el pedido, los **códigos y nombres de los
-productos pedidos** y los **números de las consignaciones y facturas** que ya
-tomaron el pedido. La columna **Estado** no entra en la búsqueda libre: para
-filtrar por ella use la ventana de filtros. Puede escribir varias palabras en
+observaciones y observaciones internas. Puede escribir varias palabras en
 cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el texto
 o pulse Escape en el cuadro. Mientras busca, aparece un **círculo girando** al
 final del cuadro y la tabla se ve atenuada. Si sigue escribiendo, la búsqueda
 anterior se descarta sola: siempre manda la última.
 
-La búsqueda encuentra lo mismo que antes, pero desde la versión 1.6 responde en
-milésimas de segundo aunque la empresa tenga decenas de miles de pedidos.
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** El cuadro devuelve
+solo pedidos donde se vea por qué coinciden; el resto se consulta en la ventana
+de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Códigos y nombres de los productos pedidos | Pestaña *Detalles* |
+| N° de las consignaciones y facturas que tomaron el pedido | Pestaña *Detalles* |
+| Identificación / RUC del cliente | Pestaña *Pedido* → **RUC / cédula** |
+| Usuario que registró | Pestaña *Pedido* |
+| Estado | Pestaña *Pedido* |
+
+La pestaña *Detalles* es además más clara para eso: muestra **qué línea o qué
+documento coincidió**, mientras que desde el cuadro el pedido aparecía en la
+lista sin que se viera el motivo.
+
+La búsqueda responde en milésimas de segundo aunque la empresa tenga decenas de
+miles de pedidos.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -211,6 +223,14 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
   recargue la pantalla). Resuelto en la versión 1.2.
 
 ## Historial de cambios
+
+- **1.7** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla:
+  número, fechas, rango horario, cliente, responsable de entrega y las dos
+  observaciones. Los **productos pedidos** y los **números de las consignaciones y
+  facturas** que tomaron el pedido pasan a la pestaña *Detalles* del modal de filtros,
+  que además muestra cuál coincidió; la **identificación del cliente** y el **usuario
+  que registró** se consultan en sus filtros. Antes el pedido aparecía en la lista sin
+  que se viera el motivo.
 
 - **1.6** — La **búsqueda del listado es mucho más rápida**: encuentra exactamente
   lo mismo, pero deja de revisar todos los pedidos de la empresa en cada tecla.

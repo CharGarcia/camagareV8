@@ -83,7 +83,10 @@ class FacturaVentaRepository extends BaseRepository
     private static function exprFactura(string $a = ''): string
     {
         $m = \App\Helpers\MotorBusqueda::class;
-        return "COALESCE({$a}establecimiento, '') || '-' || COALESCE({$a}punto_emision, '') || '-' || COALESCE({$a}secuencial, '')"
+        // Número en formato canónico 000-000-000000000 (SecuencialFormato::sqlNumeroCompleto):
+        // así se encuentra escribiéndolo como está en el documento aunque el secuencial se
+        // haya guardado sin los ceros a la izquierda.
+        return \App\Helpers\SecuencialFormato::sqlNumeroCompleto("{$a}establecimiento", "{$a}punto_emision", "{$a}secuencial")
              . " || ' ' || COALESCE({$a}observaciones, '')"
              . " || ' ' || COALESCE({$a}guia_remision, '')"
              . " || ' ' || COALESCE({$a}placa, '')"

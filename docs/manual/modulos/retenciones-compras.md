@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips
-version: 1.14
+etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
+version: 1.15
 orden: 30
 estado: activo
 ---
@@ -41,13 +41,27 @@ búsqueda y los botones de columnas, PDF y Excel.
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas de la retención: N°
 retención, secuencial, fecha, proveedor, identificación, documento sustento,
-período fiscal y total retenido. Además busca en la clave de acceso, el número de
-autorización, el usuario que la registró y los **códigos y conceptos de
-retención** de sus líneas. Las columnas **Tipo Doc.**, **Correo** y **Estado** no
-entran en la búsqueda libre: para filtrar por ellas use la ventana de filtros.
-Puede escribir varias palabras en cualquier orden y no importan mayúsculas ni
-tildes. Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca,
-aparece un **círculo girando** al final del cuadro y la tabla se ve atenuada.
+período fiscal y total retenido. Puede escribir varias palabras en cualquier
+orden y no importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse
+Escape en el cuadro. Mientras busca, aparece un **círculo girando** al final del
+cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** Para que el cuadro
+devuelva solo retenciones donde se vea por qué coinciden, estos datos se
+consultan en la ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Clave de acceso y N° de autorización | Pestaña *Retención* |
+| Usuario que registró | Pestaña *Retención* |
+| Códigos y conceptos de retención de las líneas | Pestaña *Detalles* |
+| Tipo Doc., Correo y Estado | Pestaña *Retención* |
+
+En un comprobante electrónico la clave de acceso y el número de autorización son
+el mismo número de 49 dígitos, que lleva dentro la fecha, el RUC y el número del
+documento. Al escribir un número de documento en el cuadro aparecían retenciones
+ajenas cuya clave contenía por casualidad esa secuencia; ahora ese número solo
+encuentra la retención que realmente lo tiene.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -335,6 +349,15 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
   rechazo real: corrija lo que indica el detalle antes de reenviar.
 
 ## Historial de cambios
+
+- **1.15** — Corregido: al buscar un **número de documento** en el cuadro aparecían
+  también documentos que no lo tenían. La búsqueda libre miraba dentro de la **clave de
+  acceso** (49 dígitos, que llevan la fecha, el RUC y el número del documento) y cualquier
+  número corto caía ahí por casualidad. Ahora la clave se consulta en la ventana de
+  filtros,
+  junto con el **número de autorización** y el **usuario que registró**; los **códigos y
+  conceptos de retención** de las líneas pasan a la pestaña *Detalles*, que sí muestra qué
+  línea coincidió.
 
 - **1.14** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias; lo que
   se escribe se busca en las columnas de la retención (y en clave de acceso,

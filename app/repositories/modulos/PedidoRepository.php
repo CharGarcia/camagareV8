@@ -83,7 +83,10 @@ class PedidoRepository {
      * expresión alimenta la consulta y el índice, así que no se pueden desalinear.
      */
     private static function exprPedido(string $a = ''): string {
-        return "COALESCE({$a}establecimiento, '') || '-' || COALESCE({$a}punto_emision, '') || '-' || COALESCE({$a}secuencial, '')"
+        // Número en formato canónico 000-000-000000000 (SecuencialFormato::sqlNumeroCompleto):
+        // hay pedidos con el secuencial guardado sin los ceros a la izquierda ('16' en vez de
+        // '000000016'), y así se encuentran escribiendo el número como se lee en el documento.
+        return \App\Helpers\SecuencialFormato::sqlNumeroCompleto("{$a}establecimiento", "{$a}punto_emision", "{$a}secuencial")
              . " || ' ' || COALESCE({$a}observaciones, '')"
              . " || ' ' || COALESCE({$a}observaciones_internas, '')"
              . " || ' ' || " . self::fechaTexto("{$a}fecha_pedido")
@@ -102,10 +105,21 @@ class PedidoRepository {
      * conjunto que PostgreSQL resuelve UNA vez por palabra con su índice trigram, en lugar
      * de recalcularse por cada pedido de la empresa.
      *
-     * Busca exactamente lo mismo que antes: número de pedido, fechas, rango horario,
-     * observaciones, observaciones internas, cliente (nombre e identificación), responsable
-     * de entrega, usuario que registró, productos pedidos y el número de las consignaciones
-     * o facturas que consumieron el pedido. El Estado sigue fuera (solo por el modal).
+     * Qué busca: lo que se VE en el listado — número de pedido, fechas de pedido y entrega,
+     * rango horario, observaciones, observaciones internas, cliente (nombre) y responsable
+     * de entrega.
+     *
+     * Qué NO busca, por decisión del usuario (17-09-2026), y dónde se busca en su lugar. El
+     * criterio es el mismo de Facturas, Compras, notas, retenciones y consignaciones: si un
+     * dato no está en una columna del listado, el pedido aparecía sin que se viera por qué:
+     *   - Estado → modal de filtros (decisión anterior).
+     *   - Identificación del cliente → filtro `ruc:` / `identificacion:`.
+     *   - Usuario que registró → filtro del modal.
+     *   - Productos pedidos y el número de las consignaciones o facturas que consumieron el
+     *     pedido → pestaña "Detalles" del modal de filtros (buscarEnDetalles()), que busca las
+     *     tres cosas y SÍ dice cuál coincidió.
+     * Con eso quedan sin uso los índices idx_trgm_productos, idx_trgm_consignaciones_numero e
+     * idx_trgm_ventas_numero. Ver database/20260917d_ajuste_busqueda_pedidos.sql.
      *
      * A propósito NO se filtra por empresa en las fuentes que cuelgan de otra tabla: el
      * listado ya está acotado a la empresa por fuera, y filtrar aquí cambiaría el resultado
@@ -119,51 +133,21 @@ class PedidoRepository {
                 'expr'   => self::exprPedido('bx.'),
                 'indice' => ['tabla' => 'pedidos_cabecera', 'nombre' => 'idx_trgm_pedidos_cabecera', 'expr' => self::exprPedido()],
             ],
-            // Cliente: nombre e identificación
+            // Cliente: SOLO el nombre, que es la columna del listado. El índice compartido
+            // idx_trgm_clientes indexa "nombre + identificación" y un GIN trigram solo sirve
+            // para la MISMA expresión, así que se usa el de nombre (el mismo que
+            // Consignaciones de Venta).
             [
                 'sql'    => "p.id_cliente IN (SELECT cx.id FROM clientes cx WHERE {cond})",
-                'expr'   => "COALESCE(cx.nombre, '') || ' ' || COALESCE(cx.identificacion, '')",
-                'indice' => ['tabla' => 'clientes', 'nombre' => 'idx_trgm_clientes', 'expr' => "COALESCE(nombre, '') || ' ' || COALESCE(identificacion, '')"],
+                'expr'   => "COALESCE(cx.nombre, '')",
+                'indice' => ['tabla' => 'clientes', 'nombre' => 'idx_trgm_clientes_nombre', 'expr' => "COALESCE(nombre, '')"],
             ],
-            // Responsable de entrega y usuario que registró: tablas chicas, sin índice.
+            // Responsable de entrega (columna del listado): tabla chica, sin índice.
             [
                 'sql'  => "p.id_responsable_entrega IN (SELECT rx.id FROM responsables_traslado rx WHERE {cond})",
                 'expr' => "COALESCE(rx.nombre, '')",
             ],
-            [
-                'sql'  => "p.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})",
-                'expr' => "COALESCE(ux.nombre, '')",
-            ],
-            // Productos pedidos
-            [
-                'sql'    => "p.id IN (SELECT pdp.id_pedido FROM pedidos_detalle pdp
-                                        JOIN productos pr ON pr.id = pdp.id_producto
-                                       WHERE pdp.eliminado = false AND {cond})",
-                'expr'   => "COALESCE(pr.codigo, '') || ' ' || COALESCE(pr.nombre, '')",
-                'indice' => ['tabla' => 'productos', 'nombre' => 'idx_trgm_productos', 'expr' => "COALESCE(codigo, '') || ' ' || COALESCE(nombre, '')"],
-            ],
-            // Consignaciones de venta que consumieron el pedido
-            [
-                'sql'    => "p.id IN (SELECT pdr.id_pedido FROM pedidos_detalle pdr
-                                        JOIN consignaciones_ventas_detalles cvd ON cvd.id_pedido_detalle = pdr.id AND cvd.eliminado = false
-                                        JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion AND cv.eliminado = false
-                                       WHERE {cond})",
-                'expr'   => self::exprNumero('cv.'),
-                'indice' => ['tabla' => 'consignaciones_ventas', 'nombre' => 'idx_trgm_consignaciones_numero', 'expr' => self::exprNumero()],
-            ],
         ];
-
-        // Facturas de venta que consumieron el pedido (solo si existe la columna de enlace).
-        if ($this->columnaVentasDetalleExiste()) {
-            $fuentes[] = [
-                'sql'    => "p.id IN (SELECT pdf.id_pedido FROM pedidos_detalle pdf
-                                        JOIN ventas_detalle vd ON vd.id_pedido_detalle = pdf.id
-                                        JOIN ventas_cabecera v ON v.id = vd.id_venta AND v.eliminado = false
-                                       WHERE {cond})",
-                'expr'   => self::exprNumero('v.'),
-                'indice' => ['tabla' => 'ventas_cabecera', 'nombre' => 'idx_trgm_ventas_numero', 'expr' => self::exprNumero()],
-            ];
-        }
 
         return $fuentes;
     }

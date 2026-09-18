@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips
-version: 1.6
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
+version: 1.7
 orden: 40
 estado: activo
 ---
@@ -52,13 +52,27 @@ búsqueda y los botones de columnas, PDF y Excel.
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas de la liquidación: N°
 liquidación, secuencial, fecha, proveedor, identificación, subtotal, descuento,
-total y usuario. Además busca en el número de autorización, la clave de acceso,
-las observaciones y los **códigos y descripciones de los productos o servicios**
-de la liquidación. Las columnas **Correo** y **Estado** no entran en la búsqueda
-libre: para filtrar por ellas use la ventana de filtros. Puede escribir varias
-palabras en cualquier orden y no importan mayúsculas ni tildes. Para limpiar,
-borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo
-girando** al final del cuadro y la tabla se ve atenuada.
+total y usuario; además, en las observaciones. Puede escribir varias palabras en
+cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el texto
+o pulse Escape en el cuadro. Mientras busca, aparece un **círculo girando** al
+final del cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** Para que el cuadro
+devuelva solo liquidaciones donde se vea por qué coinciden, estos datos se
+consultan en la ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Clave de acceso y N° de autorización | Pestaña *Liquidación* → **N° autorización** |
+| Productos o servicios de la liquidación (código y descripción) | Pestaña *Detalles* |
+| Correo y Estado | Pestaña *Liquidación* |
+
+En un comprobante electrónico la clave de acceso y el número de autorización son
+el mismo número de 49 dígitos, que lleva dentro la fecha, el RUC y el número del
+documento (el filtro *N° autorización* busca en los dos). Al escribir un número de
+documento en el cuadro aparecían liquidaciones ajenas cuya clave contenía por
+casualidad esa secuencia; ahora ese número solo encuentra la liquidación que
+realmente lo tiene.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -145,6 +159,15 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.7** — Corregido: al buscar un **número de documento** en el cuadro aparecían
+  también documentos que no lo tenían. La búsqueda libre miraba dentro de la **clave de
+  acceso** (49 dígitos, que llevan la fecha, el RUC y el número del documento) y cualquier
+  número corto caía ahí por casualidad. Ahora la clave se consulta en la ventana de
+  filtros,
+  junto con el **número de autorización** (el filtro *N° autorización* busca en los dos);
+  los **productos o servicios** de la liquidación pasan a la pestaña *Detalles*, que sí
+  muestra qué línea coincidió.
 
 - **1.6** — **Búsqueda del listado más rápida**: el conteo y la página salen
   de una sola consulta y la condición de búsqueda se evalúa una sola vez (antes, dos: una para contar y otra para la página). Las fechas y los montos solo se comparan

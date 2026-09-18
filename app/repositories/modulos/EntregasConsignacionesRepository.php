@@ -337,10 +337,19 @@ class EntregasConsignacionesRepository extends BaseRepository
         $filtros    = $parsed['filtros'];
 
         if ($textoLibre !== '') {
-            // Texto libre (buscador FiltrosModal de la vista): las columnas del listado y lo
-            // que identifica a la consignación aunque no sea columna. Decisión del usuario:
-            // Estado y Canal (tipo) NO entran en el texto libre; se filtran desde el modal.
-            // Firma y GPS son íconos sí/no: también van solo al modal.
+            // Texto libre (buscador FiltrosModal de la vista): SOLO las columnas del listado —
+            // nº de consignación, observaciones de la entrega, fechas de emisión y entrega,
+            // días, fecha/hora de la entrega, cliente, dirección, responsable y quién la
+            // registró.
+            //
+            // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar:
+            //   - Estado y Canal (tipo) → modal de filtros; Firma y GPS son íconos sí/no,
+            //     también solo desde el modal (decisión anterior).
+            //   - Identificación del cliente → filtro `ruc:` / `identificacion:` (17-09-2026).
+            //   - Observaciones de la CONSIGNACIÓN y punto de llegada → filtros del listado de
+            //     Consignaciones de Venta; aquí no son columna.
+            //   - Id del dispositivo, productos, lote y NUP → pestaña "Detalles" del modal de
+            //     filtros (buscarEnDetalles()), que SÍ dice qué línea o evidencia coincidió.
             //
             // Rendimiento (17-09-2026): cliente, responsable, usuario y productos se buscan en
             // su tabla como CONJUNTO por palabra (FiltrosBusqueda::condicionTexto, `col` + `sql`)
@@ -352,30 +361,20 @@ class EntregasConsignacionesRepository extends BaseRepository
                 [
                     "CONCAT(cv.serie, '-', cv.secuencial)",                      // Consignación
                     'e.observaciones',                                           // Observaciones (de la entrega)
-                    'cv.observaciones',                                          // Observaciones de la consignación
-                    'cv.punto_llegada',
-                    'e.dispositivo_id',
                     ['sql' => "TO_CHAR(cv.fecha_emision, 'DD-MM-YYYY')", 'si' => $fecha],          // Emisión
                     ['sql' => "TO_CHAR(cv.fecha_entrega, 'DD-MM-YYYY')", 'si' => $fecha],          // Entrega programada
                     ['sql' => self::EXPR_DIAS, 'si' => $numero],                                     // Días
                     ['sql' => "TO_CHAR(e.capturado_en, 'DD-MM-YYYY HH24:MI:SS')", 'si' => $fecha], // Fecha/hora entrega
-                    // Cliente (nombre, identificación y dirección), responsable y quien registró la entrega
-                    ['col' => "CONCAT_WS(' ', cx.nombre, cx.identificacion, cx.direccion)",
+                    // Cliente (nombre y dirección, las dos columnas del listado), responsable y
+                    // quien registró la entrega. La identificación del cliente salió el
+                    // 17-09-2026 con el resto de datos que no son columna: se busca con el
+                    // filtro `ruc:` / `identificacion:`.
+                    ['col' => "CONCAT_WS(' ', cx.nombre, cx.direccion)",
                      'sql' => "cv.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})"],
                     ['col' => 'rx.nombre',
                      'sql' => "cv.id_responsable_traslado IN (SELECT rx.id FROM responsables_traslado rx WHERE rx.id_empresa = :e AND {cond})"],
                     ['col' => 'ux.nombre',
                      'sql' => "e.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})"],
-                    // Productos consignados: código y nombre en el catálogo, lote y NUP en la línea
-                    ['col' => "CONCAT_WS(' ', px.codigo, px.nombre)",
-                     'sql' => "cv.id IN (SELECT d.id_consignacion
-                                           FROM consignaciones_ventas_detalles d
-                                          WHERE d.id_empresa = :e AND d.eliminado = false
-                                            AND d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond}))"],
-                    ['col' => "CONCAT_WS(' ', d.lote, d.nup)",
-                     'sql' => "cv.id IN (SELECT d.id_consignacion
-                                           FROM consignaciones_ventas_detalles d
-                                          WHERE d.id_empresa = :e AND d.eliminado = false AND {cond})"],
                 ],
                 $textoLibre,
                 $params,

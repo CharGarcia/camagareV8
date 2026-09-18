@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips
-version: 1.13
+etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
+version: 1.14
 orden: 15
 estado: activo
 ---
@@ -167,13 +167,25 @@ búsqueda y los botones de columnas, PDF y Excel.
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias y sin recargar la página. Busca en las columnas de
 la orden: N° orden, secuencial, fecha de la orden, proveedor, identificación,
-fecha de recepción y observaciones. Además busca en quién la aprobó, el usuario
-que la creó, los **productos pedidos** (código, descripción y notas de cada línea)
-y el **número de las compras vinculadas**. La columna **Estado** no entra en la
-búsqueda libre: para filtrar por ella use la ventana de filtros. Puede escribir
+fecha de recepción y observaciones; además, en quién la aprobó. Puede escribir
 varias palabras en cualquier orden y no importan mayúsculas ni tildes. Para
 limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un
 **círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** Para que el cuadro
+devuelva solo órdenes donde se vea por qué coinciden, estos datos se consultan en
+la ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Usuario que la creó | Pestaña *Orden de compra* → selector **Usuario** |
+| Productos pedidos (código, descripción y notas) | Pestaña *Detalles* |
+| N° de las compras vinculadas | Pestaña *Detalles* |
+| Estado | Pestaña *Orden de compra* |
+
+La pestaña *Detalles* busca las dos cosas —líneas de la orden y compras
+vinculadas— y muestra cuál coincidió, mientras que desde el cuadro la orden
+aparecía en el listado sin que se viera el motivo.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -314,6 +326,12 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.14** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla. Los
+  **productos pedidos** y el **número de las compras vinculadas** pasan a la pestaña
+  *Detalles*, que muestra cuál de los dos coincidió; antes la orden aparecía en el
+  listado sin que se viera el motivo. El **usuario que la creó** se filtra desde su
+  selector en la pestaña *Orden de compra*.
 
 - **1.13** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias ni
   recarga la página; lo que se escribe se busca en las columnas de la orden (y en

@@ -154,7 +154,7 @@ class ComprasRepository extends BaseRepository
             $decimal = \App\Helpers\FiltrosBusqueda::SI_DECIMAL;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)", // N° Comprobante
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('c.establecimiento_prov', 'c.punto_emision_prov', 'c.secuencial_prov'), // N° Comprobante (canónico)
                     'c.secuencial_prov',
                     'p.razon_social',                                                               // Proveedor
                     // Fuera del listado, pero identifican la compra:

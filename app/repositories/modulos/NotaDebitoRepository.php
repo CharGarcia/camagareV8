@@ -42,14 +42,26 @@ class NotaDebitoRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
-        // Texto libre: las columnas del listado y lo que identifica la nota aunque no
-        // sea columna. El buscador de la vista no sugiere campos; lo escrito se busca
-        // en todo. Decisión del usuario: las columnas Correo y Estado NO entran en el
-        // texto libre (se filtran solo desde el modal de filtros).
+        // Texto libre: las columnas del listado (número, fecha, cliente, identificación,
+        // documento modificado, subtotal, total y usuario) más las observaciones.
+        //
+        // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar (mismo
+        // criterio que Facturas de Venta, Compras y Notas de Crédito):
+        //   - Correo y Estado → modal de filtros (decisión anterior).
+        //   - Número de autorización y clave de acceso → filtros `autorizacion:` y
+        //     `clave:` (17-09-2026). En un comprobante electrónico son el MISMO número de
+        //     49 dígitos —fecha, RUC, serie, secuencial y un código numérico aleatorio de
+        //     8—, así que al escribir un número de documento caía dentro de la clave de
+        //     OTRAS notas por puro azar y el listado devolvía filas sin coincidencia
+        //     visible.
+        //   - Motivos (las razones del detalle) → pestaña "Detalles" del modal de filtros
+        //     (buscarEnDetalles()), que SÍ dice qué línea coincidió; desde el listado la
+        //     nota aparecía sin que se viera el motivo. De paso se va la subconsulta
+        //     STRING_AGG, que se evaluaba por cada nota de la empresa.
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "CONCAT(nd.establecimiento,'-',nd.punto_emision,'-',nd.secuencial)", // Nº Nota
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('nd.establecimiento', 'nd.punto_emision', 'nd.secuencial'), // Nº Nota (canónico)
                     'nd.secuencial',
                     'nd.fecha_emision::text',                                             // Fecha
                     'c.nombre',                                                           // Cliente
@@ -59,10 +71,7 @@ class NotaDebitoRepository extends BaseRepository
                     'nd.importe_total::text',                                             // Total
                     'u.nombre',                                                           // Usuario
                     // Fuera del listado, pero identifican la nota:
-                    'nd.numero_autorizacion',
-                    'nd.clave_acceso',
                     'nd.observaciones',
-                    "(SELECT STRING_AGG(ndm.razon, ' ') FROM nota_debito_motivos ndm WHERE ndm.id_nota_debito = nd.id)", // motivos (razones)
                 ],
                 $textoLibre,
                 $params,

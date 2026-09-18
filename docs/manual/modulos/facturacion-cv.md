@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto
-version: 1.15
+etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
+version: 1.16
 orden: 47
 estado: activo
 ---
@@ -105,14 +105,22 @@ búsqueda y los botones de columnas, PDF y Excel.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas del documento: fecha,
-número (serie y secuencial), cliente, RUC o cédula, factura de venta y
-observaciones. Además busca en el vendedor, el total, el usuario que lo
-registró, la información adicional, los **productos facturados** (código,
-nombre, lote y NUP) y el número de las **consignaciones de origen**. La columna
-**Estado** no entra en la búsqueda libre: para filtrar por ella use la ventana
-de filtros. Puede escribir varias palabras en cualquier orden y no importan
-mayúsculas ni tildes. Mientras busca, aparece un **círculo girando** al final
-del cuadro y la tabla se ve atenuada.
+número (serie y secuencial), cliente, factura de venta y observaciones. Puede
+escribir varias palabras en cualquier orden y no importan mayúsculas ni tildes.
+Mientras busca, aparece un **círculo girando** al final del cuadro y la tabla se
+ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** El cuadro devuelve
+solo documentos donde se vea por qué coinciden; el resto se consulta en la
+ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Productos facturados, lote y NUP | Pestaña *Detalles* |
+| N° de las consignaciones de origen | Pestaña *Detalles* |
+| RUC o cédula del cliente | Pestaña *Facturación* → **RUC / cédula** |
+| Vendedor, total, usuario que registró e información adicional | Pestaña *Facturación* |
+| Estado | Pestaña *Facturación* |
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -259,6 +267,15 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   que repara el enlace de esas líneas.
 
 ## Historial de cambios
+
+- **1.16** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla: fecha,
+  número, cliente, factura y observaciones. Así el listado solo devuelve documentos donde
+  se vea POR QUÉ coinciden. Los **productos** (con su lote y NUP) y los **documentos
+  relacionados** pasan a la pestaña *Detalles* del modal de filtros, que además muestra
+  cuál de ellos coincidió; el resto de datos que no son columna —RUC del cliente, montos,
+  responsable, usuario— se consultan en sus filtros. Antes, el documento aparecía en la
+  lista sin que se viera el motivo.
+  El número de las consignaciones de origen se busca ahora en la pestaña *Detalles*.
 
 - **1.15** — La búsqueda del listado y la de la pestaña **Detalles** responden más
   rápido en empresas con muchos documentos (encuentran exactamente lo mismo). Si se

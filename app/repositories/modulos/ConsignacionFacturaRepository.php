@@ -323,52 +323,32 @@ class ConsignacionFacturaRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            // Texto libre (buscador FiltrosModal de la vista): las columnas del listado y lo
-            // que identifica al documento aunque no sea columna. Decisión del usuario: la
-            // columna Estado NO entra en el texto libre; se filtra desde el modal.
+            // Texto libre (buscador FiltrosModal de la vista): SOLO las columnas del listado —
+            // nº del documento, nº de la factura, observaciones, fecha y cliente.
             //
-            // Rendimiento (17-09-2026): lo que vive en otra tabla (cliente, vendedor, usuario,
-            // productos, consignaciones de origen) se busca como CONJUNTO por palabra
-            // (FiltrosBusqueda::condicionTexto, `col` + `sql`) en vez de armar un STRING_AGG de
-            // las líneas por cada documento; fecha y total solo si la palabra tiene dígitos.
-            $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
+            // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar:
+            //   - Estado → modal de filtros (decisión anterior).
+            //   - Identificación del cliente, vendedor, usuario que registró, total e
+            //     información adicional → sus filtros del modal (17-09-2026).
+            //   - Productos, lote, NUP y el nº de las consignaciones de origen → pestaña
+            //     "Detalles" del modal de filtros (buscarEnDetalles()), que SÍ dice qué línea
+            //     coincidió; desde el listado el documento aparecía sin que se viera el motivo.
+            //
+            // Rendimiento (17-09-2026): el cliente se busca como CONJUNTO por palabra
+            // (FiltrosBusqueda::condicionTexto, `col` + `sql`) en vez de recorrer su tabla, y la
+            // fecha solo si la palabra puede serlo.
             $fecha   = \App\Helpers\FiltrosBusqueda::SI_FECHA;
-            $numero  = \App\Helpers\FiltrosBusqueda::SI_NUMERO;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     "CONCAT(cf.serie, '-', cf.secuencial)",               // Secuencial (serie-secuencial)
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('cf.establecimiento', 'cf.punto_emision', 'cf.secuencial'), // el mismo nº en formato canónico
                     'cf.numero_factura',                                  // Factura
                     'cf.observaciones',                                   // Observaciones
-                    // Información adicional (JSON [{nombre, valor}]): sin las claves del JSON.
-                    // replace() y no regexp_replace(): por fila cuesta la mitad (json_encode no
-                    // deja espacios entre la clave y los dos puntos).
-                    "replace(replace(COALESCE(cf.info_adicional, ''), '\"nombre\":', ''), '\"valor\":', '')",
                     ['sql' => "TO_CHAR(cf.fecha_emision, 'DD-MM-YYYY')", 'si' => $fecha], // Fecha (como se muestra)
                     ['sql' => 'cf.fecha_emision', 'si' => $fecha],
-                    ['sql' => 'cf.total', 'si' => $numero],
-                    // Cliente (nombre e identificación), vendedor y usuario que registró
-                    ['col' => "CONCAT_WS(' ', cx.nombre, cx.identificacion)",
+                    // Cliente: SOLO el nombre, que es la columna del listado.
+                    ['col' => 'cx.nombre',
                      'sql' => "cf.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})"],
-                    ['col' => 'vx.nombre',
-                     'sql' => "cf.id_vendedor IN (SELECT vx.id FROM vendedores vx WHERE vx.id_empresa = :e AND {cond})"],
-                    ['col' => 'ux.nombre',
-                     'sql' => "cf.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})"],
-                    // Productos facturados: código y nombre en el catálogo, lote y NUP en la línea
-                    ['col' => "CONCAT_WS(' ', px.codigo, px.nombre)",
-                     'sql' => "cf.id IN (SELECT d.id_consignacion_factura
-                                           FROM consignaciones_facturas_detalles d
-                                          WHERE d.id_empresa = :e AND d.eliminado = false
-                                            AND d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond}))"],
-                    ['col' => "CONCAT_WS(' ', d.lote, d.nup)",
-                     'sql' => "cf.id IN (SELECT d.id_consignacion_factura
-                                           FROM consignaciones_facturas_detalles d
-                                          WHERE d.id_empresa = :e AND d.eliminado = false AND {cond})"],
-                    // Documentos relacionados: consignaciones de origen
-                    ['col' => "CONCAT(cvx.serie, '-', cvx.secuencial)", 'si' => $digitos,
-                     'sql' => "cf.id IN (SELECT d.id_consignacion_factura
-                                           FROM consignaciones_facturas_detalles d
-                                           JOIN consignaciones_ventas cvx ON cvx.id = d.id_consignacion
-                                          WHERE d.id_empresa = :e AND d.eliminado = false AND {cond})"],
                 ],
                 $parsed['texto_libre'],
                 $params,

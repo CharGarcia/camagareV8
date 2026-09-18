@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips
-version: 1.6
+etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
+version: 1.7
 orden: 40
 estado: activo
 ---
@@ -68,14 +68,28 @@ exportan las retenciones que coinciden con la búsqueda y el orden aplicados.
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas de la retención: N°
 retención, secuencial, fecha, cliente, identificación, período, total renta,
-total IVA, total ISD y total retenido. Además busca en la clave de acceso, el
-usuario que la registró y, dentro de las líneas, los **números de los
-documentos sustento** y los **códigos de retención**. La columna **Origen** no
-entra en la búsqueda libre: para filtrar por ella use la ventana de filtros.
-Puede escribir varias palabras en cualquier orden y no importan mayúsculas ni
-tildes. Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras
-busca, aparece un **círculo girando** al final del cuadro y la tabla se ve
-atenuada.
+total IVA, total ISD y total retenido. Puede escribir varias palabras en
+cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el texto
+o pulse Escape en el cuadro. Mientras busca, aparece un **círculo girando** al
+final del cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** Para que el cuadro
+devuelva solo retenciones donde se vea por qué coinciden, estos datos se
+consultan en la ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Clave de acceso | Pestaña *Retención* |
+| Usuario que registró | Pestaña *Retención* |
+| Documentos sustento y códigos de retención de las líneas | Pestaña *Detalles* |
+| Origen | Pestaña *Retención* |
+
+La clave de acceso son 49 dígitos que llevan dentro la fecha, el RUC y el número
+del documento. Al escribir un número de documento en el cuadro aparecían
+retenciones ajenas cuya clave contenía por casualidad esa secuencia: con las 29
+retenciones de la base de pruebas, un número de seis dígitos devolvía **17
+retenciones** que no lo tenían en ninguna columna. Ahora ese número solo
+encuentra la retención que realmente lo tiene.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -149,6 +163,16 @@ cerrado.
   Períodos Contables si realmente necesita hacer el cambio.
 
 ## Historial de cambios
+
+- **1.7** — Corregido: al buscar un **número de documento** en el cuadro aparecían
+  también documentos que no lo tenían. La búsqueda libre miraba dentro de la **clave de
+  acceso** (49 dígitos, que llevan la fecha, el RUC y el número del documento) y cualquier
+  número corto caía ahí por casualidad. Ahora la clave se consulta en la ventana de
+  filtros,
+  junto con el **usuario que registró**; los **documentos sustento** y **códigos de
+  retención** de las líneas pasan a la pestaña *Detalles*, que sí muestra qué línea
+  coincidió. Con las 29 retenciones de la base de pruebas, un número de seis dígitos
+  devolvía 17 retenciones que no lo tenían en ninguna columna; ahora, ninguna.
 
 - **1.6** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en todas las columnas (incluido el total retenido,

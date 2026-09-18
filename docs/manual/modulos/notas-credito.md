@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips
-version: 1.10
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso
+version: 1.11
 orden: 30
 estado: activo
 ---
@@ -98,14 +98,26 @@ búsqueda y los botones de columnas, PDF y Excel.
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas de la nota: N° nota,
 secuencial, fecha, cliente, identificación, documento modificado, subtotal,
-descuento, total, motivo y usuario. Además busca en el número de autorización,
-la clave de acceso, las observaciones y los **códigos y descripciones de los
-productos o servicios** de la nota. Las columnas **Correo** y **Estado** no
-entran en la búsqueda libre: para filtrar por ellas use la ventana de filtros.
-Puede escribir varias palabras en cualquier orden y no importan mayúsculas ni
-tildes. Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras
-busca, aparece un **círculo girando** al final del cuadro y la tabla se ve
-atenuada.
+descuento, total, motivo y usuario; además, en las observaciones. Puede escribir
+varias palabras en cualquier orden y no importan mayúsculas ni tildes. Para
+limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un
+**círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** Para que el cuadro
+devuelva solo notas donde se vea por qué coinciden, estos datos se consultan en
+la ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Clave de acceso y N° de autorización | Pestaña *Nota de crédito* |
+| Productos o servicios de la nota (código y descripción) | Pestaña *Detalles* |
+| Correo y Estado | Pestaña *Nota de crédito* |
+
+En un comprobante electrónico la clave de acceso y el número de autorización son
+el mismo número de 49 dígitos, que lleva dentro la fecha, el RUC y el número del
+documento. Al escribir un número de documento en el cuadro aparecían notas ajenas
+cuya clave contenía por casualidad esa secuencia; ahora ese número solo encuentra
+la nota que realmente lo tiene.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -176,6 +188,14 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.11** — Corregido: al buscar un **número de documento** en el cuadro aparecían
+  también notas que no lo tenían. La búsqueda libre miraba dentro de la **clave de
+  acceso** y del **número de autorización** —el mismo número de 49 dígitos, que lleva
+  la fecha, el RUC y el número del documento— y cualquier número corto caía ahí por
+  casualidad. Ahora esos dos datos se consultan en la ventana de filtros, y los
+  **productos o servicios** de la nota pasan a la pestaña *Detalles*, que sí muestra qué
+  línea coincidió.
 
 - **1.10** — La nota de crédito devuelve stock solo si **"La facturación afecta al
   inventario"** está activada en el establecimiento, igual que la factura lo descuenta

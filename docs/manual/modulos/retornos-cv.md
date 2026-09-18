@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero
-version: 1.15
+etiquetas: retorno, retornos, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
+version: 1.16
 orden: 46
 estado: activo
 ---
@@ -107,15 +107,22 @@ Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
 búsqueda y los botones de columnas, PDF y Excel.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
-solo, sin menús ni sugerencias. Busca en las columnas del retorno: fecha,
-número (serie y secuencial), cliente, RUC o cédula, motivo y observaciones.
-Además busca en el responsable de traslado, los puntos de partida y llegada, el
-total, el usuario que lo registró, los **productos retornados** (código, nombre,
-lote y NUP) y el número de las **consignaciones de origen**. La columna
-**Estado** no entra en la búsqueda libre: para filtrar por ella use la ventana
-de filtros. Puede escribir varias palabras en cualquier orden y no importan
-mayúsculas ni tildes. Mientras busca, aparece un **círculo girando** al final
-del cuadro y la tabla se ve atenuada.
+solo, sin menús ni sugerencias. Busca en las columnas del retorno: fecha, número
+(serie y secuencial), cliente, motivo y observaciones. Puede escribir varias
+palabras en cualquier orden y no importan mayúsculas ni tildes. Mientras busca,
+aparece un **círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** El cuadro devuelve
+solo retornos donde se vea por qué coinciden; el resto se consulta en la ventana
+de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Productos retornados, lote y NUP | Pestaña *Detalles* |
+| N° de la consignación de origen | Pestaña *Detalles* |
+| RUC o cédula del cliente | Pestaña *Retorno* → **RUC / cédula** |
+| Puntos de partida y llegada, total, responsable y usuario | Pestaña *Retorno* |
+| Estado | Pestaña *Retorno* |
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -223,6 +230,15 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.16** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla: fecha,
+  número, cliente, motivo y observaciones. Así el listado solo devuelve retornos donde
+  se vea POR QUÉ coinciden. Los **productos** (con su lote y NUP) y los **documentos
+  relacionados** pasan a la pestaña *Detalles* del modal de filtros, que además muestra
+  cuál de ellos coincidió; el resto de datos que no son columna —RUC del cliente, montos,
+  responsable, usuario— se consultan en sus filtros. Antes, el documento aparecía en la
+  lista sin que se viera el motivo.
+  El número de la consignación de origen se busca ahora en la pestaña *Detalles*.
 
 - **1.15** — El listado muestra la nueva columna **Observaciones**, con lo que se
   escribió en el retorno (si el texto es largo se corta y se lee completo al pasar

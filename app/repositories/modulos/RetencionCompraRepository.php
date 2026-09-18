@@ -61,13 +61,26 @@ class RetencionCompraRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         // Texto libre: todas las palabras, en cualquier orden, sobre las columnas del
-        // listado y lo que identifica la retención. Decisión del usuario (igual que
-        // Compras/Ingresos/Egresos): Tipo Doc., Correo y Estado NO entran en el texto
-        // libre; se filtran solo desde el modal de filtros.
+        // listado — número, fecha, proveedor, identificación, documento sustento, período
+        // y total retenido.
+        //
+        // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar (mismo
+        // criterio que Facturas de Venta, Compras y las notas de crédito/débito):
+        //   - Tipo Doc., Correo y Estado → modal de filtros (decisión anterior).
+        //   - Clave de acceso y número de autorización → filtros `clave:` y
+        //     `autorizacion:` (17-09-2026). En un comprobante electrónico son el MISMO
+        //     número de 49 dígitos —fecha, RUC, serie, secuencial y un código numérico
+        //     aleatorio de 8—, así que al escribir un número de documento caía dentro de
+        //     la clave de OTRAS retenciones por puro azar y el listado devolvía filas sin
+        //     ninguna coincidencia visible.
+        //   - Usuario que registró → filtro `usuario:` (no es columna de este listado).
+        //   - Códigos y conceptos de retención de las líneas → pestaña "Detalles" del
+        //     modal de filtros (buscarEnDetalles()), que SÍ dice qué línea coincidió. De
+        //     paso se va la subconsulta STRING_AGG, que corría por cada retención.
         if ($parsed['texto_libre'] !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial)", // Nº Retención
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('r.establecimiento', 'r.punto_emision', 'r.secuencial'), // Nº Retención (canónico)
                     'r.secuencial',
                     'r.fecha_emision::text',                                          // Fecha
                     'p.razon_social',                                                 // Proveedor
@@ -75,11 +88,6 @@ class RetencionCompraRepository extends BaseRepository
                     'r.num_doc_sustento',                                             // Doc. Sustento
                     'r.periodo_fiscal',                                               // Período
                     'r.total_retenido::text',                                         // Total Ret.
-                    // Fuera del listado, pero identifican la retención:
-                    'r.clave_acceso',
-                    'r.numero_autorizacion',
-                    'u.nombre',
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', dx.codigo_retencion, dx.concepto), ' ') FROM retencion_compra_detalle dx WHERE dx.id_retencion = r.id)",
                 ],
                 $parsed['texto_libre'],
                 $params,
@@ -99,6 +107,9 @@ class RetencionCompraRepository extends BaseRepository
                 'doc_sustento'   => 'r.num_doc_sustento',
                 'periodo'        => 'r.periodo_fiscal',
                 'clave_acceso'   => 'r.clave_acceso',
+                // Alias corto, igual que en Facturas, notas y guías: al salir la clave
+                // del texto libre, `clave:…` es la forma de buscarla a propósito.
+                'clave'          => 'r.clave_acceso',
                 'usuario'        => 'u.nombre',
                 // Claves nuevas del modal de filtros.
                 'autorizacion'   => 'r.numero_autorizacion',

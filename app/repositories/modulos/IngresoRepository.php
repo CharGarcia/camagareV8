@@ -151,30 +151,36 @@ class IngresoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            // Texto libre: las columnas del listado y sus relacionadas (el buscador de
-            // la vista no sugiere campos; lo que se escribe se busca en todo). Los
-            // documentos cobrados viven en el detalle: se agregan como una sola cadena
-            // por ingreso.
-            // Decisión del usuario: las columnas Tipo (tipo de ingreso, tipo de los
-            // documentos cobrados y nombre del concepto) y Estado NO entran en el
-            // texto libre; se filtran solo desde el modal de filtros.
+            // Texto libre: SOLO lo que se VE en el listado — nº de ingreso (con su serie y
+            // secuencial), "Recibo de" (el texto libre, el cliente o el concepto, que es lo
+            // que muestra esa columna), observaciones, fecha y monto.
+            //
+            // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar (mismo
+            // criterio que el resto de módulos, 17-09-2026):
+            //   - Tipo (de ingreso, de los documentos cobrados y nombre del concepto) y
+            //     Estado → modal de filtros (decisión anterior).
+            //   - Identificación del cliente → filtro `ruc:` / `identificacion:`.
+            //   - Usuario que registró → filtro `usuario:`.
+            //   - N° de los documentos cobrados → pestaña "Detalles" del modal de filtros
+            //     (buscarEnDetalles()), que SÍ dice qué documento o qué pago coincidió; desde
+            //     el listado el ingreso aparecía sin que se viera el motivo. De paso se va la
+            //     subconsulta STRING_AGG, que corría por cada ingreso de la empresa.
             // Rendimiento: monto y fecha solo se comparan si la palabra tiene dígitos
             // (ver FiltrosBusqueda::condicionTexto). La subconsulta del detalle va al final.
             $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    'i.numero_ingreso',                                   // Nº Ingreso
+                    'i.numero_ingreso',                                   // Nº Ingreso (tal como se guardó)
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('i.establecimiento', 'i.punto_emision', 'i.secuencial'), // y en formato canónico
                     'i.secuencial',
                     "CONCAT(i.establecimiento,'-',i.punto_emision)",      // Serie
-                    'i.recibo_de',                                        // Recibo de
+                    // Columna "Recibo de": muestra el texto libre, o el cliente, o el concepto.
+                    'i.recibo_de',
                     'c.nombre',
-                    'c.identificacion',
                     'rc.nombre',
                     'i.observaciones',                                    // Observaciones
-                    'u.nombre',                                           // Usuario que registró
                     ['sql' => 'i.fecha_emision', 'si' => $digitos],       // Fecha
                     ['sql' => 'i.monto_total', 'si' => $digitos],         // Monto
-                    "(SELECT STRING_AGG(d.numero_documento, ' ') FROM ingresos_detalle d WHERE d.id_ingreso = i.id)",
                 ],
                 $parsed['texto_libre'],
                 $params,

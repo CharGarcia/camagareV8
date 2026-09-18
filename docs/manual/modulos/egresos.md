@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo
-version: 1.17
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado
+version: 1.19
 orden: 20
 estado: activo
 ---
@@ -305,16 +305,29 @@ Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
 búsqueda y los botones de columnas, PDF y Excel.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
-solo, sin menús ni sugerencias. Busca en las columnas del egreso y en sus datos
-relacionados: número, serie, secuencial, fecha, beneficiario (proveedor,
-empleado u otro), RUC o cédula del beneficiario, observaciones, monto, usuario
-que lo registró y los **números de los documentos pagados** (compras,
-liquidaciones, roles…). Las columnas **Tipo** y **Estado** no entran en la
-búsqueda libre: para filtrar por ellas use la ventana de filtros. Puede escribir
-varias palabras en cualquier orden y no importan mayúsculas ni tildes. Para
-limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un
-**círculo girando** al final del cuadro y la tabla se ve atenuada; cuando
-desaparece, el listado ya muestra el resultado.
+solo, sin menús ni sugerencias. Busca en las columnas del egreso: número, serie,
+secuencial, fecha, sujeto (proveedor, empleado u otro beneficiario),
+observaciones y monto. Puede escribir varias palabras en cualquier orden y no
+importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el
+cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y la
+tabla se ve atenuada; cuando desaparece, el listado ya muestra el resultado.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** El cuadro devuelve
+solo egresos donde se vea por qué coinciden; el resto se consulta en la ventana
+de filtros:
+
+| Dato | Dónde se busca |
+|------|----------------|
+| N° de los documentos pagados (compras, liquidaciones, roles…) | Pestaña *Detalles* |
+| Identificación / RUC del proveedor o del empleado | Pestaña *Egreso* → **RUC / cédula** |
+| Usuario que registró | Pestaña *Egreso* |
+| Tipo y Estado | Pestaña *Egreso* |
+
+La pestaña *Detalles* busca dentro de los egresos —documentos pagados, su
+descripción, montos y cuenta contable, y también las formas de pago con su
+referencia, cheque, beneficiario del cheque y operación bancaria— y muestra **qué
+línea coincidió**, mientras que desde el cuadro el egreso aparecía sin que se
+viera el motivo.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -404,6 +417,18 @@ ve solo los que registró.
   puede pagar"**: esa compra no se paga. Revise el motivo en el modal de Compras.
 
 ## Historial de cambios
+
+- **1.19** — El cuadro encuentra el egreso escribiendo su número completo `001-001-000000001`, aunque el
+  documento tenga el número guardado sin la serie o con el secuencial sin los ceros de
+  la izquierda (pasa en registros antiguos y migrados): el listado lo arma a partir de
+  la serie y el secuencial.
+
+- **1.18** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla:
+  número, serie, secuencial, fecha, sujeto, observaciones y monto. Los **números de los
+  documentos pagados** pasan a la pestaña *Detalles* del modal de filtros, que además
+  muestra qué línea coincidió; la **identificación del proveedor o empleado** y el
+  **usuario que registró** se consultan en sus filtros. Antes el egreso aparecía en la
+  lista sin que se viera el motivo.
 
 - **1.17** — La lista de **formas de pago** respeta el **Orden** definido en
   *Formas de cobro y pago* (antes era siempre alfabética) y muestra el saldo solo

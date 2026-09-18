@@ -54,4 +54,31 @@ class SecuencialFormato
 
         return str_pad($valor, self::LONGITUD, '0', STR_PAD_LEFT);
     }
+
+    /**
+     * Expresión SQL con el NÚMERO COMPLETO del documento en su formato canónico
+     * `000-000-000000000`, para los buscadores de los listados.
+     *
+     * Por qué (17-09-2026): el usuario busca por el número tal como lo lee en el documento
+     * —`001-001-000000001`—, pero no todas las filas lo tienen guardado así. Hay egresos con
+     * `numero_egreso = '000000001'` (sin la serie) y pedidos con el secuencial sin ceros
+     * (`'16'` en vez de `'000000016'`), heredados de flujos antiguos y de migraciones. Con
+     * esta expresión el listado arma el número canónico a partir de la serie y el secuencial,
+     * así que ese formato encuentra el documento aunque lo guardado esté corto.
+     *
+     * `GREATEST(LONGITUD, LENGTH(...))` en vez de un LPAD fijo: LPAD TRUNCA cuando el valor
+     * es más largo que el ancho pedido, y un secuencial de 10+ dígitos (dato heredado) se
+     * perdería. Todas las funciones usadas son IMMUTABLE, así que la expresión sirve también
+     * dentro de un índice (los módulos con índice trigram la usan: ver MotorBusqueda).
+     *
+     * @param string $estab Columna del establecimiento (p. ej. 'v.establecimiento')
+     * @param string $punto Columna del punto de emisión
+     * @param string $sec   Columna del secuencial
+     */
+    public static function sqlNumeroCompleto(string $estab, string $punto, string $sec): string
+    {
+        $n = self::LONGITUD;
+        return "COALESCE({$estab}, '') || '-' || COALESCE({$punto}, '') || '-' || "
+             . "LPAD(COALESCE({$sec}, ''), GREATEST({$n}, LENGTH(COALESCE({$sec}, ''))), '0')";
+    }
 }

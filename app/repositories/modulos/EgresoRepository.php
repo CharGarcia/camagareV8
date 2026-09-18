@@ -180,29 +180,35 @@ class EgresoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            // Texto libre: las columnas del listado y sus relacionadas (el buscador de
-            // la vista no sugiere campos; lo que se escribe se busca en todo). Los
-            // documentos pagados viven en el detalle: se agregan como una sola cadena
-            // por egreso.
-            // Decisión del usuario (igual que en Ingresos y Facturas): las columnas
-            // Tipo y Estado NO entran en el texto libre; se filtran desde el modal.
+            // Texto libre: SOLO lo que se VE en el listado — nº de egreso (con su serie y
+            // secuencial), "Sujeto" (proveedor, empleado o beneficiario, que es lo que
+            // muestra esa columna), observaciones, fecha y monto.
+            //
+            // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar (mismo
+            // criterio que Ingresos y el resto de módulos, 17-09-2026):
+            //   - Tipo y Estado → modal de filtros (decisión anterior).
+            //   - Identificación del proveedor o del empleado → filtro `ruc:` /
+            //     `identificacion:`.
+            //   - Usuario que registró → filtro `usuario:`.
+            //   - N° de los documentos pagados → pestaña "Detalles" del modal de filtros
+            //     (buscarEnDetalles()), que SÍ dice qué documento o qué pago coincidió; desde
+            //     el listado el egreso aparecía sin que se viera el motivo. De paso se va la
+            //     subconsulta STRING_AGG, que corría por cada egreso de la empresa.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     // Rendimiento: monto y fecha solo se comparan si la palabra tiene
                     // dígitos (ver FiltrosBusqueda::condicionTexto).
-                    'e.numero_egreso',                                    // Nº Egreso
+                    'e.numero_egreso',                                    // Nº Egreso (tal como se guardó)
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('e.establecimiento', 'e.punto_emision', 'e.secuencial'), // y en formato canónico
                     'e.secuencial',
                     "CONCAT(e.establecimiento,'-',e.punto_emision)",      // Serie
-                    'p.razon_social',                                     // Beneficiario
+                    // Columna "Sujeto": muestra el proveedor, el empleado o el beneficiario.
+                    'p.razon_social',
                     'emp.nombres_apellidos',
                     'e.beneficiario_nombre',
-                    'p.identificacion',                                   // RUC / cédula del beneficiario
-                    'emp.identificacion',
                     'e.observaciones',                                    // Observaciones
-                    'u.nombre',                                           // Usuario que registró
                     ['sql' => 'e.fecha_emision', 'si' => \App\Helpers\FiltrosBusqueda::SI_DIGITOS], // Fecha
                     ['sql' => 'e.monto_total', 'si' => \App\Helpers\FiltrosBusqueda::SI_DIGITOS],   // Monto
-                    "(SELECT STRING_AGG(d.numero_documento, ' ') FROM egresos_detalle d WHERE d.id_egreso = e.id AND d.eliminado = FALSE)",
                 ],
                 $parsed['texto_libre'],
                 $params,

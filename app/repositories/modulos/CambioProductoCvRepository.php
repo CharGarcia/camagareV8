@@ -558,32 +558,38 @@ class CambioProductoCvRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            // Texto libre (buscador FiltrosModal de la vista): las columnas del listado y lo
-            // que identifica al cambio aunque no sea columna. Decisión del usuario: la
-            // columna Estado NO entra en el texto libre; se filtra desde el modal.
+            // Texto libre (buscador FiltrosModal de la vista): las columnas del listado. Este
+            // listado muestra las dos patas del cambio línea a línea (producto, lote, NUP,
+            // bodega y factura de origen, tanto de lo devuelto como de lo entregado), así que
+            // casi todo lo que busca SÍ se ve; por eso aquí se conservan.
             //
-            // Rendimiento (17-09-2026): lo que vive en otra tabla (cliente, responsable, usuario,
-            // productos, bodegas y documentos de origen) se busca como CONJUNTO por palabra
+            // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar:
+            //   - Estado → modal de filtros (decisión anterior).
+            //   - Identificación del cliente, responsable de traslado y diferencia → sus
+            //     filtros del modal (17-09-2026).
+            //   - Usuario que registró → selector del modal.
+            //
+            // Rendimiento (17-09-2026): lo que vive en otra tabla (cliente, productos, bodegas y
+            // documentos de origen) se busca como CONJUNTO por palabra
             // (FiltrosBusqueda::condicionTexto, `col` + `sql`) en vez de un STRING_AGG de las
-            // líneas por cada cambio; fecha y diferencia solo si la palabra tiene dígitos.
+            // líneas por cada cambio; la fecha solo si la palabra puede serlo.
             $fecha   = \App\Helpers\FiltrosBusqueda::SI_FECHA;
             $numero  = \App\Helpers\FiltrosBusqueda::SI_NUMERO;
             $lineasEmpresa = "SELECT d.id_cambio FROM cambios_producto_cv_detalles d WHERE d.id_empresa = :e AND d.eliminado = false";
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
                     "CONCAT(r.serie, '-', r.secuencial)",                 // N.° de cambio
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('r.establecimiento', 'r.punto_emision', 'r.secuencial'), // el mismo nº en formato canónico
                     'r.motivo',
                     'r.observaciones',                                    // Observaciones
                     ['sql' => "TO_CHAR(r.fecha_cambio, 'DD-MM-YYYY')", 'si' => $fecha], // Fecha
                     ['sql' => 'r.fecha_cambio', 'si' => $fecha],
-                    ['sql' => 'r.diferencia', 'si' => $numero],
-                    // Cliente (nombre e identificación), responsable de traslado y usuario que registró
-                    ['col' => "CONCAT_WS(' ', cx.nombre, cx.identificacion)",
+                    // Cliente: SOLO el nombre, que es la columna del listado. La identificación,
+                    // el responsable de traslado, el usuario que registró y la diferencia
+                    // salieron del texto libre el 17-09-2026 (no son columnas de esta tabla):
+                    // se buscan desde el modal de filtros.
+                    ['col' => 'cx.nombre',
                      'sql' => "r.id_cliente IN (SELECT cx.id FROM clientes cx WHERE cx.id_empresa = :e AND {cond})"],
-                    ['col' => 'rx.nombre',
-                     'sql' => "r.id_responsable_traslado IN (SELECT rx.id FROM responsables_traslado rx WHERE rx.id_empresa = :e AND {cond})"],
-                    ['col' => 'ux.nombre',
-                     'sql' => "r.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})"],
                     // Productos que entran y salen: código y nombre en el catálogo, bodega, lote y NUP
                     ['col' => "CONCAT_WS(' ', px.codigo, px.nombre)",
                      'sql' => "r.id IN ($lineasEmpresa AND d.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond}))"],

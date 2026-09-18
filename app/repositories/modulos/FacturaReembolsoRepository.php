@@ -24,14 +24,26 @@ class FacturaReembolsoRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
-        // Texto libre: las columnas del listado (incluidas las calculadas Terceros y
-        // Reembolsado) y lo que identifica la factura aunque no sea columna: líneas,
-        // proveedores y comprobantes de reembolso. Decisión del usuario: la columna Estado
-        // (y el estado del correo) NO entran en el texto libre (se filtran desde el modal).
+        // Texto libre: las columnas del listado —número, fecha, cliente, identificación,
+        // Terceros (la cantidad), Reembolsado, total y usuario— más las observaciones.
+        //
+        // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar (mismo
+        // criterio que Facturas de Venta, Compras y las notas de crédito/débito):
+        //   - Estado y estado del correo → modal de filtros (decisión anterior).
+        //   - Número de autorización y clave de acceso → filtros `autorizacion:` y
+        //     `clave:` (17-09-2026). En un comprobante electrónico son el MISMO número de
+        //     49 dígitos —fecha, RUC, serie, secuencial y un código numérico aleatorio de
+        //     8—, así que al escribir un número de documento caía dentro de la clave de
+        //     OTRAS facturas por puro azar y el listado devolvía filas sin ninguna
+        //     coincidencia visible.
+        //   - Líneas del detalle y los proveedores/comprobantes de reembolso (los
+        //     "terceros") → pestaña "Detalles" del modal de filtros (buscarEnDetalles()),
+        //     que SÍ dice qué línea o qué tercero coincidió. De paso se van dos
+        //     subconsultas STRING_AGG que corrían por cada factura de la empresa.
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "CONCAT(fr.establecimiento,'-',fr.punto_emision,'-',fr.secuencial)", // Número
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('fr.establecimiento', 'fr.punto_emision', 'fr.secuencial'), // Número (canónico)
                     'fr.secuencial',
                     'fr.fecha_emision::text',                                             // Fecha
                     'c.nombre',                                                           // Cliente
@@ -42,10 +54,6 @@ class FacturaReembolsoRepository extends BaseRepository
                     'u.nombre',                                                           // Usuario
                     // Fuera del listado, pero identifican la factura:
                     'fr.observaciones',
-                    'fr.numero_autorizacion',
-                    'fr.clave_acceso',
-                    "(SELECT STRING_AGG(frd.descripcion, ' ') FROM factura_reembolso_detalle frd WHERE frd.id_factura_reembolso = fr.id)",
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', frt.razon_social_proveedor_reembolso, frt.identificacion_proveedor_reembolso, CONCAT(frt.estab_doc_reembolso,'-',frt.pto_emi_doc_reembolso,'-',frt.secuencial_doc_reembolso)), ' ') FROM factura_reembolso_terceros frt WHERE frt.id_factura_reembolso = fr.id)",
                 ],
                 $textoLibre,
                 $params,

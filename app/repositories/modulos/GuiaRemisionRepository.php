@@ -47,14 +47,28 @@ class GuiaRemisionRepository extends BaseRepository
         $where = "WHERE g.id_empresa = :id_empresa AND g.eliminado = false AND g.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
-        // Texto libre: las columnas del listado y lo que identifica la guía aunque no sea
-        // columna. El buscador de la vista no sugiere campos; lo escrito se busca en todo.
-        // Decisión del usuario: las columnas Estado y Correo NO entran en el texto libre
-        // (se filtran solo desde el modal de filtros).
+        // Texto libre: las columnas del listado —número, fecha, destinatario, RUC/cédula,
+        // transportista, placa, motivo, fecha de inicio y usuario— más los datos de
+        // cabecera que identifican la guía: identificación del transportista, documento
+        // sustento, direcciones de partida y destino, ruta y observaciones.
+        //
+        // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar (mismo
+        // criterio que Facturas de Venta, Compras y las notas de crédito/débito):
+        //   - Estado y Correo → modal de filtros (decisión anterior).
+        //   - Clave de acceso y número de autorización → filtros `clave:` y
+        //     `autorizacion:` (17-09-2026). En un comprobante electrónico son el MISMO
+        //     número de 49 dígitos —fecha, RUC, serie, secuencial y un código numérico
+        //     aleatorio de 8—, así que al escribir un número de documento caía dentro de
+        //     la clave de OTRAS guías por puro azar y el listado devolvía filas sin
+        //     ninguna coincidencia visible.
+        //   - Productos de la guía (código y descripción de cada línea) → pestaña
+        //     "Detalles" del modal de filtros (buscarEnDetalles()), que SÍ dice qué línea
+        //     coincidió. De paso se va la subconsulta STRING_AGG, que corría por cada
+        //     guía de la empresa.
         if ($parsed['texto_libre'] !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "CONCAT(g.establecimiento,'-',g.punto_emision,'-',g.secuencial)", // Número
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('g.establecimiento', 'g.punto_emision', 'g.secuencial'), // Número (canónico)
                     'g.secuencial',
                     'g.fecha_emision::text',                                          // Emisión
                     'c.nombre',                                                       // Destinatario
@@ -66,14 +80,11 @@ class GuiaRemisionRepository extends BaseRepository
                     'u.nombre',                                                       // Usuario
                     // Fuera del listado, pero identifican la guía:
                     't.identificacion',
-                    'g.clave_acceso',
-                    'g.numero_autorizacion',
                     'g.num_doc_sustento',
                     'g.direccion_partida',
                     'g.direccion_destino',
                     'g.ruta',
                     'g.observaciones',
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', grd.codigo_principal, grd.codigo_auxiliar, grd.descripcion), ' ') FROM guias_remision_detalle grd WHERE grd.id_guia_remision = g.id)",
                 ],
                 $parsed['texto_libre'],
                 $params,

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
-etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips
-version: 1.3
+etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
+version: 1.4
 orden: 21
 estado: activo
 ---
@@ -65,14 +65,27 @@ búsqueda y los botones de columnas, PDF y Excel.
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas de la factura: número,
 secuencial, fecha, cliente, identificación, cantidad de terceros, valor
-reembolsado, total y usuario. Además busca en las observaciones, el número de
-autorización, la clave de acceso, las **descripciones de las líneas** y los
-**comprobantes de terceros** (proveedor, RUC y número del comprobante). La
-columna **Estado** no entra en la búsqueda libre: para filtrar por ella use la
-ventana de filtros. Puede escribir varias palabras en cualquier orden y no
-importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en
-el cuadro. Mientras busca, aparece un **círculo girando** al final del cuadro y
-la tabla se ve atenuada.
+reembolsado, total y usuario; además, en las observaciones. Puede escribir varias
+palabras en cualquier orden y no importan mayúsculas ni tildes. Para limpiar,
+borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo
+girando** al final del cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** Para que el cuadro
+devuelva solo facturas donde se vea por qué coinciden, estos datos se consultan
+en la ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Clave de acceso y N° de autorización | Pestaña *Factura de reembolso* |
+| Descripciones de las líneas | Pestaña *Detalles* |
+| Comprobantes de terceros (proveedor, RUC y número) | Pestaña *Detalles* |
+| Estado | Pestaña *Factura de reembolso* |
+
+En un comprobante electrónico la clave de acceso y el número de autorización son
+el mismo número de 49 dígitos, que lleva dentro la fecha, el RUC y el número del
+documento. Al escribir un número de documento en el cuadro aparecían facturas
+ajenas cuya clave contenía por casualidad esa secuencia; ahora ese número solo
+encuentra la factura que realmente lo tiene.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -177,6 +190,15 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.4** — Corregido: al buscar un **número de documento** en el cuadro aparecían
+  también documentos que no lo tenían. La búsqueda libre miraba dentro de la **clave de
+  acceso** (49 dígitos, que llevan la fecha, el RUC y el número del documento) y cualquier
+  número corto caía ahí por casualidad. Ahora la clave se consulta en la ventana de
+  filtros,
+  junto con el **número de autorización**; las **descripciones de las líneas** y los
+  **comprobantes de terceros** pasan a la pestaña *Detalles*, que sí muestra cuál
+  coincidió.
 
 - **1.3** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas de la factura (incluidos terceros y

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto
-version: 1.22
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
+version: 1.23
 orden: 45
 estado: activo
 ---
@@ -182,16 +182,29 @@ búsqueda y los botones de columnas, PDF y Excel.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas de la consignación:
-fecha, número (serie y secuencial), cliente, RUC o cédula, asesor y
-observaciones. Además busca en el responsable de traslado, los puntos de
-partida y llegada, el total, el usuario que la registró, los **productos
-consignados** (código, nombre, lote y NUP) y los **documentos relacionados**:
-facturas de consignación (su número y el de la factura SRI), retornos y
-cambios de producto. La columna **Estado** no entra en la búsqueda libre: para
-filtrar por ella use la ventana de filtros. Puede escribir varias palabras en
-cualquier orden y no importan mayúsculas ni tildes. Para limpiar, borre el
-texto o pulse Escape en el cuadro. Mientras busca, aparece un **círculo
-girando** al final del cuadro y la tabla se ve atenuada.
+fecha, número (serie y secuencial), cliente, asesor y observaciones. Puede
+escribir varias palabras en cualquier orden y no importan mayúsculas ni tildes.
+Para limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca,
+aparece un **círculo girando** al final del cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** El cuadro devuelve
+solo consignaciones donde se vea por qué coinciden; el resto se consulta en la
+ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Productos consignados, lote y NUP | Pestaña *Detalles* |
+| N° de las facturas de consignación, retornos y cambios de producto | Pestaña *Detalles* |
+| RUC o cédula del cliente | Pestaña *Consignación* → **RUC / cédula** |
+| Puntos de partida y de llegada | Pestaña *Consignación* |
+| Total | Pestaña *Consignación* → **Total** (mínimo y máximo) |
+| Responsable de traslado | Pestaña *Consignación* |
+| Usuario que registró | Pestaña *Consignación* |
+| Estado | Pestaña *Consignación* |
+
+La pestaña *Detalles* es además más clara para eso: muestra **qué línea o qué
+documento coincidió** (el producto, el lote, el número del retorno…), mientras que
+desde el cuadro la consignación aparecía en la lista sin que se viera el motivo.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -339,6 +352,16 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.23** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla: fecha,
+  número, cliente, asesor y observaciones. Así el listado solo devuelve consignaciones donde
+  se vea POR QUÉ coinciden. Los **productos** (con su lote y NUP) y los **documentos
+  relacionados** pasan a la pestaña *Detalles* del modal de filtros, que además muestra
+  cuál de ellos coincidió; el resto de datos que no son columna —RUC del cliente, montos,
+  responsable, usuario— se consultan en sus filtros. Antes, el documento aparecía en la
+  lista sin que se viera el motivo.
+  También salieron del cuadro los puntos de partida y llegada, que tienen sus propios
+  filtros (`partida:` y `llegada:`).
 
 - **1.22** — La **búsqueda del listado vuelve a ser instantánea** en empresas con
   decenas de miles de consignaciones: encuentra exactamente lo mismo, pero deja de

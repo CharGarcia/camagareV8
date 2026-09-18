@@ -43,17 +43,29 @@ class NotaCreditoRepository extends BaseRepository
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
 
-        // Texto libre: las columnas del listado y lo que identifica la nota aunque no
-        // sea columna. El buscador de la vista no sugiere campos; lo escrito se busca
-        // en todo. Decisión del usuario: las columnas Correo y Estado NO entran en el
-        // texto libre (se filtran solo desde el modal de filtros).
+        // Texto libre: las columnas del listado (número, fecha, cliente, identificación,
+        // documento modificado, importes, motivo y usuario) más las observaciones.
+        //
+        // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar:
+        //   - Correo y Estado → modal de filtros (decisión anterior).
+        //   - Número de autorización y clave de acceso → filtros `autorizacion:` y
+        //     `clave:` (17-09-2026). En un comprobante electrónico son el MISMO número de
+        //     49 dígitos —fecha, RUC, serie, secuencial y un código numérico aleatorio de
+        //     8—, así que al escribir un número de documento caía dentro de la clave de
+        //     OTRAS notas por puro azar y el listado devolvía filas sin ninguna
+        //     coincidencia visible. Mismo caso que en FacturaVentaRepository y
+        //     ComprasRepository.
+        //   - Productos/servicios del detalle → pestaña "Detalles" del modal de filtros
+        //     (buscarEnDetalles()), que SÍ dice qué línea coincidió; desde el listado la
+        //     nota aparecía sin que se viera el motivo. De paso se va la subconsulta
+        //     STRING_AGG, que se evaluaba por cada nota de la empresa.
         if ($textoLibre !== '') {
             // Rendimiento: montos y fecha solo se comparan si la palabra tiene dígitos
             // (ver FiltrosBusqueda::condicionTexto). La subconsulta del detalle va al final.
             $digitos = \App\Helpers\FiltrosBusqueda::SI_DIGITOS;
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    "CONCAT(nc.establecimiento,'-',nc.punto_emision,'-',nc.secuencial)", // Nº Nota
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('nc.establecimiento', 'nc.punto_emision', 'nc.secuencial'), // Nº Nota (canónico)
                     'nc.secuencial',
                     'c.nombre',                                                           // Cliente
                     'c.identificacion',                                                   // Identificación
@@ -61,14 +73,11 @@ class NotaCreditoRepository extends BaseRepository
                     'nc.motivo',                                                          // Motivo
                     'u.nombre',                                                           // Usuario
                     // Fuera del listado, pero identifican la nota:
-                    'nc.numero_autorizacion',
-                    'nc.clave_acceso',
                     'nc.observaciones',
                     ['sql' => 'nc.fecha_emision', 'si' => $digitos],                      // Fecha
                     ['sql' => 'nc.total_sin_impuestos', 'si' => $digitos],                // Subtotal
                     ['sql' => 'nc.total_descuento', 'si' => $digitos],                    // Descuento
                     ['sql' => 'nc.importe_total', 'si' => $digitos],                      // Total
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', ncd.codigo_principal, ncd.codigo_auxiliar, ncd.descripcion), ' ') FROM notas_credito_detalle ncd WHERE ncd.id_nota_credito = nc.id)",
                 ],
                 $textoLibre,
                 $params,

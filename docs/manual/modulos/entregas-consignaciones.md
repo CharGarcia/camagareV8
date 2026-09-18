@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
-etiquetas: entregas, entrega, buscar entrega, buscar consignacion, buscador, filtros, filtrar entregas, buscar por producto, buscar por lote, con firma, sin firma, con gps, sin gps, chips, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas
-version: 1.7
+etiquetas: entregas, entrega, buscar entrega, buscar consignacion, buscador, filtros, filtrar entregas, buscar por producto, buscar por lote, con firma, sin firma, con gps, sin gps, chips, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
+version: 1.8
 orden: 0
 estado: activo
 ---
@@ -115,16 +115,24 @@ de estado, año y mes.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas del listado: emisión,
-consignación (serie y secuencial), cliente, RUC o cédula, dirección,
-responsable, entrega programada, días, fecha/hora de entrega, registrado por y
-observaciones de la entrega. Además busca en las observaciones y el punto de
-llegada de la consignación, el dispositivo de la app móvil y los **productos
-consignados** (código, nombre, lote y NUP). Las columnas **Estado** y **Canal**
-no entran en la búsqueda libre, y *Firma* y *GPS* tampoco: para filtrar por
-ellas use la ventana de filtros. Puede escribir varias palabras en cualquier
-orden y no importan mayúsculas ni tildes. La búsqueda respeta el estado de
-entrega elegido (por defecto, pendientes). Mientras busca, aparece un **círculo
-girando** al final del cuadro y la tabla se ve atenuada.
+consignación (serie y secuencial), cliente, dirección, responsable, entrega
+programada, días, fecha/hora de entrega, registrado por y observaciones de la
+entrega. Puede escribir varias palabras en cualquier orden y no importan
+mayúsculas ni tildes. La búsqueda respeta el estado de entrega elegido (por
+defecto, pendientes). Mientras busca, aparece un **círculo girando** al final del
+cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** El cuadro devuelve
+solo entregas donde se vea por qué coinciden; el resto se consulta en la ventana
+de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Productos consignados, lote y NUP | Pestaña *Detalles* |
+| Dispositivo de la app móvil | Pestaña *Detalles* |
+| RUC o cédula del cliente | Pestaña *Entrega* → **RUC / cédula** |
+| Observaciones y punto de llegada **de la consignación** | Listado de Consignaciones de Venta |
+| Estado, Canal, Firma y GPS | Pestaña *Entrega* |
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -247,6 +255,16 @@ igual que una que no existe.
   entregas registradas manualmente desde la web nunca tienen firma).
 
 ## Historial de cambios
+
+- **1.8** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla. Así el
+  listado solo devuelve entregas donde
+  se vea POR QUÉ coinciden. Los **productos** (con su lote y NUP) y los **documentos
+  relacionados** pasan a la pestaña *Detalles* del modal de filtros, que además muestra
+  cuál de ellos coincidió; el resto de datos que no son columna —RUC del cliente, montos,
+  responsable, usuario— se consultan en sus filtros. Antes, el documento aparecía en la
+  lista sin que se viera el motivo.
+  Las observaciones y el punto de llegada de la CONSIGNACIÓN se buscan en su propio
+  listado, y el dispositivo de la app móvil en la pestaña *Detalles*.
 
 - **1.7** — La búsqueda del listado, los indicadores de arriba y la pestaña
   **Detalles** responden más rápido en empresas con muchas consignaciones: con

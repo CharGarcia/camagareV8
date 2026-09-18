@@ -4,8 +4,8 @@ resumen: Escriba las palabras sueltas, en el orden que quiera y sin tildes; tamb
 categoria: Primeros pasos
 tipo: concepto
 visibilidad: todos
-etiquetas: buscar, busqueda, buscador, no encuentra, no me aparece, no sale el cliente, tildes, acentos, ñ, mayusculas, filtrar, lupa, buscar cliente, buscar producto, buscar proveedor, autocompletar, sugerencias, palabras sueltas, orden de las palabras, filtros, clave valor
-version: 1.2
+etiquetas: buscar, busqueda, buscador, no encuentra, no me aparece, no sale el cliente, tildes, acentos, ñ, mayusculas, filtrar, lupa, buscar cliente, buscar producto, buscar proveedor, autocompletar, sugerencias, palabras sueltas, orden de las palabras, filtros, clave valor, buscar por numero de documento, 001-001-000000001, numero completo, no encuentro el documento por su numero
+version: 1.3
 orden: 15
 estado: activo
 ---
@@ -87,6 +87,28 @@ Cada módulo acepta sus propios campos; los que no reconoce, los ignora sin
 avisar. Si un filtro no parece surtir efecto, pruebe escribiéndolo como texto
 libre.
 
+## Buscar un documento por su número
+
+En los listados de documentos —facturas de venta, compras, notas de crédito y
+débito, retenciones, guías, liquidaciones, facturas de reembolso, ingresos,
+egresos, pedidos, órdenes de compra, consignaciones, facturación de
+consignaciones, retornos y cambios de producto— puede escribir el número **tal
+como aparece en el documento**:
+
+```
+001-001-000000001
+```
+
+Funciona aunque el documento se haya guardado con el número incompleto. Algunos
+registros antiguos o migrados tienen el secuencial sin los ceros de la izquierda
+(`16` en vez de `000000016`), o el número sin la serie (`000000001` a secas); el
+listado arma igualmente el número completo a partir de la serie y el secuencial,
+así que lo encuentra.
+
+También sirve escribir **solo el secuencial** (`000000001`, e incluso `1` en los
+módulos que aceptan el filtro numérico `secuencial:1`) o **solo la serie**
+(`001-001`).
+
 ## Cuando el buscador no encuentra algo
 
 Antes de dar por perdido un registro, revise:
@@ -106,6 +128,7 @@ Antes de dar por perdido un registro, revise:
 
 | Versión | Cambio |
 |---------|--------|
+| 1.3 | Nueva sección *Buscar un documento por su número*: en todos los listados de documentos se puede escribir el número completo `001-001-000000001`, aunque el registro lo tenga guardado sin la serie o con el secuencial sin ceros. |
 | 1.2 | Se suman los filtros de Cuentas por Cobrar (cliente y producto) y de Cuentas por Pagar (proveedor), que hasta ahora exigían escribir el texto exacto con sus tildes. |
 | 1.1 | Se suman Tareas y Obligaciones, Configuración Contable, retenciones del SRI y el buscador de empresas. |
 | 1.0 | Primera versión: búsqueda por palabras sueltas, sin tildes, en todos los buscadores de clientes y terceros. |

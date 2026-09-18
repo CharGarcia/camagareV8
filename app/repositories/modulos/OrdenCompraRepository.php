@@ -81,25 +81,34 @@ class OrdenCompraRepository extends BaseRepository
         }
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
-        // Texto libre: las columnas del listado y lo que identifica la orden. Decisión
-        // del usuario (igual que Compras/Ingresos/Egresos): la columna Estado NO entra
-        // en el texto libre; se filtra solo desde el modal de filtros. Los datos de otras
-        // tablas van en subconsultas para no cambiar los JOIN del COUNT.
+        // Texto libre: las columnas del listado —N° de orden, secuencial, fecha de orden,
+        // proveedor, identificación, fecha de recepción y observaciones— más el nombre de
+        // quien aprobó la orden.
+        //
+        // Qué NO entra, por decisión del usuario, y dónde se busca en su lugar (mismo
+        // criterio que Facturas de Venta, Compras y las notas de crédito/débito):
+        //   - Estado → modal de filtros (decisión anterior).
+        //   - Usuario que registró → filtro `usuario:` (no es columna de este listado).
+        //   - Productos de la orden y las compras vinculadas → pestaña "Detalles" del
+        //     modal de filtros (buscarEnDetalles()), que busca las dos cosas y SÍ dice
+        //     cuál coincidió; desde el listado la orden aparecía sin que se viera el
+        //     motivo. De paso se van dos subconsultas STRING_AGG que corrían por cada
+        //     orden de la empresa.
+        // Esta orden NO es un comprobante electrónico: no tiene clave de acceso ni
+        // autorización, así que no le aplica el ruido de esos 49 dígitos.
         if ($parsed['texto_libre'] !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
-                    'oc.numero_orden',                 // N° Orden
+                    'oc.numero_orden',                 // N° Orden (tal como se guardó)
+                    \App\Helpers\SecuencialFormato::sqlNumeroCompleto('oc.establecimiento', 'oc.punto_emision', 'oc.secuencial'), // y en formato canónico
                     'oc.secuencial',
                     'oc.fecha_orden::text',            // Fecha Orden
                     'p.razon_social',                  // Proveedor
                     'p.identificacion',                // Identificación
                     'oc.fecha_recepcion::text',        // Fecha Recepción
                     'oc.observaciones',                // Observaciones
-                    // Fuera del listado, pero identifican la orden:
+                    // Fuera del listado, pero identifica la orden:
                     'oc.aprobado_por',
-                    '(SELECT ux.nombre FROM usuarios ux WHERE ux.id = oc.created_by)',
-                    "(SELECT STRING_AGG(CONCAT_WS(' ', px.codigo, dx.descripcion, dx.notas), ' ') FROM ordenes_compra_detalle dx LEFT JOIN productos px ON px.id = dx.id_producto WHERE dx.id_orden = oc.id)",
-                    "(SELECT STRING_AGG(CONCAT(cx.establecimiento_prov,'-',cx.punto_emision_prov,'-',cx.secuencial_prov), ' ') FROM compras_cabecera cx WHERE cx.id_orden_compra = oc.id AND cx.id_empresa = oc.id_empresa AND cx.eliminado = false)",
                 ],
                 $parsed['texto_libre'],
                 $params,

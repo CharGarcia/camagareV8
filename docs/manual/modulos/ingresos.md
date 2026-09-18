@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo
-version: 2.4
+etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado
+version: 2.6
 orden: 10
 estado: activo
 ---
@@ -201,13 +201,27 @@ cuando el concepto no tiene una cuenta fija.
 Arriba de la tabla hay dos piezas: el botón **Filtros** y el cuadro de búsqueda.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
-solo, sin menús ni sugerencias. Busca en las columnas del ingreso y en sus
-datos relacionados: número, serie, secuencial, fecha, "Recibo de", cliente, RUC
-o cédula, observaciones, monto, usuario que lo registró y los **números de las
-facturas o recibos cobrados**. Las columnas **Tipo** y **Estado** no entran en
-la búsqueda libre: para filtrar por ellas use la ventana de filtros. Puede escribir
-varias palabras en cualquier orden (`perez mayo`) y no importan mayúsculas ni
-tildes. Para limpiar, borre el texto o pulse Escape en el cuadro.
+solo, sin menús ni sugerencias. Busca en las columnas del ingreso: número, serie,
+secuencial, fecha, "Recibo de" (sea el texto escrito, el cliente o el concepto),
+observaciones y monto. Puede escribir varias palabras en cualquier orden
+(`perez mayo`) y no importan mayúsculas ni tildes. Para limpiar, borre el texto o
+pulse Escape en el cuadro.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** El cuadro devuelve
+solo ingresos donde se vea por qué coinciden; el resto se consulta en la ventana
+de filtros:
+
+| Dato | Dónde se busca |
+|------|----------------|
+| N° de las facturas o recibos cobrados | Pestaña *Detalles* |
+| Identificación / RUC del cliente | Pestaña *Ingreso* → **RUC / cédula** |
+| Usuario que registró | Pestaña *Ingreso* |
+| Tipo y Estado | Pestaña *Ingreso* |
+
+La pestaña *Detalles* busca dentro de los ingresos —documentos cobrados, su
+descripción, montos y cuenta contable, y también las formas de cobro con su
+referencia, cheque y operación bancaria— y muestra **qué línea coincidió**,
+mientras que desde el cuadro el ingreso aparecía sin que se viera el motivo.
 Mientras busca, aparece un **círculo girando** al final del cuadro; cuando desaparece, el listado ya muestra el resultado. Mientras tanto la tabla se ve atenuada, también al cambiar de página o de orden.
 
 **Filtros.** Pulse **Filtros** para abrir la ventana con todos los criterios,
@@ -294,6 +308,18 @@ deseable; para el contador o el administrador, active el acceso total.
   cliente, que no está ya cobrada y que no fue anulada.
 
 ## Historial de cambios
+
+- **2.6** — El cuadro encuentra el ingreso escribiendo su número completo `001-001-000000001`, aunque el
+  documento tenga el número guardado sin la serie o con el secuencial sin los ceros de
+  la izquierda (pasa en registros antiguos y migrados): el listado lo arma a partir de
+  la serie y el secuencial.
+
+- **2.5** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla:
+  número, serie, secuencial, fecha, "Recibo de", observaciones y monto. Los **números de
+  las facturas o recibos cobrados** pasan a la pestaña *Detalles* del modal de filtros,
+  que además muestra qué línea coincidió; la **identificación del cliente** y el
+  **usuario que registró** se consultan en sus filtros. Antes el ingreso aparecía en la
+  lista sin que se viera el motivo.
 
 - **2.4** — La lista de **formas de cobro** respeta el **Orden** definido en
   *Formas de cobro y pago* (antes era siempre alfabética) y muestra el saldo solo

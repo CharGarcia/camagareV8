@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
-etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips
-version: 1.9
+etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
+version: 1.10
 orden: 55
 estado: activo
 ---
@@ -183,14 +183,27 @@ búsqueda y los botones de columnas, PDF y Excel.
 solo, sin menús ni sugerencias. Busca en las columnas de la guía: número,
 secuencial, fecha de emisión, destinatario, RUC / cédula, transportista, placa,
 motivo, fecha de inicio y usuario. Además busca en la identificación del
-transportista, la clave de acceso, el número de autorización, el documento de
-sustento, las direcciones de partida y destino, la ruta, las observaciones y
-los **códigos y descripciones de los productos** transportados. Las columnas
-**Estado** y **Correo** no entran en la búsqueda libre: para filtrar por ellas
-use la ventana de filtros. Puede escribir varias palabras en cualquier orden y
+transportista, el documento de sustento, las direcciones de partida y destino,
+la ruta y las observaciones. Puede escribir varias palabras en cualquier orden y
 no importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape
 en el cuadro. Mientras busca, aparece un **círculo girando** al final del
 cuadro y la tabla se ve atenuada.
+
+**Lo que NO entra en la búsqueda libre, y dónde buscarlo.** Para que el cuadro
+devuelva solo guías donde se vea por qué coinciden, estos datos se consultan en
+la ventana de filtros (botón del embudo):
+
+| Dato | Dónde se busca |
+|------|----------------|
+| Clave de acceso y N° de autorización | Pestaña *Guía* |
+| Productos transportados (código y descripción) | Pestaña *Detalles* |
+| Estado y Correo | Pestaña *Guía* |
+
+En un comprobante electrónico la clave de acceso y el número de autorización son
+el mismo número de 49 dígitos, que lleva dentro la fecha, el RUC y el número del
+documento. Al escribir un número de documento en el cuadro aparecían guías ajenas
+cuya clave contenía por casualidad esa secuencia; ahora ese número solo encuentra
+la guía que realmente lo tiene.
 
 **Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
 en dos pestañas. Llene los que necesite y pulse **Aplicar**; nada se aplica
@@ -252,6 +265,14 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 **placa**, y emitirla como cualquier otra guía.
 
 ## Historial de cambios
+
+- **1.10** — Corregido: al buscar un **número de documento** en el cuadro aparecían
+  también documentos que no lo tenían. La búsqueda libre miraba dentro de la **clave de
+  acceso** (49 dígitos, que llevan la fecha, el RUC y el número del documento) y cualquier
+  número corto caía ahí por casualidad. Ahora la clave se consulta en la ventana de
+  filtros,
+  junto con el **número de autorización**; los **productos transportados** pasan a la
+  pestaña *Detalles*, que sí muestra qué línea coincidió.
 
 - **1.9** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en las columnas de la guía (y en direcciones,
