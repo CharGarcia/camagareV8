@@ -557,6 +557,17 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
                             </div>
                             <div id="empVacContenido" class="d-none">
                                 <?php
+                                // Solicitudes: enviarle el enlace al empleado y revisar/aprobar lo que envió.
+                                $solicitudesCuadro = [
+                                    'id'               => 'empVacSolicitudes',
+                                    'modo'             => 'empleado',
+                                    'puede_crear'      => !empty($permVacEmp['crear']),
+                                    'puede_actualizar' => !empty($permVacEmp['actualizar']),
+                                ];
+                                include MVC_APP . '/views/modulos/vacaciones/_solicitudes.php';
+                                ?>
+                                <hr class="my-3 opacity-25">
+                                <?php
                                 $cuadroPeriodos = ['id' => 'empVacCuadro', 'puede_marcar' => !empty($permVacEmp['crear']), 'con_resumen' => true];
                                 include MVC_APP . '/views/modulos/vacaciones/_cuadro_periodos.php';
                                 ?>
@@ -793,9 +804,10 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
 
 <?php if (!empty($permVacEmp['ver'])): ?>
 <script src="<?= $baseEmp ?>/js/modulos/vacaciones_periodos.js?v=<?= asset_ver('/js/modulos/vacaciones_periodos.js') ?>"></script>
+<script src="<?= $baseEmp ?>/js/modulos/vacaciones_solicitudes.js?v=<?= asset_ver('/js/modulos/vacaciones_solicitudes.js') ?>"></script>
 <script>
-// Pestaña Vacaciones: el mismo cuadro de períodos del módulo Vacaciones (mismos datos,
-// permisos y acciones; ver vacaciones_periodos.js).
+// Pestaña Vacaciones: los mismos cuadros del módulo Vacaciones (mismos datos,
+// permisos y acciones; ver vacaciones_periodos.js y vacaciones_solicitudes.js).
 (function () {
     'use strict';
     const $ = (id) => document.getElementById(id);
@@ -803,12 +815,31 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
     if (!raiz || !window.CuadroPeriodosVacaciones) return;
     const cuadro = new window.CuadroPeriodosVacaciones(raiz);
 
+    // Solicitudes del empleado. Al aprobar una se registra su vacación, así que el
+    // cuadro de períodos (saldo, días gozados) se vuelve a cargar.
+    const raizSol = $('empVacSolicitudes');
+    const solicitudes = (raizSol && window.CuadroSolicitudesVacaciones)
+        ? new window.CuadroSolicitudesVacaciones(raizSol, {
+            onCambio: () => { const id = $('emp_id') ? $('emp_id').value : ''; if (id) cuadro.cargar(id); },
+        })
+        : null;
+
     // Se carga cada vez que se abre la pestaña, siempre con lo guardado del empleado.
     window.empVacCargar = function () {
         const id = $('emp_id') ? $('emp_id').value : '';
         $('empVacNoGuardado').classList.toggle('d-none', !!id);
         $('empVacContenido').classList.toggle('d-none', !id);
         if (id) cuadro.cargar(id); else cuadro.limpiar();
+        if (solicitudes) {
+            if (id) {
+                solicitudes.cargarEmpleado(id, {
+                    correo: $('emp_email') ? $('emp_email').value : '',
+                    nombre: $('emp_nombres_apellidos') ? $('emp_nombres_apellidos').value : '',
+                });
+            } else {
+                solicitudes.limpiar();
+            }
+        }
     };
 
     $('tab-vacaciones-btn')?.addEventListener('shown.bs.tab', () => cuadro.scrollAlPrimerPendiente());
@@ -819,7 +850,10 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
     });
 
     // Al cerrar, que el próximo empleado no vea por un instante el cuadro de este.
-    $('modalEmpleado')?.addEventListener('hidden.bs.modal', () => cuadro.limpiar());
+    $('modalEmpleado')?.addEventListener('hidden.bs.modal', () => {
+        cuadro.limpiar();
+        if (solicitudes) solicitudes.limpiar();
+    });
 })();
 </script>
 <?php endif; ?>

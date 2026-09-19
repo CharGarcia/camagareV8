@@ -808,7 +808,11 @@
             return;
         }
         const fechaDia = NC_fechaSoloDia(f.fecha_emision);
-        searchFactura.value = f.num_doc || f.num || '';
+        // Desde Factura de Venta el número llega en partes (establecimiento, punto, secuencial).
+        const numDePartes = (f.establecimiento && f.punto_emision && f.secuencial)
+            ? `${String(f.establecimiento).padStart(3, '0')}-${String(f.punto_emision).padStart(3, '0')}-${String(f.secuencial).padStart(9, '0')}`
+            : '';
+        searchFactura.value = f.num_doc || f.num || numDePartes;
         document.getElementById('nc_fecha_emision_docs_sustento').value = fechaDia;
         dropdownFactura.classList.add('d-none');
         // Tras elegir la factura, llevar el cursor a la fecha del documento.
@@ -882,6 +886,9 @@
         detalles.forEach(d => {
             const idTarifa = resolverIdTarifa(d.impuestos, d.id_tarifa_iva);
             agregarFila({
+                // Oculto: la línea de la factura de la que viene el ítem. El servidor toma de
+                // ahí el lote / NUP / caducidad que la nota devuelve al inventario.
+                id_venta_detalle: d.id,
                 id_producto: d.id_producto,
                 codigo_principal: d.codigo_principal,
                 descripcion: d.descripcion,
@@ -913,6 +920,7 @@
         tr.className = 'row-det';
         
         const idProducto = data.id_producto || '';
+        const idVentaDetalle = data.id_venta_detalle || '';
         const codigoPrincipal = data.codigo_principal || '';
         const descripcion = data.descripcion || '';
         const cantidad = data.cantidad || 0;
@@ -923,6 +931,7 @@
         tr.innerHTML = `
             <td class="ps-3 py-1 position-relative">
                 <input type="hidden" name="det_id_producto[]" value="${idProducto}">
+                <input type="hidden" name="det_id_venta_detalle[]" value="${idVentaDetalle}">
                 <input type="hidden" name="det_codigo_principal[]" value="${String(codigoPrincipal).replace(/"/g, '&quot;')}">
                 <input type="text" name="det_descripcion[]" class="input-detalle" value="${descripcion}" placeholder="Buscar producto/servicio o escribir..." autocomplete="off">
             </td>
@@ -983,12 +992,15 @@
         }
 
         const inpCod = tr.querySelector('input[name="det_codigo_principal[]"]');
+        const inpVd  = tr.querySelector('input[name="det_id_venta_detalle[]"]');
         let timer;
         inpDesc.addEventListener('input', () => {
             clearTimeout(timer);
-            // Al editar manualmente la descripción se rompe el vínculo con el producto.
+            // Al editar manualmente la descripción se rompe el vínculo con el producto
+            // y con la línea de la factura de la que venía el ítem.
             if (inpId) inpId.value = '';
             if (inpCod) inpCod.value = '';
+            if (inpVd) inpVd.value = '';
             const q = inpDesc.value.trim();
             if (q.length < 2) { dd.classList.add('d-none'); return; }
             timer = setTimeout(async () => {
@@ -1347,6 +1359,7 @@
 
             detalles.push({
                 id_producto: tr.querySelector('input[name="det_id_producto[]"]').value,
+                id_venta_detalle: (tr.querySelector('input[name="det_id_venta_detalle[]"]')?.value || null),
                 codigo_principal: (tr.querySelector('input[name="det_codigo_principal[]"]')?.value || ''),
                 descripcion: tr.querySelector('input[name="det_descripcion[]"]').value,
                 cantidad: cant,
@@ -1433,6 +1446,7 @@
         rows.forEach(tr => {
             detalles.push({
                 id_producto: tr.querySelector('input[name="det_id_producto[]"]').value,
+                id_venta_detalle: (tr.querySelector('input[name="det_id_venta_detalle[]"]')?.value || ''),
                 codigo_principal: (tr.querySelector('input[name="det_codigo_principal[]"]')?.value || ''),
                 descripcion: tr.querySelector('input[name="det_descripcion[]"]').value,
                 cantidad: tr.querySelector('input[name="det_cantidad[]"]').value,

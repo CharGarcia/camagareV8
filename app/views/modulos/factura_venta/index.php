@@ -165,6 +165,22 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         padding: 2px 8px !important;
     }
 
+    .modal-factura .table-detalle .fv-ro-oculto {
+        display: none !important;
+    }
+
+    .modal-factura .table-detalle .fv-ro-txt {
+        display: block;
+        padding: 2px 8px;
+        font-size: 0.82rem;
+        user-select: text;
+        cursor: text;
+    }
+
+    .modal-factura .table-detalle .input-detalle.d-none + .fv-ro-txt {
+        display: none;
+    }
+
     .modal-factura .table-detalle .input-codigo {
         field-sizing: content;
         min-width: 100%;
@@ -2679,10 +2695,22 @@ $totalPages = $totalPagesOriginal;
         controles.forEach(el => {
             if (el.id === 'm-select-vendedor') {
                 el.disabled = false;
+            } else if (el.closest('#m-tbodyDetalle') && el.tagName !== 'SELECT') {
+                // Filas de ítems: readonly (no disabled) para poder seleccionar y copiar el texto.
+                // Se respeta el readonly original (precio/descuento según la config de la empresa).
+                if (el.dataset.roOrig === undefined) el.dataset.roOrig = el.readOnly ? '1' : '0';
+                el.disabled = false;
+                el.readOnly = !esBorrador || el.dataset.roOrig === '1';
             } else {
                 el.disabled = !esBorrador;
             }
         });
+        fvRefrescarTextoSelectsLectura();
+        if (!esBorrador) {
+            // Selects que se llenan de forma asíncrona (medida, lotes) terminan después.
+            setTimeout(fvRefrescarTextoSelectsLectura, 500);
+            setTimeout(fvRefrescarTextoSelectsLectura, 1500);
+        }
 
         // Mostrar/ocultar botones de agregar (Productos, Info Adicional, Pagos)
         const btnAddProd = tabDetalle.querySelector('button[onclick="agregarFila()"]');
@@ -2713,6 +2741,32 @@ $totalPages = $totalPagesOriginal;
         const paymentBtns = tabDetalle.querySelectorAll('#m-container-pagos button:not(.text-danger)');
         paymentBtns.forEach(btn => {
             btn.disabled = !esBorrador;
+        });
+    }
+
+    /**
+     * Un <select> (Lote, Caducidad, IVA, Medida...) nunca deja seleccionar su texto. Con la
+     * factura en solo lectura se oculta y en su lugar se muestra el valor elegido como texto
+     * seleccionable/copiable. En borrador se quita el texto y vuelve el select.
+     */
+    function fvRefrescarTextoSelectsLectura(ambito) {
+        const raiz = ambito || document.getElementById('m-tbodyDetalle');
+        if (!raiz) return;
+        raiz.querySelectorAll('select').forEach(sel => {
+            let span = sel.nextElementSibling;
+            if (span && !span.classList.contains('fv-ro-txt')) span = null;
+            if (FV_ES_BORRADOR) {
+                if (span) span.remove();
+                sel.classList.remove('fv-ro-oculto');
+                return;
+            }
+            if (!span) {
+                span = document.createElement('span');
+                span.className = 'fv-ro-txt';
+                sel.after(span);
+            }
+            span.textContent = sel.value !== '' ? (sel.selectedOptions[0]?.text || '') : '';
+            sel.classList.add('fv-ro-oculto');
         });
     }
 
@@ -4784,6 +4838,7 @@ $totalPages = $totalPagesOriginal;
             console.error('Error cargando lotes', e);
         } finally {
             if (selLote) selLote.disabled = !FV_ES_BORRADOR;
+            if (!FV_ES_BORRADOR) fvRefrescarTextoSelectsLectura(row);
         }
     }
 
@@ -5779,6 +5834,7 @@ $totalPages = $totalPagesOriginal;
                             }
                             sc.value = savedCad;
                         }
+                        if (!FV_ES_BORRADOR) fvRefrescarTextoSelectsLectura(tr);
                     });
                 }
 

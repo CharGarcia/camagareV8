@@ -15,6 +15,8 @@ class InventarioService
     private ?BodegaService $bodegaService = null;
     private ?\App\repositories\modulos\ProductoRepository $prodRepo = null;
     private ?\App\repositories\modulos\EmpresaRepository $empRepo = null;
+    /** Facturas ya resueltas por número: una nota de crédito la busca en cada una de sus líneas. */
+    private array $ventaPorNumero = [];
 
     public function __construct(InventarioRepository $repo, LogSistemaService $log)
     {
@@ -144,16 +146,16 @@ class InventarioService
                     } else {
                         // Fallback si no hay historial ni saldo
                         $loteParaKardex = 'SIN LOTE';
-                        $cadParaKardex  = date('Y-m-d');
                     }
                 }
 
-                if (empty($cadParaKardex)) {
-                    $cadParaKardex = date('Y-m-d');
-                } else {
-                    $cadParaKardex = trim((string)$cadParaKardex);
-                    if ($cadParaKardex === '') $cadParaKardex = date('Y-m-d');
-                }
+                // Sin caducidad real se graba NULL, nunca la fecha de hoy. Esa fecha
+                // "centinela" se leía después como un vencimiento verdadero (selector de
+                // lotes, reporte por caducidad, trazabilidad) y, como queda en el pasado,
+                // hacía que el grupo sin lote pareciera el próximo a vencer y getLoteMasAntiguo()
+                // lo eligiera antes que a un lote real.
+                $cadParaKardex = trim((string) $cadParaKardex);
+                if ($cadParaKardex === '') $cadParaKardex = null;
 
                 $kardexIds[$i]['principal'] = $this->registrarSalidaIndividual(
                     $idProducto,
@@ -551,7 +553,8 @@ class InventarioService
             $idProducto,
             (string) ($data['num_doc_modificado'] ?? ''),
             (string) ($data['cod_doc_modificado'] ?? '01'),
-            $cantidad
+            $cantidad,
+            $data['linea_origen'] ?? null
         );
 
         foreach ($tramos as $t) {
@@ -582,20 +585,61 @@ class InventarioService
     }
 
     /**
+     * Líneas de la factura que modifica una NC, por id: el enlace oculto que lleva cada ítem de la
+     * nota cargado desde la factura. Solo devuelve líneas de ESA factura (un id de otro documento
+     * no aparece), con el lote / NUP que el usuario eligió en ella.
+     *
+     * @return array<int,array{id_producto:int,lote:?string,nup:?string}>
+     */
+    public function lineasFacturaParaNC(int $idEmpresa, string $numDoc, string $codDoc, array $idsVentaDetalle): array
+    {
+        $numDoc = trim($numDoc);
+        if ($numDoc === '' || $codDoc !== '01' || !$idsVentaDetalle) return [];
+
+        $idVenta = $this->idVentaPorNumero($idEmpresa, $numDoc);
+        if (!$idVenta) return [];
+
+        $lineas = [];
+        foreach ($this->repo->getLineasVenta($idVenta, $idsVentaDetalle) as $id => $l) {
+            $lote = trim((string) ($l['numero_lote'] ?? ''));
+            $nup  = trim((string) ($l['nup'] ?? ''));
+            $lineas[$id] = [
+                'id_producto' => (int) $l['id_producto'],
+                // 'sin_lote' es el centinela que graba la factura cuando el lote no era obligatorio:
+                // el lote lo eligió el sistema al descontar y no quedó en la línea.
+                'lote'        => ($lote !== '' && $lote !== 'sin_lote') ? $lote : null,
+                'nup'         => $nup !== '' ? $nup : null,
+            ];
+        }
+        return $lineas;
+    }
+
+    private function idVentaPorNumero(int $idEmpresa, string $numDoc): ?int
+    {
+        $clave = $idEmpresa . '|' . $numDoc;
+        if (!array_key_exists($clave, $this->ventaPorNumero)) {
+            $this->ventaPorNumero[$clave] = $this->repo->getIdVentaPorNumero($idEmpresa, $numDoc);
+        }
+        return $this->ventaPorNumero[$clave];
+    }
+
+    /**
      * Divide lo devuelto por una NC entre los lotes/NUP que la factura original sacó, descontando
-     * lo que otras NC vigentes del mismo documento ya devolvieron. Lo que no se pueda atribuir a un
+     * lo que otras NC vigentes del mismo documento ya devolvieron. Si el ítem viene de una línea
+     * de la factura ($lineaOrigen, ver lineasFacturaParaNC()), primero se devuelve al lote / NUP
+     * de esa línea; lo demás se reparte en el orden en que salió. Lo que no se pueda atribuir a un
      * lote (documento sin factura, sin salida registrada o exceso) queda sin lote, como antes.
      *
      * @return array<int,array{lote:?string,caducidad:?string,nup:?string,cantidad:float}>
      */
-    private function repartirDevolucionPorOrigen(int $idEmpresa, int $idProducto, string $numDoc, string $codDoc, float $cantidad): array
+    private function repartirDevolucionPorOrigen(int $idEmpresa, int $idProducto, string $numDoc, string $codDoc, float $cantidad, ?array $lineaOrigen = null): array
     {
         $sinOrigen = [['lote' => null, 'caducidad' => null, 'nup' => null, 'cantidad' => $cantidad]];
 
         $numDoc = trim($numDoc);
         if ($numDoc === '' || $codDoc !== '01') return $sinOrigen;
 
-        $idVenta = $this->repo->getIdVentaPorNumero($idEmpresa, $numDoc);
+        $idVenta = $this->idVentaPorNumero($idEmpresa, $numDoc);
         if (!$idVenta) return $sinOrigen;
 
         $origen = $this->repo->getSalidasVentaProducto($idEmpresa, $idProducto, $idVenta);
@@ -622,6 +666,15 @@ class InventarioService
         foreach ($this->repo->getDevueltoPorNcDeDocumento($idEmpresa, $idProducto, $numDoc) as $d) {
             $k = $d['lote'] . '|' . $d['nup'];
             if (isset($disponibles[$k])) $disponibles[$k]['cantidad'] -= (float) $d['cantidad'];
+        }
+
+        // Ítem enlazado a su línea de factura: su lote / NUP va primero en el reparto.
+        $loteLinea = $lineaOrigen['lote'] ?? null;
+        $nupLinea  = $lineaOrigen['nup'] ?? null;
+        if ($loteLinea !== null || $nupLinea !== null) {
+            $deLaLinea = array_filter($disponibles, fn($d) =>
+                ($loteLinea === null || $d['lote'] === $loteLinea) && ($nupLinea === null || $d['nup'] === $nupLinea));
+            $disponibles = $deLaLinea + $disponibles;
         }
 
         $tramos = [];

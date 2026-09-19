@@ -148,12 +148,10 @@ class ReciboVentaService
                 if ($det['inventariable'] && $afectaInv && ($det['tipo_produccion'] ?? '') !== '02' && empty($det['es_libre'])) {
                     if (!$obliLotes && empty($det['lote'])) {
                         $det['lote'] = 'sin_lote';
-                        // Caducidad: solo se pone la fecha centinela (hoy) si el detalle
-                        // NO trae una real — tiene su propia obligatoriedad
-                        // (obligatorio_caducidad), independiente de obligatorio_lotes.
-                        if (empty($det['caducidad'])) {
-                            $det['caducidad'] = date('Y-m-d');
-                        }
+                        // La caducidad ya NO se rellena con la fecha de hoy (misma corrección
+                        // que en FacturaVentaService): esa fecha centinela se leía luego como
+                        // un vencimiento real y desordenaba la elección automática de lote.
+                        // Su obligatoriedad la comprueba rules->validar(), que corre antes.
                         // El NUP NO se toca aquí: es independiente del lote (no forma parte
                         // de la clave de agregación de stock de abajo) y tiene su propia
                         // obligatoriedad (obligatorio_nup) — ver FacturaVentaService, mismo fix.

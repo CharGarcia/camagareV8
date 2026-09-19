@@ -31,6 +31,13 @@ $colores = ['registrado' => 'info', 'pagado' => 'success', 'anulado' => 'danger'
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-umbrella me-2 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex gap-2">
+        <?php // Solicitudes que los empleados enviaron desde el enlace que recibieron por correo. ?>
+        <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-toggle="modal" data-bs-target="#modalSolicitudesVac" title="Revisar, aprobar o rechazar las solicitudes de los empleados">
+            <i class="bi bi-envelope-paper me-1"></i> Solicitudes
+            <?php if (!empty($solicitudesPendientes)): ?>
+                <span class="badge bg-warning text-dark ms-1"><?= (int) $solicitudesPendientes ?></span>
+            <?php endif; ?>
+        </button>
         <?php // Períodos de un empleado: ver su cuadro y marcar los ya tomados o pagados antes del sistema. ?>
         <button type="button" class="btn btn-outline-primary btn-sm px-3" onclick="abrirModalPeriodos()" title="Ver los períodos de un empleado y marcar los ya tomados o pagados"><i class="bi bi-calendar-check me-1"></i> Períodos</button>
         <?php if ($perm['crear']): ?>
@@ -169,9 +176,43 @@ $colores = ['registrado' => 'info', 'pagado' => 'success', 'anulado' => 'danger'
     </div>
 </div>
 
+<!-- Bandeja de solicitudes de vacaciones de toda la empresa -->
+<div class="modal fade" id="modalSolicitudesVac" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-3">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-envelope-paper me-2 text-primary"></i>Solicitudes de vacaciones
+                </h5>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2">
+                    <i class="bi bi-info-circle me-1"></i>Los empleados envían estas solicitudes desde el enlace que
+                    reciben por correo. El enlace se manda desde la pestaña <b>Vacaciones</b> de su ficha (módulo
+                    Empleados). Al aprobar una solicitud se registra la vacación del empleado.
+                </p>
+                <?php
+                $solicitudesCuadro = [
+                    'id'               => 'vacBandejaSolicitudes',
+                    'modo'             => 'bandeja',
+                    'puede_crear'      => !empty($perm['crear']),
+                    'puede_actualizar' => !empty($perm['actualizar']),
+                ];
+                include MVC_APP . '/views/modulos/vacaciones/_solicitudes.php';
+                ?>
+            </div>
+            <div class="modal-footer bg-light border-top p-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include 'modal_vacacion.php'; ?>
 <script src="<?= $base ?>/js/modulos/vacaciones_periodos.js?v=<?= asset_ver('/js/modulos/vacaciones_periodos.js') ?>"></script>
+<script src="<?= $base ?>/js/modulos/vacaciones_solicitudes.js?v=<?= asset_ver('/js/modulos/vacaciones_solicitudes.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/vacaciones.js?v=<?= asset_ver('/js/modulos/vacaciones.js') ?>"></script>
 
 <script>
@@ -209,5 +250,16 @@ $colores = ['registrado' => 'info', 'pagado' => 'success', 'anulado' => 'danger'
             window.CMG_initSort('vacaciones', (col, dir) => { currentSort = col; currentDir = dir; cargarListado(1); }, { col: currentSort, dir: currentDir });
         }
         window.addEventListener('vacacionGuardada', () => cargarListado(window.currentPage || 1));
+
+        // Bandeja de solicitudes: se carga al abrir el modal. Si se aprueba una, se
+        // registra la vacación → hay que refrescar el listado de atrás.
+        const raizSol = document.getElementById('vacBandejaSolicitudes');
+        if (raizSol && window.CuadroSolicitudesVacaciones) {
+            const bandeja = new window.CuadroSolicitudesVacaciones(raizSol, {
+                onCambio: () => cargarListado(window.currentPage || 1),
+            });
+            document.getElementById('modalSolicitudesVac')
+                ?.addEventListener('shown.bs.modal', () => bandeja.cargarBandeja());
+        }
     })();
 </script>

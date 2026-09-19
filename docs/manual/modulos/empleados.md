@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
-etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos
-version: 1.6
+etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf
+version: 1.7
 orden: 10
 estado: activo
 ---
@@ -84,12 +84,32 @@ sistema*.
 Las marcas se guardan al pulsar esos botones: no hace falta el botón *Guardar*
 del empleado. Para quitar una marca, use la flecha circular de la fila.
 
+### Solicitudes y PDF del detalle
+
+Arriba del cuadro, la sección **Solicitudes** sirve para que el empleado pida sus
+vacaciones sin entrar al sistema:
+
+- **Enviar solicitud** le manda por correo un enlace personal (sirve una vez y
+  caduca a los 15 días). Se propone el correo de la ficha. Si el correo no sale,
+  el sistema avisa y deja **copiar el enlace** para enviarlo por otro medio.
+- Cuando el empleado lo llena, su solicitud aparece aquí como *Esperando
+  aprobación*: **✔** la aprueba —y registra la vacación con sus días y su valor—
+  y **✘** la rechaza pidiendo el motivo. En ambos casos se le puede avisar por
+  correo.
+- El botón **PDF** de cada fila imprime la solicitud con las firmas.
+- **Detalle PDF** descarga el historial de vacaciones del empleado: períodos,
+  saldo y cada vacación con su valor (y el total ya pagado, si lo hay).
+
+El detalle de cómo funciona cada estado está en el artículo del módulo
+*Vacaciones*.
+
 El cuadro usa la fecha de ingreso **guardada** en la pestaña *Periodos*. Si la
 corrige, guarde el empleado y el cuadro se recalcula.
 
 La pestaña aparece solo a quien tiene permiso para **ver** el módulo Vacaciones.
-Marcar períodos requiere el permiso de **crear** de ese módulo, y quitar una
-marca, el de **eliminar**. Los detalles (cómo se reparten las vacaciones entre
+Marcar períodos, enviar la solicitud al empleado y aprobarla requieren el permiso
+de **crear** de ese módulo; rechazar una solicitud o anular un enlace, el de
+**actualizar**; y quitar la marca de un período, el de **eliminar**. Los detalles (cómo se reparten las vacaciones entre
 los períodos, marcas parciales, avisos) están en el artículo del módulo
 *Vacaciones*.
 
@@ -183,6 +203,10 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Historial de cambios
 
+- **1.7** — En la pestaña *Vacaciones*, sección **Solicitudes**: se le envía al
+  empleado un enlace por correo para que pida sus vacaciones, y desde ahí se
+  aprueban o se rechazan. Nuevos PDF de la solicitud y del detalle de vacaciones
+  del empleado.
 - **1.6** — Se quita la pestaña *Atrasos*: el tratamiento de atrasos pasa a la
   pestaña *Horario*, en su propia sección arriba de los horarios. En la pestaña
   *Vacaciones*, la situación de los períodos marcados como tomados se muestra

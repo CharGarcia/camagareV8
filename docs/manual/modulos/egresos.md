@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada
-version: 1.21
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra
+version: 1.22
 orden: 20
 estado: activo
 ---
@@ -124,6 +124,33 @@ en *Configuración Contable → Ingresos y Egresos* (la misma que se ve en
 - Si un concepto no propone ninguna cuenta, revise que la tenga asignada en
   *Configuración Contable → Ingresos y Egresos*.
 
+## Observaciones que se completan solas
+
+Mientras arma un egreso **nuevo**, el campo **Observaciones del Egreso** se va
+llenando solo con lo que se carga en el detalle, sin escribir nada:
+
+| Lo que se carga | Texto en Observaciones |
+|-----------------|------------------------|
+| Una factura de compra | `Pago factura de compra 002-004-000042869` |
+| Varias facturas de compra | `Pago facturas de compra 002-004-000042869, 001-001-000000111` |
+| Una compra y una liquidación | `Pago factura de compra 002-004-000042869; liquidación de compra 001-001-000000045` |
+| Nómina (roles, anticipos, préstamos, décimos) | `Pago Rol Mensual 9/2026`, `Pago Décimo Tercero 2026`… |
+| Una línea de "Otros conceptos" | Su descripción, tal como se escribe |
+
+- El texto no repite el **beneficiario**: el proveedor o el empleado ya tienen su
+  propia columna en el listado y su campo en el comprobante.
+- Si quita un documento, lo desmarca o deja su monto en cero, sale del texto:
+  ya no se va a pagar.
+- **Si escribe su propio texto, ese manda**: desde ese momento el campo no se
+  vuelve a tocar, aunque agregue o quite documentos. Si lo borra por completo,
+  se vuelve a llenar solo con el siguiente documento o línea que cargue.
+- Al **editar** un egreso guardado, las observaciones siguen actualizándose
+  solas únicamente si son el texto automático tal cual. Un texto escrito a mano,
+  o un egreso antiguo sin observaciones, no se cambia.
+
+Es el texto que se ve en la columna *Observaciones* del listado y como
+*Concepto* en el comprobante PDF y Excel.
+
 ## Reglas que aplica el sistema
 
 | Regla | Qué significa |
@@ -163,7 +190,7 @@ liquidación, nómina, anticipo o gasto general):
 
 - La **fecha de emisión**.
 - El **beneficiario** (tipo Proveedor/Empleado y la persona).
-- Las **observaciones**.
+- Las **observaciones** (ver *Observaciones que se completan solas*).
 - Los **documentos pagados**: quitar uno, cambiar el monto pagado o agregar
   otro documento pendiente del mismo tipo (el botón del concepto activo en la
   barra superior vuelve a abrir el buscador). Al editar, el buscador y los
@@ -457,6 +484,13 @@ ve solo los que registró.
   y se pone sola.
 
 ## Historial de cambios
+
+- **1.22** — **Observaciones automáticas**: al registrar un egreso,
+  *Observaciones del Egreso* se llena sola con lo que se va cargando
+  (`Pago factura de compra 002-004-000042869`, liquidaciones, roles y demás
+  documentos de nómina, y las descripciones de "Otros conceptos"). Si el usuario
+  escribe su propio texto, el sistema ya no lo cambia. Nueva sección
+  *Observaciones que se completan solas*.
 
 - **1.21** — Al guardar un egreso nuevo o editado, el listado se actualiza en la
   misma página, con la búsqueda, los filtros y el orden que tenía, y resalta la

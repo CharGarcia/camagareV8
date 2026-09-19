@@ -49,6 +49,17 @@ class VacacionService
         return $this->repo->getDetalle($id, $idEmpresa);
     }
 
+    /** Empleado + sus vacaciones registradas (PDF del detalle de vacaciones). */
+    public function getEmpleado(int $idEmpleado, int $idEmpresa): ?array
+    {
+        return $this->repo->getEmpleado($idEmpleado, $idEmpresa);
+    }
+
+    public function getVacacionesEmpleado(int $idEmpleado, int $idEmpresa): array
+    {
+        return $this->repo->getPorEmpleado($idEmpleado, $idEmpresa);
+    }
+
     /**
      * Información de vacaciones de un empleado: antigüedad, derecho, saldo, sueldo y el
      * cuadro de sus períodos de servicio.

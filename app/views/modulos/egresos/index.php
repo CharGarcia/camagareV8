@@ -708,6 +708,46 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     // muestra, arriba en la barra de conceptos). Ver egConceptoCuentaActual().
     const EGR_COMP_CON_DOCUMENTOS = <?= json_encode($comportamientosDocDriven) ?>;
 
+    // ── Observaciones automáticas ─────────────────────────────────────────────
+    // "Observaciones del Egreso" se arma sola con lo que se va cargando: "Pago factura de compra
+    // 001-001-000000123; liquidación de compra 001-001-000000045" más la descripción de cada
+    // línea de "Otros conceptos". En cuanto el usuario escribe su propio texto el campo ya no se
+    // toca; si lo vacía por completo, vuelve a completarse solo con el siguiente cambio.
+    let egObsAuto = true;
+
+    // Nómina (roles, anticipos, préstamos, décimos) no lleva etiqueta: su "número" ya lo dice
+    // todo ("Rol Mensual 9/2026", "Décimo Tercero 2026", "Préstamo Empresa (desembolso)").
+    const EG_OBS_TIPOS = {
+        COMPRA:      ['factura de compra', 'facturas de compra'],
+        LIQUIDACION: ['liquidación de compra', 'liquidaciones de compra']
+    };
+
+    function egGenerarObservaciones() {
+        // Mismo filtro que egConstruirDetalles(): un documento desmarcado o en $0 no se guarda.
+        const grupos = {};
+        docsEgreso.filter(d => d.seleccionado && d.pagado > 0).forEach(d => {
+            const tipo = d.tipo_bd || '';
+            (grupos[tipo] = grupos[tipo] || []).push(d.numero);
+        });
+        const partes = Object.keys(grupos).map(tipo => {
+            const nums = grupos[tipo];
+            const etiqueta = EG_OBS_TIPOS[tipo];
+            return etiqueta ? `${nums.length > 1 ? etiqueta[1] : etiqueta[0]} ${nums.join(', ')}` : nums.join(', ');
+        });
+        const textos = partes.length ? ['Pago ' + partes.join('; ')] : [];
+        manualEgreso.forEach(m => {
+            const desc = String(m.desc || '').trim();
+            if (desc) textos.push(desc);
+        });
+        return textos.join('; ');
+    }
+
+    function egActualizarObservacionesAuto() {
+        const el = document.getElementById('eg-input-obs');
+        if (!el || el.disabled || !egObsAuto) return;
+        el.value = egGenerarObservaciones();
+    }
+
     // ── Modal secundario: selección de documentos pendientes de pago ──────────
     let _egDocsModal    = [];
     let _egSelModal     = {};
@@ -720,6 +760,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     document.addEventListener('DOMContentLoaded', () => {
         const p = document.getElementById('eg-select-punto');
         if(p) syncEgresoSecuencial(p.value);
+
+        // Si el usuario escribe en Observaciones, su texto manda; si lo vacía, vuelve el automático.
+        document.getElementById('eg-input-obs')?.addEventListener('input', (e) => {
+            egObsAuto = e.target.value.trim() === '';
+        });
 
         // Predictivo
         const inSrc = document.getElementById('eg-search-input');
@@ -1076,6 +1121,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function renderDocsEgreso() {
         renderDocsPendientesEgreso();
         renderManualEgreso();
+        egActualizarObservacionesAuto();
     }
 
     function renderDocsPendientesEgreso() {
@@ -1222,6 +1268,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
         docsEgreso[i].pagado = val;
         recalcEgresoTot();
+        egActualizarObservacionesAuto(); // un documento en $0 sale del texto (no se guarda)
     }
 
     function agregarFilaManualEgreso() {
@@ -1333,6 +1380,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     function actualizarManualEgresoDesc(i, val) {
         if (manualEgreso[i]) manualEgreso[i].desc = val;
+        egActualizarObservacionesAuto();
     }
 
     function actualizarManualEgresoMonto(i, val) {
@@ -1890,6 +1938,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         esEgresoAnulado = false;
         esEgresoSoloLectura = false;
+        // Egreso nuevo: Observaciones se completa sola. Al abrir uno guardado no se pisa lo
+        // guardado; abrirModalEgresoVer() decide tras hidratar (ver egGenerarObservaciones).
+        egObsAuto = esNuevo;
         document.getElementById('eg-bloqueo-aviso')?.classList.add('d-none');
         const btnG = document.getElementById('btnGuardarEgreso');
         btnG.classList.remove('d-none');
@@ -2334,6 +2385,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 document.getElementById('eg-input-obs').disabled = false;
                 document.getElementById('eg-input-fecha').disabled = false;
             }
+
+            // Observaciones automáticas al editar: siguen completándose solas únicamente si lo
+            // guardado es justo el texto automático (nadie lo reescribió); un texto propio —o
+            // vacío, como los egresos anteriores a esta función— no se toca.
+            const obsGuardada = (e.observaciones || '').trim();
+            egObsAuto = !esEgresoSoloLectura && obsGuardada !== '' && obsGuardada === egGenerarObservaciones();
 
             // Render único (ambos bloques: documentos + otros conceptos), ya con
             // eg-input-obs.disabled definitivo para que isReadOnly salga correcto.

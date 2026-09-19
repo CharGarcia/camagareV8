@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar
-version: 2.15
+version: 2.16
 orden: 20
 estado: activo
 ---
@@ -81,6 +81,14 @@ Para volver a ver todas las fechas, devuelva el lote a *Lote...*.
 
 Al **abrir una factura ya guardada**, la línea muestra el lote y el vencimiento
 **con los que se emitió**, aunque el inventario haya cambiado desde entonces.
+
+**Cuando el establecimiento no exige lote**, el sistema elige uno solo al descontar:
+toma el **lote real que vence primero** y solo usa el grupo *sin lote* si el producto
+no tiene ningún lote en esa bodega. Y si no se eligió fecha de vencimiento, la línea
+queda **sin vencimiento**: ya no se guarda la fecha del día, que después aparecía en el
+ítem del PDF, en el selector de lotes y en el reporte por caducidad como un vencimiento
+que en realidad nadie había puesto. Si el establecimiento exige lote o vencimiento, no
+cambia nada: se siguen eligiendo a mano.
 
 ## Barra de acciones del documento
 
@@ -388,6 +396,13 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.16** — Cuando el establecimiento **no exige lote**, al descontar se elige el
+  **lote real que vence primero** en vez del grupo *sin lote*. Ese grupo arrastraba como
+  vencimiento la fecha de ventas anteriores, así que parecía el más próximo a caducar y
+  se lo elegía antes que a un lote real con saldo. Además, si no se eligió vencimiento la
+  línea queda **sin vencimiento**: antes se guardaba la fecha del día, y esa fecha se veía
+  después como un vencimiento real en el ítem del PDF, en el selector de lotes y en el
+  reporte por caducidad.
 - **2.15** — En la tabla de productos de la factura, la **descripción** se ve
   completa: crece en alto con su texto (antes quedaba en poco más de una línea y el
   resto se escondía tras una barra). Las columnas **Código** y **Descripción** se

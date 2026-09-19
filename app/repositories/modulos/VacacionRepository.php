@@ -222,6 +222,21 @@ class VacacionRepository extends BaseRepository
         return (float) $st->fetchColumn();
     }
 
+    /**
+     * Vacaciones registradas del empleado, de la más reciente a la más antigua
+     * (PDF del detalle de vacaciones). Incluye las anuladas: el PDF las muestra
+     * como tales y no las suma en los totales.
+     */
+    public function getPorEmpleado(int $idEmpleado, int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT * FROM {$this->table}
+                                  WHERE id_empleado = :e AND id_empresa = :emp AND eliminado = false
+                                    AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
+                                  ORDER BY fecha_desde DESC, id DESC");
+        $st->execute([':e' => $idEmpleado, ':emp' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** Valor de vacaciones a incluir en el rol mensual del empleado. */
     public function getValorParaRol(int $idEmpresa, int $idEmpleado, int $anio, int $mes): float
     {

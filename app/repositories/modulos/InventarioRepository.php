@@ -195,6 +195,28 @@ class InventarioRepository extends BaseRepository
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
 
+    /** Líneas de una factura por id, con su producto y lote/NUP (enlace de cada ítem de una NC). */
+    public function getLineasVenta(int $idVenta, array $idsDetalle): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsDetalle))));
+        if (!$ids) {
+            return [];
+        }
+        $marcas = implode(',', array_fill(0, count($ids), '?'));
+        $st = $this->db->prepare(
+            "SELECT id, id_producto, numero_lote, nup
+             FROM ventas_detalle
+             WHERE id_venta = ? AND id IN ($marcas)"
+        );
+        $st->execute(array_merge([$idVenta], $ids));
+
+        $lineas = [];
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $l) {
+            $lineas[(int) $l['id']] = $l;
+        }
+        return $lineas;
+    }
+
     /** Lo ya devuelto por notas de crédito vigentes del mismo documento, por lote y NUP. */
     public function getDevueltoPorNcDeDocumento(int $idEmpresa, int $idProducto, string $numDoc): array
     {
@@ -285,9 +307,17 @@ class InventarioRepository extends BaseRepository
         // cada serial — un lote con stock repartido entre varios NUP podía
         // aparecer sin saldo suficiente en ninguna fila individual, aunque el
         // lote completo sí tuviera stock.
+        //
+        // Los lotes REALES van primero y el grupo sin lote (NULL / '' / 'SIN LOTE')
+        // queda al final: ese grupo arrastra como caducidad las fechas de ventas
+        // anteriores (antes se grababa la fecha del día cuando la salida no traía
+        // una real), así que parecía el próximo a vencer y se elegía antes que un
+        // lote real con saldo. Entre lotes reales manda la caducidad, como siempre.
         $sql = "SELECT numero_lote, fecha_caducidad, nup
                 FROM (
-                    SELECT numero_lote, MAX(fecha_caducidad) as fecha_caducidad, MIN(nup) as nup, MIN(id) as first_id, SUM(cantidad) as stock
+                    SELECT numero_lote,
+                           (numero_lote IS NULL OR numero_lote = '' OR UPPER(numero_lote) IN ('SIN LOTE', 'SIN_LOTE')) AS sin_lote,
+                           MAX(fecha_caducidad) as fecha_caducidad, MIN(nup) as nup, MIN(id) as first_id, SUM(cantidad) as stock
                     FROM inventario_kardex
                     WHERE id_empresa = :e AND id_producto = :p AND id_bodega = :b AND eliminado = false
                       AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e2)
@@ -295,7 +325,7 @@ class InventarioRepository extends BaseRepository
                     GROUP BY numero_lote
                 ) t
                 $whereStock
-                ORDER BY fecha_caducidad ASC NULLS LAST, first_id ASC
+                ORDER BY sin_lote ASC, fecha_caducidad ASC NULLS LAST, first_id ASC
                 LIMIT 1";
 
         $params = [':e' => $idEmpresa, ':e2' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodega];

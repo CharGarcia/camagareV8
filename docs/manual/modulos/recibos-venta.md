@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar
-version: 1.11
+version: 1.12
 orden: 35
 estado: activo
 ---
@@ -42,6 +42,12 @@ producto en esa bodega, y al elegir uno la lista queda **acotada a la fecha de e
 lote**. Así no puede quedar registrada una combinación lote/vencimiento que no
 exista en bodega. También funciona al revés: elegir la fecha selecciona su lote.
 Para volver a ver todas las fechas, devuelva el lote a *Lote...*.
+
+**Cuando el establecimiento no exige lote**, el sistema elige uno solo al descontar:
+toma el **lote real que vence primero** y solo usa el grupo *sin lote* si el producto no
+tiene ningún lote en esa bodega. Y si no se eligió vencimiento, la línea queda **sin
+vencimiento**: ya no se guarda la fecha del día. Es el mismo criterio de la factura de
+venta.
 
 Al **abrir un recibo ya guardado**, la línea muestra el lote y el vencimiento **con
 los que se emitió**, aunque el inventario haya cambiado desde entonces.
@@ -175,6 +181,10 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.12** — Igual que en la factura de venta: cuando el establecimiento **no exige
+  lote**, al descontar se elige el **lote real que vence primero** en vez del grupo *sin
+  lote*, y si no se eligió vencimiento la línea queda sin vencimiento (antes se guardaba
+  la fecha del día).
 - **1.11** — En la tabla de productos del recibo, la **descripción** se ve
   completa: crece en alto con su texto (antes quedaba en poco más de una línea y el
   resto se escondía tras una barra). Las columnas **Código** y **Descripción** se

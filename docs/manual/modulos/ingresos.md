@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada
-version: 2.8
+etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta
+version: 2.9
 orden: 10
 estado: activo
 ---
@@ -107,6 +107,32 @@ en *Configuración Contable → Ingresos y Egresos* (la misma que se ve en
 - Si un concepto no propone ninguna cuenta, revise que la tenga asignada en
   *Configuración Contable → Ingresos y Egresos*.
 
+## Observaciones que se completan solas
+
+Mientras arma un ingreso **nuevo**, el campo **Observaciones Generales** se va
+llenando solo con lo que se carga en el detalle, sin escribir nada:
+
+| Lo que se carga | Texto en Observaciones |
+|-----------------|------------------------|
+| Una factura de venta | `Cobro factura de venta 001-001-000000001` |
+| Varias facturas de venta | `Cobro facturas de venta 001-001-000000001, 001-001-000000002` |
+| Una factura y un recibo | `Cobro factura de venta 001-001-000000001; recibo de venta 001-002-000000004` |
+| Una factura de reembolso | `Cobro factura de reembolso 001-001-000000009` |
+| Un saldo inicial | `Cobro saldo inicial` y el número del documento |
+| Una línea de "Otros conceptos" | Su descripción, tal como se escribe |
+
+- Si quita un documento, lo desmarca o deja su monto en cero, sale del texto:
+  ya no se va a cobrar.
+- **Si escribe su propio texto, ese manda**: desde ese momento el campo no se
+  vuelve a tocar, aunque agregue o quite documentos. Si lo borra por completo,
+  se vuelve a llenar solo con el siguiente documento o línea que cargue.
+- Al **editar** un ingreso guardado, las observaciones siguen actualizándose
+  solas únicamente si son el texto automático tal cual. Un texto escrito a mano,
+  o un ingreso antiguo sin observaciones, no se cambia.
+
+Es el texto que se ve en la columna *Observaciones* del listado y como
+*Concepto* en el comprobante PDF y Excel.
+
 ## Campos obligatorios
 
 | Campo | Regla |
@@ -127,7 +153,7 @@ permite corregir prácticamente todo, sea cual sea su tipo (cobro de factura,
 recibo de venta, reembolso, anticipo u otro concepto):
 
 - La **fecha de emisión** y el campo **Recibo de**.
-- Las **observaciones**.
+- Las **observaciones** (ver *Observaciones que se completan solas*).
 - Los **documentos cobrados**: quitar uno, cambiar el monto cobrado o agregar
   otro documento pendiente del mismo tipo (el botón del concepto activo en la
   barra superior vuelve a abrir el buscador). Al editar, el buscador y los
@@ -347,6 +373,13 @@ deseable; para el contador o el administrador, active el acceso total.
   sola.
 
 ## Historial de cambios
+
+- **2.9** — **Observaciones automáticas**: al registrar un ingreso,
+  *Observaciones Generales* se llena sola con lo que se va cargando
+  (`Cobro factura de venta 001-001-000000001`, recibos, reembolsos, saldos
+  iniciales y las descripciones de "Otros conceptos"). Si el usuario escribe su
+  propio texto, el sistema ya no lo cambia. Nueva sección *Observaciones que se
+  completan solas*.
 
 - **2.8** — Al guardar un ingreso nuevo o editado, el listado se actualiza en la
   misma página, con la búsqueda, los filtros y el orden que tenía, y resalta la

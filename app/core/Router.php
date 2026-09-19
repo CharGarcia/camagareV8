@@ -121,6 +121,14 @@ class Router
                 }
             }
 
+            // /solicitud-vacaciones/{token}[/enviar] → formulario público con el que el
+            // empleado solicita sus vacaciones (sin auth; el token llega en su correo)
+            if (($parts[0] ?? '') === 'solicitud-vacaciones') {
+                $controller    = 'SolicitudVacaciones';
+                $_GET['token'] = $parts[1] ?? ($_GET['token'] ?? '');
+                $action        = (($parts[2] ?? '') === 'enviar') ? 'enviar' : 'index';
+            }
+
             // /modulos/videollamadas/sala/{codigo} → abre una sala concreta por su
             // código público. Sin el código, la sala solo se resolvería por la
             // sesión, y entonces el enlace no serviría para compartir.

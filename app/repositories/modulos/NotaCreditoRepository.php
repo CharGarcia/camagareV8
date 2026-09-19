@@ -467,13 +467,9 @@ class NotaCreditoRepository extends BaseRepository
 
     public function insertDetalle(array $data): int
     {
-        $sql = "INSERT INTO notas_credito_detalle (
-                    id_nota_credito, id_producto, codigo_principal, codigo_auxiliar,
-                    descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
-        
-        $st = $this->db->prepare($sql);
-        $st->execute([
+        $cols = "id_nota_credito, id_producto, codigo_principal, codigo_auxiliar,
+                 descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto";
+        $params = [
             $data['id_nota_credito'],
             $data['id_producto'] ?? null,
             $data['codigo_principal'] ?? null,
@@ -483,7 +479,18 @@ class NotaCreditoRepository extends BaseRepository
             $data['precio_unitario'],
             $data['descuento'] ?? 0,
             $data['precio_total_sin_impuesto']
-        ]);
+        ];
+
+        // Línea de la factura de la que viene el ítem (database/20260919_nc_detalle_linea_factura.sql).
+        // Mientras ese SQL no esté aplicado, el ítem se guarda sin el enlace.
+        if ($this->columnaExiste('notas_credito_detalle', 'id_venta_detalle')) {
+            $cols    .= ", id_venta_detalle";
+            $params[] = !empty($data['id_venta_detalle']) ? (int) $data['id_venta_detalle'] : null;
+        }
+
+        $marcas = implode(', ', array_fill(0, count($params), '?'));
+        $st = $this->db->prepare("INSERT INTO notas_credito_detalle ({$cols}) VALUES ({$marcas}) RETURNING id");
+        $st->execute($params);
 
         return (int) $st->fetchColumn();
     }

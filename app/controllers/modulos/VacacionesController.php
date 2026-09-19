@@ -5,14 +5,19 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\repositories\modulos\VacacionRepository;
+use App\repositories\modulos\VacacionSolicitudRepository;
 use App\Rules\modulos\VacacionRules;
+use App\Rules\modulos\VacacionSolicitudRules;
 use App\Services\LogSistemaService;
+use App\Services\modulos\VacacionPdfService;
 use App\Services\modulos\VacacionService;
+use App\Services\modulos\VacacionSolicitudService;
 use App\models\CatalogoNovedades;
 
 class VacacionesController extends BaseModuloController
 {
     private VacacionService $service;
+    private ?VacacionSolicitudService $solicitudService = null;
     private const RUTA_MODULO = 'modulos/vacaciones';
 
     public function __construct()
@@ -61,6 +66,8 @@ class VacacionesController extends BaseModuloController
             'usuariosFiltro' => $this->service->getUsuariosConVacaciones($idEmpresa),
             'vistaConfig' => $prefsVista,
             'idEmpresa'  => $idEmpresa,
+            // Bandeja de solicitudes: badge con las que esperan aprobación (0 si su SQL no está aplicado).
+            'solicitudesPendientes' => $this->solicitudes()->contarPendientes($idEmpresa, $idUsuarioFiltro),
         ]);
     }
 
@@ -284,6 +291,250 @@ class VacacionesController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    // ─── Solicitudes de vacaciones ───────────────────────────────────────────
+    //
+    // Permisos: enviar el enlace y APROBAR piden Crear (aprobar registra la
+    // vacación); rechazar y anular un enlace piden Actualizar. Sin acceso total,
+    // cada usuario solo ve y resuelve las solicitudes que él envió (§6).
+
+    private function solicitudes(): VacacionSolicitudService
+    {
+        if ($this->solicitudService === null) {
+            $this->solicitudService = new VacacionSolicitudService(
+                new VacacionSolicitudRepository(),
+                new VacacionSolicitudRules(),
+                new LogSistemaService()
+            );
+        }
+        return $this->solicitudService;
+    }
+
+    /** null si el usuario tiene acceso total; su id si solo ve lo suyo. */
+    private function filtroPropio(): ?int
+    {
+        return empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
+    }
+
+    /** Envía al empleado el enlace para que llene su solicitud. POST: id_empleado, correo. */
+    public function enviarSolicitudAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        try {
+            $res = $this->solicitudes()->enviarInvitacion(
+                (int) $_SESSION['id_empresa'],
+                (int) ($_POST['id_empleado'] ?? 0),
+                trim((string) ($_POST['correo'] ?? '')),
+                (int) $_SESSION['id_usuario']
+            );
+            echo json_encode([
+                'ok'      => true,
+                'msg'     => $res['enviado']
+                    ? 'Solicitud enviada a ' . $res['correo'] . '.'
+                    : 'No se pudo enviar el correo (revise la configuración de correo de la empresa). Copie el enlace y envíeselo al empleado.',
+                'enviado' => $res['enviado'],
+                'url'     => $res['url'],
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Solicitudes de un empleado (ficha del empleado). GET: id_empleado. */
+    public function solicitudesEmpleadoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $svc  = $this->solicitudes();
+            $filas = $svc->getPorEmpleado(
+                (int) ($_GET['id_empleado'] ?? 0),
+                (int) $_SESSION['id_empresa'],
+                $this->filtroPropio()
+            );
+            echo json_encode([
+                'ok'         => true,
+                'disponible' => $svc->disponible(),
+                'data'       => array_map(fn($s) => $this->filaSolicitud($s, $svc), $filas),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Bandeja del módulo: solicitudes de toda la empresa. GET: estado (vacío = abiertas). */
+    public function solicitudesBandejaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $svc       = $this->solicitudes();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $filtro    = $this->filtroPropio();
+            $filas     = $svc->getBandeja($idEmpresa, trim((string) ($_GET['estado'] ?? '')), $filtro);
+            echo json_encode([
+                'ok'         => true,
+                'disponible' => $svc->disponible(),
+                'pendientes' => $svc->contarPendientes($idEmpresa, $filtro),
+                'data'       => array_map(fn($s) => $this->filaSolicitud($s, $svc), $filas),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Lo que necesita la UI de cada solicitud (sin exponer el token completo salvo en su enlace). */
+    private function filaSolicitud(array $s, VacacionSolicitudService $svc): array
+    {
+        return [
+            'id'               => (int) $s['id'],
+            'id_empleado'      => (int) $s['id_empleado'],
+            'empleado_nombre'  => $s['empleado_nombre'] ?? '',
+            'empleado_identificacion' => $s['empleado_identificacion'] ?? '',
+            'estado'           => $s['estado'],
+            'correo_destino'   => $s['correo_destino'],
+            'enviado_at'       => $s['enviado_at'],
+            'expira_at'        => $s['expira_at'],
+            'fecha_desde'      => $s['fecha_desde'],
+            'fecha_hasta'      => $s['fecha_hasta'],
+            'dias_solicitados' => (float) ($s['dias_solicitados'] ?? 0),
+            'motivo'           => $s['motivo'],
+            'contacto'         => $s['contacto'],
+            'solicitado_at'    => $s['solicitado_at'],
+            'resuelto_at'      => $s['resuelto_at'],
+            'resuelto_nombre'  => $s['resuelto_nombre'] ?? null,
+            'comentario'       => $s['comentario'],
+            'id_vacacion'      => $s['id_vacacion'] !== null ? (int) $s['id_vacacion'] : null,
+            'url'              => $s['estado'] === 'enviada' ? $svc->urlDe($s) : '',
+        ];
+    }
+
+    /** Aprueba la solicitud: crea la vacación. POST: id, comentario, notificar. */
+    public function aprobarSolicitudAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        try {
+            $id        = (int) ($_POST['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $this->requireRegistroPropio($this->solicitudes()->getDetalle($id, $idEmpresa));
+
+            $idVacacion = $this->solicitudes()->aprobar($id, $idEmpresa, (int) $_SESSION['id_usuario'], [
+                'comentario' => trim((string) ($_POST['comentario'] ?? '')),
+                'notificar'  => !empty($_POST['notificar']),
+            ]);
+            echo json_encode(['ok' => true, 'msg' => 'Solicitud aprobada: la vacación quedó registrada.', 'id_vacacion' => $idVacacion]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Rechaza la solicitud. POST: id, motivo, notificar. */
+    public function rechazarSolicitudAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            $id        = (int) ($_POST['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $this->requireRegistroPropio($this->solicitudes()->getDetalle($id, $idEmpresa));
+
+            $this->solicitudes()->rechazar(
+                $id,
+                $idEmpresa,
+                (int) $_SESSION['id_usuario'],
+                trim((string) ($_POST['motivo'] ?? '')),
+                !empty($_POST['notificar'])
+            );
+            echo json_encode(['ok' => true, 'msg' => 'Solicitud rechazada.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Anula un enlace que el empleado todavía no usó. POST: id. */
+    public function cancelarSolicitudAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            $id        = (int) ($_POST['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $this->requireRegistroPropio($this->solicitudes()->getDetalle($id, $idEmpresa));
+
+            $this->solicitudes()->cancelar($id, $idEmpresa, (int) $_SESSION['id_usuario']);
+            echo json_encode(['ok' => true, 'msg' => 'El enlace quedó anulado.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** PDF de una solicitud. GET: id. */
+    public function solicitudPdf(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        try {
+            $sol = $this->solicitudes()->getDetalle($id, $idEmpresa);
+            if (!$sol) { http_response_code(404); echo 'Solicitud no encontrada'; exit; }
+            $this->requireRegistroPropio($sol);
+
+            (new VacacionPdfService())->generarSolicitud($sol, $this->cargarEmpresaParaPdf($idEmpresa), 'D');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500);
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /** PDF del detalle de vacaciones de un empleado (períodos, saldo y valores). GET: id_empleado. */
+    public function detalleEmpleadoPdf(): void
+    {
+        $this->requireLeer();
+        $idEmpleado = (int) ($_GET['id_empleado'] ?? 0);
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        try {
+            $emp = $this->service->getEmpleado($idEmpleado, $idEmpresa);
+            if (!$emp) { http_response_code(404); echo 'Empleado no encontrado'; exit; }
+
+            $info       = $this->service->getInfoEmpleado($idEmpleado, $idEmpresa);
+            $vacaciones = $this->service->getVacacionesEmpleado($idEmpleado, $idEmpresa);
+
+            (new VacacionPdfService())->generarDetalleEmpleado($emp, $info, $vacaciones, $this->cargarEmpresaParaPdf($idEmpresa), 'D');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500);
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /** Datos de la empresa (con el logo del establecimiento) para los PDF. */
+    private function cargarEmpresaParaPdf(int $idEmpresa): array
+    {
+        $empresaModel = new \App\models\Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+        if (!empty($establecimientos[0]['logo_ruta'])) {
+            $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+        }
+        return $empresa;
     }
 
     private function recoger(): array

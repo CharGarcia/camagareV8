@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/vacaciones
 tipo: modulo
 visibilidad: todos
-etiquetas: vacaciones, dias de vacaciones, descanso, saldo de vacaciones, antiguedad, gozadas, periodo vacacional, buscar vacaciones, buscador, filtros, filtrar vacaciones, vacaciones por empleado, chips, periodos, periodos de vacaciones, periodos tomados, periodos pagados, vacaciones tomadas, vacaciones pagadas, vacaciones no gozadas, vacaciones acumuladas, saldo inicial de vacaciones, ajustar saldo, empleados de otro sistema, migracion de empleados, vacaciones al dia
-version: 1.3
+etiquetas: vacaciones, dias de vacaciones, descanso, saldo de vacaciones, antiguedad, gozadas, periodo vacacional, buscar vacaciones, buscador, filtros, filtrar vacaciones, vacaciones por empleado, chips, periodos, periodos de vacaciones, periodos tomados, periodos pagados, vacaciones tomadas, vacaciones pagadas, vacaciones no gozadas, vacaciones acumuladas, saldo inicial de vacaciones, ajustar saldo, empleados de otro sistema, migracion de empleados, vacaciones al dia, solicitud de vacaciones, solicitar vacaciones, pedir vacaciones, permiso de vacaciones, formulario de vacaciones, enlace por correo, aprobar vacaciones, rechazar vacaciones, autorizar vacaciones, solicitudes pendientes, pdf de vacaciones, imprimir vacaciones, detalle de vacaciones
+version: 1.4
 orden: 40
 estado: activo
 ---
@@ -100,6 +100,89 @@ quite la marca de los que ya no correspondan.
 5. Indique el **mes del rol** en el que se refleja.
 6. Guarde.
 
+## Solicitudes de vacaciones
+
+El empleado **no entra al sistema**: recibe por correo un enlace personal, llena
+ahí su solicitud y en el sistema se aprueba o se rechaza. Al aprobarla, la
+vacación queda registrada sola, con sus días y su valor.
+
+### 1. Enviarle el enlace al empleado
+
+1. Abra la ficha del empleado (módulo **Empleados**) y vaya a la pestaña
+   **Vacaciones**.
+2. Pulse **Enviar solicitud**. Se propone el correo de la ficha; puede cambiarlo.
+3. Confirme.
+
+El empleado recibe un correo con el botón *Solicitar mis vacaciones*. El enlace
+es **personal**, sirve **una sola vez** y **caduca a los 15 días**. Si le envía
+otro, el anterior queda anulado: siempre vale el último.
+
+> Si la empresa no tiene configurado el correo, el envío falla y el sistema lo
+> avisa en ese momento: use **Copiar enlace** y mándeselo por WhatsApp o como
+> prefiera. El enlace funciona igual.
+
+### 2. Lo que llena el empleado
+
+Al abrir el enlace ve su nombre, su antigüedad y los **días que tiene
+disponibles**, y completa:
+
+| Campo | Detalle |
+|-------|---------|
+| Desde / Hasta | Días que quiere tomar. Los días se calculan solos con ese rango |
+| Días que solicita | Sugeridos por las fechas; puede corregirlos si no toma el rango completo |
+| Motivo | Opcional |
+| Teléfono de contacto | Opcional: dónde ubicarlo mientras esté de vacaciones |
+
+No puede pedir más días de los que abarcan las fechas, ni más de su saldo, ni
+fechas de hace más de 30 días. Al enviar, el enlace se consume y la solicitud
+queda **esperando aprobación**.
+
+### 3. Aprobar o rechazar
+
+En la pestaña **Vacaciones** de la ficha del empleado, o en la bandeja del
+listado (botón **Solicitudes**, que muestra cuántas esperan aprobación):
+
+- **Aprobar** (✔) registra la vacación del empleado con esas fechas y días: el
+  valor se calcula con su sueldo, el mes del rol sale de la fecha *desde* y el
+  saldo se actualiza al momento. Puede dejar un comentario.
+- **Rechazar** (✘) pide el **motivo**, que es obligatorio.
+- En ambos casos, la casilla *Avisar al empleado por correo* le manda el
+  resultado. Si la desmarca, no se le avisa.
+- Mientras el empleado no haya usado el enlace, puede **anularlo** (✘).
+
+Aprobar una solicitud es lo mismo que registrar la vacación a mano: si el rol
+mensual de ese período ya está pagado, el sistema no deja aprobarla y dice por
+qué.
+
+### Estados de una solicitud
+
+| Estado | Qué significa |
+|--------|---------------|
+| Enviada al empleado | El enlace salió y se espera que el empleado lo llene |
+| Esperando aprobación | El empleado ya la envió |
+| Aprobada | Se registró la vacación (queda enlazada a ella) |
+| Rechazada | No se registró nada; el motivo queda guardado |
+| Anulada | El enlace se anuló antes de que el empleado lo usara |
+
+### Imprimir la solicitud
+
+El botón **PDF** (🗎) de cada solicitud descarga el documento con los datos del
+empleado, las fechas y días pedidos, el motivo, la resolución (quién y cuándo) y
+las firmas del empleado y de quien autoriza.
+
+## PDF del detalle de vacaciones de un empleado
+
+En la pestaña **Vacaciones** de la ficha del empleado, el botón **Detalle PDF**
+descarga su historial completo:
+
+- Resumen: fecha de ingreso, antigüedad, sueldo base, derecho del año, derecho
+  acumulado, días tomados o pagados antes del sistema, gozados y **saldo**.
+- Cuadro de **períodos** (años de trabajo) con su situación.
+- **Vacaciones registradas** con fechas, días, días de derecho, **valor**, mes
+  del rol, estado y observación, con los totales al pie.
+- Si hay vacaciones en estado *pagado*, se suma aparte el **valor ya pagado por
+  vacaciones**. Las anuladas salen en gris y no suman.
+
 ## Validaciones
 
 | Regla | Detalle |
@@ -158,6 +241,13 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Ver el listado, el saldo y el cuadro de períodos | Ver |
 | Registrar vacaciones y marcar períodos | Crear |
 | Quitar la marca de un período | Eliminar. Sin **acceso total**, solo las marcas que hizo el propio usuario |
+| Enviarle el enlace al empleado | Crear |
+| Aprobar una solicitud (registra la vacación) | Crear |
+| Rechazar una solicitud o anular un enlace | Actualizar |
+| Ver e imprimir solicitudes | Ver |
+
+> Sin **acceso total**, cada usuario solo ve y resuelve las solicitudes que él
+> mismo envió, igual que con las vacaciones del listado.
 
 ## Errores frecuentes
 
@@ -172,8 +262,26 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   completos.
 - **"El empleado no tiene fecha de ingreso"**: regístrela en su ficha (módulo
   Empleados); sin ella no hay períodos que mostrar.
+- **El empleado dice que "el enlace no es válido o ya no está disponible"**: ya
+  lo usó, el enlace caducó (15 días), se envió uno nuevo que anuló al anterior, o
+  la empresa está inactiva. Envíele uno nuevo desde su ficha.
+- **"No se pudo enviar el correo"** al mandar la solicitud: la empresa no tiene
+  configurado el correo. El enlace sí se creó: cópielo y envíeselo usted.
+- **"Esta solicitud ya fue resuelta"**: otro usuario la aprobó o la rechazó
+  mientras usted tenía la ventana abierta. Actualícela.
+- **"Las solicitudes de vacaciones todavía no están habilitadas en la base de
+  datos"**: falta aplicar `database/modulos_vacaciones_solicitudes.sql`. Avise al
+  administrador; el resto del módulo sigue funcionando igual.
 
 ## Historial de cambios
+
+- **1.4** — Solicitudes de vacaciones: se le envía al empleado un enlace personal
+  por correo, él llena su solicitud desde ahí (sin entrar al sistema) y se
+  aprueba o se rechaza desde la pestaña *Vacaciones* de su ficha o desde la
+  bandeja **Solicitudes** del listado. Al aprobar se registra la vacación. Nuevos
+  PDF: la solicitud (con firmas) y el detalle de vacaciones del empleado (con
+  períodos, valores y lo ya pagado). Requiere aplicar
+  `database/modulos_vacaciones_solicitudes.sql`.
 
 - **1.3** — En la columna *Situación* del cuadro de períodos, los marcados como
   tomados se muestran como *Vacaciones tomadas* (antes *Tomado antes del

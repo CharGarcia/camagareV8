@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso
-version: 1.11
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado
+version: 1.13
 orden: 30
 estado: activo
 ---
@@ -84,11 +84,32 @@ Facturación): con esa opción apagada la venta no descontó nada, así que tamp
 nada que devolver.
 
 La mercadería vuelve **con el mismo lote, NUP / serial y fecha de caducidad** con que
-salió en la factura que la nota modifica; no hay que digitarlos. Si la devolución abarca
-varios lotes, se reparte entre ellos en el orden en que salieron, descontando lo que
-otras notas de crédito de la misma factura ya devolvieron. Lo que no se pueda atribuir a
-un lote (nota sobre un saldo inicial, factura sin lote, o unidades de más sobre lo
-vendido) entra al inventario sin lote, como antes.
+salió en la factura que la nota modifica; no hay que digitarlos.
+
+### Cada ítem recuerda su línea de la factura
+
+Al cargar la factura en la nota de crédito, cada ítem queda enlazado —sin que se vea en
+pantalla— a la línea de la factura de la que viene, y devuelve **el lote y el NUP de esa
+línea**. Por eso, para una devolución parcial basta con dejar las líneas que realmente
+regresan y borrar las demás:
+
+| Factura | El cliente devuelve | En la nota de crédito | Vuelve al inventario |
+|---|---|---|---|
+| Línea 1: lote A x 5 · Línea 2: lote B x 5 | 3 unidades del lote B | Borrar la línea 1 y poner 3 en la línea 2 | 3 al **lote B** |
+| Seriales S1, S2 y S3, una línea cada uno | El serial S3 | Dejar solo la línea de S3 | El **serial S3** |
+
+Algunos casos no tienen una línea de factura de la cual tomar el lote, y se reparten
+entre los lotes que sacó la factura **en el orden en que salieron**, descontando lo que
+otras notas de crédito de la misma factura ya devolvieron:
+
+- ítems agregados con **Agregar línea manual**;
+- ítems a los que se les cambió el producto o se les editó la descripción (eso rompe el
+  enlace con la línea);
+- líneas cuyo lote eligió el sistema al facturar, porque el establecimiento no exige lote.
+
+Si un ítem devuelve más de lo que salió de su lote, el excedente sigue ese mismo reparto.
+Lo que no se pueda atribuir a ningún lote (nota sobre un saldo inicial, factura sin lote,
+o unidades de más sobre lo vendido) entra al inventario sin lote.
 
 ## Exportar el documento
 
@@ -196,6 +217,12 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.13** — Cada ítem cargado desde la factura queda enlazado a su **línea de factura** y
+  devuelve el **lote y el NUP de esa línea**. Antes, en una devolución parcial de una factura
+  con varios lotes o seriales del mismo producto, la nota repartía por orden de salida y
+  podía devolver al lote o al serial equivocado. Además, al generar la nota desde la
+  **Factura de Venta**, el número del documento modificado ya viene lleno (antes quedaba vacío).
+  Requiere el script `database/20260919_nc_detalle_linea_factura.sql`.
 - **1.12** — La devolución de stock de la nota de crédito ahora regresa el producto con
   el **lote, NUP y fecha de caducidad** de la factura original (antes entraba sin ellos).
   Las notas ya emitidas se corrigen con el script `database/nc_reparar_lote_nup_caducidad.sql`.

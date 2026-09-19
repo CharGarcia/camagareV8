@@ -684,15 +684,14 @@ class FacturaVentaService
                     if ($det['inventariable'] && $afectaInv && $det['tipo_produccion'] !== '02' && empty($det['es_libre'])) {
                         if (!$obliLotes && empty($det['lote'])) {
                             $det['lote'] = 'sin_lote';
-                            // Caducidad, igual que el NUP: solo se pone la fecha centinela
-                            // (hoy) si el detalle NO trae una real. La caducidad tiene su
-                            // propia obligatoriedad (obligatorio_caducidad), independiente
-                            // de obligatorio_lotes — sobrescribirla siempre borraba una
-                            // fecha real elegida por el usuario cuando la empresa no exige
-                            // lotes pero sí exige caducidad.
-                            if (empty($det['caducidad'])) {
-                                $det['caducidad'] = date('Y-m-d');
-                            }
+                            // La caducidad ya NO se rellena con la fecha de hoy. Esa fecha
+                            // "centinela" se leía después como un vencimiento real (selector
+                            // de lotes, reporte por caducidad, ítem del RIDE) y, al quedar en
+                            // el pasado, hacía que el grupo sin lote pareciera el próximo a
+                            // vencer y se lo eligiera antes que a un lote real. Si el usuario
+                            // no eligió caducidad, la línea se queda sin ella; su
+                            // obligatoriedad (obligatorio_caducidad) ya la comprobó
+                            // $this->rules->validar(), que corre antes de este bloque.
                             // El NUP NO se toca aquí: es un dato independiente del lote (no
                             // forma parte de la clave de agregación de stock de abajo) y tiene
                             // su propia obligatoriedad (obligatorio_nup). Ponerlo en null a la
@@ -959,15 +958,14 @@ class FacturaVentaService
                     if ($det['inventariable'] && $afectaInv && $det['tipo_produccion'] !== '02' && empty($det['es_libre'])) {
                         if (!$obliLotes && empty($det['lote'])) {
                             $det['lote'] = 'sin_lote';
-                            // Caducidad, igual que el NUP: solo se pone la fecha centinela
-                            // (hoy) si el detalle NO trae una real. La caducidad tiene su
-                            // propia obligatoriedad (obligatorio_caducidad), independiente
-                            // de obligatorio_lotes — sobrescribirla siempre borraba una
-                            // fecha real elegida por el usuario cuando la empresa no exige
-                            // lotes pero sí exige caducidad.
-                            if (empty($det['caducidad'])) {
-                                $det['caducidad'] = date('Y-m-d');
-                            }
+                            // La caducidad ya NO se rellena con la fecha de hoy. Esa fecha
+                            // "centinela" se leía después como un vencimiento real (selector
+                            // de lotes, reporte por caducidad, ítem del RIDE) y, al quedar en
+                            // el pasado, hacía que el grupo sin lote pareciera el próximo a
+                            // vencer y se lo eligiera antes que a un lote real. Si el usuario
+                            // no eligió caducidad, la línea se queda sin ella; su
+                            // obligatoriedad (obligatorio_caducidad) ya la comprobó
+                            // $this->rules->validar(), que corre antes de este bloque.
                             // El NUP NO se toca aquí: es un dato independiente del lote (no
                             // forma parte de la clave de agregación de stock de abajo) y tiene
                             // su propia obligatoriedad (obligatorio_nup). Ponerlo en null a la

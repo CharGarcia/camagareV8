@@ -688,11 +688,56 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     // muestra, arriba en la barra de conceptos). Ver ingConceptoCuentaActual().
     const ING_COMP_CON_DOCUMENTOS = <?= json_encode($comportamientosDocDriven) ?>;
 
+    // ── Observaciones automáticas ─────────────────────────────────────────────
+    // "Observaciones Generales" se arma sola con lo que se va cargando: "Cobro factura de venta
+    // 001-001-000000001; recibo de venta 001-001-000000004" más la descripción de cada línea de
+    // "Otros conceptos". En cuanto el usuario escribe su propio texto el campo ya no se toca; si
+    // lo vacía por completo, vuelve a completarse solo con el siguiente cambio.
+    let ingObsAuto = true;
+
+    const ING_OBS_TIPOS = {
+        FACTURA:           ['factura de venta', 'facturas de venta'],
+        RECIBO:            ['recibo de venta', 'recibos de venta'],
+        FACTURA_REEMBOLSO: ['factura de reembolso', 'facturas de reembolso'],
+        SALDO_INICIAL:     ['saldo inicial', 'saldos iniciales']
+    };
+
+    function ingGenerarObservaciones() {
+        // Mismo filtro que guardarIngreso(): un documento desmarcado o en $0 no se guarda.
+        const grupos = {};
+        docPendientes.filter(f => f.seleccionado && f.cobrado > 0).forEach(f => {
+            const tipo = f.tipo_documento || 'FACTURA';
+            (grupos[tipo] = grupos[tipo] || []).push(f.numero);
+        });
+        const partes = Object.keys(grupos).map(tipo => {
+            const nums = grupos[tipo];
+            const [singular, plural] = ING_OBS_TIPOS[tipo] || ['documento', 'documentos'];
+            return `${nums.length > 1 ? plural : singular} ${nums.join(', ')}`;
+        });
+        const textos = partes.length ? ['Cobro ' + partes.join('; ')] : [];
+        detalleManual.forEach(d => {
+            const desc = String(d.descripcion || '').trim();
+            if (desc) textos.push(desc);
+        });
+        return textos.join('; ');
+    }
+
+    function ingActualizarObservacionesAuto() {
+        const el = document.getElementById('m-input-observaciones');
+        if (!el || el.disabled || !ingObsAuto) return;
+        el.value = ingGenerarObservaciones();
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         const puntoSel = document.getElementById('m-select-punto');
         if (puntoSel) {
             syncIngresoSecuencial(puntoSel.value);
         }
+
+        // Si el usuario escribe en Observaciones, su texto manda; si lo vacía, vuelve el automático.
+        document.getElementById('m-input-observaciones')?.addEventListener('input', (e) => {
+            ingObsAuto = e.target.value.trim() === '';
+        });
 
         // Autocomplete para "Recibo de"
         const inputReciboDe = document.getElementById('m-recibo-de-input');
@@ -1492,6 +1537,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function renderDetalles() {
         renderDocsPendientesIngreso();
         renderManualIngreso();
+        ingActualizarObservacionesAuto();
     }
 
     function renderDocsPendientesIngreso() {
@@ -1659,6 +1705,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         docPendientes[idx].cobrado = v;
         recalcularTotales();
+        ingActualizarObservacionesAuto(); // un documento en $0 sale del texto (no se guarda)
     }
 
     function agregarFilaManualIngreso() {
@@ -1770,6 +1817,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     function actualizarManualIngresoDesc(idx, val) {
         if (detalleManual[idx]) detalleManual[idx].descripcion = val;
+        ingActualizarObservacionesAuto();
     }
 
     function actualizarManualIngresoMonto(idx, val) {
@@ -1985,6 +2033,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         formasPagoData = [];
         clientesCargados = {};
         esIngresoModoLectura = false;
+        ingObsAuto = true; // ingreso nuevo: Observaciones se completa sola (ver ingGenerarObservaciones)
         actualizarInfoClientesCargados();
 
         // Aplicar preferencias/favoritos del usuario
@@ -2280,6 +2329,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 abrirModalIngreso(); // Resets all, variables and resets fields to enabled
                 esIngresoModoLectura = soloLectura; // abrirModalIngreso() lo reinicia a false
+                ingObsAuto = false; // no pisar las observaciones guardadas; se decide tras hidratar
                 document.getElementById('tab-ingreso-cnt-li')?.classList.remove('d-none'); // Registro guardado: sí mostrar Asiento contable
 
                 // Cambiar estética según estado
@@ -2436,6 +2486,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         });
                     }
                 }
+
+                // Observaciones automáticas al editar: siguen completándose solas únicamente si lo
+                // guardado es justo el texto automático (nadie lo reescribió); un texto propio —o
+                // vacío, como los ingresos anteriores a esta función— no se toca.
+                const obsGuardada = (ing.observaciones || '').trim();
+                ingObsAuto = !soloLectura && obsGuardada !== '' && obsGuardada === ingGenerarObservaciones();
 
                 actualizarInfoClientesCargados();
                 renderDetalles();

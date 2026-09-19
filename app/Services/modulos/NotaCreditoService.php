@@ -100,6 +100,7 @@ class NotaCreditoService
                 $this->logService
             );
             $devuelveStock = $invService->facturacionAfectaInventario((int) ($data['id_establecimiento'] ?? 0));
+            $data['detalles'] = $this->enlazarLineasFactura($data['detalles'], $data, $invService);
 
             foreach ($data['detalles'] as $det) {
                 $det['id_nota_credito'] = $idNC;
@@ -122,6 +123,7 @@ class NotaCreditoService
                         'id_referencia'   => $idNC,
                         'num_doc_modificado' => $data['num_doc_modificado'] ?? '',
                         'cod_doc_modificado' => $data['cod_doc_modificado'] ?? '01',
+                        'linea_origen'    => $det['linea_origen'],
                         'descripcion'     => "Devolución NC {$data['establecimiento']}-{$data['punto_emision']}-{$data['secuencial']}",
                         'id_usuario'      => $data['id_usuario']
                     ]);
@@ -314,6 +316,7 @@ class NotaCreditoService
             );
             $invService->revertirMovimientosPorReferencia('nota_credito', $id, (int)$data['id_empresa'], (int)$data['id_usuario']);
             $devuelveStock = $invService->facturacionAfectaInventario((int) ($data['id_establecimiento'] ?? 0));
+            $data['detalles'] = $this->enlazarLineasFactura($data['detalles'], $data, $invService);
 
             $this->repository->deleteDetalles($id);
 
@@ -338,6 +341,7 @@ class NotaCreditoService
                         'id_referencia'   => $id,
                         'num_doc_modificado' => $data['num_doc_modificado'] ?? '',
                         'cod_doc_modificado' => $data['cod_doc_modificado'] ?? '01',
+                        'linea_origen'    => $det['linea_origen'],
                         'descripcion'     => "Devolución NC Actualizada {$data['secuencial']}",
                         'id_usuario'      => $data['id_usuario']
                     ]);
@@ -366,6 +370,35 @@ class NotaCreditoService
             $db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Cada ítem cargado desde la factura trae, oculto, el id de su línea (id_venta_detalle): de
+     * ella sale el lote / NUP que vuelve al inventario. Solo se conserva si la línea es de la
+     * factura que modifica la nota y del mismo producto (si el usuario cambió el producto del
+     * ítem, ya no le corresponde); si no, el ítem queda sin enlace y se reparte por orden de salida.
+     */
+    private function enlazarLineasFactura(array $detalles, array $data, InventarioService $invService): array
+    {
+        $lineas = $invService->lineasFacturaParaNC(
+            (int) $data['id_empresa'],
+            (string) ($data['num_doc_modificado'] ?? ''),
+            (string) ($data['cod_doc_modificado'] ?? '01'),
+            array_column($detalles, 'id_venta_detalle')
+        );
+
+        foreach ($detalles as &$det) {
+            $idLinea = (int) ($det['id_venta_detalle'] ?? 0);
+            $linea   = $lineas[$idLinea] ?? null;
+            if ($linea && $linea['id_producto'] !== (int) ($det['id_producto'] ?? 0)) {
+                $linea = null;
+            }
+            $det['id_venta_detalle'] = $linea ? $idLinea : null;
+            $det['linea_origen']     = $linea;
+        }
+        unset($det);
+
+        return $detalles;
     }
 
     /**
