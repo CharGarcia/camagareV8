@@ -6,7 +6,7 @@ ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
 etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf
-version: 1.7
+version: 1.8
 orden: 10
 estado: activo
 ---
@@ -102,6 +102,26 @@ vacaciones sin entrar al sistema:
 
 El detalle de cómo funciona cada estado está en el artículo del módulo
 *Vacaciones*.
+
+### Registrar vacaciones desde la ficha
+
+Debajo de las solicitudes está la lista de **vacaciones registradas** del
+empleado —fechas, días, valor, mes del rol, estado y observación—, con el total
+de días y de dinero junto al título (sin contar las anuladas).
+
+- **Registrar vacación** abre el mismo formulario del módulo *Vacaciones* con el
+  empleado ya fijado: fechas, días gozados (se sugieren con el rango elegido),
+  valor calculado con su sueldo, mes y año del rol (salen de la fecha *desde*),
+  si se incluye en el rol de pagos y observación. Arriba se recuerda su saldo.
+- Pulsando una fila se abre para **editar**; desde ahí también se **elimina**
+  (botón a la izquierda del pie).
+- Al registrar, el estado es siempre *Registrado*; al editar se puede cambiar a
+  *Pagado* o *Anulado*.
+- El saldo y los períodos de abajo se actualizan al momento.
+
+Es lo mismo que registrarlas desde el módulo *Vacaciones*: mismas validaciones
+—incluido el bloqueo cuando el rol mensual de ese período ya está pagado—, misma
+auditoría, y el valor entra igual al rol del mes indicado.
 
 El cuadro usa la fecha de ingreso **guardada** en la pestaña *Periodos*. Si la
 corrige, guarde el empleado y el cuadro se recalcula.
@@ -203,6 +223,10 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Historial de cambios
 
+- **1.8** — En la pestaña *Vacaciones*, lista de **vacaciones registradas** del
+  empleado y botón **Registrar vacación**: el mismo formulario del módulo
+  Vacaciones con el empleado ya fijado, con editar y eliminar desde la propia
+  ficha.
 - **1.7** — En la pestaña *Vacaciones*, sección **Solicitudes**: se le envía al
   empleado un enlace por correo para que pida sus vacaciones, y desde ahí se
   aprueban o se rechazan. Nuevos PDF de la solicitud y del detalle de vacaciones

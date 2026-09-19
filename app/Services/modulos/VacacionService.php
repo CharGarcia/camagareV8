@@ -326,6 +326,9 @@ class VacacionService
     {
         $antes = $this->repo->getDetalle($id, $idEmpresa);
         if (!$antes) throw new Exception('Registro no encontrado.');
+        // Quien no envía el estado (flujos que no lo editan) conserva el que tenía:
+        // el repositorio usa 'registrado' por defecto y lo cambiaría sin querer.
+        if (empty($data['estado'])) $data['estado'] = $antes['estado'];
         $data = $this->prepararCalculos($data, $idEmpresa);
         $this->rules->validate($data);
 

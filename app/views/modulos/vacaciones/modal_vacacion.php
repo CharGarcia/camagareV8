@@ -6,7 +6,11 @@ $anioActual = (int) date('Y');
 $mesActual  = (int) date('n');
 ?>
 <div class="modal fade" id="modalVacacion" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index:1060;">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <?php /* Sin `modal-dialog-scrollable`: en escritorio se desplaza el modal completo
+             (cabecera, cuerpo y pie juntos), como el resto de modales del sistema, en vez
+             de scrollear solo su interior. En móvil/tablet a pantalla completa, scripts.php
+             agrega esa clase por su cuenta para pasar el scroll al cuerpo. */ ?>
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <form id="formVacacion" novalidate onsubmit="return false;">
                 <div class="modal-header bg-light py-3">

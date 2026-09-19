@@ -568,6 +568,19 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
                                 ?>
                                 <hr class="my-3 opacity-25">
                                 <?php
+                                // Vacaciones ya registradas del empleado + registrar una nueva
+                                // (mismo formulario del módulo Vacaciones, con el empleado fijo).
+                                $vacacionesEmpleado = [
+                                    'id'               => 'empVacRegistradas',
+                                    'puede_crear'      => !empty($permVacEmp['crear']),
+                                    'puede_actualizar' => !empty($permVacEmp['actualizar']),
+                                    'puede_eliminar'   => !empty($permVacEmp['eliminar']),
+                                    'meses'            => \App\models\CatalogoNovedades::MESES,
+                                ];
+                                include MVC_APP . '/views/modulos/vacaciones/_vacaciones_empleado.php';
+                                ?>
+                                <hr class="my-3 opacity-25">
+                                <?php
                                 $cuadroPeriodos = ['id' => 'empVacCuadro', 'puede_marcar' => !empty($permVacEmp['crear']), 'con_resumen' => true];
                                 include MVC_APP . '/views/modulos/vacaciones/_cuadro_periodos.php';
                                 ?>
@@ -805,40 +818,64 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
 <?php if (!empty($permVacEmp['ver'])): ?>
 <script src="<?= $baseEmp ?>/js/modulos/vacaciones_periodos.js?v=<?= asset_ver('/js/modulos/vacaciones_periodos.js') ?>"></script>
 <script src="<?= $baseEmp ?>/js/modulos/vacaciones_solicitudes.js?v=<?= asset_ver('/js/modulos/vacaciones_solicitudes.js') ?>"></script>
+<script src="<?= $baseEmp ?>/js/modulos/vacaciones_empleado.js?v=<?= asset_ver('/js/modulos/vacaciones_empleado.js') ?>"></script>
 <script>
 // Pestaña Vacaciones: los mismos cuadros del módulo Vacaciones (mismos datos,
-// permisos y acciones; ver vacaciones_periodos.js y vacaciones_solicitudes.js).
+// permisos y acciones; ver vacaciones_periodos.js, vacaciones_solicitudes.js y
+// vacaciones_empleado.js).
 (function () {
     'use strict';
     const $ = (id) => document.getElementById(id);
     const raiz = $('empVacCuadro');
     if (!raiz || !window.CuadroPeriodosVacaciones) return;
     const cuadro = new window.CuadroPeriodosVacaciones(raiz);
+    const idEmp = () => ($('emp_id') ? $('emp_id').value : '');
+    const nombreEmp = () => ($('emp_nombres_apellidos') ? $('emp_nombres_apellidos').value : '');
 
-    // Solicitudes del empleado. Al aprobar una se registra su vacación, así que el
-    // cuadro de períodos (saldo, días gozados) se vuelve a cargar.
+    // Vacaciones registradas del empleado (registrar / editar / eliminar).
+    const raizVacs = $('empVacRegistradas');
+    const vacs = (raizVacs && window.CuadroVacacionesEmpleado)
+        ? new window.CuadroVacacionesEmpleado(raizVacs, { onCambio: () => refrescarPeriodos() })
+        : null;
+
+    // Solicitudes del empleado. Al aprobar una se registra su vacación, así que se
+    // recargan el cuadro de períodos (saldo) y la lista de vacaciones.
     const raizSol = $('empVacSolicitudes');
     const solicitudes = (raizSol && window.CuadroSolicitudesVacaciones)
         ? new window.CuadroSolicitudesVacaciones(raizSol, {
-            onCambio: () => { const id = $('emp_id') ? $('emp_id').value : ''; if (id) cuadro.cargar(id); },
+            onCambio: () => { refrescarPeriodos(); if (vacs) vacs.recargar(); },
         })
         : null;
 
+    /** Recarga el cuadro de períodos y pasa a la lista el sueldo y el saldo que devuelve. */
+    function refrescarPeriodos() {
+        const id = idEmp();
+        if (!id) return Promise.resolve(null);
+        return cuadro.cargar(id).then((d) => {
+            if (vacs && d) vacs.empleado = { nombre: nombreEmp(), sueldo: d.sueldo_base, saldo: d.saldo };
+            return d;
+        });
+    }
+
     // Se carga cada vez que se abre la pestaña, siempre con lo guardado del empleado.
     window.empVacCargar = function () {
-        const id = $('emp_id') ? $('emp_id').value : '';
+        const id = idEmp();
         $('empVacNoGuardado').classList.toggle('d-none', !!id);
         $('empVacContenido').classList.toggle('d-none', !id);
-        if (id) cuadro.cargar(id); else cuadro.limpiar();
+        if (!id) {
+            cuadro.limpiar();
+            if (vacs) vacs.limpiar();
+            if (solicitudes) solicitudes.limpiar();
+            return;
+        }
+        refrescarPeriodos().then((d) => {
+            if (vacs) vacs.cargar(id, { nombre: nombreEmp(), sueldo: d ? d.sueldo_base : null, saldo: d ? d.saldo : null });
+        });
         if (solicitudes) {
-            if (id) {
-                solicitudes.cargarEmpleado(id, {
-                    correo: $('emp_email') ? $('emp_email').value : '',
-                    nombre: $('emp_nombres_apellidos') ? $('emp_nombres_apellidos').value : '',
-                });
-            } else {
-                solicitudes.limpiar();
-            }
+            solicitudes.cargarEmpleado(id, {
+                correo: $('emp_email') ? $('emp_email').value : '',
+                nombre: nombreEmp(),
+            });
         }
     };
 
@@ -849,9 +886,10 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
         if ($('tab-vacaciones')?.classList.contains('active')) window.empVacCargar();
     });
 
-    // Al cerrar, que el próximo empleado no vea por un instante el cuadro de este.
+    // Al cerrar, que el próximo empleado no vea por un instante los datos de este.
     $('modalEmpleado')?.addEventListener('hidden.bs.modal', () => {
         cuadro.limpiar();
+        if (vacs) vacs.limpiar();
         if (solicitudes) solicitudes.limpiar();
     });
 })();

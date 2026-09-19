@@ -6,7 +6,7 @@ ruta_modulo: modulos/vacaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: vacaciones, dias de vacaciones, descanso, saldo de vacaciones, antiguedad, gozadas, periodo vacacional, buscar vacaciones, buscador, filtros, filtrar vacaciones, vacaciones por empleado, chips, periodos, periodos de vacaciones, periodos tomados, periodos pagados, vacaciones tomadas, vacaciones pagadas, vacaciones no gozadas, vacaciones acumuladas, saldo inicial de vacaciones, ajustar saldo, empleados de otro sistema, migracion de empleados, vacaciones al dia, solicitud de vacaciones, solicitar vacaciones, pedir vacaciones, permiso de vacaciones, formulario de vacaciones, enlace por correo, aprobar vacaciones, rechazar vacaciones, autorizar vacaciones, solicitudes pendientes, pdf de vacaciones, imprimir vacaciones, detalle de vacaciones
-version: 1.4
+version: 1.5
 orden: 40
 estado: activo
 ---
@@ -99,6 +99,14 @@ quite la marca de los que ya no correspondan.
 4. Revise los **días gozados** calculados.
 5. Indique el **mes del rol** en el que se refleja.
 6. Guarde.
+
+> También puede registrarlas desde la ficha del empleado (módulo **Empleados**,
+> pestaña *Vacaciones*, botón **Registrar vacación**): es el mismo formulario con
+> el empleado ya fijado, y ahí mismo se ven, se editan y se eliminan las que ya
+> tiene registradas.
+
+Al **editar** una vacación puede cambiar su **estado** (registrado, pagado o
+anulado); el que elija es el que queda guardado.
 
 ## Solicitudes de vacaciones
 
@@ -275,6 +283,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.5** — Las vacaciones se pueden registrar, editar y eliminar también desde
+  la ficha del empleado (pestaña *Vacaciones*), con el mismo formulario. Además,
+  al editar una vacación ya **no se pierde su estado**: antes, guardar una
+  vacación *pagada* o *anulada* la devolvía a *registrada*.
 - **1.4** — Solicitudes de vacaciones: se le envía al empleado un enlace personal
   por correo, él llena su solicitud desde ahí (sin entrar al sistema) y se
   aprueba o se rechaza desde la pestaña *Vacaciones* de su ficha o desde la

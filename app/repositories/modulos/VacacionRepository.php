@@ -150,7 +150,8 @@ class VacacionRepository extends BaseRepository
     private function bind(array $d): array
     {
         return [
-            ':id_empresa'   => $d['id_empresa'],
+            // update() lo reemplaza por el de la sesión, así que puede no venir en $d.
+            ':id_empresa'   => $d['id_empresa'] ?? null,
             ':id_empleado'  => (int) $d['id_empleado'],
             ':fecha_desde'  => $d['fecha_desde'],
             ':fecha_hasta'  => $d['fecha_hasta'],

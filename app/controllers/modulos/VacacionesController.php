@@ -368,6 +368,41 @@ class VacacionesController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Vacaciones registradas de un empleado (sección "Vacaciones registradas" de su
+     * ficha). No filtra por creador: el saldo y los días gozados que ya muestra el
+     * cuadro de períodos son del empleado completo, así que su detalle también.
+     * GET: id_empleado.
+     */
+    public function vacacionesEmpleadoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa  = (int) $_SESSION['id_empresa'];
+            $idEmpleado = (int) ($_GET['id_empleado'] ?? 0);
+            $filas = array_map(static fn($v) => [
+                'id'           => (int) $v['id'],
+                'fecha_desde'  => $v['fecha_desde'],
+                'fecha_hasta'  => $v['fecha_hasta'],
+                'dias_gozados' => (float) $v['dias_gozados'],
+                'dias_derecho' => (float) $v['dias_derecho'],
+                'valor'        => (float) $v['valor'],
+                'periodo_mes'  => (int) $v['periodo_mes'],
+                'periodo_anio' => (int) $v['periodo_anio'],
+                'afecta_rol'   => in_array((string) $v['afecta_rol'], ['1', 't', 'true'], true),
+                'estado'       => $v['estado'],
+                'observacion'  => $v['observacion'],
+            ], $this->service->getVacacionesEmpleado($idEmpleado, $idEmpresa));
+
+            echo json_encode(['ok' => true, 'data' => $filas, 'meses' => CatalogoNovedades::MESES]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /** Bandeja del módulo: solicitudes de toda la empresa. GET: estado (vacío = abiertas). */
     public function solicitudesBandejaAjax(): void
     {
@@ -548,6 +583,10 @@ class VacacionesController extends BaseModuloController
             'periodo_anio' => (int) ($_POST['periodo_anio'] ?? 0),
             'afecta_rol'   => !empty($_POST['afecta_rol']) ? 1 : 0,
             'observacion'  => trim($_POST['observacion'] ?? ''),
+            // El modal muestra el estado al editar: sin recogerlo, cada edición
+            // devolvía la vacación a 'registrado' (el repositorio usa ese valor por
+            // defecto). En store() se fuerza 'registrado' igual que antes.
+            'estado'       => trim($_POST['estado'] ?? ''),
         ];
     }
 }
