@@ -3,6 +3,7 @@ titulo: Carga de Suscripciones por Excel
 slug: modulos/carga-suscripciones
 etiquetas: [suscripciones, excel, carga masiva, importar, plantilla, xlsx, alta masiva, recurrente]
 visibilidad: usuario
+version: 1.1
 ---
 
 ## Qué es
@@ -34,10 +35,11 @@ existentes.
    suscripción, repitiendo la misma **CLAVE** de la cabecera. Cada suscripción debe
    tener al menos una línea.
 4. **Suba el archivo** y pulse *Revisar archivo*. No se guarda nada todavía: se
-   muestra un resumen (a crear, bloqueadas, filas con error) y el detalle de los
-   problemas.
-5. Si todo está bien, pulse **Crear suscripciones**. Las filas con error se omiten
-   y el resto se crea (aplicación parcial).
+   muestra un resumen (a crear, bloqueadas, filas con error, avisos) y el detalle
+   de los problemas. Cada mensaje viene marcado como **ERROR** o **AVISO**.
+5. Si todo está bien, pulse **Crear suscripciones**. Las filas con **error** se
+   omiten y el resto se crea (aplicación parcial). Las filas con **aviso** **sí se
+   crean**: el aviso solo le pide que revise, por ejemplo, un posible duplicado.
 
 > No borre ni agregue hojas al libro, ni cambie los encabezados de las columnas:
 > el sistema rechaza el archivo. Descargue la plantilla nuevamente si se dañó.
@@ -80,10 +82,13 @@ existentes.
 
 - La CLAVE debe ser única dentro del archivo; una CLAVE repetida se marca con error.
 - Toda suscripción debe tener al menos una línea de detalle válida.
-- **Anti-duplicados**: una suscripción se **bloquea** (no se crea) si el mismo cliente
-  ya tiene otra suscripción no eliminada con **exactamente el mismo conjunto de
-  productos**, ya sea en la base de datos o en otra fila del mismo archivo. No se
-  consideran cantidad ni precio, solo qué productos la componen.
+- **Posibles duplicados (aviso, no bloquea)**: si el mismo cliente ya tiene otra
+  suscripción no eliminada con **exactamente el mismo conjunto de productos**, ya sea
+  en la base de datos o en otra fila del mismo archivo, la suscripción se marca con
+  un **AVISO** pero **se crea igual**, porque un cliente puede tener legítimamente
+  dos suscripciones del mismo producto. No se consideran cantidad ni precio, solo
+  qué productos la componen. Revise esos avisos antes de crear: cada suscripción se
+  factura por separado, así que un duplicado real se cobraría dos veces.
 - Si una línea de detalle tiene error, **su suscripción completa se bloquea** (no se
   crea), para no perder ningún ítem.
 - Cada suscripción se crea con su propia transacción a través del módulo de
@@ -112,11 +117,24 @@ existentes.
   primero el cliente o el producto, o corrija el valor con uno de la hoja de consulta.
 - *"La suscripción no tiene ninguna línea…"*: agregue al menos una fila en la hoja
   Detalle con la misma CLAVE.
+
+## Avisos de posible duplicado
+
+Estos mensajes aparecen como **AVISO**: no impiden la carga y la suscripción se crea.
+
 - *"Ya existe una suscripción de este cliente con el mismo conjunto de productos"*: ese
-  cliente ya tiene esa suscripción; cámbiele los productos o quítela del archivo.
+  cliente ya tiene una suscripción con los mismos productos. Si es la misma, quítela
+  del archivo para no facturarla dos veces; si es otra distinta (otro servicio del
+  mismo producto), puede continuar.
+- *"Otra fila del archivo (CLAVE …) crea una suscripción idéntica para este cliente"*:
+  dos filas del archivo crean suscripciones con los mismos productos para el mismo
+  cliente. Si no fue intencional, deje solo una.
 
 ## Historial de cambios
 
+- **1.1** — Los posibles duplicados (mismo cliente con el mismo conjunto de
+  productos, en la base o dentro del archivo) pasan a ser **avisos**: ya no bloquean
+  la suscripción y se crean igual.
 - **1.0** — Versión inicial. Carga masiva de suscripciones (solo alta) con plantilla
   de dos hojas de datos (Suscripciones + Detalle) y hojas de consulta de clientes,
   productos, periodicidades e IVA.

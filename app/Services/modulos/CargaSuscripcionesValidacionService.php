@@ -101,38 +101,41 @@ class CargaSuscripcionesValidacionService
                 $s['errores'][] = 'La suscripción no tiene ninguna línea en la hoja '
                     . CargaSuscripcionesEsquema::HOJA_DETALLE . '.';
                 // Reflejar el error en la fila de cabecera del informe.
-                $this->marcarErrorCabecera($informe, $s['fila'],
+                $this->marcarCabecera($informe, $s['fila'],
                     'La suscripción no tiene ninguna línea en la hoja ' . CargaSuscripcionesEsquema::HOJA_DETALLE . '.');
             }
         }
         unset($s);
 
-        // 3.b. Duplicados: bloquear si el mismo cliente ya tiene una suscripción
-        //      (no eliminada) con exactamente el mismo conjunto de productos, ya sea
-        //      en la base o en otra fila de este mismo archivo.
+        // 3.b. Posibles duplicados: AVISO (no bloquea) si el mismo cliente ya tiene
+        //      una suscripción (no eliminada) con exactamente el mismo conjunto de
+        //      productos, ya sea en la base o en otra fila de este mismo archivo.
+        //      Un cliente puede tener legítimamente dos suscripciones del mismo
+        //      producto, así que se crea igual y el usuario decide al revisar.
         $firmasArchivo = [];
         foreach ($suscripciones as &$s) {
             if (!empty($s['errores'])) {
-                continue; // ya bloqueada por otra causa
+                continue; // ya bloqueada por otra causa: no se creará
             }
             $firma = $this->firmaSuscripcion($s);
             if ($firma === null) {
                 continue;
             }
 
-            $msg = null;
+            $avisos = [];
             if (isset($this->firmasExistentes[$firma])) {
-                $msg = 'Ya existe una suscripción de este cliente con el mismo conjunto de productos.';
-            } elseif (isset($firmasArchivo[$firma])) {
-                $msg = 'Otra fila del archivo (CLAVE ' . $firmasArchivo[$firma]
-                    . ') crea una suscripción idéntica para este cliente.';
+                $avisos[] = 'Ya existe una suscripción de este cliente con el mismo conjunto de productos.';
             }
-
-            if ($msg !== null) {
-                $s['errores'][] = $msg;
-                $this->marcarErrorCabecera($informe, $s['fila'], $msg);
+            if (isset($firmasArchivo[$firma])) {
+                $avisos[] = 'Otra fila del archivo (CLAVE ' . $firmasArchivo[$firma]
+                    . ') crea una suscripción idéntica para este cliente.';
             } else {
                 $firmasArchivo[$firma] = $s['clave'];
+            }
+
+            foreach ($avisos as $msg) {
+                $s['avisos'][] = $msg;
+                $this->marcarCabecera($informe, $s['fila'], $msg, 'avisos');
             }
         }
         unset($s);
@@ -436,12 +439,15 @@ class CargaSuscripcionesValidacionService
         return $s['id_cliente'] . '|' . implode(',', $ids);
     }
 
-    /** Agrega un mensaje de error a la fila de cabecera ya registrada en el informe. */
-    private function marcarErrorCabecera(array &$informe, int $nFila, string $mensaje): void
+    /**
+     * Agrega un mensaje a la fila de cabecera ya registrada en el informe.
+     * $tipo: 'errores' (bloquea la suscripción) o 'avisos' (solo informa).
+     */
+    private function marcarCabecera(array &$informe, int $nFila, string $mensaje, string $tipo = 'errores'): void
     {
         foreach ($informe['filas'] as &$fila) {
             if ($fila['hoja'] === CargaSuscripcionesEsquema::HOJA_SUSCRIPCIONES && $fila['fila'] === $nFila) {
-                $fila['errores'][] = $mensaje;
+                $fila[$tipo][] = $mensaje;
                 return;
             }
         }

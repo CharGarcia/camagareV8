@@ -156,14 +156,21 @@
 
         const aplicables = r.crear || 0;
         const bloqueados = r.bloqueados || 0;
+        const conAviso   = r.con_aviso || 0;
 
         let subtitulo;
         if (globales.length) {
             subtitulo = 'El archivo no se puede procesar. Corrija lo indicado y vuelva a subirlo.';
         } else if (bloqueados > 0) {
             subtitulo = `Se crearán ${aplicables} suscripción(es). Las ${bloqueados} con errores se omitirán.`;
+        } else if (conAviso > 0) {
+            subtitulo = `Se crearán ${aplicables} suscripción(es).`;
         } else {
             subtitulo = `Todo correcto: se crearán ${aplicables} suscripción(es).`;
+        }
+        // Los avisos no bloquean: esas suscripciones también se crean.
+        if (!globales.length && conAviso > 0) {
+            subtitulo += ` ${conAviso} tiene(n) avisos (se crearán igual): revíselos antes de continuar.`;
         }
         $('csSubtituloResultado').textContent = subtitulo;
 
