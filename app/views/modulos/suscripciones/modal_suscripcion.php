@@ -4,6 +4,10 @@ $urlBaseClientes = BASE_URL . '/modulos/clientes';
 $urlBaseProductos = BASE_URL . '/modulos/productos';
 $permSusc        = $perm ?? [];
 
+// Pestaña Facturas (solo lectura): solo si puede ver Facturas o Recibos de Venta. Misma
+// constante con la que el controlador arma los documentos que entran en la consulta.
+$suscVerFacturas = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\SuscripcionesController::RUTAS_FACTURAS);
+
 $vistaConfigSusc = \App\Helpers\PreferenciasHelper::getPreferenciasVista('suscripciones');
 echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigSusc, 'estiloVistaPestanasSusc');
 ?>
@@ -32,6 +36,21 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     .susc-total-label { font-size: 0.78rem; color: #6c757d; font-weight: 600; }
     .susc-total-value { font-size: 0.95rem; font-weight: 700; }
     .susc-total-grande { font-size: 1.2rem; font-weight: 700; color: #0d6efd; }
+
+    /* Pestaña Facturas (solo lectura). La clase del contenedor NO lleva "-scroll": esta
+       página usa app-shell y app.css le quita el alto a todo [class*="-scroll"]. Alto FIJO
+       (no "hasta") para que el modal no cambie de tamaño al buscar o paginar. */
+    .modal-susc .susc-fact-lista { height: clamp(170px, calc(100vh - 430px), 440px); overflow: auto; }
+    .modal-susc .susc-fact-lista > table { font-size: 0.76rem; }
+    .modal-susc .susc-fact-lista > table > thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa;
+                                                      box-shadow: 0 1px 0 #dee2e6; white-space: nowrap; }
+    .modal-susc .susc-fact-lista > table > thead th[data-orden] { cursor: pointer; user-select: none; }
+    .modal-susc .susc-fact-lista > table > tbody > tr > td { white-space: nowrap; vertical-align: middle; }
+    .modal-susc .susc-fact-desc    { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    .modal-susc tr.susc-fact-fila  { cursor: pointer; }
+    .modal-susc tr.susc-fact-det > td { background: #f8f9fa; white-space: normal !important; }
+    .modal-susc tr.susc-fact-det table { font-size: 0.74rem; }
+    .modal-susc .susc-fact-linea-desc { min-width: 220px; }
 </style>
 
 <div class="modal fade modal-susc" id="modalSusc" tabindex="-1" aria-labelledby="modalSuscLabel" aria-hidden="true" data-bs-backdrop="static" style="z-index:1060">
@@ -72,6 +91,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                     <i class="bi bi-credit-card me-1"></i>Forma de pago
                                 </a>
                             </li>
+                            <?php if ($suscVerFacturas): ?>
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link py-2 small" id="susc-tab-facturas-btn" data-bs-toggle="tab" data-bs-target="#pane-susc-facturas" href="#pane-susc-facturas" role="tab" title="Facturas y recibos de venta emitidos al cliente">
+                                    <i class="bi bi-receipt-cutoff me-1"></i>Facturas
+                                </a>
+                            </li>
+                            <?php endif; ?>
                         </ul>
                         <div class="pb-1 flex-shrink-0">
                             <?php
@@ -79,6 +105,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                 'pane-susc-servicios' => 'Detalle suscripción',
                                 'pane-susc-cobro'     => 'Forma de pago',
                             ];
+                            if ($suscVerFacturas) {
+                                $pestanasConfigSusc['pane-susc-facturas'] = 'Facturas';
+                            }
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigSusc, $vistaConfigSusc ?? [], 'suscripciones');
                             ?>
                         </div>
@@ -332,6 +361,84 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                 </div>
                             </div>
                         </div><!-- /pane-susc-cobro -->
+
+                        <?php if ($suscVerFacturas): ?>
+                        <!-- ══ PESTAÑA 3: Facturas del cliente (solo lectura) ═══════════════════
+                             La alimenta SuscFacturas (public/js/modulos/suscripciones_facturas.js),
+                             que ubica cada control por su data-sf. Sin "name": no viajan al guardar. -->
+                        <div class="tab-pane fade" id="pane-susc-facturas" role="tabpanel">
+                            <div class="text-center text-muted small py-5 d-none" data-sf="sin-cliente">
+                                <i class="bi bi-person-exclamation fs-3 d-block mb-2"></i>
+                                Elija el cliente en la pestaña <b>Detalle suscripción</b> para ver sus facturas.
+                            </div>
+                            <div data-sf="con-datos">
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                    <div class="input-group input-group-sm" style="width: 320px; max-width: 100%;">
+                                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                        <input type="search" class="form-control" data-sf="buscar" autocomplete="off" aria-label="Buscar documentos"
+                                               placeholder="Número, producto, fecha…"
+                                               title="Texto libre o filtros: fecha:2026-08, total:>50, saldo:>0, pago:pendiente, estado:borrador, tipo:recibo, producto:soporte">
+                                    </div>
+                                    <div class="btn-group btn-group-sm" role="group" aria-label="Documentos a mostrar">
+                                        <button type="button" class="btn btn-outline-secondary active" data-sf-alcance="cliente" title="Todos los documentos emitidos al cliente">
+                                            <i class="bi bi-person me-1"></i>Del cliente
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" data-sf-alcance="suscripcion">
+                                            <i class="bi bi-arrow-repeat me-1"></i>De esta suscripción
+                                        </button>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" data-sf="todas" title="Desplegar o plegar el detalle de todos los documentos de la página"></button>
+                                    <div class="ms-auto d-flex align-items-center gap-2">
+                                        <span class="small text-muted fw-medium" data-sf="info">0-0/0</span>
+                                        <div class="btn-group btn-group-sm">
+                                            <button type="button" class="btn btn-outline-secondary" data-sf="prev" title="Anterior" disabled><i class="bi bi-chevron-left"></i></button>
+                                            <button type="button" class="btn btn-outline-secondary" data-sf="next" title="Siguiente" disabled><i class="bi bi-chevron-right"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="susc-fact-lista border rounded bg-white">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead><tr data-sf="thead"></tr></thead>
+                                        <tbody data-sf="tbody"></tbody>
+                                    </table>
+                                </div>
+
+                                <div class="small text-muted mt-1">
+                                    <i class="bi bi-info-circle me-1"></i><span data-sf="nota"></span>
+                                    Haga clic en un documento para ver sus productos y servicios.
+                                </div>
+
+                                <!-- Resumen de TODOS los documentos del filtro (no solo de la página) -->
+                                <div class="row g-2 mt-1">
+                                    <div class="col-6 col-md-3">
+                                        <div class="card bg-light border-0 text-center p-2">
+                                            <span class="small text-muted d-block" style="font-size: 0.7rem;">DOCUMENTOS</span>
+                                            <h6 class="mb-0 fw-bold" data-sf="res-docs">0</h6>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="card bg-light border-0 text-center p-2">
+                                            <span class="small text-muted d-block" style="font-size: 0.7rem;">TOTAL EMITIDO</span>
+                                            <h6 class="mb-0 fw-bold text-primary" data-sf="res-total">$0.00</h6>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="card bg-light border-0 text-center p-2">
+                                            <span class="small text-muted d-block" style="font-size: 0.7rem;">COBRADO</span>
+                                            <h6 class="mb-0 fw-bold text-success" data-sf="res-cobrado">$0.00</h6>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="card bg-light border-0 text-center p-2">
+                                            <span class="small text-muted d-block" style="font-size: 0.7rem;">SALDO PENDIENTE <span data-sf="res-con-saldo"></span></span>
+                                            <h6 class="mb-0 fw-bold text-danger" data-sf="res-saldo">$0.00</h6>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div><!-- /pane-susc-facturas -->
+                        <?php endif; ?>
 
                     </div><!-- /tab-content -->
                 </div><!-- /modal-body -->
@@ -1061,3 +1168,21 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
 
 })();
 </script>
+
+<?php if ($suscVerFacturas): ?>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/suscripciones_facturas.js?v=<?= asset_ver('/js/modulos/suscripciones_facturas.js') ?>"></script>
+<script>
+    SuscFacturas.iniciar({
+        url:       <?= json_encode($urlBase . '/facturasClienteAjax') ?>,
+        urlPdf:    {
+            FACTURA: <?= json_encode(rtrim(BASE_URL, '/') . '/modulos/factura-venta/exportarPdfAjax') ?>,
+            RECIBO:  <?= json_encode(rtrim(BASE_URL, '/') . '/modulos/recibo-venta/exportarPdfAjax') ?>,
+        },
+        panel:     'pane-susc-facturas',
+        boton:     'susc-tab-facturas-btn',
+        modalId:   'modalSusc',
+        idSusc:    'susc_id',
+        idCliente: 'susc_id_cliente',
+    });
+</script>
+<?php endif; ?>

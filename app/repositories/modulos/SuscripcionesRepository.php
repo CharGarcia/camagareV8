@@ -3,11 +3,16 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\AbonosVentaSql;
+use App\Helpers\FiltrosBusqueda;
 use App\repositories\BaseRepository;
+use App\Traits\AmbienteEmpresaTrait;
 use PDO;
 
 class SuscripcionesRepository extends BaseRepository
 {
+    use AmbienteEmpresaTrait;
+
     public const COLUMNAS_ORDEN = ['nombre_cliente', 'nombre_periodicidad', 'tipo_comprobante', 'forma_cobro', 'proximo_cobro', 'fecha_inicio', 'fecha_fin', 'estado', 'created_at'];
 
     public function __construct()
@@ -542,6 +547,379 @@ class SuscripcionesRepository extends BaseRepository
                 'saldo'        => max(0, $saldo),
                 'estado'       => $estado,
             ];
+        }
+        return $out;
+    }
+
+    // ── Pestaña "Facturas" del modal ──────────────────────────────────────────
+
+    /**
+     * Columnas por las que se puede ordenar la pestaña: clave que manda el navegador =>
+     * expresión fija (lo único que llega al ORDER BY). Deben coincidir con las columnas
+     * ordenables de public/js/modulos/suscripciones_facturas.js.
+     */
+    private const ORDEN_FACTURAS_CLIENTE = [
+        'fecha'     => 'd.fecha',
+        'documento' => 'd.numero',
+        'total'     => 'd.total',
+        'cobrado'   => 'd.abonos',
+        'saldo'     => 'd.saldo',
+    ];
+
+    /**
+     * Estados en los que el documento no tiene efecto: se lista (con su estado), pero no
+     * suma en los totales ni tiene saldo. El recibo "facturado" ya se convirtió en factura
+     * (y esa factura es la que cobra): contarlo también sería cobrar dos veces lo mismo.
+     */
+    private const ESTADOS_FACTURA_SIN_EFECTO = ['anulado', 'anulada'];
+    private const ESTADOS_RECIBO_SIN_EFECTO  = ['anulado', 'anulada', 'facturado'];
+
+    /** Sinónimos del filtro `pago:` (los mismos que acepta el listado de Facturas de Venta). */
+    private const SINONIMOS_PAGO = [
+        'pagada' => 'pagado', 'pagadas' => 'pagado', 'pagados' => 'pagado', 'cobrada' => 'pagado', 'cobrado' => 'pagado',
+        'abonada' => 'abonado', 'abonadas' => 'abonado', 'abonados' => 'abonado', 'parcial' => 'abonado', 'abono' => 'abonado',
+        'pendientes' => 'pendiente', 'falta' => 'pendiente', 'sinpago' => 'pendiente', 'impaga' => 'pendiente', 'impagada' => 'pendiente',
+    ];
+
+    /** ¿El cliente existe, es de la empresa y no está eliminado? */
+    public function existeCliente(int $idCliente, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare("SELECT 1 FROM clientes WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false");
+        $st->execute([':id' => $idCliente, ':id_empresa' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
+     * Pestaña "Facturas" del modal de suscripción: facturas y recibos de venta emitidos al
+     * cliente (o, con $soloSuscripcion, solo los que generó esta suscripción), uno por
+     * fila, con su estado de cobro y sus líneas (productos/servicios).
+     *
+     * Mismo alcance que el listado de cada módulo: empresa activa, no eliminados, ambiente
+     * actual de la empresa y, sin acceso total en ese módulo, solo los que registró el
+     * usuario (`id_usuario`). El saldo sigue la regla de ese listado: la factura resta
+     * cobros, notas de crédito y retenciones (AbonosVentaSql); el recibo, solo sus cobros.
+     *
+     * @param int[]              $idsCliente      Fichas del cliente (cédula y RUC); se ignora con $soloSuscripcion.
+     * @param int                $idSuscripcion   Marca los documentos que generó (0 = suscripción nueva).
+     * @param array<string,?int> $fuentes         'FACTURA' y/o 'RECIBO' => id de usuario para registros
+     *                                            propios (null = todos). Un origen ausente no se consulta.
+     * @return array{rows: array, total: int, resumen: array}
+     */
+    public function getFacturasCliente(
+        int $idEmpresa,
+        array $idsCliente,
+        int $idSuscripcion,
+        bool $soloSuscripcion,
+        array $fuentes,
+        string $buscar,
+        int $page,
+        int $perPage,
+        string $ordenCol,
+        string $ordenDir
+    ): array {
+        $vacio = [
+            'rows'    => [],
+            'total'   => 0,
+            'resumen' => ['documentos' => 0, 'total' => 0.0, 'cobrado' => 0.0, 'saldo' => 0.0, 'con_saldo' => 0],
+        ];
+        $idsCliente = array_values(array_unique(array_filter(array_map('intval', $idsCliente), static fn ($i) => $i > 0)));
+        if ($soloSuscripcion ? $idSuscripcion <= 0 : !$idsCliente) {
+            return $vacio;
+        }
+
+        $params = [];
+        $ramas  = [];
+        foreach (['FACTURA', 'RECIBO'] as $origen) {
+            if (array_key_exists($origen, $fuentes)) {
+                $ramas[] = $this->ramaFacturasCliente($origen, $idEmpresa, $idsCliente, $idSuscripcion, $soloSuscripcion, $fuentes[$origen], $params);
+            }
+        }
+        if (!$ramas) {
+            return $vacio;
+        }
+
+        $where = $this->filtroFacturasCliente($buscar, $params);
+
+        // Saldo y estado de pago se calculan UNA vez por documento (CTE `docs`) y los usan
+        // el buscador (saldo:, pago:), el orden y los totales.
+        $cte = "WITH base AS (\n" . implode("\n UNION ALL \n", $ramas) . "\n),
+                docs AS (
+                    SELECT b.*,
+                           CASE WHEN b.con_efecto THEN GREATEST(b.total - b.abonos, 0) ELSE 0 END AS saldo,
+                           CASE WHEN NOT b.con_efecto          THEN 'sin_efecto'
+                                WHEN b.total - b.abonos <= 0.01 THEN 'pagado'
+                                WHEN b.abonos > 0               THEN 'abonado'
+                                ELSE 'pendiente' END AS estado_pago
+                    FROM base b
+                )";
+
+        $stT = $this->db->prepare("{$cte}
+            SELECT COUNT(*) AS documentos,
+                   COALESCE(SUM(d.total)  FILTER (WHERE d.con_efecto), 0) AS total,
+                   COALESCE(SUM(d.abonos) FILTER (WHERE d.con_efecto), 0) AS cobrado,
+                   COALESCE(SUM(d.saldo), 0) AS saldo,
+                   COUNT(*) FILTER (WHERE d.saldo > 0.01) AS con_saldo
+            FROM docs d
+            WHERE true {$where}");
+        $stT->execute($params);
+        $tot   = $stT->fetch(PDO::FETCH_ASSOC) ?: [];
+        $total = (int) ($tot['documentos'] ?? 0);
+
+        $resumen = [
+            'documentos' => $total,
+            'total'      => round((float) ($tot['total'] ?? 0), 2),
+            'cobrado'    => round((float) ($tot['cobrado'] ?? 0), 2),
+            'saldo'      => round((float) ($tot['saldo'] ?? 0), 2),
+            'con_saldo'  => (int) ($tot['con_saldo'] ?? 0),
+        ];
+        if ($total === 0) {
+            return ['rows' => [], 'total' => 0, 'resumen' => $resumen];
+        }
+
+        $col    = self::ORDEN_FACTURAS_CLIENTE[$ordenCol] ?? self::ORDEN_FACTURAS_CLIENTE['fecha'];
+        $dir    = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
+        $limite = ' LIMIT ' . max(1, $perPage) . ' OFFSET ' . max(0, ($page - 1) * $perPage);
+
+        // Desempate fijo: sin él, documentos con el mismo valor cambian de página entre cargas.
+        $st = $this->db->prepare("{$cte}
+            SELECT d.* FROM docs d
+            WHERE true {$where}
+            ORDER BY {$col} {$dir}, d.fecha DESC, d.origen, d.id DESC
+            {$limite}");
+        $st->execute($params);
+        $filas = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        $idsPorOrigen = [];
+        foreach ($filas as $f) {
+            $idsPorOrigen[$f['origen']][] = (int) $f['id'];
+        }
+        $lineas = $this->lineasDocumentosVenta($idsPorOrigen);
+
+        $rows = [];
+        foreach ($filas as $f) {
+            $ls = $lineas[$f['origen']][(int) $f['id']] ?? [];
+            $rows[] = [
+                'origen'         => (string) $f['origen'],
+                'id'             => (int) $f['id'],
+                'fecha'          => (string) $f['fecha'],
+                'numero'         => (string) $f['numero'],
+                'tipo_documento' => (string) $f['tipo_documento'],
+                'estado'         => (string) $f['estado'],
+                'subtotal'       => (float) $f['subtotal'],
+                'iva'            => round(array_sum(array_column($ls, 'iva')), 2),
+                'total'          => (float) $f['total'],
+                'cobrado'        => (float) $f['cobrado'],
+                'nota_credito'   => (float) $f['nc'],
+                'retencion'      => (float) $f['retencion'],
+                'abonos'         => (float) $f['abonos'],
+                'saldo'          => (float) $f['saldo'],
+                'estado_pago'    => (string) $f['estado_pago'],
+                'con_efecto'     => (bool) $f['con_efecto'],
+                'de_suscripcion' => (bool) $f['de_suscripcion'],
+                'items'          => (string) ($f['items'] ?? ''),
+                'lineas'         => $ls,
+            ];
+        }
+
+        return ['rows' => $rows, 'total' => $total, 'resumen' => $resumen];
+    }
+
+    /**
+     * Rama del UNION de getFacturasCliente() para un tipo de documento. Tablas, etiquetas y
+     * estados vienen de código, nunca del usuario; cada rama usa sus propios placeholders
+     * (y solo agrega a $params los que su SQL realmente usa: PDO lanza HY093 si sobra uno).
+     */
+    private function ramaFacturasCliente(
+        string $origen,
+        int $idEmpresa,
+        array $idsCliente,
+        int $idSuscripcion,
+        bool $soloSuscripcion,
+        ?int $idUsuarioFiltro,
+        array &$params
+    ): string {
+        $esFactura = $origen === 'FACTURA';
+        $s         = $esFactura ? 'f' : 'r';
+        $cabecera  = $esFactura ? 'ventas_cabecera' : 'recibos_venta_cabecera';
+        $detalle   = $esFactura ? 'ventas_detalle' : 'recibos_venta_detalle';
+        $fk        = $esFactura ? 'id_venta' : 'id_recibo';
+        $colPago   = $esFactura ? 'id_factura' : 'id_recibo';   // columna de suscripciones_pagos
+        $etiqueta  = $esFactura ? 'Factura' : 'Recibo';
+        $sinEfecto = "'" . implode("','", $esFactura ? self::ESTADOS_FACTURA_SIN_EFECTO : self::ESTADOS_RECIBO_SIN_EFECTO) . "'";
+
+        // Abonos con la regla del listado de su módulo (Facturas de Venta / Recibos de Venta).
+        $cobrado = "(SELECT COALESCE(SUM(ind.monto_cobrado), 0)
+                       FROM ingresos_detalle ind
+                       JOIN ingresos_cabecera inc ON inc.id = ind.id_ingreso
+                      WHERE ind.id_referencia_documento = c.id
+                        AND ind.tipo_documento = '{$origen}'
+                        AND inc.estado != 'anulado' AND inc.eliminado = false)";
+        $nc        = $esFactura ? AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'c') : '0::numeric';
+        $retencion = $esFactura ? AbonosVentaSql::subRetenidoFactura('c') : '0::numeric';
+
+        $marca = 'false';
+        if ($idSuscripcion > 0) {
+            $marca = "EXISTS (SELECT 1 FROM suscripciones_pagos sp
+                              WHERE sp.{$colPago} = c.id AND sp.id_suscripcion = :sus_{$s} AND sp.eliminado = false)";
+            $params[":sus_{$s}"] = $idSuscripcion;
+        }
+
+        $sql = "SELECT '{$origen}'::text AS origen, c.id,
+                       c.fecha_emision::date AS fecha,
+                       CONCAT(c.establecimiento, '-', c.punto_emision, '-', c.secuencial) AS numero,
+                       '{$etiqueta}'::text AS tipo_documento,
+                       LOWER(TRIM(COALESCE(c.estado, ''))) AS estado,
+                       COALESCE(c.total_sin_impuestos, 0) AS subtotal,
+                       COALESCE(c.importe_total, 0) AS total,
+                       ab.cobrado, ab.nc, ab.retencion,
+                       (ab.cobrado + ab.nc + ab.retencion) AS abonos,
+                       (LOWER(TRIM(COALESCE(c.estado, ''))) NOT IN ({$sinEfecto})) AS con_efecto,
+                       {$marca} AS de_suscripcion,
+                       (SELECT STRING_AGG(COALESCE(NULLIF(TRIM(dd.descripcion), ''), dd.codigo_principal), ' · ' ORDER BY dd.id)
+                          FROM {$detalle} dd WHERE dd.{$fk} = c.id) AS items
+                FROM {$cabecera} c
+                CROSS JOIN LATERAL (SELECT {$cobrado} AS cobrado, {$nc} AS nc, {$retencion} AS retencion) ab
+                WHERE c.id_empresa = :emp_{$s}
+                  AND c.eliminado = false
+                  AND {$this->condAmbienteDe('c', [$idEmpresa])}";
+        $params[":emp_{$s}"] = $idEmpresa;
+
+        if ($soloSuscripcion) {
+            $sql .= " AND c.id IN (SELECT spx.{$colPago} FROM suscripciones_pagos spx
+                                    WHERE spx.id_suscripcion = :susx_{$s} AND spx.eliminado = false
+                                      AND spx.{$colPago} IS NOT NULL)";
+            $params[":susx_{$s}"] = $idSuscripcion;
+        } else {
+            // Enteros ya validados por getFacturasCliente(): interpolación segura.
+            $sql .= ' AND c.id_cliente IN (' . implode(',', $idsCliente) . ')';
+        }
+
+        if ($idUsuarioFiltro !== null) {
+            $sql .= " AND c.id_usuario = :usr_{$s}";
+            $params[":usr_{$s}"] = $idUsuarioFiltro;
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Buscador de la pestaña: texto libre (número, tipo, estado, fecha, total y los
+     * productos/servicios del documento) y filtros `clave:valor` sobre el CTE `docs`.
+     * Devuelve el fragmento para el WHERE (" AND …") y agrega sus parámetros.
+     */
+    private function filtroFacturasCliente(string $buscar, array &$params): string
+    {
+        $where  = '';
+        $parsed = FiltrosBusqueda::parsear($buscar);
+
+        if ($parsed['texto_libre'] !== '') {
+            $cond = FiltrosBusqueda::condicionTexto(
+                [
+                    'd.numero', 'd.tipo_documento', 'd.estado', 'd.items',
+                    ['sql' => "TO_CHAR(d.fecha, 'DD-MM-YYYY')", 'si' => FiltrosBusqueda::SI_FECHA],
+                    ['sql' => 'd.total', 'si' => FiltrosBusqueda::SI_NUMERO],
+                ],
+                $parsed['texto_libre'],
+                $params,
+                'sfc_b'
+            );
+            if ($cond !== '') {
+                $where .= ' AND ' . $cond;
+            }
+        }
+
+        // pago: en minúsculas y con los sinónimos del listado de Facturas de Venta.
+        $filtros = $parsed['filtros'];
+        if (isset($filtros['pago'])) {
+            $norm = static function ($v): string {
+                $v = mb_strtolower(trim((string) $v));
+                return self::SINONIMOS_PAGO[$v] ?? $v;
+            };
+            $valor = $filtros['pago']['valor'];
+            $filtros['pago']['valor'] = is_array($valor) ? array_map($norm, $valor) : $norm($valor);
+        }
+
+        FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
+            'texto'    => [
+                'numero'      => 'd.numero',
+                'nro'         => 'd.numero',
+                'documento'   => 'd.numero',
+                'producto'    => 'd.items',
+                'servicio'    => 'd.items',
+                'detalle'     => 'd.items',
+                'descripcion' => 'd.items',
+                'tipo'        => 'd.tipo_documento',
+                'estado'      => 'd.estado',
+            ],
+            'exacto'   => ['pago' => 'd.estado_pago'],
+            'fecha'    => ['fecha' => 'd.fecha'],
+            'numerico' => [
+                'total'   => 'd.total',
+                'monto'   => 'd.total',
+                'cobrado' => 'd.abonos',
+                'saldo'   => 'd.saldo',
+            ],
+        ]);
+
+        return $where;
+    }
+
+    /**
+     * Líneas (productos/servicios) de los documentos de la página: una consulta por tipo
+     * de documento, no una por documento. El IVA de cada línea es la suma de sus impuestos
+     * con codigo_impuesto = '2', igual que la pestaña Transacciones de la ficha del cliente.
+     *
+     * @param array<string, int[]> $idsPorOrigen ['FACTURA' => [ids], 'RECIBO' => [ids]]
+     * @return array<string, array<int, array>> origen => id del documento => líneas
+     */
+    private function lineasDocumentosVenta(array $idsPorOrigen): array
+    {
+        $tablas = [
+            'FACTURA' => ['ventas_detalle', 'id_venta', 'ventas_detalle_impuestos', 'id_venta_detalle'],
+            'RECIBO'  => ['recibos_venta_detalle', 'id_recibo', 'recibos_venta_detalle_impuestos', 'id_recibo_detalle'],
+        ];
+
+        $out = [];
+        foreach ($idsPorOrigen as $origen => $ids) {
+            $ids = array_values(array_unique(array_map('intval', $ids)));
+            if (!$ids || !isset($tablas[$origen])) {
+                continue;
+            }
+            [$detalle, $fk, $impuestos, $fkImpuestos] = $tablas[$origen];
+            $ph = implode(',', array_fill(0, count($ids), '?'));
+
+            $st = $this->db->prepare(
+                "SELECT d.{$fk} AS id_documento,
+                        COALESCE(TRIM(d.codigo_principal), '') AS codigo,
+                        COALESCE(TRIM(d.descripcion), '') AS descripcion,
+                        d.cantidad, d.precio_unitario,
+                        COALESCE(d.descuento, 0) AS descuento,
+                        COALESCE(d.precio_total_sin_impuesto, 0) AS subtotal,
+                        COALESCE(imp.iva, 0) AS iva,
+                        COALESCE(imp.tarifa, 0) AS tarifa_iva
+                 FROM {$detalle} d
+                 LEFT JOIN LATERAL (
+                     SELECT SUM(i.valor) AS iva, MAX(i.tarifa) AS tarifa
+                     FROM {$impuestos} i
+                     WHERE i.{$fkImpuestos} = d.id AND i.codigo_impuesto = '2'
+                 ) imp ON true
+                 WHERE d.{$fk} IN ({$ph})
+                 ORDER BY d.{$fk}, d.id"
+            );
+            $st->execute($ids);
+
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $l) {
+                $out[$origen][(int) $l['id_documento']][] = [
+                    'codigo'          => (string) $l['codigo'],
+                    'descripcion'     => (string) $l['descripcion'],
+                    'cantidad'        => (float) $l['cantidad'],
+                    'precio_unitario' => (float) $l['precio_unitario'],
+                    'descuento'       => (float) $l['descuento'],
+                    'subtotal'        => (float) $l['subtotal'],
+                    'iva'             => (float) $l['iva'],
+                    'tarifa_iva'      => (float) $l['tarifa_iva'],
+                ];
+            }
         }
         return $out;
     }

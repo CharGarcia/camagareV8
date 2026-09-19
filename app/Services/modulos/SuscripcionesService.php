@@ -64,6 +64,55 @@ class SuscripcionesService
         return $this->repository->getPagosPorSuscripcion($idSuscripcion);
     }
 
+    /** Cabecera de la suscripción (con created_by), o null si no es de la empresa o fue eliminada. */
+    public function getSuscripcion(int $idSuscripcion, int $idEmpresa): ?array
+    {
+        return $idSuscripcion > 0 ? $this->repository->findById($idSuscripcion, $idEmpresa) : null;
+    }
+
+    /**
+     * Pestaña "Facturas" del modal: facturas y recibos de venta emitidos al cliente elegido
+     * en el formulario, o —con $soloSuscripcion— solo los que generó esta suscripción, con
+     * su estado de cobro y el detalle de productos/servicios. Solo lectura.
+     *
+     * $fuentes llega resuelto por el controlador según los permisos del usuario sobre
+     * Facturas y Recibos de Venta (ver SuscripcionesRepository::getFacturasCliente()).
+     */
+    public function getFacturasCliente(
+        int $idEmpresa,
+        int $idCliente,
+        int $idSuscripcion,
+        bool $soloSuscripcion,
+        array $fuentes,
+        string $buscar,
+        int $page,
+        int $perPage,
+        string $ordenCol,
+        string $ordenDir
+    ): array {
+        if ($idSuscripcion > 0 && !$this->repository->findById($idSuscripcion, $idEmpresa)) {
+            throw new Exception('La suscripción no existe o ha sido eliminada.');
+        }
+        // "Solo esta suscripción" necesita una suscripción ya guardada.
+        $soloSuscripcion = $soloSuscripcion && $idSuscripcion > 0;
+
+        $idsCliente = [];
+        if (!$soloSuscripcion) {
+            if ($idCliente <= 0 || !$this->repository->existeCliente($idCliente, $idEmpresa)) {
+                throw new Exception('El cliente no existe o ha sido eliminado.');
+            }
+            // El mismo contribuyente cargado con cédula y con RUC es un solo cliente, igual
+            // que en la ficha del cliente y en Cuentas por Cobrar.
+            $idsCliente = (new \App\repositories\modulos\ReporteCarteraRepository())
+                ->expandirEntidades($idEmpresa, 'CLIENTE', [$idCliente]);
+        }
+
+        return $this->repository->getFacturasCliente(
+            $idEmpresa, $idsCliente, $idSuscripcion, $soloSuscripcion, $fuentes,
+            $buscar, $page, $perPage, $ordenCol, $ordenDir
+        );
+    }
+
     public function crear(array $data): int
     {
         $detalle = $this->_extraerDetalle($data);

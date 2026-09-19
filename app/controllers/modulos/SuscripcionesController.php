@@ -14,6 +14,17 @@ class SuscripcionesController extends BaseModuloController
     private SuscripcionesService $service;
     private const RUTA_MODULO = 'modulos/suscripciones';
 
+    /**
+     * Módulos cuyo permiso de lectura habilita la pestaña "Facturas" del modal: cada tipo
+     * de documento se incluye solo si el usuario puede ver su módulo y, sin "acceso total"
+     * en él, solo con los documentos que registró (igual que su listado). Única fuente:
+     * modal_suscripcion.php la usa también para decidir si pinta la pestaña.
+     */
+    public const RUTAS_FACTURAS = [
+        'FACTURA' => 'modulos/factura-venta',
+        'RECIBO'  => 'modulos/recibo-venta',
+    ];
+
     public function __construct()
     {
         parent::__construct();
@@ -362,6 +373,84 @@ class SuscripcionesController extends BaseModuloController
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Pestaña "Facturas" del modal: facturas y recibos de venta emitidos al cliente elegido
+     * en el formulario (alcance=cliente) o solo los que generó la suscripción
+     * (alcance=suscripcion), con su estado de cobro y el detalle de productos/servicios.
+     * Solo lectura; paginado en el servidor.
+     */
+    public function facturasClienteAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $fuentes = $this->fuentesFacturas();
+        if (empty($fuentes)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'mensaje' => 'No tiene permiso para ver facturas ni recibos de venta.']);
+            return;
+        }
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idSusc    = (int) ($_GET['id'] ?? 0);
+
+        // Registros propios (§6): sin acceso total en Suscripciones, solo las que registró.
+        if ($idSusc > 0) {
+            $this->requireRegistroPropio($this->service->getSuscripcion($idSusc, $idEmpresa));
+        }
+
+        try {
+            $page    = max(1, (int) ($_GET['page'] ?? 1));
+            $perPage = 20;
+
+            $res = $this->service->getFacturasCliente(
+                $idEmpresa,
+                (int) ($_GET['id_cliente'] ?? 0),
+                $idSusc,
+                ($_GET['alcance'] ?? '') === 'suscripcion',
+                $fuentes,
+                mb_substr(trim((string) ($_GET['b'] ?? '')), 0, 200),
+                $page,
+                $perPage,
+                trim((string) ($_GET['sort'] ?? '')),
+                trim((string) ($_GET['dir'] ?? ''))
+            );
+
+            echo json_encode([
+                'ok'          => true,
+                'rows'        => $res['rows'],
+                'total'       => $res['total'],
+                'resumen'     => $res['resumen'],
+                'page'        => $page,
+                'per_page'    => $perPage,
+                'total_pages' => max(1, (int) ceil($res['total'] / $perPage)),
+                // Qué documentos entran y de cuáles solo ve los propios (nota al pie de la pestaña).
+                'fuentes'     => array_keys($fuentes),
+                'propios'     => array_keys(array_filter($fuentes, static fn ($u) => $u !== null)),
+            ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+    }
+
+    /**
+     * Tipos de documento de la pestaña "Facturas" que este usuario puede ver, cada uno con
+     * su filtro de registros propios (null = ve todos los del módulo).
+     */
+    private function fuentesFacturas(): array
+    {
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $fuentes   = [];
+        foreach (self::RUTAS_FACTURAS as $origen => $ruta) {
+            $p = $this->permisosModuloPorRuta($ruta);
+            if (!empty($p['ver'])) {
+                $fuentes[$origen] = empty($p['todo']) ? $idUsuario : null;
+            }
+        }
+        return $fuentes;
     }
 
     public function tokenizarTarjetaAjax(): void
