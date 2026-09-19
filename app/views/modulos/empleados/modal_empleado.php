@@ -26,6 +26,17 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
 // 3. Pestaña Vacaciones: sus datos y acciones son del módulo Vacaciones (endpoints de
 // modulos/vacaciones), así que se rige por los permisos de ESE módulo, no por los de Empleados.
 $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
+
+// Sección "Vacaciones registradas" de esa pestaña. Se define aquí —después de
+// $permVacEmp— porque la sección va dentro de la pestaña y su modal al final del
+// archivo (fuera de este modal): los dos partials comparten esta configuración.
+$vacacionesEmpleado = [
+    'id'               => 'empVacRegistradas',
+    'puede_crear'      => !empty($permVacEmp['crear']),
+    'puede_actualizar' => !empty($permVacEmp['actualizar']),
+    'puede_eliminar'   => !empty($permVacEmp['eliminar']),
+    'meses'            => \App\models\CatalogoNovedades::MESES,
+];
 ?>
 <style>
     /* Ancho del modal: un poco más angosto que modal-xl, pero suficiente para las pestañas */
@@ -570,13 +581,7 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
                                 <?php
                                 // Vacaciones ya registradas del empleado + registrar una nueva
                                 // (mismo formulario del módulo Vacaciones, con el empleado fijo).
-                                $vacacionesEmpleado = [
-                                    'id'               => 'empVacRegistradas',
-                                    'puede_crear'      => !empty($permVacEmp['crear']),
-                                    'puede_actualizar' => !empty($permVacEmp['actualizar']),
-                                    'puede_eliminar'   => !empty($permVacEmp['eliminar']),
-                                    'meses'            => \App\models\CatalogoNovedades::MESES,
-                                ];
+                                // Su modal se incluye al final del archivo, fuera de este modal.
                                 include MVC_APP . '/views/modulos/vacaciones/_vacaciones_empleado.php';
                                 ?>
                                 <hr class="my-3 opacity-25">
@@ -794,6 +799,17 @@ $permVacEmp = \App\Helpers\Permisos::porRuta('modulos/vacaciones');
         </div>
     </div>
 </div>
+
+<?php if (!empty($permVacEmp['ver'])): ?>
+    <?php
+    // Modal de "Registrar vacación": va AQUÍ, hermano del modal de la ficha y no
+    // dentro de él. Anidado heredaría su contexto de apilamiento (.modal tiene
+    // z-index 5060 !important en app.css) y su propio backdrop lo taparía: se veía
+    // detrás y no se podía usar ni cerrar. Misma convención que los submodales de
+    // Proformas, que también se declaran a nivel de la página.
+    include MVC_APP . '/views/modulos/vacaciones/_vacaciones_empleado_modal.php';
+    ?>
+<?php endif; ?>
 
 <?php $urlEmpMod = rtrim(BASE_URL, '/') . '/modulos/empleados'; $baseEmp = rtrim(BASE_URL, '/'); ?>
 

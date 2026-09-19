@@ -41,6 +41,15 @@
             this.puedeEliminar = raiz.dataset.eliminar === '1';
             this.modalEl = document.getElementById(raiz.dataset.modal);
             this.onCambio = typeof opciones.onCambio === 'function' ? opciones.onCambio : null;
+
+            // Salvaguarda: este modal debe quedar fuera de cualquier otro modal. Dentro
+            // de uno hereda su contexto de apilamiento —app.css fuerza
+            // .modal { z-index:5060 !important }— y su propio backdrop lo tapa: se ve
+            // detrás, atenuado y sin poder cerrarlo. La vista ya lo declara como
+            // hermano; esto lo lleva al <body> por si alguien lo incluye anidado.
+            if (this.modalEl && this.modalEl.parentElement !== document.body) {
+                document.body.appendChild(this.modalEl);
+            }
             this.seq = 0;
             this.idEmpleado = null;
             this.empleado = {};
@@ -286,8 +295,9 @@
                 if (document.querySelector('.modal.show')) document.body.classList.add('modal-open');
             });
 
-            // El modal vive dentro del <form> de la ficha del empleado: un Enter en
-            // cualquier campo lo guardaría. (El textarea sí conserva sus saltos.)
+            // Enter no debe disparar el guardado de ningún formulario que lo contenga
+            // (el modal se declara dentro del <form> de la ficha, aunque luego se mueva
+            // al <body>). El textarea sí conserva sus saltos de línea.
             this.modalEl.addEventListener('keydown', (ev) => {
                 if (ev.key === 'Enter' && ev.target.matches('input')) ev.preventDefault();
             });
