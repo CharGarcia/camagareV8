@@ -1431,6 +1431,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }
         
         const filasPrecioCero = [];
+        // Una unidad = un NUP dentro de su lote. La clave del duplicado es producto + lote + NUP:
+        // el mismo NUP en otro producto, o en otro lote del mismo producto, es legítimo.
+        const nupsVistos = new Map();
         for (let i = 0; i < rowElements.length; i++) {
             const tr = rowElements[i];
             const idProd = tr.querySelector('.input-id-producto').value;
@@ -1469,6 +1472,25 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             }
             if (precio === 0) {
                 filasPrecioCero.push({ i, nombre: tr.querySelector('.input-descripcion')?.value || `Fila ${i + 1}` });
+            }
+
+            // NUP repetido en el mismo lote del mismo producto: es la misma unidad dos veces.
+            const nupEl = tr.querySelector('.input-nup');
+            const nupVal = (nupEl && !nupEl.classList.contains('d-none')) ? (nupEl.value || '').trim() : '';
+            if (nupVal) {
+                const loteEl = tr.querySelector('.input-lote');
+                const loteVal = (loteEl && !loteEl.classList.contains('d-none')) ? (loteEl.value || '').trim() : '';
+                const claveNup = `${idProd}|${loteVal.toUpperCase()}|${nupVal.toUpperCase()}`;
+                if (nupsVistos.has(claveNup)) {
+                    Swal.fire('Atención', `El NUP «${nupVal}» está repetido en las filas ${nupsVistos.get(claveNup)} y ${i + 1}${loteVal ? ` (lote ${loteVal})` : ''}. Cada unidad debe llevar su propio NUP.`, 'warning').then(() => {
+                        if (nupEl) {
+                            nupEl.focus();
+                            nupEl.select();
+                        }
+                    });
+                    return;
+                }
+                nupsVistos.set(claveNup, i + 1);
             }
         }
 
@@ -2263,24 +2285,34 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             return;
         }
 
-        // NUP único: una unidad física = un NUP. No puede repetirse ni entre las filas de este
-        // lote (p. ej. varias unidades del mismo producto) ni con uno ya cargado en la grilla.
-        const nupsEnGrilla = Array.from(document.querySelectorAll('#cons_detalles_body .input-nup'))
-            .map(el => (el.value || '').trim())
-            .filter(v => v !== '');
+        // Una unidad física = un NUP dentro de su lote. El duplicado es el mismo producto + el
+        // mismo lote + el mismo NUP, ya sea entre las filas que se están agregando o contra una
+        // que ya está en la grilla. El mismo NUP en OTRO producto, o en otro lote del mismo
+        // producto, sí es válido: el NUP no identifica la unidad por sí solo.
+        const claveNupItem = (idProd, lote, nup) => `${idProd}|${(lote || '').trim().toUpperCase()}|${(nup || '').trim().toUpperCase()}`;
+        const nupsEnGrilla = new Set();
+        document.querySelectorAll('#cons_detalles_body tr.row-detalle-cons').forEach(tr => {
+            const nupEl = tr.querySelector('.input-nup');
+            const nupGrilla = nupEl ? (nupEl.value || '').trim() : '';
+            if (!nupGrilla) return;
+            const loteEl = tr.querySelector('.input-lote');
+            const idProdEl = tr.querySelector('.input-id-producto');
+            nupsEnGrilla.add(claveNupItem(idProdEl ? idProdEl.value : '', loteEl ? loteEl.value : '', nupGrilla));
+        });
         const vistosEnLote = new Set();
         const nupsDuplicados = [];
         for (const it of selectedItems) {
             const nup = (it.nup || '').trim();
             if (!nup) continue;
-            if (vistosEnLote.has(nup) || nupsEnGrilla.includes(nup)) {
-                nupsDuplicados.push(`${nup} (${it.original.producto_nombre})`);
+            const clave = claveNupItem(it.id_producto, it.lote, nup);
+            if (vistosEnLote.has(clave) || nupsEnGrilla.has(clave)) {
+                nupsDuplicados.push(`${nup} (${it.original.producto_nombre}${it.lote ? ', lote ' + it.lote : ''})`);
             } else {
-                vistosEnLote.add(nup);
+                vistosEnLote.add(clave);
             }
         }
         if (nupsDuplicados.length) {
-            Swal.fire('Atención', `El NUP no puede repetirse (cada unidad debe tener un NUP único). Revise: ${nupsDuplicados.join(', ')}`, 'warning');
+            Swal.fire('Atención', `El NUP no puede repetirse dentro del mismo lote: cada unidad debe llevar el suyo. Revise: ${nupsDuplicados.join(', ')}`, 'warning');
             return;
         }
 

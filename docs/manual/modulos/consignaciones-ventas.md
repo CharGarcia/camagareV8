@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo
-version: 1.25
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido
+version: 1.26
 orden: 45
 estado: activo
 ---
@@ -336,6 +336,35 @@ siguiente número libre»*: basta con volver a pulsar **Guardar**.
 Una consignación **eliminada** libera su número, que se volverá a ofrecer; una
 **anulada** lo conserva.
 
+## El NUP no se puede repetir en el mismo lote
+
+Cada unidad se identifica por **producto + lote + NUP**, no por el NUP solo. Dentro
+de una misma consignación, esa combinación no puede aparecer dos veces: sería la
+misma unidad contada dos veces, y arrastraría el error a los retornos, a la
+facturación y a los cambios de productos, que heredan el NUP de la línea.
+
+Lo que **sí se permite**, porque es habitual y no es un error:
+
+- El mismo NUP en **productos distintos**, incluso si el lote se llama igual.
+- El mismo NUP en **otro lote** del mismo producto.
+- Una línea con NUP y **cantidad mayor que 1**, cuando el NUP identifica un grupo
+  y no una sola unidad.
+
+Mayúsculas y espacios no cuentan: `ab-1` y `AB-1 ` son la misma unidad. Si la
+línea no tiene lote, el «sin lote» funciona como un lote más, así que dos líneas
+sin lote del mismo producto tampoco pueden llevar el mismo NUP.
+
+El aviso llega en dos momentos. Al traer ítems **desde un pedido**, antes de
+agregarlos: el mensaje nombra el producto y el lote de cada repetido, y no se
+agrega ninguna fila hasta corregirlo. Y al **guardar**, que es el control que
+vale para todo lo demás —ítems agregados a mano, NUP cambiado después de traerlo
+del pedido y consignaciones que se vuelven a editar—; ahí el mensaje dice en qué
+dos filas está el NUP repetido.
+
+Este control rige para lo que se guarda de ahora en adelante. Los documentos
+antiguos no se tocan, pero si abre uno que ya traía un NUP repetido en el mismo
+lote y lo guarda, deberá corregirlo antes.
+
 ## Numeración por fecha de emisión
 
 Por defecto el número de estos documentos es un **correlativo corrido** que nunca
@@ -367,6 +396,12 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.26** — El **NUP no puede repetirse dentro del mismo lote del mismo producto**
+  en una consignación: se avisa al traer ítems de un pedido y se bloquea al guardar,
+  también en los ítems agregados a mano y al editar un documento ya guardado. El
+  mismo NUP en otro producto, o en otro lote, sigue siendo válido — antes la única
+  comprobación miraba el NUP suelto, así que rechazaba esos casos legítimos y en
+  cambio dejaba pasar los repetidos escritos con otras mayúsculas.
 - **1.25** — El **cambio de estado que la consignación provoca en el pedido** (Pendiente
   ↔ Procesado) ahora queda registrado en el historial de ese pedido, indicando de qué
   consignación vino. Antes ese recálculo dejaba el pedido marcado como modificado por

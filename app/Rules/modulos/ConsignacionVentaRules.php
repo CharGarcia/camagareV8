@@ -30,6 +30,11 @@ class ConsignacionVentaRules
         $obligatorioCaducidad = $toBool($estConfig['obligatorio_caducidad'] ?? false);
         $obligatorioNup = $toBool($estConfig['obligatorio_nup'] ?? false);
 
+        // Una unidad = un NUP dentro de su lote. La clave del duplicado es
+        // producto + lote + NUP: el mismo NUP en OTRO producto, o en otro lote del mismo
+        // producto, es legítimo y frecuente (el NUP no identifica por sí solo).
+        $nupsVistos = [];
+
         foreach ($data['detalles'] as $idx => $det) {
             if (empty($det['id_producto'])) {
                 throw new Exception("Hay un producto sin identificar en la fila " . ($idx + 1));
@@ -50,6 +55,20 @@ class ConsignacionVentaRules
             $esInventariable = $toBool($prodData['inventariable'] ?? false);
             $tipoProduccion = trim((string)($prodData['tipo_produccion'] ?? ''));
             $nombreItem = $prodData['nombre'] ?? "Fila " . ($idx + 1);
+
+            // NUP repetido dentro del documento (ver $nupsVistos). Se compara sin espacios y sin
+            // distinguir mayúsculas, para que "ab-1" y "AB-1 " cuenten como la misma unidad.
+            $nupOriginal = trim((string)($det['nup'] ?? ''));
+            if ($nupOriginal !== '') {
+                $loteOriginal = trim((string)($det['lote'] ?? ''));
+                $clave = (int)$det['id_producto'] . '|' . mb_strtoupper($loteOriginal) . '|' . mb_strtoupper($nupOriginal);
+                if (isset($nupsVistos[$clave])) {
+                    throw new Exception("{$nombreItem}: el NUP «{$nupOriginal}» está repetido"
+                        . ($loteOriginal !== '' ? " en el lote {$loteOriginal}" : "")
+                        . " (filas {$nupsVistos[$clave]} y " . ($idx + 1) . "). Cada unidad debe llevar su propio NUP.");
+                }
+                $nupsVistos[$clave] = $idx + 1;
+            }
 
             // Servicios (tipo 02) o productos no inventariables no requieren estos campos
             if ($tipoProduccion === '02' || !$esInventariable) {

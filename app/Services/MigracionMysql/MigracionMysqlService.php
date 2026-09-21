@@ -1774,6 +1774,9 @@ class MigracionMysqlService
             if (empty($res['error_muestra'])) { $res['error_muestra'] = 'conciliación: ' . substr($ex->getMessage(), 0, 150); }
         }
 
+        // Enlaza los pagos de nómina ya migrados (egresos ROL) con las líneas de este rol → "pagado" por empleado.
+        $res['pagos_rol_enlazados'] = $this->cruzarEgresosConRoles($idEmpresa);
+
         return $res;
     }
 
@@ -4720,6 +4723,15 @@ class MigracionMysqlService
                         $tdoc   = 'MANUAL';
                         $idRef  = null;
                         $numDoc = null;
+                        // Pago de NÓMINA: el cv 'ROL_PAGOS<n>' / 'QUINCENA<n>' referencia la línea POR
+                        // EMPLEADO del rol viejo (n = detalle_rolespago.id / detalle_quincena.id). Se guarda
+                        // como línea 'ROL' con la llave natural en numero_documento; cruzarEgresosConRoles
+                        // rellena id_referencia_documento (→ rol_detalle) para que el rol se vea PAGADO por
+                        // empleado (getPagadoPorDetalle). Sin esto el rol migrado sale "pendiente de pago".
+                        if (preg_match('/^(ROL[_ ]?PAGOS?|QUINCENA)\d+$/i', trim($cdv))) {
+                            $tdoc   = 'ROL';
+                            $numDoc = trim($cdv);
+                        }
                     }
                     $insDet->execute([$idEgr, $tdoc, $idRef, $numDoc, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
                 }
@@ -4751,6 +4763,8 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
             }
         }
+        // Enlaza los pagos de nómina recién migrados con su línea de rol (si los roles ya están migrados).
+        $res['pagos_rol_enlazados'] = $this->cruzarEgresosConRoles($idEmpresa);
         return $res;
     }
 
@@ -6105,6 +6119,97 @@ class MigracionMysqlService
             );
             $st->execute([':e' => $idEmpresa]);
             return $st->rowCount();
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Cruza los pagos (egresos) de NÓMINA migrados con la línea de rol de cada empleado: llena
+     * id_referencia_documento de las líneas 'ROL' que migrarEgresos dejó con la llave natural en
+     * numero_documento ('ROL_PAGOS<n>' / 'QUINCENA<n>', donde <n> = detalle_rolespago.id /
+     * detalle_quincena.id del viejo, la línea POR EMPLEADO). Resuelve <n> → (rol viejo, empleado
+     * viejo) en MySQL, y esos → rol_cabecera / empleado nuevos vía el mapa de migración, para ubicar
+     * el rol_detalle exacto. NO empareja por monto (los netos se repiten entre empleados) ni depende
+     * del nombre. Idempotente (solo líneas ROL sin documento). Se llama al final de migrarEgresos y de
+     * migrarRolGenerico, así el enlace se completa sin importar el orden de migración.
+     */
+    private function cruzarEgresosConRoles(int $idEmpresa): int
+    {
+        try {
+            $pg = Database::getConnection();
+            // 1) Candidatas: líneas ROL migradas sin enlazar, con su llave natural (cv) en numero_documento.
+            $sel = $pg->prepare(
+                "SELECT d.id AS id_det, d.numero_documento AS cv
+                   FROM egresos_detalle d
+                   JOIN egresos_cabecera e    ON e.id = d.id_egreso
+                   JOIN migracion_mysql_map m ON m.id_empresa = e.id_empresa AND m.entidad = 'egresos' AND m.id_destino = e.id
+                  WHERE e.id_empresa = :e AND e.eliminado = false
+                    AND d.tipo_documento = 'ROL' AND d.id_referencia_documento IS NULL AND d.eliminado = false
+                    AND d.numero_documento IS NOT NULL AND d.numero_documento <> ''"
+            );
+            $sel->execute([':e' => $idEmpresa]);
+            $cands = $sel->fetchAll(PDO::FETCH_ASSOC);
+            if (!$cands) { return 0; }
+
+            // Separar por tipo (rol vs quincena) y agrupar las líneas nuevas por id de detalle viejo.
+            $rolIds = []; $qIds = []; $porDet = []; // clave 'r:'|'q:' . oldDet => [id_det nuevo, ...]
+            foreach ($cands as $c) {
+                $cv = strtoupper(trim((string) $c['cv']));
+                if (!preg_match('/^(ROL[_ ]?PAGOS?|QUINCENA)0*(\d+)$/', $cv, $mm)) { continue; }
+                $oldDet = (int) $mm[2];
+                if ($oldDet <= 0) { continue; }
+                $key = (strpos($cv, 'QUINCENA') === 0 ? 'q:' : 'r:') . $oldDet;
+                if ($key[0] === 'q') { $qIds[$oldDet] = true; } else { $rolIds[$oldDet] = true; }
+                $porDet[$key][] = (int) $c['id_det'];
+            }
+            if (!$rolIds && !$qIds) { return 0; }
+
+            // 2) MySQL: old detalle id => (old cabecera, old empleado).
+            $mysql   = LegacyMysqlConnection::get();
+            $detInfo = [];
+            if ($rolIds) {
+                $in = implode(',', array_map('intval', array_keys($rolIds)));
+                foreach ($mysql->query("SELECT id, id_rol, id_empleado FROM detalle_rolespago WHERE id IN ($in)") as $r) {
+                    $detInfo['r:' . (int) $r['id']] = ['cab' => (int) $r['id_rol'], 'emp' => (int) $r['id_empleado']];
+                }
+            }
+            if ($qIds) {
+                $in = implode(',', array_map('intval', array_keys($qIds)));
+                foreach ($mysql->query("SELECT id, id_quincena, id_empleado FROM detalle_quincena WHERE id IN ($in)") as $r) {
+                    $detInfo['q:' . (int) $r['id']] = ['cab' => (int) $r['id_quincena'], 'emp' => (int) $r['id_empleado']];
+                }
+            }
+            if (!$detInfo) { return 0; }
+
+            // 3) Mapas viejo→nuevo (cabecera de rol/quincena y empleado).
+            $mapRol = $this->mapaDe($pg, $idEmpresa, 'roles_pago'); // oldRol       => newCab
+            $mapQ   = $this->mapaDe($pg, $idEmpresa, 'quincenas');  // oldQuincena  => newCab
+            $mapEmp = $this->mapaDe($pg, $idEmpresa, 'empleados');  // oldEmpleado  => newEmpleado
+
+            // 4) Ubicar el rol_detalle (cabecera+empleado) y enlazar. Sirve también para cabeceras
+            //    ya existentes/vinculadas (empareja por rol+empleado, no por nuestra inserción).
+            $buscarRd = $pg->prepare(
+                "SELECT rd.id FROM rol_detalle rd JOIN rol_cabecera rc ON rc.id = rd.id_rol
+                  WHERE rd.id_empresa = :e AND rd.id_rol = :cab AND rd.id_empleado = :emp AND rc.eliminado = false
+                  ORDER BY rd.id LIMIT 1"
+            );
+            $upd = $pg->prepare("UPDATE egresos_detalle SET id_referencia_documento = :rd WHERE id = :d AND id_referencia_documento IS NULL");
+            $n = 0;
+            foreach ($detInfo as $key => $info) {
+                $esQ    = ($key[0] === 'q');
+                $newCab = $esQ ? (int) ($mapQ[(string) $info['cab']] ?? 0) : (int) ($mapRol[(string) $info['cab']] ?? 0);
+                $newEmp = (int) ($mapEmp[(string) $info['emp']] ?? 0);
+                if ($newCab <= 0 || $newEmp <= 0) { continue; }
+                $buscarRd->execute([':e' => $idEmpresa, ':cab' => $newCab, ':emp' => $newEmp]);
+                $rdId = (int) ($buscarRd->fetchColumn() ?: 0);
+                if ($rdId <= 0) { continue; }
+                foreach ($porDet[$key] ?? [] as $egDetId) {
+                    $upd->execute([':rd' => $rdId, ':d' => $egDetId]);
+                    $n += $upd->rowCount();
+                }
+            }
+            return $n;
         } catch (\Throwable $e) {
             return 0;
         }
