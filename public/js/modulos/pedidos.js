@@ -286,9 +286,10 @@ function initAutocomplete(inputId, listId, onSelect, url, hiddenId = null) {
 
 /**
  * Pinta (o borra) el vendedor/asesor del cliente seleccionado, en letra pequeña
- * justo debajo del buscador de cliente. Es solo informativo: el pedido no guarda
- * vendedor propio, sale del que tiene asignado el cliente (clientes.id_vendedor),
- * así que si el cliente no tiene uno la línea simplemente no se muestra.
+ * al final de la línea del label "Cliente", alineado al filo derecho. Es solo
+ * informativo: el pedido no guarda vendedor propio, sale del que tiene asignado
+ * el cliente (clientes.id_vendedor), así que si el cliente no tiene uno la línea
+ * simplemente no se muestra.
  */
 function pedMostrarVendedorCliente(nombre) {
     const cont = document.getElementById('ped-cliente-vendedor');

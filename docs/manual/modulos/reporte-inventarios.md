@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote
-version: 1.20
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica
+version: 1.21
 orden: 40
 estado: activo
 ---
@@ -106,6 +106,19 @@ estados del stock de un producto, y aquí la fila es una entrega.
 > Esta opción aparece solo si el usuario también puede **ver Consignaciones de
 > ventas**: muestra datos de ese módulo, no del kardex.
 
+## El reporte solo se genera al pulsar Mostrar
+
+Ninguna pestaña consulta por su cuenta. Elegir un producto o un cliente en el
+buscador, cambiar el selector **Detalle** o cambiar **Año** y **Mes** solo deja
+el filtro puesto: la tabla no se mueve hasta que se pulsa **Mostrar**.
+
+Así se pueden acomodar varios filtros seguidos sin que cada cambio dispare una
+búsqueda —una consulta sin acotar recorre todo el inventario o todo el kardex— y
+sin quedarse esperando resultados que todavía no se pidieron.
+
+Al abrir el módulo, y cada vez que se limpian los filtros, la tabla muestra
+*Aplica los filtros y genera el reporte* hasta el primer Mostrar.
+
 ## Limpiar los filtros
 
 Cada pestaña tiene, junto al botón **Mostrar**, un botón con un icono de goma
@@ -126,9 +139,8 @@ exportación) no deja esperando al resto del sistema: mientras carga se puede
 abrir otro módulo en otra pestaña del navegador o usar los buscadores de
 producto y cliente.
 
-Si se vuelve a pulsar **Mostrar** —o se cambia Detalle, Año o Mes— antes de que
-termine la búsqueda anterior, esa anterior se descarta y la tabla muestra solo
-el resultado de la última.
+Si se vuelve a pulsar **Mostrar** antes de que termine la búsqueda anterior,
+esa anterior se descarta y la tabla muestra solo el resultado de la última.
 
 ## Cómo se calcula el stock (saldo en vivo)
 
@@ -350,6 +362,11 @@ ahí.
 
 ## Historial de cambios
 
+- **1.21** — Ninguna pestaña vuelve a consultar sola: elegir un producto o un
+  cliente en el buscador, cambiar el selector *Detalle* o cambiar *Año* y *Mes*
+  ya no lanza la búsqueda. La tabla se actualiza únicamente al pulsar
+  **Mostrar**, así se pueden acomodar varios filtros seguidos sin disparar una
+  consulta en cada cambio.
 - **1.20** — Nueva opción **Lote + consignación** en el selector *Detalle* de
   Existencias: una fila por lote/NUP entregado, con fecha, secuencial, cliente,
   asesor, responsable de traslado, bodega y el desglose consignado / retornado

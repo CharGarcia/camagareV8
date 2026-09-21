@@ -135,16 +135,21 @@ $pedVistaConfig = $vistaConfig ?? [];
                                     </select>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Cliente <span class="text-danger">*</span></label>
+                                    <!-- El vendedor va en la MISMA línea del label, pegado al filo derecho:
+                                         `min-width:0` es lo que permite que text-truncate recorte el nombre
+                                         largo en vez de empujar el label "Cliente" fuera de la columna. -->
+                                    <div class="d-flex align-items-end justify-content-between gap-2">
+                                        <label class="form-label small fw-bold mb-1 flex-shrink-0">Cliente <span class="text-danger">*</span></label>
+                                        <!-- Vendedor (asesor) del cliente seleccionado. Pedidos no guarda vendedor
+                                             propio: es el que tiene asignado el cliente (clientes.id_vendedor), solo
+                                             informativo. Lo llena pedMostrarVendedorCliente() en pedidos.js. -->
+                                        <div id="ped-cliente-vendedor" class="small text-muted text-truncate text-end mb-1 d-none" style="font-size:.72rem;min-width:0;"></div>
+                                    </div>
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text bg-white"><i class="bi bi-person"></i></span>
                                         <input type="text" id="buscar-cliente" class="form-control form-control-sm" placeholder="Buscar por nombre o identificación..." autocomplete="off">
                                         <input type="hidden" id="id_cliente">
                                     </div>
-                                    <!-- Vendedor (asesor) del cliente seleccionado. Pedidos no guarda vendedor
-                                         propio: es el que tiene asignado el cliente (clientes.id_vendedor), solo
-                                         informativo. Lo llena pedMostrarVendedorCliente() en pedidos.js. -->
-                                    <div id="ped-cliente-vendedor" class="small text-muted mt-1 text-truncate d-none" style="font-size:.72rem;"></div>
                                 </div>
                             </div>
 

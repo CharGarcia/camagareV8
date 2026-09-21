@@ -1,4 +1,10 @@
 // Módulo: Reporte de Inventarios (Existencias, Movimientos, Valorización, Consignaciones)
+//
+// Regla de la pantalla: ningún filtro consulta por su cuenta. Elegir un producto o
+// cliente en el buscador, cambiar el Detalle o cambiar Año/Mes solo actualiza el
+// formulario; los datos se piden únicamente al pulsar Mostrar (submit del form).
+// Una consulta sin acotar recorre todo el inventario/kardex, y el usuario suele
+// tocar varios filtros seguidos antes de querer verla.
 
 // ════════════════════════════════════════════════════════════════════
 // HELPERS COMPARTIDOS
@@ -199,7 +205,8 @@ window.RI_Existencias = {
         if (estado) { estado.disabled = false; estado.title = ''; }
     },
 
-    /** El desglose ya define las filas: con él activo, "Agrupar por" no pinta nada. */
+    /** El desglose ya define las filas: con él activo, "Agrupar por" no pinta nada.
+     *  Solo deja los controles como corresponde; la consulta la lanza Mostrar. */
     cambiarDesglose() {
         const desglose = document.getElementById('ri-ex-desglose').value;
         const agrupar = document.getElementById('ri-ex-agrupar');
@@ -216,12 +223,10 @@ window.RI_Existencias = {
                 ? 'No aplica en "Lote + consignación": cada fila es una entrega, no el stock de un producto.'
                 : '';
         }
-        this.generar();
     },
 
     limpiarProducto() {
         RI_limpiarBusqueda('ri-ex-search-producto', 'ri-ex-id-producto', 'ri-ex-producto-seleccionado');
-        this.generar();
     },
 
     modalEditarInstance: null,
@@ -492,21 +497,20 @@ window.RI_Existencias = {
 window.RI_Movimientos = {
     limpiarFiltros() {
         RI_limpiarFiltros('ri-mv', ['ri-mv-producto-seleccionado']);
-        this.cambiarMesAnio(false);   // el reset deja el año por defecto: hay que rehacer las fechas
+        this.cambiarMesAnio();   // el reset deja el año por defecto: hay que rehacer las fechas
     },
 
     limpiarProducto() {
         RI_limpiarBusqueda('ri-mv-search-producto', 'ri-mv-id-producto', 'ri-mv-producto-seleccionado');
-        this.generar();
     },
 
     /**
-     * Traduce Año/Mes a las fechas desde/hasta, que son el filtro real. Con
-     * regenerar=false solo sincroniza los campos (carga inicial y tras limpiar):
-     * la pestaña arranca con un año elegido porque sin acotar la fecha el saldo
-     * corrido obliga a recorrer todo el histórico del kardex.
+     * Traduce Año/Mes a las fechas desde/hasta, que son el filtro real. Solo
+     * sincroniza los campos: la consulta la lanza el botón Mostrar. La pestaña
+     * arranca con un año elegido porque sin acotar la fecha el saldo corrido
+     * obliga a recorrer todo el histórico del kardex.
      */
-    cambiarMesAnio(regenerar = true) {
+    cambiarMesAnio() {
         // La pestaña Movimientos no está en la página cuando el usuario no puede ver
         // Inventario (el controlador no la dibuja): no hay nada que sincronizar.
         const selMes  = document.getElementById('ri-mv-mes');
@@ -527,7 +531,6 @@ window.RI_Movimientos = {
             document.getElementById('ri-mv-fecha-desde').value = `${anio}-${mes}-01`;
             document.getElementById('ri-mv-fecha-hasta').value = `${anio}-${mes}-${String(ultimoDia).padStart(2, '0')}`;
         }
-        if (regenerar) this.generar();
     },
 
     dibujarCabecera(modo) {
@@ -620,7 +623,6 @@ window.RI_Valorizacion = {
 
     limpiarProducto() {
         RI_limpiarBusqueda('ri-va-search-producto', 'ri-va-id-producto', 'ri-va-producto-seleccionado');
-        this.generar();
     },
 
     generar() {
@@ -671,11 +673,9 @@ window.RI_Consignaciones = {
 
     limpiarCliente() {
         RI_limpiarBusqueda('ri-cv-search-cliente', 'ri-cv-id-cliente', 'ri-cv-cliente-seleccionado');
-        this.generar();
     },
     limpiarProducto() {
         RI_limpiarBusqueda('ri-cv-search-producto', 'ri-cv-id-producto', 'ri-cv-producto-seleccionado');
-        this.generar();
     },
 
     modalInstance: null,
@@ -875,7 +875,6 @@ window.RI_Auditoria = {
 
     limpiarProducto() {
         RI_limpiarBusqueda('ri-au-search-producto', 'ri-au-id-producto', 'ri-au-producto-seleccionado');
-        this.generar();
     },
 
     dibujarCabecera() {
@@ -1028,14 +1027,14 @@ document.addEventListener('DOMContentLoaded', function () {
         aplicarFavoritosModal();
     }
 
-    RI_setupAutocomplete('ri-ex-search-producto', 'ri-ex-dropdown-producto', 'ri-ex-id-producto', 'ri-ex-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Existencias.generar());
-    RI_setupAutocomplete('ri-mv-search-producto', 'ri-mv-dropdown-producto', 'ri-mv-id-producto', 'ri-mv-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Movimientos.generar());
-    RI_setupAutocomplete('ri-va-search-producto', 'ri-va-dropdown-producto', 'ri-va-id-producto', 'ri-va-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Valorizacion.generar());
-    RI_setupAutocomplete('ri-cv-search-producto', 'ri-cv-dropdown-producto', 'ri-cv-id-producto', 'ri-cv-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Consignaciones.generar());
-    RI_setupAutocomplete('ri-cv-search-cliente', 'ri-cv-dropdown-cliente', 'ri-cv-id-cliente', 'ri-cv-cliente-seleccionado', '/getClientesAjax?q=', () => window.RI_Consignaciones.generar());
-    RI_setupAutocomplete('ri-au-search-producto', 'ri-au-dropdown-producto', 'ri-au-id-producto', 'ri-au-producto-seleccionado', '/getProductosAjax?q=', () => window.RI_Auditoria.generar());
+    RI_setupAutocomplete('ri-ex-search-producto', 'ri-ex-dropdown-producto', 'ri-ex-id-producto', 'ri-ex-producto-seleccionado', '/getProductosAjax?q=');
+    RI_setupAutocomplete('ri-mv-search-producto', 'ri-mv-dropdown-producto', 'ri-mv-id-producto', 'ri-mv-producto-seleccionado', '/getProductosAjax?q=');
+    RI_setupAutocomplete('ri-va-search-producto', 'ri-va-dropdown-producto', 'ri-va-id-producto', 'ri-va-producto-seleccionado', '/getProductosAjax?q=');
+    RI_setupAutocomplete('ri-cv-search-producto', 'ri-cv-dropdown-producto', 'ri-cv-id-producto', 'ri-cv-producto-seleccionado', '/getProductosAjax?q=');
+    RI_setupAutocomplete('ri-cv-search-cliente', 'ri-cv-dropdown-cliente', 'ri-cv-id-cliente', 'ri-cv-cliente-seleccionado', '/getClientesAjax?q=');
+    RI_setupAutocomplete('ri-au-search-producto', 'ri-au-dropdown-producto', 'ri-au-id-producto', 'ri-au-producto-seleccionado', '/getProductosAjax?q=');
 
     // El selector Año de Movimientos viene con un año elegido; las fechas (el filtro
     // real) hay que derivarlas al cargar, sin lanzar todavía ninguna consulta.
-    window.RI_Movimientos.cambiarMesAnio(false);
+    window.RI_Movimientos.cambiarMesAnio();
 });

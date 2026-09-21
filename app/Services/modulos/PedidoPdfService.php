@@ -130,8 +130,7 @@ class PedidoPdfService
             . $fmtHora($c['hora_inicial_entrega'] ?? '')
             . (($c['hora_maxima_entrega'] ?? '') ? ' - ' . $fmtHora($c['hora_maxima_entrega'] ?? '') : ''));
 
-        // 5 renglones de 5 mm desde y+1.5 → 26.5; la caja necesita 31 para no cortarlos.
-        $boxH = 31;
+        $boxH = 26;
         $pdf->SetLineWidth(0.2);
         $pdf->SetDrawColor(120, 120, 120);
         $pdf->SetFillColor(245, 245, 245);
@@ -156,13 +155,15 @@ class PedidoPdfService
         $par('Cliente:', (string) ($c['cliente_nombre'] ?? '—'), 'Fecha pedido:', $fmtFecha($c['fecha_pedido'] ?? ''));
         $par('Identificación:', (string) ($c['cliente_identificacion'] ?? ''), 'Fecha entrega:', $entrega !== '' ? $entrega : '—');
         $par('Resp. entrega:', (string) ($c['responsable_entrega'] ?? '—'), 'Estado:', ucfirst((string) ($c['estado'] ?? '')));
-        // Vendedor / asesor: Pedidos no lo guarda en su cabecera, viene del
-        // vendedor asignado al cliente (clientes.id_vendedor).
-        $vendedor = trim((string) ($c['vendedor_nombre'] ?? ''));
-        $par('Vendedor:', $vendedor !== '' ? $vendedor : '—', '', '');
-        // Solicitado por: el usuario que registró el pedido (pedidos_cabecera.created_by).
+        // Última fila: a la izquierda el vendedor / asesor —Pedidos no lo guarda en su
+        // cabecera, viene del vendedor asignado al cliente (clientes.id_vendedor)— y a la
+        // derecha quién registró el pedido (pedidos_cabecera.created_by). Son distintos.
+        $vendedor    = trim((string) ($c['vendedor_nombre'] ?? ''));
         $solicitante = trim((string) ($c['creado_por_nombre'] ?? ''));
-        $par('Solicitado por:', $solicitante !== '' ? $solicitante : '—', '', '');
+        $par(
+            'Vendedor:',       $vendedor    !== '' ? $vendedor    : '—',
+            'Solicitado por:', $solicitante !== '' ? $solicitante : '—'
+        );
 
         return $y + $boxH;
     }
