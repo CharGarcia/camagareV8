@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips
-version: 1.14
+etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips
+version: 1.15
 orden: 15
 estado: activo
 ---
@@ -52,6 +52,53 @@ Si intenta convertir una proforma que **ya generó una factura vigente**, el
 sistema pide confirmación antes de crear otra. Es a propósito: evita duplicar una
 venta por error, pero permite refacturar cuando de verdad hace falta (por ejemplo
 si la factura anterior fue anulada).
+
+## Enviar a pedidos
+
+Cuando lo cotizado hay que **despachar** antes (o en vez) de facturar, el botón
+del **carrito** de la barra superior del modal genera un **pedido** con los
+productos de la proforma.
+
+El pedido nace en estado **Pendiente**, con el mismo cliente, los mismos
+productos, cantidades y precios. **No mueve inventario ni emite nada al SRI**: es
+la orden de despacho de lo que el cliente ya aceptó.
+
+Su **fecha de pedido es la del momento en que se genera, con hora incluida**
+(21-09-2026 15:46:27), no la fecha de la proforma: lo que interesa es cuándo se
+mandó a despachar. La pestaña *Pedidos* la muestra con esa hora; el listado del
+módulo Pedidos, como siempre, muestra solo el día.
+
+Lo que **no** viaja desde la proforma son los datos de entrega —**fecha, horario
+y responsable**—, porque la proforma no los tiene. Quedan vacíos y se completan
+abriendo el pedido en el módulo **Pedidos**.
+
+Condiciones para poder enviarlo:
+
+| Requisito | Por qué |
+|---|---|
+| La proforma está **aprobada** (o ya facturada) | Desde un borrador todavía editable no se manda nada a despacho. Es la misma regla que para facturar |
+| **Todos** los ítems tienen un producto del catálogo | Un pedido se despacha, se consume desde Consignaciones y se factura **por producto**. Una línea de concepto libre (texto escrito a mano, sin producto) no tiene cómo viajar |
+| Existe un punto de emisión con secuencial de **Pedidos** configurado | El pedido necesita su propio número |
+| Permiso de **crear** en Proformas | Igual que convertir a factura |
+
+**Si hay ítems sin producto no se crea nada.** El sistema corta la operación
+entera y muestra la lista de líneas que hay que corregir. Para resolverlo,
+regrese la proforma a borrador, asigne un producto a esas líneas y vuelva a
+intentarlo. Se bloquea todo en lugar de saltarse esas líneas a propósito: un
+pedido al que le faltan ítems en silencio se despacha incompleto.
+
+Si la proforma **ya tiene un pedido**, el sistema pide confirmación antes de
+crear otro — mismo criterio que con las facturas.
+
+La proforma **no cambia de estado** al generar un pedido: *Convertida* significa
+*facturada*, y un pedido no factura. La relación queda visible en la pestaña
+**Pedidos** del modal, con el número, la fecha de entrega, el valor y el estado
+de cada pedido generado.
+
+> Los precios viajan al pedido para que el listado muestre el valor de lo
+> cotizado. Tenga en cuenta que el modal del módulo Pedidos no captura precios:
+> si vuelve a guardar ese pedido desde ahí, sus valores quedan en cero (el
+> detalle de productos y cantidades se conserva).
 
 ## Editar
 
@@ -418,6 +465,15 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.15** — El botón **Enviar a pedidos** ya funciona (antes solo avisaba
+  "próximamente"). Genera un pedido en estado *Pendiente* con el cliente, los
+  productos, las cantidades y los precios de la proforma; los datos de entrega se
+  completan después en el módulo Pedidos, y con la **fecha y hora** del momento en que se
+  genera. Solo desde una proforma **aprobada** (el
+  botón ya no aparece en borrador) y solo si **todos** los ítems tienen producto de
+  catálogo: si hay líneas de concepto libre, no se crea nada y el sistema las
+  nombra. Nueva pestaña **Pedidos** en el modal, con los pedidos generados desde
+  esa proforma. Nueva sección *Enviar a pedidos*.
 - **1.14** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en todas las columnas (incluidos vendedor, total y
   los productos cotizados, cada palabra por separado y sin importar tildes),

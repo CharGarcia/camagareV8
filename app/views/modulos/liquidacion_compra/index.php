@@ -942,6 +942,14 @@ $pestanasConfigLiq = array_merge(
         calculo_iva:        '<?= ($empresa['calculo_iva_facturacion'] ?? 'linea_linea') === 'subtotal' ? 'subtotal' : 'linea_linea' ?>'
     };
 
+    // Campo normativo del SRI en la información adicional (Res. NAC-DGERCGC26-00000027):
+    // el RUC del proveedor del sistema de facturación, global para toda la instalación
+    // (/config/sri-proveedor). El servidor lo agrega y lo fuerza al guardar; la pantalla
+    // solo lo muestra como una fila fija que no se edita ni se elimina. Vacío = sin
+    // configurar, y entonces no se muestra nada.
+    window.LC_RUC_PROVEEDOR_SRI       = <?= json_encode(\App\Helpers\SriProveedorHelper::rucProveedor()) ?>;
+    window.LC_CAMPO_RUC_PROVEEDOR_SRI = <?= json_encode(\App\Helpers\SriProveedorHelper::CAMPO_NOMBRE) ?>;
+
     // Pasar catálogos a JS
     window.TARIFAS_IVA = <?= json_encode($tarifasIva ?? []) ?>;
     window.FORMAS_PAGO_SRI = <?= json_encode($formasPago ?? []) ?>;

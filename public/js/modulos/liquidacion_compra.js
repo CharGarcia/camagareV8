@@ -30,6 +30,18 @@
     const DEC_CANT   = Math.max(0, Math.min(6, parseInt(LC_CFG.decimales_cantidad ?? 2, 10) || 0));
     const MODO_IVA   = LC_CFG.calculo_iva === 'subtotal' ? 'subtotal' : 'linea_linea';
 
+    // Campo normativo del SRI en la información adicional (Res. NAC-DGERCGC26-00000027):
+    // el RUC del proveedor del sistema de facturación. Lo agrega y lo vuelve a forzar el
+    // servidor en cada guardado desde la configuración global (SriProveedorHelper), así
+    // que en pantalla es solo informativo: no se edita ni se elimina. Vacío = la empresa
+    // todavía no configuró el RUC en /config/sri-proveedor.
+    const LC_RUC_PROVEEDOR       = String(window.LC_RUC_PROVEEDOR_SRI || '').trim();
+    const LC_CAMPO_RUC_PROVEEDOR = String(window.LC_CAMPO_RUC_PROVEEDOR_SRI || 'RUC Proveedor');
+
+    /** Escapa un texto para interpolarlo dentro de un atributo HTML entre comillas dobles. */
+    const lcAttr = v => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                                       .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
     /**
      * Formatea con los decimales configurados, pero nunca por debajo de la precisión
      * real del valor (tope 6, el máximo del SRI). Al reabrir un borrador cuyo precio
@@ -813,7 +825,7 @@
             const nombre = tr.querySelector('.input-info-nombre').value;
             const valor = tr.querySelector('.input-info-valor').value;
             if (nombre && valor) {
-                estado.info_adicional.push({ nombre, valor, fija: tr.dataset.tipo === 'email' });
+                estado.info_adicional.push({ nombre, valor, tipo: tr.dataset.tipo || '' });
             }
         });
 
@@ -876,14 +888,10 @@
             agregarPagoFn();
         }
 
-        // Info adicional
-        const containerInfo = document.getElementById('container-info-adicional');
-        containerInfo.innerHTML = '';
-        if (estado.info_adicional && estado.info_adicional.length > 0) {
-            estado.info_adicional.forEach(ia => {
-                agregarInfoAdicionalFn(ia.nombre, ia.valor, ia.fija);
-            });
-        }
+        // Info adicional: se pinta con renderInfoAdicional() para que el borrador
+        // restaurado reciba también la fila fija del RUC del proveedor.
+        infoAdicional = (estado.info_adicional || []).map(ia => ({ nombre: ia.nombre, valor: ia.valor }));
+        renderInfoAdicional();
 
         LC_calcTotales();
     }
@@ -954,7 +962,7 @@
             if (prev) prev.remove();
 
             if (p.email) {
-                agregarInfoAdicionalFn('correo del proveedor', p.email, true);
+                agregarInfoAdicionalFn('correo del proveedor', p.email, 'email');
             }
         }
 
@@ -1026,42 +1034,82 @@
         }
     }
 
-    function agregarInfoAdicionalFn(nombre = '', valor = '', fija = false) {
-        const container = document.getElementById('container-info-adicional');
+    /**
+     * Una fila de la información adicional. `tipo` separa las filas que controla el
+     * sistema de las que escribe el usuario:
+     *
+     *   ''              libre: concepto y detalle editables, con botón de eliminar.
+     *   'email'         correo del proveedor: el concepto es fijo y la fila no se
+     *                   elimina, pero el detalle se puede corregir a mano.
+     *   'ruc-proveedor' RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027):
+     *                   ni se edita ni se elimina. El servidor lo repone con el valor
+     *                   de la configuración global en cada guardado, así que cambiarlo
+     *                   aquí no tendría ningún efecto sobre el comprobante.
+     */
+    function agregarInfoAdicionalFn(nombre = '', valor = '', tipo = '') {
+        const container   = document.getElementById('container-info-adicional');
+        const fija        = tipo !== '';
+        const soloLectura = tipo === 'ruc-proveedor';
+
         const tr = document.createElement('tr');
         tr.className = 'row-info-extra border-bottom';
-        if (fija) tr.dataset.tipo = 'email';
+        if (fija) tr.dataset.tipo = tipo;
+
+        const accion = soloLectura
+            ? '<i class="bi bi-shield-check text-success" title="Campo obligatorio del SRI (Res. NAC-DGERCGC26-00000027): lo agrega el sistema y no se puede editar ni eliminar"></i>'
+            : (fija
+                ? '<i class="bi bi-lock-fill text-muted opacity-50" title="Campo obligatorio"></i>'
+                : '<i class="bi bi-x-circle-fill text-danger" role="button" onclick="this.closest(\'tr\').remove()"></i>');
 
         tr.innerHTML = `
             <td class="p-0">
-                <input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-nombre" 
-                    placeholder="Concepto" value="${nombre}" ${fija ? 'readonly' : ''} style="font-size:0.8rem">
+                <input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-nombre"
+                    placeholder="Concepto" value="${lcAttr(nombre)}" ${fija ? 'readonly' : ''} style="font-size:0.8rem">
             </td>
             <td class="p-0">
-                <input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-valor" 
-                    placeholder="Detalle" value="${valor}" style="font-size:0.8rem">
+                <input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-valor"
+                    placeholder="Detalle" value="${lcAttr(valor)}" ${soloLectura ? 'readonly' : ''} style="font-size:0.8rem">
             </td>
             <td class="p-1 text-center">
-                ${fija ? 
-                    '<i class="bi bi-lock-fill text-muted opacity-50" title="Campo obligatorio"></i>' : 
-                    '<i class="bi bi-x-circle-fill text-danger" role="button" onclick="this.closest(\'tr\').remove()"></i>'
-                }
+                ${accion}
             </td>
         `;
-        
+
         if (fija) container.prepend(tr);
         else container.appendChild(tr);
-        
+
         if (!nombre && !fija) tr.querySelector('.input-info-nombre').focus();
+    }
+
+    /** Tipo de fila (ver agregarInfoAdicionalFn) que le corresponde a un campo guardado. */
+    function lcTipoInfoAdicional(nombre) {
+        const n = String(nombre || '').trim().toLowerCase();
+        if (n === LC_CAMPO_RUC_PROVEEDOR.toLowerCase()) return 'ruc-proveedor';
+        if (n.includes('correo')) return 'email';
+        return '';
     }
 
     function renderInfoAdicional() {
         const container = document.getElementById('container-info-adicional');
         container.innerHTML = '';
-        infoAdicional.forEach(info => {
-            const isEmail = info.nombre.toLowerCase().includes('correo');
-            agregarInfoAdicionalFn(info.nombre, info.valor, isEmail);
+
+        let tieneRucProveedor = false;
+        (infoAdicional || []).forEach(info => {
+            const tipo = lcTipoInfoAdicional(info.nombre);
+            if (tipo === 'ruc-proveedor') tieneRucProveedor = true;
+            agregarInfoAdicionalFn(info.nombre, info.valor, tipo);
         });
+
+        // Mientras la liquidación se pueda editar (nueva o en borrador), se muestra por
+        // adelantado el campo que el servidor va a agregar al guardar, para que el
+        // usuario lo vea como parte del documento. En una autorizada o anulada no se
+        // inventa: si no lo tiene guardado es porque se emitió antes de la resolución, y
+        // la pantalla no debe hacer creer lo contrario sobre un XML que ya viajó al SRI.
+        const estado   = String(liquidacionActual?.estado || '').toLowerCase();
+        const editable = estado !== 'autorizado' && estado !== 'anulado';
+        if (!tieneRucProveedor && editable && LC_RUC_PROVEEDOR) {
+            agregarInfoAdicionalFn(LC_CAMPO_RUC_PROVEEDOR, LC_RUC_PROVEEDOR, 'ruc-proveedor');
+        }
     }
 
     // --- Save Logic ---
@@ -1070,17 +1118,13 @@
         
         // Recolectar detalles del DOM
         const detallesDom = [];
-        let errorDesc = false;
         document.querySelectorAll('#tbodyDetalles .row-detalle').forEach(tr => {
             const ivaSelect = tr.querySelector('.input-iva');
-            const desc = tr.querySelector('.input-descripcion').value.trim();
-            
-            if (!desc) errorDesc = true;
 
             detallesDom.push({
                 id_producto: tr.querySelector('.input-id-producto').value,
-                codigo: tr.querySelector('.input-codigo').value,
-                descripcion: desc,
+                codigo: tr.querySelector('.input-codigo').value.trim(),
+                descripcion: tr.querySelector('.input-descripcion').value.trim(),
                 adicional: tr.querySelector('.input-adicional').value,
                 cantidad: tr.querySelector('.input-cantidad').value,
                 precio_unitario: tr.querySelector('.input-precio').value,
@@ -1090,11 +1134,10 @@
             });
         });
 
-        if (errorDesc) {
-            if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Todos los ítems deben tener una descripción', 'warning');
-            else alert("Todos los ítems deben tener una descripción");
-            return;
-        }
+        // Código y descripción son obligatorios en cada línea del XML: sin ellos el SRI
+        // devuelve el comprobante por estructura, ya guardado y numerado, y sin decir qué
+        // línea falla. Se avisa antes de guardar, diciendo exactamente qué ítem corregir.
+        if (lcAvisarItemsIncompletos()) return;
 
         // Recolectar pagos
         const pagosDom = [];
@@ -1194,6 +1237,68 @@
         });
     }
 
+    /**
+     * Ítems de la pantalla a los que les falta el código o la descripción, dos campos
+     * que el SRI exige en cada `<detalle>` del comprobante.
+     *
+     * @returns {{sinCodigo:number[], sinDescripcion:number[], primerInput:HTMLElement|null}}
+     */
+    function lcItemsIncompletos() {
+        const sinCodigo = [], sinDescripcion = [];
+        let primerInput = null;
+
+        document.querySelectorAll('#tbodyDetalles .row-detalle').forEach((tr, i) => {
+            const inputCodigo = tr.querySelector('.input-codigo');
+            const inputDesc   = tr.querySelector('.input-descripcion');
+
+            if (!inputCodigo.value.trim()) {
+                sinCodigo.push(i + 1);
+                if (!primerInput) primerInput = inputCodigo;
+            }
+            if (!inputDesc.value.trim()) {
+                sinDescripcion.push(i + 1);
+                if (!primerInput) primerInput = inputDesc;
+            }
+        });
+
+        return { sinCodigo, sinDescripcion, primerInput };
+    }
+
+    /**
+     * Avisa de los ítems incompletos y deja el cursor en el primer campo que falta.
+     * @returns {boolean} true si había algo que corregir (el llamador debe detenerse).
+     */
+    function lcAvisarItemsIncompletos() {
+        const { sinCodigo, sinDescripcion, primerInput } = lcItemsIncompletos();
+        if (!sinCodigo.length && !sinDescripcion.length) return false;
+
+        const lista = (nums, campo) =>
+            `Sin <strong>${campo}</strong>: ${nums.length > 1 ? 'ítems' : 'ítem'} ${nums.join(', ')}.`;
+
+        const detalle = [];
+        if (sinCodigo.length)      detalle.push(lista(sinCodigo, 'código'));
+        if (sinDescripcion.length) detalle.push(lista(sinDescripcion, 'descripción'));
+
+        const html = '<p class="mb-2">El SRI exige código y descripción en cada ítem. Si falta alguno, '
+            + 'rechazará la liquidación al enviarla a autorizar.</p>'
+            + `<p class="mb-0 small text-start">${detalle.join('<br>')}</p>`;
+
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Ítems incompletos',
+                html,
+                confirmButtonText: 'Corregir',
+                confirmButtonColor: '#0d6efd',
+                target: document.getElementById('modalLiquidacion'),
+            }).then(() => { if (primerInput) primerInput.focus(); });
+        } else {
+            alert(html.replace(/<[^>]+>/g, ' '));
+            if (primerInput) primerInput.focus();
+        }
+        return true;
+    }
+
     // ── SRI ────────────────────────────────────────────────────────────────
 
     // ── Acciones de documento: PDF / XML / Correo / WhatsApp ─────────────────
@@ -1288,6 +1393,12 @@
             Swal.fire({ icon: 'warning', title: 'Aviso', text: 'Primero guarda la liquidación antes de enviarla al SRI.' });
             return;
         }
+
+        // Aviso antes de firmar y enviar: el SRI devolvería el comprobante por estructura
+        // si algún ítem no tiene código o descripción. El servidor lo vuelve a comprobar
+        // sobre lo realmente guardado (SriEnvioService), por si la pantalla tiene cambios
+        // sin guardar.
+        if (lcAvisarItemsIncompletos()) return;
 
         const confirmar = await Swal.fire({
             icon: 'question',

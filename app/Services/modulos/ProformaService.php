@@ -851,6 +851,170 @@ class ProformaService
     }
 
     /**
+     * Genera un PEDIDO a partir de la proforma aprobada ("enviar a pedidos").
+     *
+     * A diferencia de la factura y del recibo, el pedido NO mueve inventario ni emite
+     * documento electrónico: es la orden de despacho de lo cotizado. Nace en estado
+     * "Pendiente" y el usuario completa desde el módulo Pedidos los datos de entrega
+     * (fecha, horario y responsable), que la proforma no tiene.
+     *
+     * Reglas:
+     *  - Solo desde una proforma aprobada (o ya convertida, para volver a pedir lo mismo),
+     *    igual criterio que convertirAFactura()/convertirARecibo().
+     *  - TODAS las líneas deben apuntar a un producto del catálogo: pedidos_detalle.id_producto
+     *    es NOT NULL y el consumo desde Consignaciones/Facturas cruza por producto, así que una
+     *    proforma con ítems de concepto libre se rechaza entera —nombrando las líneas
+     *    culpables— en vez de crear un pedido incompleto en silencio.
+     *  - Si la proforma ya tiene pedidos vigentes se pide confirmación, como con la factura.
+     *
+     * La proforma NO cambia de estado: 'convertida' significa facturada, y un pedido no
+     * factura. El vínculo queda en pedidos_cabecera.id_proforma.
+     *
+     * @return array{id_pedido?:int,numero?:string,requiere_confirmacion?:bool,mensaje?:string,items_sin_producto?:string[]}
+     */
+    public function convertirAPedido(int $id, int $idEmpresa, int $idUsuario, bool $forzar = false): array
+    {
+        $proforma = $this->repository->getPorId($id);
+        if (!$proforma || (int) $proforma['id_empresa'] !== $idEmpresa) {
+            throw new \RuntimeException('Proforma no encontrada.');
+        }
+        $yaConvertida = !empty($proforma['id_factura_convertida']) || $proforma['estado'] === 'convertida';
+        if (!$yaConvertida && $proforma['estado'] !== 'aprobada') {
+            throw new \RuntimeException('La proforma debe estar aprobada para generar un pedido.');
+        }
+
+        $detallesPf = $this->repository->getDetalles($id);
+        if (empty($detallesPf)) {
+            throw new \RuntimeException('La proforma no tiene líneas de detalle para el pedido.');
+        }
+
+        // ── Bloqueo por ítems de concepto libre (sin producto de catálogo) ──
+        $sinProducto = [];
+        foreach ($detallesPf as $d) {
+            if (empty($d['id_producto'])) {
+                $sinProducto[] = trim((string) ($d['descripcion'] ?? '')) ?: 'Línea sin descripción';
+            }
+        }
+        if (!empty($sinProducto)) {
+            return ['items_sin_producto' => $sinProducto];
+        }
+
+        // ── ¿Ya hay pedidos generados desde esta proforma? ──
+        $pedidoRepo      = new \App\Repositories\Modulos\PedidoRepository();
+        $pedidosVigentes = $pedidoRepo->getPorProforma($id, $idEmpresa);
+        if (!empty($pedidosVigentes) && !$forzar) {
+            return [
+                'requiere_confirmacion' => true,
+                'mensaje' => 'Esta proforma ya tiene un pedido asociado. ¿Desea crear otro de todos modos?',
+            ];
+        }
+
+        // ── Contexto de la serie: primer establecimiento y primer punto con secuencial
+        //    de "Pedidos" configurado (mismo criterio que factura y recibo) ──
+        $empresaModel     = new \App\models\Empresa();
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+        if (empty($establecimientos)) {
+            throw new \RuntimeException('La empresa no tiene establecimientos configurados.');
+        }
+        $est     = $establecimientos[0];
+        $idEstab = (int) $est['id'];
+
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $puntos  = [];
+        foreach ($empresaModel->getPuntosEmision($idEstab) as $p) {
+            $secConfig = $secRepo->getConfigSecuencial((int) $p['id'], 'Pedidos');
+            if (empty($secConfig['id'])) {
+                continue;
+            }
+            $puntos[] = $p;
+        }
+        if (empty($puntos)) {
+            throw new \RuntimeException('El establecimiento no tiene un punto de emisión con secuencial configurado para Pedidos.');
+        }
+        $punto   = $puntos[0];
+        $idPunto = (int) $punto['id'];
+
+        // ── Mapear las líneas ──
+        // pedidos_detalle no tiene columna de descuento: el subtotal de la proforma
+        // (precio_total_sin_impuesto) ya viene neto, así que el valor del pedido cuadra
+        // con lo cotizado aunque el precio unitario se guarde bruto.
+        $impuestosPorLinea = $this->repository->getImpuestosPorDetalles(array_column($detallesPf, 'id'));
+
+        $detallesPed = [];
+        foreach ($detallesPf as $d) {
+            $iva        = 0.0;
+            $impuestos  = 0.0;
+            foreach ($impuestosPorLinea[(int) $d['id']] ?? [] as $imp) {
+                $valor      = (float) ($imp['valor'] ?? 0);
+                $impuestos += $valor;
+                if ((string) ($imp['codigo_impuesto'] ?? '2') === '2') {
+                    $iva += $valor;   // código 2 = IVA (el ICE suma al total, no al IVA)
+                }
+            }
+            $subtotal = (float) ($d['precio_total_sin_impuesto'] ?? 0);
+
+            $detallesPed[] = [
+                'id_producto'     => (int) $d['id_producto'],
+                'cantidad'        => (float) ($d['cantidad'] ?? 0),
+                'precio_unitario' => (float) ($d['precio_unitario'] ?? 0),
+                'subtotal'        => round($subtotal, 2),
+                'iva'             => round($iva, 2),
+                'total'           => round($subtotal + $impuestos, 2),
+            ];
+        }
+
+        $numProf = ($proforma['establecimiento'] ?? '') . '-' . ($proforma['punto_emision'] ?? '') . '-' . ($proforma['secuencial'] ?? '');
+
+        $cabecera = [
+            'id_cliente'             => (int) $proforma['id_cliente'],
+            // Fecha Y HORA del momento en que se envía a pedidos: pedidos_cabecera.fecha_pedido
+            // es timestamp, y así queda constancia de cuándo salió, no solo del día (el modal
+            // de Pedidos usa un <input type="date">, por eso los pedidos hechos a mano quedan
+            // a las 00:00:00). Pasar la hora no afecta al secuencial por fecha: getPrefijoPeriodo()
+            // resuelve el periodo con strtotime().
+            'fecha_pedido'           => date('Y-m-d H:i:s'),
+            'observaciones'          => trim('Generado desde proforma ' . $numProf . '. ' . ($proforma['observaciones'] ?? '')),
+            'observaciones_internas' => '',
+            // La proforma no tiene datos de entrega: los completa el usuario en Pedidos.
+            'fecha_entrega'          => null,
+            'hora_inicial_entrega'   => null,
+            'hora_maxima_entrega'    => null,
+            'id_responsable_entrega' => null,
+            'id_establecimiento'     => $idEstab,
+            'id_punto_emision'       => $idPunto,
+            'establecimiento'        => (string) ($punto['cod_establecimiento'] ?? $est['codigo'] ?? '001'),
+            'punto_emision'          => (string) ($punto['codigo_punto'] ?? $punto['codigo'] ?? '001'),
+            'id_proforma'            => $id,
+        ];
+
+        // guardarPedido() abre y cierra su propia transacción, con el advisory lock del
+        // secuencial dentro (CLAUDE.md §8). Por eso aquí NO se abre otra: se delega entero
+        // para reutilizar su numeración autoritativa, su control de duplicados y su
+        // auditoría, en vez de duplicar el INSERT (CLAUDE.md §3).
+        $pedidoService = new \App\Services\Modulos\PedidoService();
+        $idPedido      = (int) $pedidoService->guardarPedido($cabecera, $detallesPed, $idEmpresa, $idUsuario);
+
+        try {
+            $this->log->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'convertir_a_pedido',
+                'proformas_cabecera',
+                $id,
+                null,
+                ['id_pedido' => $idPedido]
+            );
+        } catch (\Throwable $e) { /* log no crítico */ }
+
+        $pedido = $pedidoRepo->obtenerPorId($idPedido, $idEmpresa) ?: [];
+
+        return [
+            'id_pedido' => $idPedido,
+            'numero'    => (string) ($pedido['numero_pedido'] ?? ''),
+        ];
+    }
+
+    /**
      * Verifica el stock disponible de los productos de la proforma según la
      * configuración del establecimiento. Devuelve la lista de productos sin saldo
      * suficiente (o [] si la config no exige stock o hay saldo para todos).

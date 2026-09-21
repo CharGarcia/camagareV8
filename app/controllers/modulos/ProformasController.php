@@ -1317,6 +1317,88 @@ class ProformasController extends BaseModuloController
     }
 
     /**
+     * Genera un pedido a partir de la proforma aprobada ("enviar a pedidos").
+     * No mueve inventario: el pedido nace en "Pendiente" para completar la entrega.
+     */
+    public function convertirAPedidoAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        $id        = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $forzar    = !empty($_POST['forzar']) || ($_GET['forzar'] ?? '') === '1';
+
+        if (!$id) {
+            echo json_encode(['ok' => false, 'error' => 'ID requerido.']);
+            exit;
+        }
+
+        try {
+            $res = $this->service->convertirAPedido($id, $idEmpresa, $idUsuario, $forzar);
+
+            // Hay líneas de concepto libre: el pedido trabaja solo con productos del catálogo.
+            if (!empty($res['items_sin_producto'])) {
+                echo json_encode([
+                    'ok' => false,
+                    'items_sin_producto' => $res['items_sin_producto'],
+                ]);
+                exit;
+            }
+
+            // La proforma ya tiene pedidos: la UI debe confirmar antes de crear otro.
+            if (!empty($res['requiere_confirmacion'])) {
+                echo json_encode([
+                    'ok' => false,
+                    'requiere_confirmacion' => true,
+                    'mensaje' => $res['mensaje'] ?? 'Esta proforma ya tiene un pedido asociado. ¿Desea continuar?',
+                ]);
+                exit;
+            }
+
+            echo json_encode([
+                'ok'        => true,
+                'id_pedido' => (int) ($res['id_pedido'] ?? 0),
+                'numero'    => (string) ($res['numero'] ?? ''),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Lista los pedidos generados desde una proforma (pestaña Pedidos del modal).
+     */
+    public function getPedidosAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) {
+            echo json_encode(['ok' => false, 'error' => 'ID requerido.']);
+            exit;
+        }
+
+        try {
+            $proforma = $this->repository->getPorId($id);
+            if (!$proforma || (int) $proforma['id_empresa'] !== $idEmpresa) {
+                throw new \RuntimeException('Proforma no encontrada.');
+            }
+            $pedidoRepo = new \App\Repositories\Modulos\PedidoRepository();
+            $pedidos    = $pedidoRepo->getPorProforma($id, $idEmpresa);
+            echo json_encode(['ok' => true, 'pedidos' => $pedidos]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Lista las facturas generadas desde una proforma (pestaña Facturas del modal).
      */
     public function getFacturasAjax(): void

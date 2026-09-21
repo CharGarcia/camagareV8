@@ -2248,6 +2248,19 @@ class SriEnvioService
         }
         unset($d);
 
+        // Ítems sin código o sin descripción: el SRI los devuelve como "ERROR EN
+        // ESTRUCTURA DE COMPROBANTE" sin decir qué línea falla. Se avisa aquí, antes
+        // de firmar y enviar, con el número de ítem. Hace falta además de la misma
+        // comprobación al guardar (LiquidacionCompraRules) porque las liquidaciones
+        // creadas antes de esa validación pueden tener ítems incompletos.
+        $itemsIncompletos = \App\Rules\modulos\LiquidacionCompraRules::erroresItemsIncompletos($detalles);
+        if ($itemsIncompletos) {
+            throw new \RuntimeException(
+                'No se puede enviar al SRI: ' . implode(' ', $itemsIncompletos)
+                . ' Corrija los ítems en la liquidación y vuelva a intentarlo.'
+            );
+        }
+
         $pagos         = $repo->getPagos($idLiq);
         $infoAdicional = $repo->getInfoAdicional($idLiq);
 

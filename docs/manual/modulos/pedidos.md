@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
-etiquetas: pedidos, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.9
+etiquetas: pedidos, pedido desde proforma, proforma a pedido, enviar a pedidos, generar pedido desde cotizacion, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado
+version: 1.10
 orden: 0
 estado: activo
 ---
@@ -259,8 +259,38 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
 - **Auditoría**: crear, actualizar y eliminar un pedido quedan registrados en la
   bitácora del sistema (`/config/log-sistema`, módulo *Pedidos*).
 
+## Pedidos que nacen de una proforma
+
+Además de crearlo a mano, un pedido puede venir de una **proforma aprobada**: en
+el modal de la proforma, el botón del **carrito** lo genera con el mismo cliente,
+productos, cantidades y precios. Ese pedido entra al listado como cualquier otro,
+en estado **Pendiente**, y en sus observaciones queda anotado de qué proforma
+salió.
+
+Tres cosas que conviene saber cuando un pedido llega por esa vía:
+
+- **Los datos de entrega vienen vacíos** (fecha, rango horario y responsable),
+  porque la proforma no los tiene. Hay que abrir el pedido y completarlos, como en
+  cualquier pedido nuevo.
+- **La fecha del pedido queda con la hora exacta** en que se generó. Un pedido
+  creado a mano guarda solo el día (el formulario pide una fecha, no una hora), así
+  que queda a las 00:00; uno que viene de una proforma conserva el minuto en que se
+  mandó a despachar. El listado muestra el día en ambos casos. Si reabre ese pedido
+  y lo guarda, pasa a comportarse como los demás y la hora se pierde.
+- **Trae los precios de la proforma**, así que el listado muestra su valor. Si
+  vuelve a guardar ese pedido desde este módulo —que no captura precios— esos
+  valores quedan en cero; los productos y las cantidades se conservan.
+
+Una proforma con **ítems de concepto libre** (líneas escritas a mano, sin producto
+del catálogo) no se puede enviar a pedidos: el sistema lo bloquea y pide corregir
+esas líneas primero. El detalle está en el manual de **Proformas**, sección
+*Enviar a pedidos*.
+
 ## Integraciones con otros módulos
 
+- **Proformas**: una proforma aprobada puede enviarse a pedidos con un clic (ver
+  la sección anterior). El pedido queda enlazado a la proforma que lo originó, y
+  la proforma lista sus pedidos en la pestaña *Pedidos* de su modal.
 - **Consignaciones de Venta**: la entrega real se registra allí; cada línea
   entregada queda enlazada a la línea del pedido y de ahí sale el control de lo ya
   despachado y el cambio de estado a Procesado.
@@ -292,6 +322,12 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
 
 ## Historial de cambios
 
+- **1.10** — Un pedido puede **nacer de una proforma aprobada** (botón del carrito
+  en el modal de Proformas): llega con cliente, productos, cantidades y precios ya
+  cargados, con la **fecha y hora** en que se generó, en estado *Pendiente* y con los
+  datos de entrega por completar. Nueva
+  sección *Pedidos que nacen de una proforma*. Requiere aplicar la migración
+  `20260921_add_id_proforma_to_pedidos.sql`.
 - **1.9** — Al elegir el **cliente** en el formulario, a la derecha del título del campo
   se muestra en letra pequeña el **vendedor (asesor)** que ese cliente tiene asignado,
   para saber de quién es la cuenta sin salir del pedido. En el **PDF**, en la misma línea

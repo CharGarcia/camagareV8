@@ -361,13 +361,19 @@ class LiquidacionCompraService
                 $this->repository->insertPago($pago);
             }
 
-            // Reemplazar info adicional
+            // Reemplazar info adicional. El RUC del proveedor del sistema
+            // (Res. NAC-DGERCGC26-00000027) se vuelve a forzar aquí con el valor de la
+            // configuración global: en pantalla es una fila fija que no se edita ni se
+            // elimina, y esta línea lo garantiza aunque la petición llegue sin ella.
+            // Solo alcanza a los borradores: una liquidación autorizada no llega hasta
+            // aquí (se rechaza más arriba), así que ningún documento emitido se altera.
+            $infoAdicional = is_array($data['info_adicional'] ?? null) ? $data['info_adicional'] : [];
+            $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+
             $this->repository->deleteInfoAdicional($id);
-            if (!empty($data['info_adicional'])) {
-                foreach ($data['info_adicional'] as $info) {
-                    $info['id_cabecera'] = $id;
-                    $this->repository->insertInfoAdicional($info);
-                }
+            foreach ($infoAdicional as $info) {
+                $info['id_cabecera'] = $id;
+                $this->repository->insertInfoAdicional($info);
             }
 
             $this->logService->registrar(

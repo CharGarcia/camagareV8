@@ -35,10 +35,12 @@ class LiquidacionCompraRules
             throw new \Exception('La liquidación debe tener al menos un ítem.');
         }
 
+        $incompletos = self::erroresItemsIncompletos($data['detalles']);
+        if ($incompletos) {
+            throw new \Exception(implode(' ', $incompletos));
+        }
+
         foreach ($data['detalles'] as $idx => $det) {
-            if (empty($det['descripcion'])) {
-                throw new \Exception("El ítem " . ($idx + 1) . " debe tener una descripción.");
-            }
             if ((float)($det['cantidad'] ?? 0) <= 0) {
                 throw new \Exception("La cantidad del ítem " . ($idx + 1) . " debe ser mayor a cero.");
             }
@@ -52,6 +54,43 @@ class LiquidacionCompraRules
         $this->validarTipoIdentificacionProveedor((int)$data['id_proveedor'], (int)$data['id_empresa']);
 
         $this->validarFichaTecnicaSri($data);
+    }
+
+    /**
+     * Ítems que el SRI devolvería por estructura: `codigoPrincipal` y `descripcion`
+     * son obligatorios en el `<detalle>` del esquema de la liquidación de compra.
+     *
+     * `XmlLiquidacionCompraService` escribe lo que recibe —un ítem sin código deja
+     * `<codigoPrincipal></codigoPrincipal>`—, así que la liquidación se guardaba y
+     * numeraba sin ruido y recién al enviarla el SRI la devolvía con "ERROR EN
+     * ESTRUCTURA DE COMPROBANTE", sin decir qué línea la causó.
+     *
+     * Es público y estático porque se comprueba en dos momentos: al guardar (aquí,
+     * en validar()) y antes de firmar y enviar (`SriEnvioService`), ya que las
+     * liquidaciones guardadas antes de esta validación pueden tener ítems sin código.
+     *
+     * @param  array $detalles Líneas del documento.
+     * @return string[] Un mensaje por ítem incompleto, con el número de línea.
+     */
+    public static function erroresItemsIncompletos(array $detalles): array
+    {
+        $errores = [];
+
+        foreach (array_values($detalles) as $i => $det) {
+            $n = $i + 1;
+
+            $codigo = trim((string) ($det['codigo_principal'] ?? $det['codigo'] ?? ''));
+            if ($codigo === '') {
+                $errores[] = "El ítem {$n} no tiene código; el SRI lo exige y rechazaría el comprobante.";
+            }
+
+            $descripcion = trim((string) ($det['descripcion'] ?? ''));
+            if ($descripcion === '') {
+                $errores[] = "El ítem {$n} no tiene descripción; el SRI la exige y rechazaría el comprobante.";
+            }
+        }
+
+        return $errores;
     }
 
     /**

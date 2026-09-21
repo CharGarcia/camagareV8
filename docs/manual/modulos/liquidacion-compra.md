@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva
-version: 1.10
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila
+version: 1.11
 orden: 40
 estado: activo
 ---
@@ -43,6 +43,21 @@ registrar una compra normal.
 | Código de sustento tributario | Obligatorio |
 | Secuencial | Obligatorio |
 | Ítems | Al menos uno |
+| Código de cada ítem | Obligatorio: el SRI lo exige en cada línea |
+| Descripción de cada ítem | Obligatoria: el SRI la exige en cada línea |
+| Cantidad de cada ítem | Mayor a cero |
+
+### Ítems incompletos
+
+**Cada ítem necesita código y descripción.** Son dos campos que el SRI exige en
+todas las líneas del comprobante: si falta alguno, devuelve la liquidación con
+*ERROR EN ESTRUCTURA DE COMPROBANTE* y no dice cuál es la línea que falla.
+
+Para que eso no ocurra, el sistema avisa antes: al **guardar** y al **enviar al
+SRI** revisa las líneas y, si encuentra alguna incompleta, muestra el número de
+ítem y deja el cursor en el primer campo que falta. La misma comprobación se hace
+en el servidor, así que una liquidación guardada hace tiempo con ítems sin código
+también se detiene antes de firmarse y enviarse.
 
 ## Cómo se calculan los totales
 
@@ -72,6 +87,30 @@ Si al abrir una liquidación ya autorizada los totales no coinciden al centavo c
 lo que usted recuerda, es porque la configuración del cálculo del IVA cambió
 después de emitirla: el documento conserva los valores con los que se emitió y no
 se recalcula.
+
+## Información adicional
+
+En la pestaña **Info. Adicional** se añaden los datos extra que acompañan al
+comprobante (referencias, observaciones, datos de contacto). Son hasta 15 campos,
+el tope que admite el SRI.
+
+Dos filas las controla el sistema y se reconocen por el icono de la derecha:
+
+| Fila | Icono | Qué se puede hacer |
+|------|-------|--------------------|
+| **Correo del proveedor** | Candado | El concepto es fijo; el detalle se puede corregir a mano. La repone el sistema al elegir el proveedor |
+| **RUC Proveedor** | Escudo | Ni se edita ni se elimina |
+
+**RUC Proveedor** es un campo obligatorio para el SRI (Resolución
+NAC-DGERCGC26-00000027): identifica al proveedor del sistema de facturación
+electrónica, no al proveedor de la compra. Lo toma de la configuración general
+(*Configuración → RUC Proveedor (SRI)*, solo superadministrador) y lo vuelve a
+poner en cada guardado, así que la fila no tiene botón para borrarla y su valor no
+se puede escribir: cualquier cambio quedaría sin efecto en el comprobante.
+
+La fila aparece mientras la liquidación se pueda editar. En una **autorizada o
+anulada** solo se ve si el campo estaba guardado: los documentos emitidos antes de
+esa resolución no lo llevan, y la pantalla muestra lo que realmente viajó al SRI.
 
 ## Buscar y filtrar el listado
 
@@ -165,6 +204,13 @@ vuelva a intentarlo.
   elimine primero esa retención en el módulo *Retenciones de compra*.
 - **"La liquidación debe tener al menos un ítem"**: añada el detalle antes de
   guardar.
+- **"El ítem N no tiene código"** o **"…no tiene descripción"**: complete esa
+  línea. El SRI exige los dos campos y rechazaría el comprobante.
+- **"No se puede enviar al SRI: el ítem N no tiene código…"**: la liquidación se
+  guardó antes con esa línea incompleta. Ábrala, corrija el ítem, guarde y vuelva
+  a enviarla.
+- **No aparece el botón para borrar la fila "RUC Proveedor"**: es correcto, ese
+  campo es obligatorio para el SRI y el sistema lo repone en cada guardado.
 - **"Debe seleccionar el código de sustento tributario"**: es obligatorio para
   que el SRI acepte el comprobante.
 - **El SRI rechaza el comprobante**: revise que los datos del proveedor sean
@@ -188,6 +234,18 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.11** — **Aviso de ítems incompletos y campo *RUC Proveedor* protegido.**
+  - Si un ítem no tiene **código** o **descripción**, el sistema avisa al guardar y
+    al enviar al SRI, indicando el número de ítem y dejando el cursor en el campo
+    que falta. Antes la liquidación se guardaba y se numeraba sin ruido, y el error
+    aparecía recién al enviarla a autorizar, como *ERROR EN ESTRUCTURA DE
+    COMPROBANTE*, sin decir qué línea lo causaba. La comprobación también corre en
+    el servidor, así que alcanza a las liquidaciones guardadas antes de este cambio.
+  - La fila **RUC Proveedor** de *Info. Adicional* ya **no se puede eliminar ni
+    editar**: es un campo obligatorio del SRI que el sistema repone en cada
+    guardado. Antes se mostraba como una fila normal, con su botón de borrar, y
+    borrarla dejaba el comprobante sin el dato.
 
 - **1.10** — Corregido: al **enviar la liquidación por correo** desde su ventana, el cuadro del
   correo del destinatario no aceptaba texto —se veía, pero al escribir no pasaba nada—.

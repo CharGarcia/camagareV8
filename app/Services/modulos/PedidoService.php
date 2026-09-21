@@ -121,19 +121,26 @@ class PedidoService {
                     }
                 }
 
+                // Origen del pedido: solo se escribe si la proforma lo mandó Y la migración
+                // 20260921_add_id_proforma_to_pedidos.sql ya está aplicada. Sin esa guarda,
+                // un ambiente con el código desplegado antes que el SQL no podría guardar
+                // NINGÚN pedido (la columna no existiría).
+                $idProforma = !empty($cabecera['id_proforma']) ? (int) $cabecera['id_proforma'] : null;
+                $conProforma = $idProforma !== null && $this->repository->columnaProformaExiste();
+
                 $sql = "INSERT INTO pedidos_cabecera
                         (id_empresa, id_cliente, fecha_pedido, observaciones,
                         estado, observaciones_internas, fecha_entrega, hora_inicial_entrega, hora_maxima_entrega, id_responsable_entrega,
-                        id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial, tipo_ambiente, created_by)
+                        id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial, tipo_ambiente, created_by"
+                        . ($conProforma ? ", id_proforma" : "") . ")
                         VALUES
                         (:id_empresa, :id_cliente, :fecha_pedido, :observaciones,
                         :estado, :observaciones_internas, :fecha_entrega, :hora_inicial_entrega, :hora_maxima_entrega, :id_responsable_entrega,
-                        :id_establecimiento, :id_punto_emision, :establecimiento, :punto_emision, :secuencial, :tipo_ambiente, :created_by)
+                        :id_establecimiento, :id_punto_emision, :establecimiento, :punto_emision, :secuencial, :tipo_ambiente, :created_by"
+                        . ($conProforma ? ", :id_proforma" : "") . ")
                         RETURNING id";
 
-                $stmt = $this->db->prepare($sql);
-                try {
-                    $stmt->execute([
+                $params = [
                         'id_empresa' => $id_empresa,
                         'id_cliente' => $cabecera['id_cliente'],
                         'fecha_pedido' => $cabecera['fecha_pedido'],
@@ -151,7 +158,14 @@ class PedidoService {
                         'secuencial' => $secuencial,
                         'tipo_ambiente' => $tipoAmbiente,
                         'created_by' => $id_usuario
-                    ]);
+                ];
+                if ($conProforma) {
+                    $params['id_proforma'] = $idProforma;
+                }
+
+                $stmt = $this->db->prepare($sql);
+                try {
+                    $stmt->execute($params);
                 } catch (PDOException $e) {
                     if (($e->errorInfo[0] ?? '') === '23505') {
                         throw new Exception("El secuencial {$secuencial} ya está en uso para esta serie. Recargue e intente nuevamente.");

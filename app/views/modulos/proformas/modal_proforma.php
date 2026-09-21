@@ -183,6 +183,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link py-2 small" id="pf-tab-pedidos-btn"
+                               data-bs-toggle="tab" data-bs-target="#pf-tab-pedidos" href="#pf-tab-pedidos" role="tab" style="white-space:nowrap;">
+                                <i class="bi bi-cart-check me-1"></i>Pedidos
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link py-2 small" id="pf-tab-productos-btn"
                                data-bs-toggle="tab" data-bs-target="#pf-tab-productos" href="#pf-tab-productos" role="tab" style="white-space:nowrap;">
                                 <i class="bi bi-images me-1"></i>Info Productos
@@ -193,6 +199,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                         <?php
                         echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas([
                             'pf-tab-facturas'   => 'Facturas',
+                            'pf-tab-pedidos'    => 'Pedidos',
                             'pf-tab-productos'  => 'Info Productos',
                         ], $vistaConfigPF, 'modulos/proformas');
                         ?>
@@ -493,6 +500,35 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                             </div>
                         </div>
                     </div><!-- /pf-tab-facturas -->
+
+                    <!-- ── TAB PEDIDOS ────────────────────────── -->
+                    <div class="tab-pane fade" id="pf-tab-pedidos" role="tabpanel">
+                        <div class="p-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-cart-check me-2 text-primary"></i>
+                                <h6 class="mb-0 fw-bold text-secondary small">Detalle de pedidos</h6>
+                                <span class="ms-2 text-muted small">Pedidos generados a partir de esta proforma</span>
+                            </div>
+                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                                <div class="table-responsive" style="max-height:350px;">
+                                    <table class="table table-sm table-detalle mb-0 text-nowrap">
+                                        <thead>
+                                            <tr class="table-light border-bottom">
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:18%;">Fecha</th>
+                                                <th class="py-2 small fw-bold text-muted" style="width:30%;">N° Pedido</th>
+                                                <th class="py-2 small fw-bold text-muted" style="width:17%;">Entrega</th>
+                                                <th class="py-2 small fw-bold text-muted text-end" style="width:17%;">Valor Total</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:18%;">Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pf_tbodyPedidos">
+                                            <tr><td colspan="5" class="text-center text-muted small py-3">Sin pedidos asociados</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div><!-- /pf-tab-pedidos -->
 
                     <!-- ── TAB INFO PRODUCTOS ──────────────────── -->
                     <div class="tab-pane fade" id="pf-tab-productos" role="tabpanel">

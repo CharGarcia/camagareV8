@@ -11,6 +11,9 @@ class PedidoRepository {
     /** Caché por request: ¿existe ventas_detalle.id_pedido_detalle? (migración database/agregar_id_pedido_detalle_ventas.sql). */
     private ?bool $columnaVentasDetalleExiste = null;
 
+    /** Caché por request: ¿existe pedidos_cabecera.id_proforma? (migración database/migrations/20260921_add_id_proforma_to_pedidos.sql). */
+    private ?bool $columnaProformaExiste = null;
+
     /**
      * Orden lógico del estado para el ORDER BY (no alfabético).
      * Los estados reales son Pendiente / Procesado / Anulado (la migración mapea
@@ -477,6 +480,41 @@ class PedidoRepository {
             $this->columnaVentasDetalleExiste = (bool) $this->db->query($sql)->fetchColumn();
         }
         return $this->columnaVentasDetalleExiste;
+    }
+
+    /** ¿Ya se desplegó database/migrations/20260921_add_id_proforma_to_pedidos.sql? Degradación segura si no. */
+    public function columnaProformaExiste(): bool {
+        if ($this->columnaProformaExiste === null) {
+            $sql = "SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'pedidos_cabecera' AND column_name = 'id_proforma'
+                    )";
+            $this->columnaProformaExiste = (bool) $this->db->query($sql)->fetchColumn();
+        }
+        return $this->columnaProformaExiste;
+    }
+
+    /**
+     * Pedidos (no eliminados) generados desde una proforma. Espejo de
+     * FacturaVentaRepository::getPorProforma(): alimenta la pestaña "Pedidos" del
+     * modal de proforma y el aviso de "ya existe un pedido" antes de crear otro.
+     *
+     * El total del pedido no es columna de la cabecera: sale de sus líneas.
+     */
+    public function getPorProforma(int $idProforma, int $idEmpresa): array {
+        if (!$this->columnaProformaExiste()) {
+            return [];   // migración aún no aplicada: no hay vínculo que consultar
+        }
+        $sql = "SELECT p.id, p.fecha_pedido, p.establecimiento, p.punto_emision, p.secuencial,
+                       p.estado, p.fecha_entrega,
+                       (SELECT COALESCE(SUM(d.total), 0) FROM pedidos_detalle d
+                         WHERE d.id_pedido = p.id AND d.eliminado = false) AS importe_total
+                FROM pedidos_cabecera p
+                WHERE p.id_proforma = :id_proforma AND p.id_empresa = :id_empresa AND p.eliminado = false
+                ORDER BY p.fecha_pedido DESC, p.id DESC";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute(['id_proforma' => $idProforma, 'id_empresa' => $idEmpresa]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
