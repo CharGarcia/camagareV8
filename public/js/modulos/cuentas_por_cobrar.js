@@ -491,9 +491,13 @@ function CXC_filaMayorHtml(r) {
     // para que total − NC − abonos − retenciones siga cuadrando con el saldo.
     const ndTxt = nd > 0 ? ` <span class="text-muted" style="font-size:.68rem;" title="Nota de débito sumada al documento">+${CXC_fmt(nd)}</span>` : '';
 
+    // Columna "Días": antigüedad del documento —días desde su emisión hasta la Fecha Hasta
+    // del filtro (o hasta hoy si no hay corte)—, no su mora. El rojo lo sigue marcando la
+    // mora (`dias_vencido`), así se ve de un vistazo cuál está vencido sin perder la edad.
+    const edad    = Math.max(0, parseInt(r.dias_transcurridos) || 0);
     const diasTxt = dias > 0
-        ? `<span class="fw-bold" style="color:#dc3545;" title="Venció el ${CXC_fmtFecha(r.fecha_vencimiento)}">${dias}</span>`
-        : `<span class="text-muted" title="Vence el ${CXC_fmtFecha(r.fecha_vencimiento)}">—</span>`;
+        ? `<span class="fw-bold" style="color:#dc3545;" title="${edad} días desde la emisión (${CXC_fmtFecha(r.fecha_emision)}) · venció el ${CXC_fmtFecha(r.fecha_vencimiento)}">${edad}</span>`
+        : `<span title="${edad} días desde la emisión (${CXC_fmtFecha(r.fecha_emision)}) · vence el ${CXC_fmtFecha(r.fecha_vencimiento)}">${edad}</span>`;
 
     return `
         <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle" data-id="${r.id}" data-origen="${r.origen}" data-hermana="${esHermana ? 1 : 0}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">

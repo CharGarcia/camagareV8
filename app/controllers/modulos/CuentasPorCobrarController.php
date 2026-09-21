@@ -127,6 +127,9 @@ class CuentasPorCobrarController extends BaseModuloController
             $f['total_cobrado']= number_format((float)$f['total_cobrado'],2, '.', '');
             $f['saldo']        = number_format((float)$f['saldo'],        2, '.', '');
             $f['dias_vencido'] = (int)($f['dias_vencido'] ?? 0);
+            // Columna "Días": antigüedad del documento (emisión → Fecha Hasta del filtro).
+            // `dias_vencido` sigue decidiendo el estado y el color; no son lo mismo.
+            $f['dias_transcurridos'] = (int)($f['dias_transcurridos'] ?? 0);
             // Consolidado: los documentos de OTRO establecimiento son solo lectura
             // (sin cobro, correo ni WhatsApp desde aquí). La vista lo usa para
             // deshabilitar esas acciones y mostrar el badge del establecimiento.
@@ -297,8 +300,8 @@ class CuentasPorCobrarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 8.5pt; }
-                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; }
+                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: 8.5pt; }
+                td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; } .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; } .header h3 { margin: 0 0 2px 0; font-size: 10pt; } .header p { margin: 0; font-size: 7.5pt; }
@@ -420,7 +423,7 @@ class CuentasPorCobrarController extends BaseModuloController
             $sinAsesor = $this->filtraPorVendedor($filtros);
 
             $headers = ['Fecha', 'N. Documento', 'Origen', 'Total', 'NC', 'Abonos', 'Retenciones',
-                        'Saldo', 'Días Vencidos', ...($sinAsesor ? [] : ['Asesor']), 'Estado'];
+                        'Saldo', 'Días', ...($sinAsesor ? [] : ['Asesor']), 'Estado'];
             if ($consolidado) {
                 array_unshift($headers, 'Estab.');
             }
@@ -456,7 +459,7 @@ class CuentasPorCobrarController extends BaseModuloController
                         round((float)($r['total_cobrado'] ?? 0), 2),
                         round((float)($r['total_retenido'] ?? 0), 2),
                         round($saldo, 2),
-                        $dias > 0 ? $dias : 0,
+                        max(0, (int)($r['dias_transcurridos'] ?? 0)),
                         ...($sinAsesor ? [] : [(string)($r['vendedor_nombre'] ?? '')]),
                         $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE'),
                     ];
@@ -479,7 +482,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 'TOTAL GENERAL (' . count($grupos) . ' cliente' . (count($grupos) !== 1 ? 's' : '') . ')',
                 round($totTotal, 2), round($totNc, 2), round($totAbonos, 2),
                 round($totRet, 2), round($totSaldo, 2),
-                // Días Vencidos (+ Asesor, si va) + Estado: sin valor en el total general
+                // Días (+ Asesor, si va) + Estado: sin valor en el total general
                 ...array_fill(0, $sinAsesor ? 2 : 3, ''),
             ];
 
@@ -545,9 +548,11 @@ class CuentasPorCobrarController extends BaseModuloController
                 $totRet    += $g['retenciones'];
                 $totSaldo  += $g['saldo'];
 
-                // Cabecera de la sección: "RUC - NOMBRE · saldo: 1,234.56". Lo que interesa
-                // del cliente es cuánto debe, no cuántos documentos tiene.
-                $titulo = trim(($g['ruc'] !== '' ? $g['ruc'] . ' - ' : '') . $g['nombre']);
+                // Cabecera de la sección: "NOMBRE · saldo: 1,234.56". Sin el RUC delante:
+                // quien lee el reporte identifica al cliente por el nombre, y el número
+                // solo le robaba ancho a la línea. Lo que interesa es cuánto debe, no
+                // cuántos documentos tiene.
+                $titulo = trim((string) $g['nombre']);
                 // La cabecera del cliente va en su propia tabla: un colspan en la primera fila
                 // hace que el motor ignore los anchos de las columnas de la tabla de abajo.
                 $cuerpo .= "<table class='grp'><tr><td style='width:100%;'>"
@@ -593,7 +598,9 @@ class CuentasPorCobrarController extends BaseModuloController
                         . "<td class='text-end' style='width:10%;'>" . ($abonos > 0 ? '$' . number_format($abonos, 2) : '—') . "</td>"
                         . "<td class='text-end' style='width:10%;'>" . ($ret > 0 ? '$' . number_format($ret, 2) : '—') . "</td>"
                         . "<td class='text-end' style='width:10%;{$color}font-weight:bold;'>$" . number_format($tsal, 2) . "</td>"
-                        . "<td class='text-center' style='width:5%;{$color}'>" . ($dias > 0 ? $dias : '—') . "</td>"
+                        // Días = antigüedad (emisión → Fecha Hasta); el rojo lo sigue
+                        // marcando la mora ($color, de dias_vencido).
+                        . "<td class='text-center' style='width:5%;{$color}'>" . max(0, (int)($r['dias_transcurridos'] ?? 0)) . "</td>"
                         . ($sinAsesor ? '' : "<td style='width:{$wAse}%;'>" . $e($r['vendedor_nombre'] ?? '') . "</td>")
                         . "</tr>";
                 }
@@ -608,8 +615,8 @@ class CuentasPorCobrarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 6px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 8.5pt; color: #000; }
-                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; color: #000; }
+                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: 8.5pt; color: #000; }
+                td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; color: #000; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
@@ -858,6 +865,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 'total_nc'          => $s['monto_nc'] ?? 0,
                 'saldo'             => $s['saldo_pendiente'],
                 'dias_vencido'      => (int)($s['dias_vencido'] ?? 0),
+                'dias_transcurridos'=> (int)($s['dias_transcurridos'] ?? 0),
             ];
         }
 
@@ -1984,7 +1992,7 @@ $plantillasFiltradas = [];
             // todas las filas (ya va en el resumen de filtros de arriba) y se omite.
             $sinVendedor = $this->filtraPorVendedor($filtros);
 
-            $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'Vendedor', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
+            $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'Vendedor', 'F.Emisión', 'F.Vencimiento', 'Días', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
             if ($sinVendedor) {
                 unset($headers[4]);
                 $headers = array_values($headers);
@@ -1994,7 +2002,7 @@ $plantillasFiltradas = [];
                 array_unshift($headers, 'Estab.');
             }
             // Columnas de montos (1-based): número con 2 decimales, sin separador de miles.
-            // Son las seis que siguen a "Días Vencidos", así que su posición se corre con las
+            // Son las seis que siguen a "Días", así que su posición se corre con las
             // columnas opcionales del inicio (Estab.) y con la de Vendedor.
             $colTotal = 9 + ($consolidado ? 1 : 0) - ($sinVendedor ? 1 : 0);
             $formatos = array_fill_keys(range($colTotal, $colTotal + 5), '0.00');
@@ -2015,7 +2023,7 @@ $plantillasFiltradas = [];
                     ...($sinVendedor ? [] : [(string)($r['vendedor_nombre'] ?? '')]),
                     $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
                     $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
-                    $dias > 0 ? $dias : 0,
+                    max(0, (int)($r['dias_transcurridos'] ?? 0)),
                     round((float)$r['total'], 2),
                     round($abonos, 2),
                     round($nc, 2),
@@ -2115,8 +2123,8 @@ $plantillasFiltradas = [];
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 8.5pt; color: #000; }
-                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; color: #000; }
+                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: 8.5pt; color: #000; }
+                td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; color: #000; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }

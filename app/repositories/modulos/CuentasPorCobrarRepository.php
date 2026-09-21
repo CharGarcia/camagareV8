@@ -192,6 +192,32 @@ class CuentasPorCobrarRepository extends BaseRepository
         return $fechaHasta ?: null;
     }
 
+    /**
+     * Expresión SQL de la columna **Días** del listado: los días transcurridos desde la
+     * EMISIÓN del documento hasta la **Fecha Hasta** del filtro (o hasta hoy, si no se fijó
+     * corte). Es la antigüedad del documento, no su mora.
+     *
+     * No confundir con `dias_vencido`, que cuenta desde el VENCIMIENTO (emisión + días de
+     * crédito) siempre contra `CURRENT_DATE`: ese sigue decidiendo el estado VENCIDA/VIGENTE,
+     * el color rojo de la fila y los tramos del gráfico de antigüedad. Los dos viajan juntos
+     * en cada fila.
+     *
+     * @param string $ph Placeholder propio de cada consulta: el listado unificado arma
+     *                   varios SELECT y reusar el mismo nombre rompe el bind (ver memoria
+     *                   pdo-placeholders-repetidos).
+     */
+    private function sqlDiasTranscurridos(array $filtros, string $colFechaEmision, string $ph, array &$params): string
+    {
+        $fechaHasta = trim((string) ($filtros['fecha_hasta'] ?? ''));
+        if ($fechaHasta === '') {
+            return "(CURRENT_DATE - {$colFechaEmision}::date)";
+        }
+        $params[$ph] = $fechaHasta;
+        // CAST(:ph AS date) y no ":ph::date": el parser de placeholders de PDO no distingue
+        // bien el cast `::` pegado al nombre del parámetro.
+        return "(CAST({$ph} AS date) - {$colFechaEmision}::date)";
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // ALCANCE DEL USUARIO (§6, ver App\Helpers\AlcanceRegistros)
     //
@@ -354,7 +380,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
                 v.fecha_emision + INTERVAL '1 day' * v.dias_credito AS fecha_vencimiento,
                 v.dias_credito,
-                (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
+                (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido,
+                " . $this->sqlDiasTranscurridos($filtros, 'v.fecha_emision', ':dias_corte_fac', $params) . " AS dias_transcurridos
             FROM ventas_cabecera v
             LEFT JOIN empresas emp ON emp.id = v.id_empresa
             JOIN clientes c ON c.id = v.id_cliente
@@ -742,7 +769,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 v.importe_total - COALESCE(cb.total_cobrado, 0)     AS saldo,
                 v.fecha_emision + INTERVAL '1 day' * v.dias_credito AS fecha_vencimiento,
                 v.dias_credito,
-                (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
+                (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido,
+                " . $this->sqlDiasTranscurridos($filtros, 'v.fecha_emision', ':dias_corte_rec', $params) . " AS dias_transcurridos
             FROM recibos_venta_cabecera v
             LEFT JOIN empresas emp ON emp.id = v.id_empresa
             JOIN clientes c ON c.id = v.id_cliente
@@ -1471,7 +1499,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                     END AS estado,
                     s.observaciones,
                     CASE WHEN s.fecha_vencimiento < CURRENT_DATE AND {$pend} > 0
-                         THEN CURRENT_DATE - s.fecha_vencimiento ELSE 0 END AS dias_vencido
+                         THEN CURRENT_DATE - s.fecha_vencimiento ELSE 0 END AS dias_vencido,
+                    " . $this->sqlDiasTranscurridos($filtros, 's.fecha_emision', ':dias_corte_si', $params) . " AS dias_transcurridos
                 FROM saldos_iniciales_cxc s
                 LEFT JOIN empresas emp ON emp.id = s.id_empresa"
                 . $this->lateralCobradoSaldoInicial($fCob)

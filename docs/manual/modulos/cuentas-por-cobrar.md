@@ -5,7 +5,7 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde
 version: 2.19
 orden: 40
 estado: activo
@@ -318,7 +318,7 @@ imprimir.
 | Abonos | Cobros recibidos (efectivo, banco, tarjeta…). |
 | Retenciones | Retenciones que practicó el cliente. |
 | Saldo | Lo que falta cobrar: total + ND − NC − abonos − retenciones. En rojo si hay saldo. |
-| Días | Días vencidos (en rojo); si aún no vence, muestra `—` y la fecha de vencimiento al pasar el mouse. |
+| Días | Días transcurridos desde la emisión hasta la *Fecha Hasta* del filtro (hasta hoy si está vacía). Sale **en rojo** cuando el documento está vencido. Al pasar el mouse se ven la fecha de emisión y la de vencimiento. Ver *La columna Días y el estado de vencimiento*. |
 | Asesor | Vendedor asignado al documento. |
 
 - Un cliente cargado dos veces —con la cédula y con el RUC— forma **una sola
@@ -446,11 +446,27 @@ tarjetas, el gráfico de antigüedad y las exportaciones respetan el corte. Sin
 Fecha Hasta, el saldo es el actual. La fecha que manda para un cobro es la
 **fecha del ingreso**.
 
-## Días vencidos
+## La columna Días y el estado de vencimiento
 
-Cada documento muestra los **días vencidos**, calculados desde su fecha de
-vencimiento. Un documento con días vencidos en cero está pendiente pero todavía
-en plazo.
+Son dos cosas distintas y conviene no confundirlas.
+
+**La columna *Días*** muestra la **antigüedad del documento**: los días que
+pasaron desde su **fecha de emisión** hasta la **Fecha Hasta** del filtro. Si deja
+la *Fecha Hasta* vacía, se cuenta hasta hoy. Es decir, si saca el reporte con
+corte al 30 de junio, un documento emitido el 1 de junio muestra 29 días, no los
+que lleva hasta hoy. Vale igual para facturas, recibos de venta y saldos
+iniciales.
+
+**El estado de vencimiento** (la etiqueta *VENCIDA / VIGENTE / PAGADA*, el número
+en rojo, el color de la fila y los tramos del gráfico de antigüedad) se calcula
+aparte, desde la **fecha de vencimiento** —que en facturas y recibos es la
+emisión más los **días de crédito** del documento— y **siempre contra el día de
+hoy**, no contra la fecha de corte. Por eso en la vista *Por cliente* el número
+de la columna *Días* sale **en rojo cuando el documento está vencido**: la cifra
+es la antigüedad, el color avisa de la mora.
+
+Un documento con cero días de crédito (contado) vence el mismo día que se emite,
+así que su antigüedad y su mora coinciden.
 
 Puede filtrar entre ver solo lo pendiente, solo lo vencido o todo.
 
@@ -646,10 +662,19 @@ Y dos casos que el reporte **no** descuenta a propósito:
 
 ## Historial de cambios
 
-- **2.19** — En el PDF **Por cliente** se **duplicó la separación entre un
-  cliente y el siguiente**, para que al imprimir cada sección se distinga como
-  un bloque aparte. La cabecera de cada cliente sigue pegada a sus documentos.
-  Actualizada *Vista "Por cliente"*.
+- **2.19** — La columna **Días** pasa a mostrar la **antigüedad del documento**
+  —días desde su emisión hasta la *Fecha Hasta* del filtro, o hasta hoy si no hay
+  corte— en vez de los días vencidos. El estado *VENCIDA / VIGENTE*, el color rojo
+  y los tramos del gráfico de antigüedad **no cambian**: siguen calculándose desde
+  la fecha de vencimiento contra el día de hoy. En el Excel la columna se llama
+  ahora *Días*, no *Días Vencidos*.
+
+  En los **PDF** del módulo, además: las **cuadrículas de las tablas de
+  documentos se marcan** (antes las líneas casi no se veían al imprimir), en la
+  vista *Por cliente* se **duplicó la separación entre un cliente y el
+  siguiente**, y la cabecera de cada cliente **ya no lleva el RUC delante del
+  nombre**. Actualizadas *Vista "Por cliente"*, *El PDF del listado* y la nueva
+  *La columna Días y el estado de vencimiento*.
 
 - **2.18** — **El centavo pendiente ya se puede cobrar.** El saldo de
   $0.01 que este reporte mostraba como pendiente no se ofrecía en *Ingresos*,
