@@ -13,10 +13,37 @@
     const LC_STORAGE_KEY = `lc_borrador_${typeof ID_EMPRESA !== 'undefined' ? ID_EMPRESA : 0}_${typeof ID_USUARIO !== 'undefined' ? ID_USUARIO : 0}`;
     let _egresoDepsCargados = false;
     let _egresoDeps = null;
+    // Documento autorizado o anulado: su contenido es historia y no se toca (lo fija
+    // liqAplicarBloqueoEdicion al abrir el modal).
+    let LC_BLOQUEADO = false;
 
 
     const r2 = v => Math.round(v * 100) / 100;
-    const DEC_PRECIO = 2; // Default, se podría traer de config si se requiere
+
+    // Configuración de facturación de la empresa (empresa_establecimiento), inyectada
+    // por la vista. Los decimales son los mismos con los que se muestran precio y
+    // cantidad en el resto del sistema: fijarlos en 2 recortaba el precio de las
+    // empresas configuradas con más decimales, tanto al cargar un producto como al
+    // reabrir la liquidación (y ese valor recortado era el que se volvía a guardar).
+    const LC_CFG = window.LC_EMPRESA_CONFIG || {};
+    const DEC_PRECIO = Math.max(0, Math.min(6, parseInt(LC_CFG.decimales_precio ?? 2, 10) || 0));
+    const DEC_CANT   = Math.max(0, Math.min(6, parseInt(LC_CFG.decimales_cantidad ?? 2, 10) || 0));
+    const MODO_IVA   = LC_CFG.calculo_iva === 'subtotal' ? 'subtotal' : 'linea_linea';
+
+    /**
+     * Formatea con los decimales configurados, pero nunca por debajo de la precisión
+     * real del valor (tope 6, el máximo del SRI). Al reabrir un borrador cuyo precio
+     * traía más decimales que la configuración, recortarlo en el input cambiaría el
+     * importe del documento al volver a guardarlo. Mismo criterio que
+     * XmlLiquidacionCompraService::decConfig().
+     */
+    const lcFmt = (v, dec) => {
+        const n = parseFloat(v) || 0;
+        const limpio = n.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+        const pos = limpio.indexOf('.');
+        const real = pos === -1 ? 0 : limpio.length - pos - 1;
+        return n.toFixed(Math.min(6, Math.max(dec, real)));
+    };
 
     // --- Funciones Globales ---
     window.abrirModalLiquidacion = abrirModalLiquidacionFn;
@@ -301,6 +328,7 @@
     function liqAplicarBloqueoEdicion(cab) {
         const estado = (cab && cab.estado ? String(cab.estado) : '').toLowerCase();
         const bloqueado = estado === 'autorizado' || estado === 'anulado';
+        LC_BLOQUEADO = bloqueado;
 
         // Campos de cabecera
         ['liq-fecha', 'liq-punto', 'liq-secuencial', 'liq-sustento', 'search-proveedor'].forEach(id => {
@@ -371,7 +399,13 @@
                         // el <select> conserve el IVA real y no se resetee al abrir/guardar.
                         id_tarifa_iva: resolverIdTarifaIva(d),
                         adicional: d.info_adicional || '',
-                        total: (parseFloat(d.cantidad) * parseFloat(d.precio_unitario)) - parseFloat(d.descuento)
+                        // El subtotal de la línea es el GUARDADO (lo que se emitió); solo
+                        // si faltara se recalcula. Recalcularlo siempre mostraba un
+                        // centavo distinto al del documento cuando cantidad × precio no
+                        // daba un número exacto de centavos.
+                        total: (d.precio_total_sin_impuesto !== undefined && d.precio_total_sin_impuesto !== null && d.precio_total_sin_impuesto !== '')
+                            ? parseFloat(d.precio_total_sin_impuesto)
+                            : Math.max(0, r2(r2(parseFloat(d.cantidad) * parseFloat(d.precio_unitario)) - parseFloat(d.descuento)))
                     }));
                     // La BD/getPagos devuelve la columna `forma_pago`, pero el render y el resto del JS
                     // usan `id_forma_pago`. Se normaliza para que el <select> muestre la forma de pago
@@ -384,8 +418,11 @@
                     renderDetalles();
                     renderPagos();
                     renderInfoAdicional();
-                    LC_calcTotales();
+                    // El bloqueo va ANTES de recalcular: LC_calcTotales() sincroniza el
+                    // monto del pago único y necesita saber si el documento ya está
+                    // emitido para no pisar el valor con el que se emitió.
                     liqAplicarBloqueoEdicion(res.cabecera);
+                    LC_calcTotales();
                     liqActualizarBadgeEstado(res.cabecera.estado);
 
                     const seqCompleto = `${res.cabecera.establecimiento || '001'}-${res.cabecera.punto_emision || '001'}-${res.cabecera.secuencial || ''}`;
@@ -531,8 +568,8 @@
             </td>
             <td><input type="text" class="input-detalle input-descripcion" placeholder="Descripción" value="${descripcion}"></td>
             <td><input type="text" class="input-detalle input-adicional" placeholder="Info extra..." value="${adicional}"></td>
-            <td><input type="number" class="input-detalle text-center input-cantidad" value="${cantidad}" step="any" oninput="window.LC_calcFila(this)"></td>
-            <td><input type="number" class="input-detalle text-end input-precio" value="${p_unitario.toFixed(DEC_PRECIO)}" step="any" oninput="window.LC_calcSinImp(this)"></td>
+            <td><input type="number" class="input-detalle text-center input-cantidad" value="${lcFmt(cantidad, DEC_CANT)}" step="any" oninput="window.LC_calcFila(this)"></td>
+            <td><input type="number" class="input-detalle text-end input-precio" value="${lcFmt(p_unitario, DEC_PRECIO)}" step="any" oninput="window.LC_calcSinImp(this)"></td>
             <td><input type="number" class="input-detalle text-end input-desc" value="${descuento.toFixed(2)}" step="0.01" oninput="window.LC_calcFila(this)"></td>
             <td>
                 <select class="form-select form-select-sm border-0 bg-transparent py-0 input-iva" style="font-size:0.8rem" onchange="window.LC_syncPrecioIva(this)">
@@ -625,7 +662,9 @@
         const desc = parseFloat(tr.querySelector('.input-desc').value) || 0;
 
         const subtotalBruto = r2(cant * prec);
-        const subtotalNeto = r2(subtotalBruto - desc);
+        // Nunca negativo: un descuento mayor al bruto deja la línea en 0, igual que
+        // lo guarda el service (un neto negativo no existe en el XML del SRI).
+        const subtotalNeto = Math.max(0, r2(subtotalBruto - desc));
 
         tr.querySelector('.subtotal-line').textContent = subtotalNeto.toFixed(2);
         LC_calcTotales();
@@ -633,8 +672,14 @@
 
     // --- Totals Calculation ---
     function LC_calcTotales() {
-        let subtotalGeneralBruto = 0; 
+        // subtotalGeneral es NETO (el descuento de cada línea ya está restado), igual
+        // que en Facturas de Venta: es el número que se guarda en total_sin_impuestos
+        // y el que el SRI compara contra importeTotal = totalSinImpuestos + Σ IVA.
+        let subtotalGeneral = 0;
         let descuentoTotal = 0;
+        // Agrupado por ID de tarifa, no por porcentaje: 0%, Exento y No Objeto de IVA
+        // comparten tarifa 0 pero son conceptos distintos, y así los separan el PDF y
+        // el XML (códigos 0 / 7 / 6).
         const grupos = {};
 
         document.querySelectorAll('#tbodyDetalles .row-detalle').forEach(tr => {
@@ -642,33 +687,43 @@
             const prec = parseFloat(tr.querySelector('.input-precio').value) || 0;
             const desc = parseFloat(tr.querySelector('.input-desc').value) || 0;
             const ivaSelect = tr.querySelector('.input-iva');
+            const optIva = ivaSelect.options[ivaSelect.selectedIndex];
             const ivaPct = parseFloat(ivaSelect.value) || 0;
-            const idTarifa = ivaSelect.options[ivaSelect.selectedIndex].dataset.id;
-            const key = ivaPct.toFixed(2);
+            const key = optIva.dataset.id || ivaPct.toFixed(2);
 
             const bruto = r2(cant * prec);
-            const neto = r2(bruto - desc);
+            const neto = Math.max(0, r2(bruto - desc));
 
-            subtotalGeneralBruto = r2(subtotalGeneralBruto + bruto);
+            subtotalGeneral = r2(subtotalGeneral + neto);
             descuentoTotal = r2(descuentoTotal + desc);
 
             if (!grupos[key]) {
-                const optText = ivaSelect.options[ivaSelect.selectedIndex].text;
                 grupos[key] = {
                     pct: ivaPct,
                     base: 0,
                     iva: 0,
-                    nombre: optText
+                    nombre: optIva.text
                 };
             }
             grupos[key].base = r2(grupos[key].base + neto);
-            grupos[key].iva = r2(grupos[key].iva + r2(neto * ivaPct / 100));
+            // Modo línea a línea: se acumula el IVA ya redondeado de cada renglón.
+            if (MODO_IVA === 'linea_linea') {
+                grupos[key].iva = r2(grupos[key].iva + r2(neto * ivaPct / 100));
+            }
         });
 
-        const ivaTotal = Object.values(grupos).reduce((acc, g) => r2(acc + g.iva), 0);
-        const totalFinal = r2(subtotalGeneralBruto - descuentoTotal + ivaTotal);
+        // Modo al subtotal: el IVA se calcula sobre la base acumulada de cada tarifa.
+        if (MODO_IVA === 'subtotal') {
+            Object.values(grupos).forEach(g => {
+                g.iva = r2(g.base * g.pct / 100);
+            });
+        }
 
-        document.getElementById('liq-lbl-subtotal').innerText = subtotalGeneralBruto.toFixed(2);
+        const ivaTotal = Object.values(grupos).reduce((acc, g) => r2(acc + g.iva), 0);
+        // subtotalGeneral ya es neto: NO volver a restar descuentoTotal aquí.
+        const totalFinal = r2(subtotalGeneral + ivaTotal);
+
+        document.getElementById('liq-lbl-subtotal').innerText = subtotalGeneral.toFixed(2);
         document.getElementById('liq-lbl-descuento').innerText = descuentoTotal.toFixed(2);
         document.getElementById('liq-lbl-total').innerText = totalFinal.toFixed(2);
 
@@ -679,7 +734,7 @@
             Object.values(grupos).forEach(g => {
                 subTotalesDiv.innerHTML += `
                     <div class="d-flex justify-content-between align-items-center mb-1 text-muted">
-                        <span class="small">Subtotal ${g.pct}%</span>
+                        <span class="small">Subtotal ${g.nombre}</span>
                         <span class="fw-bold">${g.base.toFixed(2)}</span>
                     </div>
                 `;
@@ -702,9 +757,12 @@
             });
         }
 
-        // Sync first payment if exists
+        // Sync first payment if exists — solo mientras la liquidación se puede editar.
+        // En una autorizada o anulada esto pisaba el monto REAL ya guardado con el total
+        // recién recalculado, que puede diferir en centavos si el modo de cálculo del
+        // IVA de la empresa cambió después de emitida.
         const inputPago = document.querySelector('#container-pagos input');
-        if (inputPago && document.querySelectorAll('#container-pagos .row').length === 1) {
+        if (!LC_BLOQUEADO && inputPago && document.querySelectorAll('#container-pagos .row').length === 1) {
             inputPago.value = totalFinal.toFixed(2);
         }
     }
@@ -1065,6 +1123,9 @@
         const puntoSelect = document.getElementById('liq-punto');
         const puntoOpt = puntoSelect.options[puntoSelect.selectedIndex];
 
+        // Los totales viajan para que el servidor pueda comparar, pero NO son los que
+        // se guardan: LiquidacionCompraService los recalcula con la configuración de
+        // facturación de la empresa. "liq-lbl-subtotal" ya es el subtotal neto.
         const data = {
             id: document.getElementById('liq-id').value,
             id_proveedor: document.getElementById('liq-id-proveedor').value,
@@ -1487,7 +1548,7 @@
             document.getElementById('pagoTotalAbonado').textContent = totalAbonado.toFixed(2);
             document.getElementById('pagoSaldoPendiente').textContent = saldo.toFixed(2);
 
-            if (saldo < 0.01) {
+            if (Math.round(saldo * 100) <= 0) {
                 alertaPagada.classList.remove('d-none');
                 cardRegistro.classList.add('d-none');
             } else {

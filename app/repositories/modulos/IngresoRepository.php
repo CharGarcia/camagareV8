@@ -583,7 +583,7 @@ class IngresoRepository extends BaseRepository
                       AND v.estado <> 'anulado' -- Vigentes: incluye 'borrador' (aún sin autorizar por el SRI), que igual se puede cobrar
                       AND v.eliminado = FALSE
                       AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0.01
+                      AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0
 
                     UNION ALL
 
@@ -601,7 +601,7 @@ class IngresoRepository extends BaseRepository
                     WHERE s.id_cliente = :id_cliente
                       AND s.id_empresa = :id_empresa
                       AND s.eliminado = FALSE
-                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0.01
+                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0
 
                     UNION ALL
 
@@ -620,7 +620,7 @@ class IngresoRepository extends BaseRepository
                       AND r.estado NOT IN ('anulado','facturado')
                       AND r.eliminado = FALSE
                       AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0.01
+                      AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0
                 ) docs
                 ORDER BY fecha_emision ASC, id ASC";
 
@@ -722,7 +722,7 @@ class IngresoRepository extends BaseRepository
                       AND v.estado <> 'anulado' -- incluye 'borrador': una factura sin autorizar del SRI igual se cobra
                       AND v.eliminado = FALSE
                       AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0.01
+                      AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0
 
                     UNION
 
@@ -732,7 +732,7 @@ class IngresoRepository extends BaseRepository
                     LEFT JOIN retenido_si rsi ON s.id = rsi.id_saldo
                     WHERE s.id_empresa = :id_empresa
                       AND s.eliminado = FALSE
-                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0.01
+                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0
 
                     UNION
 
@@ -743,7 +743,7 @@ class IngresoRepository extends BaseRepository
                       AND r.estado NOT IN ('anulado','facturado')
                       AND r.eliminado = FALSE
                       AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0.01
+                      AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0
                 )
                 SELECT cli.id, cli.nombre, cli.identificacion
                 FROM clientes cli
@@ -1137,7 +1137,7 @@ class IngresoRepository extends BaseRepository
                       AND v.estado <> 'anulado' -- incluye 'borrador': una factura sin autorizar del SRI igual se cobra
                       AND v.eliminado = FALSE
                       AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0.01
+                      AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0
                       $filtroBusq
 
                     UNION ALL
@@ -1163,7 +1163,7 @@ class IngresoRepository extends BaseRepository
                     LEFT JOIN retenido_si rsi ON s.id = rsi.id_saldo
                     WHERE s.id_empresa = :id_empresa
                       AND s.eliminado = FALSE
-                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0.01
+                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0
                       $filtroBusqCxc
 
                     UNION ALL
@@ -1188,7 +1188,7 @@ class IngresoRepository extends BaseRepository
                       AND r.estado NOT IN ('anulado','facturado')
                       AND r.eliminado = FALSE
                       AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0.01
+                      AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0
                       $filtroBusqRec
 
                     UNION ALL
@@ -1213,7 +1213,7 @@ class IngresoRepository extends BaseRepository
                       AND fr.estado = 'autorizado'
                       AND fr.eliminado = FALSE
                       AND fr.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (fr.importe_total - COALESCE(cfr.total_cobrado, 0)) > 0.01
+                      AND (fr.importe_total - COALESCE(cfr.total_cobrado, 0)) > 0
                       $filtroBusqFr
                 ) docs
                 WHERE docs.tipo_documento = ANY(:tipos::text[])

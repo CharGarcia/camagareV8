@@ -23,8 +23,13 @@ class ReporteInventariosController extends BaseModuloController
     private ?array $bodegasDenegadas = null;
     private const RUTA_MODULO = 'modulos/reporte_inventarios';
 
-    /** Desgloses de Existencias por debajo de producto×bodega (ver resolverDesglose()). */
+    /** Desgloses de Existencias por debajo de producto×bodega, calculados desde el kardex
+     *  (ver resolverDesglose()). No incluye LOTE_CONSIGNACION, que sale de otra fuente. */
     private const DESGLOSES_EXISTENCIAS = ['LOTE', 'CADUCIDAD', 'LOTE_CADUCIDAD'];
+
+    /** Desglose de Existencias que no sale del kardex sino de las líneas de consignación:
+     *  una fila por lote/NUP entregado, con el documento, el cliente y su saldo. */
+    private const DESGLOSE_CONSIGNACION = 'LOTE_CONSIGNACION';
 
     protected function getRutaModulo(): string
     {
@@ -207,7 +212,7 @@ class ReporteInventariosController extends BaseModuloController
     private function resolverDesglose(): string
     {
         $desglose = strtoupper(trim((string) ($_REQUEST['desglose'] ?? '')));
-        if (in_array($desglose, self::DESGLOSES_EXISTENCIAS, true)) {
+        if (in_array($desglose, self::DESGLOSES_EXISTENCIAS, true) || $desglose === self::DESGLOSE_CONSIGNACION) {
             return $desglose;
         }
         $agrupar = strtoupper(trim((string) ($_REQUEST['agrupar_por'] ?? '')));
@@ -237,6 +242,30 @@ class ReporteInventariosController extends BaseModuloController
             'dir'          => $_REQUEST['dir'] ?? 'ASC',
             'buscar'       => trim($_REQUEST['buscar']  ?? ''),
             'bodegas_denegadas' => $this->bodegasDenegadas(),
+        ];
+    }
+
+    /**
+     * Traduce los filtros de Existencias a los que entiende la consulta de consignaciones,
+     * para el desglose "Lote + consignación". Los de esa pestaña que no tienen equivalente
+     * (estado de stock, agrupación, orden) no se trasladan: ahí la fila es una línea de
+     * consignación, no un par producto×bodega. La fecha de corte se traduce a "emitidas
+     * hasta esa fecha", que es lo que significa un corte en este reporte.
+     */
+    private static function filtrosConsignacionDesdeExistencias(array $filtros): array
+    {
+        return [
+            'estado'       => 'TODOS',
+            'id_bodega'    => $filtros['id_bodega']    ?? '',
+            'id_categoria' => $filtros['id_categoria'] ?? '',
+            'id_marca'     => $filtros['id_marca']     ?? '',
+            'id_producto'  => $filtros['id_producto']  ?? '',
+            'numero_lote'  => $filtros['numero_lote']  ?? '',
+            'nup'          => $filtros['nup']          ?? '',
+            'fecha_caducidad_desde' => $filtros['fecha_caducidad_desde'] ?? '',
+            'fecha_caducidad_hasta' => $filtros['fecha_caducidad_hasta'] ?? '',
+            'fecha_hasta'  => $filtros['fecha_corte'] ?? '',
+            'bodegas_denegadas' => $filtros['bodegas_denegadas'] ?? [],
         ];
     }
 
@@ -346,7 +375,18 @@ class ReporteInventariosController extends BaseModuloController
         // El desglose (por lote / por caducidad) define las filas por sí solo: cuando
         // está activo, "Agrupar por" no pinta nada — la vista lo deshabilita.
         $limite = ReporteInventarioRepository::LIMITE_FILAS_PANTALLA;
-        if ($desglose !== 'GENERAL') {
+        if ($desglose === self::DESGLOSE_CONSIGNACION) {
+            // Este desglose sirve datos de consignaciones desde una pestaña que solo exige
+            // Inventario: se pide además el permiso del módulo dueño, como hace requirePestana().
+            $this->requirePermisoVerModulo(self::RUTA_CONSIGNACIONES);
+            $modo = $desglose;
+            $rows = $this->repository->getConsignacionesDetalle(
+                $idEmpresa,
+                self::filtrosConsignacionDesdeExistencias($filtros),
+                (string) ($filtros['consignado'] ?? ''),
+                $limite
+            );
+        } elseif ($desglose !== 'GENERAL') {
             $modo = $desglose;
             $rows = $this->repository->getExistenciasPorDesglose($idEmpresa, $filtros, $desglose, $limite);
         } else {
@@ -403,7 +443,8 @@ class ReporteInventariosController extends BaseModuloController
         // a repetir la consulta completa en cada Mostrar (medido: una segunda pasada completa sobre el kardex). El único
         // indicador que sí se usa, el de Auditoría, se cuenta en PHP sobre las filas ya traídas.
 
-        $colSpan = $modo === 'NINGUNO' ? 12 : 6;
+        // +1 columna (Código) en detalle y en el agrupado por producto; el resto de agrupados no la lleva.
+        $colSpan = $modo === 'NINGUNO' ? 13 : ($modo === 'PRODUCTO' ? 7 : 6);
 
         return [
             'rows'       => $this->renderRows($rows, fn($r) => $this->filaMovimientos($r, $modo), $colSpan)
@@ -416,7 +457,9 @@ class ReporteInventariosController extends BaseModuloController
     private function generarValorizacion(int $idEmpresa): array
     {
         $filtros = $this->getFiltrosValorizacion();
-        $modo = $filtros['agrupar_por'];
+        // Se normaliza a PRODUCTO igual que el match: así la fila sabe que debe pintar la
+        // columna Código aunque llegue un "agrupar_por" desconocido.
+        $modo = self::modoValorizacion($filtros['agrupar_por']);
 
         $rows = match ($modo) {
             'CATEGORIA' => $this->repository->getValorizacionAgrupadoCategoria($idEmpresa, $filtros),
@@ -429,7 +472,7 @@ class ReporteInventariosController extends BaseModuloController
         // indicador que sí se usa, el de Auditoría, se cuenta en PHP sobre las filas ya traídas.
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaValorizacion($r), 5),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaValorizacion($r, $modo), $modo === 'PRODUCTO' ? 6 : 5),
             'agrupacion' => $modo,
         ];
     }
@@ -449,7 +492,7 @@ class ReporteInventariosController extends BaseModuloController
         // front-end nunca lee `rawData`. Calcularlos obligaba a repetir entera la consulta de
         // saldos (la más cara del módulo) y a serializar dos veces el mismo resultado.
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 9 : 3),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaConsignaciones($r, $modo), $modo === 'NINGUNO' ? 10 : ($modo === 'PRODUCTO' ? 4 : 3)),
             'agrupacion' => $modo,
         ];
     }
@@ -465,8 +508,8 @@ class ReporteInventariosController extends BaseModuloController
         }
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaAuditoria($r), 6)
-                            . ($hayMas ? self::filaTopeAlcanzado($limite, 6) : ''),
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaAuditoria($r), 7)
+                            . ($hayMas ? self::filaTopeAlcanzado($limite, 7) : ''),
             // Este sí lo lee la pantalla (el contador de discrepancias), y no cuesta una
             // consulta aparte: sale de las filas ya traídas. Con tope, es "al menos N".
             'kpis'       => ['total_discrepancias' => count($rows)],
@@ -504,19 +547,42 @@ class ReporteInventariosController extends BaseModuloController
     // ────────────────────────────────────────────────────────────────
     // RENDER DE FILAS POR PESTAÑA
     // ────────────────────────────────────────────────────────────────
-    /** Columnas de la tabla de Existencias según el modo (para el colspan del mensaje vacío). */
+    /** Columnas de la tabla de Existencias según el modo (para el colspan del mensaje vacío).
+     *  Incluye la columna Código, que va primera en todo modo cuya fila es un producto
+     *  (detalle, desgloses y agrupado por producto); los demás agrupados no la tienen. */
     private static function colSpanExistencias(string $modo): int
     {
         return match ($modo) {
-            'NINGUNO'        => 10,
-            'LOTE_CADUCIDAD' => 10,
-            'LOTE', 'CADUCIDAD' => 8,
+            'NINGUNO'        => 11,
+            'LOTE_CADUCIDAD' => 11,
+            'LOTE', 'CADUCIDAD' => 9,
+            'PRODUCTO'       => 9,
+            self::DESGLOSE_CONSIGNACION => 15,
             default          => 8,
         };
     }
 
+    /** Valorización siempre agrupa; cualquier valor fuera de la lista cae en "por Producto". */
+    private static function modoValorizacion(?string $agruparPor): string
+    {
+        return in_array($agruparPor, ['CATEGORIA', 'BODEGA', 'MARCA'], true) ? $agruparPor : 'PRODUCTO';
+    }
+
+    /** Primera celda de una fila de reporte: el código del producto. */
+    private static function tdCodigo(?string $codigo): string
+    {
+        $codigo = trim((string) $codigo);
+        return '<td class="small text-nowrap fw-semibold">' . htmlspecialchars($codigo !== '' ? $codigo : '-') . '</td>';
+    }
+
     private function filaExistencias(array $r, string $modo): string
     {
+        // "Lote + consignación": la fila es una línea de consignación, no un par
+        // producto×bodega, así que sus columnas son las del documento que la entregó.
+        if ($modo === self::DESGLOSE_CONSIGNACION) {
+            return $this->filaExistenciaConsignacion($r);
+        }
+
         $costo = number_format((float) ($r['costo_unitario'] ?? 0), 4);
         $valor = number_format((float) ($r['valor_total'] ?? 0), 2);
 
@@ -538,6 +604,7 @@ class ReporteInventariosController extends BaseModuloController
                 . ' data-id-categoria="' . $idCategoriaActual . '"'
                 . ' data-costo-unitario="' . (float) ($r['costo_unitario'] ?? 0) . '"'
                 . '>'
+                . self::tdCodigo($r['producto_codigo'] ?? '')
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['categoria_nombre'] ?? '') . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
@@ -566,6 +633,7 @@ class ReporteInventariosController extends BaseModuloController
                 $celdasClave .= '<td class="small">' . $cad . '</td>';
             }
             return '<tr>'
+                . self::tdCodigo($r['producto_codigo'] ?? '')
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
                 . $celdasClave
@@ -577,7 +645,9 @@ class ReporteInventariosController extends BaseModuloController
                 . '</tr>';
         }
 
+        // Agrupado por producto: el código viaja aparte del label y encabeza la fila.
         return '<tr>'
+            . ($modo === 'PRODUCTO' ? self::tdCodigo($r['codigo_grupo'] ?? '') : '')
             . '<td class="fw-bold">' . htmlspecialchars((string) ($r['nombre_grupo'] ?? '')) . '</td>'
             . '<td class="text-center">' . (int) ($r['cantidad_productos'] ?? 0) . '</td>'
             . '<td class="text-end small text-info">' . number_format((float) ($r['consignado'] ?? 0), 2) . '</td>'
@@ -586,6 +656,36 @@ class ReporteInventariosController extends BaseModuloController
             . '<td class="text-end small text-muted">' . number_format((float) ($r['stock_minimo'] ?? 0), 2) . '</td>'
             . '<td class="text-end">' . $costo . '</td>'
             . '<td class="text-end fw-bold text-primary">' . $valor . '</td>'
+            . '</tr>';
+    }
+
+    /** Fila del desglose "Lote + consignación" de Existencias: una línea de consignación
+     *  con su documento, su lote/NUP y el desglose de lo que ya salió del saldo. */
+    private function filaExistenciaConsignacion(array $r): string
+    {
+        $saldo = (float) ($r['saldo'] ?? 0);
+        $num   = static fn($v) => number_format((float) $v, 2);
+
+        // sinFiltros = true: el modal es el de la pestaña Consignaciones y por defecto reaplica
+        // los filtros de ESA pestaña, que aquí no son los que produjeron la fila.
+        return '<tr class="ri-cv-row" style="cursor:pointer;" title="Ver detalle de la consignación"'
+            . ' onclick="window.RI_Consignaciones.verDetalle(' . (int) ($r['id_consignacion'] ?? 0) . ', true)">'
+            . self::tdCodigo($r['producto_codigo'] ?? '')
+            . '<td class="small text-nowrap">' . date('d-m-Y', strtotime($r['fecha_emision'] ?? '')) . '</td>'
+            . '<td class="small text-nowrap">' . htmlspecialchars($r['secuencial'] ?? '') . '</td>'
+            . '<td class="small">' . htmlspecialchars($r['cliente_nombre'] ?? '-') . '</td>'
+            . '<td class="small">' . htmlspecialchars($r['vendedor_nombre'] ?? '-') . '</td>'
+            . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
+            . '<td class="small">' . htmlspecialchars($r['numero_lote'] ?? '-') . '</td>'
+            . '<td class="small">' . htmlspecialchars($r['nup'] ?? '-') . '</td>'
+            . '<td class="small">' . htmlspecialchars($r['responsable_traslado_nombre'] ?? '-') . '</td>'
+            . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '-') . '</td>'
+            . '<td class="text-end small">' . $num($r['cantidad_consignada'] ?? 0) . '</td>'
+            . '<td class="text-end small">' . $num($r['cantidad_retornada'] ?? 0) . '</td>'
+            . '<td class="text-end small">' . $num($r['cantidad_facturada'] ?? 0) . '</td>'
+            . '<td class="text-end small" title="Entregado al cliente a cambio de otro producto (módulo Cambios de productos)">'
+            . $num($r['cantidad_cambiada'] ?? 0) . '</td>'
+            . '<td class="text-end fw-bold ' . ($saldo > 0 ? 'text-primary' : 'text-muted') . '">' . $num($saldo) . '</td>'
             . '</tr>';
     }
 
@@ -598,6 +698,7 @@ class ReporteInventariosController extends BaseModuloController
             $saldo = (float) ($r['saldo'] ?? 0);
             $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '-';
             return '<tr>'
+                . self::tdCodigo($r['producto_codigo'] ?? '')
                 . '<td class="small text-nowrap">' . date('d-m-Y H:i', strtotime($r['fecha_movimiento'] ?? '')) . '</td>'
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
@@ -618,6 +719,7 @@ class ReporteInventariosController extends BaseModuloController
             $label = date('d/m/Y', strtotime((string) $label));
         }
         return '<tr>'
+            . ($modo === 'PRODUCTO' ? self::tdCodigo($r['codigo_grupo'] ?? '') : '')
             . '<td class="fw-bold">' . htmlspecialchars((string) $label) . '</td>'
             . '<td class="text-center">' . (int) ($r['cantidad_movimientos'] ?? 0) . '</td>'
             . '<td class="text-end text-success">' . number_format((float) ($r['total_entradas'] ?? 0), 2) . '</td>'
@@ -627,9 +729,10 @@ class ReporteInventariosController extends BaseModuloController
             . '</tr>';
     }
 
-    private function filaValorizacion(array $r): string
+    private function filaValorizacion(array $r, string $modo): string
     {
         return '<tr>'
+            . ($modo === 'PRODUCTO' ? self::tdCodigo($r['codigo_grupo'] ?? '') : '')
             . '<td class="fw-bold">' . htmlspecialchars((string) ($r['nombre_grupo'] ?? '')) . '</td>'
             . '<td class="text-center">' . (int) ($r['cantidad_productos'] ?? 0) . '</td>'
             . '<td class="text-end">' . number_format((float) ($r['stock_actual'] ?? 0), 2) . '</td>'
@@ -654,6 +757,9 @@ class ReporteInventariosController extends BaseModuloController
             // con ellipsis dejando el valor entero en el title.
             $lotes = trim((string) ($r['lotes'] ?? '')) !== '' ? (string) $r['lotes'] : '-';
             $nups  = trim((string) ($r['nups']  ?? '')) !== '' ? (string) $r['nups']  : '-';
+            // Los códigos llegan agregados por el mismo motivo: la fila es el documento completo,
+            // que puede llevar varios productos. El detalle producto a producto está en el modal.
+            $codigos = trim((string) ($r['codigos'] ?? '')) !== '' ? (string) $r['codigos'] : '-';
 
             $totalProductos = (float) ($r['total_productos'] ?? 0);
             $tituloTotal = 'Consignado ' . number_format($totalProductos, 2)
@@ -662,6 +768,7 @@ class ReporteInventariosController extends BaseModuloController
                 . ' · A cambio ' . number_format((float) ($r['total_cambiado'] ?? 0), 2);
 
             return '<tr class="ri-cv-row" style="cursor:pointer;" onclick="window.RI_Consignaciones.verDetalle(' . (int) ($r['id_consignacion'] ?? 0) . ')" title="Ver detalle de productos">'
+                . '<td class="small text-truncate fw-semibold" style="max-width:150px;" title="' . htmlspecialchars($codigos, ENT_QUOTES) . '">' . htmlspecialchars($codigos) . '</td>'
                 . '<td class="small">' . date('d-m-Y', strtotime($r['fecha_emision'] ?? '')) . '<br><small class="text-muted">' . htmlspecialchars($r['secuencial'] ?? '') . '</small></td>'
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['cliente_identificacion'] ?? '') . '</small></td>'
                 . '<td class="small">' . htmlspecialchars($r['vendedor_nombre'] ?? '-') . '</td>'
@@ -676,6 +783,7 @@ class ReporteInventariosController extends BaseModuloController
         }
 
         return '<tr>'
+            . ($modo === 'PRODUCTO' ? self::tdCodigo($r['codigo_grupo'] ?? '') : '')
             . '<td class="fw-bold">' . htmlspecialchars((string) ($r['nombre_grupo'] ?? '')) . '</td>'
             . '<td class="text-center">' . (int) ($r['cantidad_consignaciones'] ?? 0) . '</td>'
             . '<td class="text-end fw-bold">' . number_format((float) ($r['saldo'] ?? 0), 2) . '</td>'
@@ -689,7 +797,8 @@ class ReporteInventariosController extends BaseModuloController
         $diferencia = $cacheado - $real;
         $colorDif = $diferencia > 0 ? 'text-danger' : 'text-warning';
         return '<tr>'
-            . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['producto_codigo'] ?? '') . '</small></td>'
+            . self::tdCodigo($r['producto_codigo'] ?? '')
+            . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
             . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
             . '<td class="text-end">' . number_format($cacheado, 2) . '</td>'
             . '<td class="text-end fw-bold">' . number_format($real, 2) . '</td>'
@@ -1358,17 +1467,25 @@ class ReporteInventariosController extends BaseModuloController
                     default    => $this->repository->getMovimientosDetalle($idEmpresa, $filtros, ReporteInventarioRepository::LIMITE_FILAS_EXPORT),
                 };
                 if ($modo === 'NINGUNO') {
-                    $headers = ['Fecha', 'Producto', 'Código', 'Bodega', 'Tipo', 'Origen', 'Entradas', 'Salidas', 'Saldo', 'Costo Unit.', 'Lote', 'Observaciones'];
+                    $headers = ['Código', 'Fecha', 'Producto', 'Bodega', 'Tipo', 'Origen', 'Entradas', 'Salidas', 'Saldo', 'Costo Unit.', 'Lote', 'Observaciones'];
                     $data = array_map(function ($r) {
                         $cant = (float) $r['cantidad'];
                         return [
+                            $r['producto_codigo'] ?? '',
                             date('d-m-Y H:i', strtotime($r['fecha_movimiento'])),
-                            $r['producto_nombre'] ?? '', $r['producto_codigo'] ?? '', $r['bodega_nombre'] ?? '',
+                            $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? '',
                             strtoupper($r['tipo_movimiento'] ?? ''), $r['origen_label'] ?? '',
                             $cant > 0 ? $cant : 0, $cant < 0 ? abs($cant) : 0, (float) $r['saldo'],
                             (float) $r['costo_unitario'], $r['numero_lote'] ?? '', $r['observaciones'] ?? '',
                         ];
                     }, $rows);
+                } elseif ($modo === 'PRODUCTO') {
+                    $headers = ['Código', 'Producto', 'Movimientos', 'Entradas', 'Salidas', 'Saldo neto', 'Costo total'];
+                    $data = array_map(fn($r) => [
+                        (string) ($r['codigo_grupo'] ?? ''), (string) $r['nombre_grupo'], (int) $r['cantidad_movimientos'],
+                        (float) $r['total_entradas'], (float) $r['total_salidas'],
+                        (float) $r['saldo_neto'], (float) $r['costo_total'],
+                    ], $rows);
                 } else {
                     $headers = ['Grupo', 'Movimientos', 'Entradas', 'Salidas', 'Saldo neto', 'Costo total'];
                     $data = array_map(fn($r) => [
@@ -1381,18 +1498,26 @@ class ReporteInventariosController extends BaseModuloController
 
             case 'valorizacion':
                 $filtros = $this->getFiltrosValorizacion();
-                $modo = $filtros['agrupar_por'];
+                $modo = self::modoValorizacion($filtros['agrupar_por']);
                 $rows = match ($modo) {
                     'CATEGORIA' => $this->repository->getValorizacionAgrupadoCategoria($idEmpresa, $filtros),
                     'BODEGA'    => $this->repository->getValorizacionAgrupadoBodega($idEmpresa, $filtros),
                     'MARCA'     => $this->repository->getValorizacionAgrupadoMarca($idEmpresa, $filtros),
                     default     => $this->repository->getValorizacionAgrupadoProducto($idEmpresa, $filtros),
                 };
-                $headers = ['Grupo', 'Productos', 'Stock', 'Costo promedio', 'Valor total'];
-                $data = array_map(fn($r) => [
-                    (string) $r['nombre_grupo'], (int) $r['cantidad_productos'],
-                    (float) $r['stock_actual'], (float) $r['costo_promedio'], (float) $r['valor_total'],
-                ], $rows);
+                if ($modo === 'PRODUCTO') {
+                    $headers = ['Código', 'Producto', 'Productos', 'Stock', 'Costo promedio', 'Valor total'];
+                    $data = array_map(fn($r) => [
+                        (string) ($r['codigo_grupo'] ?? ''), (string) $r['nombre_grupo'], (int) $r['cantidad_productos'],
+                        (float) $r['stock_actual'], (float) $r['costo_promedio'], (float) $r['valor_total'],
+                    ], $rows);
+                } else {
+                    $headers = ['Grupo', 'Productos', 'Stock', 'Costo promedio', 'Valor total'];
+                    $data = array_map(fn($r) => [
+                        (string) $r['nombre_grupo'], (int) $r['cantidad_productos'],
+                        (float) $r['stock_actual'], (float) $r['costo_promedio'], (float) $r['valor_total'],
+                    ], $rows);
+                }
                 return [$headers, $data, 'Valorización de Inventario'];
 
             case 'consignaciones':
@@ -1404,9 +1529,10 @@ class ReporteInventariosController extends BaseModuloController
                     default    => $this->repository->getConsignacionesDetalle($idEmpresa, $filtros),
                 };
                 if ($modo === 'NINGUNO') {
-                    $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Asesor', 'Responsable de traslado',
+                    $headers = ['Código', 'Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Asesor', 'Responsable de traslado',
                                 'Producto', 'Bodega', 'Lote', 'NUP', 'Consignado', 'Retornado', 'Facturado', 'A cambio', 'Saldo', 'Valor a costo'];
                     $data = array_map(fn($r) => [
+                        $r['producto_codigo'] ?? '',
                         date('d-m-Y', strtotime($r['fecha_emision'])), $r['secuencial'] ?? '',
                         $r['cliente_nombre'] ?? '', $r['cliente_identificacion'] ?? '',
                         $r['vendedor_nombre'] ?? '', $r['responsable_traslado_nombre'] ?? '',
@@ -1414,6 +1540,12 @@ class ReporteInventariosController extends BaseModuloController
                         $r['numero_lote'] ?? '-', $r['nup'] ?? '-',
                         (float) $r['cantidad_consignada'], (float) $r['cantidad_retornada'], (float) $r['cantidad_facturada'],
                         (float) ($r['cantidad_cambiada'] ?? 0),
+                        (float) $r['saldo'], (float) $r['valor_saldo'],
+                    ], $rows);
+                } elseif ($modo === 'PRODUCTO') {
+                    $headers = ['Código', 'Producto', 'Consignaciones', 'Saldo', 'Valor a costo'];
+                    $data = array_map(fn($r) => [
+                        (string) ($r['codigo_grupo'] ?? ''), (string) $r['nombre_grupo'], (int) $r['cantidad_consignaciones'],
                         (float) $r['saldo'], (float) $r['valor_saldo'],
                     ], $rows);
                 } else {
@@ -1429,7 +1561,18 @@ class ReporteInventariosController extends BaseModuloController
                 $filtros  = $this->getFiltrosExistencias();
                 $desglose = $filtros['desglose'];
                 $topeExport = ReporteInventarioRepository::LIMITE_FILAS_EXPORT;
-                if ($desglose !== 'GENERAL') {
+                if ($desglose === self::DESGLOSE_CONSIGNACION) {
+                    // Mismo guard que en pantalla: la exportación no puede servir lo que
+                    // la pestaña no dejaría ver (ver generarExistencias()).
+                    $this->requirePermisoVerModulo(self::RUTA_CONSIGNACIONES);
+                    $modo = $desglose;
+                    $rows = $this->repository->getConsignacionesDetalle(
+                        $idEmpresa,
+                        self::filtrosConsignacionDesdeExistencias($filtros),
+                        (string) ($filtros['consignado'] ?? ''),
+                        $topeExport
+                    );
+                } elseif ($desglose !== 'GENERAL') {
                     $modo = $desglose;
                     $rows = $this->repository->getExistenciasPorDesglose($idEmpresa, $filtros, $desglose, $topeExport);
                 } else {
@@ -1441,10 +1584,23 @@ class ReporteInventariosController extends BaseModuloController
                         default     => $this->repository->getExistenciasDetalle($idEmpresa, $filtros, $topeExport),
                     };
                 }
-                if ($modo === 'NINGUNO') {
-                    $headers = ['Producto', 'Código', 'Categoría', 'Bodega', 'Consignación', 'Stock', 'Stock Total', 'Mínimo', 'Máximo', 'Costo Unit.', 'Valor total', 'Estado'];
+                if ($modo === self::DESGLOSE_CONSIGNACION) {
+                    $headers = ['Código', 'Fecha', 'Secuencial', 'Cliente', 'Asesor', 'Descripción', 'Lote', 'NUP',
+                                'Responsable de traslado', 'Bodega', 'Consignado', 'Retornado', 'Facturado', 'A cambio', 'Saldo'];
                     $data = array_map(fn($r) => [
-                        $r['producto_nombre'] ?? '', $r['producto_codigo'] ?? '', $r['categoria_nombre'] ?? '', $r['bodega_nombre'] ?? '',
+                        $r['producto_codigo'] ?? '',
+                        date('d-m-Y', strtotime($r['fecha_emision'])), $r['secuencial'] ?? '',
+                        $r['cliente_nombre'] ?? '', $r['vendedor_nombre'] ?? '',
+                        $r['producto_nombre'] ?? '', $r['numero_lote'] ?? '-', $r['nup'] ?? '-',
+                        $r['responsable_traslado_nombre'] ?? '', $r['bodega_nombre'] ?? '',
+                        (float) $r['cantidad_consignada'], (float) $r['cantidad_retornada'],
+                        (float) $r['cantidad_facturada'], (float) ($r['cantidad_cambiada'] ?? 0),
+                        (float) $r['saldo'],
+                    ], $rows);
+                } elseif ($modo === 'NINGUNO') {
+                    $headers = ['Código', 'Producto', 'Categoría', 'Bodega', 'Consignación', 'Stock', 'Stock Total', 'Mínimo', 'Máximo', 'Costo Unit.', 'Valor total', 'Estado'];
+                    $data = array_map(fn($r) => [
+                        $r['producto_codigo'] ?? '', $r['producto_nombre'] ?? '', $r['categoria_nombre'] ?? '', $r['bodega_nombre'] ?? '',
                         (float) $r['consignado'], (float) $r['stock_actual'], (float) $r['stock_total'], (float) $r['stock_minimo'], (float) $r['stock_maximo'],
                         (float) $r['costo_unitario'], (float) $r['valor_total'], $r['estado_stock'] ?? '',
                     ], $rows);
@@ -1454,7 +1610,7 @@ class ReporteInventariosController extends BaseModuloController
                     $conNup  = $modo === 'LOTE_CADUCIDAD';
                     $conCad  = $modo === 'CADUCIDAD' || $modo === 'LOTE_CADUCIDAD';
                     $headers = array_merge(
-                        ['Producto', 'Código', 'Bodega'],
+                        ['Código', 'Producto', 'Bodega'],
                         $conLote ? ['Lote'] : [],
                         $conNup  ? ['NUP'] : [],
                         $conCad  ? ['Caducidad'] : [],
@@ -1463,7 +1619,7 @@ class ReporteInventariosController extends BaseModuloController
                     $data = array_map(function ($r) use ($conLote, $conNup, $conCad) {
                         $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '';
                         return array_merge(
-                            [$r['producto_nombre'] ?? '', $r['producto_codigo'] ?? '', $r['bodega_nombre'] ?? ''],
+                            [$r['producto_codigo'] ?? '', $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? ''],
                             $conLote ? [$r['lote'] ?? ''] : [],
                             $conNup  ? [$r['nup'] ?? ''] : [],
                             $conCad  ? [$cad] : [],
@@ -1473,6 +1629,12 @@ class ReporteInventariosController extends BaseModuloController
                             ]
                         );
                     }, $rows);
+                } elseif ($modo === 'PRODUCTO') {
+                    $headers = ['Código', 'Producto', 'Productos', 'Consignación', 'Stock', 'Stock Total', 'Costo Unit.', 'Valor total'];
+                    $data = array_map(fn($r) => [
+                        (string) ($r['codigo_grupo'] ?? ''), (string) $r['nombre_grupo'], (int) $r['cantidad_productos'],
+                        (float) $r['consignado'], (float) $r['stock_actual'], (float) $r['stock_total'], (float) $r['costo_unitario'], (float) $r['valor_total'],
+                    ], $rows);
                 } else {
                     $headers = ['Grupo', 'Productos', 'Consignación', 'Stock', 'Stock Total', 'Costo Unit.', 'Valor total'];
                     $data = array_map(fn($r) => [

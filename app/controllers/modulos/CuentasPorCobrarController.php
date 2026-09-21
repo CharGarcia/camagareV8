@@ -297,8 +297,8 @@ class CuentasPorCobrarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 7.5pt; }
-                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 8.5pt; }
+                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; } .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; } .header h3 { margin: 0 0 2px 0; font-size: 10pt; } .header p { margin: 0; font-size: 7.5pt; }
@@ -605,8 +605,8 @@ class CuentasPorCobrarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 6px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 7.5pt; color: #000; }
-                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; color: #000; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 8.5pt; color: #000; }
+                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; color: #000; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
@@ -2109,8 +2109,8 @@ $plantillasFiltradas = [];
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 7.5pt; color: #000; }
-                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; color: #000; }
+                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 8.5pt; color: #000; }
+                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; color: #000; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
@@ -2376,9 +2376,9 @@ $plantillasFiltradas = [];
     /** Estilos de la caja "Filtros aplicados": los tres PDF del módulo la dibujan igual. */
     private const CSS_FILTROS_PDF = '
         table.fil-tit { margin-bottom: 0; }
-        table.fil-tit td { background: #e9ecef; border: 1px solid #ccc; padding: 3px 5px; font-size: 7.5pt; font-weight: bold; color: #000; }
+        table.fil-tit td { background: #e9ecef; border: 1px solid #ccc; padding: 3px 5px; font-size: 8.5pt; font-weight: bold; color: #000; }
         table.filtros { margin-bottom: 8px; }
-        table.filtros td { border: 1px solid #ddd; padding: 2px 4px; font-size: 7pt; color: #000; }
+        table.filtros td { border: 1px solid #ddd; padding: 2px 4px; font-size: 8pt; color: #000; }
         table.filtros td.f-lbl { background: #f8f9fa; font-weight: bold; }
     ';
 

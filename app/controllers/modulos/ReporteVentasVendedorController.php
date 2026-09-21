@@ -190,7 +190,7 @@ class ReporteVentasVendedorController extends BaseModuloController
         $saldo   = number_format((float) ($r['saldo'] ?? 0), 2);
         // Saldo pendiente del documento (o suma de saldos del grupo): rojo si queda
         // algo por cobrar, verde si ya está cancelado.
-        $saldoCls = (float) ($r['saldo'] ?? 0) > 0.01 ? 'text-danger' : 'text-success';
+        $saldoCls = round((float) ($r['saldo'] ?? 0), 2) > 0 ? 'text-danger' : 'text-success';
 
         if ($agruparPor === 'PRODUCTO') {
             $tarifa = (float) ($r['tarifa_iva'] ?? 0);

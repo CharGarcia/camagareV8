@@ -1513,7 +1513,7 @@ class FacturaVentaController extends BaseModuloController
         }
         $abonos = (float) ($r['total_cobrado'] ?? 0) + (float) ($r['total_nc'] ?? 0) + (float) ($r['total_retencion'] ?? 0);
         $saldo  = max(0, (float) ($r['importe_total'] ?? 0) - $abonos);
-        if ($saldo <= 0.01) return 'Pagada';
+        if (round($saldo, 2) <= 0) return 'Pagada';
         if ($abonos > 0)    return 'Abonada';
         return 'Pendiente';
     }
@@ -3491,7 +3491,7 @@ class FacturaVentaController extends BaseModuloController
 
         if ($estado === 'anulado') {
             $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>';
-        } elseif ($saldo <= 0.01) {
+        } elseif (round($saldo, 2) <= 0) {
             $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
         } elseif (($cobrado + $nc + $retencion) > 0) {
             $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
@@ -3510,7 +3510,7 @@ class FacturaVentaController extends BaseModuloController
                 <td class="text-end" data-col="total_ice">$' . number_format((float)($r['total_ice'] ?? 0), 2) . '</td>
                 <td class="text-end" data-col="propina">$' . number_format((float)($r['propina'] ?? 0), 2) . '</td>
                 <td class="text-end fw-bold" data-col="importe_total">$' . number_format((float)($r['importe_total'] ?? 0), 2) . '</td>
-                <td class="text-end fw-bold ' . (($estado === 'anulado' ? 0.0 : $saldo) > 0.01 ? 'text-danger' : 'text-success') . '" data-col="saldo_pendiente">$' . number_format($estado === 'anulado' ? 0.0 : $saldo, 2) . '</td>
+                <td class="text-end fw-bold ' . (round($estado === 'anulado' ? 0.0 : $saldo, 2) > 0 ? 'text-danger' : 'text-success') . '" data-col="saldo_pendiente">$' . number_format($estado === 'anulado' ? 0.0 : $saldo, 2) . '</td>
                 <td data-col="vendedor_nombre"><span class="text-muted">' . htmlspecialchars($r['vendedor_nombre'] ?? '') . '</span></td>
                 <td data-col="observaciones" class="text-truncate" style="max-width:180px">' . htmlspecialchars($r['observaciones'] ?? '') . '</td>
                 <td data-col="usuario_nombre">' . htmlspecialchars($r['usuario_nombre'] ?? '') . '</td>

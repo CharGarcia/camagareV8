@@ -103,11 +103,15 @@ $riSubtitulo = count($riNombres) > 1
                         <div class="d-flex flex-wrap align-items-start gap-2">
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Detalle</label>
-                                <select id="ri-ex-desglose" class="form-select form-select-sm shadow-none border" style="width:150px;" onchange="window.RI_Existencias.cambiarDesglose();" title="Hasta qué nivel se desglosa el stock de cada producto">
+                                <select id="ri-ex-desglose" class="form-select form-select-sm shadow-none border" style="width:150px;" onchange="window.RI_Existencias.cambiarDesglose();" title="Hasta qué nivel se desglosa el stock de cada producto. &quot;Lote + consignación&quot; muestra, en su lugar, con qué cliente y documento salió cada lote.">
                                     <option value="GENERAL">En general</option>
                                     <option value="LOTE">Por lotes</option>
                                     <option value="CADUCIDAD">Por caducidad</option>
                                     <option value="LOTE_CADUCIDAD">Lote + caducidad</option>
+                                    <?php /* Sirve datos de consignaciones: solo para quien también puede ver ese módulo. */ ?>
+                                    <?php if (!empty($pestanas["consignaciones"])): ?>
+                                    <option value="LOTE_CONSIGNACION">Lote + consignación</option>
+                                    <?php endif; ?>
                                 </select>
                             </div>
                             <div>
@@ -222,7 +226,7 @@ $riSubtitulo = count($riNombres) > 1
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-ex-thead"></thead>
                             <tbody id="ri-ex-tbody">
-                                <tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -387,7 +391,7 @@ $riSubtitulo = count($riNombres) > 1
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-mv-thead"></thead>
                             <tbody id="ri-mv-tbody">
-                                <tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="13" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -471,11 +475,11 @@ $riSubtitulo = count($riNombres) > 1
                 <div class="card-body p-0">
                     <div class="ri-va-scroll w-100">
                         <table class="table table-hover table-sm mb-0 align-middle">
-                            <thead class="table-light">
-                                <tr><th>Grupo</th><th class="text-center">Productos</th><th class="text-end">Stock</th><th class="text-end">Costo promedio</th><th class="text-end">Valor total</th></tr>
+                            <thead class="table-light" id="ri-va-thead">
+                                <tr><th>Código</th><th>Producto</th><th class="text-center">Productos</th><th class="text-end">Stock</th><th class="text-end">Costo promedio</th><th class="text-end">Valor total</th></tr>
                             </thead>
                             <tbody id="ri-va-tbody">
-                                <tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -611,7 +615,7 @@ $riSubtitulo = count($riNombres) > 1
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-cv-thead"></thead>
                             <tbody id="ri-cv-tbody">
-                                <tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -683,6 +687,7 @@ $riSubtitulo = count($riNombres) > 1
                         <table class="table table-hover table-sm mb-0 align-middle">
                             <thead class="table-light" id="ri-au-thead">
                                 <tr>
+                                    <th>Código</th>
                                     <th>Producto</th>
                                     <th>Bodega</th>
                                     <th class="text-end">Guardado</th>
@@ -692,7 +697,7 @@ $riSubtitulo = count($riNombres) > 1
                                 </tr>
                             </thead>
                             <tbody id="ri-au-tbody">
-                                <tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
+                                <tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>
                             </tbody>
                         </table>
                     </div>

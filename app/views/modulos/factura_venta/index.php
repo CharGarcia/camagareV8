@@ -483,7 +483,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                             if ($estado === 'anulado') {
                                 $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>';
-                            } elseif ($saldo <= 0.01) {
+                            } elseif (round($saldo, 2) <= 0) {
                                 $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
                             } elseif (($cobrado + $nc + $retencion) > 0) {
                                 $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
@@ -503,7 +503,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="text-end" data-col="propina">$<?= number_format((float)($r['propina'] ?? 0), 2) ?></td>
                                 <td class="text-end fw-bold" data-col="importe_total">$<?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
                                 <?php $saldoMostrar = $estado === 'anulado' ? 0.0 : $saldo; ?>
-                                <td class="text-end fw-bold <?= $saldoMostrar > 0.01 ? 'text-danger' : 'text-success' ?>" data-col="saldo_pendiente">$<?= number_format($saldoMostrar, 2) ?></td>
+                                <td class="text-end fw-bold <?= round($saldoMostrar, 2) > 0 ? 'text-danger' : 'text-success' ?>" data-col="saldo_pendiente">$<?= number_format($saldoMostrar, 2) ?></td>
                                 <td data-col="vendedor_nombre"><?= htmlspecialchars($r['vendedor_nombre'] ?? '-') ?></td>
                                 <td data-col="observaciones" class="text-truncate" style="max-width:180px"><?= htmlspecialchars($r['observaciones'] ?? '') ?></td>
                                 <td data-col="usuario_nombre"><?= htmlspecialchars($r['usuario_nombre'] ?? '-') ?></td>
@@ -7489,7 +7489,7 @@ $totalPages = $totalPagesOriginal;
                 if (alertaAnulada) alertaAnulada.classList.remove('d-none');
                 if (alertaPagada)  alertaPagada.classList.add('d-none');
                 cardReg.classList.add('d-none');
-            } else if (saldo < 0.01) {
+            } else if (Math.round(saldo * 100) <= 0) {
                 if (alertaAnulada) alertaAnulada.classList.add('d-none');
                 alertaPagada.classList.remove('d-none');
                 cardReg.classList.add('d-none');

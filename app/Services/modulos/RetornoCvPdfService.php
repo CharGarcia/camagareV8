@@ -13,7 +13,7 @@ use TCPDF;
  * (Ingresos/Egresos): logo + datos de empresa a la izquierda y una caja con el
  * título y número del documento a la derecha.
  *
- * Cuerpo: datos del cliente, tabla de productos devueltos (Código, Descripción,
+ * Cuerpo: datos del cliente, tabla de productos devueltos (Código, Descripción, Bodega,
  * Lote, NUP, Cantidad), observaciones y motivo, y dos firmas
  * (Realizado por / Recibido por).
  *
@@ -160,18 +160,19 @@ class RetornoCvPdfService
         return $y + $boxH;
     }
 
-    /** Tabla: Código | Descripción | Lote | NUP | Cantidad. */
+    /** Tabla: Código | Descripción | Bodega | Lote | NUP | Cantidad, más fila TOTAL de cantidades. */
     private function dibujarTablaDetalle(array $detalles, float $y): float
     {
         $pdf = $this->pdf;
         $mL  = $this->marginL;
 
         $cols = [
-            ['t' => 'Código',      'w' => 28, 'a' => 'L', 'k' => 'producto_codigo'],
+            ['t' => 'Código',      'w' => 26, 'a' => 'L', 'k' => 'producto_codigo'],
             ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'producto_nombre'],
-            ['t' => 'Lote',        'w' => 30, 'a' => 'L', 'k' => 'lote'],
-            ['t' => 'NUP',         'w' => 30, 'a' => 'L', 'k' => 'nup'],
-            ['t' => 'Cantidad',    'w' => 22, 'a' => 'R', 'k' => 'cantidad'],
+            ['t' => 'Bodega',      'w' => 28, 'a' => 'L', 'k' => 'bodega_nombre'],
+            ['t' => 'Lote',        'w' => 26, 'a' => 'L', 'k' => 'lote'],
+            ['t' => 'NUP',         'w' => 26, 'a' => 'L', 'k' => 'nup'],
+            ['t' => 'Cantidad',    'w' => 20, 'a' => 'R', 'k' => 'cantidad'],
         ];
 
         $fixed = 0.0;
@@ -259,6 +260,35 @@ class RetornoCvPdfService
             }
             $pdf->SetXY($mL, $yRow + $h);
         }
+
+        // Fila de totales: suma de todas las cantidades, bajo su propia columna.
+        // Va pegada a la última fila; si ya no cabe en la página, pasa a la
+        // siguiente repitiendo el encabezado (igual que las filas del detalle).
+        $totalCantidad = 0.0;
+        foreach ($detalles as $d) {
+            $totalCantidad += (float)($d['cantidad'] ?? 0);
+        }
+
+        $hTot = 6.0;
+        $yTot = $pdf->GetY();
+        if ($yTot + $hTot > $limiteY) {
+            $pdf->AddPage();
+            $yTot = $dibujarCabeceraTabla($pdf->GetY());
+        }
+
+        $cantIdx = count($cols) - 1; // Cantidad es la última columna
+        $wEtiqueta = 0.0;
+        for ($i = 0; $i < $cantIdx; $i++) {
+            $wEtiqueta += $cols[$i]['w'];
+        }
+
+        $pdf->SetXY($mL, $yTot);
+        $pdf->SetFont('helvetica', 'B', 8);
+        $pdf->SetFillColor(226, 231, 238);
+        $pdf->SetDrawColor(60, 70, 90);
+        $pdf->Cell($wEtiqueta, $hTot, 'TOTAL', 1, 0, 'R', true);
+        $pdf->Cell($cols[$cantIdx]['w'], $hTot, number_format($totalCantidad, 2), 1, 1, 'R', true);
+        $pdf->SetFont('helvetica', '', 7.5);
 
         return $pdf->GetY();
     }

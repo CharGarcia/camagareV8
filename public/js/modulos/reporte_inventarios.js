@@ -159,6 +159,11 @@ function RI_limpiarFiltros(prefijo, etiquetas, colsPorDefecto) {
 // ReporteInventariosController::DESGLOSES_EXISTENCIAS.
 const RI_DESGLOSES = ['LOTE', 'CADUCIDAD', 'LOTE_CADUCIDAD'];
 
+// Desglose de Existencias que no sale del kardex sino de las líneas de consignación:
+// una fila por lote/NUP entregado, con su documento, cliente y saldo. Debe coincidir
+// con ReporteInventariosController::DESGLOSE_CONSIGNACION.
+const RI_DESGLOSE_CONSIGNACION = 'LOTE_CONSIGNACION';
+
 window.RI_Existencias = {
     orden: '',
     dir: 'ASC',
@@ -173,8 +178,13 @@ window.RI_Existencias = {
         return desglose !== 'GENERAL' ? desglose : document.getElementById('ri-ex-agrupar').value;
     },
 
+    // Debe coincidir con ReporteInventariosController::colSpanExistencias(): la columna
+    // Código suma una en todo modo cuya fila es un producto (detalle, desgloses y por producto).
     colSpan(modo) {
-        if (modo === 'NINGUNO' || modo === 'LOTE_CADUCIDAD') return 10;
+        if (modo === RI_DESGLOSE_CONSIGNACION) return 15;
+        if (modo === 'NINGUNO' || modo === 'LOTE_CADUCIDAD') return 11;
+        if (modo === 'PRODUCTO') return 9;
+        if (RI_DESGLOSES.includes(modo)) return 9;
         return 8;
     },
 
@@ -182,8 +192,11 @@ window.RI_Existencias = {
         RI_limpiarFiltros('ri-ex', ['ri-ex-producto-seleccionado']);
         this.orden = '';
         this.dir = 'ASC';
-        // El reset devuelve el Detalle a "En general", así que Agrupar por vuelve a estar activo.
+        // El reset devuelve el Detalle a "En general", así que Agrupar por y Estado
+        // vuelven a estar activos.
         document.getElementById('ri-ex-agrupar').disabled = false;
+        const estado = document.getElementById('ri-ex-estado');
+        if (estado) { estado.disabled = false; estado.title = ''; }
     },
 
     /** El desglose ya define las filas: con él activo, "Agrupar por" no pinta nada. */
@@ -192,6 +205,17 @@ window.RI_Existencias = {
         const agrupar = document.getElementById('ri-ex-agrupar');
         agrupar.disabled = desglose !== 'GENERAL';
         if (agrupar.disabled) agrupar.value = 'NINGUNO';
+
+        // En "Lote + consignación" la fila es una línea de consignación, no un par
+        // producto×bodega: el estado de stock (quiebre, bajo mínimo…) no significa nada ahí.
+        const estado = document.getElementById('ri-ex-estado');
+        if (estado) {
+            estado.disabled = desglose === RI_DESGLOSE_CONSIGNACION;
+            if (estado.disabled) estado.value = '';
+            estado.title = estado.disabled
+                ? 'No aplica en "Lote + consignación": cada fila es una entrega, no el stock de un producto.'
+                : '';
+        }
         this.generar();
     },
 
@@ -353,7 +377,8 @@ window.RI_Existencias = {
         const th2 = (label, campo, extra) => `<th class="sortable-header ${extra || ''}" data-sort="${campo}" data-col="${campo}">${label}${sortIcon}</th>`;
         let th = '<tr class="text-secondary">';
         if (modo === 'NINGUNO') {
-            th += th2('Producto', 'producto_nombre', 'ps-3')
+            th += th2('Código', 'producto_codigo', 'ps-3')
+                + th2('Producto', 'producto_nombre')
                 + th2('Categoría', 'categoria_nombre')
                 + th2('Bodega', 'bodega_nombre')
                 + th2('Consignación', 'consignado', 'text-end')
@@ -363,17 +388,29 @@ window.RI_Existencias = {
                 + th2('Máximo', 'stock_maximo', 'text-end')
                 + th2('Costo Unit.', 'costo_unitario', 'text-end')
                 + th2('Valor total', 'valor_total', 'text-end pe-3');
+        } else if (modo === RI_DESGLOSE_CONSIGNACION) {
+            // La fila es una línea de consignación: sus columnas son las del documento
+            // que la entregó, no las del par producto×bodega.
+            th += `<th class="ps-3">Código</th><th>Fecha</th><th>Secuencial</th><th>Cliente</th><th>Asesor</th>
+                   <th>Descripción</th><th>Lote</th><th>NUP</th><th>Responsable traslado</th><th>Bodega</th>
+                   <th class="text-end">Consignado</th><th class="text-end">Retornado</th>
+                   <th class="text-end">Facturado</th>
+                   <th class="text-end" title="Entregado al cliente a cambio de otro producto (Cambios de productos)">A cambio</th>
+                   <th class="text-end pe-3">Saldo</th>`;
         } else if (RI_DESGLOSES.includes(modo)) {
             // Solo las columnas que el desglose puede afirmar: "Por lotes" suma todas las
             // caducidades de un lote, así que no tiene una caducidad ni un NUP únicos.
-            th += '<th class="ps-3">Producto</th><th>Bodega</th>';
+            th += '<th class="ps-3">Código</th><th>Producto</th><th>Bodega</th>';
             if (modo === 'LOTE' || modo === 'LOTE_CADUCIDAD') th += '<th>Lote</th>';
             if (modo === 'LOTE_CADUCIDAD') th += '<th>NUP</th>';
             if (modo === 'CADUCIDAD' || modo === 'LOTE_CADUCIDAD') th += '<th>Caducidad</th>';
             th += `<th class="text-end">Stock</th><th class="text-end">Consignación</th><th class="text-end">Stock Total</th>
                    <th class="text-end">Costo Unit.</th><th class="text-end pe-3">Valor total</th>`;
         } else {
-            th += `<th class="ps-3">Grupo</th><th class="text-center">Productos</th>
+            // Agrupado por producto: el código encabeza la fila; por categoría o bodega no hay uno.
+            if (modo === 'PRODUCTO') th += '<th class="ps-3">Código</th><th>Producto</th>';
+            else th += '<th class="ps-3">Grupo</th>';
+            th += `<th class="text-center">Productos</th>
                    <th class="text-end">Consignación</th><th class="text-end">Stock</th><th class="text-end">Stock Total</th>
                    <th class="text-end">Mínimo</th>
                    <th class="text-end">Costo Unit.</th><th class="text-end pe-3">Valor total</th>`;
@@ -496,12 +533,15 @@ window.RI_Movimientos = {
     dibujarCabecera(modo) {
         let th = '<tr class="text-secondary">';
         if (modo === 'NINGUNO') {
-            th += `<th class="ps-3">Fecha</th><th>Producto</th><th>Bodega</th><th class="text-center">Tipo</th>
+            th += `<th class="ps-3">Código</th><th>Fecha</th><th>Producto</th><th>Bodega</th><th class="text-center">Tipo</th>
                    <th>Origen</th><th class="text-end">Entradas</th><th class="text-end">Salidas</th><th class="text-end">Saldo</th>
                    <th class="text-end">Costo Unit.</th>
                    <th>Lote</th><th>Caducidad</th><th class="pe-3">Observaciones</th>`;
         } else {
-            th += `<th class="ps-3">Grupo</th><th class="text-center">Movimientos</th>
+            // Agrupado por producto: el código encabeza la fila; los demás agrupados no tienen uno.
+            if (modo === 'PRODUCTO') th += '<th class="ps-3">Código</th><th>Producto</th>';
+            else th += '<th class="ps-3">Grupo</th>';
+            th += `<th class="text-center">Movimientos</th>
                    <th class="text-end">Entradas</th><th class="text-end">Salidas</th>
                    <th class="text-end">Saldo neto</th><th class="text-end pe-3">Costo total</th>`;
         }
@@ -525,7 +565,7 @@ window.RI_Movimientos = {
         });
 
         const tbody = document.getElementById('ri-mv-tbody');
-        const colSpan = modo === 'NINGUNO' ? 12 : 6;
+        const colSpan = modo === 'NINGUNO' ? 13 : (modo === 'PRODUCTO' ? 7 : 6);
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('movimientos', params, (res) => {
@@ -564,7 +604,18 @@ window.RI_Movimientos = {
 // ════════════════════════════════════════════════════════════════════
 window.RI_Valorizacion = {
     limpiarFiltros() {
-        RI_limpiarFiltros("ri-va", ["ri-va-producto-seleccionado"], 5); // su thead es estático, sin id
+        RI_limpiarFiltros('ri-va', ['ri-va-producto-seleccionado'], 6);
+        this.dibujarCabecera(document.getElementById('ri-va-agrupar').value);
+    },
+
+    /** "Por Producto" es el único agrupado con código propio; los demás (categoría,
+     *  bodega, marca) no lo tienen, así que esa primera columna solo aparece ahí. */
+    dibujarCabecera(modo) {
+        let th = '<tr>';
+        th += modo === 'PRODUCTO' ? '<th>Código</th><th>Producto</th>' : '<th>Grupo</th>';
+        th += `<th class="text-center">Productos</th><th class="text-end">Stock</th>
+               <th class="text-end">Costo promedio</th><th class="text-end">Valor total</th></tr>`;
+        document.getElementById('ri-va-thead').innerHTML = th;
     },
 
     limpiarProducto() {
@@ -573,18 +624,22 @@ window.RI_Valorizacion = {
     },
 
     generar() {
+        const modo = document.getElementById('ri-va-agrupar').value;
+        this.dibujarCabecera(modo);
+
         const params = RI_paramsFromIds({
             id_bodega: 'ri-va-bodega', id_categoria: 'ri-va-categoria', id_marca: 'ri-va-marca',
             id_producto: 'ri-va-id-producto', agrupar_por: 'ri-va-agrupar',
         });
 
         const tbody = document.getElementById('ri-va-tbody');
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        const colSpan = modo === 'PRODUCTO' ? 6 : 5;
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('valorizacion', params, (res) => {
             tbody.innerHTML = res.rows;
         }, (msg) => {
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">${msg}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
         });
     },
 
@@ -631,12 +686,16 @@ window.RI_Consignaciones = {
     dibujarCabecera(modo) {
         let th = '<tr class="text-secondary">';
         if (modo === 'NINGUNO') {
-            th += `<th class="ps-3">Fecha</th><th>Cliente</th><th>Asesor</th><th>Responsable traslado</th>
+            // La fila es el documento completo: como Lote y NUP, el código llega agregado
+            // con todos los productos de la consignación (el detalle por línea va en el modal).
+            th += `<th class="ps-3">Código</th><th>Fecha</th><th>Cliente</th><th>Asesor</th><th>Responsable traslado</th>
                    <th>Lote</th><th>NUP</th>
                    <th class="text-end">Total productos</th><th class="text-end">Saldo</th>
                    <th class="text-center pe-3">Estado</th>`;
         } else {
-            th += `<th class="ps-3">Grupo</th><th class="text-center">Consignaciones</th>
+            if (modo === 'PRODUCTO') th += '<th class="ps-3">Código</th><th>Producto</th>';
+            else th += '<th class="ps-3">Grupo</th>';
+            th += `<th class="text-center">Consignaciones</th>
                    <th class="text-end pe-3">Saldo</th>`;
         }
         th += '</tr>';
@@ -771,7 +830,7 @@ window.RI_Consignaciones = {
         });
 
         const tbody = document.getElementById('ri-cv-tbody');
-        const colSpan = modo === 'NINGUNO' ? 9 : 3;
+        const colSpan = modo === 'NINGUNO' ? 10 : (modo === 'PRODUCTO' ? 4 : 3);
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
 
         RI_fetchGenerar('consignaciones', params, (res) => {
@@ -820,7 +879,7 @@ window.RI_Auditoria = {
     },
 
     dibujarCabecera() {
-        const th = `<tr><th>Producto</th><th>Bodega</th><th class="text-end">Guardado</th>
+        const th = `<tr><th>Código</th><th>Producto</th><th>Bodega</th><th class="text-end">Guardado</th>
                <th class="text-end">Real (Kardex)</th><th class="text-end">Diferencia</th>
                <th class="text-center">Acción</th></tr>`;
         document.getElementById('ri-au-thead').innerHTML = th;
@@ -834,7 +893,7 @@ window.RI_Auditoria = {
 
     generar() {
         const params = this._filtros();
-        const colSpan = 6;
+        const colSpan = 7;
 
         const tbody = document.getElementById('ri-au-tbody');
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;

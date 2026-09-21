@@ -3905,7 +3905,7 @@ window.CMG_cargarPagosTab = async function() {
         }
 
         // Determinar visibilidad de registro
-        if (saldo < 0.01) {
+        if (Math.round(saldo * 100) <= 0) {
             alertaPagada.classList.remove('d-none');
             cardRegistro.classList.add('d-none');
         } else {

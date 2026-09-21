@@ -42,16 +42,12 @@ class InventarioController extends BaseModuloController
         $ordenDir  = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
         $perPage   = 20;
 
-        // Filtros adicionales
-        $desde      = $_GET['desde'] ?? '';
-        $hasta      = $_GET['hasta'] ?? '';
-        $tipo_mov   = $_GET['tipo_mov'] ?? '';
-        $id_prod    = $_GET['id_producto'] ?? '';
-        $id_bod     = $_GET['id_bodega'] ?? '';
-
         $empresa   = (new Empresa())->getPorId($idEmpresa) ?? [];
-        
-        $filtros = $this->getFiltrosDesdeRequest($buscar, $ordenCol, $ordenDir, $desde, $hasta, $id_prod, $id_bod);
+
+        // Los filtros adicionales (desde, hasta, tipo, producto, bodega…) los lee
+        // getFiltrosDesdeRequest() del propio request; solo se le pasan los tres
+        // primeros porque el orden sí sale de las preferencias del usuario.
+        $filtros = $this->getFiltrosDesdeRequest($buscar, $ordenCol, $ordenDir);
 
         // Obtener datos del Kardex
         $kardexData = $this->service->getKardex($idEmpresa, $filtros, $page, $perPage);
@@ -196,11 +192,15 @@ class InventarioController extends BaseModuloController
             'buscar'          => $buscar,
             'sort'            => $sort,
             'dir'             => $dir,
-            'desde'           => $_GET['desde'] ?? $_POST['desde'] ?? $explicit[3] ?? '',
-            'hasta'           => $_GET['hasta'] ?? $_POST['hasta'] ?? $explicit[4] ?? '',
-            'tipo_movimiento' => $_GET['tipo_mov'] ?? $_POST['tipo_mov'] ?? $explicit[5] ?? '',
-            'id_producto'     => $_GET['id_producto'] ?? $_POST['id_producto'] ?? $explicit[6] ?? '',
-            'id_bodega'       => $_GET['id_bodega'] ?? $_POST['id_bodega'] ?? $explicit[7] ?? '',
+            'desde'           => $_GET['desde'] ?? $_POST['desde'] ?? '',
+            'hasta'           => $_GET['hasta'] ?? $_POST['hasta'] ?? '',
+            // `tipo_movimiento` es el nombre con el que queryExportacion() devuelve el
+            // filtro a PDF/Excel; `tipo_mov` es el nombre histórico del formulario. Si
+            // solo se lee `tipo_mov`, el PDF sale sin el filtro de entrada/salida.
+            'tipo_movimiento' => $_GET['tipo_movimiento'] ?? $_POST['tipo_movimiento']
+                                 ?? $_GET['tipo_mov'] ?? $_POST['tipo_mov'] ?? '',
+            'id_producto'     => $_GET['id_producto'] ?? $_POST['id_producto'] ?? '',
+            'id_bodega'       => $_GET['id_bodega'] ?? $_POST['id_bodega'] ?? '',
             'id_usuario'      => $_GET['id_usuario'] ?? $_POST['id_usuario'] ?? '',
             'numero_lote'     => $_GET['numero_lote'] ?? $_POST['numero_lote'] ?? '',
             'nup'             => $_GET['nup'] ?? $_POST['nup'] ?? '',
@@ -254,55 +254,66 @@ class InventarioController extends BaseModuloController
             ob_start();
             ?>
             <style>
-                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 9pt; }
-                th { background: #f2f2f2; border: 1px solid #ccc; padding: 6px; text-align: left; }
-                td { border: 1px solid #ccc; padding: 6px; }
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 3px 3px; font-size: 7.5pt; text-align: left; }
+                td { border: 1px solid #ccc; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; }
-                .header { text-align: center; margin-bottom: 20px; }
+                .entrada { color: #198754; }
+                .salida { color: #dc3545; }
+                .header { text-align: center; margin-bottom: 15px; width: 100%; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
+                .fecha-reporte { margin: 3px 0 0 0; color: #666; font-size: 8pt; }
             </style>
-            <div class="header">
-                <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
-                <h3>Movimientos de Inventario</h3>
-                <p>Fecha de reporte: <?= date('d-m-Y H:i:s') ?></p>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Producto</th>
-                        <th>Bodega</th>
-                        <th>Tipo</th>
-                        <th class="text-end">Cant.</th>
-                        <th>Observaciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <tr>
-                        <td><?= date('d-m-Y H:i:s', strtotime($r['fecha_movimiento'])) ?></td>
-                        <td><?= htmlspecialchars($r['producto_nombre'] ?? '') ?></td>
-                        <td><?= htmlspecialchars($r['bodega_nombre'] ?? '') ?></td>
-                        <td><?= strtoupper($r['tipo_movimiento']) ?></td>
-                        <td class="text-end">
-                            <span class="<?= $r['tipo_movimiento'] === 'entrada' ? 'text-success' : 'text-danger' ?>">
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
+                <div class="header">
+                    <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
+                    <h2>Movimientos de Inventario</h2>
+                    <div class="fecha-reporte">Fecha de reporte: <?= date('d-m-Y H:i:s') ?></div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">Fecha</th>
+                            <th style="width: 27%">Producto</th>
+                            <th style="width: 14%">Bodega</th>
+                            <th style="width: 9%">Tipo</th>
+                            <th style="width: 9%" class="text-end">Cant.</th>
+                            <th style="width: 26%">Observaciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r): ?>
+                        <tr>
+                            <td><?= date('d-m-Y H:i:s', strtotime((string)$r['fecha_movimiento'])) ?></td>
+                            <td><?= htmlspecialchars((string)($r['producto_nombre'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string)($r['bodega_nombre'] ?? '')) ?></td>
+                            <td><?= strtoupper((string)$r['tipo_movimiento']) ?></td>
+                            <td class="text-end <?= $r['tipo_movimiento'] === 'entrada' ? 'entrada' : 'salida' ?>">
                                 <?= $r['tipo_movimiento'] === 'entrada' ? '+' : '-' ?><?= number_format(abs((float)$r['cantidad']), 2) ?>
-                            </span>
-                        </td>
-                        <td><?= htmlspecialchars($r['observaciones'] ?? '') ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                            </td>
+                            <td><?= htmlspecialchars((string)($r['observaciones'] ?? '')) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($rows)): ?>
+                        <tr><td colspan="6" style="text-align:center">Sin movimientos para los filtros aplicados.</td></tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </page>
             <?php
             $html = ob_get_clean();
-            $dompdf = new \Dompdf\Dompdf();
-            $dompdf->loadHtml($html);
-            $dompdf->setPaper('A4', 'portrait');
-            $dompdf->render();
-            $dompdf->stream("Inventario_" . date('Ymd') . ".pdf", ["Attachment" => false]);
+
+            // Html2Pdf, no Dompdf: Dompdf no está instalado en vendor/ y reventaba en ejecución.
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $html2pdf->writeHTML($html);
+            $html2pdf->output('Inventario_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            header('Content-Type: text/html');
             echo "Error al generar PDF: " . $e->getMessage();
+            exit;
         }
     }
 
@@ -473,6 +484,38 @@ class InventarioController extends BaseModuloController
         }
 
         echo json_encode(['ok' => true, 'data' => $mov]);
+        exit;
+    }
+
+    /**
+     * Comprobante PDF de un movimiento del kardex (ficha del registro).
+     * Incluye los anulados: la ficha debe poder imprimirse igual, con su sello.
+     */
+    public function pdf(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $mov = $this->service->getById($id, $idEmpresa);
+            if (!$mov) { http_response_code(404); echo 'Movimiento no encontrado'; exit; }
+
+            $empresaModel     = new Empresa();
+            $empresa          = $empresaModel->getPorId($idEmpresa) ?? [];
+            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+            if (!empty($establecimientos[0]['logo_ruta'])) {
+                $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+            }
+
+            (new \App\Services\modulos\MovimientoInventarioPdfService())->generar($mov, $empresa, 'D');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500);
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
         exit;
     }
 

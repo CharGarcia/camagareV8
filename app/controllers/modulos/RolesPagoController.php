@@ -258,7 +258,7 @@ class RolesPagoController extends BaseModuloController
         if ($idRol > 0) {
             $this->service->refrescarSiCorresponde($idRol, $idEmpresa, (int) $_SESSION['id_usuario']);
             foreach ((new RolPagoRepository())->getDetalleCompleto($idRol, $idEmpresa) as $d) {
-                if (round((float) ($d['saldo'] ?? 0), 2) <= 0.01) {
+                if (round((float) ($d['saldo'] ?? 0), 2) <= 0) {
                     continue; // ya pagado
                 }
                 $empleados[] = [

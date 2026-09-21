@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.7
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva
+version: 1.9
 orden: 40
 estado: activo
 ---
@@ -43,6 +43,35 @@ registrar una compra normal.
 | Código de sustento tributario | Obligatorio |
 | Secuencial | Obligatorio |
 | Ítems | Al menos uno |
+
+## Cómo se calculan los totales
+
+Los totales salen de la **configuración de facturación de la empresa** (*Empresa →
+Configuración*), la misma que usan las facturas de venta:
+
+| Configuración | Qué controla en la liquidación |
+|---------------|-------------------------------|
+| Decimales de precio | Con cuántos decimales se muestra y se guarda el precio unitario |
+| Decimales de cantidad | Con cuántos decimales se muestra la cantidad |
+| Cálculo del IVA | **Línea por línea** (se redondea el IVA de cada ítem y se suman) o **Al subtotal** (se suma la base de cada tarifa y se calcula el IVA una sola vez sobre ese subtotal) |
+
+Las dos formas de calcular el IVA pueden diferir en **un centavo**: es normal y
+depende de lo que la empresa haya configurado. El mismo criterio se aplica en la
+pantalla, en el PDF y en el XML que se envía al SRI, así que los tres muestran
+siempre el mismo valor.
+
+El **Subtotal** del pie del formulario es el subtotal **neto**: ya tiene restado el
+descuento de cada línea. Es el número que viaja al SRI como *Subtotal sin
+impuestos*, y el TOTAL es ese subtotal más el IVA.
+
+Los subtotales por tarifa se muestran **por concepto**, no por porcentaje: *0%*,
+*Exento de IVA* y *No objeto de impuesto* aparecen en líneas separadas aunque los
+tres tengan tarifa cero, igual que en el PDF y en el XML.
+
+Si al abrir una liquidación ya autorizada los totales no coinciden al centavo con
+lo que usted recuerda, es porque la configuración del cálculo del IVA cambió
+después de emitirla: el documento conserva los valores con los que se emitió y no
+se recalcula.
 
 ## Buscar y filtrar el listado
 
@@ -159,6 +188,29 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.9** — **Los totales se calculan con la configuración de facturación de la
+  empresa.** Antes la pantalla usaba siempre 2 decimales y siempre calculaba el IVA
+  línea por línea, sin mirar la configuración: en una empresa con más decimales de
+  precio el valor se recortaba al cargar el producto y al reabrir el documento, y en
+  una configurada *Al subtotal* el IVA salía por el otro camino. Además:
+  - El **Subtotal** del formulario ahora es el **neto** (con el descuento restado),
+    que es lo que exige el SRI. Antes se enviaba el bruto y, con cualquier descuento,
+    el comprobante se rechazaba por diferencias y el asiento contable quedaba
+    descuadrado justo por el monto del descuento (la liquidación se guardaba sin
+    asiento, en silencio).
+  - El **IVA se guarda a centavos**. Antes se guardaba con todos sus decimales, así
+    que el PDF, el XML, el asiento y los casilleros de la declaración de IVA —que lo
+    suman— no cuadraban con el total del documento.
+  - Los subtotales por tarifa se muestran **por concepto** (0%, Exento, No objeto)
+    en vez de fundirse en un solo *Subtotal 0%*.
+  - Ver *Cómo se calculan los totales*.
+
+- **1.8** — **Una liquidación con $0.01 de saldo queda como Abonada,
+  no como Pagada.** Mismo criterio que *Cuentas por Pagar* y *Egresos*: hay
+  saldo mientras quede al menos un centavo. Afecta al filtro `pago:…` y al panel
+  de pago del modal.
+
 
 - **1.7** — Corregido: al buscar un **número de documento** en el cuadro aparecían
   también documentos que no lo tenían. La búsqueda libre miraba dentro de la **clave de

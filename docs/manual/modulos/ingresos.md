@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta
-version: 2.9
+etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo
+version: 3.0
 orden: 10
 estado: activo
 ---
@@ -367,12 +367,25 @@ deseable; para el contador o el administrador, active el acceso total.
   Pagos, y reverse ahí.
 - **No encuentro la factura a cobrar**: compruebe que está a nombre de ese
   cliente, que no está ya cobrada y que no fue anulada.
+- **Falta un centavo y no puedo cobrarlo**: hasta la versión 2.9, un documento al
+  que le quedaba exactamente **$0.01** no se ofrecía para cobro —el sistema lo
+  daba por pagado—, pero *Cuentas por Cobrar* sí lo seguía mostrando como
+  pendiente. Desde la 3.0 el criterio es el mismo en los dos lados: **hay saldo
+  mientras quede al menos un centavo**, y ese centavo se cobra como cualquier
+  otro importe.
 - **"Falta cuenta contable"**: el ingreso mezcla facturas o recibos con una línea
   de "Otros conceptos" que no tiene cuenta. Elíjala en la columna *Cuenta
   contable* de esa línea; si es un anticipo, pulse **Anticipo Cliente** y se pone
   sola.
 
 ## Historial de cambios
+
+- **3.0** — **Un documento está pendiente mientras le quede al menos un centavo.**
+  Antes, la búsqueda de documentos por cobrar descartaba los que tenían
+  exactamente $0.01 de saldo, de modo que ese centavo no se podía cobrar aunque
+  *Cuentas por Cobrar* lo siguiera reportando como pendiente. Ahora ambos
+  módulos usan el mismo criterio (saldo mayor que cero). Aplica a facturas de
+  venta, recibos de venta, facturas de reembolso y saldos iniciales CXC.
 
 - **2.9** — **Observaciones automáticas**: al registrar un ingreso,
   *Observaciones Generales* se llena sola con lo que se va cargando

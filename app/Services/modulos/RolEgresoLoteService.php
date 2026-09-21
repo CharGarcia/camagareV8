@@ -115,7 +115,7 @@ class RolEgresoLoteService
         foreach ($detalle as $d) {
             $saldo = round((float) ($d['saldo'] ?? 0), 2);
             $nombre = (string) ($d['nombres_apellidos'] ?? ('#' . ($d['id_empleado'] ?? '')));
-            if ($saldo <= 0.01) { $omitidos++; continue; } // ya pagado
+            if ($saldo <= 0) { $omitidos++; continue; } // ya pagado
             if ($soloMarcados && !isset($seleccion[(int) $d['id']])) {
                 $noSeleccionados++; continue; // pendiente, pero el usuario no lo marcó
             }

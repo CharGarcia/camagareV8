@@ -372,7 +372,7 @@ window.RVV_abrirDetalleVendedor = function (idVendedor, nombreVendedor) {
                 <td class="text-end">$${subtotal.toFixed(2)}</td>
                 <td class="text-end ${nc > 0 ? 'text-danger' : 'text-muted'}">${nc > 0 ? '-$' + nc.toFixed(2) : '—'}</td>
                 <td class="text-end fw-bold text-success">$${total.toFixed(2)}</td>
-                <td class="text-end pe-3 fw-bold ${saldo > 0.01 ? 'text-danger' : 'text-success'}">$${saldo.toFixed(2)}</td>
+                <td class="text-end pe-3 fw-bold ${Math.round(saldo * 100) > 0 ? 'text-danger' : 'text-success'}">$${saldo.toFixed(2)}</td>
             </tr>`;
         });
 

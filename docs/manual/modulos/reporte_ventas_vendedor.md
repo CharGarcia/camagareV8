@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ventas_vendedor
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, subtotal sin impuestos, subtotal nc, total documentos por asesor, cuantas facturas hizo cada vendedor, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor, solo mis ventas, cada asesor ve lo suyo, el vendedor no debe ver las ventas de otros, mis comisiones, acceso total, permiso de ver todos, registros propios, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, filtro vendedor fijo, no ver ventas de otros vendedores
-version: 1.6
+version: 1.7
 orden: 0
 estado: activo
 ---
@@ -250,6 +250,11 @@ corrió la migración, así que solo él (o alguien con acceso total) los verá.
   Permisos por módulo*).
 
 ## Historial de cambios
+
+- **1.7** — **Un saldo de $0.01 se muestra en rojo**, como
+  pendiente, igual que en *Cuentas por Cobrar*. Antes salía en verde, como si
+  estuviera cobrado.
+
 
 - **1.6** — Lo que ve cada usuario sigue ahora la **misma regla que Reporte de
   Ventas y Cuentas por Cobrar**. Los niveles 2 y 3 siguen viendo todas las

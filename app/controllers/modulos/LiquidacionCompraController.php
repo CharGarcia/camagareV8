@@ -50,6 +50,20 @@ class LiquidacionCompraController extends BaseModuloController
         $empresaData  = $empresaModel->getPorId($idEmpresa);
 
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+
+        // Configuración de facturación del establecimiento (decimales de precio y
+        // cantidad, modo de cálculo del IVA): la pantalla la necesita para calcular
+        // los totales igual que el service. Mismo merge que hace guardarAjax().
+        if (!empty($establecimientos)) {
+            try {
+                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                if ($estConfig) {
+                    $empresaData = array_merge($empresaData ?? [], $estConfig);
+                }
+            } catch (\Throwable $e) {}
+        }
+
         $puntos = [];
         if (!empty($establecimientos)) {
             $secRepo = new \App\repositories\SecuencialRepository();
@@ -303,43 +317,9 @@ class LiquidacionCompraController extends BaseModuloController
             } catch (\Throwable $e) {}
             $data['empresa_config'] = $empresaData;
 
-            // Procesar impuestos para cada detalle
-            if (!empty($data['detalles'])) {
-                $tarifasIva = $this->repository->getTarifasIva();
-                $tarifasMap = [];
-                foreach ($tarifasIva as $t) {
-                    $tarifasMap[$t['id']] = $t;
-                }
-
-                foreach ($data['detalles'] as &$det) {
-                    $det['id_empresa'] = $data['id_empresa'];
-                    $idTarifa = (int) ($det['id_tarifa_iva'] ?? 0);
-                    $neto = (float) $det['total'];
-                    
-                    if (isset($tarifasMap[$idTarifa])) {
-                        $tarifa = $tarifasMap[$idTarifa];
-                        $porcentaje = (float) $tarifa['porcentaje_iva'];
-                        $ivaValor = $neto * ($porcentaje / 100);
-                        
-                        $det['impuestos'] = [[
-                            'codigo_impuesto'   => '2', // IVA
-                            'codigo_porcentaje' => (string) ($tarifa['codigo'] ?? '0'),
-                            'tarifa'            => $porcentaje,
-                            'base_imponible'    => $neto,
-                            'valor'             => $ivaValor
-                        ]];
-                    } else {
-                        $det['impuestos'] = [];
-                    }
-
-                    // Asegurar campos para el repositorio
-                    $det['codigo_principal'] = trim((string)($det['codigo'] ?? ''));
-                    $det['precio_total_sin_impuesto'] = $neto;
-                    $det['info_adicional'] = $det['adicional'] ?? '';
-                }
-                unset($det);
-            }
-
+            // Los impuestos por línea y los totales de la cabecera los calcula el
+            // service con la configuración de facturación de la empresa (decimales y
+            // modo de cálculo del IVA); aquí ya no se toca nada de eso.
             $idExistente = !empty($data['id']) ? (int) $data['id'] : 0;
             
             if ($idExistente > 0) {
@@ -1031,6 +1011,15 @@ class LiquidacionCompraController extends BaseModuloController
             $subtotal   = (float)($cabecera['total_sin_impuestos'] ?? 0);
             $descuento  = (float)($cabecera['total_descuento'] ?? 0);
             $total      = (float)($cabecera['importe_total'] ?? 0);
+
+            // IVA a centavos y conciliado con el TOTAL, igual que el PDF: las
+            // liquidaciones emitidas antes de centralizar el cálculo en el service
+            // guardaron el IVA sin redondear. Solo se absorben centavos.
+            $totalIva   = round($totalIva, 2);
+            $desfaseIva = round($total - $subtotal - $totalIva, 2);
+            if (abs($desfaseIva) >= 0.01 && abs($desfaseIva) <= 0.05) {
+                $totalIva = round($totalIva + $desfaseIva, 2);
+            }
 
             $row += 1;
             $totales = [

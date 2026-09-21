@@ -145,7 +145,7 @@ class XmlLiquidacionCompraService
         $this->txt($dom, $el, 'totalDescuento',    $this->dec2($cab['total_descuento']     ?? 0));
 
         // totalConImpuestos (agrupa impuestos de todos los detalles)
-        $el->appendChild($this->buildTotalConImpuestos($dom, $detalles));
+        $el->appendChild($this->buildTotalConImpuestos($dom, $detalles, $cab));
 
         $this->txt($dom, $el, 'importeTotal', $this->dec2($cab['importe_total'] ?? 0));
         $this->txt($dom, $el, 'moneda',       strtoupper($cab['moneda'] ?? 'DOLAR'));
@@ -169,26 +169,78 @@ class XmlLiquidacionCompraService
 
     // ── totalConImpuestos ────────────────────────────────────────────────────
 
-    private function buildTotalConImpuestos(\DOMDocument $dom, array $detalles): \DOMElement
+    /**
+     * codigoPorcentaje del SRI para un impuesto.
+     *
+     * Para IVA con tarifa > 0 se DERIVA de la tarifa real (el dato con el que se
+     * calculó el valor), para no arrastrar al XML un codigo_porcentaje desactualizado
+     * guardado en BD — causa típica de "ERROR EN DIFERENCIAS". Con tarifa 0 se respeta
+     * el guardado: 0% (0), no objeto (6) y exento (7) comparten tarifa 0 pero son
+     * códigos distintos. Mismo criterio que XmlFacturaVentaService y que el PDF de
+     * este mismo módulo.
+     */
+    private function codigoPorcentajeImpuesto(array $imp): string
+    {
+        $codImpuesto = (string)($imp['codigo_impuesto'] ?? '');
+        $tarifa      = (float)($imp['tarifa'] ?? 0);
+
+        if ($codImpuesto === '2' && $tarifa > 0) {
+            return \App\Helpers\SriIvaHelper::codigoPorcentaje($tarifa);
+        }
+        return (string)($imp['codigo_porcentaje'] ?? '');
+    }
+
+    private function buildTotalConImpuestos(\DOMDocument $dom, array $detalles, array $cab = []): \DOMElement
     {
         $el = $dom->createElement('totalConImpuestos');
 
-        // Agrupar por (codigo_impuesto, codigo_porcentaje)
+        // Agrupar por (codigo_impuesto, codigoPorcentaje derivado)
         $grupos = [];
         foreach ($detalles as $d) {
             foreach ($d['impuestos'] ?? [] as $imp) {
-                $key = ($imp['codigo_impuesto'] ?? '') . '|' . ($imp['codigo_porcentaje'] ?? '');
+                $codPorcentaje = $this->codigoPorcentajeImpuesto($imp);
+                $key = ($imp['codigo_impuesto'] ?? '') . '|' . $codPorcentaje;
                 if (!isset($grupos[$key])) {
                     $grupos[$key] = [
-                        'codigo'           => $imp['codigo_impuesto']   ?? '',
-                        'codigoPorcentaje' => $imp['codigo_porcentaje'] ?? '',
-                        'tarifa'           => (float)($imp['tarifa']        ?? 0),
+                        'codigo'           => $imp['codigo_impuesto'] ?? '',
+                        'codigoPorcentaje' => $codPorcentaje,
+                        'tarifa'           => (float)($imp['tarifa'] ?? 0),
                         'baseImponible'    => 0.0,
                         'valor'            => 0.0,
                     ];
                 }
                 $grupos[$key]['baseImponible'] += (float)($imp['base_imponible'] ?? 0);
                 $grupos[$key]['valor']         += (float)($imp['valor']          ?? 0);
+            }
+        }
+
+        // Conciliar el IVA con el importeTotal para que el XML cuadre EXACTO:
+        //   importeTotal = totalSinImpuestos + Σ(valor impuestos).
+        // El IVA se acumuló sumando el valor de cada línea; en una liquidación emitida
+        // antes de que el cálculo se centralizara en el service —o con el modo de IVA
+        // de la empresa cambiado después— ese total puede diferir en centavos del
+        // guardado. El desfase se absorbe en el grupo de IVA de mayor valor, así el XML
+        // es consistente por sí mismo y no depende de la tolerancia del SRI. Mismo
+        // mecanismo que XmlFacturaVentaService.
+        if (isset($cab['importe_total'], $cab['total_sin_impuestos'])) {
+            $sumaNoIva = 0.0; // todo lo que no es IVA (ICE, IRBPNR, …)
+            foreach ($grupos as $g) {
+                if ((string)$g['codigo'] !== '2') {
+                    $sumaNoIva += (float)$g['valor'];
+                }
+            }
+            $ivaObjetivo = round((float)$cab['importe_total'] - (float)$cab['total_sin_impuestos'] - $sumaNoIva, 2);
+            $ivaActual = 0.0;
+            $kMax = null; $vMax = -INF;
+            foreach ($grupos as $k => $g) {
+                if ((string)$g['codigo'] === '2') {
+                    $ivaActual += (float)$g['valor'];
+                    if ((float)$g['valor'] > $vMax) { $vMax = (float)$g['valor']; $kMax = $k; }
+                }
+            }
+            $desfase = round($ivaObjetivo - $ivaActual, 2);
+            if ($kMax !== null && abs($desfase) >= 0.01 && abs($desfase) <= 0.05) {
+                $grupos[$kMax]['valor'] = round((float)$grupos[$kMax]['valor'] + $desfase, 2);
             }
         }
 
@@ -227,8 +279,8 @@ class XmlLiquidacionCompraService
             $impuestosEl = $dom->createElement('impuestos');
             foreach ($d['impuestos'] ?? [] as $imp) {
                 $impEl = $dom->createElement('impuesto');
-                $this->txt($dom, $impEl, 'codigo',           (string)($imp['codigo_impuesto']   ?? ''));
-                $this->txt($dom, $impEl, 'codigoPorcentaje', (string)($imp['codigo_porcentaje'] ?? ''));
+                $this->txt($dom, $impEl, 'codigo',           (string)($imp['codigo_impuesto'] ?? ''));
+                $this->txt($dom, $impEl, 'codigoPorcentaje', $this->codigoPorcentajeImpuesto($imp));
                 $this->txt($dom, $impEl, 'tarifa',           $this->dec2($imp['tarifa']         ?? 0));
                 $this->txt($dom, $impEl, 'baseImponible',    $this->dec2($imp['base_imponible'] ?? 0));
                 $this->txt($dom, $impEl, 'valor',            $this->dec2($imp['valor']          ?? 0));

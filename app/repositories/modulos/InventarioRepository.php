@@ -487,12 +487,15 @@ class InventarioRepository extends BaseRepository
     public function findIncluyendoEliminados(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT k.*, p.nombre AS producto_nombre, p.codigo AS producto_codigo,
-                       b.nombre AS bodega_nombre, u.nombre AS usuario_nombre
+                       b.nombre AS bodega_nombre, u.nombre AS usuario_nombre,
+                       um.nombre AS nombre_medida, um.abreviatura AS abreviatura_medida,
+                       ua.nombre AS anulado_por
                 FROM inventario_kardex k
                 INNER JOIN productos p ON p.id = k.id_producto
                 INNER JOIN bodegas   b ON b.id = k.id_bodega
                 LEFT JOIN unidades_medida um ON um.id = k.id_medida
                 LEFT JOIN usuarios   u ON u.id = k.created_by
+                LEFT JOIN usuarios   ua ON ua.id = k.deleted_by
                 WHERE k.id = :id AND k.id_empresa = :e";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':e' => $idEmpresa]);

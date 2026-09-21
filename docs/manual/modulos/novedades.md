@@ -6,7 +6,7 @@ ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
 etiquetas: novedades, novedad, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
-version: 1.7
+version: 1.8
 orden: 20
 estado: activo
 ---
@@ -296,6 +296,12 @@ filtrado.
   anteriores se eliminan novedad por novedad desde el listado.
 
 ## Historial de cambios
+
+- **1.8** — **Un anticipo o préstamo al que le queda $0.01 sigue pendiente.**
+  Antes ese centavo lo daba por pagado y la novedad salía como *pagada*. Ahora
+  el criterio es el mismo de *Egresos*: hay saldo mientras quede al menos un
+  centavo.
+
 
 - **1.7** — Días no laborados y aviso de salida afectan siempre al rol mensual
   (*Afecta a* queda fijo en Rol de Pagos; también al importar y al generar desde

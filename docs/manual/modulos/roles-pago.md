@@ -6,7 +6,7 @@ ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
 etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips
-version: 1.7
+version: 1.8
 orden: 30
 estado: activo
 ---
@@ -219,6 +219,12 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   quincena o semana en lugar del rol mensual.
 
 ## Historial de cambios
+
+- **1.8** — **Un rol al que le queda $0.01 sigue pendiente.** Antes ese
+  centavo lo marcaba como pagado: el rol no aparecía en el pago por lote y su
+  estado salía *Pagado*. Ahora cuenta como **Parcial** y se puede terminar de
+  pagar, igual que en *Egresos*.
+
 
 - **1.7** — El rol mensual vuelve a sumar los ingresos pagados en las quincenas y semanas del mes (antes el neteo los descontaba a fin de mes) y los que aportan al IESS entran a la base del mes. En quincena y semana solo hay ingresos y descuentos: los días no laborados y el aviso de salida van siempre al rol mensual.
 - **1.6** — En el rol mensual los días no laborados restan del sueldo ganado (ingreso negativo): bajan el aporte al IESS, el Impuesto a la Renta, las provisiones y la base del décimo tercero, y los fondos de reserva y el décimo tercero pagados en el rol se calculan sobre los días laborados. El décimo cuarto sigue por días de contrato.

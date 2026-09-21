@@ -1095,7 +1095,7 @@ class ReciboVentaController extends BaseModuloController
         $cobrado      = (float)($r['total_cobrado'] ?? 0);
         $saldo        = max(0, $importeTotal - $cobrado);
 
-        if ($saldo <= 0.01) {
+        if (round($saldo, 2) <= 0) {
             $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagado</span>';
         } elseif ($cobrado > 0) {
             $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonado</span>';

@@ -459,7 +459,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             $retencion    = (float)($r['total_retencion'] ?? 0);
                             $saldo        = max(0, $importeTotal - $cobrado - $nc - $retencion);
 
-                            if ($saldo <= 0.01) {
+                            if (round($saldo, 2) <= 0) {
                                 $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
                             } elseif (($cobrado + $nc + $retencion) > 0) {
                                 $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
@@ -6240,7 +6240,7 @@ $totalPages = $totalPagesOriginal;
                         : 'Este recibo está anulado: no admite cobros.';
                     alertaBloq.classList.remove('d-none');
                 }
-            } else if (saldo < 0.01) {
+            } else if (Math.round(saldo * 100) <= 0) {
                 if (alertaBloq) alertaBloq.classList.add('d-none');
                 alertaPagada.classList.remove('d-none');
                 cardReg.classList.add('d-none');

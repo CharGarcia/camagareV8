@@ -312,7 +312,7 @@ $to         = $to         ?? 0;
                             if (($r['tipo_comprobante'] ?? '') === '04') {
                                 // Las notas de crédito de compra son un crédito a favor: no se pagan → Pagada.
                                 $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
-                            } elseif ($saldo <= 0.01) {
+                            } elseif (round($saldo, 2) <= 0) {
                                 $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
                             } elseif (($pagado + $nc + $retencion) > 0) {
                                 $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
@@ -338,7 +338,7 @@ $to         = $to         ?? 0;
                                     <?php if (($r['tipo_comprobante'] ?? '') === '04'): ?>
                                         <span class="text-muted" title="Las notas de crédito no tienen saldo por pagar">N/A</span>
                                     <?php else: ?>
-                                        <span class="<?= $saldo > 0.01 ? 'text-danger' : 'text-success' ?>">$<?= number_format($saldo, 2) ?></span>
+                                        <span class="<?= round($saldo, 2) > 0 ? 'text-danger' : 'text-success' ?>">$<?= number_format($saldo, 2) ?></span>
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-center" data-col="estado_pago"><?= $estadoPagoBadge ?></td>

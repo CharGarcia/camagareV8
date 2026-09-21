@@ -48,6 +48,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                 <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-0">
+                <!-- Barra de Acciones Superior -->
+                <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
+                    <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="ajuste_btn_pdf" title="Imprimir comprobante del movimiento (PDF)">
+                        <i class="bi bi-file-earmark-pdf fs-6"></i>
+                    </button>
+                    <span class="small text-muted" id="ajuste_acciones_vacio">Guarde el movimiento para habilitar las acciones del documento.</span>
+                </div>
+
                 <form id="formAjuste">
                     <input type="hidden" name="id" id="ajuste_id_mov">
 
@@ -219,6 +227,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
 
         const btnGuardar = document.getElementById('ajuste_btn_guardar');
         const btnEliminar = document.getElementById('ajuste_btn_eliminar');
+        const btnPdf = document.getElementById('ajuste_btn_pdf');
+        const avisoAcciones = document.getElementById('ajuste_acciones_vacio');
+
+        // Las acciones de documento solo tienen sentido sobre un movimiento ya guardado.
+        function mostrarAccionesDocumento(mostrar) {
+            if (btnPdf) btnPdf.classList.toggle('d-none', !mostrar);
+            if (avisoAcciones) avisoAcciones.classList.toggle('d-none', mostrar);
+        }
         let timerBusqueda;
         let modalObj = null;
         const spanStock = document.getElementById('ajuste_stock_info');
@@ -255,6 +271,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                 restablecerCampoLote();
                 if (btnEliminar) btnEliminar.classList.add('d-none');
                 if (btnHabilitar) btnHabilitar.classList.add('d-none');
+                mostrarAccionesDocumento(false);
                 form.querySelectorAll('input, select, textarea').forEach(el => el.disabled = false);
 
                 if (id) {
@@ -270,6 +287,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                             originalTipo = d.tipo_movimiento;
 
                             inputIdMov.value = d.id;
+                            mostrarAccionesDocumento(true);
                             inputIdProd.value = d.id_producto;
                             inputBusqueda.value = `[${d.producto_codigo}] ${d.producto_nombre}`;
                             selectBodega.value = d.id_bodega;
@@ -614,6 +632,23 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                 window.INV_error('Error de conexión con el servidor.');
             }
         });
+
+        if (btnPdf) {
+            btnPdf.addEventListener('click', () => {
+                const id = inputIdMov.value;
+                if (!id) {
+                    window.INV_error('Primero guarde el movimiento para poder imprimirlo.');
+                    return;
+                }
+                // Cache-buster: evita que el navegador reuse un PDF anterior del mismo movimiento.
+                const a = document.createElement('a');
+                a.href = `<?= BASE_URL ?>/modulos/inventario/pdf?id=${id}&_=${Date.now()}`;
+                a.download = '';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            });
+        }
 
         if (btnEliminar) {
             btnEliminar.addEventListener('click', async () => {

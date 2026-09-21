@@ -647,7 +647,7 @@ class SuscripcionesRepository extends BaseRepository
                     SELECT b.*,
                            CASE WHEN b.con_efecto THEN GREATEST(b.total - b.abonos, 0) ELSE 0 END AS saldo,
                            CASE WHEN NOT b.con_efecto          THEN 'sin_efecto'
-                                WHEN b.total - b.abonos <= 0.01 THEN 'pagado'
+                                WHEN b.total - b.abonos <= 0    THEN 'pagado'
                                 WHEN b.abonos > 0               THEN 'abonado'
                                 ELSE 'pendiente' END AS estado_pago
                     FROM base b
@@ -658,7 +658,7 @@ class SuscripcionesRepository extends BaseRepository
                    COALESCE(SUM(d.total)  FILTER (WHERE d.con_efecto), 0) AS total,
                    COALESCE(SUM(d.abonos) FILTER (WHERE d.con_efecto), 0) AS cobrado,
                    COALESCE(SUM(d.saldo), 0) AS saldo,
-                   COUNT(*) FILTER (WHERE d.saldo > 0.01) AS con_saldo
+                   COUNT(*) FILTER (WHERE d.saldo > 0) AS con_saldo
             FROM docs d
             WHERE true {$where}");
         $stT->execute($params);

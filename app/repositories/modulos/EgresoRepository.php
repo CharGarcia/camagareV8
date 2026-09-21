@@ -611,7 +611,7 @@ class EgresoRepository extends BaseRepository
                 LEFT JOIN pagado_rol p ON p.id_referencia_documento = rd.id
                 WHERE rd.id_empleado = :id_emp AND rd.id_empresa = :id_empresa
                   AND rc.eliminado = FALSE AND rc.estado IN ('generado','pagado','contabilizado')
-                  AND (rd.neto - COALESCE(p.total_pagado, 0)) > 0.01
+                  AND (rd.neto - COALESCE(p.total_pagado, 0)) > 0
                 UNION ALL
                 SELECT 'ANTICIPO' AS tipo_doc_bd, n.id,
                        n.tipo_nombre || ' ' || n.periodo_mes || '/' || n.periodo_anio AS numero_documento,
@@ -625,7 +625,7 @@ class EgresoRepository extends BaseRepository
                 WHERE n.id_empleado = :id_emp AND n.id_empresa = :id_empresa
                   AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo = '3'
                   AND n.desembolsado_migrado = FALSE
-                  AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0.01
+                  AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0
                 UNION ALL
                 -- Solo el préstamo tipo 9 (Préstamo Empresa) requiere desembolso por egreso:
                 -- el 7 (Quirografario) y el 8 (Hipotecario) los desembolsa el IESS/banco
@@ -644,7 +644,7 @@ class EgresoRepository extends BaseRepository
                   AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo = '9'
                   AND n.desembolsado_migrado = FALSE
                 GROUP BY n.id_empleado, n.tipo_codigo, pp.total_pagado
-                HAVING (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) > 0.01
+                HAVING (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) > 0
                 UNION ALL
                 SELECT 'DECIMO_CUARTO' AS tipo_doc_bd, dcd.id,
                        'Décimo Cuarto ' || dcc.anio || ' (' ||
@@ -659,8 +659,8 @@ class EgresoRepository extends BaseRepository
                 INNER JOIN decimo_cuarto_cabecera dcc ON dcc.id = dcd.id_cabecera
                 LEFT JOIN pagado_dc pdc ON pdc.id_referencia_documento = dcd.id
                 WHERE dcd.id_empleado = :id_emp AND dcd.id_empresa = :id_empresa
-                  AND dcc.eliminado = FALSE AND dcd.mensualiza = FALSE AND dcd.valor > 0.01
-                  AND (dcd.valor - COALESCE(pdc.total_pagado, 0)) > 0.01
+                  AND dcc.eliminado = FALSE AND dcd.mensualiza = FALSE AND dcd.valor > 0
+                  AND (dcd.valor - COALESCE(pdc.total_pagado, 0)) > 0
                 UNION ALL
                 SELECT 'DECIMO_TERCERO' AS tipo_doc_bd, dtd.id,
                        'Décimo Tercero ' || dtc.anio AS numero_documento,
@@ -673,8 +673,8 @@ class EgresoRepository extends BaseRepository
                 INNER JOIN decimo_tercero_cabecera dtc ON dtc.id = dtd.id_cabecera
                 LEFT JOIN pagado_dt pdt ON pdt.id_referencia_documento = dtd.id
                 WHERE dtd.id_empleado = :id_emp AND dtd.id_empresa = :id_empresa
-                  AND dtc.eliminado = FALSE AND dtd.mensualiza = FALSE AND dtd.valor > 0.01
-                  AND (dtd.valor - COALESCE(pdt.total_pagado, 0)) > 0.01
+                  AND dtc.eliminado = FALSE AND dtd.mensualiza = FALSE AND dtd.valor > 0
+                  AND (dtd.valor - COALESCE(pdt.total_pagado, 0)) > 0
                 ORDER BY numero_documento ASC";
         return $this->query($sql, [':id_emp' => $idEmpleado, ':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -727,7 +727,7 @@ class EgresoRepository extends BaseRepository
                   AND COALESCE(c.tipo_comprobante, '01') NOT IN ('04','05')
                   AND {$compraPagable}
                   AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                  AND (c.importe_total + COALESCE(c.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
+                  AND (c.importe_total + COALESCE(c.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0
                 UNION ALL
                 SELECT 'LIQUIDACION' as tipo_doc_bd, l.id,
                        CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial) AS numero_documento,
@@ -743,7 +743,7 @@ class EgresoRepository extends BaseRepository
                   AND l.eliminado = FALSE
                   AND l.estado = 'autorizado'
                   AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                  AND (l.importe_total - COALESCE(p.total_pagado, 0)) > 0.01
+                  AND (l.importe_total - COALESCE(p.total_pagado, 0)) > 0
                 ORDER BY fecha_emision ASC";
 
         return $this->query($sql, [
@@ -1002,7 +1002,7 @@ class EgresoRepository extends BaseRepository
                       AND COALESCE(cb.tipo_comprobante, '01') NOT IN ('04','05')
                       $filtroPagable
                       AND cb.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (cb.importe_total + COALESCE(cb.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
+                      AND (cb.importe_total + COALESCE(cb.total_terceros, 0) - COALESCE(p.total_pagado, 0) - COALESCE(rcp.total_retenido, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0
                       $filtroBusq
                       {$filtroFecha('cb.fecha_emision')}
                       {$filtroSoloId('cb.id')}
@@ -1081,7 +1081,7 @@ class EgresoRepository extends BaseRepository
                           AND rc.eliminado = FALSE
                           AND rc.estado IN ('generado','pagado','contabilizado')
                           AND rc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                          AND (rd.neto - COALESCE(p.total_pagado, 0)) > 0.01
+                          AND (rd.neto - COALESCE(p.total_pagado, 0)) > 0
                           $filtroRol
                         UNION ALL
                         SELECT 'ANTICIPO' AS tipo_doc_bd,
@@ -1102,7 +1102,7 @@ class EgresoRepository extends BaseRepository
                           AND n.eliminado = FALSE AND n.estado = 'activo'
                           AND n.tipo_codigo = '3'
                           AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                          AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0.01
+                          AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0
                           $filtroAnt
                         UNION ALL
                         -- PRÉSTAMOS AGRUPADOS: una línea por empleado+tipo = desembolso (suma de cuotas).
@@ -1129,7 +1129,7 @@ class EgresoRepository extends BaseRepository
                           AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                           $filtroPre
                         GROUP BY n.id_empleado, n.tipo_codigo, emp.id, emp.nombres_apellidos, emp.identificacion, pp.total_pagado
-                        HAVING (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) > 0.01
+                        HAVING (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) > 0
                         UNION ALL
                         SELECT 'DECIMO_CUARTO' AS tipo_doc_bd,
                                dcd.id,
@@ -1149,8 +1149,8 @@ class EgresoRepository extends BaseRepository
                         INNER JOIN empleados emp ON emp.id = dcd.id_empleado
                         LEFT  JOIN pagado_dc pdc ON pdc.id_referencia_documento = dcd.id
                         WHERE dcc.id_empresa = :id_empresa
-                          AND dcc.eliminado = FALSE AND dcd.mensualiza = FALSE AND dcd.valor > 0.01
-                          AND (dcd.valor - COALESCE(pdc.total_pagado, 0)) > 0.01
+                          AND dcc.eliminado = FALSE AND dcd.mensualiza = FALSE AND dcd.valor > 0
+                          AND (dcd.valor - COALESCE(pdc.total_pagado, 0)) > 0
                           $filtroDc
                         UNION ALL
                         SELECT 'DECIMO_TERCERO' AS tipo_doc_bd,
@@ -1169,8 +1169,8 @@ class EgresoRepository extends BaseRepository
                         INNER JOIN empleados emp ON emp.id = dtd.id_empleado
                         LEFT  JOIN pagado_dt pdt ON pdt.id_referencia_documento = dtd.id
                         WHERE dtc.id_empresa = :id_empresa
-                          AND dtc.eliminado = FALSE AND dtd.mensualiza = FALSE AND dtd.valor > 0.01
-                          AND (dtd.valor - COALESCE(pdt.total_pagado, 0)) > 0.01
+                          AND dtc.eliminado = FALSE AND dtd.mensualiza = FALSE AND dtd.valor > 0
+                          AND (dtd.valor - COALESCE(pdt.total_pagado, 0)) > 0
                           $filtroDt
                     ) u
                     WHERE TRUE
@@ -1252,7 +1252,7 @@ class EgresoRepository extends BaseRepository
                       AND l.eliminado = FALSE
                       AND l.estado = 'autorizado'
                       AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (l.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rl.total_retenido, 0)) > 0.01
+                      AND (l.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rl.total_retenido, 0)) > 0
                       $filtroBusq
                       {$filtroFecha('l.fecha_emision')}
                       {$filtroSoloId('l.id')}

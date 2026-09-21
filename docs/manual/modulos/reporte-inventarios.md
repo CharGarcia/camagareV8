@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle
-version: 1.18
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote
+version: 1.20
 orden: 40
 estado: activo
 ---
@@ -15,10 +15,35 @@ El **reporte de inventarios** muestra las existencias y los movimientos del
 periodo, por producto y por bodega. Es la herramienta para el conteo físico y
 para valorar lo que hay en almacén.
 
+## El código del producto, siempre en la primera columna
+
+En las cinco pestañas, el **código del producto es la primera columna** de la
+tabla —también en el PDF y en el Excel—, para poder identificar el artículo sin
+depender del nombre.
+
+Dónde aparece según lo que esté mostrando cada pestaña:
+
+| Vista | Qué lleva en la primera columna |
+|---|---|
+| Existencias (Detallado, Por lotes, Por caducidad, Lote + caducidad) | Código del producto de la fila |
+| Existencias (Lote + consignación) | Código del producto entregado |
+| Movimientos (Detallado) | Código del producto del movimiento |
+| Cualquier pestaña con *Agrupar por* en **Por Producto** | Código del producto, y el nombre pasa a la columna siguiente |
+| Consignaciones (Detallado) | Códigos de los productos del documento, separados por coma |
+| Auditoría | Código del producto de la discrepancia |
+
+Cuando la fila **no es un producto** —agrupados por categoría, bodega, marca,
+tipo, origen, fecha o mes— no hay un código que mostrar y la primera columna
+sigue siendo la del grupo.
+
+En **Existencias con *Agrupar por* en Detallado**, la columna Código también
+ordena: un clic en su encabezado ordena el listado por código.
+
 ## Qué permite ver
 
 - Existencias actuales por producto y bodega, y —si hace falta— desglosadas
   por lote, por caducidad o por ambos.
+- Qué lote salió con qué cliente y en qué consignación (*Lote + consignación*).
 - Movimientos del periodo: qué entró, qué salió y de dónde vino cada movimiento
   (columnas Entradas, Salidas y Saldo, en orden cronológico).
 - Valor del inventario según el costo registrado.
@@ -28,8 +53,8 @@ para valorar lo que hay en almacén.
 ## Ver el stock por lote o por caducidad (selector Detalle)
 
 En **Existencias**, el primer selector (**Detalle**) decide hasta dónde se
-desglosa el stock de cada producto. Las cuatro opciones muestran siempre el
-mismo total; lo que cambia es en cuántas filas se reparte:
+desglosa el stock de cada producto. Las cuatro primeras opciones muestran
+siempre el mismo total; lo que cambia es en cuántas filas se reparte:
 
 | Detalle | Una fila por | Para qué sirve |
 |---|---|---|
@@ -37,6 +62,7 @@ mismo total; lo que cambia es en cuántas filas se reparte:
 | **Por lotes** | producto, bodega y lote | Cuánto queda de cada lote. Si un lote entró con dos caducidades distintas, aquí se ven sumadas. |
 | **Por caducidad** | producto, bodega y fecha de caducidad | Qué se vence y cuándo, sin importar de qué lote venga. |
 | **Lote + caducidad** | cada combinación de lote, NUP y caducidad | El máximo detalle, para cuadrar un lote concreto. |
+| **Lote + consignación** | cada lote/NUP **entregado en consignación** | Con qué cliente y con qué documento salió cada lote. Ver abajo. |
 
 Mientras el Detalle no esté en *En general*, el selector **Agrupar por** queda
 desactivado: el desglose ya define las filas por sí solo.
@@ -47,6 +73,38 @@ que está en poder de clientes siempre se pueden comparar en la misma fila.
 
 > El desglose por lote/caducidad se calcula desde el kardex, no desde el stock
 > guardado del producto: el sistema no almacena un stock por lote.
+
+## Lote + consignación: qué lote tiene cada cliente
+
+Las otras opciones de *Detalle* responden "cuánto queda"; esta responde **"con
+quién salió"**. Cada fila es una **línea de consignación** —un producto con su
+lote y su NUP dentro de un documento—, no un par producto/bodega:
+
+| Columna | Qué contiene |
+|---|---|
+| Código | Código del producto |
+| Fecha / Secuencial | Fecha y número de la consignación |
+| Cliente / Asesor | A quién se entregó y qué vendedor la hizo |
+| Descripción | Nombre del producto |
+| Lote / NUP | Lote y NUP de esa línea |
+| Responsable traslado | Quien trasladó la mercadería |
+| Bodega | Bodega de la que salió |
+| Consignado | Cantidad entregada en esa línea |
+| Retornado / Facturado / A cambio | Lo que ya salió del saldo: devuelto, facturado o entregado a cambio de otro producto |
+| Saldo | Entregado − retornado − facturado − a cambio: lo que sigue en poder del cliente |
+
+Un clic en la fila abre el **detalle completo de esa consignación**, el mismo
+de la pestaña Consignaciones.
+
+**Filtros que aplican**: Bodega, Categoría, Marca, Producto, Lote, NUP,
+Caducidad y **Fecha de corte** (aquí significa *consignaciones emitidas hasta
+esa fecha*). El selector **Consignado** filtra por saldo: *Con consignado*
+deja solo lo que sigue en poder del cliente y *Sin consignado*, lo ya
+liquidado. El selector **Estado** queda desactivado: quiebre o bajo mínimo son
+estados del stock de un producto, y aquí la fila es una entrega.
+
+> Esta opción aparece solo si el usuario también puede **ver Consignaciones de
+> ventas**: muestra datos de ese módulo, no del kardex.
 
 ## Limpiar los filtros
 
@@ -109,6 +167,7 @@ Cada fila es una **consignación** (un documento), con:
 
 | Columna | Qué contiene |
 |---|---|
+| Código | Códigos de los productos de la consignación, separados por coma |
 | Fecha | Fecha de emisión y, debajo, el secuencial del documento |
 | Cliente | Nombre y, debajo, la identificación |
 | Asesor | Vendedor asignado a la consignación |
@@ -119,7 +178,7 @@ Cada fila es una **consignación** (un documento), con:
 | Saldo | Entregado − devuelto − facturado: lo que sigue en poder del cliente |
 | Estado | Entregada, Emitida o Anulada |
 
-Cuando la consignación mezcla varios lotes o NUP, la celda los muestra
+Cuando la consignación mezcla varios códigos, lotes o NUP, la celda los muestra
 separados por coma y recorta con puntos suspensivos; el valor completo aparece
 al pasar el mouse.
 
@@ -291,6 +350,19 @@ ahí.
 
 ## Historial de cambios
 
+- **1.20** — Nueva opción **Lote + consignación** en el selector *Detalle* de
+  Existencias: una fila por lote/NUP entregado, con fecha, secuencial, cliente,
+  asesor, responsable de traslado, bodega y el desglose consignado / retornado
+  / facturado / a cambio / saldo. Responde "con qué cliente y con qué documento
+  salió este lote". Solo la ven los usuarios que además pueden ver
+  Consignaciones de ventas.
+- **1.19** — El **código del producto pasa a ser la primera columna** de todos
+  los reportes del módulo: Existencias (detallado y los tres desgloses),
+  Movimientos, Valorización, Consignaciones y Auditoría, y también en sus
+  exportaciones a PDF y Excel. En los agrupados *Por Producto*, el código deja
+  de ir pegado al nombre ("COD - Nombre") y ocupa su propia columna. En
+  Auditoría deja de mostrarse en letra pequeña bajo el nombre. En Existencias
+  detallado, la columna Código es ordenable.
 - **1.18** — Pestaña **Consignaciones**: el detalle de una consignación muestra
   el **código del producto** como primera columna, y la ventana del detalle es
   más ancha para que la columna nueva quepa sin apretar el nombre del producto.

@@ -931,6 +931,17 @@ $pestanasConfigLiq = array_merge(
     window.LC_ordenDir = '<?= $ordenDir ?>';
 
 
+    // Configuración de facturación de la empresa (empresa_establecimiento): los
+    // mismos decimales y el mismo modo de cálculo del IVA que aplica el service al
+    // guardar. Sin esto la pantalla calculaba con 2 decimales y siempre línea a
+    // línea, así que en una empresa con otra configuración lo que se veía no era lo
+    // que se guardaba.
+    window.LC_EMPRESA_CONFIG = {
+        decimales_precio:   <?= (int) ($empresa['decimales_precio']   ?? 2) ?>,
+        decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>,
+        calculo_iva:        '<?= ($empresa['calculo_iva_facturacion'] ?? 'linea_linea') === 'subtotal' ? 'subtotal' : 'linea_linea' ?>'
+    };
+
     // Pasar catálogos a JS
     window.TARIFAS_IVA = <?= json_encode($tarifasIva ?? []) ?>;
     window.FORMAS_PAGO_SRI = <?= json_encode($formasPago ?? []) ?>;

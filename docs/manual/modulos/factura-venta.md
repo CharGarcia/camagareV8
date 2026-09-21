@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento
-version: 2.17
+version: 2.18
 orden: 20
 estado: activo
 ---
@@ -395,6 +395,13 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.18** — **Una factura con $0.01 de saldo queda como Abonada, no como
+  Pagada.** Antes, el centavo restante se daba por cobrado. Ahora el criterio es
+  el mismo de *Cuentas por Cobrar* e *Ingresos*: hay saldo mientras quede al
+  menos un centavo. Afecta al badge de la columna **Pago**, al filtro
+  `pago:pagada|abonada|pendiente`, al orden por esa columna, al color del saldo
+  y al panel de cobro del modal (que ya no dice "pagada" con un centavo vivo).
 
 - **2.17** — Corregido: al **abrir una factura guardada** —o al recuperar un
   borrador— la columna **P. Con Imp.** salía en 0.00 en todas las líneas. El

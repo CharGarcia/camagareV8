@@ -422,6 +422,9 @@ class LogSistemaService
             'id_producto'       => ['table' => 'productos', 'field' => "codigo || ' - ' || nombre"],
             'id_cliente'        => ['table' => 'clientes', 'field' => 'nombre'],
             'id_proveedor'      => ['table' => 'proveedores', 'field' => 'razon_social'],
+            // Quién entrega (Pedidos, Consignaciones): sin esto el historial decía
+            // "Responsable entrega: 4 → 7".
+            'id_responsable_entrega' => ['table' => 'responsables_traslado', 'field' => 'nombre'],
             'id_cuenta_cobrar'  => ['table' => 'plan_cuentas', 'field' => "codigo || ' - ' || nombre"],
             'id_cuenta_ingreso' => ['table' => 'plan_cuentas', 'field' => "codigo || ' - ' || nombre"],
             'id_cuenta_pagar'   => ['table' => 'plan_cuentas', 'field' => "codigo || ' - ' || nombre"],

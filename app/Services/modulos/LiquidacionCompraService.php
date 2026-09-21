@@ -25,6 +25,7 @@ class LiquidacionCompraService
 
     public function crear(array $data): int
     {
+        $data = $this->normalizarImpuestosYTotales($data);
         $this->rules->validar($data);
 
         $this->validarPeriodoContable(
@@ -110,6 +111,118 @@ class LiquidacionCompraService
             error_log("[Liquidacion] Asiento no generado para liquidación $id: " . $eAs->getMessage());
         }
         return $id;
+    }
+
+    /**
+     * Impuestos de cada línea y totales de la cabecera, con la configuración de
+     * facturación de la empresa (`empresa_establecimiento.calculo_iva_facturacion`).
+     *
+     * El servidor es la autoridad: los totales que manda la pantalla se recalculan
+     * aquí y no se guardan tal cual. Antes esto vivía en el controller y el IVA se
+     * guardaba SIN redondear (10.35 al 15% dejaba 1.5525 en
+     * `liquidaciones_detalle_impuestos.valor`), así que el XML, el PDF, el asiento
+     * y los casilleros de la Declaración de IVA —que suman esa columna— nunca
+     * cuadraban con el `importe_total` que la pantalla calculó por centavos.
+     *
+     * `total_sin_impuestos` es el subtotal NETO (con el descuento ya restado), igual
+     * que en Facturas de Venta: es lo que el SRI compara contra
+     * `importeTotal = totalSinImpuestos + Σ impuestos`, y lo que el asiento reparte
+     * entre Inventario y Gasto. La pantalla enviaba el bruto, así que con cualquier
+     * descuento el XML se rechazaba por diferencias y el asiento quedaba descuadrado
+     * justo por el monto del descuento.
+     */
+    private function normalizarImpuestosYTotales(array $data): array
+    {
+        $detalles = is_array($data['detalles'] ?? null) ? $data['detalles'] : [];
+        if (!$detalles) {
+            return $data;
+        }
+
+        $config  = is_array($data['empresa_config'] ?? null) ? $data['empresa_config'] : [];
+        $modoIva = ($config['calculo_iva_facturacion'] ?? 'linea_linea') === 'subtotal'
+            ? 'subtotal'
+            : 'linea_linea';
+
+        $tarifas = [];
+        foreach ($this->repository->getTarifasIva() as $t) {
+            $tarifas[(int) $t['id']] = $t;
+        }
+
+        $totalSinImpuestos = 0.0;
+        $totalDescuento    = 0.0;
+        $grupos            = []; // id_tarifa => ['pct','codigo','base','lineas']
+
+        foreach ($detalles as $i => $det) {
+            $cantidad = (float) ($det['cantidad'] ?? 0);
+            $precio   = (float) ($det['precio_unitario'] ?? 0);
+            $desc     = round((float) ($det['descuento'] ?? 0), 2);
+            // Mismo orden de redondeo que la pantalla: el bruto a centavos primero y
+            // el descuento después. Hacerlo de una sola vez daría un neto que puede
+            // diferir un centavo del que vio el usuario.
+            $neto = max(0.0, round(round($cantidad * $precio, 2) - $desc, 2));
+
+            $detalles[$i]['id_empresa']                = $data['id_empresa'] ?? null;
+            $detalles[$i]['descuento']                 = $desc;
+            $detalles[$i]['precio_total_sin_impuesto'] = $neto;
+            $detalles[$i]['codigo_principal']          = trim((string) ($det['codigo_principal'] ?? $det['codigo'] ?? ''));
+            $detalles[$i]['info_adicional']            = $det['info_adicional'] ?? $det['adicional'] ?? '';
+            $detalles[$i]['impuestos']                 = [];
+
+            $totalSinImpuestos = round($totalSinImpuestos + $neto, 2);
+            $totalDescuento    = round($totalDescuento + $desc, 2);
+
+            $idTarifa = (int) ($det['id_tarifa_iva'] ?? 0);
+            if (!isset($tarifas[$idTarifa])) {
+                continue; // tarifa desconocida: la línea queda sin impuestos, como antes
+            }
+
+            if (!isset($grupos[$idTarifa])) {
+                $grupos[$idTarifa] = [
+                    'pct'    => (float) ($tarifas[$idTarifa]['porcentaje_iva'] ?? 0),
+                    'codigo' => (string) ($tarifas[$idTarifa]['codigo'] ?? '0'),
+                    'base'   => 0.0,
+                    'lineas' => [],
+                ];
+            }
+            $grupos[$idTarifa]['base']     = round($grupos[$idTarifa]['base'] + $neto, 2);
+            $grupos[$idTarifa]['lineas'][] = $i;
+        }
+
+        $totalIva = 0.0;
+        foreach ($grupos as $g) {
+            // 'subtotal': el IVA de la tarifa se calcula sobre la base acumulada del
+            // grupo y el residuo de centavos se asienta en su última línea, para que
+            // la suma de las líneas cuadre EXACTO con el total de la tarifa — es lo
+            // que el SRI compara en totalConImpuestos.
+            $ivaGrupo   = $modoIva === 'subtotal' ? round($g['base'] * $g['pct'] / 100, 2) : 0.0;
+            $acumulado  = 0.0;
+            $ultimaPos  = count($g['lineas']) - 1;
+
+            foreach ($g['lineas'] as $pos => $i) {
+                $base = (float) $detalles[$i]['precio_total_sin_impuesto'];
+                $iva  = round($base * $g['pct'] / 100, 2);
+                if ($modoIva === 'subtotal' && $pos === $ultimaPos) {
+                    $iva = round($ivaGrupo - $acumulado, 2);
+                }
+                $acumulado = round($acumulado + $iva, 2);
+
+                $detalles[$i]['impuestos'] = [[
+                    'codigo_impuesto'   => '2', // IVA
+                    'codigo_porcentaje' => $g['codigo'],
+                    'tarifa'            => $g['pct'],
+                    'base_imponible'    => $base,
+                    'valor'             => $iva,
+                ]];
+                $totalIva = round($totalIva + $iva, 2);
+            }
+        }
+
+        $data['detalles']            = $detalles;
+        $data['total_sin_impuestos'] = $totalSinImpuestos;
+        $data['total_descuento']     = $totalDescuento;
+        $data['importe_total']       = round($totalSinImpuestos + $totalIva, 2);
+
+        return $data;
     }
 
     /**
@@ -201,6 +314,7 @@ class LiquidacionCompraService
             'la liquidación'
         );
 
+        $data = $this->normalizarImpuestosYTotales($data);
         $this->rules->validar($data);
 
         $empresaConfig = $data['empresa_config'] ?? [];

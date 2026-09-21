@@ -498,8 +498,22 @@ class LiquidacionCompraPdfService
 
         $subtotalSinImp = (float)($cab['total_sin_impuestos'] ?? (array_sum($subtotMap) + $noObjIva + $exentoIva));
         $totalDcto      = (float)($cab['total_descuento'] ?? 0);
-        $totalIva       = array_sum($ivaMap);
-        $total          = (float)($cab['importe_total'] ?? ($subtotalSinImp + $totalIva));
+
+        // Los IVA por concepto se muestran a centavos y se concilian con el VALOR TOTAL
+        // del documento, para que SUBTOTAL + IVA sea exactamente el TOTAL impreso. Hace
+        // falta para las liquidaciones emitidas antes de que el cálculo se centralizara
+        // en el service, cuyo IVA quedó guardado sin redondear. El desfase solo se
+        // absorbe si es de centavos: una diferencia mayor es otro problema y debe verse.
+        $ivaMap = array_map(fn($v) => round((float)$v, 2), $ivaMap);
+        if (isset($cab['importe_total'], $cab['total_sin_impuestos']) && $ivaMap) {
+            $desfase = round((float)$cab['importe_total'] - $subtotalSinImp - array_sum($ivaMap), 2);
+            if (abs($desfase) >= 0.01 && abs($desfase) <= 0.05) {
+                $kMax = array_keys($ivaMap, max($ivaMap))[0];
+                $ivaMap[$kMax] = round($ivaMap[$kMax] + $desfase, 2);
+            }
+        }
+        $totalIva = round(array_sum($ivaMap), 2);
+        $total    = (float)($cab['importe_total'] ?? ($subtotalSinImp + $totalIva));
 
         // Layout de dos columnas (igual que factura).
         $totW    = 72;

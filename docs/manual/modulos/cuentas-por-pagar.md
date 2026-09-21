@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde
-version: 1.20
+version: 1.21
 orden: 50
 estado: activo
 ---
@@ -331,6 +331,13 @@ la factura que modifican. Mismo criterio que
 el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
+
+- **1.21** — **El centavo pendiente ya se puede pagar.** El saldo de
+  $0.01 que este reporte mostraba como pendiente no se ofrecía en *Egresos*,
+  que lo daba por pagado. Los dos módulos usan ahora el mismo criterio: **hay
+  saldo mientras quede al menos un centavo**. Este reporte no cambia; el que se
+  corrigió fue Egresos.
+
 
 - **1.20** — El **PDF** (vistas *Detallado* y *Por proveedor*) ya no imprime el
   recuadro de **filtros aplicados**: bajo el encabezado van directamente las

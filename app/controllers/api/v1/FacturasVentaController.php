@@ -819,7 +819,7 @@ class FacturasVentaController extends ApiBaseController
         }
 
         $saldo = $this->calcularSaldoPendiente($idFactura, $idEmpresa, $factura);
-        if ($saldo['saldo_pendiente'] <= 0.01) {
+        if (round((float) $saldo['saldo_pendiente'], 2) <= 0) {
             $this->jsonError('YA_PAGADA', 'Esta factura ya no tiene saldo pendiente.', 409);
         }
         if ($monto > $saldo['saldo_pendiente'] + 0.01) {

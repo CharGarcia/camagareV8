@@ -1,6 +1,12 @@
 <?php
 
 /** @var array $perm */
+/** @var string $rutaModulo */
+/** @var array $vistaConfig */
+
+// Módulo de preferencias: el helper lo normaliza a 'pedidos' (basename + guiones a _).
+$pedRutaModulo  = $rutaModulo ?? 'modulos/pedidos';
+$pedVistaConfig = $vistaConfig ?? [];
 ?>
 <!-- Modal Pedido -->
 <div class="modal fade" id="modalPedido" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
@@ -13,7 +19,8 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
-            <div class="modal-body p-3">
+            <div class="modal-body p-0">
+                <div class="px-3 pt-3">
                 <!-- Aviso: otro usuario tiene este pedido en uso (edición o consumo desde Consignaciones) -->
                 <div id="aviso-bloqueo-pedido" class="alert alert-warning d-flex align-items-center gap-2 mb-3 d-none" role="alert">
                     <i class="bi bi-lock-fill"></i>
@@ -26,7 +33,8 @@
                     <span>Este pedido ya está completamente registrado en una consignación o factura. No se puede editar.</span>
                 </div>
 
-                <!-- Acciones Rápidas Superior -->
+                <!-- Barra de acciones del documento: va ANTES de las pestañas (CLAUDE.md §9),
+                     porque aplica al pedido entero y no a una pestaña en particular. -->
                 <div class="d-flex justify-content-start gap-1 mb-3">
                     <?php if (\App\Helpers\Permisos::puedeCrear('modulos/clientes')): ?>
                     <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="abrirModalClienteCrear()" title="Crear nuevo cliente rápido">
@@ -57,8 +65,41 @@
                     </button>
                     <?php endif; ?>
                 </div>
-                <hr class="text-muted my-3 opacity-25">
+                </div>
 
+                <!-- Pestañas del modal -->
+                <div class="d-flex align-items-center bg-light px-3 pt-2">
+                    <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap tab-pestaña" id="tabsPedido" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link active" id="ped-tab-general-btn" data-bs-toggle="tab"
+                               data-bs-target="#ped-pane-general" href="#ped-pane-general" role="tab" title="General">
+                                <i class="bi bi-info-circle me-1"></i> General
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="ped-tab-detalle-btn" data-bs-toggle="tab"
+                               data-bs-target="#ped-pane-detalle" href="#ped-pane-detalle" role="tab" title="Detalle del registro">
+                                <i class="bi bi-clock-history me-1"></i> Detalle
+                            </a>
+                        </li>
+                    </ul>
+                    <div class="pb-1 flex-shrink-0">
+                        <?php
+                        // La clave debe ser el id del .tab-pane (no el del <a>): es lo que
+                        // oculta renderEstilosPestanasOcultas(). "General" no se lista a
+                        // propósito — es el formulario, no se puede esconder.
+                        echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas(
+                            ['ped-pane-detalle' => 'Detalle'],
+                            $pedVistaConfig,
+                            $pedRutaModulo
+                        );
+                        ?>
+                    </div>
+                </div>
+                <div class="border-bottom bg-light mb-0"></div>
+
+                <div class="tab-content border-top px-3 py-3" id="tabsPedidoContent" style="overflow: visible !important;">
+                <div class="tab-pane fade show active" id="ped-pane-general" role="tabpanel">
                 <form id="form-pedido-cabecera">
                     <input type="hidden" id="pedido_id">
 
@@ -195,6 +236,75 @@
                                 <span id="txt-total">0</span>
                             </div>
                         </form>
+                </div><!-- /ped-pane-general -->
+
+                <!-- Pestaña Detalle: quién registró el pedido y qué se le ha cambiado.
+                     Va FUERA del <form> a propósito: PED_bloquearControles() deshabilita
+                     todos los input/select/button del formulario cuando el pedido está
+                     bloqueado, y el historial se debe poder seguir consultando. -->
+                <div class="tab-pane fade" id="ped-pane-detalle" role="tabpanel">
+                    <div id="ped-detalle-vacio" class="text-center text-muted py-5 d-none">
+                        <i class="bi bi-clock-history d-block mb-2" style="font-size: 1.6rem;"></i>
+                        <div class="small">El pedido todavía no se ha guardado: aquí aparecerán quién lo creó y los cambios que reciba.</div>
+                    </div>
+
+                    <div id="ped-detalle-contenido" class="d-none">
+                        <!-- Ficha de registro -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-3 col-6">
+                                <div class="border rounded-3 p-2 bg-white h-100">
+                                    <div class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
+                                        <i class="bi bi-person-check me-1"></i> Creado por
+                                    </div>
+                                    <div class="fw-bold text-truncate" style="font-size: 0.85rem;" id="ped-info-creado-por" title="">—</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6">
+                                <div class="border rounded-3 p-2 bg-white h-100">
+                                    <div class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
+                                        <i class="bi bi-calendar-plus me-1"></i> Fecha de creación
+                                    </div>
+                                    <div class="fw-bold" style="font-size: 0.85rem;" id="ped-info-creado-en">—</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6">
+                                <div class="border rounded-3 p-2 bg-white h-100">
+                                    <div class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
+                                        <i class="bi bi-pencil-square me-1"></i> Última edición por
+                                    </div>
+                                    <div class="fw-bold text-truncate" style="font-size: 0.85rem;" id="ped-info-modificado-por" title="">—</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6">
+                                <div class="border rounded-3 p-2 bg-white h-100">
+                                    <div class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
+                                        <i class="bi bi-calendar-check me-1"></i> Fecha de última edición
+                                    </div>
+                                    <div class="fw-bold" style="font-size: 0.85rem;" id="ped-info-modificado-en">—</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Historial de ediciones (log_sistema / pedidos_cabecera) -->
+                        <h6 class="fw-bold small text-muted text-uppercase mb-2">
+                            <i class="bi bi-list-ul me-1"></i> Ediciones del pedido
+                        </h6>
+                        <div class="border rounded-3 bg-white p-3" style="max-height: 320px; overflow-y: auto;">
+                            <div id="ped-historial-timeline" class="position-relative">
+                                <div class="text-center py-4 text-muted small">
+                                    <span class="spinner-border spinner-border-sm me-2"></span> Cargando historial...
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-muted mt-2" style="font-size: 0.7rem;">
+                            <i class="bi bi-info-circle me-1"></i>
+                            El historial registra los cambios de la cabecera del pedido (cliente, fechas, horas,
+                            responsable, estado y observaciones). Lo que pasó con cada línea —si ya se entregó en
+                            consignación o se facturó— se consulta con el ícono de historial de la propia línea, en General.
+                        </div>
+                    </div>
+                </div><!-- /ped-pane-detalle -->
+                </div><!-- /tab-content -->
             </div>
 
             <div class="modal-footer justify-content-between bg-light border-top p-2">

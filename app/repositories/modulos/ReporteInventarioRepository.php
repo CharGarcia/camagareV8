@@ -301,7 +301,7 @@ class ReporteInventarioRepository extends BaseRepository
 
     /** Columnas permitidas para ordenar el detalle de existencias (whitelist anti-inyección). */
     private const SORT_COLUMNAS_EXISTENCIAS = [
-        'producto_nombre', 'categoria_nombre', 'bodega_nombre',
+        'producto_codigo', 'producto_nombre', 'categoria_nombre', 'bodega_nombre',
         'stock_actual', 'consignado', 'stock_total', 'stock_minimo', 'stock_maximo', 'costo_unitario', 'valor_total',
     ];
 
@@ -337,7 +337,9 @@ class ReporteInventarioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    private function getExistenciasAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabel): array
+    /** @param string|null $campoCodigo expresión del código del grupo: solo la tiene "por Producto",
+     *  y viaja aparte del label para que la tabla lo pinte en su propia primera columna. */
+    private function getExistenciasAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabel, ?string $campoCodigo = null): array
     {
         list($where, $params) = $this->buildWhereExistencias($idEmpresa, $filtros);
         $conFechaCorte = !empty($filtros['fecha_corte']);
@@ -353,8 +355,10 @@ class ReporteInventarioRepository extends BaseRepository
             $whereConsignado = ' WHERE consignado = 0';
         }
 
+        $selCodigo = $campoCodigo !== null ? "MAX({$campoCodigo}) AS codigo_grupo," : '';
+
         $sql = "SELECT * FROM (
-                    SELECT {$campoId} AS id_grupo, MAX({$campoLabel}) AS nombre_grupo,
+                    SELECT {$campoId} AS id_grupo, MAX({$campoLabel}) AS nombre_grupo, {$selCodigo}
                            SUM(stock_actual) AS stock_actual,
                            SUM(consignado) AS consignado,
                            SUM(stock_actual + consignado) AS stock_total,
@@ -375,7 +379,7 @@ class ReporteInventarioRepository extends BaseRepository
 
     public function getExistenciasAgrupadoProducto(int $idEmpresa, array $filtros): array
     {
-        return $this->getExistenciasAgrupado($idEmpresa, $filtros, 'id_producto', "producto_codigo || ' - ' || producto_nombre");
+        return $this->getExistenciasAgrupado($idEmpresa, $filtros, 'id_producto', 'producto_nombre', 'producto_codigo');
     }
 
     public function getExistenciasAgrupadoCategoria(int $idEmpresa, array $filtros): array
@@ -770,11 +774,14 @@ class ReporteInventarioRepository extends BaseRepository
         return $rows;
     }
 
-    private function getMovimientosAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabelExpr, string $orderBy): array
+    /** @param string|null $campoCodigo expresión del código del grupo: solo la tiene "por Producto",
+     *  y viaja aparte del label para que la tabla lo pinte en su propia primera columna. */
+    private function getMovimientosAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabelExpr, string $orderBy, ?string $campoCodigo = null): array
     {
         list($whereKardex, $whereFuera, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
+        $selCodigo = $campoCodigo !== null ? "MAX({$campoCodigo}) AS codigo_grupo," : '';
         $sql = $this->cteMovimientos($whereKardex) . "
-                SELECT {$campoId} AS id_grupo, MAX({$campoLabelExpr}) AS nombre_grupo,
+                SELECT {$campoId} AS id_grupo, MAX({$campoLabelExpr}) AS nombre_grupo, {$selCodigo}
                        COUNT(*) AS cantidad_movimientos,
                        SUM(CASE WHEN k.cantidad > 0 THEN k.cantidad ELSE 0 END) AS total_entradas,
                        SUM(CASE WHEN k.cantidad < 0 THEN ABS(k.cantidad) ELSE 0 END) AS total_salidas,
@@ -791,7 +798,7 @@ class ReporteInventarioRepository extends BaseRepository
 
     public function getMovimientosAgrupadoProducto(int $idEmpresa, array $filtros): array
     {
-        return $this->getMovimientosAgrupado($idEmpresa, $filtros, 'k.id_producto', "p.codigo || ' - ' || p.nombre", 'cantidad_movimientos DESC');
+        return $this->getMovimientosAgrupado($idEmpresa, $filtros, 'k.id_producto', 'p.nombre', 'cantidad_movimientos DESC', 'p.codigo');
     }
 
     public function getMovimientosAgrupadoBodega(int $idEmpresa, array $filtros): array
@@ -906,12 +913,15 @@ class ReporteInventarioRepository extends BaseRepository
     // PESTAÑA 3 — VALORIZACIÓN (a la fecha actual)
     // ════════════════════════════════════════════════════════════════════
 
-    private function getValorizacionAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabel): array
+    /** @param string|null $campoCodigo expresión del código del grupo: solo la tiene "por Producto",
+     *  y viaja aparte del label para que la tabla lo pinte en su propia primera columna. */
+    private function getValorizacionAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabel, ?string $campoCodigo = null): array
     {
         list($where, $params) = $this->buildWhereExistencias($idEmpresa, $filtros);
         $base = $this->wrapValorYEstado($this->baseExistencias($where, $filtros));
+        $selCodigo = $campoCodigo !== null ? "MAX({$campoCodigo}) AS codigo_grupo," : '';
 
-        $sql = "SELECT {$campoId} AS id_grupo, MAX({$campoLabel}) AS nombre_grupo,
+        $sql = "SELECT {$campoId} AS id_grupo, MAX({$campoLabel}) AS nombre_grupo, {$selCodigo}
                        SUM(stock_actual) AS stock_actual,
                        SUM(valor_total) AS valor_total,
                        CASE WHEN SUM(stock_actual) > 0 THEN SUM(valor_total) / SUM(stock_actual) ELSE 0 END AS costo_promedio,
@@ -928,7 +938,7 @@ class ReporteInventarioRepository extends BaseRepository
 
     public function getValorizacionAgrupadoProducto(int $idEmpresa, array $filtros): array
     {
-        return $this->getValorizacionAgrupado($idEmpresa, $filtros, 'id_producto', "producto_codigo || ' - ' || producto_nombre");
+        return $this->getValorizacionAgrupado($idEmpresa, $filtros, 'id_producto', 'producto_nombre', 'producto_codigo');
     }
 
     public function getValorizacionAgrupadoCategoria(int $idEmpresa, array $filtros): array
@@ -1149,6 +1159,20 @@ class ReporteInventarioRepository extends BaseRepository
             $where .= " AND cvd.fecha_caducidad <= :fecha_caducidad_hasta";
             $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
         }
+        // Categoría y marca llegan solo desde el desglose "Lote + consignación" de Existencias
+        // (la pestaña Consignaciones no tiene esos filtros). Van como subconsulta sobre
+        // productos en vez de un JOIN dentro del CTE de líneas: así no cambian el plan de
+        // la consulta base, que es la más cara del módulo.
+        if (!empty($filtros['id_categoria'])) {
+            $where .= " AND cvd.id_producto IN (SELECT id FROM productos WHERE id_empresa = :id_empresa_cat AND id_categoria = :id_categoria)";
+            $params[':id_empresa_cat'] = $idEmpresa;
+            $params[':id_categoria']   = (int) $filtros['id_categoria'];
+        }
+        if (!empty($filtros['id_marca'])) {
+            $where .= " AND cvd.id_producto IN (SELECT id FROM productos WHERE id_empresa = :id_empresa_mar AND id_marca = :id_marca)";
+            $params[':id_empresa_mar'] = $idEmpresa;
+            $params[':id_marca']       = (int) $filtros['id_marca'];
+        }
         if (!empty($filtros['secuencial'])) {
             // Acepta buscar solo por el secuencial ("000000113") o por el número completo
             // con serie ("001-001-000000113"): antes solo comparaba contra cv.secuencial,
@@ -1236,11 +1260,29 @@ class ReporteInventarioRepository extends BaseRepository
         ";
     }
 
-    public function getConsignacionesDetalle(int $idEmpresa, array $filtros): array
+    /**
+     * Una fila por LÍNEA de consignación (producto + lote + NUP), con los datos del documento.
+     *
+     * @param string   $saldo  '' todas las líneas, 'CON' solo las que siguen en poder del
+     *                         cliente (saldo > 0), 'SIN' solo las ya liquidadas. Lo usa el
+     *                         desglose "Lote + consignación" de Existencias, que reaprovecha
+     *                         el selector Consignado de esa pestaña.
+     * @param int|null $limite tope de filas para pantalla; null = sin tope (exportaciones).
+     */
+    public function getConsignacionesDetalle(int $idEmpresa, array $filtros, string $saldo = '', ?int $limite = null): array
     {
         list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);
-        $sql = "SELECT * FROM (" . $this->wrapSaldoConsignacion($this->baseConsignaciones($where)) . ") s
-                ORDER BY s.fecha_emision DESC, s.id_consignacion DESC";
+        $sql = "SELECT * FROM (" . $this->wrapSaldoConsignacion($this->baseConsignaciones($where)) . ") s";
+        if ($saldo === 'CON') {
+            $sql .= " WHERE s.saldo > 0";
+        } elseif ($saldo === 'SIN') {
+            $sql .= " WHERE s.saldo <= 0";
+        }
+        $sql .= " ORDER BY s.fecha_emision DESC, s.id_consignacion DESC, s.producto_nombre ASC, s.id_detalle ASC";
+        if ($limite !== null) {
+            // +1 fila: así el llamador sabe que hay más y puede avisar, sin un COUNT(*) aparte.
+            $sql .= ' LIMIT ' . ((int) $limite + 1);
+        }
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -1262,6 +1304,7 @@ class ReporteInventarioRepository extends BaseRepository
                        MAX(s.cliente_nombre) AS cliente_nombre, MAX(s.cliente_identificacion) AS cliente_identificacion,
                        MAX(s.vendedor_nombre) AS vendedor_nombre,
                        MAX(s.responsable_traslado_nombre) AS responsable_traslado_nombre,
+                       string_agg(DISTINCT NULLIF(s.producto_codigo, ''), ', ' ORDER BY NULLIF(s.producto_codigo, '')) AS codigos,
                        string_agg(DISTINCT NULLIF(s.numero_lote, '-'), ', ' ORDER BY NULLIF(s.numero_lote, '-')) AS lotes,
                        string_agg(DISTINCT NULLIF(s.nup, '-'), ', ' ORDER BY NULLIF(s.nup, '-')) AS nups,
                        -- Cuenta LÍNEAS del documento, no productos distintos: una misma
@@ -1356,12 +1399,15 @@ class ReporteInventarioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    private function getConsignacionesAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabel): array
+    /** @param string|null $campoCodigo expresión del código del grupo: solo la tiene "por Producto",
+     *  y viaja aparte del label para que la tabla lo pinte en su propia primera columna. */
+    private function getConsignacionesAgrupado(int $idEmpresa, array $filtros, string $campoId, string $campoLabel, ?string $campoCodigo = null): array
     {
         list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);
         $base = $this->wrapSaldoConsignacion($this->baseConsignaciones($where));
+        $selCodigo = $campoCodigo !== null ? "MAX({$campoCodigo}) AS codigo_grupo," : '';
 
-        $sql = "SELECT {$campoId} AS id_grupo, MAX({$campoLabel}) AS nombre_grupo,
+        $sql = "SELECT {$campoId} AS id_grupo, MAX({$campoLabel}) AS nombre_grupo, {$selCodigo}
                        SUM(s.saldo) AS saldo,
                        SUM(s.valor_saldo) AS valor_saldo,
                        COUNT(DISTINCT s.id_consignacion) AS cantidad_consignaciones
@@ -1381,7 +1427,7 @@ class ReporteInventarioRepository extends BaseRepository
 
     public function getConsignacionesAgrupadoProducto(int $idEmpresa, array $filtros): array
     {
-        return $this->getConsignacionesAgrupado($idEmpresa, $filtros, 'id_producto', "producto_codigo || ' - ' || producto_nombre");
+        return $this->getConsignacionesAgrupado($idEmpresa, $filtros, 'id_producto', 'producto_nombre', 'producto_codigo');
     }
 
     /** Indicadores del saldo vigente. Hoy la pestaña no los pinta, así que el controlador NO

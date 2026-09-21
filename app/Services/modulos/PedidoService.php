@@ -41,6 +41,40 @@ class PedidoService {
         return $result;
     }
 
+    /**
+     * Deja fechas y horas en el mismo formato en los dos lados del log.
+     *
+     * La fila de la base y lo que manda el formulario no escriben igual el mismo
+     * dato: `fecha_pedido` es `timestamp` ("2026-09-21 00:00:00") y las horas de
+     * entrega son `time` ("08:00:00"), mientras el navegador manda "2026-09-21" y
+     * "08:00". Sin igualarlos, el diff de `LogSistemaService` marcaba esos campos
+     * como modificados en CADA edición aunque nadie los hubiera tocado, y el
+     * historial del pedido se llenaba de cambios que nunca ocurrieron.
+     *
+     * Solo reescribe esos campos: el resto de la fila se conserva tal cual para
+     * que el detalle completo de /config/log-sistema siga viéndolo todo.
+     */
+    private function normalizarParaAuditoria(?array $fila): ?array
+    {
+        if (!$fila) {
+            return $fila;
+        }
+
+        foreach (['fecha_pedido', 'fecha_entrega'] as $campo) {
+            if (!empty($fila[$campo])) {
+                $fila[$campo] = substr((string) $fila[$campo], 0, 10);
+            }
+        }
+
+        foreach (['hora_inicial_entrega', 'hora_maxima_entrega'] as $campo) {
+            if (!empty($fila[$campo])) {
+                $fila[$campo] = substr((string) $fila[$campo], 0, 5);
+            }
+        }
+
+        return $fila;
+    }
+
     public function guardarPedido($cabecera, $detalles, $id_empresa, $id_usuario) {
         // Defensa en profundidad: aunque la UI ya deshabilita "Guardar" cuando otro usuario
         // tiene el pedido en uso (edición o consumo desde Consignaciones), se re-verifica aquí
@@ -127,7 +161,25 @@ class PedidoService {
 
                 $id_pedido = $stmt->fetchColumn();
 
-                $this->logService->registrar($id_usuario, $id_empresa, 'CREAR_PEDIDO', 'pedidos_cabecera', (int) $id_pedido, null, $cabecera);
+                // Se audita lo que REALMENTE se guardó, no lo que mandó el navegador: el
+                // secuencial lo recalcula el servidor y el estado se fuerza a 'Pendiente'.
+                $this->logService->registrar(
+                    $id_usuario,
+                    $id_empresa,
+                    'CREAR_PEDIDO',
+                    'pedidos_cabecera',
+                    (int) $id_pedido,
+                    null,
+                    $this->normalizarParaAuditoria(array_merge($cabecera, [
+                        'estado'                 => 'Pendiente',
+                        'secuencial'             => $secuencial,
+                        'id_punto_emision'       => $idPuntoEmision,
+                        'fecha_entrega'          => $fecha_entrega,
+                        'hora_inicial_entrega'   => $hora_inicial_entrega,
+                        'hora_maxima_entrega'    => $hora_maxima_entrega,
+                        'tipo_ambiente'          => $tipoAmbiente,
+                    ]))
+                );
             } else {
                 // Actualizar Pedido
                 $id_pedido = $cabecera['id'];
@@ -173,7 +225,19 @@ class PedidoService {
                     'id_empresa' => $id_empresa
                 ]);
 
-                $this->logService->registrar($id_usuario, $id_empresa, 'ACTUALIZAR_PEDIDO', 'pedidos_cabecera', (int) $id_pedido, $cabeceraAnterior ?: null, $cabecera);
+                $this->logService->registrar(
+                    $id_usuario,
+                    $id_empresa,
+                    'ACTUALIZAR_PEDIDO',
+                    'pedidos_cabecera',
+                    (int) $id_pedido,
+                    $this->normalizarParaAuditoria($cabeceraAnterior ?: null),
+                    $this->normalizarParaAuditoria(array_merge($cabecera, [
+                        'fecha_entrega'        => $fecha_entrega,
+                        'hora_inicial_entrega' => $hora_inicial_entrega,
+                        'hora_maxima_entrega'  => $hora_maxima_entrega,
+                    ]))
+                );
 
                 $this->sincronizarDetalles((int) $id_pedido, $id_empresa, $detalles);
                 $this->db->commit();
@@ -321,7 +385,7 @@ class PedidoService {
                        WHERE id_pedido = :id";
             $this->db->prepare($sqlDet)->execute(['id' => $id]);
 
-            $this->logService->registrar($id_usuario, $id_empresa, 'ELIMINAR_PEDIDO', 'pedidos_cabecera', (int) $id, $cabeceraAnterior ?: null);
+            $this->logService->registrar($id_usuario, $id_empresa, 'ELIMINAR_PEDIDO', 'pedidos_cabecera', (int) $id, $this->normalizarParaAuditoria($cabeceraAnterior ?: null));
 
             $this->db->commit();
             return true;

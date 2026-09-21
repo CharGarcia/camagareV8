@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra
-version: 1.22
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo
+version: 1.23
 orden: 20
 estado: activo
 ---
@@ -473,6 +473,11 @@ ve solo los que registró.
 - **No encuentro la factura a pagar**: compruebe que esté a nombre de ese
   proveedor, que no esté ya pagada y que la compra no fuera anulada, rechazada o
   siga **pendiente de aprobación** (ver *Compras que no se pueden pagar*).
+- **Falta un centavo y no puedo pagarlo**: hasta la versión 1.22, un documento al
+  que le quedaba exactamente **$0.01** no se ofrecía para pago —el sistema lo
+  daba por pagado—, pero *Cuentas por Pagar* sí lo seguía mostrando como
+  pendiente. Desde la 1.23 el criterio es el mismo en los dos lados: **hay saldo
+  mientras quede al menos un centavo**.
 - **"La compra ... está pendiente de aprobación: no se puede pagar hasta que la
   aprueben"**: un aprobador debe autorizarla primero, desde el correo o desde el
   modal de Compras.
@@ -484,6 +489,14 @@ ve solo los que registró.
   y se pone sola.
 
 ## Historial de cambios
+
+- **1.23** — **Un documento está pendiente mientras le quede al menos un centavo.**
+  Antes, la búsqueda de documentos por pagar descartaba los que tenían
+  exactamente $0.01 de saldo, así que ese centavo no se podía pagar aunque
+  *Cuentas por Pagar* lo siguiera reportando como pendiente. Ahora ambos
+  módulos usan el mismo criterio (saldo mayor que cero). Aplica a compras,
+  liquidaciones de compra, roles de pago, anticipos, préstamos y décimos.
+
 
 - **1.22** — **Observaciones automáticas**: al registrar un egreso,
   *Observaciones del Egreso* se llena sola con lo que se va cargando

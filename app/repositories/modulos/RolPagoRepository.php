@@ -719,7 +719,7 @@ class RolPagoRepository extends BaseRepository
                     FROM novedades n
                     WHERE n.id IN ($in) AND n.desembolsado_migrado = false
                 ) x
-                WHERE x.desembolsado < x.total_cuotas - 0.01";
+                WHERE x.desembolsado < x.total_cuotas";
         $set = [];
         try {
             $st = $this->db->prepare($sql);
@@ -761,7 +761,7 @@ class RolPagoRepository extends BaseRepository
                         FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                        WHERE ed.tipo_documento = 'ROL' AND ec.estado != 'anulado'
                          AND ec.eliminado = false AND ed.eliminado = false
-                         AND ed.id_referencia_documento = rd.id), 0)) > 0.01";
+                         AND ed.id_referencia_documento = rd.id), 0)) > 0";
         try {
             $st = $this->db->prepare($sql);
             $st->execute([':r' => $idRol, ':e' => $idEmpresa]);
@@ -795,7 +795,7 @@ class RolPagoRepository extends BaseRepository
                        AND n.tipo_codigo = '3' AND n.estado = 'activo' AND n.eliminado = false
                        AND n.desembolsado_migrado = false
                        AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
-                       AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0.01
+                       AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0
                      ORDER BY emp.nombres_apellidos";
             $st = $this->db->prepare($sqlA);
             $st->execute($p);
@@ -817,7 +817,7 @@ class RolPagoRepository extends BaseRepository
                                AND n2.tipo_codigo = n.tipo_codigo AND n2.eliminado = false AND n2.estado = 'activo')
                            > (SELECT COALESCE(SUM(ed.monto_pagado), 0) FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                                WHERE ed.tipo_documento = ('PRESTAMO' || n.tipo_codigo) AND ed.id_referencia_documento = n.id_empleado
-                                 AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false) + 0.01
+                                 AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false)
                      ORDER BY emp.nombres_apellidos";
             $st2 = $this->db->prepare($sqlP);
             $st2->execute($p);
@@ -977,7 +977,7 @@ class RolPagoRepository extends BaseRepository
                 $neto = round((float) $d['neto'], 2);
                 $d['pagado'] = $pagado;
                 $d['saldo'] = round($neto - $pagado, 2);
-                $d['estado_pago'] = $pagado <= 0 ? 'pendiente' : ($d['saldo'] <= 0.01 ? 'pagado' : 'parcial');
+                $d['estado_pago'] = $pagado <= 0 ? 'pendiente' : ($d['saldo'] <= 0 ? 'pagado' : 'parcial');
             }
         }
         return $detalle;
@@ -1171,7 +1171,7 @@ class RolPagoRepository extends BaseRepository
                           JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                          WHERE ed.tipo_documento = 'ROL' AND ec.estado != 'anulado'
                            AND ec.eliminado = false AND ed.eliminado = false
-                           AND ed.id_referencia_documento = d.id), 0)) > 0.01
+                           AND ed.id_referencia_documento = d.id), 0)) > 0
                 ORDER BY c.periodo_anio, c.periodo_mes, c.tipo_rol";
         $st = $this->db->prepare($sql);
         $st->execute([':emp' => $idEmpresa, ':e' => $idEmpleado]);

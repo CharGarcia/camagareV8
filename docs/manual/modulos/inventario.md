@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes
-version: 1.5
+etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento
+version: 1.6
 orden: 20
 estado: activo
 ---
@@ -106,6 +106,37 @@ Para cuadrar muchos productos tras un conteo físico, use una **carga de
 inventario de tipo Ajuste**: se escribe lo contado y el sistema registra solo la
 diferencia.
 
+## Imprimir un movimiento
+
+Abra el movimiento desde el listado. Arriba de la ventana, antes de las
+pestañas, está la barra de acciones con el botón rojo de **PDF**: genera el
+*comprobante del movimiento* y lo descarga.
+
+El comprobante es una hoja A4 vertical con los datos de la empresa y su logo, el
+número del movimiento (*MOV-000123*) y:
+
+| Bloque | Contiene |
+|--------|----------|
+| Datos del movimiento | Fecha, tipo (entrada / salida), origen y bodega |
+| Producto | Código, descripción y unidad de medida |
+| Cantidades y costos | Cantidad con su signo, costo unitario, costo total, stock anterior y posterior |
+| Trazabilidad | Lote, fabricación, caducidad y NUP / serial, solo si el movimiento los tiene |
+| Observaciones | El motivo registrado |
+| Registro | Quién lo registró y cuándo; si está anulado, también quién lo anuló y cuándo |
+
+Al pie hay tres líneas de firma —**Realizado por**, **Aprobado por** y **Recibí
+conforme**— para usarlo como respaldo físico de una entrega o de un ajuste.
+
+El botón solo aparece con un movimiento ya guardado: mientras registra uno
+nuevo, la barra avisa que primero hay que guardarlo.
+
+Un movimiento **anulado** también se imprime, y el comprobante lleva una franja
+roja *MOVIMIENTO ANULADO - NO AFECTA EL STOCK ACTUAL* para que no se confunda
+con uno vigente.
+
+Este comprobante es un **documento interno**: no es un comprobante autorizado
+por el SRI, y así lo dice su pie de página.
+
 ## Solo productos inventariables
 
 Únicamente los productos marcados como **inventariables** en su ficha generan
@@ -124,6 +155,17 @@ problema pero no aparece en el kardex ni tiene stock.
   que originó el movimiento; revise el precio de esa compra.
 
 ## Historial de cambios
+
+- **1.6** — La ventana de un movimiento tiene arriba una **barra de acciones** con
+  el botón de **PDF**: imprime el comprobante de ese movimiento (datos, cantidades
+  y costos, trazabilidad, observaciones, quién lo registró y tres líneas de firma).
+  Los movimientos **anulados** también se imprimen, con una franja roja que lo
+  advierte. Además, el botón de **PDF del listado** vuelve a funcionar: antes
+  respondía *"Error al generar PDF"* siempre, porque usaba un generador que no está
+  instalado; ahora usa el mismo del resto del sistema y **descarga** el archivo. Y
+  ese PDF ya respeta **todos** los filtros de la pantalla: el de **tipo (entrada /
+  salida)** se perdía por el camino y el archivo salía con entradas y salidas
+  mezcladas aunque en pantalla se viera solo una de las dos.
 
 - **1.5** — El cuadro de búsqueda queda para fecha, producto y código, cantidad, lote,
   caducidad, NUP y observaciones. **Bodega**, **unidad de medida** y **usuario** pasan a

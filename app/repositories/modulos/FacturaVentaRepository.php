@@ -57,7 +57,7 @@ class FacturaVentaRepository extends BaseRepository
             // ver ahí) — la fórmula de abonos ya no se repite aquí.
             'iva'                 => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
             'estado_pago'         => "CASE WHEN v.estado = 'anulado' THEN 4 "
-                                     . "WHEN (v.importe_total - ab.abonos) <= 0.01 THEN 3 "
+                                     . "WHEN (v.importe_total - ab.abonos) <= 0 THEN 3 "
                                      . "WHEN ab.abonos > 0 THEN 2 ELSE 1 END",
         ];
     }
@@ -226,11 +226,11 @@ class FacturaVentaRepository extends BaseRepository
             foreach ($valores as $val) {
                 $v2 = strtolower(trim((string)$val));
                 if (in_array($v2, ['pagada', 'pagado', 'pagadas', 'cobrada', 'cobrado'], true)) {
-                    $conds[] = "$saldo <= 0.01";
+                    $conds[] = "$saldo <= 0";
                 } elseif (in_array($v2, ['abonada', 'abonado', 'abonadas', 'parcial', 'abono'], true)) {
-                    $conds[] = "($saldo > 0.01 AND $sqlAbonos > 0)";
+                    $conds[] = "($saldo > 0 AND $sqlAbonos > 0)";
                 } elseif (in_array($v2, ['pendiente', 'pendientes', 'falta', 'sinpago', 'impaga', 'impagada'], true)) {
-                    $conds[] = "($saldo > 0.01 AND $sqlAbonos <= 0)";
+                    $conds[] = "($saldo > 0 AND $sqlAbonos <= 0)";
                 }
             }
             if ($conds) {

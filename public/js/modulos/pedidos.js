@@ -438,6 +438,9 @@ function nuevoPedido() {
     agregarFilaProducto();
     // Pedido nuevo: sin columna "Estado" (no hay nada registrado todavía).
     pedActualizarColumnaEstado();
+    // Pedido nuevo: se abre en General y la pestaña Detalle queda con su aviso.
+    PED_HISTORIAL_PENDIENTE = null;
+    pedResetPestanaDetalle(false);
 
     // Configurar serie y secuencial
     const selPuntos = document.getElementById('id_punto_emision');
@@ -1183,6 +1186,13 @@ async function editarPedido(id) {
             // Pedido existente (editar / ver): la columna "Estado" sí se muestra.
             pedActualizarColumnaEstado();
 
+            // Pestaña Detalle: la ficha de registro se llena con lo que ya trae la
+            // cabecera; el historial se pide a log_sistema recién cuando el usuario
+            // abre la pestaña.
+            pedResetPestanaDetalle(true);
+            pedLlenarDetalleRegistro(p);
+            PED_HISTORIAL_PENDIENTE = p.id;
+
             const elTitulo = document.getElementById('titulo-modal');
             if (elTitulo) {
                 const nroPedido = (p.establecimiento && p.punto_emision && p.secuencial)
@@ -1298,6 +1308,175 @@ function formatDate(dateStr) {
     const min = String(date.getMinutes()).padStart(2, '0');
     const s = String(date.getSeconds()).padStart(2, '0');
     return `${d}-${m}-${y} ${h}:${min}:${s}`;
+}
+
+// ==========================================
+// Pestaña "Detalle" del modal: quién registró el pedido y qué ediciones tuvo
+// ==========================================
+
+/**
+ * Timestamp de PostgreSQL ("2026-09-21 10:33:12.123456") en el formato del
+ * sistema, d-m-Y H:i:s.
+ *
+ * Se parsea con expresión regular en vez de `new Date(...)` a propósito: el
+ * valor ya viene en la hora del servidor, y pasarlo por Date lo reinterpreta
+ * según la zona horaria del navegador (el mismo pedido se veía con una hora
+ * distinta desde otra máquina).
+ */
+function pedFechaHora(valor) {
+    if (!valor) return '—';
+    const m = String(valor).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}:${m[6] || '00'}`;
+    const soloFecha = String(valor).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (soloFecha) return `${soloFecha[3]}-${soloFecha[2]}-${soloFecha[1]}`;
+    return String(valor);
+}
+
+/** Escapa el texto que llega del servidor antes de inyectarlo en el HTML del historial. */
+function pedEscapar(texto) {
+    const div = document.createElement('div');
+    div.textContent = texto === null || texto === undefined ? '' : String(texto);
+    return div.innerHTML;
+}
+
+/**
+ * Deja el modal en la pestaña General y limpia la pestaña Detalle.
+ *
+ * @param {boolean} hayPedido  false en un pedido nuevo: la pestaña Detalle
+ *                             muestra el aviso de "todavía no se ha guardado".
+ */
+function pedResetPestanaDetalle(hayPedido) {
+    const btnGeneral = document.getElementById('ped-tab-general-btn');
+    if (btnGeneral && typeof bootstrap !== 'undefined' && bootstrap.Tab) {
+        bootstrap.Tab.getOrCreateInstance(btnGeneral).show();
+    }
+
+    document.getElementById('ped-detalle-vacio')?.classList.toggle('d-none', hayPedido);
+    document.getElementById('ped-detalle-contenido')?.classList.toggle('d-none', !hayPedido);
+
+    ['ped-info-creado-por', 'ped-info-creado-en', 'ped-info-modificado-por', 'ped-info-modificado-en']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) { el.textContent = '—'; el.title = ''; }
+        });
+
+    const timeline = document.getElementById('ped-historial-timeline');
+    if (timeline) {
+        timeline.innerHTML = hayPedido
+            ? '<div class="text-center py-4 text-muted small"><span class="spinner-border spinner-border-sm me-2"></span> Cargando historial...</div>'
+            : '';
+    }
+}
+
+/** Llena la ficha de registro (creado/modificado por y cuándo) con la cabecera del pedido. */
+function pedLlenarDetalleRegistro(p) {
+    const poner = (id, texto) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = texto || '—';
+        el.title = texto || '';
+    };
+
+    poner('ped-info-creado-por', p.creado_por_nombre);
+    poner('ped-info-creado-en', p.created_at ? pedFechaHora(p.created_at) : '');
+    // Un pedido que nunca se editó no tiene updated_by: se dice así, en vez de
+    // repetir al creador como si lo hubiera modificado.
+    poner('ped-info-modificado-por', p.modificado_por_nombre || 'Sin ediciones');
+    poner('ped-info-modificado-en', p.updated_at ? pedFechaHora(p.updated_at) : '');
+}
+
+/** Línea de cambios de un evento del historial ("Cliente: A → B"). */
+function pedRenderCambios(detalles) {
+    if (!detalles || detalles.length === 0) {
+        return '<span class="text-muted">Sin cambios registrados</span>';
+    }
+    if (typeof detalles === 'string') return pedEscapar(detalles);
+    if (!Array.isArray(detalles)) return pedEscapar(JSON.stringify(detalles));
+
+    return `<ul class="list-unstyled mb-0">${detalles.map(d => {
+        if (d && typeof d === 'object') {
+            const antes = (d.antes !== null && d.antes !== undefined)
+                ? `<span class="text-decoration-line-through text-muted">${pedEscapar(d.antes)}</span> `
+                : '';
+            return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${pedEscapar(d.campo)}:</span> ${antes}<i class="bi bi-arrow-right mx-1"></i> ${pedEscapar(d.despues)}</li>`;
+        }
+        return `<li><i class="bi bi-dot"></i> ${pedEscapar(d)}</li>`;
+    }).join('')}</ul>`;
+}
+
+/**
+ * Pedido cuyo historial falta traer, o null si ya se trajo (o no hay pedido).
+ *
+ * El historial se pide solo al abrir la pestaña Detalle, no al abrir el pedido:
+ * cargar un pedido ya dispara varias peticiones, y quien nunca mire esta pestaña
+ * —que son casi todas las veces— no tiene por qué pagar una más.
+ */
+let PED_HISTORIAL_PENDIENTE = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btnDetalle = document.getElementById('ped-tab-detalle-btn');
+    if (!btnDetalle) return;
+    btnDetalle.addEventListener('shown.bs.tab', () => {
+        if (!PED_HISTORIAL_PENDIENTE) return;
+        const id = PED_HISTORIAL_PENDIENTE;
+        PED_HISTORIAL_PENDIENTE = null;
+        pedCargarHistorial(id);
+    });
+});
+
+/** Trae de log_sistema las ediciones del pedido y las pinta como línea de tiempo. */
+async function pedCargarHistorial(id) {
+    const cont = document.getElementById('ped-historial-timeline');
+    if (!cont || !id) return;
+
+    try {
+        const resp = await fetch(`${window.CMG_urlBase}/getHistorialAjax?id=${id}&tabla=pedidos_cabecera`);
+        const json = await resp.json();
+
+        if (!json.ok || !json.data || json.data.length === 0) {
+            cont.innerHTML = '<div class="text-center py-4 text-muted small">No hay ediciones registradas para este pedido.</div>';
+            return;
+        }
+
+        let html = '<div class="position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>';
+
+        json.data.forEach(log => {
+            const accion = String(log.accion || '');
+            const icono = accion.includes('CREAR')      ? 'bi-plus-circle-fill text-success' :
+                          accion.includes('ACTUALIZAR') ? 'bi-pencil-fill text-primary' :
+                          accion.includes('ELIMINAR')   ? 'bi-trash-fill text-danger' :
+                                                          'bi-clock-history text-secondary';
+            const etiqueta = accion.includes('CREAR')      ? 'Pedido creado' :
+                             accion.includes('ACTUALIZAR') ? 'Pedido editado' :
+                             accion.includes('ELIMINAR')   ? 'Pedido eliminado' :
+                                                             accion.replace(/_/g, ' ');
+
+            html += `
+                <div class="position-relative mb-3 ps-4">
+                    <div class="position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border"
+                         style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
+                        <i class="bi ${icono}" style="font-size: 0.7rem;"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-0 gap-2">
+                            <span class="fw-bold" style="font-size: 0.75rem;">${pedEscapar(etiqueta)}</span>
+                            <span class="text-muted text-nowrap" style="font-size: 0.65rem;">${pedEscapar(log.created_at || '')}</span>
+                        </div>
+                        <div class="text-muted mb-1" style="font-size: 0.7rem;">
+                            <i class="bi bi-person me-1"></i> ${pedEscapar(log.usuario_nombre || 'SISTEMA')}
+                        </div>
+                        <div class="bg-light rounded p-1 border border-light-subtle" style="font-size: 0.65rem;">
+                            ${pedRenderCambios(log.detalles)}
+                        </div>
+                    </div>
+                </div>`;
+        });
+
+        cont.innerHTML = html;
+    } catch (e) {
+        console.error('Error al cargar el historial del pedido:', e);
+        cont.innerHTML = '<div class="text-center py-3 text-danger small">No se pudo cargar el historial.</div>';
+    }
 }
 
 // ==========================================

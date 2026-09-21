@@ -140,7 +140,7 @@ class NovedadRepository extends BaseRepository
                             ) pg
                             WHERE rr.id_novedad = {$a}.id
                               AND rd.id_empresa = {$a}.id_empresa AND rc.eliminado = false
-                              AND pg.pagado > 0 AND (rd.neto - pg.pagado) <= 0.01
+                              AND pg.pagado > 0 AND (rd.neto - pg.pagado) <= 0
                        )
                   THEN 'pagada' ELSE 'pendiente' END";
     }
@@ -315,7 +315,7 @@ class NovedadRepository extends BaseRepository
     /**
      * Devuelve un mapa [id_novedad => true] con las novedades ya PAGADAS: aquellas que
      * figuran como rubro (rol_detalle_rubro.id_novedad) en una línea de rol cuyo neto
-     * fue cubierto por egresos (pagado > 0 y saldo ≤ 0.01). Resiliente: si el módulo de
+     * fue cubierto por egresos (pagado > 0 y saldo ≤ 0). Resiliente: si el módulo de
      * roles/egresos no está desplegado, devuelve [] y el listado sigue funcionando.
      */
     private function idsNovedadesPagadas(array $ids, int $idEmpresa): array
@@ -338,7 +338,7 @@ class NovedadRepository extends BaseRepository
                 WHERE rr.id_novedad IN ($in)
                   AND rd.id_empresa = :emp AND rc.eliminado = false
                   AND {$pagadoSub} > 0
-                  AND (rd.neto - {$pagadoSub}) <= 0.01";
+                  AND (rd.neto - {$pagadoSub}) <= 0";
         $set = [];
         try {
             $st = $this->db->prepare($sql);

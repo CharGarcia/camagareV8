@@ -229,7 +229,7 @@
                 <td class="text-center">${badge(color, capitalizar(r.estado) || '—')}</td>
                 <td class="text-end fw-medium${tachado}">${fmtMoneda(r.total)}</td>
                 <td class="text-end${tachado}">${fmtMoneda(r.abonos)}</td>
-                <td class="text-end fw-bold ${!r.con_efecto ? 'text-muted' : (saldo > 0.01 ? 'text-danger' : 'text-success')}">${fmtMoneda(saldo)}</td>
+                <td class="text-end fw-bold ${!r.con_efecto ? 'text-muted' : (Math.round(saldo * 100) > 0 ? 'text-danger' : 'text-success')}">${fmtMoneda(saldo)}</td>
                 <td class="text-center">${pagoCel}</td>
                 <td class="text-center pe-2">${urlPdf
                     ? `<a class="btn btn-sm btn-outline-danger py-0 px-1" href="${esc(urlPdf)}" target="_blank" rel="noopener" title="Descargar el PDF del documento"><i class="bi bi-file-earmark-pdf"></i></a>`
