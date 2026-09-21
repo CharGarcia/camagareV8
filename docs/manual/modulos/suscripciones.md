@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento
-version: 1.2
+version: 1.3
 orden: 0
 estado: activo
 ---
@@ -212,6 +212,10 @@ y Excel con los filtros aplicados.
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
+
+- **1.3** — Corregido: al **enviar al cliente el enlace para registrar su tarjeta**, el
+  cuadro del correo no aceptaba texto —se veía, pero al escribir no pasaba nada—. Ya se
+  puede escribir la dirección con normalidad.
 
 - **1.2** — **Una factura de suscripción con $0.01 de saldo queda como
   Abonado, no Pagado**, y sigue contando en el total de documentos con saldo.

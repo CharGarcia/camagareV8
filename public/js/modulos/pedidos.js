@@ -1360,6 +1360,16 @@ function pedResetPestanaDetalle(hayPedido) {
             if (el) { el.textContent = '—'; el.title = ''; }
         });
 
+    PED_ULTIMA_EDICION_AT = null;
+    const accion = document.getElementById('ped-info-ultima-accion');
+    // El "qué hizo" sale del historial, que se pide al abrir la pestaña: hasta
+    // entonces se dice que se está consultando, no un guion suelto.
+    if (accion) {
+        accion.innerHTML = hayPedido
+            ? '<span class="text-muted">Consultando el historial…</span>'
+            : '<span class="text-muted">—</span>';
+    }
+
     const timeline = document.getElementById('ped-historial-timeline');
     if (timeline) {
         timeline.innerHTML = hayPedido
@@ -1368,7 +1378,16 @@ function pedResetPestanaDetalle(hayPedido) {
     }
 }
 
-/** Llena la ficha de registro (creado/modificado por y cuándo) con la cabecera del pedido. */
+/** Fecha (cruda, del servidor) de la última edición del pedido abierto; null si nunca se editó. */
+let PED_ULTIMA_EDICION_AT = null;
+
+/**
+ * Llena la ficha de registro con la cabecera del pedido.
+ *
+ * Aquí solo se sabe QUIÉN y CUÁNDO: `created_by`/`updated_by` de la cabecera. El
+ * "qué hizo" de la última edición no vive en esas columnas, así que lo completa
+ * después pedLlenarUltimaAccion() con el último evento del historial.
+ */
 function pedLlenarDetalleRegistro(p) {
     const poner = (id, texto) => {
         const el = document.getElementById(id);
@@ -1379,10 +1398,84 @@ function pedLlenarDetalleRegistro(p) {
 
     poner('ped-info-creado-por', p.creado_por_nombre);
     poner('ped-info-creado-en', p.created_at ? pedFechaHora(p.created_at) : '');
-    // Un pedido que nunca se editó no tiene updated_by: se dice así, en vez de
-    // repetir al creador como si lo hubiera modificado.
-    poner('ped-info-modificado-por', p.modificado_por_nombre || 'Sin ediciones');
-    poner('ped-info-modificado-en', p.updated_at ? pedFechaHora(p.updated_at) : '');
+
+    // Un pedido que nunca se editó tiene updated_by/updated_at en nulo: se dice
+    // así, en vez de repetir al creador como si lo hubiera modificado.
+    const hayEdicion = !!(p.updated_by || p.updated_at);
+    poner('ped-info-modificado-por', hayEdicion ? (p.modificado_por_nombre || 'Usuario no identificado') : 'Sin ediciones');
+    poner('ped-info-modificado-en', hayEdicion && p.updated_at ? '· ' + pedFechaHora(p.updated_at) : '');
+
+    // Se guarda para contrastarlo luego con la fecha del último evento del historial.
+    PED_ULTIMA_EDICION_AT = hayEdicion ? (p.updated_at || null) : null;
+
+    const accion = document.getElementById('ped-info-ultima-accion');
+    if (accion && !hayEdicion) {
+        accion.innerHTML = '<span class="text-muted">El pedido no se ha modificado desde que se creó.</span>';
+    }
+}
+
+/** Milisegundos de una fecha del servidor, venga como "YYYY-MM-DD HH:MM:SS" o "DD-MM-YYYY HH:MM:SS". */
+function pedTimestamp(valor) {
+    if (!valor) return null;
+    const s = String(valor);
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)).getTime();
+    m = s.match(/^(\d{2})-(\d{2})-(\d{4})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +(m[6] || 0)).getTime();
+    return null;
+}
+
+/** Cómo se lee un evento del historial: "Pedido editado", "Estado actualizado al guardar…". */
+function pedEtiquetaAccion(log) {
+    const accion = String(log.accion || '');
+
+    if (accion.includes('POR_CONSIGNACION')) {
+        let numero = '';
+        try {
+            numero = (JSON.parse(log.datos_nuevos || '{}') || {}).consignacion || '';
+        } catch (e) { /* datos viejos o incompletos: se muestra sin número */ }
+        return numero
+            ? `Estado actualizado al guardar la consignación ${numero}`
+            : 'Estado actualizado por una consignación';
+    }
+    if (accion.includes('CREAR'))      return 'Pedido creado';
+    if (accion.includes('ACTUALIZAR')) return 'Pedido editado';
+    if (accion.includes('ELIMINAR'))   return 'Pedido eliminado';
+
+    return accion.replace(/_/g, ' ');
+}
+
+/**
+ * Dice EN QUÉ consistió la última edición, con el evento más reciente del historial.
+ *
+ * `updated_by` lo pisan varios caminos (guardar el pedido, guardar o eliminar una
+ * consignación que consume sus líneas, y una re-migración), así que el nombre suelto
+ * no dice nada: hay que contarlo contra el historial. Si la fecha del último evento
+ * no cuadra con `updated_at`, es que ese último cambio no quedó asentado —pedidos
+ * anteriores a que el módulo registrara, o tocados por la migración— y se avisa en
+ * vez de atribuirle al usuario algo que no hizo.
+ */
+function pedLlenarUltimaAccion(eventos) {
+    const cont = document.getElementById('ped-info-ultima-accion');
+    if (!cont) return;
+
+    if (!PED_ULTIMA_EDICION_AT) return; // pedido sin ediciones: ya lo dijo la ficha
+
+    const ultimo = (eventos || []).find(e => !String(e.accion || '').includes('CREAR'));
+    const tsPedido = pedTimestamp(PED_ULTIMA_EDICION_AT);
+    const tsEvento = ultimo ? pedTimestamp(ultimo.created_at) : null;
+    // Tolerancia amplia: el UPDATE y su registro ocurren en la misma transacción,
+    // pero cada uno toma su propia marca de tiempo.
+    const cuadra = tsPedido !== null && tsEvento !== null && Math.abs(tsPedido - tsEvento) <= 60000;
+
+    if (!ultimo || !cuadra) {
+        cont.innerHTML = '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>'
+            + 'Este último cambio no quedó detallado en el historial (pedido anterior al registro de cambios, o tocado por una migración).</span>';
+        return;
+    }
+
+    cont.innerHTML = `<span class="fw-semibold">${pedEscapar(pedEtiquetaAccion(ultimo))}</span>`
+        + `<div class="mt-1">${pedRenderCambios(ultimo.detalles)}</div>`;
 }
 
 /** Línea de cambios de un evento del historial ("Cliente: A → B"). */
@@ -1435,6 +1528,7 @@ async function pedCargarHistorial(id) {
 
         if (!json.ok || !json.data || json.data.length === 0) {
             cont.innerHTML = '<div class="text-center py-4 text-muted small">No hay ediciones registradas para este pedido.</div>';
+            pedLlenarUltimaAccion([]);
             return;
         }
 
@@ -1442,14 +1536,12 @@ async function pedCargarHistorial(id) {
 
         json.data.forEach(log => {
             const accion = String(log.accion || '');
-            const icono = accion.includes('CREAR')      ? 'bi-plus-circle-fill text-success' :
-                          accion.includes('ACTUALIZAR') ? 'bi-pencil-fill text-primary' :
-                          accion.includes('ELIMINAR')   ? 'bi-trash-fill text-danger' :
-                                                          'bi-clock-history text-secondary';
-            const etiqueta = accion.includes('CREAR')      ? 'Pedido creado' :
-                             accion.includes('ACTUALIZAR') ? 'Pedido editado' :
-                             accion.includes('ELIMINAR')   ? 'Pedido eliminado' :
-                                                             accion.replace(/_/g, ' ');
+            const icono = accion.includes('POR_CONSIGNACION') ? 'bi-arrow-repeat text-info' :
+                          accion.includes('CREAR')            ? 'bi-plus-circle-fill text-success' :
+                          accion.includes('ACTUALIZAR')       ? 'bi-pencil-fill text-primary' :
+                          accion.includes('ELIMINAR')         ? 'bi-trash-fill text-danger' :
+                                                                'bi-clock-history text-secondary';
+            const etiqueta = pedEtiquetaAccion(log);
 
             html += `
                 <div class="position-relative mb-3 ps-4">
@@ -1473,6 +1565,7 @@ async function pedCargarHistorial(id) {
         });
 
         cont.innerHTML = html;
+        pedLlenarUltimaAccion(json.data);
     } catch (e) {
         console.error('Error al cargar el historial del pedido:', e);
         cont.innerHTML = '<div class="text-center py-3 text-danger small">No se pudo cargar el historial.</div>';

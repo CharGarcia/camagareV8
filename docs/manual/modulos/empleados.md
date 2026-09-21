@@ -6,7 +6,7 @@ ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
 etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf
-version: 1.8
+version: 1.9
 orden: 10
 estado: activo
 ---
@@ -222,6 +222,11 @@ producción**: es un catálogo maestro, siempre el mismo.
   podía abrirla.
 
 ## Historial de cambios
+
+- **1.9** — Corregido: en la pestaña *Vacaciones*, sección **Solicitudes**, los cuadros para
+  escribir —el correo al enviar la solicitud, el comentario al aprobar y el motivo al
+  rechazar— no aceptaban texto: se veían, pero al escribir no pasaba nada. Ya se puede
+  escribir con normalidad.
 
 - **1.8** — En la pestaña *Vacaciones*, lista de **vacaciones registradas** del
   empleado y botón **Registrar vacación**: el mismo formulario del módulo

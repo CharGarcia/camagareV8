@@ -490,7 +490,11 @@ async function mcRechazarCompra() {
         showCancelButton: true,
         confirmButtonText: 'Confirmar rechazo',
         cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#dc3545'
+        confirmButtonColor: '#dc3545',
+        // Este popup se abre con el modal de la compra abierto detrás: tiene que colgar
+        // DENTRO del modal. Colgado de <body> —lo normal— el focus trap de Bootstrap le
+        // devuelve el foco al modal y el campo del motivo no deja escribir.
+        target: document.getElementById('modalCompra'),
     });
     if (!isConfirmed) return;
 

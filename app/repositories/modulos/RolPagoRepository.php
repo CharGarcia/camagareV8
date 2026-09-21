@@ -719,7 +719,7 @@ class RolPagoRepository extends BaseRepository
                     FROM novedades n
                     WHERE n.id IN ($in) AND n.desembolsado_migrado = false
                 ) x
-                WHERE x.desembolsado < x.total_cuotas";
+                WHERE ROUND(x.total_cuotas - x.desembolsado, 2) > 0";
         $set = [];
         try {
             $st = $this->db->prepare($sql);
@@ -757,11 +757,11 @@ class RolPagoRepository extends BaseRepository
         $sql = "SELECT COUNT(*)
                 FROM rol_detalle rd
                 WHERE rd.id_rol = :r AND rd.id_empresa = :e
-                  AND (rd.neto - COALESCE((SELECT SUM(ed.monto_pagado)
+                  AND ROUND(rd.neto - COALESCE((SELECT SUM(ed.monto_pagado)
                         FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                        WHERE ed.tipo_documento = 'ROL' AND ec.estado != 'anulado'
                          AND ec.eliminado = false AND ed.eliminado = false
-                         AND ed.id_referencia_documento = rd.id), 0)) > 0";
+                         AND ed.id_referencia_documento = rd.id), 0), 2) > 0";
         try {
             $st = $this->db->prepare($sql);
             $st->execute([':r' => $idRol, ':e' => $idEmpresa]);
@@ -795,7 +795,7 @@ class RolPagoRepository extends BaseRepository
                        AND n.tipo_codigo = '3' AND n.estado = 'activo' AND n.eliminado = false
                        AND n.desembolsado_migrado = false
                        AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
-                       AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0
+                       AND ROUND(n.valor - COALESCE(pa.total_pagado, 0), 2) > 0
                      ORDER BY emp.nombres_apellidos";
             $st = $this->db->prepare($sqlA);
             $st->execute($p);
@@ -812,12 +812,12 @@ class RolPagoRepository extends BaseRepository
                        AND n.tipo_codigo = '9' AND n.estado = 'activo' AND n.eliminado = false
                        AND n.desembolsado_migrado = false
                        AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
-                       AND (SELECT COALESCE(SUM(n2.valor), 0) FROM novedades n2
+                       AND ROUND((SELECT COALESCE(SUM(n2.valor), 0) FROM novedades n2
                              WHERE n2.id_empresa = n.id_empresa AND n2.id_empleado = n.id_empleado
                                AND n2.tipo_codigo = n.tipo_codigo AND n2.eliminado = false AND n2.estado = 'activo')
-                           > (SELECT COALESCE(SUM(ed.monto_pagado), 0) FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                           - (SELECT COALESCE(SUM(ed.monto_pagado), 0) FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                                WHERE ed.tipo_documento = ('PRESTAMO' || n.tipo_codigo) AND ed.id_referencia_documento = n.id_empleado
-                                 AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false)
+                                 AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false), 2) > 0
                      ORDER BY emp.nombres_apellidos";
             $st2 = $this->db->prepare($sqlP);
             $st2->execute($p);
@@ -1166,12 +1166,12 @@ class RolPagoRepository extends BaseRepository
                 JOIN rol_cabecera c ON c.id = d.id_rol
                 WHERE d.id_empresa = :emp AND d.id_empleado = :e
                   AND c.eliminado = false AND c.estado = 'generado'
-                  AND (d.neto - COALESCE((SELECT SUM(ed.monto_pagado)
+                  AND ROUND(d.neto - COALESCE((SELECT SUM(ed.monto_pagado)
                           FROM egresos_detalle ed
                           JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                          WHERE ed.tipo_documento = 'ROL' AND ec.estado != 'anulado'
                            AND ec.eliminado = false AND ed.eliminado = false
-                           AND ed.id_referencia_documento = d.id), 0)) > 0
+                           AND ed.id_referencia_documento = d.id), 0), 2) > 0
                 ORDER BY c.periodo_anio, c.periodo_mes, c.tipo_rol";
         $st = $this->db->prepare($sql);
         $st->execute([':emp' => $idEmpresa, ':e' => $idEmpleado]);

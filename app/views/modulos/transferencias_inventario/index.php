@@ -3,6 +3,8 @@
 /** @var array  $perm */
 /** @var string $rutaModulo */
 /** @var array  $rows */
+/** @var string $filasHtml   Filas ya renderizadas por el controlador */
+/** @var bool   $recepcionOk ¿La BD tiene las columnas de recepción? */
 /** @var int    $total */
 /** @var int    $page */
 /** @var int    $totalPages */
@@ -89,6 +91,18 @@ $urlBase  = rtrim(BASE_URL, '/') . '/' . $rutaModulo;
                         <option value="anulada"    <?= ($filtros['estado'] ?? '') === 'anulada' ? 'selected' : '' ?>>Anuladas</option>
                     </select>
                 </div>
+                <?php if (!empty($recepcionOk)): ?>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Recepción</label>
+                        <select id="tri-recepcion" class="form-select form-select-sm shadow-none border" style="width:140px;" onchange="window.TRI_buscar(1)">
+                            <option value="">Todas</option>
+                            <option value="pendiente" <?= ($filtros['recepcion'] ?? '') === 'pendiente' ? 'selected' : '' ?>>Pendientes</option>
+                            <option value="enviada"   <?= ($filtros['recepcion'] ?? '') === 'enviada' ? 'selected' : '' ?>>Enviadas</option>
+                            <option value="recibida"  <?= ($filtros['recepcion'] ?? '') === 'recibida' ? 'selected' : '' ?>>Recibidas</option>
+                            <option value="rechazada" <?= ($filtros['recepcion'] ?? '') === 'rechazada' ? 'selected' : '' ?>>Rechazadas</option>
+                        </select>
+                    </div>
+                <?php endif; ?>
 
                 <!-- Buscador + botones: agrupados para que nunca se separen al hacer wrap -->
                 <div class="d-flex flex-wrap align-items-start gap-2">
@@ -173,6 +187,7 @@ $urlBase  = rtrim(BASE_URL, '/') . '/' . $rutaModulo;
                         'total_items'         => 'Unidades',
                         'total_costo'         => 'Costo',
                         'estado'              => 'Estado',
+                        'recepcion'           => 'Recepción',
                     ];
                     echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo);
                     ?>
@@ -211,39 +226,17 @@ $urlBase  = rtrim(BASE_URL, '/') . '/' . $rutaModulo;
                             <?php
                             $th('total_items', 'Unidades', 'right');
                             $th('total_costo', 'Costo', 'right');
-                            $th('estado', 'Estado', 'center', 'pe-3');
+                            $th('estado', 'Estado', 'center');
                             ?>
+                            <th class="text-center" data-col="recepcion">Recepción</th>
+                            <th class="text-center pe-3" data-col="acciones" style="width:46px;" title="Enviar el acta por correo"><i class="bi bi-envelope"></i></th>
                         </tr>
                     </thead>
                     <tbody id="tri-tbody">
                         <?php if (empty($rows)): ?>
-                            <tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>No se encontraron transferencias.</td></tr>
+                            <tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-arrow-left-right fs-3 d-block mb-2"></i>No se encontraron transferencias.</td></tr>
                         <?php else: ?>
-                            <?php foreach ($rows as $r): ?>
-                                <?php
-                                $anulada  = ($r['estado'] ?? '') === 'anulada';
-                                $entreEst = !empty($r['entre_establecimientos']) && $r['entre_establecimientos'] !== 'f';
-                                ?>
-                                <tr class="tri-row" role="button" onclick="window.TRI_verTransferencia(<?= (int) $r['id'] ?>)">
-                                    <td class="ps-3" data-col="numero">
-                                        <code><?= htmlspecialchars((string) $r['numero']) ?></code>
-                                        <?php if ($entreEst): ?><i class="bi bi-signpost-split text-warning" title="Entre establecimientos"></i><?php endif; ?>
-                                    </td>
-                                    <td data-col="fecha_transferencia"><?= date('d-m-Y H:i:s', strtotime((string) $r['fecha_transferencia'])) ?></td>
-                                    <td data-col="origen_nombre"><span class="badge bg-light text-dark border"><?= htmlspecialchars((string) $r['origen_nombre']) ?></span></td>
-                                    <td data-col="destino_nombre"><i class="bi bi-arrow-right text-muted small me-1"></i><span class="badge bg-light text-dark border"><?= htmlspecialchars((string) $r['destino_nombre']) ?></span></td>
-                                    <td class="text-end" data-col="lineas"><?= (int) ($r['lineas'] ?? 0) ?></td>
-                                    <td class="text-end" data-col="total_items"><?= number_format((float) $r['total_items'], 2) ?></td>
-                                    <td class="text-end" data-col="total_costo">$<?= number_format((float) $r['total_costo'], 2) ?></td>
-                                    <td class="text-center pe-3" data-col="estado">
-                                        <?php if ($anulada): ?>
-                                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulada</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Registrada</span>
-                                        <?php endif; ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
+                            <?= $filasHtml /* mismas filas que arma el refresco AJAX (Controller::renderFila) */ ?>
                         <?php endif; ?>
                     </tbody>
                 </table>
@@ -253,9 +246,11 @@ $urlBase  = rtrim(BASE_URL, '/') . '/' . $rutaModulo;
 </div>
 
 <?php include __DIR__ . '/modal.php'; ?>
+<?php include __DIR__ . '/modal_correo.php'; ?>
 
 <script>
     window.TRI_URL_BASE = '<?= $urlBase ?>';
+    window.TRI_RECEPCION_OK = <?= !empty($recepcionOk) ? 'true' : 'false' ?>;
     window.TRI_BODEGAS  = <?= json_encode($bodegas, JSON_HEX_TAG | JSON_HEX_APOS) ?>;
     window.TRI_PERM     = <?= json_encode([
         'crear'      => (bool) ($perm['crear'] ?? false),

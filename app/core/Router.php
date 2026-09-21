@@ -177,6 +177,16 @@ class Router
                 $action        = in_array($sub, ['aprobar', 'rechazar'], true) ? $sub : 'index';
             }
 
+            // /recepcion-transferencia/{token}[/confirmar|/rechazar|/pdf] → confirmación
+            // pública de la recepción de una transferencia de inventario y acta en PDF
+            // (sin auth: la autorización es el token del correo)
+            if (($parts[0] ?? '') === 'recepcion-transferencia') {
+                $controller    = 'RecepcionTransferencia';
+                $_GET['token'] = $parts[1] ?? ($_GET['token'] ?? '');
+                $sub           = $parts[2] ?? '';
+                $action        = in_array($sub, ['confirmar', 'rechazar', 'pdf'], true) ? $sub : 'index';
+            }
+
             // /aprobar-proforma/{token}[/aprobar] → aprobación pública de la proforma por el cliente (sin auth)
             if (($parts[0] ?? '') === 'aprobar-proforma') {
                 $controller    = 'ProformaAprobacion';

@@ -74,19 +74,38 @@ para esa persona y esa empresa. *General* no se puede ocultar.
 
 ### Qué muestra la pestaña Detalle
 
-Arriba, cuatro datos del registro:
+Arriba, dos fichas:
 
-- **Creado por** y **Fecha de creación**: quién levantó el pedido y cuándo.
-- **Última edición por** y **Fecha de última edición**: quién fue el último en
-  guardarlo. Si el pedido nunca se editó, dice *Sin ediciones*.
+- **Creado**: quién levantó el pedido y cuándo.
+- **Última edición**: quién lo modificó por última vez, cuándo, y —lo importante—
+  **en qué consistió ese cambio**. No basta con el nombre: al pedido lo pueden
+  modificar desde dos sitios distintos (ver más abajo), así que la ficha dice la
+  acción y los campos que cambiaron, por ejemplo *Estado actualizado al guardar la
+  consignación 001-001-000000123 · Estado: Pendiente → Procesado*.
+
+Si el pedido nunca se modificó desde que se creó, la ficha lo dice. Y si el último
+cambio es anterior al registro de cambios, o lo hizo una migración, avisa que ese
+cambio **no quedó detallado** en vez de atribuirle algo al usuario.
 
 Debajo, la lista de **ediciones del pedido**, de la más reciente a la más antigua.
-Cada línea dice qué pasó (creado, editado o eliminado), quién lo hizo, la fecha y
-hora, y **qué cambió**, campo por campo, con el valor anterior tachado y el nuevo
-al lado — por ejemplo *Estado: Pendiente → Procesado* o *Responsable entrega:
-Juan Pérez → María Loor*.
+Cada línea dice qué pasó, quién lo hizo, la fecha y hora, y **qué cambió**, campo
+por campo, con el valor anterior tachado y el nuevo al lado.
 
-Dos aclaraciones sobre lo que esa lista incluye:
+### Quién puede modificar un pedido
+
+El pedido cambia por dos caminos, y los dos quedan en la lista de ediciones:
+
+| Qué ocurrió | Cómo aparece |
+|---|---|
+| Alguien abrió el pedido y lo guardó | *Pedido editado*, con los campos que tocó |
+| Alguien guardó o eliminó una **consignación** que usa líneas de este pedido, y eso cambió su estado | *Estado actualizado al guardar la consignación 001-001-000000123* |
+
+El segundo caso es automático: nadie abrió el pedido, pero el sistema recalcula si
+quedó **Procesado** (todas sus líneas ya salieron en consignación) o vuelve a
+**Pendiente**. Por eso la última edición puede estar a nombre de alguien que nunca
+abrió el pedido; la ficha lo aclara diciendo qué hizo.
+
+Dos aclaraciones más sobre la lista:
 
 - Registra los cambios de la **cabecera** del pedido: cliente, fechas, horas,
   responsable, estado, serie y observaciones. Lo que ocurrió con cada **línea de
@@ -267,11 +286,16 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
 
 - **1.8** — El formulario del pedido se divide en dos pestañas. **General** tiene el
   pedido de siempre, sin cambios. La nueva pestaña **Detalle** muestra quién creó el
-  pedido y cuándo, quién lo editó por última vez, y la lista de ediciones con el
-  detalle de qué cambió en cada una. Se puede ocultar desde el engranaje de las
-  pestañas. Además, el historial dejó de marcar como modificadas la *fecha del
-  pedido* y las *horas de entrega* en cada guardado cuando nadie las había tocado, y
-  ahora muestra el **nombre del responsable de entrega** en vez de su número interno.
+  pedido, quién lo editó por última vez y **en qué consistió ese cambio**, más la
+  lista completa de ediciones. Se puede ocultar desde el engranaje de las pestañas.
+  Junto con eso:
+  - El **cambio de estado que provoca guardar o eliminar una consignación** ahora
+    queda registrado en el historial del pedido, indicando de qué consignación vino.
+    Antes ese cambio pisaba el "última edición por" del pedido sin dejar rastro, así
+    que el pedido figuraba modificado por alguien que nunca lo había abierto.
+  - El historial dejó de marcar como modificadas la *fecha del pedido* y las *horas
+    de entrega* en cada guardado cuando nadie las había tocado.
+  - Se muestra el **nombre del responsable de entrega** en vez de su número interno.
 
 - **1.7** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla:
   número, fechas, rango horario, cliente, responsable de entrega y las dos

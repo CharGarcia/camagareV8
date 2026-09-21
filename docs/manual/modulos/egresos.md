@@ -493,9 +493,13 @@ ve solo los que registró.
 - **1.23** — **Un documento está pendiente mientras le quede al menos un centavo.**
   Antes, la búsqueda de documentos por pagar descartaba los que tenían
   exactamente $0.01 de saldo, así que ese centavo no se podía pagar aunque
-  *Cuentas por Pagar* lo siguiera reportando como pendiente. Ahora ambos
-  módulos usan el mismo criterio (saldo mayor que cero). Aplica a compras,
-  liquidaciones de compra, roles de pago, anticipos, préstamos y décimos.
+  *Cuentas por Pagar* lo siguiera reportando como pendiente. Ahora el criterio
+  es el mismo en los dos lados: el saldo se **redondea a centavos** y el
+  documento sigue pendiente mientras quede al menos uno. El redondeo importa
+  porque los importes de egresos se guardan con seis decimales: sin él, un
+  residuo de $0.000001 dejaría el documento "pendiente" para siempre, porque no
+  hay forma de pagar menos de un centavo. Aplica a compras, liquidaciones de
+  compra, roles de pago, anticipos, préstamos y décimos.
 
 
 - **1.22** — **Observaciones automáticas**: al registrar un egreso,

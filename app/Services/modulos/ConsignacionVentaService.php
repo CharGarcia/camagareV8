@@ -378,7 +378,12 @@ class ConsignacionVentaService
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR_CONSIGNACION', 'consignaciones_ventas', $idConsignacion, null, $cabecera);
 
-            $this->reconciliarPedidosAfectados((int) $idEmpresa, (int) $idUsuario, array_column($detalles, 'id_pedido_detalle'));
+            $this->reconciliarPedidosAfectados(
+                (int) $idEmpresa,
+                (int) $idUsuario,
+                array_column($detalles, 'id_pedido_detalle'),
+                $numero['serie'] . '-' . $numero['secuencial']
+            );
 
             $db->commit();
 
@@ -583,10 +588,15 @@ class ConsignacionVentaService
             $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR_CONSIGNACION', 'consignaciones_ventas', $id, $cabecera, $updData);
 
             // Pedidos de las líneas que tenía y de las que quedan.
-            $this->reconciliarPedidosAfectados($idEmpresa, $idUsuario, array_merge(
-                array_column($detallesAntiguos, 'id_pedido_detalle'),
-                array_column($data['detalles'], 'id_pedido_detalle')
-            ));
+            $this->reconciliarPedidosAfectados(
+                $idEmpresa,
+                $idUsuario,
+                array_merge(
+                    array_column($detallesAntiguos, 'id_pedido_detalle'),
+                    array_column($data['detalles'], 'id_pedido_detalle')
+                ),
+                $this->numeroConsignacion($updData)
+            );
 
             $db->commit();
 
@@ -637,7 +647,7 @@ class ConsignacionVentaService
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'ELIMINAR_CONSIGNACION', 'consignaciones_ventas', $id, $cabecera);
 
-            $this->reconciliarPedidosAfectados($idEmpresa, $idUsuario, $idsPedidoDetalle);
+            $this->reconciliarPedidosAfectados($idEmpresa, $idUsuario, $idsPedidoDetalle, $this->numeroConsignacion($cabecera));
 
             $db->commit();
 
@@ -1161,9 +1171,24 @@ class ConsignacionVentaService
      * por guardado, dentro de la transacción y con los candados de stock y de secuencial tomados,
      * así que además frenaba a quien guardara otro documento con esos productos o esa serie.
      *
-     * @param array $idsPedidoDetalle Líneas de pedido enlazadas, antes y después del cambio.
+     * @param array  $idsPedidoDetalle Líneas de pedido enlazadas, antes y después del cambio.
+     * @param string $numeroConsignacion Número del documento que provocó el recálculo (serie-secuencial),
+     *        para que el historial del pedido diga de dónde vino el cambio de estado.
      */
-    private function reconciliarPedidosAfectados(int $idEmpresa, int $idUsuario, array $idsPedidoDetalle): void
+    /** "001-001-000000123" a partir de una cabecera de consignación; '' si no se puede armar. */
+    private function numeroConsignacion(array $fila): string
+    {
+        $serie      = trim((string) ($fila['serie'] ?? ''));
+        $secuencial = trim((string) ($fila['secuencial'] ?? ''));
+
+        if ($serie === '' && $secuencial === '') {
+            return '';
+        }
+
+        return $serie !== '' && $secuencial !== '' ? $serie . '-' . $secuencial : $serie . $secuencial;
+    }
+
+    private function reconciliarPedidosAfectados(int $idEmpresa, int $idUsuario, array $idsPedidoDetalle, string $numeroConsignacion = ''): void
     {
         $idsPedido = $this->repository->getPedidosDeLineas($idsPedidoDetalle, $idEmpresa);
         if (empty($idsPedido)) {
@@ -1171,6 +1196,23 @@ class ConsignacionVentaService
         }
 
         $this->repository->lockEstadoPedidos($idsPedido, $idEmpresa);
-        $this->repository->actualizarEstadoPedidosPorConsignado($idsPedido, $idEmpresa, $idUsuario);
+        $cambiados = $this->repository->actualizarEstadoPedidosPorConsignado($idsPedido, $idEmpresa, $idUsuario);
+
+        // Este recálculo escribe `updated_by`/`updated_at` en el pedido, así que tiene que
+        // dejar su rastro (CLAUDE.md §7): si no, el pedido muestra como "última edición" a
+        // quien guardó ESTA consignación, sin ninguna edición del pedido que lo explique.
+        // Normalmente son 1 o 2 pedidos por consignación; el INSERT va dentro de la misma
+        // transacción, junto al UPDATE que lo causó.
+        foreach ($cambiados as $c) {
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'ESTADO_PEDIDO_POR_CONSIGNACION',
+                'pedidos_cabecera',
+                $c['id'],
+                ['estado' => $c['estado_anterior'], 'consignacion' => $numeroConsignacion],
+                ['estado' => $c['nuevo_estado'],    'consignacion' => $numeroConsignacion]
+            );
+        }
     }
 }

@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo
-version: 1.24
+version: 1.25
 orden: 45
 estado: activo
 ---
@@ -100,6 +100,12 @@ quedaron cubiertas por lo consignado, y vuelve a **Pendiente** si al editar o
 eliminar la consignación alguna línea deja de estarlo. Solo se revisan los pedidos
 que usa esa consignación: un pedido **anulado** no cambia, y el estado que se haya
 puesto a mano en cualquier otro pedido tampoco.
+
+Ese cambio **queda registrado en el historial del pedido**, en su pestaña *Detalle*,
+a nombre de quien guardó la consignación y diciendo de qué consignación vino — por
+ejemplo *Estado actualizado al guardar la consignación 001-001-000000123 · Estado:
+Pendiente → Procesado*. Así, quien abra el pedido y vea que lo modificó alguien que
+nunca lo abrió, entiende por qué.
 
 ### La pestaña Pedidos
 
@@ -361,6 +367,10 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.25** — El **cambio de estado que la consignación provoca en el pedido** (Pendiente
+  ↔ Procesado) ahora queda registrado en el historial de ese pedido, indicando de qué
+  consignación vino. Antes ese recálculo dejaba el pedido marcado como modificado por
+  quien guardó la consignación, sin ninguna edición que lo explicara.
 - **1.24** — Las líneas de productos del modal muestran el **código** del producto en su
   propia columna, antes del nombre; la pestaña **Resumen** también lo muestra.
 - **1.23** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla: fecha,

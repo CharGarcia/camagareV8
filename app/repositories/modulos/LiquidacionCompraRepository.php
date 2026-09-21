@@ -91,11 +91,11 @@ class LiquidacionCompraRepository extends BaseRepository
             foreach ($valores as $val) {
                 $v2 = strtolower(trim((string) $val));
                 if (in_array($v2, ['pagada', 'pagado', 'pagadas'], true)) {
-                    $conds[] = "($saldo <= 0)";
+                    $conds[] = "(ROUND($saldo, 2) <= 0)";
                 } elseif (in_array($v2, ['abonada', 'abonado', 'abonadas', 'parcial'], true)) {
-                    $conds[] = "($saldo > 0 AND $sqlAbonos > 0)";
+                    $conds[] = "(ROUND($saldo, 2) > 0 AND $sqlAbonos > 0)";
                 } elseif (in_array($v2, ['pendiente', 'pendientes'], true)) {
-                    $conds[] = "($saldo > 0 AND $sqlAbonos <= 0)";
+                    $conds[] = "(ROUND($saldo, 2) > 0 AND $sqlAbonos <= 0)";
                 }
             }
             if ($conds) {

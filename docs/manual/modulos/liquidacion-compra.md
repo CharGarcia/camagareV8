@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva
-version: 1.9
+version: 1.10
 orden: 40
 estado: activo
 ---
@@ -188,6 +188,10 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.10** — Corregido: al **enviar la liquidación por correo** desde su ventana, el cuadro del
+  correo del destinatario no aceptaba texto —se veía, pero al escribir no pasaba nada—.
+  Ya se puede escribir la dirección con normalidad.
 
 - **1.9** — **Los totales se calculan con la configuración de facturación de la
   empresa.** Antes la pantalla usaba siempre 2 decimales y siempre calculaba el IVA

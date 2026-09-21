@@ -199,6 +199,25 @@ $nCols = count($cols);
         </table>
     <?php endif; ?>
 
+    <?php
+    // Conformidad registrada por el destinatario desde el enlace del correo.
+    // Vale como constancia aunque el acta no se haya firmado a mano.
+    $recepcion = (string) ($doc['recepcion_estado'] ?? 'pendiente');
+    if (in_array($recepcion, ['recibida', 'rechazada'], true)):
+        $quienRecibio = trim((string) ($doc['recepcion_nombre'] ?? ''));
+        $cuando       = !empty($doc['recepcion_fecha']) ? date('d-m-Y H:i:s', strtotime((string) $doc['recepcion_fecha'])) : '';
+    ?>
+        <table class="obs">
+            <tr><td style="width:100%">
+                <span class="lbl"><?= $recepcion === 'recibida' ? 'Recepción confirmada:' : 'Recepción RECHAZADA:' ?></span>
+                <?= $esc($oVacio($quienRecibio)) ?><?= $cuando !== '' ? ' · ' . $esc($cuando) : '' ?>
+                <?php if (!empty($doc['recepcion_comentario'])): ?>
+                    — <?= $esc($doc['recepcion_comentario']) ?>
+                <?php endif; ?>
+            </td></tr>
+        </table>
+    <?php endif; ?>
+
     <br><br><br>
 
     <?php // Las firmas no se parten entre páginas: si no caben, pasan enteras a la siguiente. ?>

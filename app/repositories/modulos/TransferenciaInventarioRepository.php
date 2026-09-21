@@ -79,6 +79,11 @@ class TransferenciaInventarioRepository extends BaseRepository
             $where .= " AND t.estado = :estado";
             $params[':estado'] = $filtros['estado'];
         }
+        // Estado de recepción: solo si las columnas ya están desplegadas.
+        if (!empty($filtros['recepcion']) && $this->soportaRecepcion()) {
+            $where .= " AND COALESCE(t.recepcion_estado, 'pendiente') = :recepcion";
+            $params[':recepcion'] = $filtros['recepcion'];
+        }
 
         // Buscador estándar: texto libre multi-palabra + filtros clave:valor.
         $parsed = FiltrosBusqueda::parsear($buscar);
@@ -472,6 +477,171 @@ class TransferenciaInventarioRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':e' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodega, ':nup' => $nup]);
         return (float) $st->fetchColumn();
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // RECEPCIÓN (acta por correo + confirmación del destinatario)
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * ¿La base ya tiene las columnas de recepción? El código no puede romperse
+     * en un ambiente donde todavía no se corrió la migración
+     * (database/migrations/20260921_transferencias_inventario_recepcion.sql).
+     */
+    public function soportaRecepcion(): bool
+    {
+        static $soporta = null;
+        if ($soporta === null) {
+            $soporta = (int) $this->db->query(
+                "SELECT COUNT(*) FROM information_schema.columns
+                  WHERE table_name = 'transferencias_inventario_cabecera'
+                    AND column_name IN ('recepcion_estado', 'recepcion_token', 'recepcion_fecha')"
+            )->fetchColumn() === 3;
+        }
+        return $soporta;
+    }
+
+    /** Token de recepción ya generado para el documento ('' si no tiene). */
+    public function getTokenRecepcion(int $id, int $idEmpresa): string
+    {
+        if (!$this->soportaRecepcion()) {
+            return '';
+        }
+        $st = $this->db->prepare(
+            "SELECT COALESCE(recepcion_token, '') FROM {$this->table}
+              WHERE id = :id AND id_empresa = :e AND eliminado = false"
+        );
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        return (string) ($st->fetchColumn() ?: '');
+    }
+
+    public function setTokenRecepcion(int $id, int $idEmpresa, string $token): void
+    {
+        if (!$this->soportaRecepcion()) {
+            return;
+        }
+        $st = $this->db->prepare(
+            "UPDATE {$this->table} SET recepcion_token = :t, updated_at = CURRENT_TIMESTAMP
+              WHERE id = :id AND id_empresa = :e AND eliminado = false"
+        );
+        $st->execute([':t' => $token, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
+    /**
+     * Transferencia por su token de recepción, para la página pública SIN login.
+     *
+     * Regla de endpoints públicos (§6): la empresa dueña del documento se
+     * resuelve aquí por token, no por sesión, así que este es el único punto
+     * donde se puede comprobar que siga activa. Si no lo está, el token se
+     * comporta como si no existiera.
+     */
+    public function getPorTokenRecepcion(string $token): ?array
+    {
+        $token = trim($token);
+        if ($token === '' || !$this->soportaRecepcion()) {
+            return null;
+        }
+
+        $sql = "SELECT t.*,
+                       bo.nombre AS origen_nombre,
+                       bd.nombre AS destino_nombre,
+                       eo.codigo AS establecimiento_origen_codigo, eo.nombre AS establecimiento_origen_nombre,
+                       ed.codigo AS establecimiento_destino_codigo, ed.nombre AS establecimiento_destino_nombre,
+                       u.nombre  AS usuario_nombre,
+                       COALESCE(emp.nombre_comercial, emp.nombre) AS empresa_nombre
+                FROM {$this->table} t
+                INNER JOIN empresas emp ON emp.id = t.id_empresa
+                INNER JOIN bodegas bo ON bo.id = t.id_bodega_origen
+                INNER JOIN bodegas bd ON bd.id = t.id_bodega_destino
+                LEFT JOIN empresa_establecimiento eo ON eo.id = t.id_establecimiento_origen
+                LEFT JOIN empresa_establecimiento ed ON ed.id = t.id_establecimiento_destino
+                LEFT JOIN usuarios u ON u.id = t.created_by
+                WHERE t.recepcion_token = :t AND t.eliminado = false
+                  AND emp.estado = '1' AND emp.eliminado = false
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':t' => $token]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Deja constancia del envío del acta por correo. El estado solo avanza de
+     * 'pendiente' a 'enviada': si el destino ya respondió, reenviar el correo no
+     * borra su confirmación.
+     */
+    public function registrarEnvioCorreo(int $id, int $idEmpresa, string $correos): void
+    {
+        if (!$this->soportaRecepcion()) {
+            return;
+        }
+        $st = $this->db->prepare(
+            "UPDATE {$this->table}
+                SET recepcion_correos      = :correos,
+                    recepcion_correo_fecha = CURRENT_TIMESTAMP,
+                    recepcion_estado       = CASE WHEN COALESCE(recepcion_estado, 'pendiente') = 'pendiente'
+                                                  THEN 'enviada' ELSE recepcion_estado END,
+                    updated_at             = CURRENT_TIMESTAMP
+              WHERE id = :id AND id_empresa = :e AND eliminado = false"
+        );
+        $st->execute([':correos' => $correos, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
+    /**
+     * Respuesta del destinatario ('recibida' o 'rechazada'). El WHERE exige que
+     * la recepción siga abierta: dos clics sobre el mismo enlace no se pisan y
+     * el segundo devuelve false.
+     */
+    public function resolverRecepcion(int $id, int $idEmpresa, string $estado, string $nombre, string $comentario, string $ip): bool
+    {
+        if (!$this->soportaRecepcion()) {
+            return false;
+        }
+        $st = $this->db->prepare(
+            "UPDATE {$this->table}
+                SET recepcion_estado     = :estado,
+                    recepcion_fecha      = CURRENT_TIMESTAMP,
+                    recepcion_nombre     = :nombre,
+                    recepcion_comentario = :comentario,
+                    recepcion_ip         = :ip,
+                    updated_at           = CURRENT_TIMESTAMP
+              WHERE id = :id AND id_empresa = :e AND eliminado = false
+                AND estado = 'registrada'
+                AND COALESCE(recepcion_estado, 'pendiente') IN ('pendiente', 'enviada')"
+        );
+        $st->execute([
+            ':estado'     => $estado,
+            ':nombre'     => $nombre !== '' ? mb_substr($nombre, 0, 150) : null,
+            ':comentario' => $comentario !== '' ? $comentario : null,
+            ':ip'         => $ip !== '' ? mb_substr($ip, 0, 64) : null,
+            ':id'         => $id,
+            ':e'          => $idEmpresa,
+        ]);
+        return $st->rowCount() > 0;
+    }
+
+    /**
+     * Usuarios de la empresa con correo, para el selector del modal de envío.
+     * Mismo universo que la pantalla de accesos de Bodegas: usuarios asignados
+     * a la empresa y de nivel menor a 3. `acceso` marca a los que pueden operar
+     * la bodega de destino — desde nivel 2 son todas, y para el nivel 1 el
+     * acceso es permisivo salvo veto explícito (usuarios_bodegas.denegado).
+     */
+    public function getUsuariosParaCorreo(int $idEmpresa, int $idBodegaDestino = 0): array
+    {
+        $sql = "SELECT u.id, u.nombre, u.mail,
+                       CASE WHEN COALESCE(u.nivel, 1) >= 2 THEN true
+                            ELSE NOT COALESCE(ub.denegado, false) END AS acceso
+                FROM usuarios u
+                INNER JOIN empresa_asignada ea ON ea.id_usuario = u.id AND ea.id_empresa = :e
+                LEFT JOIN usuarios_bodegas ub ON ub.id_usuario = u.id AND ub.id_empresa = :e2
+                     AND ub.id_bodega = :b AND ub.eliminado = false
+                WHERE u.eliminado = false
+                  AND COALESCE(u.nivel, 1) < 3
+                  AND TRIM(COALESCE(u.mail, '')) <> ''
+                ORDER BY u.nombre ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa, ':e2' => $idEmpresa, ':b' => $idBodegaDestino]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** Series/NUP disponibles de un producto en una bodega (stock neto > 0). */

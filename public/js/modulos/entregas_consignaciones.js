@@ -120,7 +120,7 @@ function entcObtenerUbicacion() {
 async function entcMarcarEntregada(idConsignacion, numero) {
     if (!idConsignacion) return;
 
-    const c = await Swal.fire({
+    const opciones = {
         title: `¿Marcar ${numero || 'la consignación'} como entregada?`,
         html: '<div class="small text-muted mb-2">Se registrará la entrega con la ubicación actual, la fecha/hora y su usuario.</div>',
         input: 'textarea',
@@ -132,7 +132,21 @@ async function entcMarcarEntregada(idConsignacion, numero) {
         confirmButtonText: '<i class="bi bi-geo-alt me-1"></i> Sí, registrar entrega',
         cancelButtonText: 'Cancelar',
         confirmButtonColor: '#198754',
-    });
+    };
+
+    // Llamada desde el detalle: el modal sigue abierto DETRÁS del popup y su "focus trap"
+    // (Bootstrap) devuelve el foco al modal en cuanto lo recibe algo de fuera — el popup
+    // cuelga de <body>, así que el cuadro de la observación se veía pero rebotaba el foco y
+    // no dejaba escribir. Con `target` el popup cuelga DENTRO del modal y el trap lo acepta
+    // (mismo patrón que factura_venta y pedidos al pedir el correo). Desde el botón
+    // "Entregar" de la fila no hay modal abierto: ahí el popup cuelga de <body>, como siempre
+    // (si se apuntara al modal cerrado —display:none— el popup no se vería).
+    const modalDetalleEl = document.getElementById('modalEntregaDetalle');
+    if (modalDetalleEl && modalDetalleEl.classList.contains('show')) {
+        opciones.target = modalDetalleEl;
+    }
+
+    const c = await Swal.fire(opciones);
     if (!c.isConfirmed) return;
 
     Swal.fire({ title: 'Registrando entrega…', text: 'Obteniendo ubicación', allowOutsideClick: false, didOpen: () => Swal.showLoading() });

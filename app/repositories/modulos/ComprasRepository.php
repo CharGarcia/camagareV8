@@ -186,11 +186,11 @@ class ComprasRepository extends BaseRepository
             foreach ($valores as $val) {
                 $v2 = strtolower(trim((string) $val));
                 if (in_array($v2, ['pagada', 'pagado', 'pagadas'], true)) {
-                    $conds[] = "(c.tipo_comprobante = '04' OR $saldo <= 0)";
+                    $conds[] = "(c.tipo_comprobante = '04' OR ROUND($saldo, 2) <= 0)";
                 } elseif (in_array($v2, ['abonada', 'abonado', 'abonadas', 'parcial'], true)) {
-                    $conds[] = "(c.tipo_comprobante <> '04' AND $saldo > 0 AND $sqlAbonos > 0)";
+                    $conds[] = "(c.tipo_comprobante <> '04' AND ROUND($saldo, 2) > 0 AND $sqlAbonos > 0)";
                 } elseif (in_array($v2, ['pendiente', 'pendientes'], true)) {
-                    $conds[] = "(c.tipo_comprobante <> '04' AND $saldo > 0 AND $sqlAbonos <= 0)";
+                    $conds[] = "(c.tipo_comprobante <> '04' AND ROUND($saldo, 2) > 0 AND $sqlAbonos <= 0)";
                 }
             }
             if ($conds) {

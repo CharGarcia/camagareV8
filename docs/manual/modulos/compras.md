@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos
-version: 2.16
+version: 2.17
 orden: 20
 estado: activo
 ---
@@ -521,6 +521,10 @@ tampoco la incluye. Si dos aprobadores la aprueban a la vez, solo una de las
 aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
+
+- **2.17** — Corregido: al **rechazar una compra** desde su ventana, el cuadro del *motivo del
+  rechazo* no aceptaba texto —se veía, pero al escribir no pasaba nada—. Ya se puede
+  escribir el motivo con normalidad.
 
 - **2.16** — **Una compra con $0.01 de saldo queda como Abonada, no como
   Pagada.** Antes, el centavo restante se daba por pagado. Ahora el criterio es

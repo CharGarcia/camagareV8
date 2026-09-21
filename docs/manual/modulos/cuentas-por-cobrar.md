@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde
-version: 2.18
+version: 2.19
 orden: 40
 estado: activo
 ---
@@ -303,6 +303,11 @@ cliente ya es la cabecera de la sección): muestra **fecha, n. de documento,
 total, NC, abonos, retenciones, saldo, días y asesor**. La columna *Asesor*
 **no aparece cuando se está filtrando por un vendedor** (ver *Filtrar por
 vendedor*): en ese caso su espacio pasa a *N. Documento*.
+
+En el **PDF** de esta vista, la cabecera de cada cliente va pegada a sus
+documentos y entre un cliente y el siguiente queda un espacio en blanco del
+doble de ancho, para que cada sección se distinga como un bloque aparte al
+imprimir.
 
 | Columna | Qué muestra |
 |---|---|
@@ -640,6 +645,11 @@ Y dos casos que el reporte **no** descuenta a propósito:
   (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
+
+- **2.19** — En el PDF **Por cliente** se **duplicó la separación entre un
+  cliente y el siguiente**, para que al imprimir cada sección se distinga como
+  un bloque aparte. La cabecera de cada cliente sigue pegada a sus documentos.
+  Actualizada *Vista "Por cliente"*.
 
 - **2.18** — **El centavo pendiente ya se puede cobrar.** El saldo de
   $0.01 que este reporte mostraba como pendiente no se ofrecía en *Ingresos*,

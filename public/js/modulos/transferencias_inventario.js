@@ -16,6 +16,7 @@
     let ordenDir = window.TRI_ORDEN_DIR || 'DESC';
     let pagina   = 1;
     let modalRef = null;
+    let modalCorreoRef = null;
     let lineas   = [];          // líneas en edición
     let seqLinea = 0;
     let soloLectura = false;
@@ -65,6 +66,7 @@
             hasta:     el('tri-hasta')?.value || '',
             id_bodega: el('tri-bodega')?.value || '',
             estado:    el('tri-estado')?.value || '',
+            recepcion: el('tri-recepcion')?.value || '',
             sort:      ordenCol,
             dir:       ordenDir,
         });
@@ -76,7 +78,7 @@
         params.set('page', String(pagina));
 
         const tbody = el('tri-tbody');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5"><span class="spinner-border text-primary"></span></td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center py-5"><span class="spinner-border text-primary"></span></td></tr>';
 
         fetch(`${URL}/search-ajax?${params.toString()}`)
             .then(r => r.json())
@@ -129,6 +131,7 @@
         ['tri-buscar', 'tri-desde', 'tri-hasta'].forEach(id => { if (el(id)) el(id).value = ''; });
         if (el('tri-bodega')) el('tri-bodega').value = '';
         if (el('tri-estado')) el('tri-estado').value = '';
+        if (el('tri-recepcion')) el('tri-recepcion').value = '';
         window.TRI_buscar(1);
     };
 
@@ -170,6 +173,8 @@
         el('tri-zona-agregar').classList.remove('d-none');
         el('tri-info-auditoria').innerHTML = '';
         el('tri-info-auditoria').classList.add('d-none');
+        el('tri-recepcion-banner').classList.add('d-none');
+        el('tri-recepcion-banner').innerHTML = '';
 
         setCamposHabilitados(true);
         actualizarAvisoEstablecimiento();
@@ -580,6 +585,9 @@
         el('tri-btn-guardar').classList.add('d-none');
         el('tri-acciones').classList.remove('d-none');
 
+        pintarBannerRecepcion(doc, anulada);
+        el('tri-btn-correo').classList.toggle('d-none', anulada);
+
         if (!anulada) {
             if (PERM.actualizar) el('tri-btn-anular').classList.remove('d-none');
             if (entreEst) {
@@ -673,6 +681,177 @@
         const id = el('tri-id').value;
         if (id) window.open(`${URL}/pdf-documento?id=${id}`, '_blank');
     };
+
+    // ── Recepción: acta por correo + conformidad del destino ─────────────────
+
+    /** Banner del modal con el estado de la conformidad del destino. */
+    function pintarBannerRecepcion(doc, anulada) {
+        const banner = el('tri-recepcion-banner');
+        if (!banner) return;
+
+        const estado = doc.recepcion_estado || 'pendiente';
+        if (anulada || estado === 'pendiente') {
+            banner.classList.add('d-none');
+            banner.innerHTML = '';
+            return;
+        }
+
+        const quien   = esc(doc.recepcion_nombre || '');
+        const cuando  = doc.recepcion_fecha ? esc(fechaLarga(doc.recepcion_fecha)) : '';
+        const nota    = doc.recepcion_comentario ? `<div class="mt-1 fst-italic">${esc(doc.recepcion_comentario)}</div>` : '';
+        const enviado = doc.recepcion_correo_fecha ? esc(fechaLarga(doc.recepcion_correo_fecha)) : '';
+
+        let clase = 'alert-info';
+        let html  = `<i class="bi bi-send me-1"></i><strong>Acta enviada</strong> a ${esc(doc.recepcion_correos || '')}`
+                  + (enviado ? ` el ${enviado}` : '') + '. Esperando la confirmación del destino.';
+
+        if (estado === 'recibida') {
+            clase = 'alert-success';
+            html  = `<i class="bi bi-check2-circle me-1"></i><strong>Recibida conforme</strong> por ${quien}`
+                  + (cuando ? ` · ${cuando}` : '') + nota;
+        } else if (estado === 'rechazada') {
+            clase = 'alert-danger';
+            html  = `<i class="bi bi-x-circle me-1"></i><strong>Recepción rechazada</strong> por ${quien}`
+                  + (cuando ? ` · ${cuando}` : '') + nota;
+        }
+
+        banner.className = `alert ${clase} py-2 px-3 small mb-3`;
+        banner.innerHTML = html;
+    }
+
+    function getModalCorreo() {
+        if (!modalCorreoRef) modalCorreoRef = new bootstrap.Modal(document.getElementById('modalTransferenciaCorreo'));
+        return modalCorreoRef;
+    }
+
+    /**
+     * Abre el modal de envío. Sin `id` toma el documento abierto en el modal
+     * (barra de acciones); con `id` viene del botón de la fila del listado.
+     */
+    window.TRI_abrirEnvioCorreo = function (id) {
+        const idDoc = parseInt(id || el('tri-id').value, 10);
+        if (!idDoc) return;
+
+        el('tri-correo-id').value = idDoc;
+        el('tri-correo-para').value = '';
+        el('tri-correo-mensaje').value = '';
+        el('tri-correo-pdf').checked = true;
+        el('tri-correo-numero').textContent = '';
+        el('tri-correo-estado').classList.add('d-none');
+        el('tri-correo-usuarios').innerHTML = '<option value="">Cargando usuarios…</option>';
+
+        fetch(`${URL}/get-destinatarios-ajax?id=${idDoc}`)
+            .then(r => r.json())
+            .then(res => {
+                if (!res.ok) { aviso('error', 'Error', res.mensaje || 'No se pudo preparar el envío.'); return; }
+                if (res.anulada) { aviso('warning', 'Transferencia anulada', 'No se puede enviar para confirmar una transferencia anulada.'); return; }
+
+                el('tri-correo-numero').textContent = res.numero || '';
+                // Al reenviar, se proponen los mismos destinatarios del envío anterior.
+                el('tri-correo-para').value = res.correos || '';
+
+                const conAcceso = (res.usuarios || []).filter(u => u.acceso);
+                const resto     = (res.usuarios || []).filter(u => !u.acceso);
+                const opcion    = u => `<option value="${esc(u.mail)}">${esc(u.nombre)} — ${esc(u.mail)}</option>`;
+
+                let html = '<option value="">Seleccione un usuario para agregar su correo…</option>';
+                if (conAcceso.length) {
+                    html += `<optgroup label="Con acceso a ${esc(res.destino || 'la bodega de destino')}">${conAcceso.map(opcion).join('')}</optgroup>`;
+                }
+                if (resto.length) {
+                    html += `<optgroup label="Otros usuarios">${resto.map(opcion).join('')}</optgroup>`;
+                }
+                el('tri-correo-usuarios').innerHTML = html;
+
+                const caja = el('tri-correo-estado');
+                if (!window.TRI_RECEPCION_OK) {
+                    // Sin la migración aplicada el acta se envía igual, pero sin enlace.
+                    caja.className = 'alert alert-warning py-2 px-3 small mb-3';
+                    caja.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>El correo saldrá con el acta adjunta pero <strong>sin enlace de confirmación</strong>: falta aplicar la actualización de base de datos del módulo.';
+                    caja.classList.remove('d-none');
+                } else if (res.recepcion === 'recibida' || res.recepcion === 'rechazada') {
+                    caja.className = 'alert py-2 px-3 small mb-3 ' + (res.recepcion === 'recibida' ? 'alert-success' : 'alert-danger');
+                    caja.innerHTML = res.recepcion === 'recibida'
+                        ? '<i class="bi bi-check2-circle me-1"></i>El destino ya confirmó la recepción: el correo saldrá solo como copia del acta, sin enlace de confirmación.'
+                        : '<i class="bi bi-x-circle me-1"></i>El destino rechazó la recepción: el correo saldrá solo como copia del acta, sin enlace de confirmación.';
+                    caja.classList.remove('d-none');
+                }
+
+                getModalCorreo().show();
+            })
+            .catch(e => { console.error('TRI_abrirEnvioCorreo', e); aviso('error', 'Error', 'No se pudo preparar el envío.'); });
+    };
+
+    /** Agrega el correo del usuario elegido a la lista de destinatarios. */
+    window.TRI_agregarCorreoUsuario = function (select) {
+        const correo = (select.value || '').trim();
+        select.value = '';
+        if (correo === '') return;
+
+        const campo = el('tri-correo-para');
+        const actuales = campo.value.split(/[\s,;]+/).map(c => c.trim().toLowerCase()).filter(Boolean);
+        if (actuales.includes(correo.toLowerCase())) return;
+
+        campo.value = campo.value.trim() === '' ? correo : campo.value.trim().replace(/[,;]$/, '') + ', ' + correo;
+    };
+
+    window.TRI_enviarCorreo = function () {
+        const id      = el('tri-correo-id').value;
+        const correos = el('tri-correo-para').value.trim();
+        if (!id) return;
+        if (correos === '') { aviso('warning', 'Falta el destinatario', 'Indique al menos un correo.'); return; }
+
+        const fd = new FormData();
+        fd.append('id', id);
+        fd.append('correos', correos);
+        fd.append('mensaje', el('tri-correo-mensaje').value);
+        fd.append('adjuntar_pdf', el('tri-correo-pdf').checked ? '1' : '0');
+
+        const btn = el('tri-correo-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando…';
+
+        fetch(`${URL}/enviar-correo-ajax`, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(res => {
+                if (!res.ok) { aviso('error', 'No se envió', res.mensaje || 'Error desconocido.'); return; }
+                getModalCorreo().hide();
+                aviso('success', 'Correo enviado', res.mensaje);
+                window.TRI_buscar(pagina);
+                // Si el documento está abierto, refrescar su banner de recepción.
+                if (el('tri-id').value && parseInt(el('tri-id').value, 10) === parseInt(id, 10)) {
+                    fetch(`${URL}/get-transferencia-ajax?id=${id}`)
+                        .then(r => r.json())
+                        .then(doc => { if (doc.ok) pintarBannerRecepcion(doc.data, doc.data.estado === 'anulada'); })
+                        .catch(() => {});
+                }
+            })
+            .catch(e => { console.error('TRI_enviarCorreo', e); aviso('error', 'Error', 'No se pudo enviar el correo.'); })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-send me-1"></i> Enviar';
+            });
+    };
+
+    // El modal de correo puede abrirse ENCIMA del modal del documento. app.css
+    // fuerza `.modal { z-index:5060 !important }`, así que hay que elevarlo con
+    // inline !important (y su backdrop) o quedaría detrás.
+    document.addEventListener('show.bs.modal', function (ev) {
+        if (ev.target.id !== 'modalTransferenciaCorreo') return;
+        ev.target.style.setProperty('z-index', '5080', 'important');
+        setTimeout(function () {
+            const bds = document.querySelectorAll('.modal-backdrop');
+            if (bds.length) bds[bds.length - 1].style.setProperty('z-index', '5075', 'important');
+        }, 0);
+    });
+
+    // Al cerrar el modal de correo, si el del documento sigue abierto, conservar
+    // el scroll-lock que Bootstrap quita al cerrar cualquier modal.
+    document.addEventListener('hidden.bs.modal', function (ev) {
+        if (ev.target.id === 'modalTransferenciaCorreo' && document.querySelectorAll('.modal.show').length > 0) {
+            document.body.classList.add('modal-open');
+        }
+    });
 
     window.TRI_generarGuia = function () {
         const id = el('tri-id').value;

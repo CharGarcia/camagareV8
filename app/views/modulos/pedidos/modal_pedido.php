@@ -249,38 +249,33 @@ $pedVistaConfig = $vistaConfig ?? [];
                     </div>
 
                     <div id="ped-detalle-contenido" class="d-none">
-                        <!-- Ficha de registro -->
+                        <!-- Ficha de registro: quién lo creó y en qué consistió la última edición.
+                             "Quién" sale de created_by / updated_by de la cabecera; el "qué hizo"
+                             se completa con el último evento del historial, porque updated_by por
+                             sí solo no dice nada de lo que esa persona cambió. -->
                         <div class="row g-2 mb-3">
-                            <div class="col-md-3 col-6">
+                            <div class="col-md-4">
                                 <div class="border rounded-3 p-2 bg-white h-100">
-                                    <div class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
-                                        <i class="bi bi-person-check me-1"></i> Creado por
+                                    <div class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem;">
+                                        <i class="bi bi-person-check me-1"></i> Creado
                                     </div>
                                     <div class="fw-bold text-truncate" style="font-size: 0.85rem;" id="ped-info-creado-por" title="">—</div>
+                                    <div class="text-muted" style="font-size: 0.72rem;" id="ped-info-creado-en">—</div>
                                 </div>
                             </div>
-                            <div class="col-md-3 col-6">
+                            <div class="col-md-8">
                                 <div class="border rounded-3 p-2 bg-white h-100">
-                                    <div class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
-                                        <i class="bi bi-calendar-plus me-1"></i> Fecha de creación
+                                    <div class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem;">
+                                        <i class="bi bi-pencil-square me-1"></i> Última edición
                                     </div>
-                                    <div class="fw-bold" style="font-size: 0.85rem;" id="ped-info-creado-en">—</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-6">
-                                <div class="border rounded-3 p-2 bg-white h-100">
-                                    <div class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
-                                        <i class="bi bi-pencil-square me-1"></i> Última edición por
+                                    <div class="d-flex flex-wrap align-items-baseline gap-2">
+                                        <span class="fw-bold text-truncate" style="font-size: 0.85rem;" id="ped-info-modificado-por" title="">—</span>
+                                        <span class="text-muted" style="font-size: 0.72rem;" id="ped-info-modificado-en"></span>
                                     </div>
-                                    <div class="fw-bold text-truncate" style="font-size: 0.85rem;" id="ped-info-modificado-por" title="">—</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-6">
-                                <div class="border rounded-3 p-2 bg-white h-100">
-                                    <div class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
-                                        <i class="bi bi-calendar-check me-1"></i> Fecha de última edición
+                                    <!-- Qué hizo: etiqueta de la acción + campos que cambió. -->
+                                    <div class="mt-1" style="font-size: 0.72rem;" id="ped-info-ultima-accion">
+                                        <span class="text-muted">—</span>
                                     </div>
-                                    <div class="fw-bold" style="font-size: 0.85rem;" id="ped-info-modificado-en">—</div>
                                 </div>
                             </div>
                         </div>
@@ -299,8 +294,9 @@ $pedVistaConfig = $vistaConfig ?? [];
                         <div class="text-muted mt-2" style="font-size: 0.7rem;">
                             <i class="bi bi-info-circle me-1"></i>
                             El historial registra los cambios de la cabecera del pedido (cliente, fechas, horas,
-                            responsable, estado y observaciones). Lo que pasó con cada línea —si ya se entregó en
-                            consignación o se facturó— se consulta con el ícono de historial de la propia línea, en General.
+                            responsable, estado y observaciones) y los cambios de estado que provoca guardar o
+                            eliminar una consignación. Lo que pasó con cada línea —si ya se entregó en consignación
+                            o se facturó— se consulta con el ícono de historial de la propia línea, en General.
                         </div>
                     </div>
                 </div><!-- /ped-pane-detalle -->

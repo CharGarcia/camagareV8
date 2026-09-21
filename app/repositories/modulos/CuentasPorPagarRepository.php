@@ -389,12 +389,12 @@ class CuentasPorPagarRepository extends BaseRepository
                     -- Valores recaudados por cuenta de terceros (planillas de luz/agua:
                     -- bomberos, tasa de basura). No son parte del importe declarado al SRI
                     -- pero sí se transfieren al proveedor, así que suman al saldo por pagar.
-                    c.importe_total
+                    ROUND(c.importe_total
                         + COALESCE(c.total_terceros,  0)
                         - COALESCE(pg.total_pagado,   0)
                         - COALESCE(ret.total_retenido,0)
                         - COALESCE(nn.total_nc,       0)
-                        + COALESCE(nn.total_nd,       0)                         AS saldo,
+                        + COALESCE(nn.total_nd,       0), 2)                         AS saldo,
                     {$fvcExpr}                                                    AS fecha_vencimiento
                 FROM compras_cabecera c
                 LEFT JOIN empresas emp
@@ -436,9 +436,9 @@ class CuentasPorPagarRepository extends BaseRepository
                     0::numeric                                                    AS total_nc,
                     0::numeric                                                    AS total_nd,
                     COALESCE(ret.total_retenido, 0)                               AS total_retenido,
-                    l.importe_total
+                    ROUND(l.importe_total
                         - COALESCE(pg.total_pagado,   0)
-                        - COALESCE(ret.total_retenido,0)                         AS saldo,
+                        - COALESCE(ret.total_retenido,0), 2)                         AS saldo,
                     {$fvlExpr}                                                    AS fecha_vencimiento
                 FROM liquidaciones_cabecera l
                 LEFT JOIN empresas emp
@@ -476,7 +476,7 @@ class CuentasPorPagarRepository extends BaseRepository
                     0::numeric                                                     AS total_nc,
                     0::numeric                                                     AS total_nd,
                     0::numeric                                                     AS total_retenido,
-                    fe.monto_usd - COALESCE(pg.total_pagado, 0)                    AS saldo,
+                    ROUND(fe.monto_usd - COALESCE(pg.total_pagado, 0), 2)                    AS saldo,
                     {$fviExpr}                                                     AS fecha_vencimiento
                 FROM importaciones_factura_exterior fe
                 JOIN importaciones_cabecera ic
@@ -539,12 +539,12 @@ class CuentasPorPagarRepository extends BaseRepository
                        c.fecha_emision,
                        -- + total_terceros: los rubros de terceros de las planillas de
                        -- servicios básicos se pagan junto con la factura (ver listado).
-                       c.importe_total
+                       ROUND(c.importe_total
                            + COALESCE(c.total_terceros,  0)
                            - COALESCE(pg.total_pagado,   0)
                            - COALESCE(ret.total_retenido,0)
                            - COALESCE(nn.total_nc,       0)
-                           + COALESCE(nn.total_nd,       0) AS saldo,
+                           + COALESCE(nn.total_nd,       0), 2) AS saldo,
                        {$fvcExpr} AS fecha_vencimiento
                 FROM compras_cabecera c
                 JOIN proveedores p ON p.id = c.id_proveedor
@@ -561,9 +561,9 @@ class CuentasPorPagarRepository extends BaseRepository
                 SELECT l.id_proveedor,
                        'LIQUIDACION'::text                                         AS tipo_fuente,
                        l.fecha_emision,
-                       l.importe_total
+                       ROUND(l.importe_total
                            - COALESCE(pg.total_pagado,   0)
-                           - COALESCE(ret.total_retenido,0) AS saldo,
+                           - COALESCE(ret.total_retenido,0), 2) AS saldo,
                        {$fvlExpr} AS fecha_vencimiento
                 FROM liquidaciones_cabecera l
                 JOIN proveedores p ON p.id = l.id_proveedor
@@ -579,7 +579,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 SELECT fe.id_proveedor,
                        'IMPORTACION'::text                                         AS tipo_fuente,
                        COALESCE(fe.fecha_factura, ic.fecha_nacionalizacion, ic.created_at::date) AS fecha_emision,
-                       fe.monto_usd - COALESCE(pg.total_pagado, 0) AS saldo,
+                       ROUND(fe.monto_usd - COALESCE(pg.total_pagado, 0), 2) AS saldo,
                        {$fviExpr} AS fecha_vencimiento
                 FROM importaciones_factura_exterior fe
                 JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
@@ -681,7 +681,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 COUNT(*) FILTER (WHERE sub.pend > 0 AND sub.fecha_vencimiento IS NOT NULL AND sub.fecha_vencimiento < CURRENT_DATE) AS vencidas
             FROM (
                 SELECT s.fecha_vencimiento,
-                       (s.saldo_inicial - pag.pagado) AS pend
+                       ROUND(s.saldo_inicial - pag.pagado, 2) AS pend
                 FROM saldos_iniciales_cxp s"
                 . $lateralPag . "
                 WHERE {$where}
@@ -730,12 +730,12 @@ class CuentasPorPagarRepository extends BaseRepository
                        c.fecha_emision,
                        -- + total_terceros: los rubros de terceros de las planillas de
                        -- servicios básicos se pagan junto con la factura (ver listado).
-                       c.importe_total
+                       ROUND(c.importe_total
                            + COALESCE(c.total_terceros,  0)
                            - COALESCE(pg.total_pagado,   0)
                            - COALESCE(ret.total_retenido,0)
                            - COALESCE(nn.total_nc,       0)
-                           + COALESCE(nn.total_nd,       0) AS saldo,
+                           + COALESCE(nn.total_nd,       0), 2) AS saldo,
                        {$fvcExpr} AS fecha_vencimiento
                 FROM compras_cabecera c
                 JOIN proveedores p ON p.id=c.id_proveedor
@@ -752,9 +752,9 @@ class CuentasPorPagarRepository extends BaseRepository
                 SELECT l.id_proveedor,
                        'LIQUIDACION'::text                                         AS tipo_fuente,
                        l.fecha_emision,
-                       l.importe_total
+                       ROUND(l.importe_total
                            - COALESCE(pg.total_pagado,   0)
-                           - COALESCE(ret.total_retenido,0) AS saldo,
+                           - COALESCE(ret.total_retenido,0), 2) AS saldo,
                        {$fvlExpr} AS fecha_vencimiento
                 FROM liquidaciones_cabecera l
                 JOIN proveedores p ON p.id=l.id_proveedor
@@ -770,7 +770,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 SELECT fe.id_proveedor,
                        'IMPORTACION'::text                                         AS tipo_fuente,
                        COALESCE(fe.fecha_factura, ic.fecha_nacionalizacion, ic.created_at::date) AS fecha_emision,
-                       fe.monto_usd - COALESCE(pg.total_pagado, 0) AS saldo,
+                       ROUND(fe.monto_usd - COALESCE(pg.total_pagado, 0), 2) AS saldo,
                        {$fviExpr} AS fecha_vencimiento
                 FROM importaciones_factura_exterior fe
                 JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
@@ -838,7 +838,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 COALESCE(SUM(CASE WHEN dv BETWEEN 61 AND 90 THEN pend ELSE 0 END), 0) AS tramo_61_90,
                 COALESCE(SUM(CASE WHEN dv > 90            THEN pend ELSE 0 END), 0) AS tramo_mas_90
             FROM (
-                SELECT (s.saldo_inicial - pag.pagado) AS pend,
+                SELECT ROUND(s.saldo_inicial - pag.pagado, 2) AS pend,
                        CASE WHEN s.fecha_vencimiento IS NULL THEN 0
                             ELSE (CURRENT_DATE - s.fecha_vencimiento)::int END AS dv
                 FROM saldos_iniciales_cxp s"
@@ -1042,12 +1042,17 @@ class CuentasPorPagarRepository extends BaseRepository
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) return null;
 
-        // Calcular saldo
-        $saldo = (float)$row['importe_total']
-               - (float)$row['total_pagado']
-               - (float)($row['total_retenido'] ?? 0)
-               - (float)($row['total_nc'] ?? 0)
-               + (float)($row['total_nd'] ?? 0);
+        // Calcular saldo. Se redondea a centavos igual que el listado: los importes de
+        // egresos son numeric(18,6), así que restar lo pagado puede dejar un residuo por
+        // debajo del centavo — y el modal ofrecería pagar una fracción que no existe.
+        $saldo = round(
+            (float)$row['importe_total']
+            - (float)$row['total_pagado']
+            - (float)($row['total_retenido'] ?? 0)
+            - (float)($row['total_nc'] ?? 0)
+            + (float)($row['total_nd'] ?? 0),
+            2
+        );
         $row['saldo'] = $saldo;
         return $row;
     }
@@ -1210,7 +1215,7 @@ class CuentasPorPagarRepository extends BaseRepository
         // Pendiente = saldo_inicial - pagado. Con "Fecha Hasta" lo pagado se
         // corta a esa fecha (ver lateralPagadoSaldoInicialCxp), igual que las
         // compras del listado principal; el estado se deriva de ese pendiente.
-        $pend = '(s.saldo_inicial - pag.pagado)';
+        $pend = 'ROUND(s.saldo_inicial - pag.pagado, 2)';
 
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($this->idsEmpresa($idsEmpresa), 'si_emp', $params)}) AND s.eliminado = false";

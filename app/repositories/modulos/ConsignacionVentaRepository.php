@@ -889,14 +889,19 @@ class ConsignacionVentaRepository extends BaseRepository
      * consignaciones vigentes, y "Pendiente" a los demás, en una sola sentencia. Solo escribe los
      * pedidos que cambian de estado. Un pedido sin líneas vigentes queda "Procesado".
      *
+     * Devuelve qué pedidos cambió y de qué estado a cuál, para que el Service lo deje asentado en
+     * log_sistema: este UPDATE pisa `updated_by`/`updated_at` del pedido, así que sin ese registro
+     * el pedido mostraba una "última edición" a nombre de alguien que nunca abrió el pedido y sin
+     * ninguna edición que la explicara.
+     *
      * @param int[] $idsPedido
-     * @return int Pedidos que cambiaron de estado.
+     * @return array<int, array{id:int, estado_anterior:string, nuevo_estado:string}> Pedidos que cambiaron de estado.
      */
-    public function actualizarEstadoPedidosPorConsignado(array $idsPedido, int $idEmpresa, int $idUsuario): int
+    public function actualizarEstadoPedidosPorConsignado(array $idsPedido, int $idEmpresa, int $idUsuario): array
     {
         $ids = array_values(array_unique(array_map('intval', $idsPedido)));
         if (empty($ids)) {
-            return 0;
+            return [];
         }
 
         // `consignado` va MATERIALIZED y con `= ANY (ARRAY(...))`: la suma se calcula una sola vez
@@ -913,21 +918,28 @@ class ConsignacionVentaRepository extends BaseRepository
                      GROUP BY cvd.id_pedido_detalle
                 ), calc AS (
                     SELECT pc.id,
+                           pc.estado AS estado_anterior,
                            CASE WHEN COALESCE(BOOL_AND(COALESCE(c.cantidad, 0) >= pd.cantidad), true)
                                 THEN 'Procesado' ELSE 'Pendiente' END AS nuevo_estado
                       FROM pedidos_cabecera pc
                       LEFT JOIN pedidos_detalle pd ON pd.id_pedido = pc.id AND pd.eliminado = false
                       LEFT JOIN consignado c ON c.id_pedido_detalle = pd.id
                      WHERE pc.id IN ($in)
-                     GROUP BY pc.id
+                     GROUP BY pc.id, pc.estado
                 )
                 UPDATE pedidos_cabecera p
                    SET estado = calc.nuevo_estado, updated_at = CURRENT_TIMESTAMP, updated_by = ?
                   FROM calc
                  WHERE p.id = calc.id AND p.id_empresa = ?
-                   AND p.estado IS DISTINCT FROM calc.nuevo_estado";
+                   AND p.estado IS DISTINCT FROM calc.nuevo_estado
+             RETURNING p.id, calc.estado_anterior, calc.nuevo_estado";
         $st = $this->db->prepare($sql);
         $st->execute([$idEmpresa, ...$ids, ...$ids, $idUsuario, $idEmpresa]);
-        return $st->rowCount();
+
+        return array_map(static fn(array $f): array => [
+            'id'              => (int) $f['id'],
+            'estado_anterior' => (string) $f['estado_anterior'],
+            'nuevo_estado'    => (string) $f['nuevo_estado'],
+        ], $st->fetchAll(PDO::FETCH_ASSOC));
     }
 }

@@ -31,6 +31,9 @@ class TransferenciaInventarioService
 {
     public const REFERENCIA_TIPO = 'transferencia_inventario';
 
+    /** Mensaje único para token inválido, caducado o de empresa inactiva. */
+    public const MSG_TOKEN_INVALIDO = 'El enlace no es válido o ya no está disponible.';
+
     private TransferenciaInventarioRepository $repo;
     private InventarioRepository $inventarioRepo;
     private TransferenciaInventarioRules $rules;
@@ -584,6 +587,139 @@ class TransferenciaInventarioService
     public function vincularGuiaRemision(int $id, int $idEmpresa, ?int $idGuia): void
     {
         $this->repo->setGuiaRemision($id, $idEmpresa, $idGuia);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // RECEPCIÓN (acta por correo + confirmación del destinatario)
+    // ────────────────────────────────────────────────────────────────
+
+    /** ¿La base tiene ya las columnas de recepción? (migración 20260921). */
+    public function soportaRecepcion(): bool
+    {
+        return $this->repo->soportaRecepcion();
+    }
+
+    /**
+     * Token del enlace público que viaja en el correo. Se crea la primera vez y
+     * se reutiliza después: reenviar el acta no invalida el enlace anterior.
+     */
+    public function obtenerTokenRecepcion(int $id, int $idEmpresa): string
+    {
+        $token = $this->repo->getTokenRecepcion($id, $idEmpresa);
+        if ($token !== '') {
+            return $token;
+        }
+        $token = bin2hex(random_bytes(24));
+        $this->repo->setTokenRecepcion($id, $idEmpresa, $token);
+        return $token;
+    }
+
+    /** Deja constancia de a quién se le envió el acta (y pasa la recepción a "enviada"). */
+    public function registrarEnvioCorreo(int $id, int $idEmpresa, int $idUsuario, string $correos): void
+    {
+        $this->repo->registrarEnvioCorreo($id, $idEmpresa, $correos);
+
+        $this->log->registrar(
+            $idUsuario,
+            $idEmpresa,
+            'ENVIAR_CORREO_TRANSFERENCIA_INVENTARIO',
+            'transferencias_inventario_cabecera',
+            $id,
+            null,
+            ['correos' => $correos]
+        );
+    }
+
+    /**
+     * Documento completo a partir del token, para la página pública sin login.
+     * Devuelve null cuando el token no existe o la empresa ya no está activa.
+     */
+    public function getRecepcionPorToken(string $token): ?array
+    {
+        $cab = $this->repo->getPorTokenRecepcion($token);
+        if (!$cab) {
+            return null;
+        }
+        $cab['detalles'] = $this->repo->getDetalle((int) $cab['id'], (int) $cab['id_empresa']);
+        return $cab;
+    }
+
+    /** El destinatario confirma que recibió conforme lo que dice el acta. */
+    public function confirmarRecepcionPorToken(string $token, string $nombre, string $comentario, string $ip): array
+    {
+        return $this->resolverRecepcionPorToken($token, 'recibida', $nombre, $comentario, $ip);
+    }
+
+    /** El destinatario no acepta lo recibido y deja el motivo. */
+    public function rechazarRecepcionPorToken(string $token, string $nombre, string $motivo, string $ip): array
+    {
+        if (trim($motivo) === '') {
+            throw new Exception('Debe indicar el motivo del rechazo.');
+        }
+        return $this->resolverRecepcionPorToken($token, 'rechazada', $nombre, $motivo, $ip);
+    }
+
+    /**
+     * Registra la respuesta del destinatario. La recepción es solo la
+     * conformidad del destino: NO mueve stock (ya se movió al registrar la
+     * transferencia) ni anula el documento si se rechaza — para eso está la
+     * anulación, que sí devuelve la mercadería y la hace un usuario del sistema.
+     *
+     * @return array{id:int, numero:string, estado:string}
+     */
+    private function resolverRecepcionPorToken(string $token, string $estado, string $nombre, string $texto, string $ip): array
+    {
+        $cab = $this->repo->getPorTokenRecepcion($token);
+        if (!$cab) {
+            throw new Exception(self::MSG_TOKEN_INVALIDO);
+        }
+
+        $idEmpresa = (int) $cab['id_empresa'];
+        $id        = (int) $cab['id'];
+
+        // Defensa en profundidad (§6): el repositorio ya filtró por empresa
+        // activa, pero este Service también se puede invocar desde otro flujo.
+        if (!(new \App\models\Empresa())->estaActiva($idEmpresa)) {
+            throw new Exception(self::MSG_TOKEN_INVALIDO);
+        }
+
+        if (($cab['estado'] ?? '') === 'anulada') {
+            throw new Exception('La transferencia fue anulada: ya no hay nada que confirmar.');
+        }
+
+        $recepcionActual = (string) ($cab['recepcion_estado'] ?? 'pendiente');
+        if (in_array($recepcionActual, ['recibida', 'rechazada'], true)) {
+            throw new Exception($recepcionActual === 'recibida'
+                ? 'Esta transferencia ya fue confirmada como recibida.'
+                : 'Esta transferencia ya fue rechazada.');
+        }
+
+        $nombre = trim($nombre);
+        if ($nombre === '') {
+            throw new Exception('Indique su nombre para dejar constancia de quién recibe.');
+        }
+
+        if (!$this->repo->resolverRecepcion($id, $idEmpresa, $estado, $nombre, trim($texto), $ip)) {
+            throw new Exception('No se pudo registrar la respuesta. Vuelva a abrir el enlace del correo.');
+        }
+
+        // Usuario 0: la acción viene del enlace del correo, sin sesión.
+        $this->log->registrar(
+            0,
+            $idEmpresa,
+            $estado === 'recibida' ? 'CONFIRMAR_RECEPCION_TRANSFERENCIA' : 'RECHAZAR_RECEPCION_TRANSFERENCIA',
+            'transferencias_inventario_cabecera',
+            $id,
+            ['recepcion_estado' => $recepcionActual],
+            [
+                'recepcion_estado'     => $estado,
+                'recepcion_nombre'     => $nombre,
+                'recepcion_comentario' => trim($texto),
+                'recepcion_ip'         => $ip,
+            ]
+        );
+
+        return ['id' => $id, 'numero' => (string) $cab['numero'], 'estado' => $estado];
     }
 
     // ────────────────────────────────────────────────────────────────

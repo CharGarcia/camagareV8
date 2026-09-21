@@ -1240,6 +1240,10 @@
             cancelButtonText: 'Cancelar',
             confirmButtonColor: '#0dcaf0',
             inputValidator: (v) => (!v || !v.trim()) ? 'Ingresa al menos un correo' : undefined,
+            // El popup se abre con el modal de la liquidación abierto detrás: tiene que colgar
+            // DENTRO del modal. Colgado de <body> el focus trap de Bootstrap le devuelve el
+            // foco al modal y el campo del correo no deja escribir.
+            target: document.getElementById('modalLiquidacion'),
         });
         if (!correos) return;
 

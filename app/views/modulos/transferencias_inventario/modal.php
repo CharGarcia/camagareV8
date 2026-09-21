@@ -20,6 +20,10 @@
                     <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="window.TRI_abrirPdf()" title="Acta de transferencia (PDF)">
                         <i class="bi bi-file-earmark-pdf fs-6"></i>
                     </button>
+                    <button type="button" id="tri-btn-correo" class="btn btn-outline-info btn-sm px-2" onclick="window.TRI_abrirEnvioCorreo()"
+                            title="Enviar el acta por correo para que el destino confirme la recepción">
+                        <i class="bi bi-envelope fs-6"></i>
+                    </button>
                     <div class="vr mx-1"></div>
                     <button type="button" id="tri-btn-guia" class="btn btn-outline-primary btn-sm px-2 d-none" onclick="window.TRI_generarGuia()"
                             title="Generar guía de remisión con estos productos">
@@ -33,6 +37,9 @@
                 <div class="border-top">
                     <div class="p-3" id="tri-tab-doc">
                         <input type="hidden" id="tri-id" value="">
+
+                        <!-- Conformidad del destino (solo en documentos ya enviados/confirmados) -->
+                        <div id="tri-recepcion-banner" class="alert py-2 px-3 small d-none mb-3"></div>
 
                         <div class="row g-2">
                             <div class="col-md-2">

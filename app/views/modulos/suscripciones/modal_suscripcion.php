@@ -916,6 +916,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             confirmButtonText: '<i class="bi bi-send me-1"></i>Enviar',
             cancelButtonText: 'Cancelar',
             confirmButtonColor: '#0d6efd',
+            // El popup se abre con el modal de la suscripción abierto detrás: tiene que colgar
+            // DENTRO del modal. Colgado de <body> el focus trap de Bootstrap le devuelve el foco
+            // al modal y el campo del correo no deja escribir.
+            target: document.getElementById('modalSusc'),
             width: '420px',
             focusConfirm: false,
             preConfirm: function () {

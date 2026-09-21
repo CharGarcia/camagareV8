@@ -43,7 +43,17 @@
         cancelada: ['secondary', 'Anulada'],
     };
 
-    const swal = (opts) => window.Swal ? Swal.fire(opts) : Promise.resolve({ isConfirmed: window.confirm(opts.title || '') });
+    // El cuadro se usa en dos sitios: la página de Vacaciones (sin modal) y DENTRO del modal
+    // de Empleados. Con un modal abierto, su focus trap (Bootstrap) le quita el foco a todo
+    // lo que cuelga de <body> —donde va el popup—, y los campos de estos diálogos (correo,
+    // comentario, motivo) no dejan escribir: por eso el popup se ancla al modal cuando lo hay.
+    const swal = (opts) => {
+        if (!window.Swal) return Promise.resolve({ isConfirmed: window.confirm(opts.title || '') });
+        // El último abierto: si hay modales anidados, el de encima es el que atrapa el foco.
+        const abiertos = document.querySelectorAll('.modal.show');
+        const modalAbierto = abiertos[abiertos.length - 1] || null;
+        return Swal.fire(modalAbierto ? Object.assign({ target: modalAbierto }, opts) : opts);
+    };
     const aviso = (icon, title, text) => window.Swal
         ? Swal.fire({ icon, title, text, timer: icon === 'success' ? 1600 : undefined, showConfirmButton: icon !== 'success' })
         : alert(`${title}\n${text || ''}`);

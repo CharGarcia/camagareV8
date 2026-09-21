@@ -1224,6 +1224,10 @@ window.IMP_rechazarNacionalizacion = async function () {
         confirmButtonText: 'Rechazar',
         cancelButtonText: 'Cancelar',
         inputValidator: (v) => !v || !v.trim() ? 'Debe indicar el motivo del rechazo.' : undefined,
+        // Igual que el resto de avisos del módulo, el popup cuelga DENTRO del modal: colgado
+        // de <body> el focus trap de Bootstrap le devuelve el foco al modal y el campo del
+        // motivo no deja escribir.
+        target: document.getElementById('modalImportacion'),
     });
     if (!isConfirmed) return;
 

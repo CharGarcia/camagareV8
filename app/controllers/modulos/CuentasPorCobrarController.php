@@ -554,7 +554,10 @@ class CuentasPorCobrarController extends BaseModuloController
                     . $e($titulo) . " &nbsp;&middot;&nbsp; saldo: " . number_format($g['saldo'], 2)
                     . "</td></tr></table>";
 
-                $cuerpo .= "<table><thead><tr>"
+                // class='cli': el hueco entre un cliente y el siguiente sale del
+                // margin-bottom de ESTA tabla (la cabecera verde va pegada arriba con
+                // margin-bottom:0). Va en su propia clase para no mover el resto de tablas.
+                $cuerpo .= "<table class='cli'><thead><tr>"
                     . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
                     . "<th style='width:9%;'>Fecha</th>"
                     . "<th style='width:{$wDoc}%;'>N. Documento</th>"
@@ -614,6 +617,9 @@ class CuentasPorCobrarController extends BaseModuloController
                 .header h3 { margin: 0 0 2px 0; font-size: 10pt; }
                 .header p  { margin: 0; font-size: 7.5pt; }
                 table.grp { margin-bottom: 0; }
+                /* Separación entre un cliente y el siguiente: el doble del margen normal
+                   de las tablas (6px), para que cada sección se lea como un bloque aparte. */
+                table.cli { margin-bottom: 12px; }
                 table.grp td { background: #eafaf1; border: 1px solid #ccc; font-weight: bold; font-size: 8.5pt; padding: 4px 5px; }
                 table.tot td { background: #343a40; color: #fff; font-weight: bold; font-size: 8.5pt; border: 1px solid #343a40; }
                 table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }

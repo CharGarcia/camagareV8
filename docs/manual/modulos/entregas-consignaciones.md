@@ -6,7 +6,7 @@ ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: entregas, entrega, buscar entrega, buscar consignacion, buscador, filtros, filtrar entregas, buscar por producto, buscar por lote, con firma, sin firma, con gps, sin gps, chips, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.8
+version: 1.9
 orden: 0
 estado: activo
 ---
@@ -255,6 +255,12 @@ igual que una que no existe.
   entregas registradas manualmente desde la web nunca tienen firma).
 
 ## Historial de cambios
+
+- **1.9** — Corregido: al registrar una entrega desde el detalle (**Marcar como
+  entregada**), el cuadro de la observación no aceptaba texto —se veía, pero al
+  escribir no pasaba nada—. Ahora se puede escribir la observación con normalidad
+  y el cuadro queda listo para escribir apenas aparece. Desde el botón *Entregar*
+  de la fila ya funcionaba.
 
 - **1.8** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla. Así el
   listado solo devuelve entregas donde

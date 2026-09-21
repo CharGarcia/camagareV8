@@ -5,8 +5,8 @@ categoria: Inventarios
 ruta_modulo: modulos/transferencias-inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: transferencia de inventario, traslado de mercaderia, mover stock, cambiar de bodega, pasar productos de una bodega a otra, entre bodegas, entre establecimientos, entre sucursales, entre locales, traspaso de inventario, guia de remision, acta de entrega, kardex, imprimir acta, pdf de la transferencia, logo en el acta
-version: 1.1
+etiquetas: transferencia de inventario, traslado de mercaderia, mover stock, cambiar de bodega, pasar productos de una bodega a otra, entre bodegas, entre establecimientos, entre sucursales, entre locales, traspaso de inventario, guia de remision, acta de entrega, kardex, imprimir acta, pdf de la transferencia, logo en el acta, enviar por correo, mandar el acta por email, enlace del pdf, link para ver el acta, abrir el acta sin descargar, no llega el adjunto, confirmar recepcion, aprobar lo recibido, recibi conforme, acuse de recibo, aceptar la transferencia, rechazar la transferencia, quien recibio, conformidad del destino
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -74,6 +74,73 @@ Es el documento que se imprime y se firma al entregar la mercadería. Contiene:
 Si la empresa no tiene logo cargado, el encabezado sale solo con el nombre y el RUC.
 El logo se sube en **Configuración → Empresa → Establecimientos**.
 
+## Enviar el acta por correo y confirmar la recepción
+
+Desde el listado, cada fila tiene un botón de **sobre** (📧) que abre el envío del
+acta por correo. El mismo botón está en la barra de acciones del documento abierto.
+
+**Cómo se envía**
+
+1. Pulse el sobre en la fila de la transferencia (o abra el documento y use el
+   botón de correo de la barra superior).
+2. En **Usuarios del sistema** elija a quién quiere enviarle: su correo se agrega
+   a la lista de destinatarios. Aparecen primero los usuarios que tienen acceso a
+   la **bodega de destino**. Puede elegir varios, uno tras otro.
+3. En **Para** puede además escribir correos a mano, separados por coma o punto y
+   coma (sirve para alguien que no es usuario del sistema).
+4. Opcionalmente escriba un **mensaje adicional** y decida si adjunta el **acta en
+   PDF** (viene marcado).
+5. Pulse **Enviar**.
+
+El correo sale con la **misma configuración de correo de la empresa** que usan las
+facturas (Configuración → Empresa → Correo). Lleva el resumen del traslado, el
+detalle de productos, un botón **Ver el acta en PDF** y —si el acta aún está
+pendiente de confirmar— un botón **Confirmar recepción**.
+
+**El acta va dos veces: adjunta y por enlace.** Además del PDF adjunto, el correo
+incluye un **enlace para abrir el acta** en el navegador (también aparece escrito
+completo, por si el botón no funciona). Sirve cuando el correo del destinatario
+bloquea o recorta los adjuntos, o cuando la abre desde el teléfono. Es el mismo
+documento que se descarga desde el sistema, y se abre sin usuario ni contraseña
+con el mismo enlace del correo. Si desmarca *Adjuntar el acta en PDF*, el correo
+va solo con el enlace. La página de confirmación también tiene el botón
+**Ver el acta en PDF**.
+
+**Cómo confirma quien recibe**
+
+El destinatario **no necesita usuario ni contraseña**: el botón del correo abre
+una página con el detalle de la transferencia y dos opciones.
+
+- **Confirmar recepción**: escribe su nombre (viene propuesto el responsable que
+  recibe) y, si quiere, una observación. La transferencia queda **Recibida**.
+- **Rechazar**: escribe su nombre y el **motivo** (qué faltó o qué llegó distinto).
+  La transferencia queda **Rechazada**.
+
+Cualquiera de las dos respuestas queda guardada con **nombre, fecha, hora e IP**, se
+registra en la auditoría del sistema y se imprime en el acta en PDF.
+
+**Qué NO hace la confirmación**
+
+Confirmar o rechazar **no mueve stock ni cambia el documento**: el inventario ya se
+trasladó al registrar la transferencia. La recepción es la **constancia de
+conformidad** del destino, equivalente a la firma del acta. Si lo recibido no
+coincide y hay que corregir el inventario, la transferencia se **anula** desde el
+sistema (eso sí devuelve el stock) y se registra una nueva con lo correcto.
+
+**Estados de recepción**
+
+| Estado | Qué significa |
+|--------|---------------|
+| Pendiente | Registrada, todavía no se envió el acta por correo. |
+| Enviada | El acta se envió; se espera la respuesta del destino. |
+| Recibida | El destinatario confirmó que recibió conforme. |
+| Rechazada | El destinatario no aceptó lo recibido y dejó el motivo. |
+
+En el listado hay una columna **Recepción** con ese estado y un filtro para ver, por
+ejemplo, solo las que están **pendientes de confirmar**. Al abrir el documento, una
+franja de color arriba muestra a quién se le envió o quién confirmó, con la fecha y
+el comentario. Las transferencias **anuladas** no se pueden enviar ni confirmar.
+
 ## Campos del formulario
 
 | Campo | Obligatorio | Qué significa |
@@ -93,7 +160,9 @@ El logo se sube en **Configuración → Empresa → Establecimientos**.
 
 ## Permisos
 
-- **Ver** (r): entrar, listar transferencias y abrir el detalle.
+- **Ver** (r): entrar, listar transferencias, abrir el detalle e **enviar el acta
+  por correo**. Quien recibe el correo confirma sin permisos ni sesión: le basta
+  el enlace, que es único por transferencia.
 - **Crear** (w): registrar transferencias nuevas.
 - **Actualizar** (u): anular una transferencia registrada.
 - **Eliminar** (d): eliminar del listado una transferencia **ya anulada**.
@@ -158,8 +227,29 @@ Además, el usuario solo puede transferir entre bodegas a las que tenga acceso
   posteriores que usaron esa mercadería.
 - **Una serie no aparece en la lista**: esa serie ya no tiene saldo en la bodega de
   origen (se vendió o se transfirió antes).
+- **«No se pudo enviar el correo. Verifique la configuración de correo de la
+  empresa»**: falta o está mal la configuración de **Configuración → Empresa →
+  Correo** (es la misma que usan las facturas). Pruebe primero enviando una
+  factura por correo.
+- **El destinatario dice que el enlace «no es válido o ya no está disponible»**:
+  la transferencia se eliminó, o la empresa está inactiva. Si ya la confirmó o
+  rechazó antes, la página se lo indica y no deja responder dos veces.
+- **El correo llegó sin el botón de confirmar**: la recepción ya estaba resuelta
+  (recibida o rechazada) al momento del envío; en ese caso el correo va solo como
+  copia del acta.
+- **No llega el correo**: revise la carpeta de correo no deseado del destinatario
+  y que la dirección esté bien escrita. El envío queda registrado en el documento
+  ("Acta enviada a…"), así que ahí se ve a qué dirección salió.
 
 ## Historial de cambios
+
+- **1.2** — La transferencia se puede **enviar por correo** desde cada fila del
+  listado (o desde el documento abierto), eligiendo usuarios del sistema o
+  escribiendo correos a mano, con el acta en PDF **adjunta y también como
+  enlace** para abrirla en el navegador. El destinatario
+  **confirma o rechaza la recepción** desde un enlace del correo, sin necesidad de
+  usuario, y esa respuesta queda con nombre, fecha, hora e IP, se ve en el listado
+  (columna **Recepción**, con filtro) y se imprime en el acta.
 
 - **1.1** — Se rehízo el **acta en PDF**: ahora lleva el logo de la empresa y un
   recuadro de documento con el número y la fecha; el origen y el destino muestran

@@ -140,7 +140,7 @@ class NovedadRepository extends BaseRepository
                             ) pg
                             WHERE rr.id_novedad = {$a}.id
                               AND rd.id_empresa = {$a}.id_empresa AND rc.eliminado = false
-                              AND pg.pagado > 0 AND (rd.neto - pg.pagado) <= 0
+                              AND pg.pagado > 0 AND ROUND(rd.neto - pg.pagado, 2) <= 0
                        )
                   THEN 'pagada' ELSE 'pendiente' END";
     }
@@ -338,7 +338,7 @@ class NovedadRepository extends BaseRepository
                 WHERE rr.id_novedad IN ($in)
                   AND rd.id_empresa = :emp AND rc.eliminado = false
                   AND {$pagadoSub} > 0
-                  AND (rd.neto - {$pagadoSub}) <= 0";
+                  AND ROUND(rd.neto - {$pagadoSub}, 2) <= 0";
         $set = [];
         try {
             $st = $this->db->prepare($sql);
