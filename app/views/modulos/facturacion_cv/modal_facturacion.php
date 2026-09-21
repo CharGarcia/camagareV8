@@ -229,7 +229,7 @@
                                                             </select>
                                                         </div>
                                                         <div class="col-4">
-                                                            <input type="number" class="form-control form-control-sm text-end border-0 bg-light fw-bold faccv-vpago" step="0.01" value="0.00">
+                                                            <input type="text" inputmode="decimal" class="form-control form-control-sm text-end border-0 bg-light fw-bold faccv-vpago faccv-num" value="0.00">
                                                         </div>
                                                         <div class="col-1 text-center"><span></span></div>
                                                     </div>
@@ -241,7 +241,7 @@
                                                 <div class="row g-2 p-1">
                                                     <div class="col-md-6">
                                                         <label class="x-small text-muted mb-1">Días de crédito</label>
-                                                        <input type="number" class="form-control form-control-sm" id="faccv_dias_credito" value="0" min="0">
+                                                        <input type="text" inputmode="numeric" class="form-control form-control-sm faccv-num" id="faccv_dias_credito" value="0">
                                                     </div>
                                                     <div class="col-md-6">
                                                         <label class="x-small text-muted mb-1">Plazo</label>
@@ -403,11 +403,11 @@
                 <div class="row g-2 mb-2">
                     <div class="col-6">
                         <label class="small text-muted mb-1 d-block" style="font-size:0.75rem;">Ingreso</label>
-                        <input type="number" id="faccv_desc_ingreso" class="form-control form-control-sm text-center shadow-none border-secondary-subtle" value="0" step="any" min="0" oninput="faccvDescCalc()" style="font-size:0.9rem;">
+                        <input type="text" inputmode="decimal" id="faccv_desc_ingreso" class="form-control form-control-sm text-center shadow-none border-secondary-subtle faccv-num" value="0" oninput="faccvDescCalc()" style="font-size:0.9rem;">
                     </div>
                     <div class="col-6">
                         <label class="small text-muted mb-1 d-block" style="font-size:0.75rem;">Calculado ($)</label>
-                        <input type="number" id="faccv_desc_calculado" class="form-control form-control-sm text-center shadow-none border-0 bg-light text-primary" value="0" readonly style="font-size:0.9rem;">
+                        <input type="text" id="faccv_desc_calculado" class="form-control form-control-sm text-center shadow-none border-0 bg-light text-primary" value="0" readonly style="font-size:0.9rem;">
                     </div>
                 </div>
 
@@ -432,15 +432,49 @@
     // ("¿Se puede editar el descuento en un producto o servicio en la factura?").
     const EDITAR_DESC = !(window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.editar_descuento_factura === false);
     let modal, tCli = null;
+    // Documento generado por un Cambio de productos: sus líneas llevan id_cambio_detalle y
+    // las gestiona el cambio, así que NUNCA se reescriben desde aquí (ver faccvGenerar).
+    let faccvDeCambio = false;
     const added = new Set();
 
     function getModal() { if (!modal) modal = new bootstrap.Modal(document.getElementById('modalFacturacionCv')); return modal; }
-    function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+    // La coma se acepta como separador decimal por si algún valor llega con ella (pegado,
+    // autocompletado del navegador): el sistema trabaja SIEMPRE con punto.
+    function num(v) { const n = parseFloat(typeof v === 'string' ? v.replace(',', '.') : v); return isNaN(n) ? 0 : n; }
     // Redondeo a centavos igual que el backend (ConsignacionFacturaService::normalizarDetalles):
     // se redondea POR LÍNEA antes de sumar, no solo al final, para que el total de este modal
     // coincida centavo a centavo con lo que se guarda y con la Factura de Venta generada.
     function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
     function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+    // ── Separador decimal: SIEMPRE punto ──────────────────────────────────────
+    // Los campos de importes de este modal son `type="text" inputmode="decimal"` a
+    // propósito, NO `type="number"`: en un campo numérico el navegador considera
+    // "1,50" un valor inválido y `.value` devuelve CADENA VACÍA, así que un descuento
+    // tecleado con coma llegaba al servidor como CERO aunque en pantalla se siguiera
+    // leyendo "1,50" — y la factura salía sin descuento. Con `text` sí se puede
+    // convertir la coma en punto mientras se escribe.
+    // El teclado numérico del móvil se mantiene gracias a `inputmode`.
+    function faccvNormalizarDecimal(el) {
+        const antes = el.value;
+        let pos = null;
+        try { pos = el.selectionStart; } catch (e) {}
+        let v = antes.replace(/,/g, '.').replace(/[^0-9.]/g, ''); // coma → punto; fuera el resto
+        const partes = v.split('.');
+        if (partes.length > 2) v = partes.shift() + '.' + partes.join(''); // un solo separador
+        if (v === antes) return;
+        el.value = v;
+        if (pos !== null) {
+            const caret = pos + (v.length - antes.length);
+            try { el.setSelectionRange(caret, caret); } catch (e) {}
+        }
+    }
+    // En fase de CAPTURA para que corra ANTES de los `oninput` de cada campo
+    // (faccvCgRowCalc / faccvLineaDesc / faccvDescCalc): así todos leen el valor ya normalizado.
+    document.addEventListener('input', (e) => {
+        const el = e.target;
+        if (el && el.classList && el.classList.contains('faccv-num')) faccvNormalizarDecimal(el);
+    }, true);
     function $(id) { return document.getElementById(id); }
     function fmt(v, d) { return num(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
 
@@ -456,6 +490,7 @@
         $('faccv_num_factura_wrap').classList.remove('text-bg-success', 'border-success', 'text-bg-danger', 'border-danger');
         $('faccv_num_factura_wrap').classList.add('d-none', 'bg-light', 'text-dark', 'border');
         cgClienteId = null;
+        faccvDeCambio = false;
         added.clear();
         recalc();
     }
@@ -507,6 +542,7 @@
         $('faccv_btn_generar').classList.toggle('d-none', !(row.estado === 'borrador' && window.FACCV_PERM.actualizar));
         // Registro generado por un cambio de productos: solo lectura, se gestiona desde el cambio.
         const deCambio = !!row.id_cambio_producto;
+        faccvDeCambio = deCambio;
         $('faccv_aviso_cambio').classList.toggle('d-none', !deCambio);
         // "Crear nueva desde esta": disponible en documentos ya emitidos (facturada/anulada).
         $('faccv_btn_duplicar').classList.toggle('d-none', deCambio || !((row.estado === 'anulada' || row.estado === 'facturada') && window.FACCV_PERM.crear));
@@ -738,7 +774,7 @@
         div.className = 'row g-2 align-items-center mb-1 faccv-row-pago';
         div.innerHTML = `
             <div class="col-7"><select class="form-select form-select-sm border-0 bg-light faccv-fpago">${opts}</select></div>
-            <div class="col-4"><input type="number" class="form-control form-control-sm text-end border-0 bg-light fw-bold faccv-vpago" step="0.01" value="0.00"></div>
+            <div class="col-4"><input type="text" inputmode="decimal" class="form-control form-control-sm text-end border-0 bg-light fw-bold faccv-vpago faccv-num" value="0.00"></div>
             <div class="col-1 text-center"><button type="button" class="btn btn-link btn-sm p-0 text-danger shadow-none" onclick="this.closest('.faccv-row-pago').remove();" title="Eliminar"><i class="bi bi-x-circle-fill"></i></button></div>`;
         cont.appendChild(div);
         div.querySelector('.faccv-vpago').focus();
@@ -881,11 +917,11 @@
                 <td class="small">${esc(l.lote && l.lote !== 'sin_lote' ? l.lote : '—')}</td>
                 <td class="small">${esc(l.nup || '—')}</td>
                 <td><select class="form-select form-select-sm cg-precios" style="min-width:130px;font-size:.78rem;" onchange="faccvCgPrecioSel(this)" ${ya ? 'disabled' : ''}>${opts}</select></td>
-                <td><input type="number" class="form-control form-control-sm text-end cg-precio" style="width:80px;font-size:.78rem;" value="${precioCons.toFixed(DEC_P)}" min="0" step="any" oninput="faccvCgRowCalc(this)" ${ya ? 'disabled' : ''}></td>
-                <td><input type="number" class="form-control form-control-sm text-end cg-cant" style="width:70px;font-size:.78rem;" value="${saldo}" min="0" max="${saldo}" step="any" oninput="faccvCgRowCalc(this)" ${ya ? 'disabled' : ''}></td>
+                <td><input type="text" inputmode="decimal" class="form-control form-control-sm text-end cg-precio faccv-num" style="width:80px;font-size:.78rem;" value="${precioCons.toFixed(DEC_P)}" oninput="faccvCgRowCalc(this)" ${ya ? 'disabled' : ''}></td>
+                <td><input type="text" inputmode="decimal" class="form-control form-control-sm text-end cg-cant faccv-num" style="width:70px;font-size:.78rem;" value="${saldo}" oninput="faccvCgRowCalc(this)" ${ya ? 'disabled' : ''}></td>
                 <td>
                     <div class="d-flex align-items-center">
-                        <input type="number" class="form-control form-control-sm text-end cg-desc" style="width:70px;font-size:.78rem;" value="0.00" min="0" step="any" oninput="faccvCgRowCalc(this)" ${(ya || !EDITAR_DESC) ? 'disabled' : ''}>
+                        <input type="text" inputmode="decimal" class="form-control form-control-sm text-end cg-desc faccv-num" style="width:70px;font-size:.78rem;" value="0.00" oninput="faccvCgRowCalc(this)" ${(ya || !EDITAR_DESC) ? 'disabled' : ''}>
                         ${(ya || !EDITAR_DESC) ? '' : `<button type="button" class="btn btn-link btn-sm p-0 ps-1 text-primary shadow-none border-0" onclick="faccvAbrirDescuento(this)" title="Aplicar descuento rápido (% o $)"><i class="bi bi-plus-circle"></i></button>`}
                     </div>
                 </td>
@@ -969,7 +1005,7 @@
             <td class="text-end small">${cant.toFixed(2)}</td>
             <td class="text-end">${(!cfg.readonly && EDITAR_DESC) ? `
                 <div class="d-flex align-items-center justify-content-end">
-                    <input type="number" class="form-control form-control-sm input-detalle text-end text-danger faccv-input-desc" style="width:74px;" value="${desc.toFixed(2)}" step="any" min="0" oninput="faccvLineaDesc(this)" onblur="faccvLineaDescBlur(this)">
+                    <input type="text" inputmode="decimal" class="form-control form-control-sm input-detalle text-end text-danger faccv-input-desc faccv-num" style="width:74px;" value="${desc.toFixed(2)}" oninput="faccvLineaDesc(this)" onblur="faccvLineaDescBlur(this)">
                     <button type="button" class="btn btn-link btn-sm p-0 ps-1 text-primary shadow-none border-0" onclick="faccvAbrirDescuento(this)" title="Aplicar descuento rápido (% o $)"><i class="bi bi-plus-circle"></i></button>
                 </div>` : `<span class="small">${desc.toFixed(2)}</span>`}</td>
             <td class="text-center small">${fmtPct(porc)}</td>
@@ -1162,9 +1198,15 @@
     }
 
     // ── Guardar / Generar / Eliminar / Anular ────────────────────────────────
-    window.faccvGuardar = async function () {
-        if (!$('faccv_id_cliente').value) { Swal.fire('Atención', 'Seleccione el cliente a facturar.', 'warning'); return; }
-        if (!$('faccv_secuencial').value) { Swal.fire('Atención', 'Falta el secuencial. Configure el punto de emisión.', 'warning'); return; }
+
+    /**
+     * Arma el documento TAL COMO ESTÁ EN PANTALLA. Devuelve null (y avisa) si falta
+     * algo obligatorio. Está separado de faccvGuardar() porque "Generar factura"
+     * también lo necesita: ver faccvGenerar().
+     */
+    function faccvPayload() {
+        if (!$('faccv_id_cliente').value) { Swal.fire('Atención', 'Seleccione el cliente a facturar.', 'warning'); return null; }
+        if (!$('faccv_secuencial').value) { Swal.fire('Atención', 'Falta el secuencial. Configure el punto de emisión.', 'warning'); return null; }
         const detalles = [];
         document.querySelectorAll('#faccv_lineas_body tr[data-idcd]').forEach(tr => {
             const c = num(tr.dataset.cant);
@@ -1175,8 +1217,8 @@
                 descuento: num(tr.dataset.desc)
             });
         });
-        if (!detalles.length) { Swal.fire('Atención', 'Indique la cantidad a facturar en al menos una línea.', 'warning'); return; }
-        const payload = {
+        if (!detalles.length) { Swal.fire('Atención', 'Indique la cantidad a facturar en al menos una línea.', 'warning'); return null; }
+        return {
             id: $('faccv_id').value || null, fecha_emision: $('faccv_fecha').value,
             serie: $('faccv_serie').value, secuencial: $('faccv_secuencial').dataset.sec || $('faccv_secuencial').value,
             id_punto_emision: $('faccv_id_punto_emision').value, establecimiento: $('faccv_establecimiento').value, punto_emision: $('faccv_punto_emision').value,
@@ -1187,20 +1229,29 @@
             pagos_sri: collectPagos(),
             detalles
         };
+    }
+
+    /** POST a /store (crear o actualizar). Devuelve {id, msg}; lanza si el servidor rechaza. */
+    async function faccvPersistir(payload) {
+        const res = await fetch(`${RUTA}/store`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Error al guardar');
+        return { id: parseInt(data.id, 10) || parseInt($('faccv_id').value, 10) || 0, msg: data.msg };
+    }
+
+    window.faccvGuardar = async function () {
+        const payload = faccvPayload(); if (!payload) return;
         const btn = $('faccv_btn_guardar'); const orig = btn.innerHTML;
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
         try {
-            const res = await fetch(`${RUTA}/store`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const data = await res.json();
-            if (!data.ok) throw new Error(data.error || 'Error al guardar');
+            const guardado = await faccvPersistir(payload);
             // NO se cierra el modal: se recarga el documento guardado dentro del modal
             // (queda en modo edición con su id; aparece "Generar factura"). Igual que factura de venta.
-            const idGuardado = parseInt(data.id, 10) || parseInt($('faccv_id').value, 10) || 0;
             if (typeof cargarGrid === 'function') cargarGrid();
-            if (idGuardado > 0) {
-                await abrirModalFacturacionVer({ dataset: { row: JSON.stringify({ id: idGuardado, estado: 'borrador' }) } });
+            if (guardado.id > 0) {
+                await abrirModalFacturacionVer({ dataset: { row: JSON.stringify({ id: guardado.id, estado: 'borrador' }) } });
             }
-            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: data.msg || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: guardado.msg || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
         } catch (err) { Swal.fire('Error', err.message, 'error'); }
         finally { btn.disabled = false; btn.innerHTML = orig; }
     };
@@ -1208,11 +1259,21 @@
     window.faccvGenerar = async function () {
         const id = $('faccv_id').value;
         if (!id) { Swal.fire('Atención', 'Guarde el documento primero.', 'warning'); return; }
-        const c = await Swal.fire({ title: '¿Generar factura?', html: 'Se reingresará la mercadería al inventario y se generará una <b>Factura de Venta</b> al cliente del documento.', icon: 'question', showCancelButton: true, confirmButtonText: 'Sí, generar', cancelButtonText: 'Cancelar' });
+        const c = await Swal.fire({ title: '¿Generar factura?', html: 'Se <b>guardarán los cambios pendientes</b>, se reingresará la mercadería al inventario y se generará una <b>Factura de Venta</b> al cliente del documento.', icon: 'question', showCancelButton: true, confirmButtonText: 'Sí, generar', cancelButtonText: 'Cancelar' });
         if (!c.isConfirmed) return;
         const btn = $('faccv_btn_generar'); const orig = btn.innerHTML;
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando...';
         try {
+            // Guardar ANTES de generar: generarFacturaAjax solo recibe el id y el servidor
+            // factura lo que está en la BASE, así que un descuento (o una línea) editado y
+            // no guardado se perdía en silencio. Se omite en los registros generados por un
+            // Cambio de productos: sus líneas llevan id_cambio_detalle y actualizar() las
+            // reescribiría como líneas normales.
+            if (!faccvDeCambio && !$('faccv_btn_guardar').classList.contains('d-none')) {
+                const payload = faccvPayload();
+                if (!payload) return;                 // el propio faccvPayload() ya avisó
+                await faccvPersistir(payload);
+            }
             const fd = new FormData(); fd.append('id', id);
             const res = await fetch(`${RUTA}/generarFacturaAjax`, { method: 'POST', body: fd }); const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'No se pudo generar la factura.');

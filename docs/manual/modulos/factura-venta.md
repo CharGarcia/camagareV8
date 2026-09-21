@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar
-version: 2.16
+etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento
+version: 2.17
 orden: 20
 estado: activo
 ---
@@ -395,6 +395,13 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.17** — Corregido: al **abrir una factura guardada** —o al recuperar un
+  borrador— la columna **P. Con Imp.** salía en 0.00 en todas las líneas. El
+  precio con impuestos se calcula ahora también en esos dos casos (antes solo al
+  elegir el producto o al escribir el precio). No cambia ningún valor guardado:
+  es solo lo que se ve en pantalla. Además, la columna **Desc.** es más ancha,
+  que compartía sitio con el botón de descuento rápido.
 
 - **2.16** — Cuando el establecimiento **no exige lote**, al descontar se elige el
   **lote real que vence primero** en vez del grupo *sin lote*. Ese grupo arrastraba como

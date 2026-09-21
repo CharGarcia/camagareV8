@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, quitar filtros del pdf, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde
-version: 2.15
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde
+version: 2.16
 orden: 40
 estado: activo
 ---
@@ -113,7 +113,9 @@ Ventas y el Reporte de Ventas por Vendedor:
 - A estos usuarios **el filtro *Vendedor* les queda fijo**: el vendedor ve su
   propio nombre y quien no es vendedor ve *Sin vendedor vinculado*. No pueden
   elegir otro, y el sistema ignora cualquier otro vendedor que se le envíe. En el
-  encabezado del Excel y del PDF, *Vendedor* muestra su nombre.
+  resumen de *Filtros aplicados* del Excel y del PDF, *Vendedor* muestra su
+  nombre; al vendedor, además, se le oculta la columna del asesor (ver
+  *Filtrar por vendedor*).
 
 **Cómo sabe el sistema qué vendedor es el usuario.** Se resuelve en este orden:
 primero el campo **Usuario del sistema** de la ficha del vendedor (módulo
@@ -158,7 +160,7 @@ En las vistas *Por cliente* y *Por producto* las secciones salen siempre en
 pantalla como en el PDF y el Excel; el orden que elija en las cabeceras acomoda
 los documentos dentro de cada sección.
 
-## El PDF del listado: logo y encabezado, sin filtros
+## El PDF del listado: logo, encabezado y resumen de filtros
 
 El PDF del listado (botón **PDF** de la cabecera de la tabla), en cualquiera de
 las vistas (*Detallado*, *Por cliente* y *Por producto*), empieza con el **logo
@@ -168,14 +170,17 @@ principal (el primero activo, normalmente el 001), el que se sube en **Empresa**
 pestaña **Establecimiento**. Si no hay logo cargado, el encabezado sale solo con
 el nombre, centrado.
 
-Debajo del encabezado van directamente las **tarjetas de totales** (documentos,
-saldo total, vencido y al día; la vista *Por producto* no las lleva) y la tabla.
-El PDF **no imprime el recuadro de filtros aplicados** (vendedor, período,
-cliente, producto…): el listado ya refleja esos filtros.
+Debajo del encabezado va el recuadro **Filtros aplicados**, con la misma
+descripción que encabeza el Excel: alcance, tipo de documento, estado, vendedor,
+producto, período y cliente. Así un PDF impreso o reenviado dice por sí solo de
+qué cartera es, sin depender de quién lo generó. Los filtros que no se usaron
+salen como *Todos*.
 
-El **Excel** sí conserva, en su encabezado, la descripción completa de los
-filtros: vista, alcance, tipo de documento, estado, vendedor, producto, período
-y cliente.
+Más abajo van las **tarjetas de totales** (documentos, saldo total, vencido y al
+día; la vista *Por producto* no las lleva) y la tabla.
+
+El **Excel** lleva ese mismo resumen en su encabezado, con una línea por filtro
+(y, en las vistas agrupadas, también la vista usada).
 
 No confundir con el **PDF de un documento** (botón rojo de cada fila), que
 descarga la factura o el recibo (ver *Acciones de cada documento*).
@@ -204,8 +209,18 @@ en su propio vendedor (ver *Quién ve qué*).
 
 Las tarjetas superiores, el gráfico de antigüedad y las exportaciones a PDF y
 Excel respetan el filtro, igual que el de tipo de documento y el de cliente.
-El **Excel** incluye además la columna **Vendedor** con el nombre del vendedor
-asignado a cada factura o recibo (vacía en los saldos iniciales).
+Con el filtro en **Todos**, el **Excel** incluye la columna **Vendedor** con el
+nombre del vendedor asignado a cada factura o recibo (vacía en los saldos
+iniciales), y la vista *Por cliente* muestra la columna **Asesor** en pantalla,
+en el PDF y en el Excel.
+
+**Al elegir un vendedor, esa columna desaparece** —en pantalla, en el PDF y en el
+Excel— porque repetiría el mismo nombre en todas las filas: el vendedor elegido
+ya consta en el resumen de *Filtros aplicados* del encabezado, y el espacio que
+ocupaba pasa a la columna *N. Documento*. Lo mismo ocurre con el usuario que
+tiene el filtro fijo en su propio vendedor (ver *Quién ve qué*). En cambio, el
+usuario de nivel 1 **sin vendedor vinculado**, que ve solo lo que él registró,
+sí conserva la columna: sus documentos pueden ser de varios asesores.
 
 > Los **saldos iniciales** no tienen vendedor, así que al elegir un vendedor
 > quedan fuera del listado y de los totales. Con **Todos** vuelven a aparecer.
@@ -280,7 +295,9 @@ listado va la fila **TOTAL GENERAL** con la suma de todos.
 
 **El detalle de cada cliente** no repite las columnas del listado general (el
 cliente ya es la cabecera de la sección): muestra **fecha, n. de documento,
-total, NC, abonos, retenciones, saldo, días y asesor**.
+total, NC, abonos, retenciones, saldo, días y asesor**. La columna *Asesor*
+**no aparece cuando se está filtrando por un vendedor** (ver *Filtrar por
+vendedor*): en ese caso su espacio pasa a *N. Documento*.
 
 | Columna | Qué muestra |
 |---|---|
@@ -618,6 +635,18 @@ Y dos casos que el reporte **no** descuenta a propósito:
   (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
+
+- **2.16** — El **PDF del listado** vuelve a imprimir el recuadro **Filtros
+  aplicados** (alcance, tipo de documento, estado, vendedor, producto, período y
+  cliente), con la misma descripción que encabeza el Excel, en las tres vistas
+  (*Detallado*, *Por cliente* y *Por producto*). Además, **al filtrar por un
+  vendedor se oculta su columna** —*Vendedor* en el Excel detallado y *Asesor* en
+  la vista *Por cliente*, en pantalla, PDF y Excel—: repetía el mismo nombre en
+  todas las filas y ese nombre ya consta en el resumen de filtros; el espacio
+  pasa a *N. Documento*. Vale también para el usuario con el filtro fijo en su
+  propio vendedor; el de nivel 1 sin vendedor vinculado conserva la columna.
+  Actualizadas *El PDF del listado*, *Filtrar por vendedor*, *Quién ve qué* y
+  *Vista "Por cliente"*.
 
 - **2.15** — Cada fila tiene un botón **PDF** que descarga la factura o el recibo
   (el mismo de sus módulos), también para quien no tiene acceso a Facturas o

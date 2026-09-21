@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.16
+etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar
+version: 1.17
 orden: 47
 estado: activo
 ---
@@ -89,9 +89,13 @@ y solo cuando está correcto se emite la factura.
 4. Se completan Info. Adicional, Forma de pago SRI y Crédito en el pie, igual que en una factura de venta. En *Info. Adicional* aparecen además, con un candado, las líneas que el sistema mantiene solo (correo del cliente, observaciones, vendedor y cajero): no se editan ahí, se cambian en su propio campo, y son las que viajarán a la factura.
 5. **Guardar** deja el documento en **Borrador**: todavía no toca inventario ni
    emite nada, y se puede seguir editando.
-6. **Generar factura** reingresa la mercadería al inventario y emite la
-   **factura de venta**. El documento pasa a **Facturada** y queda ligado a esa
-   factura (el número se ve en la barra superior del modal).
+6. **Generar factura** guarda primero los cambios que estén en pantalla (por si
+   se retocó un descuento o se añadió una línea después del último *Guardar*),
+   reingresa la mercadería al inventario y emite la **factura de venta**. El
+   documento pasa a **Facturada** y queda ligado a esa factura (el número se ve
+   en la barra superior del modal). Si al guardar algo no cuadra —saldo
+   insuficiente, período contable cerrado, descuento mayor al subtotal— se avisa
+   y **no se emite nada**.
 7. Si el usuario tiene permiso de ver **Facturas de Venta**, al terminar el
    sistema pregunta si desea **ir a ese módulo**: al aceptar, se abre el listado
    de facturas ya filtrado por el número recién generado. Si no tiene ese
@@ -168,6 +172,9 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 - El descuento **nunca puede superar el subtotal** de su línea (precio ×
   cantidad): si se excede, el sistema lo recorta a ese tope. El IVA se calcula
   siempre sobre la base ya descontada.
+- **Los decimales se separan con punto, no con coma.** Si se teclea una coma, el
+  sistema la convierte en punto solo (escribir `1,50` deja `1.50`). Aplica a
+  descuento, precio, cantidad y valor de las formas de pago.
 - Si en **Empresa** está apagado *«¿Se puede editar el descuento en un producto o
   servicio en la factura?»*, el campo y el botón no aparecen y el descuento se
   muestra solo como dato, exactamente igual que en la factura de venta.
@@ -255,6 +262,11 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   después de fijarlo. Corrija el valor en la columna *Desc.*
 - **No se ve la columna Desc. editable**: la empresa tiene apagada la opción
   *Editar descuento en factura*, o el documento ya no está en borrador.
+- **La factura salió sin el descuento**: pasaba al escribirlo con **coma**
+  (`1,50`) —el valor se veía en pantalla pero se guardaba en cero— o al retocarlo
+  y pulsar *Generar factura* sin guardar. Ambas cosas están corregidas desde la
+  versión 1.17. Las facturas ya emitidas no se corrigen solas: hay que anularlas
+  (el documento vuelve a quedar disponible) y volver a facturar.
 - **Sin saldo facturable** al buscar una consignación: ya se facturó o se retornó
   toda su mercadería.
 - **A un documento migrado del sistema anterior le faltan ítems**: ocurría con
@@ -267,6 +279,14 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   que repara el enlace de esas líneas.
 
 ## Historial de cambios
+
+- **1.17** — **El descuento ya no se pierde al facturar.** Dos arreglos: (1) los
+  decimales se separan **siempre con punto**; si se teclea una coma el sistema la
+  convierte sola. Antes, un descuento escrito como `1,50` se veía en pantalla pero
+  el navegador lo entregaba vacío y se guardaba en **cero**, así que la factura
+  salía sin descuento. (2) **Generar factura** guarda primero lo que haya en
+  pantalla: antes emitía lo que estuviera en la base, de modo que un descuento (o
+  una línea) editado y no guardado se descartaba en silencio.
 
 - **1.16** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla: fecha,
   número, cliente, factura y observaciones. Así el listado solo devuelve documentos donde

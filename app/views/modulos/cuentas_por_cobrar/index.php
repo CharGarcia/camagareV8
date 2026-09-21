@@ -626,6 +626,11 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
     const CXC_TIENE_WA        = <?php echo $tieneWA ? 'true' : 'false'; ?>;
     const CXC_PUEDE_HISTORIAL = <?php echo !empty($puedeHistorial) ? 'true' : 'false'; ?>;
     const CXC_PUEDE_COBRAR    = <?php echo !empty($puedeCobrar) ? 'true' : 'false'; ?>;
+    // Usuario restringido a SU propio vendedor (§6): todo lo que ve es de ese asesor, así que
+    // la columna Asesor sobra igual que cuando se elige uno en el filtro (ver CXC_sinAsesor()).
+    // Restringido SIN vendedor vinculado (ve sus propios registros) NO entra: ahí los
+    // documentos pueden ser de varios asesores.
+    const CXC_VENDEDOR_UNICO  = <?php echo (!empty($vendedorFijo) && !empty($vendedores)) ? 'true' : 'false'; ?>;
 </script>
 <!-- Cédula y RUC del mismo tercero (cédula + '001') se tratan como uno solo -->
 <script src="<?php echo BASE_URL; ?>/js/components/identificacion_tercero.js?v=<?= asset_ver('/js/components/identificacion_tercero.js') ?>"></script>

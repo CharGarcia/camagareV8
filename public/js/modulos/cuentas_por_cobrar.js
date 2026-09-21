@@ -383,7 +383,8 @@ function CXC_accionesHtml(r) {
    En "Por cliente" el cliente ya es la cabecera de la sección,
    así que su detalle muestra lo que hace falta dentro del
    cliente: fecha, documento, total, NC, abonos, retenciones,
-   saldo, días vencidos y asesor.
+   saldo, días vencidos y —salvo que se esté filtrando por un
+   asesor (CXC_sinAsesor)— el asesor.
 ════════════════════════════════════════════════════ */
 /* Copia exacta del colgroup/thead de la vista (index.php): anchos y cabeceras ordenables
    (`data-sort` = clave de CXC_ORDEN). Si se cambia allá, cambiar aquí. */
@@ -405,11 +406,26 @@ const CXC_TH_ESTANDAR = `
         <th class="text-center sortable-header" data-sort="dias_vencido" role="button" title="Ordenar por días vencidos">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
         <th class="text-center">Acciones</th>
     </tr>`;
-const CXC_COLS_MAYOR = `
-    <col style="width:36px;"><col style="width:92px;"><col style="width:170px;"><col style="width:100px;">
+/* ¿El listado está acotado a UN solo asesor? Pasa al elegir uno en el filtro Vendedor y con
+   el usuario restringido a su propio vendedor (CXC_VENDEDOR_UNICO). En ese caso la columna
+   Asesor repetiría el mismo nombre en todas las filas —el que ya dice el resumen de filtros—
+   y se omite, igual que en el PDF y el Excel (CuentasPorCobrarController::filtraPorVendedor).
+   Es la única columna opcional de esta vista: cuando falta, la tabla tiene 10 y no 11. */
+function CXC_sinAsesor() {
+    return CXC_VENDEDOR_UNICO || !!(document.getElementById('cxc-vendedor')?.value || '');
+}
+
+/* Columnas de la vista "Por cliente". Sin la columna Asesor su ancho pasa a N. Documento,
+   que es la que queda flexible (<col> sin width). */
+function CXC_colsMayor() {
+    const sinAse = CXC_sinAsesor();
+    return `
+    <col style="width:36px;"><col style="width:92px;">${sinAse ? '<col>' : '<col style="width:170px;">'}<col style="width:100px;">
     <col style="width:90px;"><col style="width:95px;"><col style="width:100px;">
-    <col style="width:105px;"><col style="width:62px;"><col><col style="width:190px;">`;
-const CXC_TH_MAYOR = `
+    <col style="width:105px;"><col style="width:62px;">${sinAse ? '' : '<col>'}<col style="width:190px;">`;
+}
+function CXC_thMayor() {
+    return `
     <tr>
         <th class="text-center p-1"></th>
         <th class="ps-2">Fecha</th>
@@ -420,24 +436,26 @@ const CXC_TH_MAYOR = `
         <th class="text-end">Retenciones</th>
         <th class="text-end pe-2">Saldo</th>
         <th class="text-center" title="Días vencidos">Días</th>
-        <th>Asesor</th>
+        ${CXC_sinAsesor() ? '' : '<th>Asesor</th>'}
         <th class="text-center">Acciones</th>
     </tr>`;
+}
 
 function CXC_renderCabecera() {
     const cg = document.getElementById('cxc-colgroup');
     const th = document.getElementById('cxc-thead');
     if (!cg || !th) return;
     const mayor = (CXC_vista === 'agrupado');
-    cg.innerHTML = mayor ? CXC_COLS_MAYOR   : CXC_COLS_ESTANDAR;
-    th.innerHTML = mayor ? CXC_TH_MAYOR     : CXC_TH_ESTANDAR;
+    cg.innerHTML = mayor ? CXC_colsMayor() : CXC_COLS_ESTANDAR;
+    th.innerHTML = mayor ? CXC_thMayor()   : CXC_TH_ESTANDAR;
     // Los <th> recién creados no tienen el clic de ordenar: se vuelven a enganchar
     // (engancharCabeceras no duplica en los que ya lo tienen y repinta las flechas).
     CXC_initOrden();
 }
 
 /* Fila de un documento dentro de la sección de su cliente (vista "Por cliente"):
-   fecha, documento, total, NC, abonos, retenciones, saldo, días y asesor. */
+   fecha, documento, total, NC, abonos, retenciones, saldo, días y asesor (este
+   último solo cuando el listado NO está acotado a un asesor; ver CXC_sinAsesor). */
 function CXC_filaMayorHtml(r) {
     const dias    = parseInt(r.dias_vencido) || 0;
     const saldo   = parseFloat(r.saldo) || 0;
@@ -492,7 +510,7 @@ function CXC_filaMayorHtml(r) {
             <td class="text-end" style="font-size:.78rem;white-space:nowrap;">${ret > 0 ? '$' + CXC_fmt(ret) : '<span class="text-muted">—</span>'}</td>
             <td class="text-end fw-bold pe-2" style="font-size:.82rem;white-space:nowrap;color:${saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(saldo)}</td>
             <td class="text-center" style="font-size:.78rem;white-space:nowrap;">${diasTxt}</td>
-            <td class="text-truncate" title="${esc(r.vendedor_nombre || '')}" style="font-size:.78rem;">${r.vendedor_nombre ? esc(r.vendedor_nombre) : '<span class="text-muted">—</span>'}</td>
+            ${CXC_sinAsesor() ? '' : `<td class="text-truncate" title="${esc(r.vendedor_nombre || '')}" style="font-size:.78rem;">${r.vendedor_nombre ? esc(r.vendedor_nombre) : '<span class="text-muted">—</span>'}</td>`}
             <td class="text-center">${CXC_accionesHtml(r)}</td>
         </tr>`;
 }
@@ -550,7 +568,10 @@ function CXC_renderAgrupado(filas) {
     label.textContent = `${filas.length} docs · ${grupos.length} cliente${grupos.length !== 1 ? 's' : ''}`;
 
     // Columnas de esta vista: [chevron] Fecha | N. Documento | Total | NC | Abonos |
-    // Retenciones | Saldo | Días | Asesor | Acciones (ver CXC_TH_MAYOR).
+    // Retenciones | Saldo | Días | Asesor | Acciones (ver CXC_thMayor). Asesor se cae si el
+    // listado ya está acotado a uno: las filas de sección ajustan su colspan con `colAse`.
+    const colAse  = CXC_sinAsesor() ? 0 : 1;   // 1 si la columna Asesor está presente
+    const nCols   = 10 + colAse;
     let tTotal = 0, tNc = 0, tAbonos = 0, tRet = 0, tSaldo = 0;
     let html = '';
     for (const g of grupos) {
@@ -590,7 +611,7 @@ function CXC_renderAgrupado(filas) {
             <td class="text-center" style="font-size:.72rem;">
                 <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-normal" title="${g.items.length} documento${g.items.length !== 1 ? 's' : ''}">${g.items.length}</span>
             </td>
-            <td colspan="2"></td>
+            <td colspan="${1 + colAse}"></td>
         </tr>`;
 
         if (abierto) {
@@ -598,7 +619,7 @@ function CXC_renderAgrupado(filas) {
             // así que repetirlos al cerrar la sección solo alarga la lista. El separador
             // mantiene la sección visualmente cerrada.
             for (const r of g.items) html += CXC_filaMayorHtml(r);
-            html += `<tr class="cxc-mayor-gap"><td colspan="11"></td></tr>`;
+            html += `<tr class="cxc-mayor-gap"><td colspan="${nCols}"></td></tr>`;
         }
     }
 
@@ -610,7 +631,7 @@ function CXC_renderAgrupado(filas) {
             <td class="text-end text-success" style="font-size:.82rem;">${tAbonos > 0.001 ? '$' + CXC_fmt(tAbonos) : '<span class="text-muted">—</span>'}</td>
             <td class="text-end" style="font-size:.82rem;">${tRet > 0.001 ? '$' + CXC_fmt(tRet) : '<span class="text-muted">—</span>'}</td>
             <td class="text-end pe-2" style="font-size:.85rem;color:${tSaldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(tSaldo)}</td>
-            <td colspan="3"></td>
+            <td colspan="${2 + colAse}"></td>
         </tr>`;
 
     tbody.innerHTML = html;

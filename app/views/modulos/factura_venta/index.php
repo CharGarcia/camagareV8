@@ -752,7 +752,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <th class="py-2 small fw-bold text-muted col-lista-precios d-none" style="width: 12%;">Precios</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Sin Imp.</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Con Imp.</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end" style="width: 7%;">Desc.</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end" style="width: 10%;">Desc.</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 7%;">Iva</th>
                                                     <?php if (!empty($empresa['obligatorio_lotes']) && ($empresa['obligatorio_lotes'] === 'true' || $empresa['obligatorio_lotes'] === true)): ?>
                                                         <th class="py-2 small fw-bold text-muted text-center" style="width:8%;">Lote</th>
@@ -2351,9 +2351,13 @@ $totalPages = $totalPagesOriginal;
                 set('.input-ice-pct', fila.ice_pct);
                 set('.input-ice-cod', fila.ice_cod);
 
-                // Recalcular subtotal de la fila
+                // Recalcular el subtotal de la fila y el precio con impuestos.
+                // syncPrecioIva y no calcFila: calcFila no toca "P. Con Imp." (la columna
+                // se quedaba en 0.00) y syncPrecioIva termina llamando a calcFila igual.
+                const inputPrecioFila = tr.querySelector('.input-precio');
                 const inputCant = tr.querySelector('.input-cantidad');
-                if (inputCant) calcFila(inputCant);
+                if (inputPrecioFila) syncPrecioIva(inputPrecioFila);
+                else if (inputCant) calcFila(inputCant);
             });
         } else {
             agregarFila();
@@ -5991,7 +5995,10 @@ $totalPages = $totalPagesOriginal;
                     };
                 }
 
-                calcFila(tr.querySelector('.input-cantidad'));
+                // syncPrecioIva y no calcFila: calcFila no toca "P. Con Imp.", así que
+                // la columna se quedaba en el 0.00 con el que nace la fila. syncPrecioIva
+                // la calcula desde el precio y el IVA ya cargados, y termina en calcFila.
+                syncPrecioIva(tr.querySelector('.input-precio'));
             });
 
             // â”€â”€ Formas de pago SRI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

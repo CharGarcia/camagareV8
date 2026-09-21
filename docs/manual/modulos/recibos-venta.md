@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar
-version: 1.12
+etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero
+version: 1.13
 orden: 35
 estado: activo
 ---
@@ -180,6 +180,12 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.13** — Corregido: al **abrir un recibo guardado** —o al recuperar un
+  borrador— la columna **P. Con Imp.** salía en 0.00 en todas las líneas. El
+  precio con impuestos se calcula ahora también en esos dos casos. No cambia
+  ningún valor guardado: es solo lo que se ve en pantalla. Mismo arreglo que en
+  Facturas de Venta.
 
 - **1.12** — Igual que en la factura de venta: cuando el establecimiento **no exige
   lote**, al descontar se elige el **lote real que vence primero** en vez del grupo *sin

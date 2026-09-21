@@ -263,6 +263,7 @@ class CuentasPorCobrarController extends BaseModuloController
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
             $e = static fn ($v): string => htmlspecialchars((string)$v);
 
             $totalValor = 0.0; $totalSaldo = 0.0; $totalCobrado = 0.0; $totalDocs = 0.0; $totalCant = 0.0;
@@ -301,9 +302,11 @@ class CuentasPorCobrarController extends BaseModuloController
                 .text-end { text-align: right; } .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; } .header h3 { margin: 0 0 2px 0; font-size: 10pt; } .header p { margin: 0; font-size: 7.5pt; }
+                <?= self::CSS_FILTROS_PDF ?>
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar por Producto') ?>
+            <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
             <table>
                 <thead>
                     <tr>
@@ -412,8 +415,12 @@ class CuentasPorCobrarController extends BaseModuloController
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
             $filtrosTxt    = ['Vista' => 'Por cliente (formato mayor)'] + $this->describirFiltros($idsEmpresa, $filtros);
 
+            // Con el listado acotado a un asesor, su columna repetiría el mismo nombre en
+            // todas las filas (ya va en el resumen de filtros de arriba) y se omite.
+            $sinAsesor = $this->filtraPorVendedor($filtros);
+
             $headers = ['Fecha', 'N. Documento', 'Origen', 'Total', 'NC', 'Abonos', 'Retenciones',
-                        'Saldo', 'Días Vencidos', 'Asesor', 'Estado'];
+                        'Saldo', 'Días Vencidos', ...($sinAsesor ? [] : ['Asesor']), 'Estado'];
             if ($consolidado) {
                 array_unshift($headers, 'Estab.');
             }
@@ -450,7 +457,7 @@ class CuentasPorCobrarController extends BaseModuloController
                         round((float)($r['total_retenido'] ?? 0), 2),
                         round($saldo, 2),
                         $dias > 0 ? $dias : 0,
-                        (string)($r['vendedor_nombre'] ?? ''),
+                        ...($sinAsesor ? [] : [(string)($r['vendedor_nombre'] ?? '')]),
                         $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE'),
                     ];
                 }
@@ -471,7 +478,9 @@ class CuentasPorCobrarController extends BaseModuloController
                 ...array_fill(0, $huecos, ''),
                 'TOTAL GENERAL (' . count($grupos) . ' cliente' . (count($grupos) !== 1 ? 's' : '') . ')',
                 round($totTotal, 2), round($totNc, 2), round($totAbonos, 2),
-                round($totRet, 2), round($totSaldo, 2), '', '', '',
+                round($totRet, 2), round($totSaldo, 2),
+                // Días Vencidos (+ Asesor, si va) + Estado: sin valor en el total general
+                ...array_fill(0, $sinAsesor ? 2 : 3, ''),
             ];
 
             (new \App\Services\ReportService())->exportToExcelSeccionado(
@@ -507,13 +516,20 @@ class CuentasPorCobrarController extends BaseModuloController
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
             $e = static fn ($v): string => htmlspecialchars((string)$v);
 
+            // Con el listado acotado a un asesor, su columna repetiría el mismo nombre en
+            // todas las filas (ya va en el resumen de filtros de arriba) y se omite.
+            $sinAsesor = $this->filtraPorVendedor($filtros);
+
             // Anchos por columna (table-layout: fixed, deben sumar 100%). La columna del
-            // establecimiento solo aparece en consolidado y le resta ancho al asesor.
+            // establecimiento solo aparece en consolidado y le resta ancho al asesor; sin
+            // asesor, su ancho pasa entero a "N. Documento".
             $wEst   = $consolidado ? 6 : 0;
-            $wAse   = 20 - $wEst;
-            $wEtq   = 26 + $wEst;                // Fecha + N. Documento (+ Estab.): etiqueta del TOTAL GENERAL
+            $wAse   = $sinAsesor ? 0 : 20 - $wEst;
+            $wDoc   = 17 + ($sinAsesor ? 20 - $wEst : 0);
+            $wEtq   = 9 + $wDoc + $wEst;         // Fecha + N. Documento (+ Estab.): etiqueta del TOTAL GENERAL
 
             $totTotal  = 0.0;
             $totNc     = 0.0;
@@ -541,14 +557,14 @@ class CuentasPorCobrarController extends BaseModuloController
                 $cuerpo .= "<table><thead><tr>"
                     . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
                     . "<th style='width:9%;'>Fecha</th>"
-                    . "<th style='width:17%;'>N. Documento</th>"
+                    . "<th style='width:{$wDoc}%;'>N. Documento</th>"
                     . "<th style='width:10%;'>Total</th>"
                     . "<th style='width:9%;'>NC</th>"
                     . "<th style='width:10%;'>Abonos</th>"
                     . "<th style='width:10%;'>Retenciones</th>"
                     . "<th style='width:10%;'>Saldo</th>"
                     . "<th style='width:5%;'>Días</th>"
-                    . "<th style='width:{$wAse}%;'>Asesor</th>"
+                    . ($sinAsesor ? '' : "<th style='width:{$wAse}%;'>Asesor</th>")
                     . "</tr></thead><tbody>";
 
                 foreach ($g['items'] as $r) {
@@ -568,14 +584,14 @@ class CuentasPorCobrarController extends BaseModuloController
                     $cuerpo .= "<tr>"
                         . ($consolidado ? "<td class='text-center' style='width:{$wEst}%;'>" . $e($r['establecimiento'] ?? '') . "</td>" : '')
                         . "<td class='text-center' style='width:9%;'>{$fEmis}</td>"
-                        . "<td style='width:17%;'>{$tipo}" . $e($r['numero_factura'] ?? '') . "</td>"
+                        . "<td style='width:{$wDoc}%;'>{$tipo}" . $e($r['numero_factura'] ?? '') . "</td>"
                         . "<td class='text-end' style='width:10%;'>$" . number_format($ts, 2) . "{$ndTxt}</td>"
                         . "<td class='text-end' style='width:9%;'>" . ($nc > 0 ? '$' . number_format($nc, 2) : '—') . "</td>"
                         . "<td class='text-end' style='width:10%;'>" . ($abonos > 0 ? '$' . number_format($abonos, 2) : '—') . "</td>"
                         . "<td class='text-end' style='width:10%;'>" . ($ret > 0 ? '$' . number_format($ret, 2) : '—') . "</td>"
                         . "<td class='text-end' style='width:10%;{$color}font-weight:bold;'>$" . number_format($tsal, 2) . "</td>"
                         . "<td class='text-center' style='width:5%;{$color}'>" . ($dias > 0 ? $dias : '—') . "</td>"
-                        . "<td style='width:{$wAse}%;'>" . $e($r['vendedor_nombre'] ?? '') . "</td>"
+                        . ($sinAsesor ? '' : "<td style='width:{$wAse}%;'>" . $e($r['vendedor_nombre'] ?? '') . "</td>")
                         . "</tr>";
                 }
 
@@ -603,9 +619,11 @@ class CuentasPorCobrarController extends BaseModuloController
                 table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }
                 .stat-lbl  { font-size: 7.5pt; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
+                <?= self::CSS_FILTROS_PDF ?>
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar por Cliente') ?>
+            <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
             <table class="stats">
                 <tr>
                     <td class="stats-box" style="width:25%;">
@@ -1956,14 +1974,24 @@ $plantillasFiltradas = [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
             $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
 
+            // Con el listado acotado a un asesor, su columna repetiría el mismo nombre en
+            // todas las filas (ya va en el resumen de filtros de arriba) y se omite.
+            $sinVendedor = $this->filtraPorVendedor($filtros);
+
             $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'Vendedor', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
-            // Columnas de montos (1-based): número con 2 decimales, sin separador de miles
-            $formatos = array_fill_keys([9, 10, 11, 12, 13, 14], '0.00');
+            if ($sinVendedor) {
+                unset($headers[4]);
+                $headers = array_values($headers);
+            }
             if ($consolidado) {
                 // Consolidado: primera columna con el establecimiento dueño del documento
                 array_unshift($headers, 'Estab.');
-                $formatos = array_fill_keys([10, 11, 12, 13, 14, 15], '0.00');
             }
+            // Columnas de montos (1-based): número con 2 decimales, sin separador de miles.
+            // Son las seis que siguen a "Días Vencidos", así que su posición se corre con las
+            // columnas opcionales del inicio (Estab.) y con la de Vendedor.
+            $colTotal = 9 + ($consolidado ? 1 : 0) - ($sinVendedor ? 1 : 0);
+            $formatos = array_fill_keys(range($colTotal, $colTotal + 5), '0.00');
 
             $exportData = [];
             foreach ($filas as $r) {
@@ -1978,7 +2006,7 @@ $plantillasFiltradas = [];
                     $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
                     (string)($r['cliente_nombre'] ?? ''),
                     (string)($r['cliente_ruc'] ?? ''),
-                    (string)($r['vendedor_nombre'] ?? ''),
+                    ...($sinVendedor ? [] : [(string)($r['vendedor_nombre'] ?? '')]),
                     $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
                     $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
                     $dias > 0 ? $dias : 0,
@@ -2035,6 +2063,9 @@ $plantillasFiltradas = [];
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            // Mismo resumen de filtros que encabeza el Excel: un PDF descargado o impreso
+            // tiene que decir de qué periodo, estado, vendedor, cliente y producto es.
+            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
 
             // Consolidado: columna "Estab." al inicio; se le resta ancho a "Cliente" para
             // que la suma siga en 100% (table-layout: fixed).
@@ -2089,9 +2120,11 @@ $plantillasFiltradas = [];
                 table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }
                 .stat-lbl  { font-size: 7.5pt; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
+                <?= self::CSS_FILTROS_PDF ?>
             </style>
             <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar') ?>
+            <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
             <table class="stats">
                 <tr>
                     <td class="stats-box" style="width:25%;">
@@ -2290,8 +2323,68 @@ $plantillasFiltradas = [];
     }
 
     /**
-     * Descripción legible de los filtros aplicados (encabezado del Excel; el PDF no imprime
-     * los filtros, solo el encabezado y las tarjetas de totales).
+     * ¿El listado está acotado a UN solo asesor? Pasa con el filtro Vendedor de la pantalla y
+     * con el usuario restringido a su propio vendedor (§6, `id_vendedor_filtro`; ahí
+     * resolverAlcance() ya vació `id_vendedor`). En ese caso la columna Asesor repetiría el
+     * mismo nombre en todas las filas —el que ya dice el resumen de filtros— y se omite en
+     * pantalla, en el PDF y en el Excel. El usuario restringido SIN vendedor vinculado (ve sus
+     * propios registros) no entra aquí: sus documentos pueden ser de varios asesores.
+     */
+    private function filtraPorVendedor(array $filtros): bool
+    {
+        return !empty($filtros['id_vendedor'])
+            || \App\Helpers\AlcanceRegistros::idsVendedor($filtros) !== [];
+    }
+
+    /**
+     * Resumen de los filtros aplicados para los PDF del módulo: las mismas etiquetas y valores
+     * que encabezan el Excel (describirFiltros()), en una caja compacta de dos pares por fila.
+     * Html2Pdf no admite float ni flex y, con un colspan en la primera fila, ignora los anchos
+     * declarados de esa tabla: por eso el título va en su propia tabla de una celda y los pares
+     * en otra donde cada `<td>` lleva su ancho.
+     */
+    private function bloqueFiltrosPdf(array $filtrosTxt): string
+    {
+        if (!$filtrosTxt) {
+            return '';
+        }
+        $e     = static fn ($v): string => htmlspecialchars((string) $v);
+        $pares = [];
+        foreach ($filtrosTxt as $lbl => $val) {
+            $pares[] = [(string) $lbl, trim((string) $val)];
+        }
+        // TODAS las filas llevan las mismas cuatro celdas con los mismos anchos: basta con
+        // que una declare otros (p. ej. 13% + 87% para el filtro impar que sobra) para que
+        // Html2Pdf adopte ESOS como ancho de columna y la tabla se salga de la hoja —
+        // comprobado: el bloque terminaba dibujándose hasta x≈1082 pt en un A4 de 595 pt.
+        // Con un número impar de filtros, el último par queda en blanco.
+        $filas = '';
+        for ($i = 0, $n = count($pares); $i < $n; $i += 2) {
+            [$lblA, $valA] = $pares[$i];
+            [$lblB, $valB] = $pares[$i + 1] ?? ['', ''];
+            $filas .= '<tr>'
+                . "<td class='f-lbl' style='width:13%;'>" . ($lblA !== '' ? $e($lblA) . ':' : '') . '</td>'
+                . "<td style='width:37%;'>" . $e($valA) . '</td>'
+                . "<td class='f-lbl' style='width:13%;'>" . ($lblB !== '' ? $e($lblB) . ':' : '') . '</td>'
+                . "<td style='width:37%;'>" . $e($valB) . '</td>'
+                . '</tr>';
+        }
+        return "<table class='fil-tit'><tr><td style='width:100%;'>Filtros aplicados</td></tr></table>"
+            . "<table class='filtros'>{$filas}</table>";
+    }
+
+    /** Estilos de la caja "Filtros aplicados": los tres PDF del módulo la dibujan igual. */
+    private const CSS_FILTROS_PDF = '
+        table.fil-tit { margin-bottom: 0; }
+        table.fil-tit td { background: #e9ecef; border: 1px solid #ccc; padding: 3px 5px; font-size: 7.5pt; font-weight: bold; color: #000; }
+        table.filtros { margin-bottom: 8px; }
+        table.filtros td { border: 1px solid #ddd; padding: 2px 4px; font-size: 7pt; color: #000; }
+        table.filtros td.f-lbl { background: #f8f9fa; font-weight: bold; }
+    ';
+
+    /**
+     * Descripción legible de los filtros aplicados (encabezado del Excel y caja "Filtros
+     * aplicados" de los PDF, vía bloqueFiltrosPdf()).
      * Devuelve etiqueta => valor, con los ids de cliente/vendedor resueltos a nombre.
      */
     private function describirFiltros(int|array $idsEmpresa, array $filtros): array

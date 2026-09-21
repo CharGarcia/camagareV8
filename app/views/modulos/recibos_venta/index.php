@@ -1891,9 +1891,13 @@ $totalPages = $totalPagesOriginal;
                 set('.input-ice-pct', fila.ice_pct);
                 set('.input-ice-cod', fila.ice_cod);
 
-                // Recalcular subtotal de la fila
+                // Recalcular el subtotal de la fila y el precio con impuestos.
+                // syncPrecioIva y no calcFila: calcFila no toca "P. Con Imp." (la columna
+                // se quedaba en 0.00) y syncPrecioIva termina llamando a calcFila igual.
+                const inputPrecioFila = tr.querySelector('.input-precio');
                 const inputCant = tr.querySelector('.input-cantidad');
-                if (inputCant) calcFila(inputCant);
+                if (inputPrecioFila) syncPrecioIva(inputPrecioFila);
+                else if (inputCant) calcFila(inputCant);
             });
         } else {
             agregarFila();
@@ -4956,7 +4960,10 @@ $totalPages = $totalPagesOriginal;
                     };
                 }
 
-                calcFila(tr.querySelector('.input-cantidad'));
+                // syncPrecioIva y no calcFila: calcFila no toca "P. Con Imp.", así que
+                // la columna se quedaba en el 0.00 con el que nace la fila. syncPrecioIva
+                // la calcula desde el precio y el IVA ya cargados, y termina en calcFila.
+                syncPrecioIva(tr.querySelector('.input-precio'));
             });
 
             // â”€â”€ Formas de pago SRI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
