@@ -647,6 +647,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 <div class="col-12 px-3 mt-1 d-none" id="m-info-cliente">
                                                     <div class="d-flex flex-wrap align-items-center gap-x-3 gap-y-1" style="font-size:0.72rem; text-transform:lowercase; color:#6c757d;">
                                                         <span class="border-end pe-2 me-1 fw-bold text-dark" id="m-lbl-cliente-ruc"></span>
+                                                        <span class="border-end pe-2 me-1 d-none" id="m-lbl-cliente-tipo-id" title="Tipo de identificación"></span>
                                                         <div class="d-flex align-items-center gap-1">
                                                             <i class="bi bi-geo-alt"></i><span id="m-lbl-cliente-direccion"></span>
                                                         </div>
@@ -1716,6 +1717,8 @@ $totalPages = $totalPagesOriginal;
         const dirLbl = document.getElementById('m-lbl-cliente-direccion');
         const mailLbl = document.getElementById('m-lbl-cliente-correo');
         estado.cliente_ruc = rucLbl?.textContent || '';
+        estado.cliente_tipo_id = document.getElementById('m-tipo-id-cliente')?.value || '';
+        estado.cliente_nombre_tipo_id = document.getElementById('m-nombre-tipo-id-cliente')?.value || '';
         estado.cliente_direccion = dirLbl?.textContent || '';
         estado.cliente_correo = mailLbl?.textContent || '';
 
@@ -1814,6 +1817,11 @@ $totalPages = $totalPagesOriginal;
             const dirLbl = document.getElementById('m-lbl-cliente-direccion');
             const mailLbl = document.getElementById('m-lbl-cliente-correo');
             if (rucLbl) rucLbl.textContent = estado.cliente_ruc || '';
+            const _tIdR = document.getElementById('m-tipo-id-cliente');
+            const _nTIdR = document.getElementById('m-nombre-tipo-id-cliente');
+            if (_tIdR) _tIdR.value = estado.cliente_tipo_id || '';
+            if (_nTIdR) _nTIdR.value = estado.cliente_nombre_tipo_id || '';
+            fvMostrarTipoIdCliente(estado.cliente_nombre_tipo_id);
             if (dirLbl) dirLbl.textContent = estado.cliente_direccion || '';
             if (mailLbl) mailLbl.textContent = estado.cliente_correo || '';
             document.getElementById('m-info-cliente')?.classList.remove('d-none');
@@ -2213,6 +2221,7 @@ $totalPages = $totalPagesOriginal;
         const _nomTipoCl = document.getElementById('m-nombre-tipo-id-cliente');
         if (_tipoCl) _tipoCl.value = '';
         if (_nomTipoCl) _nomTipoCl.value = '';
+        fvMostrarTipoIdCliente('');
         document.getElementById('m-info-cliente').classList.add('d-none');
         document.getElementById('m-dropdown-clientes').classList.add('d-none');
         document.getElementById('m-search-cliente').value = '';
@@ -3143,6 +3152,11 @@ $totalPages = $totalPagesOriginal;
             if ((e.key === 'Backspace' || e.key === 'Delete') && idInput && idInput.value) {
                 idInput.value = '';
                 inputSearchCliente.value = '';
+                const _tId = document.getElementById('m-tipo-id-cliente');
+                const _nTId = document.getElementById('m-nombre-tipo-id-cliente');
+                if (_tId) _tId.value = '';
+                if (_nTId) _nTId.value = '';
+                fvMostrarTipoIdCliente('');
                 document.getElementById('m-info-cliente').classList.add('d-none');
 
 
@@ -3172,7 +3186,10 @@ $totalPages = $totalPagesOriginal;
                         btn.innerHTML = `
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="fw-bold small text-primary">${c.nombre}</span>
-                                <span class="badge bg-light text-dark border x-small">${c.identificacion}</span>
+                                <span class="d-flex align-items-center gap-1 flex-shrink-0">
+                                    <span class="badge bg-light text-dark border x-small">${c.identificacion}</span>
+                                    ${c.nombre_tipo_id ? `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 x-small">${c.nombre_tipo_id}</span>` : ''}
+                                </span>
                             </div>
                             <div class="x-small text-muted text-truncate"><i class="bi bi-geo-alt me-1"></i>${c.direccion || 'Sin dirección'}</div>
                         `;
@@ -3194,6 +3211,18 @@ $totalPages = $totalPagesOriginal;
         }, 300));
     }
 
+    /**
+     * Muestra (o esconde, si el cliente no tiene tipo) el tipo de identificación
+     * justo después de la identificación en la barra de datos del cliente.
+     */
+    function fvMostrarTipoIdCliente(nombreTipo) {
+        const el = document.getElementById('m-lbl-cliente-tipo-id');
+        if (!el) return;
+        const txt = (nombreTipo || '').trim();
+        el.textContent = txt;
+        el.classList.toggle('d-none', txt === '');
+    }
+
     function seleccionarCliente(c) {
         const idInput = document.getElementById('m-id-cliente');
         const searchInput = document.getElementById('m-search-cliente');
@@ -3212,6 +3241,7 @@ $totalPages = $totalPagesOriginal;
         if (nombreTipoIdInput) nombreTipoIdInput.value = c.nombre_tipo_id || '';
 
         if (rucLbl) rucLbl.textContent = c.identificacion || '';
+        fvMostrarTipoIdCliente(c.nombre_tipo_id);
         if (dirLbl) dirLbl.textContent = c.direccion || 'No especificada';
         if (mailLbl) mailLbl.textContent = c.email || 'Sin correo registrado';
         if (infoBar) infoBar.classList.remove('d-none');
@@ -4522,6 +4552,7 @@ $totalPages = $totalPagesOriginal;
         if (searchClienteInput) searchClienteInput.value = data.cliente_nombre || '';
         const rucLbl = document.getElementById('m-lbl-cliente-ruc');
         if (rucLbl) rucLbl.textContent = data.cliente_ruc || '';
+        fvMostrarTipoIdCliente('');   // lo llena la cabecera completa que llega por AJAX
         if (infoBarCliente) infoBarCliente.classList.remove('d-none');
 
         // BotÃ³n eliminar: solo visible para borradores con permiso
@@ -4621,6 +4652,7 @@ $totalPages = $totalPagesOriginal;
             if (tipoIdInput) tipoIdInput.value = cab.cliente_tipo_id || '';
             if (nomTipoIdInput) nomTipoIdInput.value = cab.cliente_nombre_tipo_id || '';
             if (rucLbl) rucLbl.textContent = cab.cliente_ruc || '';
+            fvMostrarTipoIdCliente(cab.cliente_nombre_tipo_id);
             const dirLbl = document.getElementById('m-lbl-cliente-direccion');
             const mailLbl = document.getElementById('m-lbl-cliente-correo');
             if (dirLbl) dirLbl.textContent = cab.cliente_direccion || 'No especificada';

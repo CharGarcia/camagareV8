@@ -141,6 +141,10 @@ $pedVistaConfig = $vistaConfig ?? [];
                                         <input type="text" id="buscar-cliente" class="form-control form-control-sm" placeholder="Buscar por nombre o identificación..." autocomplete="off">
                                         <input type="hidden" id="id_cliente">
                                     </div>
+                                    <!-- Vendedor (asesor) del cliente seleccionado. Pedidos no guarda vendedor
+                                         propio: es el que tiene asignado el cliente (clientes.id_vendedor), solo
+                                         informativo. Lo llena pedMostrarVendedorCliente() en pedidos.js. -->
+                                    <div id="ped-cliente-vendedor" class="small text-muted mt-1 text-truncate d-none" style="font-size:.72rem;"></div>
                                 </div>
                             </div>
 

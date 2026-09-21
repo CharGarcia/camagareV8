@@ -151,7 +151,18 @@ document.addEventListener('DOMContentLoaded', () => {
     initAutocomplete('buscar-cliente', 'lista-clientes-sugerencias', (item) => {
         document.getElementById('id_cliente').value = item.id;
         document.getElementById('buscar-cliente').value = item.nombre;
+        pedMostrarVendedorCliente(item.nombre_vendedor);
     }, `${window.CMG_urlBase}/buscarClientesAjax`, 'id_cliente');
+
+    // Al editar a mano el texto del cliente la selección deja de ser válida
+    // (initAutocomplete ya limpia el id oculto): el vendedor mostrado tampoco lo es.
+    const inputCli = document.getElementById('buscar-cliente');
+    if (inputCli) {
+        inputCli.addEventListener('input', () => pedMostrarVendedorCliente(''));
+        inputCli.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' || e.key === 'Delete') pedMostrarVendedorCliente('');
+        });
+    }
 
     // Validaciones de Fecha y Horas de Entrega en Tiempo Real
     const inputFecha = document.getElementById('fecha_entrega');
@@ -271,6 +282,34 @@ function initAutocomplete(inputId, listId, onSelect, url, hiddenId = null) {
             list.classList.add('d-none');
         }
     });
+}
+
+/**
+ * Pinta (o borra) el vendedor/asesor del cliente seleccionado, en letra pequeña
+ * justo debajo del buscador de cliente. Es solo informativo: el pedido no guarda
+ * vendedor propio, sale del que tiene asignado el cliente (clientes.id_vendedor),
+ * así que si el cliente no tiene uno la línea simplemente no se muestra.
+ */
+function pedMostrarVendedorCliente(nombre) {
+    const cont = document.getElementById('ped-cliente-vendedor');
+    if (!cont) return;
+    const txt = (nombre || '').toString().trim();
+    if (txt === '') {
+        cont.textContent = '';
+        cont.classList.add('d-none');
+        return;
+    }
+    cont.textContent = '';
+    const ico = document.createElement('i');
+    ico.className = 'bi bi-person-badge me-1';
+    cont.appendChild(ico);
+    const lbl = document.createElement('span');
+    lbl.className = 'fw-semibold';
+    lbl.textContent = 'Vendedor: ';
+    cont.appendChild(lbl);
+    cont.appendChild(document.createTextNode(txt));
+    cont.title = 'Vendedor: ' + txt;
+    cont.classList.remove('d-none');
 }
 
 async function listarPedidos() {
@@ -422,6 +461,7 @@ function nuevoPedido() {
     document.getElementById('buscar-cliente').value = '';
     document.getElementById('estado').value = 'Pendiente';
     window._PED_CLIENTE_EMAIL = '';
+    pedMostrarVendedorCliente('');
     
     // Configurar fecha de entrega con la fecha actual por defecto
     document.getElementById('fecha_entrega').value = CMG_fechaLocal();
@@ -1143,6 +1183,7 @@ async function editarPedido(id) {
             setVal('pedido_id', p.id);
             setVal('id_cliente', p.id_cliente);
             setVal('buscar-cliente', p.cliente_nombre);
+            pedMostrarVendedorCliente(p.vendedor_nombre);
             window._PED_CLIENTE_EMAIL = p.cliente_email || '';
             
             let dFecha = p.fecha_pedido ? p.fecha_pedido.substring(0, 10) : '';
@@ -1678,6 +1719,7 @@ document.addEventListener('clienteGuardado', function(e) {
         if (inputBuscar && inputId) {
             inputBuscar.value = cliente.nombre;
             inputId.value = cliente.id;
+            pedMostrarVendedorCliente(cliente.nombre_vendedor);
             document.getElementById('fecha_pedido').focus();
         }
     }

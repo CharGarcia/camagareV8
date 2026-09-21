@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento
-version: 2.18
+etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente
+version: 2.19
 orden: 20
 estado: activo
 ---
@@ -33,6 +33,21 @@ Para emitir facturas electrónicas la empresa necesita tener configurado:
 5. Guarde la factura.
 
 Una factura guardada queda en borrador hasta que se envía al SRI.
+
+### Tipo de identificación del cliente
+
+Al escribir en el buscador de clientes, cada resultado muestra a la derecha la
+**identificación** y, justo después, el **tipo de identificación** (*Ruc*,
+*Cedula*, *Pasaporte*, *Venta a consumidor final*, *Identificación del exterior*).
+Así se distingue de un vistazo un RUC de una cédula antes de elegir, sin abrir la
+ficha del cliente.
+
+Una vez elegido el cliente, el tipo se mantiene visible en la línea de datos que
+aparece bajo el buscador, después de la identificación, junto a la dirección, el
+teléfono y el correo. Lo mismo al abrir una factura ya guardada.
+
+El tipo es el que tenga registrado el cliente en su ficha; si no tiene ninguno,
+no se muestra nada (no aparece una etiqueta vacía).
 
 ### Ver el código y la descripción completos
 
@@ -395,6 +410,11 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.19** — El **buscador de clientes** muestra el **tipo de identificación**
+  junto a la identificación en cada resultado, y también en la línea de datos
+  del cliente una vez elegido. Sirve para distinguir un RUC de una cédula o de
+  un consumidor final sin salir de la factura.
 
 - **2.18** — **Una factura con $0.01 de saldo queda como Abonada, no como
   Pagada.** Antes, el centavo restante se daba por cobrado. Ahora el criterio es

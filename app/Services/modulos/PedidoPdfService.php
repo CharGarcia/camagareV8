@@ -130,7 +130,8 @@ class PedidoPdfService
             . $fmtHora($c['hora_inicial_entrega'] ?? '')
             . (($c['hora_maxima_entrega'] ?? '') ? ' - ' . $fmtHora($c['hora_maxima_entrega'] ?? '') : ''));
 
-        $boxH = 26;
+        // 5 renglones de 5 mm desde y+1.5 → 26.5; la caja necesita 31 para no cortarlos.
+        $boxH = 31;
         $pdf->SetLineWidth(0.2);
         $pdf->SetDrawColor(120, 120, 120);
         $pdf->SetFillColor(245, 245, 245);
@@ -159,6 +160,9 @@ class PedidoPdfService
         // vendedor asignado al cliente (clientes.id_vendedor).
         $vendedor = trim((string) ($c['vendedor_nombre'] ?? ''));
         $par('Vendedor:', $vendedor !== '' ? $vendedor : '—', '', '');
+        // Solicitado por: el usuario que registró el pedido (pedidos_cabecera.created_by).
+        $solicitante = trim((string) ($c['creado_por_nombre'] ?? ''));
+        $par('Solicitado por:', $solicitante !== '' ? $solicitante : '—', '', '');
 
         return $y + $boxH;
     }

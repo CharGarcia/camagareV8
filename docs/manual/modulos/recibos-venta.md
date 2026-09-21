@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero
-version: 1.14
+etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente
+version: 1.15
 orden: 35
 estado: activo
 ---
@@ -33,6 +33,21 @@ tributarias. Elija según lo que respalde el documento.
 4. Decida si lleva impuestos.
 5. Registre el cobro.
 6. Guarde.
+
+### Tipo de identificación del cliente
+
+Al escribir en el buscador de clientes, cada resultado muestra a la derecha la
+**identificación** y, justo después, el **tipo de identificación** (*Ruc*,
+*Cedula*, *Pasaporte*, *Venta a consumidor final*, *Identificación del exterior*).
+Así se distingue de un vistazo un RUC de una cédula antes de elegir, sin abrir la
+ficha del cliente.
+
+Una vez elegido el cliente, el tipo se mantiene visible en la línea de datos que
+aparece bajo el buscador, después de la identificación, junto a la dirección y el
+correo. Lo mismo al abrir un recibo ya guardado.
+
+El tipo es el que tenga registrado el cliente en su ficha; si no tiene ninguno,
+no se muestra nada (no aparece una etiqueta vacía).
 
 ### Lote y fecha de vencimiento
 
@@ -180,6 +195,11 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.15** — El **buscador de clientes** muestra el **tipo de identificación**
+  junto a la identificación en cada resultado, y también en la línea de datos
+  del cliente una vez elegido. Sirve para distinguir un RUC de una cédula o de
+  un consumidor final sin salir del recibo. Igual que en *Facturas de Venta*.
 
 - **1.14** — **Un recibo con $0.01 de saldo queda como Abonada, no como
   Pagada.** Mismo criterio que *Cuentas por Cobrar* e *Ingresos*: hay saldo

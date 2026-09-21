@@ -401,7 +401,7 @@ class ClienteRepository extends BaseRepository
      *
      * @param bool $soloActivos Excluye los clientes inactivos (status = '0').
      * @return array<int, array<string, mixed>> id, identificacion, nombre, direccion,
-     *         email, telefono, id_vendedor, plazo, id_forma_pago_sri
+     *         email, telefono, id_vendedor, nombre_vendedor, plazo, id_forma_pago_sri
      */
     public function buscarAutocomplete(int $idEmpresa, string $termino, int $limite = 10, bool $soloActivos = true): array
     {
@@ -425,8 +425,13 @@ class ClienteRepository extends BaseRepository
         }
 
         $limite = max(1, min($limite, 50));
+        // nombre_vendedor va como subconsulta y NO como JOIN a propósito: el WHERE lo
+        // arma getBaseWhere() sin alias de tabla, así que un JOIN a vendedores volvería
+        // ambiguas las columnas id_empresa/eliminado del filtro base.
         $sql = "SELECT id, identificacion, nombre, direccion, email, telefono,
-                       id_vendedor, COALESCE(plazo, 0) AS plazo, id_forma_pago_sri
+                       id_vendedor,
+                       (SELECT v.nombre FROM vendedores v WHERE v.id = {$this->table}.id_vendedor) AS nombre_vendedor,
+                       COALESCE(plazo, 0) AS plazo, id_forma_pago_sri
                 FROM {$this->table}
                 {$where}
                 ORDER BY nombre ASC

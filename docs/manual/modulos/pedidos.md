@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
-etiquetas: pedidos, pedido de cliente, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.8
+etiquetas: pedidos, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado
+version: 1.9
 orden: 0
 estado: activo
 ---
@@ -42,7 +42,10 @@ Los pedidos son por empresa: solo se ven los de la empresa activa.
 
 1. **Nuevo** abre el formulario. La serie y el secuencial se llenan solos según el
    punto de emisión.
-2. Busque el **cliente** por nombre o identificación.
+2. Busque el **cliente** por nombre o identificación. Al elegirlo, debajo del campo
+   aparece en letra pequeña el **vendedor (asesor)** que tiene asignado ese cliente.
+   Es solo informativo —no se edita desde aquí— y si el cliente no tiene vendedor
+   asignado, la línea no aparece.
 3. Ponga la **fecha del pedido**, la **fecha de entrega** y el **rango horario**
    (hora inicial y hora máxima).
 4. Elija el **responsable de entrega**.
@@ -57,6 +60,11 @@ Los pedidos son por empresa: solo se ven los de la empresa activa.
 Desde el formulario de un pedido guardado, la barra superior permite descargarlo en
 **PDF** o **Excel** y **enviarlo por correo** al cliente (la dirección se puede
 editar antes de enviar).
+
+El **PDF** repite en su recuadro de datos el **Vendedor** del cliente y, debajo,
+**Solicitado por**: el usuario que registró el pedido en el sistema. Son dos cosas
+distintas — el asesor asignado al cliente y quien tomó el encargo — y pueden no
+coincidir.
 
 ### Las pestañas del pedido
 
@@ -208,7 +216,7 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Serie | Sí | Punto de emisión que numera el pedido. Se puede marcar uno como favorito para que venga elegido. |
 | Secuencial | Sí | Número del pedido. Lo asigna el sistema y no se escribe a mano. |
 | Estado | Sí | Pendiente, Procesado o Anulado. Nace en Pendiente. |
-| Cliente | Sí | A quién se le entrega. Se busca por nombre o identificación. |
+| Cliente | Sí | A quién se le entrega. Se busca por nombre o identificación. Debajo del campo se muestra el **vendedor (asesor)** asignado a ese cliente, solo como referencia. |
 | Fecha Pedido | Sí | Cuándo se tomó el encargo. |
 | Fecha de Entrega | Sí | Cuándo se entrega. No puede ser anterior a hoy ni al día del pedido. |
 | Hora Inicial / Hora Máxima | Sí | Ventana horaria de la entrega, en formato 00:00. La inicial no puede ser mayor que la máxima; pueden ser la misma hora si la entrega es a una hora exacta. |
@@ -283,6 +291,12 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
   recargue la pantalla). Resuelto en la versión 1.2.
 
 ## Historial de cambios
+
+- **1.9** — Al elegir el **cliente** en el formulario, debajo del campo se muestra en
+  letra pequeña el **vendedor (asesor)** que ese cliente tiene asignado, para saber de
+  quién es la cuenta sin salir del pedido. En el **PDF**, después de *Vendedor* se
+  agrega **Solicitado por** con el usuario que registró el pedido: así el documento
+  distingue al asesor del cliente de quien tomó el encargo.
 
 - **1.8** — El formulario del pedido se divide en dos pestañas. **General** tiene el
   pedido de siempre, sin cambios. La nueva pestaña **Detalle** muestra quién creó el
