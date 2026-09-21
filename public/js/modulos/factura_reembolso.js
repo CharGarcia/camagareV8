@@ -1257,7 +1257,7 @@
                     badge.textContent = 'Autorizado';
                 }
                 window.FR_fetchSearch();
-                Swal.fire('Éxito', 'Comprobante autorizado correctamente.', 'success');
+                Swal.fire({ icon: 'success', title: 'Autorizado', text: 'Comprobante autorizado por el SRI.' });
             } else {
                 try {
                     const tabBtn = document.getElementById('tab-fr-sri-btn');

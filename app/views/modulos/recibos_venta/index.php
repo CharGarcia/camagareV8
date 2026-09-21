@@ -2531,8 +2531,8 @@ $totalPages = $totalPagesOriginal;
             if (json.ok) {
                 Swal.fire({
                     icon: 'success',
-                    title: '¡Autorizado!',
-                    html: `<p>${json.mensaje}</p><code class="small">${json.numero_autorizacion || ''}</code>`,
+                    title: 'Autorizado',
+                    text: 'Comprobante autorizado por el SRI.',
                     confirmButtonColor: '#0d6efd',
                 }).then(() => {
                     // El refresco que preserva el orden ya está armado en

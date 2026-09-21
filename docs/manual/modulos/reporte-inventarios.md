@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica
-version: 1.21
+version: 1.22
 orden: 40
 estado: activo
 ---
@@ -19,17 +19,21 @@ para valorar lo que hay en almacén.
 
 En las cinco pestañas, el **código del producto es la primera columna** de la
 tabla —también en el PDF y en el Excel—, para poder identificar el artículo sin
-depender del nombre.
+depender del nombre. Se exceptúan las dos vistas que llevan el **nombre** del
+producto en una columna aparte y lejos del código: *Lote + consignación*
+(pantalla, PDF y Excel) y el **PDF/Excel de Consignaciones detallado**. En esas
+dos, el código va **pegado a la columna del nombre** en lugar de abrir la tabla,
+para leer de corrido "código — producto".
 
 Dónde aparece según lo que esté mostrando cada pestaña:
 
 | Vista | Qué lleva en la primera columna |
 |---|---|
 | Existencias (Detallado, Por lotes, Por caducidad, Lote + caducidad) | Código del producto de la fila |
-| Existencias (Lote + consignación) | Código del producto entregado |
+| Existencias (Lote + consignación) | Fecha del documento; el código va justo antes de *Descripción* |
 | Movimientos (Detallado) | Código del producto del movimiento |
 | Cualquier pestaña con *Agrupar por* en **Por Producto** | Código del producto, y el nombre pasa a la columna siguiente |
-| Consignaciones (Detallado) | Códigos de los productos del documento, separados por coma |
+| Consignaciones (Detallado) | Códigos de los productos del documento, separados por coma. En el PDF y el Excel cada fila es una línea, y el código va justo antes de *Producto* |
 | Auditoría | Código del producto de la discrepancia |
 
 Cuando la fila **no es un producto** —agrupados por categoría, bodega, marca,
@@ -82,10 +86,9 @@ lote y su NUP dentro de un documento—, no un par producto/bodega:
 
 | Columna | Qué contiene |
 |---|---|
-| Código | Código del producto |
 | Fecha / Secuencial | Fecha y número de la consignación |
 | Cliente / Asesor | A quién se entregó y qué vendedor la hizo |
-| Descripción | Nombre del producto |
+| Código / Descripción | Código y nombre del producto de esa línea, uno junto al otro |
 | Lote / NUP | Lote y NUP de esa línea |
 | Responsable traslado | Quien trasladó la mercadería |
 | Bodega | Bodega de la que salió |
@@ -362,6 +365,11 @@ ahí.
 
 ## Historial de cambios
 
+- **1.22** — El **código del producto** pasa a ir pegado al nombre en las dos
+  vistas donde estaban separados: en *Lote + consignación* queda justo antes de
+  **Descripción** (pantalla, PDF y Excel), y en el **PDF/Excel de
+  Consignaciones detallado**, justo antes de **Producto**. Así se leen de
+  corrido "código — producto" en lugar de tener que cruzar la fila entera.
 - **1.21** — Ninguna pestaña vuelve a consultar sola: elegir un producto o un
   cliente en el buscador, cambiar el selector *Detalle* o cambiar *Año* y *Mes*
   ya no lanza la búsqueda. La tabla se actualiza únicamente al pulsar

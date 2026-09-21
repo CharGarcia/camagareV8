@@ -1329,8 +1329,8 @@
                 }
                 Swal.fire({
                     icon: 'success',
-                    title: '¡Autorizado!',
-                    html: `<p>${json.mensaje}</p><code class="small">${json.numero_autorizacion || ''}</code>`,
+                    title: 'Autorizado',
+                    text: 'Comprobante autorizado por el SRI.',
                     confirmButtonColor: '#0d6efd',
                 });
             } else {

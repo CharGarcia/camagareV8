@@ -396,8 +396,8 @@ window.RI_Existencias = {
         } else if (modo === RI_DESGLOSE_CONSIGNACION) {
             // La fila es una línea de consignación: sus columnas son las del documento
             // que la entregó, no las del par producto×bodega.
-            th += `<th class="ps-3">Código</th><th>Fecha</th><th>Secuencial</th><th>Cliente</th><th>Asesor</th>
-                   <th>Descripción</th><th>Lote</th><th>NUP</th><th>Responsable traslado</th><th>Bodega</th>
+            th += `<th class="ps-3">Fecha</th><th>Secuencial</th><th>Cliente</th><th>Asesor</th>
+                   <th>Código</th><th>Descripción</th><th>Lote</th><th>NUP</th><th>Responsable traslado</th><th>Bodega</th>
                    <th class="text-end">Consignado</th><th class="text-end">Retornado</th>
                    <th class="text-end">Facturado</th>
                    <th class="text-end" title="Entregado al cliente a cambio de otro producto (Cambios de productos)">A cambio</th>

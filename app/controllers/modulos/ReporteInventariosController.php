@@ -670,11 +670,11 @@ class ReporteInventariosController extends BaseModuloController
         // los filtros de ESA pestaña, que aquí no son los que produjeron la fila.
         return '<tr class="ri-cv-row" style="cursor:pointer;" title="Ver detalle de la consignación"'
             . ' onclick="window.RI_Consignaciones.verDetalle(' . (int) ($r['id_consignacion'] ?? 0) . ', true)">'
-            . self::tdCodigo($r['producto_codigo'] ?? '')
             . '<td class="small text-nowrap">' . date('d-m-Y', strtotime($r['fecha_emision'] ?? '')) . '</td>'
             . '<td class="small text-nowrap">' . htmlspecialchars($r['secuencial'] ?? '') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['cliente_nombre'] ?? '-') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['vendedor_nombre'] ?? '-') . '</td>'
+            . self::tdCodigo($r['producto_codigo'] ?? '')
             . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
             . '<td class="small">' . htmlspecialchars($r['numero_lote'] ?? '-') . '</td>'
             . '<td class="small">' . htmlspecialchars($r['nup'] ?? '-') . '</td>'
@@ -1529,13 +1529,13 @@ class ReporteInventariosController extends BaseModuloController
                     default    => $this->repository->getConsignacionesDetalle($idEmpresa, $filtros),
                 };
                 if ($modo === 'NINGUNO') {
-                    $headers = ['Código', 'Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Asesor', 'Responsable de traslado',
-                                'Producto', 'Bodega', 'Lote', 'NUP', 'Consignado', 'Retornado', 'Facturado', 'A cambio', 'Saldo', 'Valor a costo'];
+                    $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Asesor', 'Responsable de traslado',
+                                'Código', 'Producto', 'Bodega', 'Lote', 'NUP', 'Consignado', 'Retornado', 'Facturado', 'A cambio', 'Saldo', 'Valor a costo'];
                     $data = array_map(fn($r) => [
-                        $r['producto_codigo'] ?? '',
                         date('d-m-Y', strtotime($r['fecha_emision'])), $r['secuencial'] ?? '',
                         $r['cliente_nombre'] ?? '', $r['cliente_identificacion'] ?? '',
                         $r['vendedor_nombre'] ?? '', $r['responsable_traslado_nombre'] ?? '',
+                        $r['producto_codigo'] ?? '',
                         $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? '',
                         $r['numero_lote'] ?? '-', $r['nup'] ?? '-',
                         (float) $r['cantidad_consignada'], (float) $r['cantidad_retornada'], (float) $r['cantidad_facturada'],
@@ -1585,12 +1585,12 @@ class ReporteInventariosController extends BaseModuloController
                     };
                 }
                 if ($modo === self::DESGLOSE_CONSIGNACION) {
-                    $headers = ['Código', 'Fecha', 'Secuencial', 'Cliente', 'Asesor', 'Descripción', 'Lote', 'NUP',
+                    $headers = ['Fecha', 'Secuencial', 'Cliente', 'Asesor', 'Código', 'Descripción', 'Lote', 'NUP',
                                 'Responsable de traslado', 'Bodega', 'Consignado', 'Retornado', 'Facturado', 'A cambio', 'Saldo'];
                     $data = array_map(fn($r) => [
-                        $r['producto_codigo'] ?? '',
                         date('d-m-Y', strtotime($r['fecha_emision'])), $r['secuencial'] ?? '',
                         $r['cliente_nombre'] ?? '', $r['vendedor_nombre'] ?? '',
+                        $r['producto_codigo'] ?? '',
                         $r['producto_nombre'] ?? '', $r['numero_lote'] ?? '-', $r['nup'] ?? '-',
                         $r['responsable_traslado_nombre'] ?? '', $r['bodega_nombre'] ?? '',
                         (float) $r['cantidad_consignada'], (float) $r['cantidad_retornada'],

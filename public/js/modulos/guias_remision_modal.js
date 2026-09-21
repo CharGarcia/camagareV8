@@ -1054,7 +1054,7 @@
                 if (typeof window.GR_cargar === 'function') window.GR_cargar(window.GR_page || 1);
                 const modalEl = document.getElementById('modalGuiaRemision');
                 if (modalEl) bootstrap.Modal.getInstance(modalEl).hide();
-                Swal.fire({ icon: 'success', title: '¡Autorizado!', text: d.mensaje, timer: 2500, showConfirmButton: false });
+                Swal.fire({ icon: 'success', title: 'Autorizado', text: 'Comprobante autorizado por el SRI.', timer: 2500, showConfirmButton: false });
             } else {
                 const errores = d.errores && d.errores.length
                     ? '<ul class="text-start mt-2 mb-0 ps-3">' + d.errores.map(e => `<li>${e.mensaje || JSON.stringify(e)}</li>`).join('') + '</ul>'

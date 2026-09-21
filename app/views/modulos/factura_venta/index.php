@@ -3165,10 +3165,8 @@ $totalPages = $totalPagesOriginal;
                 // en hidden.bs.modal para cuando el usuario cierre el modal.
                 Swal.fire({
                     icon: 'success',
-                    title: '¡Autorizado!',
-                    html: `<p>${json.mensaje}</p><code class="small">${json.numero_autorizacion || ''}</code>
-                           <hr class="my-2">
-                           <small class="text-muted">El documento queda bloqueado para edición.</small>`,
+                    title: 'Autorizado',
+                    text: 'Comprobante autorizado por el SRI.',
                     confirmButtonColor: '#0d6efd',
                 });
             } else {

@@ -1629,7 +1629,7 @@
                         toggleBotonesAccion(true, 'autorizado');
                         NC_setModoLectura(true);
                         window.NC_fetchSearch();
-                        Swal.fire('Éxito', 'Comprobante autorizado correctamente.', 'success');
+                        Swal.fire({ icon: 'success', title: 'Autorizado', text: 'Comprobante autorizado por el SRI.' });
                     } else {
                         NC_irPestanaSri(); // dejar el mensaje a la vista
                         const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));

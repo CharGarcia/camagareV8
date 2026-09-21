@@ -484,8 +484,8 @@
             if (data.ok) {
                 await Swal.fire({
                     icon: 'success',
-                    title: '¡Autorizada!',
-                    html: `<p>${data.mensaje || 'Retención autorizada por el SRI.'}</p><code class="small">${data.numero_autorizacion || ''}</code>`,
+                    title: 'Autorizado',
+                    text: 'Comprobante autorizado por el SRI.',
                     confirmButtonColor: '#0d6efd',
                 });
             } else {

@@ -1315,7 +1315,7 @@
                         toggleBotonesAccion(true, 'autorizado');
                         ND_setModoLectura(true);
                         window.ND_fetchSearch();
-                        Swal.fire('Éxito', 'Comprobante autorizado correctamente.', 'success');
+                        Swal.fire({ icon: 'success', title: 'Autorizado', text: 'Comprobante autorizado por el SRI.' });
                     } else {
                         ND_irPestanaSri();
                         const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
