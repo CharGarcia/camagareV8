@@ -591,7 +591,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <div class="eg-div-cheque-fields d-none" style="width:130px;">
                                                 <label class="form-label small fw-bold text-primary"><i class="bi bi-card-checklist me-1"></i>N° Cheque</label>
                                                 <div class="input-group input-group-sm">
-                                                    <input type="text" id="eg-add-pago-num-cheque" class="form-control border-primary" placeholder="Auto...">
+                                                    <input type="text" id="eg-add-pago-num-cheque" class="form-control border-primary" maxlength="50" placeholder="Auto...">
                                                     <button type="button" class="btn btn-outline-primary btn-sm" title="Recargar secuencia" onclick="recargarSecuenciaCheque()">
                                                         <i class="bi bi-arrow-clockwise"></i>
                                                     </button>
@@ -607,7 +607,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             </div>
                                             <div style="flex:1 1 auto; min-width:160px;">
                                                 <label class="form-label small fw-bold">Nº Referencia / Comprobante</label>
-                                                <input type="text" id="eg-add-pago-ref" class="form-control form-control-sm" placeholder="Nota, referencia, etc...">
+                                                <!-- maxlength = largo de egresos_pagos.referencia (igual que en Ingresos). -->
+                                                <input type="text" id="eg-add-pago-ref" class="form-control form-control-sm" maxlength="255" placeholder="Nota, referencia, etc...">
                                             </div>
                                             <div>
                                                 <label class="form-label small fw-bold d-block">&nbsp;</label>

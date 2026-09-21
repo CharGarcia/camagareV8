@@ -667,4 +667,55 @@ class TransferenciaInventarioRepository extends BaseRepository
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    /**
+     * Lotes del producto con saldo en bodegas DISTINTAS a la de origen.
+     *
+     * Alimenta el aviso "este lote está en otra bodega" del modal: el selector de
+     * lotes solo ofrece lo que tiene saldo en la bodega de origen, así que un lote
+     * que se agotó ahí simplemente desaparece de la lista y el usuario no tiene
+     * forma de saber que sí existe al lado. Peor aún, si queda un único lote con
+     * saldo el JS lo auto-selecciona y parece que el sistema eligió mal.
+     *
+     * Mismo filtro que getLotesDisponibles() (tipo_ambiente + eliminado + saldo > 0)
+     * para que los números coincidan con lo que el usuario verá al cambiar de bodega.
+     * Se excluyen las bodegas con el acceso revocado: no tiene sentido mandar al
+     * usuario a una bodega que ni siquiera puede seleccionar como origen.
+     *
+     * @param int[] $idsBodegasDenegadas Ver BodegaRepository::getIdsBodegasDenegadas()
+     */
+    public function getLotesEnOtrasBodegas(int $idProducto, int $idBodegaOrigen, int $idEmpresa, array $idsBodegasDenegadas = []): array
+    {
+        $params = [':e' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodegaOrigen];
+
+        $whereDenegadas = '';
+        if ($idsBodegasDenegadas !== []) {
+            $marcas = [];
+            foreach (array_values($idsBodegasDenegadas) as $i => $idBodega) {
+                $marcas[] = ':den' . $i;
+                $params[':den' . $i] = (int) $idBodega;
+            }
+            $whereDenegadas = ' AND k.id_bodega NOT IN (' . implode(', ', $marcas) . ')';
+        }
+
+        $sql = "SELECT COALESCE(k.numero_lote, 'sin_lote') AS numero_lote,
+                       k.id_bodega,
+                       b.nombre AS bodega,
+                       MAX(k.fecha_caducidad) AS fecha_caducidad,
+                       ROUND(SUM(k.cantidad), 2) AS stock_lote
+                FROM inventario_kardex k
+                INNER JOIN bodegas b ON b.id = k.id_bodega
+                WHERE k.id_empresa = :e AND k.id_producto = :p
+                  AND k.id_bodega <> :b
+                  AND k.eliminado = false AND b.eliminado = false AND b.status = true
+                  AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+                  {$whereDenegadas}
+                GROUP BY COALESCE(k.numero_lote, 'sin_lote'), k.id_bodega, b.nombre
+                HAVING ROUND(SUM(k.cantidad), 2) > 0
+                ORDER BY b.nombre ASC, numero_lote ASC";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
 }

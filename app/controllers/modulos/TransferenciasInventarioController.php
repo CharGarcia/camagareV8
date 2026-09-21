@@ -359,11 +359,30 @@ class TransferenciasInventarioController extends BaseModuloController
         }
         unset($lote);
 
+        // Lotes que existen en otra bodega pero no aquí: el modal los muestra como
+        // aviso para que el usuario sepa que el lote que busca no se perdió, solo
+        // está en otro sitio (y con qué bodega de origen lo encontraría).
+        $enLaBodega = array_flip(array_column($lotes, 'numero_lote'));
+        $otras = array_values(array_filter(
+            $this->repository->getLotesEnOtrasBodegas(
+                $idProducto,
+                $idBodega,
+                $idEmp,
+                (new BodegaRepository())->getIdsBodegasDenegadas(
+                    (int) $_SESSION['id_usuario'],
+                    $idEmp,
+                    (int) ($_SESSION['nivel'] ?? 1)
+                )
+            ),
+            fn($l) => !isset($enLaBodega[$l['numero_lote']])
+        ));
+
         echo json_encode([
-            'ok'    => true,
-            'stock' => $repo->getStockActual($idProducto, $idBodega, $idEmp),
-            'costo' => $this->repository->getCostoOrigen($idProducto, $idBodega, $idEmp),
-            'lotes' => $lotes,
+            'ok'                  => true,
+            'stock'               => $repo->getStockActual($idProducto, $idBodega, $idEmp),
+            'costo'               => $this->repository->getCostoOrigen($idProducto, $idBodega, $idEmp),
+            'lotes'               => $lotes,
+            'lotes_otras_bodegas' => $otras,
         ]);
         exit;
     }

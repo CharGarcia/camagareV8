@@ -6,7 +6,7 @@ ruta_modulo: modulos/transferencias-inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: transferencia de inventario, traslado de mercaderia, mover stock, cambiar de bodega, pasar productos de una bodega a otra, entre bodegas, entre establecimientos, entre sucursales, entre locales, traspaso de inventario, guia de remision, acta de entrega, kardex, imprimir acta, pdf de la transferencia, logo en el acta, enviar por correo, mandar el acta por email, enlace del pdf, link para ver el acta, abrir el acta sin descargar, no llega el adjunto, confirmar recepcion, aprobar lo recibido, recibi conforme, acuse de recibo, aceptar la transferencia, rechazar la transferencia, quien recibio, conformidad del destino
-version: 1.2
+version: 1.3
 orden: 0
 estado: activo
 ---
@@ -48,7 +48,9 @@ la trazabilidad no se pierde al cambiar de bodega.
    el stock disponible en la bodega de origen.
 5. Por cada línea, elija el **lote** (si el producto maneja lotes) y la **serie/NUP**
    (si maneja series), y escriba la **cantidad**. El sistema no deja pasar de lo
-   disponible.
+   disponible. Si el lote que busca tiene saldo en **otra bodega**, debajo del
+   selector aparece un aviso diciendo en cuál y con cuántas unidades (ver
+   *El lote que busco no aparece en la lista*).
 6. Pulse **Registrar transferencia**. El stock se mueve en ese momento.
 7. Desde el documento ya guardado puede **imprimir el acta** (PDF con las firmas de
    entrega y recepción) y, si cruza establecimientos, **Generar guía de remisión**.
@@ -227,6 +229,16 @@ Además, el usuario solo puede transferir entre bodegas a las que tenga acceso
   posteriores que usaron esa mercadería.
 - **Una serie no aparece en la lista**: esa serie ya no tiene saldo en la bodega de
   origen (se vendió o se transfirió antes).
+- **El lote que busco no aparece en la lista**: el selector solo ofrece lotes con
+  saldo en la **bodega de origen** que eligió arriba. Si ese lote se agotó ahí,
+  desaparece de la lista aunque el Reporte de Inventarios lo muestre con
+  existencias, porque el reporte suma **todas** las bodegas. Debajo del selector
+  aparece un aviso con la bodega donde sí está y cuántas unidades tiene: cambie la
+  **bodega de origen** a esa y el lote volverá a aparecer. Dos precisiones:
+  - El aviso solo nombra bodegas a las que usted tiene acceso.
+  - Si el número que vio en el reporte era de las columnas **Consignación** o
+    **Stock Total**, esa mercadería está en poder del cliente y no se puede
+    transferir; solo es movible lo que aparece en la columna **Stock**.
 - **«No se pudo enviar el correo. Verifique la configuración de correo de la
   empresa»**: falta o está mal la configuración de **Configuración → Empresa →
   Correo** (es la misma que usan las facturas). Pruebe primero enviando una
@@ -242,6 +254,12 @@ Además, el usuario solo puede transferir entre bodegas a las que tenga acceso
   ("Acta enviada a…"), así que ahí se ve a qué dirección salió.
 
 ## Historial de cambios
+
+- **1.3** — El selector de lote avisa cuando el lote que se busca **tiene saldo en
+  otra bodega**: indica en cuál y con cuántas unidades, para no dar por perdido un
+  stock que solo está en otro sitio. Si el producto no tiene nada en la bodega de
+  origen el aviso se destaca en rojo. Solo se nombran bodegas a las que el usuario
+  tiene acceso.
 
 - **1.2** — La transferencia se puede **enviar por correo** desde cada fila del
   listado (o desde el documento abierto), eligiendo usuarios del sistema o

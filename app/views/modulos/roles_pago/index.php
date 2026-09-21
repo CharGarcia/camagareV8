@@ -11,6 +11,7 @@
 /** @var string $buscar */
 /** @var string $ordenCol */
 /** @var string $ordenDir */
+/** @var string $ordenJson */
 /** @var array $tipos */
 /** @var array $estados */
 /** @var array $meses */
@@ -164,8 +165,8 @@ $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'succes
                 <thead class="table-light shadow-sm">
                     <tr>
                         <th class="ps-3 sortable-header" data-sort="tipo_rol" role="button" data-col="tipo">Tipo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th data-col="periodo">Período</th>
-                        <th class="text-center" data-col="empleados">Empleados</th>
+                        <th class="sortable-header" data-sort="periodo" role="button" data-col="periodo">Período <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" data-sort="empleados" role="button" data-col="empleados">Empleados <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header" data-sort="total_neto" role="button" data-col="neto">Neto <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" data-sort="estado" role="button" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center" style="width: 40px;"></th>
@@ -211,24 +212,30 @@ $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'succes
         'use strict';
         const urlBase = '<?= $urlBaseRol ?>';
         const inputB = document.getElementById('buscarRol');
-        let currentSort = '<?= $ordenCol ?>', currentDir = '<?= $ordenDir ?>';
+        // Orden múltiple (Shift+clic): lista completa de criterios, en el mismo formato
+        // que lee OrdenListado en PHP. Viaja al backend como `orden=col:DIR,col:DIR`.
+        window.currentSorts = <?= $ordenJson ?? '[]' ?>;
+        let sorter = null;
 
         window.cambiarPaginaAjax = (p) => cargarListado(p);
 
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
+            const orden = window.CMG_ordenParam ? window.CMG_ordenParam(window.currentSorts) : '';
             // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
             // carga, también al paginar u ordenar (que llaman a esta función directo).
             const tbody = document.getElementById('tbodyRoles');
             if (tbody) tbody.classList.add('fm-cargando-target');
             try {
-                const resp = await fetch(`${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`);
+                const resp = await fetch(`${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&orden=${encodeURIComponent(orden)}`);
                 const data = await resp.json();
                 if (data.ok) {
                     window.currentPage = page;
                     document.getElementById('tbodyRoles').innerHTML = data.rows;
                     document.getElementById('wrapper-pagination').innerHTML = data.pagination;
                     document.getElementById('paginationInfo').textContent = data.info;
+                    // Los íconos (incluida la prioridad 1/2/3) los repinta el motor global.
+                    if (sorter) sorter.refreshIcons();
                 }
             } catch (e) {
                 console.error(e);
@@ -237,8 +244,15 @@ $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'succes
             }
         }
 
+        // Ordenamiento (motor global: persiste la preferencia y pinta los íconos).
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+        // (ASC → DESC → fuera). No recarga la página: cargarListado repinta filas,
+        // paginación y contador.
         if (window.CMG_initSort) {
-            window.CMG_initSort('roles_pago', (col, dir) => { currentSort = col; currentDir = dir; cargarListado(1); }, { col: currentSort, dir: currentDir });
+            sorter = window.CMG_initSort('roles_pago', (col, dir, sorts) => {
+                window.currentSorts = sorts;
+                cargarListado(1);
+            }, { sorts: window.currentSorts, multi: true });
         }
         window.addEventListener('rolGuardado', () => cargarListado(window.currentPage || 1));
     })();

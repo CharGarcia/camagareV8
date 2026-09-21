@@ -541,6 +541,29 @@ class CuentasPorCobrarController extends BaseModuloController
             $totSaldo  = 0.0;
             $cuerpo    = '';
 
+            // Todo el listado va en UNA sola tabla y cada cliente es una fila de cabecera
+            // (colspan) dentro de ella. No es cosmético: con una tabla por cliente, cuando
+            // una de ellas se abría en el último centímetro de la hoja, Html2Pdf dibujaba su
+            // <thead> al pie SIN contarlo al decidir si la primera fila cabía (la condición
+            // de Html2Pdf::_tag_open_TR suma el tfoot, no el thead), así que esa fila se
+            // partía y sus celdas se repartían entre dos o tres páginas, dejando renglones
+            // sueltos al pie y hojas casi en blanco — las "líneas montadas" del reporte.
+            // Con una sola tabla, el <thead> solo se dibuja arriba de cada página (donde
+            // siempre hay sitio), se repite en TODAS las páginas y ninguna fila se parte.
+            // El colspan de la cabecera de cliente no descuadra los anchos porque la primera
+            // fila de la tabla sigue siendo el <thead> con el ancho de cada columna.
+            $nCols  = 8 + ($consolidado ? 1 : 0) + ($sinAsesor ? 0 : 1);
+            $thCols = ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
+                . "<th style='width:9%;'>Fecha</th>"
+                . "<th style='width:{$wDoc}%;'>N. Documento</th>"
+                . "<th style='width:10%;'>Total</th>"
+                . "<th style='width:9%;'>NC</th>"
+                . "<th style='width:10%;'>Abonos</th>"
+                . "<th style='width:10%;'>Retenciones</th>"
+                . "<th style='width:10%;'>Saldo</th>"
+                . "<th style='width:5%;'>Días</th>"
+                . ($sinAsesor ? '' : "<th style='width:{$wAse}%;'>Asesor</th>");
+
             foreach ($grupos as $g) {
                 $totTotal  += $g['total'];
                 $totNc     += $g['nc'];
@@ -548,32 +571,22 @@ class CuentasPorCobrarController extends BaseModuloController
                 $totRet    += $g['retenciones'];
                 $totSaldo  += $g['saldo'];
 
+                if ($cuerpo === '') {
+                    $cuerpo .= "<table class='cli'><thead><tr>{$thCols}</tr></thead><tbody>";
+                } else {
+                    // Hueco entre un cliente y el siguiente (antes era el margin-bottom de la
+                    // tabla de cada cliente): fila vacía sin bordes, de la misma altura.
+                    $cuerpo .= "<tr class='sep'><td colspan='{$nCols}'>&nbsp;</td></tr>";
+                }
+
                 // Cabecera de la sección: "NOMBRE · saldo: 1,234.56". Sin el RUC delante:
                 // quien lee el reporte identifica al cliente por el nombre, y el número
                 // solo le robaba ancho a la línea. Lo que interesa es cuánto debe, no
                 // cuántos documentos tiene.
                 $titulo = trim((string) $g['nombre']);
-                // La cabecera del cliente va en su propia tabla: un colspan en la primera fila
-                // hace que el motor ignore los anchos de las columnas de la tabla de abajo.
-                $cuerpo .= "<table class='grp'><tr><td style='width:100%;'>"
+                $cuerpo .= "<tr class='grp'><td colspan='{$nCols}'>"
                     . $e($titulo) . " &nbsp;&middot;&nbsp; saldo: " . number_format($g['saldo'], 2)
-                    . "</td></tr></table>";
-
-                // class='cli': el hueco entre un cliente y el siguiente sale del
-                // margin-bottom de ESTA tabla (la cabecera verde va pegada arriba con
-                // margin-bottom:0). Va en su propia clase para no mover el resto de tablas.
-                $cuerpo .= "<table class='cli'><thead><tr>"
-                    . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
-                    . "<th style='width:9%;'>Fecha</th>"
-                    . "<th style='width:{$wDoc}%;'>N. Documento</th>"
-                    . "<th style='width:10%;'>Total</th>"
-                    . "<th style='width:9%;'>NC</th>"
-                    . "<th style='width:10%;'>Abonos</th>"
-                    . "<th style='width:10%;'>Retenciones</th>"
-                    . "<th style='width:10%;'>Saldo</th>"
-                    . "<th style='width:5%;'>Días</th>"
-                    . ($sinAsesor ? '' : "<th style='width:{$wAse}%;'>Asesor</th>")
-                    . "</tr></thead><tbody>";
+                    . "</td></tr>";
 
                 foreach ($g['items'] as $r) {
                     $dias   = (int)($r['dias_vencido'] ?? 0);
@@ -607,7 +620,9 @@ class CuentasPorCobrarController extends BaseModuloController
 
                 // Sin fila de SUBTOTAL por cliente: el saldo ya va en la cabecera de la
                 // sección y el resumen de toda la cartera queda en el TOTAL GENERAL.
-                $cuerpo .= "</tbody></table>";
+            }
+            if ($cuerpo !== '') {
+                $cuerpo .= '</tbody></table>';
             }
 
             ob_start();
@@ -623,11 +638,12 @@ class CuentasPorCobrarController extends BaseModuloController
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
                 .header h3 { margin: 0 0 2px 0; font-size: 10pt; }
                 .header p  { margin: 0; font-size: 7.5pt; }
-                table.grp { margin-bottom: 0; }
-                /* Separación entre un cliente y el siguiente: el doble del margen normal
-                   de las tablas (6px), para que cada sección se lea como un bloque aparte. */
                 table.cli { margin-bottom: 12px; }
-                table.grp td { background: #eafaf1; border: 1px solid #ccc; font-weight: bold; font-size: 8.5pt; padding: 4px 5px; }
+                /* Cabecera de cada cliente: fila de la misma tabla, con todo el ancho. */
+                tr.grp td { background: #eafaf1; border: 1px solid #ccc; font-weight: bold; font-size: 8.5pt; padding: 4px 5px; }
+                /* Separación entre un cliente y el siguiente: fila vacía sin bordes, del
+                   mismo alto que el hueco que dejaban antes las tablas sueltas (~25 pt). */
+                tr.sep td { border: none; background: #fff; padding: 0; font-size: 9pt; }
                 table.tot td { background: #343a40; color: #fff; font-weight: bold; font-size: 8.5pt; border: 1px solid #343a40; }
                 table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }
                 .stat-lbl  { font-size: 7.5pt; }

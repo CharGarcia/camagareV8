@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo
-version: 3.0
+etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres
+version: 3.1
 orden: 10
 estado: activo
 ---
@@ -45,6 +45,10 @@ La lista de **formas de cobro** sigue el **Orden** configurado en
 [Formas de cobro y pago](formas-cobros-pagos.md) (las que no tienen orden van al
 final, por nombre), y el saldo de cada forma se ve junto a su nombre solo si allí
 tiene marcado **Mostrar saldo**.
+
+*Referencia / Glosa General* admite hasta **255 caracteres** y *Nº de cheque*
+hasta **50**. Para un detalle más largo del cobro use **Observaciones
+Generales**, que no tiene tope.
 
 ## Combinar varios conceptos en un mismo ingreso
 
@@ -377,8 +381,22 @@ deseable; para el contador o el administrador, active el acceso total.
   de "Otros conceptos" que no tiene cuenta. Elíjala en la columna *Cuenta
   contable* de esa línea; si es un anticipo, pulse **Anticipo Cliente** y se pone
   sola.
+- **"value too long for type character varying(100)"** al guardar: le pasó a las
+  versiones anteriores a la 3.1 cuando la *Referencia / Glosa General* de una
+  forma de cobro superaba los 100 caracteres. El ingreso no se guardaba. Desde
+  la 3.1 ese campo admite 255 caracteres y muestra el tope al escribir; el
+  detalle más largo va en **Observaciones Generales**.
 
 ## Historial de cambios
+
+- **3.1** — **El ingreso ya no se pierde por un texto largo.** *Referencia /
+  Glosa General* pasa de 100 a **255 caracteres** y muestra el tope al escribir
+  (el *Nº de cheque* admite 50). Antes no avisaba de ningún límite y, al
+  guardar, la base de datos rechazaba el cobro entero con un error técnico
+  (*value too long for type character varying(100)*): se perdía el ingreso
+  completo. Además, si el texto llega desde otro módulo (conciliación bancaria,
+  pagos de compras), ahora se guarda recortado en vez de perder el ingreso.
+  Mismo cambio en *Egresos*.
 
 - **3.0** — **Un documento está pendiente mientras le quede al menos un centavo.**
   Antes, la búsqueda de documentos por cobrar descartaba los que tenían

@@ -794,7 +794,9 @@ class IngresoRepository extends BaseRepository
             ':monto_total'          => (float) $data['monto_total'],
             ':observaciones'        => $data['observaciones'] ?? null,
             ':estado'               => $data['estado'] ?? 'registrado',
-            ':recibo_de'            => !empty($data['recibo_de']) ? trim($data['recibo_de']) : null,
+            // Campo libre ("Recibí de") contra una columna acotada: se capa igual que la
+            // referencia del cobro, para no perder el ingreso por un texto largo.
+            ':recibo_de'            => !empty($data['recibo_de']) ? $this->caparTexto('recibo_de', trim($data['recibo_de']), 'ingresos_cabecera') : null,
             ':id_recibo_cliente'    => !empty($data['id_recibo_cliente']) ? (int) $data['id_recibo_cliente'] : null,
         ]);
 
@@ -843,7 +845,7 @@ class IngresoRepository extends BaseRepository
             ':id_ingreso_concepto'  => !empty($data['id_ingreso_concepto']) ? (int) $data['id_ingreso_concepto'] : null,
             ':monto_total'          => (float) $data['monto_total'],
             ':observaciones'        => $data['observaciones'] ?? null,
-            ':recibo_de'            => !empty($data['recibo_de']) ? trim($data['recibo_de']) : null,
+            ':recibo_de'            => !empty($data['recibo_de']) ? $this->caparTexto('recibo_de', trim($data['recibo_de']), 'ingresos_cabecera') : null,
             ':id_recibo_cliente'    => !empty($data['id_recibo_cliente']) ? (int) $data['id_recibo_cliente'] : null,
         ]);
     }
@@ -880,14 +882,20 @@ class IngresoRepository extends BaseRepository
                     :id_ingreso, :id_forma, :monto, :ref, :obs,
                     :tipo_op, :num_chq, :fec_cob
                 )";
+        // referencia y numero_cheque son campos LIBRES: el usuario escribe lo que quiera en
+        // "Nº / Referencia" del modal, y varios flujos automáticos meten ahí texto que no
+        // controlamos (el nº de operación del banco en Conciliación, las observaciones del
+        // pago en Compras). La columna es varchar(100) y PostgreSQL no trunca solo: un texto
+        // más largo abortaba el INSERT con SQLSTATE[22001] y se perdía el ingreso entero
+        // —ya guardada la cabecera— en vez de recortar un dato accesorio.
         $this->query($sql, [
             ':id_ingreso' => (int) $data['id_ingreso'],
             ':id_forma'   => (int) $data['id_forma_cobro'],
             ':monto'      => (float) $data['monto'],
-            ':ref'        => $data['referencia'] ?? null,
+            ':ref'        => $this->caparTexto('referencia', $data['referencia'] ?? null, 'ingresos_pagos'),
             ':obs'        => $data['observaciones'] ?? null,
             ':tipo_op'    => $data['tipo_operacion_bancaria'] ?? null,
-            ':num_chq'    => $data['numero_cheque'] ?? null,
+            ':num_chq'    => $this->caparTexto('numero_cheque', $data['numero_cheque'] ?? null, 'ingresos_pagos'),
             ':fec_cob'    => !empty($data['fecha_cobro']) ? $data['fecha_cobro'] : null,
         ]);
     }

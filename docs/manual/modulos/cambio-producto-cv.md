@@ -6,7 +6,7 @@ ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion
-version: 1.18
+version: 1.19
 orden: 47
 estado: activo
 ---
@@ -96,8 +96,14 @@ producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
    asiento.
 
 Las tablas del formulario **no muestran precios, IVA ni totales**, solo
-unidades. Las dos tablas llevan *Origen, Producto, Bodega, Lote, NUP y
-Cantidad*.
+unidades. Las dos tablas llevan *Origen, Producto, Bodega, Lote, NUP,
+Vencimiento y Cantidad*.
+
+El **Vencimiento** es el de la unidad, no se escribe a mano: en lo que se
+devuelve es el de la línea de la factura de consignación (o el de la entrega del
+cambio anterior) y en lo que se entrega, el de la línea de consignación. Si
+aparece un guion, esa unidad no tiene fecha de vencimiento registrada en su
+documento de origen.
 
 La columna **Origen** del formulario (y del PDF y el Excel del cambio) dice de
 dónde viene cada línea:
@@ -166,8 +172,8 @@ cambio; luego, a la **izquierda**, con encabezados en **rojo**, el producto que
 | Lado | Columnas |
 |------|----------|
 | Fecha (celeste) | Fecha de emisión del cambio |
-| Entra (rojo) | Cantidad, Producto (con el código debajo), Lote, NUP (el de la unidad en la facturación de consignación), Bodega a la que entra, Factura (número de la factura de venta de la que vino el cambio: la de la unidad que entra, también si llegó en un cambio anterior; en las filas que solo tienen producto que sale, en gris, la factura del cambio; *Sin factura* si no hay factura de venta que mostrar) |
-| Sale (verde) | Cantidad, Producto (con el código debajo), Lote, NUP, Bodega de la que sale, Cliente, Observaciones del cambio |
+| Entra (rojo) | Cantidad, Producto (con el código debajo), Lote, NUP (el de la unidad en la facturación de consignación), Vencimiento, Bodega a la que entra, Factura (número de la factura de venta de la que vino el cambio: la de la unidad que entra, también si llegó en un cambio anterior; en las filas que solo tienen producto que sale, en gris, la factura del cambio; *Sin factura* si no hay factura de venta que mostrar) |
+| Sale (verde) | Cantidad, Producto (con el código debajo), Lote, NUP, Vencimiento, Bodega de la que sale, Cliente, Observaciones del cambio |
 
 - Cada fila **empareja** un producto que entra con uno que sale del mismo
   cambio, en el orden en que se registraron (el primero con el primero, el
@@ -243,8 +249,8 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Secuencial | Automático | Vista previa; el número definitivo lo asigna el sistema al guardar. |
 | Cliente | Sí | Se fija solo con el primer ítem agregado (factura de consignación, cambio o consignación) o se elige a mano. Backspace en el campo lo limpia junto con las líneas que dependen de él. |
 | Motivo / Observaciones | No | Texto libre. |
-| Productos que devuelve | Sí (al menos uno) | Ítems de facturas de consignación (estado *facturada*) o de cambios anteriores con saldo pendiente. Columnas: origen (n.º de la factura de venta o del cambio), producto, bodega, lote, NUP y cantidad (propone el saldo pendiente y no puede superarlo). |
-| Productos que entrega a cambio | No | Ítems de consignaciones *Entregadas* con saldo en poder del cliente, buscados **solo por el número de la consignación**. Columnas: origen (n.º de la consignación), producto, bodega, lote, NUP y cantidad (propone el saldo y no puede superarlo). |
+| Productos que devuelve | Sí (al menos uno) | Ítems de facturas de consignación (estado *facturada*) o de cambios anteriores con saldo pendiente. Columnas: origen (n.º de la factura de venta o del cambio), producto, bodega, lote, NUP, vencimiento y cantidad (propone el saldo pendiente y no puede superarlo). |
+| Productos que entrega a cambio | No | Ítems de consignaciones *Entregadas* con saldo en poder del cliente, buscados **solo por el número de la consignación**. Columnas: origen (n.º de la consignación), producto, bodega, lote, NUP, vencimiento y cantidad (propone el saldo y no puede superarlo). |
 | Estado | Solo al editar | Borrador, Emitida o Anulada. Está a la derecha de la barra de botones (PDF, Excel, correo y WhatsApp). |
 
 ## Permisos
@@ -391,6 +397,20 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   la pestaña Asiento contable.
 
 ## Historial de cambios
+
+- **1.19** — Se muestra la **fecha de vencimiento** de cada unidad: en las dos
+  tablas del formulario, en el buscador de lo que se devuelve, en el listado
+  (*Entra: vencimiento* y *Sale: vencimiento*, ordenables y ocultables como
+  cualquier otra columna) y en el PDF y el Excel, tanto del cambio como del
+  listado. El dato ya se guardaba y ya entraba al inventario con la unidad
+  devuelta; lo que faltaba era poder verlo.
+
+  Junto con esto se corrigió el origen del dato: la **facturación de
+  consignaciones migrada desde el sistema anterior** se había quedado sin fecha
+  de vencimiento, y como la devolución la copia de ahí, las unidades volvían al
+  inventario sin ella aunque la consignación sí la tuviera. Ahora la migración la
+  toma de la línea de consignación, y volver a migrar completa lo que ya estaba
+  cargado.
 
 - **1.18** — Lo que se entrega a cambio puede salir de la consignación de **otro cliente**.
   Al buscarla por su número, aparece con el nombre de su cliente y la marca *Otro cliente*, y

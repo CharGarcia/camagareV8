@@ -6,21 +6,50 @@ namespace App\repositories\modulos;
 
 use App\repositories\BaseRepository;
 use App\Helpers\FiltrosBusqueda;
+use App\Helpers\OrdenListado;
 use PDO;
 
 class RolPagoRepository extends BaseRepository
 {
+    /**
+     * Columnas por las que se puede ordenar el listado: es la whitelist Y el mapa a
+     * la vez — lo único que puede llegar al ORDER BY sale de aquí (ver OrdenListado).
+     *
+     * Las cinco primeras son las columnas visibles de la tabla (`data-sort` en la
+     * vista). `periodo` no es un campo: el período se muestra como "Julio 2026 #1"
+     * pero se guarda en tres columnas, así que se ordena por el número que forman las
+     * tres juntas (año·10000 + mes·100 + número). Así DESC deja arriba el período más
+     * reciente, que es el orden por defecto del módulo.
+     *
+     * Las cuatro últimas no tienen encabezado propio; se conservan porque pudieron
+     * quedar guardadas en `__ordenCol__` de usuarios que ya ordenaron el listado.
+     */
+    public const MAPA_ORDEN = [
+        'tipo_rol'   => 'r.tipo_rol',
+        'periodo'    => '(r.periodo_anio * 10000 + r.periodo_mes * 100 + r.numero_periodo)',
+        'empleados'  => '(SELECT COUNT(*) FROM rol_detalle d WHERE d.id_rol = r.id)',
+        'total_neto' => 'r.total_neto',
+        'estado'     => 'r.estado',
+        // Compatibilidad con preferencias de orden ya guardadas.
+        'periodo_anio' => 'r.periodo_anio',
+        'periodo_mes'  => 'r.periodo_mes',
+        'fecha_pago'   => 'r.fecha_pago',
+        'id'           => 'r.id',
+    ];
+
     public function __construct()
     {
         parent::__construct('rol_cabecera');
     }
 
     // ─── Listado de corridas ─────────────────────────────────────────────────
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, array $ordenMulti = []): array
     {
-        $whitelist = ['periodo_anio', 'periodo_mes', 'tipo_rol', 'estado', 'fecha_pago', 'total_neto', 'id'];
-        $ordenCol  = in_array($ordenCol, $whitelist, true) ? $ordenCol : 'id';
-        $ordenDir  = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
+        // Sin criterios múltiples (llamadas que solo mandan sort/dir), la columna
+        // suelta es el único criterio.
+        if ($ordenMulti === []) {
+            $ordenMulti = [['col' => $ordenCol, 'dir' => $ordenDir]];
+        }
 
         $params = [':id_empresa' => $idEmpresa];
         $where  = $this->getBaseWhere($idEmpresa, 'r', $idUsuarioFiltro);
@@ -29,7 +58,7 @@ class RolPagoRepository extends BaseRepository
         }
         $where .= " AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
-        $numEmpleados = '(SELECT COUNT(*) FROM rol_detalle d WHERE d.id_rol = r.id)';
+        $numEmpleados = self::MAPA_ORDEN['empleados'];
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
@@ -96,8 +125,11 @@ class RolPagoRepository extends BaseRepository
         $stTotal->execute($params);
         $total = (int) $stTotal->fetchColumn();
 
-        $sql = "SELECT r.*, (SELECT COUNT(*) FROM rol_detalle d WHERE d.id_rol = r.id) AS num_empleados
-                {$from} ORDER BY r.{$ordenCol} {$ordenDir}, r.id DESC";
+        // Una o varias columnas, siempre validadas contra MAPA_ORDEN, con r.id como
+        // desempate para que dos filas empatadas no bailen entre páginas.
+        $orderBy = OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, self::MAPA_ORDEN['periodo'], 'r.id DESC');
+        $sql = "SELECT r.*, {$numEmpleados} AS num_empleados
+                {$from} {$orderBy}";
         if ($perPage > 0) {
             $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
         }

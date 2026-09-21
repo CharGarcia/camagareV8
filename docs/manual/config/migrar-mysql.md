@@ -6,7 +6,7 @@ ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
 etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver
-version: 1.9
+version: 1.10
 orden: 2
 estado: activo
 ---
@@ -324,6 +324,14 @@ Qué respeta la migración:
   datos reales todavía).
 
 ## Historial de cambios
+
+- **1.10** — La **facturación de consignaciones** y los **retornos de
+  consignación** migrados ya traen la **fecha de vencimiento** de cada unidad:
+  antes se quedaba vacía, y por eso los *Cambios de productos* devolvían
+  mercadería al inventario sin esa fecha aunque la consignación sí la tuviera. La
+  fecha se toma de la línea de consignación de la que salió cada unidad, igual que
+  ya se hacía con la bodega, así que **volver a migrar completa lo que ya estaba
+  cargado** sin necesidad de *Eliminar migrados*.
 
 - **1.9** — **Cambios de productos**: se completan más NUP de lo devuelto. Ya
   no se toman como posibles las facturaciones que el sistema anterior creaba

@@ -121,12 +121,13 @@
                                         <th style="width:140px">Bodega</th>
                                         <th style="width:120px">Lote</th>
                                         <th style="width:150px">NUP</th>
+                                        <th style="width:110px">Vencimiento</th>
                                         <th class="text-end" style="width:110px">Cantidad</th>
                                         <th style="width:34px"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="cam_dev_body">
-                                    <tr><td colspan="7" class="text-center text-muted py-3">Seleccione un cliente y busque el producto a devolver.</td></tr>
+                                    <tr><td colspan="8" class="text-center text-muted py-3">Seleccione un cliente y busque el producto a devolver.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -151,12 +152,13 @@
                                         <th style="width:140px">Bodega</th>
                                         <th style="width:120px">Lote</th>
                                         <th style="width:150px">NUP</th>
+                                        <th style="width:110px">Vencimiento</th>
                                         <th class="text-end" style="width:90px">Cantidad</th>
                                         <th style="width:34px"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="cam_ent_body">
-                                    <tr><td colspan="7" class="text-center text-muted py-3">Busque por N° de consignación lo que se entrega a cambio.</td></tr>
+                                    <tr><td colspan="8" class="text-center text-muted py-3">Busque por N° de consignación lo que se entrega a cambio.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -211,6 +213,13 @@
     function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
     function fmt(v, d) { return num(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
     function esc(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+    /** Vencimiento en d-m-Y (CLAUDE.md §9). Recibe la fecha ISO tal como viene de la BD. */
+    function camFechaCad(v) {
+        const iso = v ? String(v).slice(0, 10) : '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '—';
+        const p = iso.split('-');
+        return p[2] + '-' + p[1] + '-' + p[0];
+    }
 
     // ─── Reset / modo ─────────────────────────────────────────────────────────
     function resetForm() {
@@ -227,12 +236,12 @@
     }
     function vaciarDev() {
         document.getElementById('cam_dev_body').innerHTML =
-            '<tr class="cam-dev-empty"><td colspan="7" class="text-center text-muted py-3">Seleccione un cliente y busque el producto a devolver.</td></tr>';
+            '<tr class="cam-dev-empty"><td colspan="8" class="text-center text-muted py-3">Seleccione un cliente y busque el producto a devolver.</td></tr>';
         document.getElementById('cam_dev_info').textContent = '';
     }
     function vaciarEnt() {
         document.getElementById('cam_ent_body').innerHTML =
-            '<tr class="cam-ent-empty"><td colspan="7" class="text-center text-muted py-3">Busque por N° de consignación lo que se entrega a cambio.</td></tr>';
+            '<tr class="cam-ent-empty"><td colspan="8" class="text-center text-muted py-3">Busque por N° de consignación lo que se entrega a cambio.</td></tr>';
         document.getElementById('cam_ent_info').textContent = '';
     }
 
@@ -649,6 +658,7 @@
                 a.innerHTML = `<i class="bi bi-plus-circle text-primary me-1"></i>
                     <span class="small fw-semibold">${esc(l.producto_codigo ? l.producto_codigo + ' · ' : '')}${esc(l.producto_nombre)}</span>
                     <span class="small text-muted ms-1">Lote/NUP: ${esc(camLoteNup(l))}</span>
+                    ${l.fecha_caducidad ? `<span class="small text-muted ms-1">· Vence: ${camFechaCad(l.fecha_caducidad)}</span>` : ''}
                     <span class="small text-success ms-1">Saldo: ${fmt(l.saldo_pendiente, DEC_C)}</span>
                     ${l.bodega_nombre ? `<span class="small text-muted ms-1">· ${esc(l.bodega_nombre)}</span>` : ''}
                     ${ya ? '<span class="badge bg-secondary bg-opacity-10 text-secondary ms-1">ya agregada</span>' : ''}`;
@@ -717,6 +727,7 @@
             <td class="small">${esc(l.bodega_nombre || '—')}</td>
             <td class="small">${esc(l.lote || '—')}</td>
             <td class="small">${esc(l.nup || '—')}</td>
+            <td class="small text-nowrap">${camFechaCad(l.fecha_caducidad)}</td>
             <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-dev-cant" min="0" max="${saldo}" step="any" value="${saldo}" oninput="camOnCantDev(this)" title="Máximo: ${fmt(saldo, DEC_C)}" style="height:26px;font-size:.8rem;"></td>
             <td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'dev')" title="Quitar"><i class="bi bi-x-lg"></i></button></td>`;
         document.getElementById('cam_dev_body').appendChild(tr);
@@ -804,6 +815,7 @@
             <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" disabled title="La bodega es la de la consignación" style="height:26px;font-size:.78rem;">${bodegaOptions(o.id_bodega || '')}</select></td>
             <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(o.lote || '')}" readonly style="height:26px;font-size:.75rem;"></td>
             <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(o.nup || '')}" readonly style="height:26px;font-size:.75rem;"></td>
+            <td class="small text-nowrap">${camFechaCad(o.fecha_caducidad)}</td>
             <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" max="${saldo}" step="any" value="${saldo}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
             <td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'ent')" title="Quitar"><i class="bi bi-x-lg"></i></button></td>`;
         document.getElementById('cam_ent_body').appendChild(tr);
@@ -897,6 +909,7 @@
             <td class="small">${esc(d.bodega_nombre || '—')}</td>
             <td class="small">${esc(d.lote || '—')}</td>
             <td class="small">${esc(d.nup || '—')}</td>
+            <td class="small text-nowrap">${camFechaCad(d.fecha_caducidad)}</td>
             <td class="p-0 text-end">${cantCell}</td>
             <td class="text-center p-0">${editable ? `<button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'dev')"><i class="bi bi-x-lg"></i></button>` : ''}</td>`;
         document.getElementById('cam_dev_body').appendChild(tr);
@@ -932,6 +945,7 @@
                 <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" ${esConsig ? 'disabled title="La bodega es la de la consignación"' : ''} style="height:26px;font-size:.78rem;">${bodegaOptions(d.id_bodega)}</select></td>
                 <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(d.lote || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;"></td>
                 <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(d.nup || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;"></td>
+                <td class="small text-nowrap">${camFechaCad(d.fecha_caducidad)}</td>
                 <td class="p-0"><input type="number" class="form-control form-control-sm text-end cam-ent-cant" min="0" ${topeCant} step="any" value="${num(d.cantidad)}" oninput="camOnEnt(this)" style="height:26px;font-size:.8rem;"></td>
                 <td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="camQuitarFila(this,'ent')"><i class="bi bi-x-lg"></i></button></td>`;
             document.getElementById('cam_ent_body').appendChild(tr);
@@ -944,6 +958,7 @@
                 <td class="small">${esc(bod)}</td>
                 <td class="small">${esc(d.lote || '—')}</td>
                 <td class="small">${esc(d.nup || '—')}</td>
+                <td class="small text-nowrap">${camFechaCad(d.fecha_caducidad)}</td>
                 <td class="text-end small">${fmt(d.cantidad, DEC_C)}</td>
                 <td></td>`;
             document.getElementById('cam_ent_body').appendChild(tr);

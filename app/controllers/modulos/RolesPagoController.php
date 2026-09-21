@@ -39,12 +39,14 @@ class RolesPagoController extends BaseModuloController
 
         $buscar   = trim($_GET['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'id');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+        // Por defecto, el período más reciente primero (ver RolPagoRepository::MAPA_ORDEN).
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'periodo', 'DESC');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'periodo');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage  = 20;
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) $_SESSION['id_usuario']);
+        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) $_SESSION['id_usuario'], $orden);
         $totalPages = $perPage > 0 ? (int) ceil($result['total'] / $perPage) : 1;
 
         $this->viewWithLayout('layouts.main', 'modulos.roles_pago.index', [
@@ -59,6 +61,7 @@ class RolesPagoController extends BaseModuloController
             'buscar'     => $buscar,
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
+            'ordenJson'  => \App\Helpers\OrdenListado::aJson($orden),
             'tipos'      => CatalogoRol::tipos(),
             'estados'    => CatalogoRol::estados(),
             'meses'      => CatalogoNovedades::MESES,
@@ -115,13 +118,14 @@ class RolesPagoController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
         $buscar     = trim($_GET['b'] ?? '');
         $page       = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'id');
-        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+        $orden      = \App\Helpers\OrdenListado::leer($prefsVista, 'periodo', 'DESC');
+        $ordenCol   = \App\Helpers\OrdenListado::primeraCol($orden, 'periodo');
+        $ordenDir   = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
         $perPage    = 20;
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) $_SESSION['id_usuario']);
+        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) $_SESSION['id_usuario'], $orden);
         $totalPages = $perPage > 0 ? (int) ceil($result['total'] / $perPage) : 1;
         $from = $result['total'] > 0 ? (($page - 1) * $perPage) + 1 : 0;
         $to   = $result['total'] > 0 ? min($page * $perPage, $result['total']) : 0;

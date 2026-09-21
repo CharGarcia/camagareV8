@@ -2256,7 +2256,12 @@ class MigracionMysqlService
         // de serie y el documento derivado también — casar solo por producto engancharía TODAS
         // esas líneas a la misma línea de entrada (enlace colapsado: el saldo facturable de esa
         // línea se va a negativo y las demás quedan como facturables aunque ya se vendieron).
-        $lineLookup = $pg->prepare("SELECT id, id_producto, COALESCE(lote,'') AS lote, COALESCE(nup,'') AS nup
+        // fecha_caducidad viene de aquí, no del detalle viejo: `detalle_consignacion` de una
+        // FACTURA/DEVOLUCIÓN no trae `vencimiento` utilizable, mientras que la línea de ENTRADA ya
+        // lo tiene al 100% (migrarConsignaciones lo pasa por caducidadODef). Es la misma unidad
+        // física, así que la fecha es la de su entrada.
+        $lineLookup = $pg->prepare("SELECT id, id_producto, COALESCE(lote,'') AS lote, COALESCE(nup,'') AS nup,
+                                           fecha_caducidad
                                       FROM consignaciones_ventas_detalles
                                      WHERE id_consignacion = ? AND eliminado = false ORDER BY id");
         $lineCache = [];
@@ -2276,19 +2281,25 @@ class MigracionMysqlService
         if ($esFactura) {
             $updFacCab = $pg->prepare("UPDATE consignaciones_facturas SET numero_factura = :nf, id_factura = :idf, id_cliente = COALESCE(:cli, id_cliente), estado = 'facturada', updated_at = now(), updated_by = :u WHERE id = :id");
             $updDetBod = $pg->prepare("UPDATE consignaciones_facturas_detalles AS d SET id_bodega = e.id_bodega FROM consignaciones_ventas_detalles AS e WHERE e.id = d.id_consignacion_detalle AND d.id_consignacion_factura = :id AND d.id_bodega IS NULL");
+            // Igual que la bodega: el vencimiento se rellena desde la línea de ENTRADA. Así
+            // RE-MIGRAR corrige lo ya migrado sin "Eliminar migrados" (hasta el 21-09-2026 el
+            // INSERT no traía fecha_caducidad y quedaron en NULL: empresa 23, 136.638 líneas).
+            // Las dos ramas (facturación y retornos) hacen lo mismo sobre su tabla de detalle.
+            $updDetCad = $pg->prepare("UPDATE consignaciones_facturas_detalles AS d SET fecha_caducidad = e.fecha_caducidad FROM consignaciones_ventas_detalles AS e WHERE e.id = d.id_consignacion_detalle AND d.id_consignacion_factura = :id AND d.fecha_caducidad IS NULL AND e.fecha_caducidad IS NOT NULL");
         } else {
             $updFacCab = null;
             $updDetBod = $pg->prepare("UPDATE retornos_cv_detalles AS d SET id_bodega = e.id_bodega FROM consignaciones_ventas_detalles AS e WHERE e.id = d.id_consignacion_detalle AND d.id_retorno = :id AND d.id_bodega IS NULL");
+            $updDetCad = $pg->prepare("UPDATE retornos_cv_detalles AS d SET fecha_caducidad = e.fecha_caducidad FROM consignaciones_ventas_detalles AS e WHERE e.id = d.id_consignacion_detalle AND d.id_retorno = :id AND d.fecha_caducidad IS NULL AND e.fecha_caducidad IS NOT NULL");
         }
 
         $opFilter = $esFactura ? "operacion = 'FACTURA'" : "operacion LIKE 'DEVOL%'";
 
         if ($esFactura) {
             $insCab = $pg->prepare("INSERT INTO consignaciones_facturas (id_empresa, id_consignacion, id_factura, numero_factura, fecha_emision, serie, secuencial, id_cliente, id_vendedor, subtotal, impuesto, total, estado, observaciones, establecimiento, punto_emision, id_punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'facturada', ?, ?, ?, ?, ?) RETURNING id");
-            $insDet = $pg->prepare("INSERT INTO consignaciones_facturas_detalles (id_consignacion_factura, id_empresa, id_consignacion, id_consignacion_detalle, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $insDet = $pg->prepare("INSERT INTO consignaciones_facturas_detalles (id_consignacion_factura, id_empresa, id_consignacion, id_consignacion_detalle, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup, fecha_caducidad) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         } else {
             $insCab = $pg->prepare("INSERT INTO retornos_cv (id_empresa, fecha_retorno, serie, secuencial, id_cliente, id_responsable_traslado, punto_partida, punto_llegada, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, id_punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?) RETURNING id");
-            $insDet = $pg->prepare("INSERT INTO retornos_cv_detalles (id_retorno, id_empresa, id_consignacion, id_consignacion_detalle, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $insDet = $pg->prepare("INSERT INTO retornos_cv_detalles (id_retorno, id_empresa, id_consignacion, id_consignacion_detalle, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup, fecha_caducidad) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         }
 
         $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, factura_venta
@@ -2359,6 +2370,7 @@ class MigracionMysqlService
                             $updFacCab->execute([':nf' => $numFac, ':idf' => $idFac, ':cli' => $cliFac, ':u' => $idUsuario, ':id' => $dest]);
                         }
                         $updDetBod->execute([':id' => $dest]);
+                        $updDetCad->execute([':id' => $dest]);
                         $pg->commit();
                     } catch (Throwable $ex) {
                         if ($pg->inTransaction()) { $pg->rollBack(); }
@@ -2394,7 +2406,12 @@ class MigracionMysqlService
                 $st   = round($cant * $pu, 2);
                 $sub += $st;
                 $idBod = $mapBod[(string) (int) $d['id_bodega']] ?? ($bodDef ?: null); // bodega del ítem (mapeada), o la por defecto
-                $lineas[] = [$idCons, $idConsDet, $idProd, $cant, $pu, $st, self::nz($d['lote']), self::nz($d['nup']), $idBod];
+                // Vencimiento de la línea de ENTRADA con la que se casó (ver $lineLookup).
+                $cadDet = null;
+                foreach ($lineCache[$idCons] as $le) {
+                    if ((int) $le['id'] === $idConsDet) { $cadDet = $le['fecha_caducidad']; break; }
+                }
+                $lineas[] = [$idCons, $idConsDet, $idProd, $cant, $pu, $st, self::nz($d['lote']), self::nz($d['nup']), $idBod, $cadDet];
             }
             if ($incompleto || !$lineas) { $res['omitidos']++; continue; } // sin ENTRADA origen migrada / línea no casada
 
@@ -2428,7 +2445,7 @@ class MigracionMysqlService
                     $insCab->execute([$idEmpresa, $idConsCab, $idFactura, $numFac, $fe, "$estab-$pto", $sec, $idCliente, $idVend, round($sub, 2), round($sub, 2), self::nz($ec['observaciones']), $estab, $pto, $idPtoCons, $idUsuario]);
                     $idParent = (int) $insCab->fetchColumn();
                     foreach ($lineas as $ln) {
-                        $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], $ln[8], $ln[6], $ln[7]]);
+                        $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], $ln[8], $ln[6], $ln[7], $ln[9]]);
                     }
                 } else {
                     $idResp = $this->getOrCreateResponsableTraslado($idEmpresa, $idUsuario, (int) $ec['traslado_por'], $mysql, $pg, $respCache);
@@ -2436,7 +2453,7 @@ class MigracionMysqlService
                     $insCab->execute([$idEmpresa, $fe, "$estab-$pto", $sec, $idCliente, $idResp, (string) ($ec['punto_partida'] ?? ''), (string) ($ec['punto_llegada'] ?? ''), self::nz($ec['observaciones']), $est, round($sub, 2), round($sub, 2), $estab, $pto, $idPtoCons, $idUsuario]);
                     $idParent = (int) $insCab->fetchColumn();
                     foreach ($lineas as $ln) {
-                        $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], $ln[8], $ln[6], $ln[7]]);
+                        $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], $ln[8], $ln[6], $ln[7], $ln[9]]);
                     }
                 }
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idParent, ':cn' => (string) $ec['numero_consignacion'], ':vin' => 'f', ':cb' => $idUsuario]);

@@ -261,9 +261,12 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
 
 ## Pedidos que nacen de una proforma
 
-Además de crearlo a mano, un pedido puede venir de una **proforma aprobada**: en
-el modal de la proforma, el botón del **carrito** lo genera con el mismo cliente,
-productos, cantidades y precios. Ese pedido entra al listado como cualquier otro,
+Además de crearlo a mano, un pedido puede venir de una **proforma**: en el modal
+de la proforma, el botón del **carrito** lo genera con el mismo cliente,
+productos, cantidades y precios. Sirve tanto una proforma **aprobada** como una
+que todavía está en **borrador** —para ir preparando la entrega mientras se
+negocia—, pero en ese caso tenga presente que el pedido es una copia del momento:
+si la proforma cambia después, el pedido no se actualiza solo. Ese pedido entra al listado como cualquier otro,
 en estado **Pendiente**, y en sus observaciones queda anotado de qué proforma
 salió.
 
@@ -288,9 +291,10 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Integraciones con otros módulos
 
-- **Proformas**: una proforma aprobada puede enviarse a pedidos con un clic (ver
-  la sección anterior). El pedido queda enlazado a la proforma que lo originó, y
-  la proforma lista sus pedidos en la pestaña *Pedidos* de su modal.
+- **Proformas**: una proforma —en borrador o aprobada— puede enviarse a pedidos
+  con un clic (ver la sección anterior). El pedido queda enlazado a la proforma
+  que lo originó, y la proforma lista sus pedidos en la pestaña *Pedidos* de su
+  modal.
 - **Consignaciones de Venta**: la entrega real se registra allí; cada línea
   entregada queda enlazada a la línea del pedido y de ahí sale el control de lo ya
   despachado y el cambio de estado a Procesado.
@@ -322,7 +326,7 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Historial de cambios
 
-- **1.10** — Un pedido puede **nacer de una proforma aprobada** (botón del carrito
+- **1.10** — Un pedido puede **nacer de una proforma** (botón del carrito
   en el modal de Proformas): llega con cliente, productos, cantidades y precios ya
   cargados, con la **fecha y hora** en que se generó, en estado *Pendiente* y con los
   datos de entrega por completar. Nueva

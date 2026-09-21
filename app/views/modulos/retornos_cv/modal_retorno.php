@@ -144,13 +144,14 @@
                                     <th>Consignación</th>
                                     <th>Producto</th>
                                     <th>Lote / NUP</th>
+                                    <th style="width:110px">Vencimiento</th>
                                     <th>Bodega</th>
                                     <th class="text-end">Saldo</th>
                                     <th class="text-end" style="width:120px">Cant. a retornar</th>
                                 </tr>
                             </thead>
                             <tbody id="ret_lineas_body">
-                                <tr><td colspan="7" class="text-center text-muted py-4">Agregue una consignación por su número para ver sus ítems pendientes.</td></tr>
+                                <tr><td colspan="8" class="text-center text-muted py-4">Agregue una consignación por su número para ver sus ítems pendientes.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -207,6 +208,13 @@
 
     function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
     function fmt(v, d) { return num(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    /** Vencimiento del lote en d-m-Y (CLAUDE.md §9). Recibe la fecha ISO tal como viene de la BD. */
+    function retFechaCad(v) {
+        const iso = v ? String(v).slice(0, 10) : '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '—';
+        const p = iso.split('-');
+        return p[2] + '-' + p[1] + '-' + p[0];
+    }
 
     // ─── Modo edición / vista ────────────────────────────────────────────────
     function resetForm() {
@@ -251,7 +259,7 @@
 
     function retVaciarGrilla() {
         document.getElementById('ret_lineas_body').innerHTML =
-            '<tr><td colspan="7" class="text-center text-muted py-4">Agregue una consignación por su número para ver sus ítems pendientes.</td></tr>';
+            '<tr><td colspan="8" class="text-center text-muted py-4">Agregue una consignación por su número para ver sus ítems pendientes.</td></tr>';
         document.getElementById('ret_lineas_info').textContent = '';
         const chk = document.getElementById('ret_check_all');
         if (chk) chk.checked = false;
@@ -622,6 +630,7 @@
             <td class="small">${consig}</td>
             <td class="small">${(l.producto_codigo ? l.producto_codigo + ' · ' : '')}${l.producto_nombre || ''}</td>
             <td class="small">${loteNup}</td>
+            <td class="small text-nowrap">${retFechaCad(l.fecha_caducidad)}</td>
             <td class="small">${l.bodega_nombre || '—'}</td>
             <td class="text-end small">${fmt(saldo, DEC_C)}</td>
             <td class="p-0"><input type="number" class="form-control form-control-sm text-end ret-cant" min="0" max="${saldo}" step="any" value="0" oninput="retOnCant(this)" onclick="event.stopPropagation()" style="height:26px;font-size:.8rem;"></td>
@@ -668,10 +677,10 @@
     // ─── Ver detalle existente (solo lectura) ────────────────────────────────
     async function retCargarDetalle(id) {
         const body = document.getElementById('ret_lineas_body');
-        body.innerHTML = '<tr><td colspan="7" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
+        body.innerHTML = '<tr><td colspan="8" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
         const res = await fetch(`${RUTA}/getDetalleAjax?id=${id}`);
         const data = await res.json();
-        if (!data.ok) { body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">No se pudo cargar.</td></tr>'; return; }
+        if (!data.ok) { body.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">No se pudo cargar.</td></tr>'; return; }
         const r = data.data;
         document.getElementById('ret_serie').value = r.serie || '';
         const selSerie = document.getElementById('ret_select_serie');
@@ -708,6 +717,7 @@
                 <td class="small">${consig}</td>
                 <td class="small">${(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${d.producto_nombre || ''}</td>
                 <td class="small">${loteNup}</td>
+                <td class="small text-nowrap">${retFechaCad(d.fecha_caducidad)}</td>
                 <td class="small">${d.bodega_nombre || '—'}</td>
                 <td class="text-end small">—</td>
                 <td class="text-end small fw-bold">${fmt(d.cantidad, DEC_C)}</td>

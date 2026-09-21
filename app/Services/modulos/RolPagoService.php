@@ -35,9 +35,9 @@ class RolPagoService
      * Acotado a la página (perPage filas, ~20): el costo real (regenerar) solo se paga
      * en las pocas corridas todavía abiertas; el resto es un SELECT de existencia c/u.
      */
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, ?int $idUsuarioActual = null): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, ?int $idUsuarioActual = null, array $ordenMulti = []): array
     {
-        $result = $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $ordenMulti);
 
         if ($idUsuarioActual !== null) {
             foreach ($result['rows'] as &$r) {

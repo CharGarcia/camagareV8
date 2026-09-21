@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde
-version: 1.22
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina
+version: 1.23
 orden: 50
 estado: activo
 ---
@@ -84,7 +84,9 @@ esté el listado en ese momento:
   reporte, el **TOTAL GENERAL**. Cada proveedor no lleva fila de subtotal: su
   saldo ya está en la cabecera de la sección. Arriba se mantienen las tarjetas
   de resumen; el recuadro de filtros aplicados no se imprime (solo va en el
-  Excel).
+  Excel). La **fila de encabezado de columnas se repite en todas las páginas**,
+  y ninguna línea se parte entre una hoja y la siguiente: cada documento sale
+  entero en una sola página.
 - **Excel**: una **sección por proveedor** (título con su identificación, nombre
   y saldo, en el mismo formato del PDF), sus documentos con esas mismas columnas —más *Tipo* y
   *Estado*, que en una hoja de cálculo no estorban— y el **TOTAL GENERAL** al
@@ -331,6 +333,18 @@ la factura que modifican. Mismo criterio que
 el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
+
+- **1.23** — **El PDF *Por proveedor* ya no sale con las líneas montadas.**
+  Cuando la sección de un proveedor empezaba en el último centímetro de la hoja,
+  su primera línea se partía: unos datos quedaban pisando el pie de esa página,
+  el resto se repartía entre las hojas siguientes y aparecían **una o dos
+  páginas casi en blanco** con renglones sueltos. Ahora todo el listado va en
+  **una sola tabla** —cada proveedor es una fila de cabecera dentro de ella—,
+  así que ninguna línea se corta y el **encabezado de columnas se repite en
+  todas las páginas** (antes solo aparecía al empezar cada proveedor). La
+  separación entre proveedores, los anchos de las columnas y el resto del diseño
+  no cambian. Es el mismo arreglo del PDF *Por cliente* de **Cuentas por
+  cobrar**. Actualizada *PDF y Excel de esta vista*.
 
 - **1.22** — **El saldo se redondea a centavos.** Los importes de egresos se
   guardan con seis decimales, así que restar lo pagado podía dejar un residuo

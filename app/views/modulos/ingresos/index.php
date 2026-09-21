@@ -444,7 +444,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <div class="position-relative">
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-white"><i class="bi bi-person"></i></span>
-                                                <input type="text" id="m-recibo-de-input" class="form-control fw-medium"
+                                                <input type="text" id="m-recibo-de-input" class="form-control fw-medium" maxlength="300"
                                                        placeholder="Nombre del cliente o de quien se ha recibido el ingreso..." autocomplete="off" required>
                                                 <input type="hidden" name="recibo_de" id="m-input-recibo-de">
                                                 <input type="hidden" name="id_recibo_cliente" id="m-input-id-recibo-cliente">
@@ -589,7 +589,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             </div>
                                             <div class="div-cheque-fields d-none" style="width:130px;">
                                                 <label class="form-label small fw-bold text-primary"><i class="bi bi-card-checklist me-1"></i>N° Cheque</label>
-                                                <input type="text" id="m-add-cobro-num-cheque" class="form-control form-control-sm border-primary" placeholder="000123">
+                                                <input type="text" id="m-add-cobro-num-cheque" class="form-control form-control-sm border-primary" maxlength="50" placeholder="000123">
                                             </div>
                                             <div class="div-cheque-fields d-none" style="width:140px;">
                                                 <label class="form-label small fw-bold text-primary"><i class="bi bi-calendar-date me-1"></i>Fecha Cobro</label>
@@ -601,7 +601,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             </div>
                                             <div style="flex:1 1 auto; min-width:160px;">
                                                 <label class="form-label small fw-bold">Referencia / Glosa General</label>
-                                                <input type="text" id="m-add-cobro-ref" class="form-control form-control-sm" placeholder="Ej: Comprobante #5522 o detalle extra...">
+                                                <!-- maxlength = largo de ingresos_pagos.referencia (255 desde
+                                                     database/20260921_pagos_referencia_255.sql): el tope se ve al escribir
+                                                     en vez de que el guardado falle (o recorte por detrás) con un texto largo. -->
+                                                <input type="text" id="m-add-cobro-ref" class="form-control form-control-sm" maxlength="255" placeholder="Ej: Comprobante #5522 o detalle extra...">
                                             </div>
                                             <div>
                                                 <label class="form-label small fw-bold d-block">&nbsp;</label>

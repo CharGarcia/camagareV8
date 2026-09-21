@@ -103,7 +103,12 @@
     };
     const BADGE_LABELS = { borrador:'Borrador', aprobada:'Aprobada', rechazada:'Rechazada', convertida:'Facturada', anulada:'Anulada' };
 
+    // Estado de la proforma abierta ('' en una nueva). Lo consulta crearPedido() para
+    // avisar cuando se manda a pedidos algo que todavía se puede editar.
+    let _estadoActual = '';
+
     function _aplicarEstado(estado) {
+        _estadoActual = String(estado || '');
         const badge = $id('pf_estadoBadge');
         badge.className = BADGE_CLASSES[estado] || 'badge bg-secondary';
         badge.textContent = BADGE_LABELS[estado] || estado;
@@ -115,9 +120,12 @@
         // La factura solo se genera desde una proforma aprobada (o ya facturada, para reconvertir).
         const facturable    = perm().crear && ['aprobada','convertida'].includes(estado);
         show('pf-btn-factura',  facturable);
-        // El pedido nace de lo que el cliente ya aceptó, así que exige el mismo estado que
-        // la factura: desde un borrador todavía editable no se envía nada a despacho.
-        show('pf-btn-pedido',   facturable);
+        // El pedido es más permisivo que la factura a propósito (decisión del usuario):
+        // también se despacha desde un BORRADOR, para poder ir preparando la entrega
+        // mientras la cotización todavía se negocia. El diálogo avisa que el pedido no
+        // se actualiza si la proforma cambia después.
+        const despachable   = perm().crear && ['borrador','aprobada','convertida'].includes(estado);
+        show('pf-btn-pedido',   despachable && guardada);
         // El recibo aplica las mismas reglas de facturación → misma condición que la factura.
         show('pf-btn-recibo',   facturable);
         show('pf-btn-duplicar', perm().crear && guardada);
@@ -2224,10 +2232,19 @@
             const id = $id('pf_id').value;
             if (!id) return;
 
+            // Desde un borrador se puede, pero el pedido es una copia: lo que se edite
+            // después en la proforma no lo alcanza. Conviene decirlo antes, no después.
+            const avisoBorrador = _estadoActual === 'borrador'
+                ? '<p class="mb-0 small text-warning-emphasis"><strong>La proforma está en borrador.</strong> '
+                  + 'Si la modifica después, el pedido <u>no</u> se actualiza solo.</p>'
+                : '';
+
             const r = await Swal.fire({
                 icon: 'question',
                 title: 'Enviar a pedidos',
-                text: 'Se generará un pedido (Pendiente) con los productos de esta proforma. Los datos de entrega se completan luego desde el módulo Pedidos. ¿Desea continuar?',
+                html: '<p class="mb-2 small">Se generará un pedido (Pendiente) con los productos de esta '
+                    + 'proforma. Los datos de entrega se completan luego desde el módulo Pedidos.</p>'
+                    + avisoBorrador,
                 showCancelButton: true,
                 confirmButtonText: 'Sí, generar',
                 cancelButtonText: 'Cancelar',

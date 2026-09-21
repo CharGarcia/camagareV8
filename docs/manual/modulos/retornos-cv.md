@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total
-version: 1.18
+etiquetas: retorno, retornos, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total, vencimiento, fecha de vencimiento, caducidad, fecha de caducidad, columna vencimiento, vence, lote vencido, no se ve el vencimiento
+version: 1.19
 orden: 46
 estado: activo
 ---
@@ -86,15 +86,16 @@ aplica en ese momento, sin pulsar Guardar.
 ## Exportar
 
 El botón **PDF** del comprobante descarga el retorno con su detalle en columnas:
-**Código, Descripción, Bodega, Lote, NUP y Cantidad**. La columna *Bodega* indica
-a qué bodega volvió cada producto; si la línea no tiene bodega registrada se
-muestra un guion. El listado cierra con una fila **TOTAL** que, bajo la columna
-*Cantidad*, suma todas las cantidades retornadas. El PDF que se envía por correo
-es el mismo.
+**Código, Descripción, Bodega, Lote, NUP, Vence y Cantidad**. La columna *Bodega*
+indica a qué bodega volvió cada producto y *Vence* la fecha de vencimiento de la
+unidad; si la línea no tiene ese dato registrado se muestra un guion. El listado
+cierra con una fila **TOTAL** que, bajo la columna *Cantidad*, suma todas las
+cantidades retornadas. El PDF que se envía por correo es el mismo.
 
 En la barra de acciones del comprobante, junto al botón **PDF**, hay un botón
-**Excel** que descarga el detalle del retorno (código, descripción, lote, NUP
-y cantidad) en una hoja de cálculo. Requiere que el retorno esté guardado.
+**Excel** que descarga el detalle del retorno (código, descripción, lote, NUP,
+vencimiento y cantidad) en una hoja de cálculo. Requiere que el retorno esté
+guardado.
 
 Cuando el retorno tiene **muchos productos**, el listado del PDF continúa en
 las páginas siguientes y **cada página repite la fila de encabezados**. Ninguna
@@ -252,6 +253,19 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.19** — Se muestra la **fecha de vencimiento** de cada unidad: columna nueva en la
+  grilla de productos del formulario (después de *Lote / NUP*), en el PDF del
+  comprobante (*Vence*, entre el NUP y la cantidad) y en su Excel. Es la fecha de la
+  línea de consignación de la que salió la unidad; no se escribe a mano y aparece un
+  guion cuando esa línea no la tiene. El listado no la lleva porque es una fila por
+  retorno, no por producto.
+
+  Junto con esto: los retornos **migrados desde el sistema anterior** habían quedado sin
+  esa fecha, aunque la consignación de origen sí la tuviera. Se corrigió la migración (la
+  fecha se toma de esa línea de consignación, igual que ya se hacía con la bodega) y los
+  retornos ya cargados se completan al volver a migrar, sin necesidad de *Eliminar
+  migrados*.
 
 - **1.18** — El PDF del comprobante muestra la columna **Bodega** entre *Descripción*
   y *Lote*, así se ve a qué bodega volvió cada producto, y termina el listado con una

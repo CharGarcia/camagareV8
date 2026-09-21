@@ -195,7 +195,7 @@ class CambioProductoCvPdfService
     }
 
     /**
-     * Tabla: Origen | Código | Descripción | Bodega | Lote | NUP | Cant. Sin precios ni
+     * Tabla: Origen | Código | Descripción | Bodega | Lote | NUP | Vence | Cant. Sin precios ni
      * totales y con la bodega antes del lote, igual que el modal: el cambio es por unidad y la
      * bodega dice de dónde viene (devolución) o de dónde sale (entrega) cada una.
      */
@@ -217,13 +217,17 @@ class CambioProductoCvPdfService
         $pdf->Cell($this->contentW, 5, $titulo, 0, 1, 'L');
         $y = $pdf->GetY();
 
+        // Los anchos fijos suman 151 de los 186 útiles y dejan 35 para Descripción (que envuelve
+        // en varias líneas). Al agregar Vencimiento se recortaron Origen, Bodega y NUP en vez de
+        // Descripción, que es la que peor tolera quedarse corta.
         $cols = [
-            ['t' => 'Origen',      'w' => 38, 'a' => 'L', 'k' => 'origen_label'],
+            ['t' => 'Origen',      'w' => 32, 'a' => 'L', 'k' => 'origen_label'],
             ['t' => 'Código',      'w' => 20, 'a' => 'L', 'k' => 'producto_codigo'],
             ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'producto_nombre'],
-            ['t' => 'Bodega',      'w' => 30, 'a' => 'L', 'k' => 'bodega_nombre'],
+            ['t' => 'Bodega',      'w' => 26, 'a' => 'L', 'k' => 'bodega_nombre'],
             ['t' => 'Lote',        'w' => 20, 'a' => 'L', 'k' => 'lote'],
-            ['t' => 'NUP',         'w' => 24, 'a' => 'L', 'k' => 'nup'],
+            ['t' => 'NUP',         'w' => 22, 'a' => 'L', 'k' => 'nup'],
+            ['t' => 'Vence',       'w' => 17, 'a' => 'C', 'k' => 'fecha_caducidad'],
             ['t' => 'Cant.',       'w' => 14, 'a' => 'R', 'k' => 'cantidad'],
         ];
 
@@ -274,6 +278,8 @@ class CambioProductoCvPdfService
                 $raw = $d[$c['k']] ?? '';
                 if ($c['k'] === 'cantidad') {
                     $vals[] = number_format((float)$raw, 2);
+                } elseif ($c['k'] === 'fecha_caducidad') {
+                    $vals[] = ($raw !== null && trim((string)$raw) !== '') ? date('d-m-Y', strtotime((string)$raw)) : '—';
                 } else {
                     $vals[] = trim((string)$raw) !== '' ? (string)$raw : '—';
                 }

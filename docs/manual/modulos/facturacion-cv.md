@@ -6,7 +6,7 @@ ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar
-version: 1.17
+version: 1.18
 orden: 47
 estado: activo
 ---
@@ -279,6 +279,13 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   que repara el enlace de esas líneas.
 
 ## Historial de cambios
+
+- **1.18** — Los documentos **migrados desde el sistema anterior** habían quedado
+  sin la **fecha de vencimiento** en sus líneas. Importa porque los *Cambios de
+  productos* copian de aquí la fecha de lo que el cliente devuelve: sin ella, la
+  unidad volvía al inventario sin vencimiento. Se corrigió la migración (la fecha
+  se toma de la línea de consignación) y los documentos ya cargados se completan
+  al volver a migrar.
 
 - **1.17** — **El descuento ya no se pierde al facturar.** Dos arreglos: (1) los
   decimales se separan **siempre con punto**; si se teclea una coma el sistema la

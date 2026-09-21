@@ -625,11 +625,11 @@ class RetornosCvController extends BaseModuloController
             $sheet->setTitle('Retorno');
 
             $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
-            $sheet->mergeCells('A1:E1');
+            $sheet->mergeCells('A1:F1');
             $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
 
             $sheet->setCellValue('A2', 'RETORNO DE CONSIGNACIÓN N.° ' . ($numero !== '' ? $numero : '—'));
-            $sheet->mergeCells('A2:E2');
+            $sheet->mergeCells('A2:F2');
             $sheet->getStyle('A2')->getFont()->setBold(true);
 
             $fecha = !empty($retorno['fecha_retorno']) ? date('d-m-Y', strtotime((string)$retorno['fecha_retorno'])) : '';
@@ -640,14 +640,14 @@ class RetornosCvController extends BaseModuloController
             $sheet->setCellValue('A5', 'Resp. traslado: ' . (string)($retorno['responsable_traslado_nombre'] ?? ''));
 
             $headerRow = 7;
-            $headers = ['Código', 'Descripción', 'Lote', 'NUP', 'Cantidad'];
+            $headers = ['Código', 'Descripción', 'Lote', 'NUP', 'Vencimiento', 'Cantidad'];
             $col = 'A';
             foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
             $headerStyle = [
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
             ];
-            $sheet->getStyle('A' . $headerRow . ':E' . $headerRow)->applyFromArray($headerStyle);
+            $sheet->getStyle('A' . $headerRow . ':F' . $headerRow)->applyFromArray($headerStyle);
 
             $row = $headerRow + 1;
             foreach ($detalles as $d) {
@@ -655,21 +655,22 @@ class RetornosCvController extends BaseModuloController
                 $sheet->setCellValueExplicit('B' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValueExplicit('C' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValueExplicit('D' . $row, (string)($d['nup'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValue('E' . $row, (float)($d['cantidad'] ?? 0));
+                $sheet->setCellValueExplicit('E' . $row, !empty($d['fecha_caducidad']) ? date('d-m-Y', strtotime((string)$d['fecha_caducidad'])) : '', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('F' . $row, (float)($d['cantidad'] ?? 0));
                 $row++;
             }
             if ($row > $headerRow + 1) {
-                $sheet->getStyle('E' . ($headerRow + 1) . ':E' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle('F' . ($headerRow + 1) . ':F' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
             }
 
             $row += 1;
             $sheet->setCellValue('A' . $row, 'Motivo: ' . (string)($retorno['motivo'] ?? ''));
-            $sheet->mergeCells('A' . $row . ':E' . $row);
+            $sheet->mergeCells('A' . $row . ':F' . $row);
             $row++;
             $sheet->setCellValue('A' . $row, 'Observaciones: ' . (string)($retorno['observaciones'] ?? ''));
-            $sheet->mergeCells('A' . $row . ':E' . $row);
+            $sheet->mergeCells('A' . $row . ':F' . $row);
 
-            foreach (['A', 'B', 'C', 'D', 'E'] as $c) {
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $c) {
                 $sheet->getColumnDimension($c)->setAutoSize(true);
             }
 

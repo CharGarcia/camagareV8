@@ -61,7 +61,7 @@ productos de la proforma.
 
 El pedido nace en estado **Pendiente**, con el mismo cliente, los mismos
 productos, cantidades y precios. **No mueve inventario ni emite nada al SRI**: es
-la orden de despacho de lo que el cliente ya aceptó.
+la orden de despacho de lo cotizado.
 
 Su **fecha de pedido es la del momento en que se genera, con hora incluida**
 (21-09-2026 15:46:27), no la fecha de la proforma: lo que interesa es cuándo se
@@ -76,10 +76,19 @@ Condiciones para poder enviarlo:
 
 | Requisito | Por qué |
 |---|---|
-| La proforma está **aprobada** (o ya facturada) | Desde un borrador todavía editable no se manda nada a despacho. Es la misma regla que para facturar |
+| La proforma está **en borrador, aprobada o ya facturada** | No hace falta esperar a la aprobación: el pedido no factura ni emite nada, así que se puede ir preparando la entrega mientras la cotización se negocia. Una proforma *rechazada* o *anulada* sí se rechaza |
 | **Todos** los ítems tienen un producto del catálogo | Un pedido se despacha, se consume desde Consignaciones y se factura **por producto**. Una línea de concepto libre (texto escrito a mano, sin producto) no tiene cómo viajar |
 | Existe un punto de emisión con secuencial de **Pedidos** configurado | El pedido necesita su propio número |
 | Permiso de **crear** en Proformas | Igual que convertir a factura |
+
+> **Desde un borrador, el pedido es una copia del momento.** Si después edita la
+> proforma —cambia cantidades, agrega o quita productos— el pedido **no se
+> actualiza solo**: hay que corregirlo en el módulo Pedidos. El sistema lo
+> advierte en el diálogo antes de generarlo.
+
+A diferencia del pedido, la **factura** y el **recibo** sí exigen que la proforma
+esté aprobada. La diferencia es deliberada: esos documentos sí tienen efecto
+tributario.
 
 **Si hay ítems sin producto no se crea nada.** El sistema corta la operación
 entera y muestra la lista de líneas que hay que corregir. Para resolverlo,
@@ -469,8 +478,8 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
   "próximamente"). Genera un pedido en estado *Pendiente* con el cliente, los
   productos, las cantidades y los precios de la proforma; los datos de entrega se
   completan después en el módulo Pedidos, y con la **fecha y hora** del momento en que se
-  genera. Solo desde una proforma **aprobada** (el
-  botón ya no aparece en borrador) y solo si **todos** los ítems tienen producto de
+  genera. Se puede desde una proforma en **borrador**, **aprobada** o ya
+  facturada —no desde una rechazada o anulada— y solo si **todos** los ítems tienen producto de
   catálogo: si hay líneas de concepto libre, no se crea nada y el sistema las
   nombra. Nueva pestaña **Pedidos** en el modal, con los pedidos generados desde
   esa proforma. Nueva sección *Enviar a pedidos*.

@@ -822,15 +822,19 @@ class EgresoRepository extends BaseRepository
                     :id_egreso, :id_forma, :monto, :ref,
                     :tipo_op, :num_chq, :fec_cob, :benef
                 )";
+        // Mismo capado que IngresoRepository::insertPago(): referencia es varchar(100) y campo
+        // libre. Aquí además la llena código nuestro con texto sin tope —ComprasController
+        // manda las observaciones del pago cuando no hay nº de operación—, así que el
+        // SQLSTATE[22001] no dependía siquiera de lo que escribiera el usuario.
         $this->query($sql, [
             ':id_egreso'  => (int) $data['id_egreso'],
             ':id_forma'   => (int) $data['id_forma_pago'],
             ':monto'      => (float) $data['monto'],
-            ':ref'        => $data['referencia'] ?? null,
+            ':ref'        => $this->caparTexto('referencia', $data['referencia'] ?? null, 'egresos_pagos'),
             ':tipo_op'    => $data['tipo_operacion_bancaria'] ?? null,
-            ':num_chq'    => $data['numero_cheque'] ?? null,
+            ':num_chq'    => $this->caparTexto('numero_cheque', $data['numero_cheque'] ?? null, 'egresos_pagos'),
             ':fec_cob'    => !empty($data['fecha_cobro']) ? $data['fecha_cobro'] : null,
-            ':benef'      => $benef !== '' ? $benef : null
+            ':benef'      => $benef !== '' ? $this->caparTexto('beneficiario_cheque', $benef, 'egresos_pagos') : null
         ]);
     }
 

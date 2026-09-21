@@ -858,6 +858,28 @@ class CuentasPorPagarController extends BaseModuloController
             $totSaldo  = 0.0;
             $cuerpo    = '';
 
+            // Todo el listado va en UNA sola tabla y cada proveedor es una fila de cabecera
+            // (colspan) dentro de ella. No es cosmético: con una tabla por proveedor, cuando
+            // una de ellas se abría en el último centímetro de la hoja, Html2Pdf dibujaba su
+            // <thead> al pie SIN contarlo al decidir si la primera fila cabía (la condición
+            // de Html2Pdf::_tag_open_TR suma el tfoot, no el thead), así que esa fila se
+            // partía y sus celdas se repartían entre dos o tres páginas, dejando renglones
+            // sueltos al pie y hojas casi en blanco. Con una sola tabla, el <thead> solo se
+            // dibuja arriba de cada página (donde siempre hay sitio), se repite en TODAS las
+            // páginas y ninguna fila se parte. El colspan de la cabecera de proveedor no
+            // descuadra los anchos porque la primera fila sigue siendo el <thead> con el
+            // ancho de cada columna. Mismo arreglo que en Cuentas por Cobrar.
+            $nCols  = 8 + ($consolidado ? 1 : 0);
+            $thCols = ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
+                . "<th style='width:10%;'>Fecha</th>"
+                . "<th style='width:{$wDoc}%;'>N. Documento</th>"
+                . "<th style='width:12%;'>Total</th>"
+                . "<th style='width:10%;'>NC</th>"
+                . "<th style='width:12%;'>Abonos</th>"
+                . "<th style='width:12%;'>Retenciones</th>"
+                . "<th style='width:12%;'>Saldo</th>"
+                . "<th style='width:7%;'>Días</th>";
+
             foreach ($grupos as $g) {
                 $totTotal  += $g['total'];
                 $totNc     += $g['nc'];
@@ -865,26 +887,20 @@ class CuentasPorPagarController extends BaseModuloController
                 $totRet    += $g['retenciones'];
                 $totSaldo  += $g['saldo'];
 
+                if ($cuerpo === '') {
+                    $cuerpo .= "<table><thead><tr>{$thCols}</tr></thead><tbody>";
+                } else {
+                    // Hueco entre un proveedor y el siguiente (antes era el margin-bottom de
+                    // la tabla de cada uno): fila vacía sin bordes, del mismo alto.
+                    $cuerpo .= "<tr class='sep'><td colspan='{$nCols}'>&nbsp;</td></tr>";
+                }
+
                 // Cabecera de la sección: "RUC - NOMBRE · saldo: 1,234.56". Lo que interesa
                 // del proveedor es cuánto se le debe, no cuántos documentos tiene.
                 $titulo = trim(($g['ruc'] !== '' ? $g['ruc'] . ' - ' : '') . $g['nombre']);
-                // La cabecera del proveedor va en su propia tabla: un colspan en la primera
-                // fila hace que el motor ignore los anchos de las columnas de la tabla de abajo.
-                $cuerpo .= "<table class='grp'><tr><td style='width:100%;'>"
+                $cuerpo .= "<tr class='grp'><td colspan='{$nCols}'>"
                     . $e($titulo) . " &nbsp;&middot;&nbsp; saldo: " . number_format($g['saldo'] > 0 ? $g['saldo'] : 0, 2)
-                    . "</td></tr></table>";
-
-                $cuerpo .= "<table><thead><tr>"
-                    . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
-                    . "<th style='width:10%;'>Fecha</th>"
-                    . "<th style='width:{$wDoc}%;'>N. Documento</th>"
-                    . "<th style='width:12%;'>Total</th>"
-                    . "<th style='width:10%;'>NC</th>"
-                    . "<th style='width:12%;'>Abonos</th>"
-                    . "<th style='width:12%;'>Retenciones</th>"
-                    . "<th style='width:12%;'>Saldo</th>"
-                    . "<th style='width:7%;'>Días</th>"
-                    . "</tr></thead><tbody>";
+                    . "</td></tr>";
 
                 foreach ($g['items'] as $r) {
                     $dias   = (int)($r['dias_vencido'] ?? 0);
@@ -916,7 +932,9 @@ class CuentasPorPagarController extends BaseModuloController
 
                 // Sin fila de SUBTOTAL por proveedor: el saldo ya va en la cabecera de la
                 // sección y el resumen de toda la deuda queda en el TOTAL GENERAL.
-                $cuerpo .= "</tbody></table>";
+            }
+            if ($cuerpo !== '') {
+                $cuerpo .= '</tbody></table>';
             }
 
             ob_start();
@@ -932,8 +950,11 @@ class CuentasPorPagarController extends BaseModuloController
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
                 .header h3 { margin: 0 0 2px 0; font-size: 10pt; color: #555; }
                 .header p  { margin: 0; font-size: 7.5pt; color: #777; }
-                table.grp { margin-bottom: 0; }
-                table.grp td { background: #eaf1fb; border: 1px solid #ccc; font-weight: bold; font-size: 8.5pt; padding: 4px 5px; }
+                /* Cabecera de cada proveedor: fila de la misma tabla, con todo el ancho. */
+                tr.grp td { background: #eaf1fb; border: 1px solid #ccc; font-weight: bold; font-size: 8.5pt; padding: 4px 5px; }
+                /* Separación entre un proveedor y el siguiente: fila vacía sin bordes, del
+                   mismo alto que el hueco que dejaban antes las tablas sueltas (6px). */
+                tr.sep td { border: none; background: #fff; padding: 0; font-size: 4.5pt; }
                 table.tot td { background: #343a40; color: #fff; font-weight: bold; font-size: 8.5pt; border: 1px solid #343a40; }
                 .stats-box { text-align: center; padding: 5px; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }

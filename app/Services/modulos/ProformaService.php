@@ -12,6 +12,15 @@ use App\core\Database;
 
 class ProformaService
 {
+    /**
+     * Estados desde los que se puede generar un PEDIDO (además de 'convertida', que se
+     * resuelve aparte por id_factura_convertida). Es a propósito más amplio que el de la
+     * factura y el recibo —que exigen 'aprobada'— porque el pedido no factura ni emite
+     * nada: organiza el despacho, y conviene poder prepararlo mientras la cotización
+     * todavía se negocia. Quedan fuera 'rechazada' y 'anulada'.
+     */
+    private const ESTADOS_DESPACHABLES = ['borrador', 'aprobada'];
+
     private ProformaRepository $repository;
     private ProformaRules $rules;
     private LogSistemaService $log;
@@ -859,8 +868,11 @@ class ProformaService
      * (fecha, horario y responsable), que la proforma no tiene.
      *
      * Reglas:
-     *  - Solo desde una proforma aprobada (o ya convertida, para volver a pedir lo mismo),
-     *    igual criterio que convertirAFactura()/convertirARecibo().
+     *  - Desde una proforma en **borrador o aprobada** (o ya convertida, para volver a pedir
+     *    lo mismo): ver ESTADOS_DESPACHABLES. Es más permisivo que convertirAFactura() y
+     *    convertirARecibo(), que exigen 'aprobada'. Desde un borrador el pedido es una copia
+     *    del momento: si la proforma se edita después, el pedido NO se actualiza (la UI lo
+     *    advierte antes de generarlo).
      *  - TODAS las líneas deben apuntar a un producto del catálogo: pedidos_detalle.id_producto
      *    es NOT NULL y el consumo desde Consignaciones/Facturas cruza por producto, así que una
      *    proforma con ítems de concepto libre se rechaza entera —nombrando las líneas
@@ -879,8 +891,8 @@ class ProformaService
             throw new \RuntimeException('Proforma no encontrada.');
         }
         $yaConvertida = !empty($proforma['id_factura_convertida']) || $proforma['estado'] === 'convertida';
-        if (!$yaConvertida && $proforma['estado'] !== 'aprobada') {
-            throw new \RuntimeException('La proforma debe estar aprobada para generar un pedido.');
+        if (!$yaConvertida && !in_array($proforma['estado'], self::ESTADOS_DESPACHABLES, true)) {
+            throw new \RuntimeException('Solo se genera un pedido desde una proforma en borrador o aprobada.');
         }
 
         $detallesPf = $this->repository->getDetalles($id);

@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo
-version: 1.23
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres
+version: 1.24
 orden: 20
 estado: activo
 ---
@@ -50,6 +50,9 @@ La lista de **formas de pago** sigue el **Orden** configurado en
 [Formas de cobro y pago](formas-cobros-pagos.md) (las que no tienen orden van al
 final, por nombre), y el saldo de cada forma se ve junto a su nombre solo si allí
 tiene marcado **Mostrar saldo**.
+
+*Nº Referencia / Comprobante* admite hasta **255 caracteres** y *Nº de cheque*
+hasta **50**. Para un texto más largo use **Observaciones**, que no tiene tope.
 
 ## Combinar varios conceptos en un mismo egreso
 
@@ -487,8 +490,19 @@ ve solo los que registró.
   una línea de "Otros conceptos" que no tiene cuenta. Elíjala en la columna
   *Cuenta contable* de esa línea; si es un anticipo, pulse **Anticipo Proveedor**
   y se pone sola.
+- **"value too long for type character varying(100)"** al guardar: el *Nº
+  Referencia / Comprobante* de una forma de pago pasaba de 100 caracteres y el
+  egreso no se guardaba. Desde la 1.24 ese campo admite 255 caracteres.
 
 ## Historial de cambios
+
+- **1.24** — **El egreso ya no se pierde por un texto largo.** *Nº Referencia /
+  Comprobante* pasa de 100 a **255 caracteres**, con el tope visible al escribir
+  (el *Nº de cheque* admite 50). Y si el texto llega desde otro módulo —el pago
+  registrado desde **Compras** manda ahí las observaciones cuando no hay nº de
+  operación—, se guarda recortado en vez de rechazar el egreso entero, que era
+  lo que pasaba antes con el error *value too long for type character
+  varying(100)*. Mismo cambio en *Ingresos*.
 
 - **1.23** — **Un documento está pendiente mientras le quede al menos un centavo.**
   Antes, la búsqueda de documentos por pagar descartaba los que tenían

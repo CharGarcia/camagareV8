@@ -14,7 +14,7 @@ use TCPDF;
  * título y número del documento a la derecha.
  *
  * Cuerpo: datos del cliente, tabla de productos devueltos (Código, Descripción, Bodega,
- * Lote, NUP, Cantidad), observaciones y motivo, y dos firmas
+ * Lote, NUP, Vence, Cantidad), observaciones y motivo, y dos firmas
  * (Realizado por / Recibido por).
  *
  * Cuando la empresa tenga una plantilla activa (módulo Plantillas de Documentos,
@@ -160,7 +160,7 @@ class RetornoCvPdfService
         return $y + $boxH;
     }
 
-    /** Tabla: Código | Descripción | Bodega | Lote | NUP | Cantidad, más fila TOTAL de cantidades. */
+    /** Tabla: Código | Descripción | Bodega | Lote | NUP | Vence | Cantidad, más fila TOTAL de cantidades. */
     private function dibujarTablaDetalle(array $detalles, float $y): float
     {
         $pdf = $this->pdf;
@@ -172,6 +172,7 @@ class RetornoCvPdfService
             ['t' => 'Bodega',      'w' => 28, 'a' => 'L', 'k' => 'bodega_nombre'],
             ['t' => 'Lote',        'w' => 26, 'a' => 'L', 'k' => 'lote'],
             ['t' => 'NUP',         'w' => 26, 'a' => 'L', 'k' => 'nup'],
+            ['t' => 'Vence',       'w' => 20, 'a' => 'C', 'k' => 'fecha_caducidad'],
             ['t' => 'Cantidad',    'w' => 20, 'a' => 'R', 'k' => 'cantidad'],
         ];
 
@@ -222,6 +223,8 @@ class RetornoCvPdfService
                 $raw = $d[$c['k']] ?? '';
                 if ($c['k'] === 'cantidad') {
                     $vals[] = number_format((float)$raw, 2);
+                } elseif ($c['k'] === 'fecha_caducidad') {
+                    $vals[] = ($raw !== null && trim((string)$raw) !== '') ? date('d-m-Y', strtotime((string)$raw)) : '—';
                 } else {
                     $vals[] = trim((string)$raw) !== '' ? (string)$raw : '—';
                 }

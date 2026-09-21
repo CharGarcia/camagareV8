@@ -292,6 +292,7 @@
             nup: '',
             costo_unitario: 0,
             lotes: [],
+            lotes_otras_bodegas: [],
             series: [],
         };
         lineas.push(linea);
@@ -316,6 +317,7 @@
             .then(res => {
                 if (!res.ok) return;
                 l.lotes = res.lotes || [];
+                l.lotes_otras_bodegas = res.lotes_otras_bodegas || [];
                 l.stock = num(res.stock);
                 l.costo_unitario = num(res.costo);
 
@@ -330,6 +332,52 @@
                 cargarSeries(l.uid);
             })
             .catch(e => console.error('cargarLotes', e));
+    }
+
+    /**
+     * Aviso "el lote que busca está en otra bodega".
+     *
+     * El selector solo ofrece lotes con saldo en la bodega de ORIGEN, así que un
+     * lote agotado ahí desaparece de la lista sin explicación — y si queda uno
+     * solo, además se auto-selecciona y parece que el sistema eligió mal. Esta
+     * línea dice dónde sí está, para que el usuario cambie la bodega de origen
+     * en vez de dar por perdido el stock.
+     *
+     * Con pocos lotes fuera se nombran uno por uno (el caso útil: "busco este
+     * lote"); con muchos se resume por bodega y el detalle completo queda en el
+     * title, para no convertir una celda de la tabla en un párrafo.
+     */
+    function avisoOtrasBodegas(l) {
+        const otros = l.lotes_otras_bodegas || [];
+        if (!otros.length) return '';
+
+        const nombreLote = x => (x.numero_lote === 'sin_lote' ? 'Sin lote' : x.numero_lote);
+        const detalle = otros
+            .map(x => `${nombreLote(x)} — ${x.bodega} (${num(x.stock_lote).toFixed(2)})`)
+            .join('\n');
+
+        let texto;
+        if (otros.length <= 3) {
+            texto = otros
+                .map(x => `<b>${esc(nombreLote(x))}</b> en ${esc(x.bodega)} (${num(x.stock_lote).toFixed(2)})`)
+                .join(', ');
+        } else {
+            const bodegas = [...new Set(otros.map(x => x.bodega))];
+            const listaBodegas = bodegas.slice(0, 2).map(esc).join(', ')
+                + (bodegas.length > 2 ? ` y ${bodegas.length - 2} más` : '');
+            texto = `${otros.length} lotes con saldo en ${listaBodegas}`;
+        }
+
+        // Sin nada disponible aquí el aviso es la única pista que tiene el usuario:
+        // se destaca. Si ya hay lotes en esta bodega, va discreto para no estorbar.
+        const critico = !(l.lotes && l.lotes.length);
+        const clase = critico ? 'text-danger' : 'text-muted';
+        const icono = critico ? 'bi-exclamation-triangle-fill' : 'bi-info-circle';
+        const prefijo = critico ? 'No hay stock aquí. Sí hay: ' : 'También en otra bodega: ';
+
+        return `<div class="small ${clase} mt-1 lh-sm" title="${esc(detalle)}">
+                    <i class="bi ${icono} me-1"></i>${prefijo}${texto}
+                </div>`;
     }
 
     function aplicarLote(l, numeroLote) {
@@ -434,8 +482,8 @@
                     ? `<select onchange="window.TRI_cambiarLote(${l.uid}, this.value)">
                            <option value="">Seleccione el lote…</option>
                            ${l.lotes.map(x => `<option value="${esc(x.numero_lote)}" ${x.numero_lote === l.numero_lote ? 'selected' : ''}>${esc(x.numero_lote === 'sin_lote' ? 'Sin lote' : x.numero_lote)} (${num(x.stock_lote).toFixed(2)})</option>`).join('')}
-                       </select>`
-                    : '<span class="text-muted">—</span>');
+                       </select>${avisoOtrasBodegas(l)}`
+                    : `<span class="text-muted">—</span>${avisoOtrasBodegas(l)}`);
 
             const seriesHtml = soloLectura
                 ? esc(l.nup || '—')
@@ -577,6 +625,7 @@
             nup: d.nup || '',
             costo_unitario: num(d.costo_unitario),
             lotes: [],
+            lotes_otras_bodegas: [],
             series: [],
         }));
 

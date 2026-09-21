@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips
-version: 1.8
+etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente
+version: 1.9
 orden: 30
 estado: activo
 ---
@@ -206,6 +206,25 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 > Quien no tenga **acceso total** solo ve las corridas que creó él mismo, también
 > en la pestaña Detalles.
 
+## Ordenar el listado
+
+Al entrar, el listado muestra **primero el período más reciente**: el rol de
+agosto de 2026 va arriba del de julio, y dentro de un mismo mes la quincena 2 va
+arriba de la quincena 1.
+
+**Todas las columnas ordenan.** Un clic en el título de cualquiera —*Tipo*,
+*Período*, *Empleados*, *Neto* o *Estado*— ordena por ella; otro clic invierte la
+dirección. La flecha del encabezado indica el orden vigente.
+
+**Varias columnas a la vez.** Con **Shift + clic** en un segundo encabezado se
+encadena otro criterio, hasta **tres**: por ejemplo *Tipo* y, dentro de cada
+tipo, el *Período* más reciente. Un número pequeño junto a la flecha indica la
+prioridad de cada columna. El tercer Shift + clic sobre una columna la saca del
+orden.
+
+El orden elegido **se guarda para cada usuario** y se conserva al volver al
+módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a menor.
+
 ## Errores frecuentes
 
 - **"La quincena debe ser 1 o 2"** / **"La semana debe estar entre 1 y 5"**:
@@ -219,6 +238,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   quincena o semana en lugar del rol mensual.
 
 ## Historial de cambios
+
+- **1.9** — **El listado abre por el período más reciente** y **todas las
+  columnas ordenan** (*Tipo*, *Período*, *Empleados*, *Neto* y *Estado*; antes
+  solo tres). Con **Shift + clic** se ordena por hasta tres columnas a la vez.
 
 - **1.8** — **Un rol al que le queda $0.01 sigue pendiente.** Antes ese
   centavo lo marcaba como pagado: el rol no aparecía en el pago por lote y su

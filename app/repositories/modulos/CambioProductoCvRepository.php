@@ -367,6 +367,7 @@ class CambioProductoCvRepository extends BaseRepository
         'dev_producto'  => 'pdv.nombre IS NULL, pdv.nombre',
         'dev_lote'      => "COALESCE(dv.lote, '') = '', dv.lote",
         'dev_nup'       => "COALESCE(dv.nup, '') = '', dv.nup",
+        'dev_caducidad' => 'dv.fecha_caducidad IS NULL, dv.fecha_caducidad',
         'dev_bodega'    => 'bdv.nombre IS NULL, bdv.nombre',
         'dev_factura'   => self::SQL_ORIGEN_DEV . ' IS NULL, ' . self::SQL_ORIGEN_DEV,
         // Lo que SALE (entrega)
@@ -374,6 +375,7 @@ class CambioProductoCvRepository extends BaseRepository
         'ent_producto'  => 'pen.nombre IS NULL, pen.nombre',
         'ent_lote'      => "COALESCE(en.lote, '') = '', en.lote",
         'ent_nup'       => "COALESCE(en.nup, '') = '', en.nup",
+        'ent_caducidad' => 'en.fecha_caducidad IS NULL, en.fecha_caducidad',
         'ent_bodega'    => 'ben.nombre IS NULL, ben.nombre',
         'cliente'       => 'c.nombre',
         'observaciones' => "COALESCE(r.observaciones, '') = '', r.observaciones",
@@ -467,6 +469,7 @@ class CambioProductoCvRepository extends BaseRepository
                    pdv.codigo     AS dev_producto_codigo,
                    dv.lote        AS dev_lote,
                    dv.nup         AS dev_nup,
+                   dv.fecha_caducidad AS dev_caducidad,
                    bdv.nombre     AS dev_bodega,
                    dv.origen_tipo AS dev_origen_tipo,
                    dv.id_origen   AS dev_id_origen,
@@ -477,6 +480,7 @@ class CambioProductoCvRepository extends BaseRepository
                    pen.codigo     AS ent_producto_codigo,
                    en.lote        AS ent_lote,
                    en.nup         AS ent_nup,
+                   en.fecha_caducidad AS ent_caducidad,
                    ben.nombre     AS ent_bodega,
                    p.__total
             FROM pagina p
