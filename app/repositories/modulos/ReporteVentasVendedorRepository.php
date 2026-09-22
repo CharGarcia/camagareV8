@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\AbonosVentaSql;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -215,6 +216,10 @@ class ReporteVentasVendedorRepository extends BaseRepository
             return "saldos AS (SELECT dd.id AS id_doc, 0::numeric AS saldo FROM docs dd)";
         }
 
+        // Número de la factura normalizado a 15 dígitos: las notas de crédito/débito se
+        // enlazan por dígitos (001-001-13 = 001001000000013), igual que en Cuentas por Cobrar.
+        $numDoc = AbonosVentaSql::normalizar('dd.numero_factura');
+
         return "
             sal_cob AS (
                 SELECT ind.id_referencia_documento AS id_doc, SUM(ind.monto_cobrado) AS m
@@ -227,32 +232,22 @@ class ReporteVentasVendedorRepository extends BaseRepository
                   AND inc.id_empresa = {$idEmpresa}
                 GROUP BY ind.id_referencia_documento
             ),
+            -- Retenciones: la MISMA regla que Cuentas por Cobrar, el modal de la factura y el
+            -- Reporte de Ventas (AbonosVentaSql::cteRetenidoPorFactura): cada factura recibe lo
+            -- retenido en las líneas cuyo sustento (normalizado a 15 dígitos) apunta a ella, y el
+            -- total de la cabecera solo si la retención va por id_venta sin sustento enlazable.
+            -- El cruce anterior descontaba el total de la cabecera a CADA factura que sustentaba
+            -- (una retención electrónica de dos facturas se restaba entera a las dos) y comparaba
+            -- el número literal, así que un sustento sin guiones o sin ceros no se restaba.
             sal_ret AS (
-                SELECT t.id_doc, SUM(t.monto) AS m
-                FROM (
-                    SELECT r.id_venta AS id_doc,
-                           (r.total_renta + r.total_iva + r.total_isd) AS monto,
-                           r.id AS id_ret
-                    FROM retencion_venta_cabecera r
-                    JOIN docs dd ON dd.id = r.id_venta
-                    WHERE r.eliminado = false AND r.id_empresa = {$idEmpresa}
-
-                    UNION
-
-                    SELECT dd.id AS id_doc,
-                           (r.total_renta + r.total_iva + r.total_isd) AS monto,
-                           r.id AS id_ret
-                    FROM retencion_venta_cabecera r
-                    JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id
-                    JOIN docs dd ON dd.numero_factura = rd.num_doc_sustento
-                    WHERE r.eliminado = false AND r.id_empresa = {$idEmpresa}
-                ) t
-                GROUP BY t.id_doc
+                SELECT x.id_venta AS id_doc, x.total_retenido AS m
+                FROM (" . AbonosVentaSql::cteRetenidoPorFactura((string) $idEmpresa) . ") x
+                JOIN docs dd ON dd.id = x.id_venta
             ),
             sal_nc AS (
                 SELECT dd.id AS id_doc, SUM(nc.importe_total) AS m
                 FROM notas_credito_cabecera nc
-                JOIN docs dd ON dd.numero_factura = nc.num_doc_modificado
+                JOIN docs dd ON {$numDoc} = " . AbonosVentaSql::normalizar('nc.num_doc_modificado') . "
                 WHERE nc.estado != 'anulado' AND nc.eliminado = false
                   AND nc.id_empresa = {$idEmpresa}
                 GROUP BY dd.id
@@ -260,7 +255,7 @@ class ReporteVentasVendedorRepository extends BaseRepository
             sal_nd AS (
                 SELECT dd.id AS id_doc, SUM(nd.importe_total) AS m
                 FROM nota_debito_cabecera nd
-                JOIN docs dd ON dd.numero_factura = nd.num_doc_modificado
+                JOIN docs dd ON {$numDoc} = " . AbonosVentaSql::normalizar('nd.num_doc_modificado') . "
                 WHERE nd.estado != 'anulado' AND nd.eliminado = false
                   AND nd.id_empresa = {$idEmpresa}
                 GROUP BY dd.id
@@ -294,7 +289,7 @@ class ReporteVentasVendedorRepository extends BaseRepository
         return "
             SELECT dd.id AS id_doc, SUM(nc.importe_total) AS total_nc
             FROM notas_credito_cabecera nc
-            JOIN docs dd ON dd.numero_factura = nc.num_doc_modificado
+            JOIN docs dd ON " . AbonosVentaSql::normalizar('dd.numero_factura') . " = " . AbonosVentaSql::normalizar('nc.num_doc_modificado') . "
             WHERE nc.id_empresa = {$idEmpresa}
               AND nc.eliminado = false
               AND nc.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')

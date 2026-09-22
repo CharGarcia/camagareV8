@@ -710,35 +710,23 @@ class ReporteVentasRepository extends BaseRepository
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
         $clave = $f['clave'] ? "COALESCE(v.clave_acceso, '')" : "''";
-        // Vínculo doble, igual que en FacturaVentaRepository/RetencionVentaRepository: además de
-        // r.id_venta (registrada directo desde la factura), cubre la retención electrónica del SRI
-        // que solo referencia el número de la factura en su detalle (num_doc_sustento) sin haber
-        // quedado enlazada por id_venta.
+        // Retenciones aplicadas a cada factura: la MISMA regla que Cuentas por Cobrar, Ingresos,
+        // el modal de la factura y el saldo de este reporte (AbonosVentaSql::cteRetenidoPorFactura):
+        //  - enlace por id_venta (retención registrada desde la factura) y por número de sustento
+        //    normalizado a 15 dígitos (retención electrónica del SRI que solo trae el número);
+        //  - cada factura recibe la suma de `valor_retenido` de SUS líneas, nunca el total de la
+        //    cabecera repetido por línea. El CTE anterior unía cabecera × detalle y sumaba el
+        //    total de la cabecera una vez POR LÍNEA: una retención con IVA + renta (dos líneas)
+        //    salía duplicada, y una que sustentaba varias facturas se cargaba entera a cada una.
         // Se resuelve como CTE (una sola pasada sobre las retenciones de la empresa), no como
         // subconsulta correlacionada por fila: con un filtro amplio (producto_texto por nombre)
         // el reporte puede devolver muchas filas, y repetir el escaneo de retenciones por cada
         // una escala mal (N filas × M retenciones) — en el droplet de producción (1 vCPU) eso
         // fue suficiente para saturar la conexión a BD y colgar el sitio entero.
         if ($f['retenciones']) {
-            $retenCte = ",
-                retenciones_map AS (
-                    SELECT COALESCE(r.id_venta, vv.id) AS id_venta,
-                           r.total_iva, r.total_renta, r.total_isd
-                    FROM retencion_venta_cabecera r
-                    LEFT JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id AND r.id_venta IS NULL
-                    LEFT JOIN ventas_cabecera vv ON r.id_venta IS NULL
-                        AND vv.id_empresa = r.id_empresa
-                        AND CONCAT(vv.establecimiento, '-', vv.punto_emision, '-', vv.secuencial) = rd.num_doc_sustento
-                    WHERE r.eliminado = false AND r.id_empresa IN ({$this->inEmp})
-                ),
-                retenciones_agg AS (
-                    SELECT id_venta, SUM(total_iva + total_renta + total_isd) AS monto_retenciones
-                    FROM retenciones_map
-                    WHERE id_venta IS NOT NULL
-                    GROUP BY id_venta
-                )";
+            $retenCte  = ",\n                retenciones_agg AS (" . AbonosVentaSql::cteRetenidoPorFactura("ANY(ARRAY[{$this->inEmp}])") . ")";
             $retenJoin = "LEFT JOIN retenciones_agg ra ON ra.id_venta = v.id";
-            $reten = "COALESCE(ra.monto_retenciones, 0)";
+            $reten     = "COALESCE(ra.total_retenido, 0)";
         } else {
             $retenCte = "";
             $retenJoin = "";

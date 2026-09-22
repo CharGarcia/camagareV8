@@ -336,10 +336,21 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
   que se devolvió).
 - **Cambié un filtro y la tabla no cambia**: los filtros no consultan solos;
   pulse **Buscar** (el botón queda en ámbar mientras haya cambios sin aplicar).
+- **La columna Retenciones del detallado no cuadra con la retención**: desde la
+  versión 1.9 se calcula igual que en Cuentas por Cobrar y en el modal de la
+  factura (suma de lo retenido en las líneas que sustentan esa factura). Si una
+  factura sigue mostrando un valor distinto, revise en *Retenciones en ventas*
+  que el número de sustento de la retención apunte a esa factura.
 
 ## Historial de cambios
 
-- **1.9** — En el **PDF y el Excel de la agrupación Por cliente** se agrega la
+- **1.9** — **Corrección de la columna Retenciones** del detallado: se calculaba
+  sumando el total de la retención una vez por cada línea de su detalle (una
+  retención con IVA y renta salía **duplicada**), una retención que sustentaba
+  varias facturas se cargaba entera a cada una, y un número de sustento sin
+  guiones o sin ceros no enlazaba. Ahora usa la misma regla que Cuentas por
+  Cobrar y el modal de la factura: lo retenido en las líneas que sustentan esa
+  factura, con el número normalizado. En el **PDF y el Excel de la agrupación Por cliente** se agrega la
   columna con el **número de documentos** de cada cliente (después del cliente,
   antes del saldo; en el PDF con total al pie). Los filtros **ya no consultan al cambiarlos**: el reporte se genera
   solo al pulsar **Buscar** (o Enter); mientras haya filtros sin aplicar el

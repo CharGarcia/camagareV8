@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ventas_vendedor
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, subtotal sin impuestos, subtotal nc, total documentos por asesor, cuantas facturas hizo cada vendedor, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor, solo mis ventas, cada asesor ve lo suyo, el vendedor no debe ver las ventas de otros, mis comisiones, acceso total, permiso de ver todos, registros propios, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, filtro vendedor fijo, no ver ventas de otros vendedores
-version: 1.7
+version: 1.8
 orden: 0
 estado: activo
 ---
@@ -119,6 +119,12 @@ en Facturas de Venta y en Cuentas por Cobrar:
   cada asesor, documento por documento.
 - Nunca es negativo: si una factura quedó sobrecobrada se muestra en 0, igual
   que en el listado de Facturas de Venta.
+- Las **retenciones** se descuentan con la misma regla de Cuentas por Cobrar: a
+  cada factura se le resta lo retenido en las líneas de la retención que la
+  sustentan (por número de comprobante, aunque venga sin guiones o sin ceros),
+  y si una sola retención electrónica cubre varias facturas, cada una recibe
+  solo su parte. Las notas de crédito y de débito se cruzan igual, por número
+  normalizado.
 - Las notas de crédito no tienen saldo propio (una NC no se cobra), así que
   aportan 0: su efecto ya está descontado dentro del saldo de la factura que
   modifican. Por eso el saldo no cambia entre *Ventas Netas* y *Solo Facturas*,
@@ -234,8 +240,13 @@ corrió la migración, así que solo él (o alguien con acceso total) los verá.
 ## Errores frecuentes
 
 - **Una nota de crédito no se resta de ningún vendedor**: ocurre cuando esa
-  NC no pudo vincularse a la factura original (por ejemplo, si el número de
-  documento modificado no coincide con ninguna factura de la empresa).
+  NC no pudo vincularse a la factura original (el número de documento
+  modificado no corresponde a ninguna factura de la empresa; desde la versión
+  1.8 el formato —con o sin guiones, con o sin ceros— ya no importa).
+- **El saldo de una factura no cuadra con Cuentas por Cobrar**: desde la
+  versión 1.8 ambos usan el mismo cálculo de retenciones y notas. Si aún
+  difiere, revise en *Retenciones en ventas* que el número de sustento apunte
+  a esa factura.
 - **El correo no se envía**: revisar que la empresa tenga configurado el
   correo de envío de documentos en `/config`.
 - **Un asesor no ve sus ventas**: abrir su ficha en **Vendedores** y comprobar
@@ -251,6 +262,15 @@ corrió la migración, así que solo él (o alguien con acceso total) los verá.
 
 ## Historial de cambios
 
+- **1.8** — **Corrección del Saldo**: las retenciones se descontaban con el
+  total de la retención a **cada** factura que sustentaba (una retención
+  electrónica de dos facturas se restaba entera a las dos) y el cruce con
+  retenciones, notas de crédito y notas de débito era por número literal, así
+  que un comprobante con el número sin guiones o sin ceros no se restaba. Ahora
+  usa la misma regla que Cuentas por Cobrar y el Reporte de Ventas (lo retenido
+  en las líneas que sustentan la factura, número normalizado). Aplica al saldo
+  del Detallado, Por Mes, el panel de detalle por vendedor, la tarjeta *Saldo
+  Pendiente*, el PDF y el Excel.
 - **1.7** — **Un saldo de $0.01 se muestra en rojo**, como
   pendiente, igual que en *Cuentas por Cobrar*. Antes salía en verde, como si
   estuviera cobrado.
