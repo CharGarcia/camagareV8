@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila
-version: 1.11
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion
+version: 1.12
 orden: 40
 estado: activo
 ---
@@ -92,7 +92,9 @@ se recalcula.
 
 En la pestaña **Info. Adicional** se añaden los datos extra que acompañan al
 comprobante (referencias, observaciones, datos de contacto). Son hasta 15 campos,
-el tope que admite el SRI.
+el tope que admite el SRI. El **concepto** admite hasta **100 caracteres** y el
+**detalle** hasta **300**: el campo no deja escribir más, y si un texto más largo
+llegara por otra vía se recorta al tope en vez de rechazar la liquidación.
 
 Dos filas las controla el sistema y se reconocen por el icono de la derecha:
 
@@ -234,6 +236,11 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.12** — Las filas de **Info. Adicional** tienen tope en pantalla (concepto
+  100 caracteres, detalle 300). Antes un concepto de más de 100 caracteres hacía
+  fallar el guardado completo de la liquidación sin explicación; ahora el campo
+  no deja pasar el tope y, si un texto más largo llega por otra vía, se recorta.
 
 - **1.11** — **Aviso de ítems incompletos y campo *RUC Proveedor* protegido.**
   - Si un ítem no tiene **código** o **descripción**, el sistema avisa al guardar y

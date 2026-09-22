@@ -358,7 +358,13 @@ class ReporteInventariosController extends BaseModuloController
                 default          => $this->generarExistencias($idEmpresa),
             };
 
-            echo json_encode(array_merge(['ok' => true], $resultado));
+            // El tamaño del JSON SIN comprimir viaja en una cabecera propia para que la
+            // barra de progreso del navegador pueda mostrar un % de descarga real:
+            // Content-Length lo pone ob_gzhandler y mide el gzip (unos cientos de KB),
+            // no los megas que el navegador va recibiendo ya descomprimidos.
+            $json = (string) json_encode(array_merge(['ok' => true], $resultado));
+            header('X-Json-Bytes: ' . strlen($json));
+            echo $json;
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             error_log('ReporteInventario Exception: ' . $e->getMessage() . ' on line ' . $e->getLine());
@@ -410,12 +416,34 @@ class ReporteInventariosController extends BaseModuloController
         // Sin rawData por lo mismo: el front-end nunca lo lee y duplicaba la respuesta
         // (5.000 filas: 7 MB con él, 4,7 MB sin él, antes de comprimir).
 
+        // Filtros que RECORTAN el kardex que suma cada fila. El seguimiento de un
+        // negativo tiene que aplicarlos igual o su saldo no cuadrará con la fila.
+        //
+        // Cuáles son depende del nivel, y no es lo mismo en los dos:
+        //  - En los desgloses (getExistenciasPorDesglose → buildWhereExistenciasKardex)
+        //    lote/NUP/caducidad se aplican SOBRE el kardex, así que sí recortan la suma.
+        //  - En "En general" (baseExistencias) esos tres son un EXISTS que solo decide
+        //    qué producto×bodega aparece; la suma es de todo el kardex del par. Mandarlos
+        //    haría que el seguimiento sumara menos que la fila.
+        // La fecha de corte recorta en los dos.
+        $filtrosSaldo = ['fecha_corte' => (string) ($filtros['fecha_corte'] ?? '')];
+        if (in_array($desglose, self::DESGLOSES_EXISTENCIAS, true)) {
+            $filtrosSaldo += [
+                'numero_lote'           => (string) ($filtros['numero_lote'] ?? ''),
+                'nup'                   => (string) ($filtros['nup'] ?? ''),
+                'fecha_caducidad_desde' => (string) ($filtros['fecha_caducidad_desde'] ?? ''),
+                'fecha_caducidad_hasta' => (string) ($filtros['fecha_caducidad_hasta'] ?? ''),
+            ];
+        }
         $colSpan = self::colSpanExistencias($modo);
 
         return [
             'rows'       => $this->renderRows($rows, fn($r) => $this->filaExistencias($r, $modo), $colSpan)
                             . ($hayMas ? self::filaTopeAlcanzado($limite, $colSpan) : ''),
             'agrupacion' => $modo,
+            // Con qué filtros se pintó ESTA tabla, para que el seguimiento de un negativo
+            // reproduzca la misma suma (el formulario puede haber cambiado sin pulsar Mostrar).
+            'filtros_saldo' => $filtrosSaldo,
             'tope'       => $hayMas ? $limite : null,
         ];
     }
@@ -575,6 +603,65 @@ class ReporteInventariosController extends BaseModuloController
         return '<td class="small text-nowrap fw-semibold">' . htmlspecialchars($codigo !== '' ? $codigo : '-') . '</td>';
     }
 
+    /**
+     * Texto de una celda que puede venir vacía: escapado, y con guion si no hay nada.
+     * Compara contra '' en vez de usar `?:` porque en PHP la cadena "0" es falsy, y un lote
+     * o un NUP llamados literalmente "0" existen y se estaban pintando como "—".
+     */
+    private static function texto($valor): string
+    {
+        $valor = (string) ($valor ?? '');
+        return htmlspecialchars($valor !== '' ? $valor : '—');
+    }
+
+    /**
+     * Celda de "Stock" que, cuando el saldo es NEGATIVO, se vuelve un botón para abrir el
+     * seguimiento de ese negativo (qué movimientos lo produjeron).
+     *
+     * El botón va en la celda y no en la fila entera por dos razones: en el nivel "En
+     * general" la fila ya tiene su propio clic (editar mínimo/máximo/categoría), y un
+     * negativo es la excepción — el resto de filas se quedan exactamente como estaban.
+     *
+     * `data-seg-cols` dice qué columnas agrupan esa fila y viaja junto al valor de cada una,
+     * porque el seguimiento tiene que rehacer EXACTAMENTE el mismo grupo; la cadena vacía
+     * significa NULL ("sin lote" es un grupo más del desglose, no una fila sin clave). Los
+     * agrupados (por producto / categoría / bodega) no llevan botón: su fila resume varios
+     * productos o bodegas, así que no hay una clave de kardex que seguir.
+     */
+    private static function tdStockConSeguimiento(array $r, string $modo): string
+    {
+        $stock = (float) ($r['stock_actual'] ?? 0);
+        $texto = number_format($stock, 2);
+
+        $cols = match ($modo) {
+            'NINGUNO'        => '',
+            'LOTE'           => 'lote',
+            'CADUCIDAD'      => 'caducidad',
+            'LOTE_CADUCIDAD' => 'lote,nup,caducidad',
+            default          => null,
+        };
+
+        if ($stock >= 0 || $cols === null) {
+            return '<td class="text-end fw-bold' . ($stock < 0 ? ' text-danger' : '') . '">' . $texto . '</td>';
+        }
+
+        return '<td class="text-end p-0 pe-2">'
+            . '<button type="button" class="btn btn-sm btn-link p-0 fw-bold text-danger text-decoration-none"'
+            . ' title="Ver por qué está en negativo"'
+            . ' onclick="event.stopPropagation(); window.RI_Seguimiento.abrir(this);"'
+            . ' data-seg-cols="' . $cols . '"'
+            . ' data-seg-producto="' . (int) ($r['id_producto'] ?? 0) . '"'
+            . ' data-seg-bodega="' . (int) ($r['id_bodega'] ?? 0) . '"'
+            . ' data-seg-lote="' . htmlspecialchars((string) ($r['lote'] ?? ''), ENT_QUOTES) . '"'
+            . ' data-seg-nup="' . htmlspecialchars((string) ($r['nup'] ?? ''), ENT_QUOTES) . '"'
+            . ' data-seg-caducidad="' . htmlspecialchars((string) ($r['fecha_caducidad'] ?? ''), ENT_QUOTES) . '"'
+            . ' data-seg-producto-nombre="' . htmlspecialchars((string) ($r['producto_nombre'] ?? ''), ENT_QUOTES) . '"'
+            . ' data-seg-bodega-nombre="' . htmlspecialchars((string) ($r['bodega_nombre'] ?? ''), ENT_QUOTES) . '"'
+            . '>' . $texto . ' <i class="bi bi-search"></i></button>'
+            . '</td>';
+    }
+
+
     private function filaExistencias(array $r, string $modo): string
     {
         // "Lote + consignación": la fila es una línea de consignación, no un par
@@ -609,7 +696,7 @@ class ReporteInventariosController extends BaseModuloController
                 . '<td class="small">' . htmlspecialchars($r['categoria_nombre'] ?? '') . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
                 . '<td class="text-end small text-info">' . number_format((float) ($r['consignado'] ?? 0), 2) . '</td>'
-                . '<td class="text-end fw-bold">' . number_format((float) ($r['stock_actual'] ?? 0), 2) . '</td>'
+                . self::tdStockConSeguimiento($r, $modo)
                 . '<td class="text-end fw-bold text-primary">' . number_format((float) ($r['stock_total'] ?? 0), 2) . '</td>'
                 . '<td class="text-end small text-muted">' . number_format($stockMinimo, 2) . '</td>'
                 . '<td class="text-end small text-muted">' . number_format($stockMaximo, 2) . '</td>'
@@ -624,10 +711,10 @@ class ReporteInventariosController extends BaseModuloController
             $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '—';
             $celdasClave = '';
             if ($modo === 'LOTE' || $modo === 'LOTE_CADUCIDAD') {
-                $celdasClave .= '<td class="small">' . htmlspecialchars($r['lote'] ?? '' ?: '—') . '</td>';
+                $celdasClave .= '<td class="small">' . self::texto($r['lote'] ?? null) . '</td>';
             }
             if ($modo === 'LOTE_CADUCIDAD') {
-                $celdasClave .= '<td class="small">' . htmlspecialchars($r['nup'] ?? '' ?: '—') . '</td>';
+                $celdasClave .= '<td class="small">' . self::texto($r['nup'] ?? null) . '</td>';
             }
             if ($modo === 'CADUCIDAD' || $modo === 'LOTE_CADUCIDAD') {
                 $celdasClave .= '<td class="small">' . $cad . '</td>';
@@ -637,7 +724,7 @@ class ReporteInventariosController extends BaseModuloController
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
                 . $celdasClave
-                . '<td class="text-end fw-bold">' . number_format((float) ($r['stock_actual'] ?? 0), 2) . '</td>'
+                . self::tdStockConSeguimiento($r, $modo)
                 . '<td class="text-end small text-info">' . number_format((float) ($r['consignado'] ?? 0), 2) . '</td>'
                 . '<td class="text-end fw-bold text-primary">' . number_format((float) ($r['stock_total'] ?? 0), 2) . '</td>'
                 . '<td class="text-end">' . $costo . '</td>'
@@ -1307,6 +1394,228 @@ class ReporteInventariosController extends BaseModuloController
             echo 'Error al generar el PDF: ' . $e->getMessage();
         }
         exit;
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // SEGUIMIENTO DE UN STOCK NEGATIVO (Existencias)
+    // ────────────────────────────────────────────────────────────────
+    /** Tope de movimientos del seguimiento. Un negativo se explica con el historial de UNA
+     *  clave (producto+bodega+lote), que casi nunca pasa de unas decenas de movimientos; el
+     *  tope está para el caso patológico de un producto con años de rotación y sin lote. */
+    private const LIMITE_SEGUIMIENTO = 1000;
+
+    /**
+     * Explica el stock negativo de una fila de Existencias: los movimientos de kardex que la
+     * componen, en orden cronológico y con saldo corrido, más un diagnóstico (en qué
+     * movimiento cruzó a negativo) y los demás lotes del mismo producto y bodega.
+     *
+     * La clave llega en `cols` (qué columnas agrupan esa fila) con su valor al lado, y NO se
+     * deduce del desglose que haya en pantalla: la fila ya sabe cuál es su clave, y el
+     * selector Detalle puede haber cambiado entre que se pintó la tabla y se pulsó el número.
+     */
+    public function seguimientoNegativoAjax(): void
+    {
+        $this->requireLeer();
+        $this->requirePestana('existencias');
+        $this->liberarSesion();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa  = (int) $_SESSION['id_empresa'];
+            $idProducto = (int) ($_REQUEST['id_producto'] ?? 0);
+            $idBodega   = (int) ($_REQUEST['id_bodega'] ?? 0);
+            if ($idProducto <= 0 || $idBodega <= 0) {
+                throw new \InvalidArgumentException('Parámetros no válidos.');
+            }
+            // Misma regla que el resto del reporte: una bodega sin acceso responde igual que
+            // un id inexistente, sin decir que el motivo es el permiso.
+            if (in_array($idBodega, $this->bodegasDenegadas(), true)) {
+                throw new \InvalidArgumentException('Parámetros no válidos.');
+            }
+
+            // Las columnas que no vengan en `cols` NO forman parte del grupo: el seguimiento
+            // suma entonces todos sus valores, igual que hace la fila que se está explicando.
+            $clave = [];
+            foreach (explode(',', (string) ($_REQUEST['cols'] ?? '')) as $col) {
+                $col = trim($col);
+                if ($col !== '') {
+                    $clave[$col] = (string) ($_REQUEST[$col] ?? '');
+                }
+            }
+
+            // Los filtros con los que se pintó la tabla, tal como los devolvió el Mostrar que
+            // la generó (`filtros_saldo`). Se aceptan solo los que recortan el kardex: el
+            // resto no cambia la suma de una fila y no tiene por qué llegar hasta aquí.
+            $filtros = ['bodegas_denegadas' => $this->bodegasDenegadas()];
+            foreach (['fecha_corte', 'numero_lote', 'nup', 'fecha_caducidad_desde', 'fecha_caducidad_hasta'] as $f) {
+                $valor = trim((string) ($_REQUEST[$f] ?? ''));
+                if ($valor !== '') {
+                    $filtros[$f] = $valor;
+                }
+            }
+
+            $rows = $this->repository->getSeguimientoClave(
+                $idEmpresa, $idProducto, $idBodega, $clave, $filtros, self::LIMITE_SEGUIMIENTO
+            );
+            $hayMas = count($rows) > self::LIMITE_SEGUIMIENTO;
+            if ($hayMas) {
+                $rows = array_slice($rows, 0, self::LIMITE_SEGUIMIENTO);
+            }
+
+            $resumen = self::resumenSeguimiento($rows, $hayMas);
+            // Los otros lotes se listan SIN el filtro de lote/NUP/caducidad, y solo con el
+            // corte: esta tabla existe justamente para encontrar el lote gemelo que el filtro
+            // de la pantalla estaría escondiendo.
+            $grupos  = $this->repository->getGruposDeProductoBodega(
+                $idEmpresa, $idProducto, $idBodega, (string) ($filtros['fecha_corte'] ?? '')
+            );
+
+            echo json_encode([
+                'ok'      => true,
+                'resumen' => $resumen,
+                'rows'    => $this->renderRows($rows, fn($r) => self::filaSeguimiento($r, $resumen['id_cruce']), 11),
+                'grupos'  => $this->renderRows($grupos, fn($r) => self::filaGrupoProductoBodega($r, $clave), 6),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Diagnóstico del seguimiento, calculado en PHP sobre las filas ya traídas (son pocas y
+     * ya están en memoria: repetir la consulta en SQL solo para contarlas no aporta).
+     *
+     * Lo que de verdad responde "¿por qué está en negativo?" es el primer movimiento en que
+     * el saldo corrido cruza por debajo de 0, así que se identifica esa fila (`id_cruce`)
+     * para resaltarla. Los dos casos que más se repiten se nombran aparte, porque el usuario
+     * no tiene por qué deducirlos de la tabla:
+     *  - `sin_entradas`: la clave no tiene NI UNA entrada, solo salidas. Típico de un lote
+     *    que se facturó sin haberse ingresado nunca con ese lote.
+     *  - `otro_ambiente`: hay movimientos de un tipo_ambiente distinto al de la empresa.
+     *    Suman en Existencias pero NO se ven en la pestaña Movimientos, así que el negativo
+     *    parece salir de la nada mientras no se sepa que están ahí.
+     */
+    private static function resumenSeguimiento(array $rows, bool $hayMas): array
+    {
+        $entradas = 0.0;
+        $salidas  = 0.0;
+        $otroAmbiente = 0;
+        $idCruce = null;
+        $cruce = null;
+
+        foreach ($rows as $r) {
+            $cantidad = (float) $r['cantidad'];
+            if ($cantidad >= 0) {
+                $entradas += $cantidad;
+            } else {
+                $salidas += abs($cantidad);
+            }
+            if (\App\Helpers\Booleano::es($r['otro_ambiente'] ?? false)) {
+                $otroAmbiente++;
+            }
+            if ($idCruce === null && (float) $r['saldo'] < 0) {
+                $idCruce = (int) $r['id'];
+                $cruce = [
+                    'fecha'         => self::fechaHora($r['fecha_movimiento'] ?? null),
+                    'origen'        => (string) ($r['origen_label'] ?? ''),
+                    'tipo'          => (string) ($r['tipo_movimiento'] ?? ''),
+                    'referencia_id' => $r['referencia_id'] !== null ? (int) $r['referencia_id'] : null,
+                    'cantidad'      => $cantidad,
+                    'saldo'         => (float) $r['saldo'],
+                ];
+            }
+        }
+
+        $ultima = $rows ? end($rows) : null;
+
+        return [
+            'total_movimientos' => count($rows),
+            'entradas'      => $entradas,
+            'salidas'       => $salidas,
+            'saldo_final'   => $ultima ? (float) $ultima['saldo'] : 0.0,
+            'id_cruce'      => $idCruce,
+            'cruce'         => $cruce,
+            'sin_entradas'  => !empty($rows) && $entradas == 0.0,
+            'otro_ambiente' => $otroAmbiente,
+            'primero'       => $rows ? self::fechaHora($rows[0]['fecha_movimiento'] ?? null) : '',
+            'ultimo'        => $ultima ? self::fechaHora($ultima['fecha_movimiento'] ?? null) : '',
+            // Con el listado recortado, el saldo final mostrado NO es el de la fila: hay que
+            // decirlo, o el usuario creerá que el número del reporte está mal.
+            'truncado'      => $hayMas,
+        ];
+    }
+
+    /** Fecha del sistema: d-m-Y H:i:s (regla de UI). Cadena vacía si no hay fecha. */
+    private static function fechaHora(?string $fecha): string
+    {
+        return !empty($fecha) ? date('d-m-Y H:i:s', strtotime($fecha)) : '';
+    }
+
+    /** Fila del seguimiento. Se resalta la del cruce a negativo y se marcan las que están en
+     *  otro tipo_ambiente, que son justo las que no se ven en la pestaña Movimientos. */
+    private static function filaSeguimiento(array $r, ?int $idCruce): string
+    {
+        $cantidad = (float) $r['cantidad'];
+        $saldo    = (float) $r['saldo'];
+        $esCruce  = $idCruce !== null && (int) $r['id'] === $idCruce;
+        $otroAmb  = \App\Helpers\Booleano::es($r['otro_ambiente'] ?? false);
+        $cad      = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime((string) $r['fecha_caducidad'])) : '—';
+        $obs      = trim((string) ($r['observaciones'] ?? ''));
+
+        return '<tr' . ($esCruce ? ' class="table-danger"' : '') . '>'
+            . '<td class="small text-nowrap">' . self::fechaHora($r['fecha_movimiento'] ?? null)
+                . ($esCruce ? ' <i class="bi bi-arrow-down-circle-fill text-danger ms-1" title="Aquí el saldo cruza a negativo"></i>' : '')
+                . '</td>'
+            . '<td class="small">' . htmlspecialchars((string) ($r['tipo_movimiento'] ?? '')) . '</td>'
+            . '<td class="small">' . htmlspecialchars((string) ($r['origen_label'] ?? ''))
+                . ($otroAmb ? ' <span class="badge bg-warning text-dark" title="Movimiento de otro ambiente: no aparece en la pestaña Movimientos">otro ambiente</span>' : '')
+                . '</td>'
+            . '<td class="small text-muted">' . ($r['referencia_id'] !== null ? (int) $r['referencia_id'] : '—') . '</td>'
+            . '<td class="small">' . self::texto($r['numero_lote'] ?? null) . '</td>'
+            . '<td class="small">' . self::texto($r['nup'] ?? null) . '</td>'
+            . '<td class="small">' . $cad . '</td>'
+            . '<td class="text-end fw-bold ' . ($cantidad < 0 ? 'text-danger' : 'text-success') . '">' . number_format($cantidad, 2) . '</td>'
+            . '<td class="text-end fw-bold ' . ($saldo < 0 ? 'text-danger' : '') . '">' . number_format($saldo, 2) . '</td>'
+            . '<td class="small">' . self::texto($r['usuario_nombre'] ?? null) . '</td>'
+            . '<td class="small text-muted" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"'
+                . ' title="' . htmlspecialchars($obs, ENT_QUOTES) . '">' . htmlspecialchars($obs !== '' ? $obs : '—') . '</td>'
+            . '</tr>';
+    }
+
+    /** Fila de "otros grupos del mismo producto y bodega". Marca el grupo que se está
+     *  siguiendo y resalta los negativos: son los candidatos a ser el mismo lote escrito
+     *  de otra forma. */
+    private static function filaGrupoProductoBodega(array $r, array $clave): string
+    {
+        $saldo  = (float) $r['saldo'];
+        $lote   = (string) ($r['numero_lote'] ?? '');
+        $nup    = (string) ($r['nup'] ?? '');
+        $cadRaw = (string) ($r['fecha_caducidad'] ?? '');
+
+        // "El que se está siguiendo" se decide SOLO con las columnas que forman la clave: en
+        // "Por lotes", dos grupos con el mismo lote y distinta caducidad son la misma fila.
+        // Con la clave vacía ("En general") no se marca ninguno: la fila los agrega TODOS, así
+        // que marcarlos sería teñir la tabla entera y perder justo lo que distingue unos de
+        // otros. Ahí esta tabla no muestra "los otros", sino de qué se compone la fila.
+        $esActual = $clave !== [];
+        foreach (['lote' => $lote, 'nup' => $nup, 'caducidad' => $cadRaw] as $col => $valor) {
+            if (array_key_exists($col, $clave) && (string) $clave[$col] !== $valor) {
+                $esActual = false;
+                break;
+            }
+        }
+
+        return '<tr' . ($esActual ? ' class="table-primary"' : '') . '>'
+            . '<td class="small">' . self::texto($lote)
+                . ($esActual ? ' <span class="badge bg-primary">esta fila</span>' : '') . '</td>'
+            . '<td class="small">' . self::texto($nup) . '</td>'
+            . '<td class="small">' . ($cadRaw !== '' ? date('d-m-Y', strtotime($cadRaw)) : '—') . '</td>'
+            . '<td class="text-end fw-bold ' . ($saldo < 0 ? 'text-danger' : '') . '">' . number_format($saldo, 2) . '</td>'
+            . '<td class="text-end small text-muted">' . (int) $r['movimientos'] . '</td>'
+            . '<td class="small text-nowrap text-muted">' . self::fechaHora($r['ultimo_movimiento'] ?? null) . '</td>'
+            . '</tr>';
     }
 
     // ────────────────────────────────────────────────────────────────

@@ -217,8 +217,8 @@ $riSubtitulo = count($riNombres) > 1
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="btn-group btn-group-sm">
-                        <button type="button" class="btn btn-outline-danger" onclick="window.RI_Existencias.exportarPDF()"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
-                        <button type="button" class="btn btn-outline-success" onclick="window.RI_Existencias.exportarExcel()"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+                        <button type="button" data-ri-accion="ri-ex" class="btn btn-outline-danger" onclick="window.RI_Existencias.exportarPDF()"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                        <button type="button" data-ri-accion="ri-ex" class="btn btn-outline-success" onclick="window.RI_Existencias.exportarExcel()"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
                     </div>
                 </div>
                 <div class="card-body p-0">
@@ -382,8 +382,8 @@ $riSubtitulo = count($riNombres) > 1
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="btn-group btn-group-sm">
-                        <button type="button" class="btn btn-outline-danger" onclick="window.RI_Movimientos.exportarPDF()"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
-                        <button type="button" class="btn btn-outline-success" onclick="window.RI_Movimientos.exportarExcel()"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+                        <button type="button" data-ri-accion="ri-mv" class="btn btn-outline-danger" onclick="window.RI_Movimientos.exportarPDF()"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                        <button type="button" data-ri-accion="ri-mv" class="btn btn-outline-success" onclick="window.RI_Movimientos.exportarExcel()"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
                     </div>
                 </div>
                 <div class="card-body p-0">
@@ -468,8 +468,8 @@ $riSubtitulo = count($riNombres) > 1
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="btn-group btn-group-sm">
-                        <button type="button" class="btn btn-outline-danger" onclick="window.RI_Valorizacion.exportarPDF()"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
-                        <button type="button" class="btn btn-outline-success" onclick="window.RI_Valorizacion.exportarExcel()"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+                        <button type="button" data-ri-accion="ri-va" class="btn btn-outline-danger" onclick="window.RI_Valorizacion.exportarPDF()"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                        <button type="button" data-ri-accion="ri-va" class="btn btn-outline-success" onclick="window.RI_Valorizacion.exportarExcel()"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
                     </div>
                 </div>
                 <div class="card-body p-0">
@@ -606,8 +606,8 @@ $riSubtitulo = count($riNombres) > 1
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="btn-group btn-group-sm">
-                        <button type="button" class="btn btn-outline-danger" onclick="window.RI_Consignaciones.exportarPDF()"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
-                        <button type="button" class="btn btn-outline-success" onclick="window.RI_Consignaciones.exportarExcel()"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+                        <button type="button" data-ri-accion="ri-cv" class="btn btn-outline-danger" onclick="window.RI_Consignaciones.exportarPDF()"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                        <button type="button" data-ri-accion="ri-cv" class="btn btn-outline-success" onclick="window.RI_Consignaciones.exportarExcel()"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
                     </div>
                 </div>
                 <div class="card-body p-0">
@@ -678,7 +678,7 @@ $riSubtitulo = count($riNombres) > 1
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <span class="text-muted small fw-medium" id="ri-au-info-total">&nbsp;</span>
-                    <button type="button" class="btn btn-outline-danger btn-sm" id="ri-au-btn-corregir-todo" style="display:none;" onclick="window.RI_Auditoria.corregirTodo();">
+                    <button type="button" data-ri-accion="ri-au" class="btn btn-outline-danger btn-sm" id="ri-au-btn-corregir-todo" style="display:none;" onclick="window.RI_Auditoria.corregirTodo();">
                         <i class="bi bi-check2-all me-1"></i>Corregir todo
                     </button>
                 </div>
@@ -893,6 +893,73 @@ $riSubtitulo = count($riNombres) > 1
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary btn-sm" onclick="window.RI_Existencias.confirmarGuardarEdicion()"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php /* ── Seguimiento de un stock negativo ─────────────────────────────────────
+       Se abre desde el número rojo de la columna Stock en Existencias. Explica UNA
+       fila: los movimientos de kardex que la componen, en orden, con saldo corrido,
+       y los demás lotes del mismo producto y bodega (que es donde suele estar la
+       contrapartida positiva cuando el negativo viene de un lote mal escrito). */ ?>
+<style>
+/* Las dos listas del modal de seguimiento. Sus clases NO llevan "-scroll" a propósito:
+   esta página tiene un listado cmg-table-card, y app.css le fuerza
+   height:100% !important; max-height:none !important a todo [class*="-scroll"] de la
+   página —modales incluidos—, con lo que el modal crecería con la lista. */
+#ri-seg-modal .ri-seg-lista  { max-height: 42vh; overflow: auto; }
+#ri-seg-modal .ri-seg-grupos { max-height: 24vh; overflow: auto; }
+#ri-seg-modal .ri-seg-lista thead th,
+#ri-seg-modal .ri-seg-grupos thead th { position: sticky; top: 0; z-index: 2; }
+</style>
+<div class="modal fade" id="ri-seg-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2 px-3">
+                <h6 class="modal-title">
+                    <i class="bi bi-graph-down-arrow text-danger me-2"></i>Seguimiento del stock negativo
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="small text-muted mb-2" id="ri-seg-clave"></div>
+                <div id="ri-seg-diagnostico"></div>
+
+                <h6 class="small fw-bold text-uppercase text-muted mt-3 mb-1">Movimientos de esta fila</h6>
+                <div class="border rounded-3 ri-seg-lista">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Fecha</th><th>Tipo</th><th>Origen</th><th>Ref.</th>
+                                <th>Lote</th><th>NUP</th><th>Caducidad</th>
+                                <th class="text-end">Cantidad</th><th class="text-end">Saldo</th>
+                                <th>Usuario</th><th>Observaciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ri-seg-tbody"></tbody>
+                    </table>
+                </div>
+
+                <h6 class="small fw-bold text-uppercase text-muted mt-3 mb-1">
+                    <span id="ri-seg-grupos-titulo">Otros lotes del mismo producto y bodega</span>
+                    <i class="bi bi-info-circle text-muted" title="Si el negativo viene de un lote escrito de dos formas distintas, aquí se ve el otro con el saldo positivo que le sobra."></i>
+                    <div class="fw-normal text-lowercase" style="font-size:.72rem;">Sin los filtros de lote, NUP ni caducidad de la pantalla: esta tabla existe para encontrar el lote gemelo que esos filtros esconderían.</div>
+                </h6>
+                <div class="border rounded-3 ri-seg-grupos">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Lote</th><th>NUP</th><th>Caducidad</th>
+                                <th class="text-end">Saldo</th><th class="text-end">Movs.</th><th>Último movimiento</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ri-seg-grupos-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>

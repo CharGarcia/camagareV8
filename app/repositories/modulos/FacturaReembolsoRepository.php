@@ -584,11 +584,21 @@ class FacturaReembolsoRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /**
+     * `nombre` VARCHAR(300) y `valor` VARCHAR(500): texto libre del modal.
+     * PostgreSQL no trunca: un valor más largo aborta el INSERT con SQLSTATE[22001]
+     * y se cae la factura entera, así que se capa al largo real de cada columna
+     * (mismo criterio que FacturaVentaRepository::insertInfoAdicional).
+     */
     public function insertInfoAdicional(array $data): void
     {
         $sql = "INSERT INTO factura_reembolso_adicional (id_factura_reembolso, nombre, valor) VALUES (?, ?, ?)";
         $st = $this->db->prepare($sql);
-        $st->execute([$data['id_factura_reembolso'], $data['nombre'], $data['valor']]);
+        $st->execute([
+            $data['id_factura_reembolso'],
+            $this->caparTexto('nombre', $data['nombre'] ?? '', 'factura_reembolso_adicional'),
+            $this->caparTexto('valor',  $data['valor']  ?? null, 'factura_reembolso_adicional'),
+        ]);
     }
 
     public function deleteInfoAdicional(int $idFR): void

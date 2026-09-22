@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos
-version: 1.7
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina
+version: 1.8
 orden: 10
 estado: activo
 ---
@@ -192,6 +192,33 @@ El reporte se exporta a **PDF** y **Excel**, con las mismas filas, los mismos
 filtros y el mismo orden que se ve en pantalla. El Excel es el que conviene
 cuando se va a seguir analizando por fuera.
 
+### Qué trae el PDF
+
+El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
+
+- **Encabezado con el logo** del establecimiento a la izquierda del nombre de la
+  empresa, el título del reporte con la agrupación elegida (*Reporte de Ventas ·
+  Por producto*) y la fecha y hora en que se generó. Si el establecimiento no
+  tiene logo cargado, el encabezado sale centrado, sin espacio vacío.
+- **Caja "Filtros aplicados"**, en dos columnas, con todo lo que se usó para
+  armar ese reporte: alcance (este establecimiento o consolidado por RUC), tipo
+  de documento, período, agrupación, borradores, vendedor, cliente y producto, y
+  —solo si se usaron— variante, info adicional y estado. Así la hoja impresa se
+  entiende sin tener el módulo abierto.
+- **Banda de indicadores** con los mismos valores de las tarjetas de la pantalla:
+  documentos, subtotal 0 %/exento, base con IVA, IVA y gran total.
+- **El listado ocupa todo el ancho de la hoja.** En las vistas agrupadas la hoja
+  va vertical y la columna descriptiva (producto, cliente) se lleva el espacio
+  que sobra, para que los nombres largos se lean; en la vista **Detallado**, que
+  tiene doce columnas, la hoja sale **horizontal**. Un nombre o un código más
+  largo que su columna se parte en varias líneas: nunca se pisa con la columna
+  vecina ni se sale de la hoja.
+- Cada producto o cliente muestra su **código o RUC** debajo del nombre, igual
+  que en la pantalla, y las filas van sombreadas de forma alterna.
+- La **cabecera de la tabla se repite en cada página**, abajo a la derecha va
+  *Página X/Y*, y la fila **TOTALES GENERALES** aparece una sola vez al final
+  (con el número de productos, clientes o documentos que se sumaron).
+
 ## Errores frecuentes
 
 - **Las cifras no coinciden con la contabilidad**: revise el selector
@@ -219,6 +246,17 @@ cuando se va a seguir analizando por fuera.
 
 ## Historial de cambios
 
+- **1.8** — **PDF rediseñado**. Ahora lleva el **logo de la empresa** en el
+  encabezado, una caja **"Filtros aplicados"** con todo lo que se usó para armar
+  el reporte y una banda con los indicadores de las tarjetas. El listado **ocupa
+  todo el ancho de la hoja** (antes quedaba angosto y con márgenes grandes), la
+  columna del **nombre del producto se hizo mucho más ancha** y muestra el código
+  debajo, y el **Detallado sale en hoja horizontal** para que entren sus doce
+  columnas. Los textos largos se parten en varias líneas en lugar de invadir la
+  columna vecina, la cabecera se repite en cada página, se numeran las páginas y
+  la fila de totales aparece **una sola vez al final** (antes se repetía al pie
+  de cada hoja con la cifra global, como si fuera el total de esa hoja). Sección
+  *Exportar* ampliada.
 - **1.7** — Los **administradores (nivel 2)** ven todas las ventas aunque no
   tengan marcado *Acceso total*, igual que el superadministrador. El permiso
   sigue decidiendo solo para los usuarios de nivel 1. El vendedor sin acceso total

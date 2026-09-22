@@ -1201,13 +1201,20 @@ class ComprasRepository extends BaseRepository
         $this->query("DELETE FROM compras_pagos WHERE id_compra = ?", [$idCompra]);
     }
 
+    /**
+     * `nombre` es VARCHAR(255) y recibe texto libre (el modal, el XML del SRI, las
+     * cargas). PostgreSQL no trunca: un valor más largo aborta el INSERT con
+     * SQLSTATE[22001] y se cae la compra entera, así que se capa al largo real de
+     * la columna (mismo criterio que FacturaVentaRepository::insertInfoAdicional).
+     * `valor` es text; caparTexto solo le limpia bytes UTF-8 inválidos.
+     */
     public function insertInfoAdicional(array $data): void
     {
         $sql = "INSERT INTO compras_adicional (id_compra, nombre, valor) VALUES (?, ?, ?)";
         $this->query($sql, [
             (int)   $data['id_compra'],
-            $data['nombre'],
-            $data['valor'],
+            $this->caparTexto('nombre', $data['nombre'] ?? '', 'compras_adicional'),
+            $this->caparTexto('valor',  $data['valor']  ?? '', 'compras_adicional'),
         ]);
     }
 

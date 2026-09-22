@@ -2197,8 +2197,9 @@ window.mcAgregarInfoAdicional = function(nombre = '', valor = '') {
     const tbody = document.getElementById('mc-tbody-info-adicional');
     if (!tbody) return;
     const tr = document.createElement('tr');
+    // maxlength 255 en el nombre: compras_adicional.nombre es VARCHAR(255) (el valor es text, sin tope).
     tr.innerHTML = `
-        <td class="p-0"><input type="text" class="form-control form-control-sm border-0 input-info-nombre" style="padding:0 4px;height:20px;font-size:0.78rem;" value="${_esc(nombre)}" placeholder="Nombre..."></td>
+        <td class="p-0"><input type="text" class="form-control form-control-sm border-0 input-info-nombre" style="padding:0 4px;height:20px;font-size:0.78rem;" maxlength="255" value="${_esc(nombre)}" placeholder="Nombre..."></td>
         <td class="p-0"><input type="text" class="form-control form-control-sm border-0 input-info-valor" style="padding:0 4px;height:20px;font-size:0.78rem;" value="${_esc(valor)}" placeholder="Valor..."></td>
         <td class="p-0 text-center"><button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="this.closest('tr').remove()" title="Quitar"><i class="bi bi-trash"></i></button></td>
     `;

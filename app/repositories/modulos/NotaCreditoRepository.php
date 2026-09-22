@@ -370,11 +370,21 @@ class NotaCreditoRepository extends BaseRepository
         }
     }
 
+    /**
+     * `nombre` VARCHAR(300) y `valor` VARCHAR(500): texto libre del modal o de otro
+     * módulo. PostgreSQL no trunca: un valor más largo aborta el INSERT con
+     * SQLSTATE[22001] y se cae la nota entera, así que se capa al largo real de
+     * cada columna (mismo criterio que FacturaVentaRepository::insertInfoAdicional).
+     */
     public function insertInfoAdicional(array $data): void
     {
         $sql = "INSERT INTO notas_credito_adicional (id_nota_credito, nombre, valor) VALUES (?, ?, ?)";
         $st = $this->db->prepare($sql);
-        $st->execute([$data['id_nota_credito'], $data['nombre'], $data['valor']]);
+        $st->execute([
+            $data['id_nota_credito'],
+            $this->caparTexto('nombre', $data['nombre'] ?? '', 'notas_credito_adicional'),
+            $this->caparTexto('valor',  $data['valor']  ?? null, 'notas_credito_adicional'),
+        ]);
     }
 
     public function deleteInfoAdicional(int $idNC): void

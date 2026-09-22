@@ -470,6 +470,15 @@ class ReporteInventarioRepository extends BaseRepository
      * EXACTAMENTE por las columnas que definen el grupo: si la fila no distingue
      * caducidad, el consignado tampoco, o los números no cuadrarían entre sí.
      *
+     * Solo salen los grupos con EXISTENCIA REAL: se descartan las filas cuyo
+     * stock total (stock_actual + consignado) es 0. A este nivel el kardex guarda
+     * todos los lotes/caducidades que alguna vez entraron, así que un lote agotado
+     * — entró 100, salió 100 — seguiría apareciendo en 0 y el listado acaba siendo
+     * casi todo histórico muerto. El nivel GENERAL sí conserva el 0, porque ahí la
+     * fila es el producto en la bodega y "sin stock" (QUIEBRE) es justo lo que se
+     * quiere ver. Se descarta solo el 0 exacto: un total negativo es una
+     * inconsistencia y tiene que verse.
+     *
      * @param string   $desglose LOTE | CADUCIDAD | LOTE_CADUCIDAD
      * @param int|null $limite   tope de filas para pantalla; null = sin tope (exportaciones).
      */
@@ -551,6 +560,7 @@ class ReporteInventarioRepository extends BaseRepository
                     GROUP BY k.id_empresa, k.id_producto, k.id_bodega{$groupExtra},
                              p.codigo, p.nombre, cat.nombre, mar.nombre, b.nombre
                 ) t
+                WHERE (t.stock_actual + t.consignado) <> 0
                 ORDER BY {$orden}";
         if ($limite !== null) {
             $sql .= ' LIMIT ' . ((int) $limite + 1);
@@ -558,6 +568,138 @@ class ReporteInventarioRepository extends BaseRepository
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Columnas que pueden formar parte de la clave de una fila del desglose de Existencias.
+     * Es la whitelist: el nombre de columna se interpola en el WHERE, así que lo único que
+     * puede llegar al SQL sale de aquí (el valor sí va como parámetro).
+     */
+    private const CLAVE_DESGLOSE = [
+        'lote'      => 'numero_lote',
+        'nup'       => 'nup',
+        'caducidad' => 'fecha_caducidad',
+    ];
+
+    /**
+     * Tipo con el que se compara cada columna de la clave. `fecha_caducidad` es DATE y su
+     * valor llega como texto —o como NULL, que es un grupo válido ("sin caducidad")—: sin el
+     * cast explícito PostgreSQL tiene que deducir el tipo del parámetro, y de un NULL suelto
+     * no hay nada que deducir. Las demás son varchar y no necesitan nada.
+     */
+    private const CLAVE_CAST = ['caducidad' => '::date'];
+
+    /**
+     * SEGUIMIENTO DE UN STOCK NEGATIVO — movimientos que componen UNA fila de Existencias.
+     *
+     * Devuelve, en orden cronológico y con saldo corrido, los movimientos de kardex que
+     * suman exactamente el stock de esa fila: producto + bodega y las columnas de la clave
+     * que la fila puede afirmar (lote / NUP / caducidad; en el nivel "En general", ninguna).
+     * Con eso se ve en qué movimiento el saldo cruzó a negativo y con qué documento.
+     *
+     * Reproduce los filtros de getExistenciasPorDesglose(), NO los de Movimientos. La
+     * diferencia que importa es `tipo_ambiente`: Movimientos filtra por el de la empresa y
+     * Existencias no, así que si este seguimiento filtrara, su saldo final no cuadraría con
+     * el número que está explicando — que es lo único que tiene que hacer. En vez de
+     * esconderlos, los marca: `otro_ambiente` señala los movimientos de otro ambiente, que
+     * son invisibles en la pestaña Movimientos y una causa típica de un negativo que "no
+     * aparece por ningún lado".
+     *
+     * La clave se compara con IS NOT DISTINCT FROM: en el desglose, "sin lote" (NULL) es un
+     * grupo más y se tiene que poder seguir igual que a los demás.
+     *
+     * @param array<string,string|null> $clave subconjunto de CLAVE_DESGLOSE; la PRESENCIA de
+     *                                         la columna dice que forma parte del grupo, y su
+     *                                         valor ('' = NULL) qué grupo es.
+     * @param array                     $filtros los de Existencias que recortan el kardex
+     *                                         (fecha_corte y, en los desgloses, lote/NUP/
+     *                                         caducidad). Los decide el controlador según el
+     *                                         nivel: en "En general" esos tres NO recortan la
+     *                                         suma y no deben llegar aquí.
+     */
+    public function getSeguimientoClave(int $idEmpresa, int $idProducto, int $idBodega, array $clave, array $filtros = [], int $limite = 1000): array
+    {
+        // Se reutiliza el MISMO armador de WHERE que produce las filas del desglose y se le
+        // fija el producto y la bodega de la fila. No es por ahorrar líneas: si mañana se
+        // añade un filtro a Existencias que recorte el kardex, el seguimiento lo hereda y no
+        // se puede quedar explicando un número distinto del que está en pantalla.
+        $filtros['id_producto'] = $idProducto;
+        $filtros['id_bodega']   = $idBodega;
+        list($where, $params) = $this->buildWhereExistenciasKardex($idEmpresa, $filtros);
+        $params[':tipo_ambiente'] = $this->tipoAmbienteEmpresa($idEmpresa);
+
+        foreach ($clave as $nombre => $valor) {
+            if (!isset(self::CLAVE_DESGLOSE[$nombre])) {
+                continue;
+            }
+            $cast = self::CLAVE_CAST[$nombre] ?? '';
+            $where .= " AND k." . self::CLAVE_DESGLOSE[$nombre] . " IS NOT DISTINCT FROM :clave_{$nombre}{$cast}";
+            $params[":clave_{$nombre}"] = ($valor === '' ? null : $valor);
+        }
+
+        // El JOIN con productos y bodegas no es decorativo: buildWhereExistenciasKardex()
+        // usa los alias p y b (producto no eliminado e inventariable, bodega no eliminada).
+        $sql = "WITH k AS MATERIALIZED (
+                    SELECT k.id, k.fecha_movimiento, k.tipo_movimiento, k.referencia_tipo,
+                           k.referencia_id, k.cantidad, k.costo_unitario, k.costo_total,
+                           k.numero_lote, k.nup, k.fecha_caducidad, k.observaciones, k.created_by,
+                           (k.tipo_ambiente IS DISTINCT FROM :tipo_ambiente) AS otro_ambiente
+                    FROM inventario_kardex k
+                    INNER JOIN productos p ON p.id = k.id_producto AND p.id_empresa = k.id_empresa
+                    INNER JOIN bodegas b ON b.id = k.id_bodega
+                    WHERE {$where}
+                )
+                SELECT k.*, u.nombre AS usuario_nombre,
+                       SUM(k.cantidad) OVER (ORDER BY k.fecha_movimiento, k.id
+                                             ROWS UNBOUNDED PRECEDING) AS saldo
+                FROM k
+                LEFT JOIN usuarios u ON u.id = k.created_by
+                ORDER BY k.fecha_movimiento ASC, k.id ASC
+                LIMIT " . ((int) $limite + 1);
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['origen_label'] = self::labelOrigen($r['referencia_tipo']);
+        }
+        unset($r);
+
+        return $rows;
+    }
+
+    /**
+     * Los demás grupos lote/NUP/caducidad del MISMO producto y bodega, con su saldo.
+     * Es la pista que más veces explica un negativo por lote: el mismo lote escrito de dos
+     * formas ("A-123" y "A 123", o uno con un espacio al final) se agrupa por separado y
+     * queda uno en positivo y el otro en negativo, cuadrando el total del producto.
+     * Ordena por saldo ascendente para que los negativos encabecen la lista.
+     */
+    public function getGruposDeProductoBodega(int $idEmpresa, int $idProducto, int $idBodega, string $fechaCorte = ''): array
+    {
+        $params = [':id_empresa' => $idEmpresa, ':id_producto' => $idProducto, ':id_bodega' => $idBodega];
+        // El mismo corte que el seguimiento: si las dos tablas del modal no miran el mismo
+        // periodo, sus saldos no se pueden comparar y la comparación es justo lo que sirve.
+        $condCorte = '';
+        if ($fechaCorte !== '') {
+            $condCorte = ' AND k.fecha_movimiento <= :fecha_corte';
+            $params[':fecha_corte'] = $fechaCorte;
+        }
+
+        $sql = "SELECT k.numero_lote, k.nup, k.fecha_caducidad,
+                       SUM(k.cantidad) AS saldo, COUNT(*) AS movimientos,
+                       MIN(k.fecha_movimiento) AS primer_movimiento,
+                       MAX(k.fecha_movimiento) AS ultimo_movimiento
+                FROM inventario_kardex k
+                WHERE k.id_empresa = :id_empresa AND k.eliminado = false
+                  AND k.id_producto = :id_producto AND k.id_bodega = :id_bodega{$condCorte}
+                GROUP BY k.numero_lote, k.nup, k.fecha_caducidad
+                ORDER BY SUM(k.cantidad) ASC, k.numero_lote ASC NULLS LAST";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

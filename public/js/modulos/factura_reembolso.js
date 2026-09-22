@@ -860,9 +860,10 @@
         const tbody = document.getElementById('fr-tbody-info-adicional');
         const tr = document.createElement('tr');
         tr.className = 'row-fr-info-adicional';
+        // maxlength: factura_reembolso_adicional.nombre es VARCHAR(300) y valor VARCHAR(500).
         tr.innerHTML = `
-            <td class="p-0 align-middle"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-fr-info-concepto" style="padding:1px 4px;height:22px;line-height:1.2;font-size:0.78rem;" placeholder="Concepto..." value="${(concepto || '').replace(/"/g, '&quot;')}"></td>
-            <td class="p-0 align-middle"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-fr-info-detalle" style="padding:1px 4px;height:22px;line-height:1.2;font-size:0.78rem;" placeholder="Detalle..." value="${(detalle || '').replace(/"/g, '&quot;')}"></td>
+            <td class="p-0 align-middle"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-fr-info-concepto" style="padding:1px 4px;height:22px;line-height:1.2;font-size:0.78rem;" maxlength="300" placeholder="Concepto..." value="${(concepto || '').replace(/"/g, '&quot;')}"></td>
+            <td class="p-0 align-middle"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-fr-info-detalle" style="padding:1px 4px;height:22px;line-height:1.2;font-size:0.78rem;" maxlength="500" placeholder="Detalle..." value="${(detalle || '').replace(/"/g, '&quot;')}"></td>
             <td class="p-0 align-middle text-center pe-1"><button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none" onclick="this.closest('tr').remove();"><i class="bi bi-x-circle-fill"></i></button></td>
         `;
         tbody.appendChild(tr);
@@ -897,7 +898,7 @@
             tr.dataset.tipo = 'correo-cliente';
             tr.innerHTML = `
                 <td class="p-0 align-middle"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-fr-info-concepto" style="padding:1px 4px;height:22px;line-height:1.2;font-size:0.78rem;" value="Correo del cliente" readonly></td>
-                <td class="p-0 align-middle"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-fr-info-detalle" style="padding:1px 4px;height:22px;line-height:1.2;font-size:0.78rem;" value="${email}"></td>
+                <td class="p-0 align-middle"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-fr-info-detalle" style="padding:1px 4px;height:22px;line-height:1.2;font-size:0.78rem;" maxlength="500" value="${email}"></td>
                 <td class="p-0 align-middle text-center pe-1"><span class="text-muted small" title="Se actualiza al cambiar el cliente"><i class="bi bi-lock-fill"></i></span></td>
             `;
             tbody.appendChild(tr);

@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos
-version: 2.17
+etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra
+version: 2.18
 orden: 20
 estado: activo
 ---
@@ -291,7 +291,9 @@ y el **saldo pendiente** ya los incluye. Si la tarjeta no aparece, esa factura n
 trae valores de terceros.
 
 El detalle de cada rubro queda en la pestaña **Info Adicional** de la compra, tal
-como lo envió el proveedor, y se imprime en el PDF.
+como lo envió el proveedor, y se imprime en el PDF. El **nombre** de cada campo
+admite hasta **255 caracteres** (el valor no tiene tope); si un XML trae un
+nombre más largo, se recorta a 255 en vez de rechazar la compra.
 
 El reconocimiento es automático y no depende de la distribuidora: se detectan los
 campos cuyo nombre menciona *bomberos*, *basura*, *recolección* o *terceros* y
@@ -456,6 +458,10 @@ los de *Contabilidad → Asientos Contables* (ver la sección anterior).
 - **"No se puede registrar el asiento: la fecha ... corresponde a un período
   contable cerrado"** al eliminar: la eliminación anula el asiento, y eso no se
   puede hacer en un período cerrado. Reabra el período.
+- **La compra no se guardaba y el error no decía por qué** con un campo de *Info
+  Adicional* cuyo nombre era muy largo (más de 255 caracteres, típico de un XML
+  con un campo mal armado): hasta la versión 2.18 ese solo campo hacía fallar el
+  registro entero. Ahora el nombre se recorta a 255 y la compra se guarda.
 
 ## Aprobación de compras
 
@@ -521,6 +527,10 @@ tampoco la incluye. Si dos aprobadores la aprueban a la vez, solo una de las
 aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
+
+- **2.18** — El **nombre** de cada campo de *Info Adicional* tiene un tope de
+  **255 caracteres** en pantalla, y si un XML trae uno más largo se recorta a 255
+  en lugar de fallar el registro completo de la compra sin explicación.
 
 - **2.17** — Corregido: al **rechazar una compra** desde su ventana, el cuadro del *motivo del
   rechazo* no aceptaba texto —se veía, pero al escribir no pasaba nada—. Ya se puede

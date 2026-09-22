@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
-etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.4
+etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar
+version: 1.5
 orden: 21
 estado: activo
 ---
@@ -125,6 +125,7 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Línea de detalle | Sí (≥1) | Cada ítem facturado; marcar "Reembolso" si es un gasto puro (sin IVA propio) o dejarlo sin marcar si es honorario propio (con IVA). |
 | Tercero reembolsado | Sí (≥1) | El comprobante del proveedor que la empresa pagó a nombre del cliente: identificación, tipo, documento (serie/secuencial/fecha/autorización) y su base + IVA. |
 | Formas de pago | Sí | Igual que cualquier factura; debe cuadrar con el total. |
+| Info. Adicional | No | Pares concepto/detalle que viajan en el XML y salen en el RIDE. Concepto hasta **300** caracteres, detalle hasta **500**; un texto más largo que llegue por otra vía se recorta en vez de rechazar el documento. |
 
 ## Permisos
 
@@ -190,6 +191,11 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.5** — Las filas de **Info. Adicional** tienen tope en pantalla (concepto
+  300 caracteres, detalle 500), el largo que admite cada línea del comprobante.
+  Un texto más largo que llegue por otra vía se recorta en lugar de hacer fallar
+  el guardado completo del documento sin explicación.
 
 - **1.4** — Corregido: al buscar un **número de documento** en el cuadro aparecían
   también documentos que no lo tenían. La búsqueda libre miraba dentro de la **clave de

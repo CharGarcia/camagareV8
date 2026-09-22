@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar
-version: 1.18
+etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long
+version: 1.19
 orden: 47
 estado: activo
 ---
@@ -187,12 +187,12 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 | Serie | Sí | Punto de emisión con secuencial de facturación de consignaciones. |
 | Secuencial | — | Lo asigna el servidor al guardar; no se teclea. |
 | Vendedor | No | Se precarga con el vendedor del cliente. |
-| Observaciones | No | Nota del documento. **Sale en la factura** como una línea de información adicional con el concepto *Observaciones*. |
+| Observaciones | No | Nota del documento. **Sale en la factura** como una línea de información adicional con el concepto *Observaciones*. Máximo **300 caracteres**, que es lo que admite esa línea en la factura. |
 | Cliente a facturar | Sí | A quién se le emite. Puede ser distinto del cliente de la consignación. |
 | Precio | Sí | Precio de la consignación o uno de la lista de precios del producto. |
 | Cant. | Sí | Nunca mayor al saldo facturable de esa línea. |
 | Desc. | No | Descuento en dólares de la línea; tope = precio × cantidad. |
-| Info. Adicional | No | Pares concepto/detalle que viajan a la factura. Las filas con candado (correo del cliente, observaciones, vendedor, cajero) las completa el sistema. |
+| Info. Adicional | No | Pares concepto/detalle que viajan a la factura. Las filas con candado (correo del cliente, observaciones, vendedor, cajero) las completa el sistema. Concepto y detalle admiten **300 caracteres** cada uno. |
 | Forma de pago SRI | No | Una o varias formas con su valor. Si no se indica ninguna, se emite una sola por el total. |
 | Días de crédito / Plazo | No | Se precargan con el plazo del cliente. |
 
@@ -269,6 +269,12 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   (el documento vuelve a quedar disponible) y volver a facturar.
 - **Sin saldo facturable** al buscar una consignación: ya se facturó o se retornó
   toda su mercadería.
+- **«No se pudo generar la factura»** con un documento cuyas *Observaciones* eran
+  muy largas: hasta la versión 1.19 el campo no tenía tope y la línea de
+  información adicional de la factura admite 300 caracteres, así que la emisión
+  se cancelaba entera (y se deshacía el reingreso a bodega) sin decir por qué.
+  Ahora el campo no deja escribir más de 300 y, si un texto más largo llegara
+  por otra vía, la factura lo recorta a 300 en vez de fallar.
 - **A un documento migrado del sistema anterior le faltan ítems**: ocurría con
   documentos que repiten el mismo producto en varias líneas (una por número de
   serie / NUP). Los ítems siempre estuvieron guardados; la pantalla los agrupaba
@@ -279,6 +285,14 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   que repara el enlace de esas líneas.
 
 ## Historial de cambios
+
+- **1.19** — **Observaciones** y las filas de **Info. Adicional** (concepto y
+  detalle) tienen un tope de **300 caracteres**, el mismo que admite cada línea
+  de información adicional de la factura. Antes el campo no tenía límite y una
+  observación más larga hacía fallar *Generar factura* con «No se pudo generar la
+  factura», revirtiendo la emisión y el reingreso a bodega. Además, la factura
+  de venta recorta a 300 cualquier valor de información adicional que le llegue,
+  venga de donde venga, en vez de rechazar el documento.
 
 - **1.18** — Los documentos **migrados desde el sistema anterior** habían quedado
   sin la **fecha de vencimiento** en sus líneas. Importa porque los *Cambios de

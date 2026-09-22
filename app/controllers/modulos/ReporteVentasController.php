@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\core\Controller;
+use App\Helpers\IdentificacionTercero;
 use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\ReporteVentasRepository;
 
@@ -588,6 +589,15 @@ class ReporteVentasController extends BaseModuloController
         }
     }
 
+    /**
+     * PDF del reporte. Una sola definición de columnas (columnasPdf()) alimenta el <thead>,
+     * el cuerpo y la fila de totales: así el `width:%` sale repetido en el <th> Y en cada
+     * <td>, que es lo único que hace que Html2Pdf respete el ancho — con el ancho solo en
+     * el <th> ensancha la columna hasta que el texto quepa en una línea y la tabla se sale
+     * de la hoja (ver docs/manual/modulos/reporte-ventas.md, "Exportar" › "Qué trae el PDF").
+     * El detallado sale horizontal (sus doce columnas —trece en consolidado— no caben en A4
+     * retrato); los agrupados, retrato con la columna descriptiva lo más ancha posible.
+     */
     public function exportPdf(): void
     {
         $this->requireLeer();
@@ -596,161 +606,607 @@ class ReporteVentasController extends BaseModuloController
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
         $idEmpresaActiva = $idEmpresa;
         $idEmpresa       = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
+        $agrupar         = (string) $filtros['agrupar_por'];
 
         // Consultar datos
-        if ($filtros['agrupar_por'] === 'CLIENTE') {
+        if ($agrupar === 'CLIENTE') {
             $rows = $this->repository->getReporteAgrupadoCliente($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
+        } elseif ($agrupar === 'PRODUCTO') {
             $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'VARIANTE') {
+        } elseif ($agrupar === 'VARIANTE') {
             $rows = $this->repository->getReporteAgrupadoVariante($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'FECHA') {
+        } elseif ($agrupar === 'FECHA') {
             $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'MES') {
+        } elseif ($agrupar === 'MES') {
             $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $filtros);
         } else {
+            $agrupar = 'NINGUNO';
             $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
         }
 
         $totales = $this->repository->getEstadisticas($idEmpresa, $filtros);
 
         try {
-            $empresa   = (new \App\models\Empresa())->getPorId($idEmpresaActiva) ?? [];
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresaActiva) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE VENTAS';
-            $alcanceTxt    = $this->describirAlcance($idsEmpresa, $consolidado);
-            $borradoresTxt = $this->describirBorradores($filtros['borradores']);
+            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros, $consolidado);
 
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) require_once $autoload;
 
-            ob_start();
-            ?>
-            <style>
-                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 9pt; margin: 0 auto 20px auto; }
-                th { background: #f2f2f2; border: 1px solid #ccc; padding: 6px; text-align: center; }
-                td { border: 1px solid #ccc; padding: 6px; }
-                .text-end { text-align: right; }
-                .text-center { text-align: center; }
-                .header { text-align: center; margin-bottom: 20px; }
-                .totales-table th { background: #e0e0e0; }
-            </style>
-            <div class="header">
-                <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
-                <h3>Reporte de Ventas</h3>
-                <p>Fecha de reporte: <?= date('d-m-Y H:i:s') ?></p>
-                <?php if ($alcanceTxt !== ''): ?><p><strong>Alcance:</strong> <?= htmlspecialchars($alcanceTxt) ?></p><?php endif; ?>
-                <?php if ($borradoresTxt !== ''): ?><p><strong>Estados:</strong> <?= htmlspecialchars($borradoresTxt) ?></p><?php endif; ?>
-            </div>
-            <table>
-                <thead>
-                    <?php if ($filtros['agrupar_por'] === 'CLIENTE'): ?>
-                        <tr><th>Cliente</th><th>Saldo x Cobrar</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
-                    <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
-                        <tr><th>Producto</th><th>Cant.</th><th>T. IVA</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
-                    <?php elseif ($filtros['agrupar_por'] === 'VARIANTE'): ?>
-                        <tr><th>Producto</th><th>Variante</th><th>Cant.</th><th>T. IVA</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
-                    <?php elseif ($filtros['agrupar_por'] === 'FECHA'): ?>
-                        <tr><th>Fecha</th><th>Nro Facturas</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
-                    <?php elseif ($filtros['agrupar_por'] === 'MES'): ?>
-                        <tr><th>Mes</th><th>Nro Facturas</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
-                    <?php else: ?>
-                        <tr><?php if ($consolidado): ?><th>Estab.</th><?php endif; ?><th>Fecha</th><th>Factura</th><th>Cliente</th><th>Estado</th><th>Vendedor</th><th>Cajero</th><th>Usuario</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th><th>Retenciones</th></tr>
-                    <?php endif; ?>
-                </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                        <tr>
-                            <?php if ($filtros['agrupar_por'] === 'CLIENTE'): ?>
-                                <td><?= htmlspecialchars($r['cliente_nombre']) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['saldo'] ?? 0), 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
-                            <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
-                                <td><?= htmlspecialchars($r['producto_nombre']) ?></td>
-                                <td class="text-center"><?= (float)$r['cantidad_vendida'] ?></td>
-                                <td class="text-center"><?= $r['tarifa_iva'] ?>%</td>
-                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
-                            <?php elseif ($filtros['agrupar_por'] === 'VARIANTE'): ?>
-                                <td><?= htmlspecialchars($r['producto_nombre']) ?></td>
-                                <td><?= htmlspecialchars($r['variante_nombre']) ?>: <?= htmlspecialchars($r['variante_valor']) ?></td>
-                                <td class="text-center"><?= (float)$r['cantidad_vendida'] ?></td>
-                                <td class="text-center"><?= $r['tarifa_iva'] ?>%</td>
-                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
-                            <?php elseif ($filtros['agrupar_por'] === 'FECHA'): ?>
-                                <td class="text-center"><?= date('d/m/Y', strtotime($r['fecha'])) ?></td>
-                                <td class="text-center"><?= $r['cantidad_facturas'] ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
-                            <?php elseif ($filtros['agrupar_por'] === 'MES'): ?>
-                                <td class="text-center"><?= self::formatearMes($r['mes'] ?? '') ?></td>
-                                <td class="text-center"><?= $r['cantidad_facturas'] ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
-                            <?php else: ?>
-                                <?php if ($consolidado): ?><td class="text-center"><?= htmlspecialchars((string) ($r['establecimiento'] ?? '')) ?></td><?php endif; ?>
-                                <td class="text-center"><?= date('d/m/Y', strtotime($r['fecha_emision'])) ?></td>
-                                <td><?= htmlspecialchars($r['numero_factura']) ?></td>
-                                <td><?= htmlspecialchars($r['cliente_nombre']) ?></td>
-                                <td class="text-center"><?= htmlspecialchars(strtoupper($r['estado'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars($r['vendedor_nombre'] ?? '') ?></td>
-                                <td><?= htmlspecialchars($r['cajero_nombre']   ?? '') ?></td>
-                                <td><?= htmlspecialchars($r['usuario_nombre']  ?? '') ?></td>
-                                <td class="text-end"><?= number_format((float)($r['base_0'] ?? 0), 2) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['base_iva'] ?? 0), 2) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['valor_iva'] ?? 0), 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)($r['total'] ?? 0), 2) ?></strong></td>
-                                <td class="text-end"><?= number_format((float)($r['retenciones'] ?? 0), 2) ?></td>
-                            <?php endif; ?>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-                <tfoot>
-                    <tr style="background-color: #e9ecef;">
-                        <?php if ($filtros['agrupar_por'] === 'CLIENTE'): ?>
-                            <?php // La segunda columna es el saldo por cobrar: se totaliza como los demás importes ?>
-                            <th class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
-                            <th class="text-end" style="font-size: 10pt;"><?= number_format(array_sum(array_map(static fn ($r) => (float)($r['saldo'] ?? 0), $rows)), 2) ?></th>
-                        <?php elseif ($filtros['agrupar_por'] === 'FECHA' || $filtros['agrupar_por'] === 'MES'): ?>
-                            <th colspan="2" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
-                        <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
-                            <th colspan="3" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
-                        <?php elseif ($filtros['agrupar_por'] === 'VARIANTE'): ?>
-                            <th colspan="4" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
-                        <?php else: ?>
-                            <th colspan="7" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
-                        <?php endif; ?>
-
-                        <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_base_0'], 2) ?></th>
-                        <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_base_iva'], 2) ?></th>
-                        <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_iva'], 2) ?></th>
-                        <th class="text-end" style="font-size: 11pt; font-weight: bold; color: #198754;">$<?= number_format((float)$totales['gran_total'], 2) ?></th>
-                        <?php if ($filtros['agrupar_por'] === 'NINGUNO'): ?>
-                        <th class="text-end" style="font-size: 10pt;">-</th>
-                        <?php endif; ?>
-                    </tr>
-                </tfoot>
-            </table>
-            
-            <?php
-            $html = ob_get_clean();
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $detallado = ($agrupar === 'NINGUNO');
+            $html      = $this->htmlPdf($agrupar, $consolidado, $rows, $totales, $filtrosTxt, $idEmpresaActiva, $nombreEmpresa);
+            $html2pdf  = new \Spipu\Html2Pdf\Html2Pdf($detallado ? 'L' : 'P', 'A4', 'es');
             $html2pdf->writeHTML($html);
-            $html2pdf->output('ReporteVentas_' . date('Ymd_His') . '.pdf', 'D');
+            $html2pdf->output('ReporteVentas_' . ucfirst(strtolower($agrupar)) . '_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
             echo "Error al generar PDF: " . $e->getMessage();
         }
+    }
+
+    /**
+     * HTML del PDF (encabezado + filtros + indicadores + listado + totales). Separado de
+     * exportPdf() para poder generarlo —y medirlo— con cualquier juego de filas.
+     */
+    private function htmlPdf(string $agrupar, bool $consolidado, array $rows, array $totales,
+                             array $filtrosTxt, int $idEmpresaActiva, string $nombreEmpresa): string
+    {
+        $detallado = ($agrupar === 'NINGUNO');
+        $cols      = $this->columnasPdf($agrupar, $consolidado);
+        $nCols     = count($cols);
+        $fs        = $detallado ? '7pt' : '8pt';   // el detallado lleva el doble de columnas
+
+        // Cuerpo: los mismos anchos que el <thead>, celda por celda (obligatorio en
+        // Html2Pdf). Filas alternas en gris muy claro: no admite :nth-child, así que el
+        // fondo se escribe en el style de cada <td>.
+        $cuerpo = '';
+        $i = 0;
+        foreach ($rows as $r) {
+            $zebra = (++$i % 2 === 0) ? 'background:#f6f8fa;' : '';
+            $cuerpo .= '<tr>';
+            foreach ($cols as $c) {
+                $cls = $c['cls'] !== '' ? " class='{$c['cls']}'" : '';
+                $cuerpo .= "<td{$cls} style='width:{$c['w']}%;{$zebra}'>" . ($c['val'])($r) . '</td>';
+            }
+            $cuerpo .= '</tr>';
+        }
+        if ($cuerpo === '') {
+            $cuerpo = "<tr><td colspan='{$nCols}' class='text-center' style='width:100%;padding:8px;'>"
+                    . 'Sin resultados para los filtros aplicados.</td></tr>';
+        }
+
+        $encabezados = '';
+        foreach ($cols as $c) {
+            $encabezados .= "<th style='width:{$c['w']}%;'>" . htmlspecialchars($c['lbl']) . '</th>';
+        }
+
+        $etiquetaTot = 'TOTALES GENERALES (' . count($rows) . ' ' . $this->sustantivoFilas($agrupar, count($rows)) . ')';
+        $filaTotales = $this->filaTotalesPdf($cols, $totales, $rows, $etiquetaTot);
+        $titulo      = 'Reporte de Ventas · ' . (self::AGRUPACION_LBL[$agrupar] ?? 'Detallado');
+
+        ob_start();
+        ?>
+        <style>
+            body { font-family: Arial, sans-serif; color: #000; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0 0 6px 0; }
+            th { background: #e3e9f0; border: 1px solid #9aa7b4; padding: 3px; text-align: center;
+                 font-size: <?= $fs ?>; font-weight: bold; color: #1b2a3a; }
+            td { border: 1px solid #c3ccd6; padding: 2px 3px; font-size: <?= $fs ?>; word-wrap: break-word; }
+            .text-end { text-align: right; }
+            .text-center { text-align: center; }
+            .sub { font-size: 6.5pt; color: #6a747e; }
+            .header { text-align: center; }
+            .header h2 { margin: 0 0 1px 0; font-size: 13pt; color: #1b2a3a; }
+            .header h3 { margin: 0 0 1px 0; font-size: 10pt; color: #2c4a6b; }
+            .header p  { margin: 0; font-size: 7.5pt; color: #555; }
+            <?= self::CSS_FILTROS_PDF ?>
+            table.kpis { margin-bottom: 8px; }
+            table.kpis td { border: 1px solid #c3ccd6; background: #f4f7fa; padding: 4px 3px; text-align: center; }
+            .k-lbl { font-size: 6.5pt; color: #55606b; }
+            .k-val { font-size: 10pt; font-weight: bold; color: #1b2a3a; }
+            .k-tot { color: #146c43; }
+            table.tot { margin-top: 0; }
+            table.tot td { border: 1px solid #9aa7b4; background: #e3e9f0; font-weight: bold;
+                           font-size: <?= $fs ?>; padding: 3px; color: #1b2a3a; }
+        </style>
+        <?php // Los back* se SUMAN a los márgenes por defecto de Html2Pdf (5,5,5,8 mm): con
+              // 3 mm a los lados la hoja queda con 8 mm reales y el listado usa 194 mm de
+              // ancho útil (281 mm en horizontal), que es sobre lo que están calculados los
+              // % de columnasPdf(). El pie "Página x/y" se dibuja a 11 mm del borde. ?>
+        <page backtop="7mm" backbottom="7mm" backleft="3mm" backright="3mm" footer="page">
+        <?= $this->encabezadoPdf($idEmpresaActiva, $nombreEmpresa, $titulo) ?>
+        <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
+        <?= $this->bloqueTotalesPdf($totales) ?>
+        <table>
+            <thead><tr><?= $encabezados ?></tr></thead>
+            <tbody><?= $cuerpo ?></tbody>
+        </table>
+        <?php // El total va en su propia tabla y NO en un <tfoot>: Html2Pdf repite el tfoot
+              // al pie de TODAS las páginas, siempre con la cifra global, como si fuera el
+              // total de esa hoja. ?>
+        <table class="tot"><?= $filaTotales ?></table>
+        </page>
+        <?php
+        return (string) ob_get_clean();
+    }
+
+    /**
+     * Ancho de cada carácter en Helvetica/Arial, en milésimas de em: es la fuente core con la
+     * que Html2Pdf escribe estos PDF, y la usa columnasPdf() para saber cuándo una palabra no
+     * cabe en su columna. Lo que no está en la tabla (dígitos, acentuadas ya normalizadas,
+     * símbolos raros) vale 556, el ancho del dígito.
+     */
+    private const ANCHO_HELVETICA = [
+        ' ' => 278, '!' => 278, '"' => 355, '#' => 556, '$' => 556, '%' => 889, '&' => 667, "'" => 191,
+        '(' => 333, ')' => 333, '*' => 389, '+' => 584, ',' => 278, '-' => 333, '.' => 278, '/' => 278,
+        ':' => 278, ';' => 278, '<' => 584, '=' => 584, '>' => 584, '?' => 556, '@' => 1015,
+        '[' => 278, '\\' => 278, ']' => 278, '^' => 469, '_' => 556, '`' => 333,
+        '{' => 334, '|' => 260, '}' => 334, '~' => 584,
+        'A' => 667, 'B' => 667, 'C' => 722, 'D' => 722, 'E' => 667, 'F' => 611, 'G' => 778, 'H' => 722,
+        'I' => 278, 'J' => 500, 'K' => 667, 'L' => 556, 'M' => 833, 'N' => 722, 'O' => 778, 'P' => 667,
+        'Q' => 778, 'R' => 722, 'S' => 667, 'T' => 611, 'U' => 722, 'V' => 667, 'W' => 944, 'X' => 667,
+        'Y' => 667, 'Z' => 611,
+        'a' => 556, 'b' => 556, 'c' => 500, 'd' => 556, 'e' => 556, 'f' => 278, 'g' => 556, 'h' => 556,
+        'i' => 222, 'j' => 222, 'k' => 500, 'l' => 222, 'm' => 833, 'n' => 556, 'o' => 556, 'p' => 556,
+        'q' => 556, 'r' => 333, 's' => 500, 't' => 278, 'u' => 556, 'v' => 500, 'w' => 722, 'x' => 500,
+        'y' => 500, 'z' => 500,
+    ];
+
+    /** Letras acentuadas: miden lo mismo que su letra base. */
+    private const SIN_TILDE = [
+        'á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ü'=>'u','ñ'=>'n','à'=>'a','è'=>'e','ì'=>'i','ò'=>'o','ù'=>'u',
+        'Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U','Ü'=>'U','Ñ'=>'N','À'=>'A','È'=>'E','Ì'=>'I','Ò'=>'O','Ù'=>'U',
+    ];
+
+    /** Ancho de un texto en em (1 em = el tamaño de la fuente en puntos). */
+    private static function anchoEm(string $texto): float
+    {
+        $ancho = 0.0;
+        foreach (mb_str_split(strtr($texto, self::SIN_TILDE)) as $ch) {
+            $ancho += (self::ANCHO_HELVETICA[$ch] ?? 556) / 1000;
+        }
+        return $ancho;
+    }
+
+    /** Nombre legible de cada agrupación (título del PDF y caja de filtros). */
+    private const AGRUPACION_LBL = [
+        'NINGUNO'  => 'Detallado',
+        'CLIENTE'  => 'Por cliente',
+        'PRODUCTO' => 'Por producto',
+        'VARIANTE' => 'Por variante',
+        'FECHA'    => 'Por fecha',
+        'MES'      => 'Por mes',
+    ];
+
+    /** Qué cuenta cada fila del listado, para la etiqueta "TOTALES GENERALES (N …)". */
+    private function sustantivoFilas(string $agrupar, int $n): string
+    {
+        return match ($agrupar) {
+            'CLIENTE'  => $n === 1 ? 'cliente'   : 'clientes',
+            'PRODUCTO' => $n === 1 ? 'producto'  : 'productos',
+            'VARIANTE' => $n === 1 ? 'variante'  : 'variantes',
+            'FECHA'    => $n === 1 ? 'día'       : 'días',
+            'MES'      => $n === 1 ? 'mes'       : 'meses',
+            default    => $n === 1 ? 'documento' : 'documentos',
+        };
+    }
+
+    /**
+     * Columnas del PDF según la agrupación. Cada una declara su ancho en % (la suma es 100),
+     * la alineación, cómo se pinta la celda y —si corresponde— de dónde sale su total: el
+     * nombre de una clave de getEstadisticas() o un callable que suma las filas del listado.
+     *
+     * Los anchos están calculados sobre el ancho útil de la hoja (A4 retrato con márgenes de
+     * 8 mm ≈ 550 pt; horizontal ≈ 797 pt) para que ningún valor quede cortado: la columna
+     * descriptiva (producto, cliente) se lleva todo lo que sobra tras dar a cada importe lo
+     * justo para su cifra más larga.
+     */
+    private function columnasPdf(string $agrupar, bool $consolidado): array
+    {
+        $e    = static fn ($v): string => htmlspecialchars((string) $v);
+        $num  = static fn ($v): string => number_format((float) $v, 2);
+
+        // Ancho útil de la hoja y tamaños de letra de este PDF (ver htmlPdf()). El ancho en
+        // puntos de una columna es su % menos el padding y los bordes de la celda.
+        $detallado = ($agrupar === 'NINGUNO');
+        $util      = $detallado ? 796.5 : 549.9;   // A4 horizontal / retrato con 8 mm de margen
+        $ptFila    = $detallado ? 7.0 : 8.0;       // font-size del <td>
+        $ptSub     = 6.5;                          // font-size del subtexto (.sub)
+        $pt        = static fn (int $w): float => $w / 100 * $util - 6.0;
+
+        // Html2Pdf reparte el texto en líneas por los espacios, pero NO parte una "palabra"
+        // más larga que su columna: esa desborda sobre la vecina. Se cortan a mano solo esas,
+        // midiendo el ancho REAL en la fuente (un nombre de 45 letras mayúsculas ocupa un
+        // 30 % más que 45 dígitos, así que contar caracteres no sirve) y por carácter, no por
+        // byte: cortar a media secuencia UTF-8 rompe la tilde.
+        $wrap = static function (string $t, float $anchoPt, float $pts): string {
+            $palabras = preg_split('/\s+/', $t) ?: [];
+            foreach ($palabras as $i => $p) {
+                if (self::anchoEm($p) * $pts <= $anchoPt) {
+                    continue;
+                }
+                $trozos = [''];
+                $acum   = 0.0;
+                foreach (mb_str_split($p) as $ch) {
+                    $a = self::anchoEm($ch) * $pts;
+                    if ($acum + $a > $anchoPt && $acum > 0.0) {
+                        $trozos[] = '';
+                        $acum     = 0.0;
+                    }
+                    $trozos[count($trozos) - 1] .= $ch;
+                    $acum += $a;
+                }
+                $palabras[$i] = implode("\n", $trozos);
+            }
+            return nl2br(htmlspecialchars(implode(' ', $palabras)));
+        };
+        // Celda descriptiva: título en negrita y, debajo y en gris, el dato secundario
+        // (código del producto, RUC del cliente), igual que en la tabla de la pantalla.
+        $desc = static function (string $titulo, string $sub, float $anchoPt) use ($wrap, $ptFila, $ptSub): string {
+            $html = "<span style='font-weight:bold;'>" . $wrap($titulo !== '' ? $titulo : '-', $anchoPt, $ptFila) . '</span>';
+            if (trim($sub) !== '') {
+                $html .= "<br><span class='sub'>" . $wrap($sub, $anchoPt, $ptSub) . '</span>';
+            }
+            return $html;
+        };
+        $sumar = static fn (string $campo): callable
+            => static fn (array $rows): float => array_sum(array_map(static fn ($r) => (float) ($r[$campo] ?? 0), $rows));
+
+        // Columnas de importes, comunes a todas las agrupaciones (van al final de la fila).
+        $importes = static fn (int $w0, int $wIva, int $wTot): array => [
+            ['lbl' => 'Base 0%',  'w' => $w0,   'cls' => 'text-end', 'tot' => 'total_base_0',
+             'val' => static fn (array $r): string => $num($r['base_0'] ?? 0)],
+            ['lbl' => 'Base IVA', 'w' => $w0,   'cls' => 'text-end', 'tot' => 'total_base_iva',
+             'val' => static fn (array $r): string => $num($r['base_iva'] ?? 0)],
+            ['lbl' => 'IVA',      'w' => $wIva, 'cls' => 'text-end', 'tot' => 'total_iva',
+             'val' => static fn (array $r): string => $num($r['valor_iva'] ?? 0)],
+            ['lbl' => 'Total',    'w' => $wTot, 'cls' => 'text-end', 'tot' => 'gran_total',
+             'val' => static fn (array $r): string => "<span style='font-weight:bold;'>" . $num($r['total'] ?? 0) . '</span>'],
+        ];
+
+        if ($agrupar === 'PRODUCTO') {
+            // 42 % para el nombre del producto: es la columna que el usuario lee.
+            return array_merge([
+                ['lbl' => 'Producto', 'w' => 42, 'cls' => '',
+                 'val' => static fn (array $r): string => $desc((string) ($r['producto_nombre'] ?? ''), (string) ($r['producto_codigo'] ?? ''), $pt(42))],
+                ['lbl' => 'Cantidad', 'w' => 9, 'cls' => 'text-end',
+                 'val' => static fn (array $r): string => $num($r['cantidad_vendida'] ?? 0)],
+                ['lbl' => 'T.IVA', 'w' => 7, 'cls' => 'text-center',
+                 'val' => static fn (array $r): string => (float) ($r['tarifa_iva'] ?? 0) . '%'],
+            ], $importes(10, 10, 12));
+        }
+
+        if ($agrupar === 'VARIANTE') {
+            return array_merge([
+                ['lbl' => 'Producto', 'w' => 25, 'cls' => '',
+                 'val' => static fn (array $r): string => $wrap((string) ($r['producto_nombre'] ?? ''), $pt(25), $ptFila)],
+                ['lbl' => 'Variante', 'w' => 21, 'cls' => '',
+                 'val' => static fn (array $r): string => $desc((string) ($r['variante_nombre'] ?? ''), (string) ($r['variante_valor'] ?? ''), $pt(21))],
+                ['lbl' => 'Cantidad', 'w' => 8, 'cls' => 'text-end',
+                 'val' => static fn (array $r): string => $num($r['cantidad_vendida'] ?? 0)],
+                ['lbl' => 'T.IVA', 'w' => 6, 'cls' => 'text-center',
+                 'val' => static fn (array $r): string => (float) ($r['tarifa_iva'] ?? 0) . '%'],
+            ], $importes(10, 9, 11));
+        }
+
+        if ($agrupar === 'CLIENTE') {
+            return array_merge([
+                ['lbl' => 'Cliente', 'w' => 36, 'cls' => '',
+                 'val' => static fn (array $r): string => $desc((string) ($r['cliente_nombre'] ?? ''), (string) ($r['cliente_ruc'] ?? ''), $pt(36))],
+                ['lbl' => 'Saldo x Cobrar', 'w' => 13, 'cls' => 'text-end', 'tot' => $sumar('saldo'),
+                 'val' => static fn (array $r): string => $num($r['saldo'] ?? 0)],
+            ], $importes(13, 11, 14));
+        }
+
+        if ($agrupar === 'FECHA' || $agrupar === 'MES') {
+            $esMes = ($agrupar === 'MES');
+            return array_merge([
+                ['lbl' => $esMes ? 'Mes' : 'Fecha', 'w' => 24, 'cls' => $esMes ? '' : 'text-center',
+                 'val' => static fn (array $r): string => "<span style='font-weight:bold;'>"
+                     . ($esMes ? self::formatearMes((string) ($r['mes'] ?? '')) : $e(date('d-m-Y', strtotime((string) ($r['fecha'] ?? '')))))
+                     . '</span>'],
+                ['lbl' => 'Documentos', 'w' => 14, 'cls' => 'text-center', 'tot' => $sumar('cantidad_facturas'),
+                 'val' => static fn (array $r): string => (string) (int) ($r['cantidad_facturas'] ?? 0)],
+            ], $importes(15, 14, 18));
+        }
+
+        // DETALLADO: A4 horizontal. En consolidado entra la columna del establecimiento,
+        // que se descuenta del nombre del cliente (la única que se puede partir en líneas).
+        $cols = [];
+        if ($consolidado) {
+            $cols[] = ['lbl' => 'Estab.', 'w' => 5, 'cls' => 'text-center',
+                       'val' => static fn (array $r): string => $wrap((string) ($r['establecimiento'] ?? ''), $pt(5), $ptFila)];
+        }
+        return array_merge($cols, [
+            ['lbl' => 'Fecha', 'w' => 7, 'cls' => 'text-center',
+             'val' => static fn (array $r): string => $e(date('d-m-Y', strtotime((string) ($r['fecha_emision'] ?? ''))))],
+            ['lbl' => 'Documento', 'w' => 10, 'cls' => '',
+             'val' => static fn (array $r): string => $wrap((string) ($r['numero_factura'] ?? ''), $pt(10), $ptFila)],
+            ['lbl' => 'Cliente', 'w' => $consolidado ? 12 : 16, 'cls' => '',
+             'val' => static fn (array $r): string => $desc((string) ($r['cliente_nombre'] ?? ''), (string) ($r['cliente_ruc'] ?? ''), $pt($consolidado ? 12 : 16))],
+            ['lbl' => 'Estado', 'w' => 8, 'cls' => 'text-center',
+             'val' => static fn (array $r): string => $wrap(strtoupper((string) ($r['estado'] ?? '')), $pt(8), $ptFila)],
+            ['lbl' => 'Vendedor', 'w' => 9, 'cls' => '',
+             'val' => static fn (array $r): string => $wrap((string) ($r['vendedor_nombre'] ?? ''), $pt(9), $ptFila)],
+            ['lbl' => 'Cajero', 'w' => 8, 'cls' => '',
+             'val' => static fn (array $r): string => $wrap((string) ($r['cajero_nombre'] ?? ''), $pt(8), $ptFila)],
+            ['lbl' => 'Usuario', 'w' => $consolidado ? 7 : 8, 'cls' => '',
+             'val' => static fn (array $r): string => $wrap((string) ($r['usuario_nombre'] ?? ''), $pt($consolidado ? 7 : 8), $ptFila)],
+            ['lbl' => 'Base 0%', 'w' => 7, 'cls' => 'text-end', 'tot' => 'total_base_0',
+             'val' => static fn (array $r): string => $num($r['base_0'] ?? 0)],
+            ['lbl' => 'Base IVA', 'w' => 7, 'cls' => 'text-end', 'tot' => 'total_base_iva',
+             'val' => static fn (array $r): string => $num($r['base_iva'] ?? 0)],
+            ['lbl' => 'IVA', 'w' => 6, 'cls' => 'text-end', 'tot' => 'total_iva',
+             'val' => static fn (array $r): string => $num($r['valor_iva'] ?? 0)],
+            ['lbl' => 'Total', 'w' => 8, 'cls' => 'text-end', 'tot' => 'gran_total',
+             'val' => static fn (array $r): string => "<span style='font-weight:bold;'>" . $num($r['total'] ?? 0) . '</span>'],
+            ['lbl' => 'Retenc.', 'w' => 6, 'cls' => 'text-end', 'tot' => $sumar('retenciones'),
+             'val' => static fn (array $r): string => $num($r['retenciones'] ?? 0)],
+        ]);
+    }
+
+    /**
+     * Fila "TOTALES GENERALES" como tabla aparte (ver exportPdf(): un <tfoot> se repetiría en
+     * todas las páginas). La etiqueta absorbe con un colspan las columnas iniciales que no
+     * totalizan nada, y a partir de ahí cada columna conserva su ancho para que la rejilla
+     * calce con la tabla de arriba.
+     */
+    private function filaTotalesPdf(array $cols, array $totales, array $rows, string $etiqueta): string
+    {
+        $primera = null;
+        foreach ($cols as $i => $c) {
+            if (!empty($c['tot'])) { $primera = $i; break; }
+        }
+        if ($primera === null) {
+            return '';
+        }
+        $html = '<tr>';
+        if ($primera > 0) {
+            $anchoEtq = 0;
+            for ($i = 0; $i < $primera; $i++) {
+                $anchoEtq += (int) $cols[$i]['w'];
+            }
+            $html .= "<td colspan='{$primera}' class='text-end' style='width:{$anchoEtq}%;'>"
+                   . htmlspecialchars($etiqueta) . ':</td>';
+        }
+        for ($i = $primera, $n = count($cols); $i < $n; $i++) {
+            $c   = $cols[$i];
+            $val = '';
+            if (!empty($c['tot'])) {
+                $monto = $c['tot'] instanceof \Closure
+                    ? (float) ($c['tot'])($rows)
+                    : (float) ($totales[$c['tot']] ?? 0);
+                if ($c['lbl'] === 'Documentos') {
+                    $val = number_format($monto, 0);
+                } elseif ($c['lbl'] === 'Total') {
+                    $val = "<span style='color:#146c43;'>$" . number_format($monto, 2) . '</span>';
+                } else {
+                    $val = number_format($monto, 2);
+                }
+            }
+            $html .= "<td class='text-end' style='width:{$c['w']}%;'>{$val}</td>";
+        }
+        return $html . '</tr>';
+    }
+
+    /**
+     * Banda de indicadores bajo el encabezado: los mismos cuatro valores que la tarjeta de
+     * control de la pantalla (documentos, base 0 %, base con IVA, IVA y total), para que el
+     * PDF se entienda sin tener el módulo abierto.
+     */
+    private function bloqueTotalesPdf(array $totales): string
+    {
+        $kpi = static function (string $lbl, string $val, bool $destacar = false): string {
+            $cls = $destacar ? 'k-val k-tot' : 'k-val';
+            return "<td style='width:20%;'><span class='k-lbl'>" . htmlspecialchars($lbl) . '</span><br>'
+                 . "<span class='{$cls}'>" . $val . '</span></td>';
+        };
+        return '<table class="kpis"><tr>'
+            . $kpi('DOCUMENTOS', number_format((float) ($totales['total_documentos'] ?? 0), 0))
+            . $kpi('SUBTOTAL 0% / EXENTO', '$' . number_format((float) ($totales['total_base_0'] ?? 0), 2))
+            . $kpi('BASE CON IVA', '$' . number_format((float) ($totales['total_base_iva'] ?? 0), 2))
+            . $kpi('IVA', '$' . number_format((float) ($totales['total_iva'] ?? 0), 2))
+            . $kpi('GRAN TOTAL', '$' . number_format((float) ($totales['gran_total'] ?? 0), 2), true)
+            . '</tr></table>';
+    }
+
+    /**
+     * Encabezado del PDF: logo del establecimiento a la izquierda del nombre de la empresa,
+     * con el título del reporte y la fecha de generación. Html2Pdf no admite float ni flex,
+     * así que va en una tabla de tres celdas —logo | textos | celda vacía del mismo ancho que
+     * la del logo— para que el nombre siga centrado en la hoja. Sin logo, encabezado centrado.
+     */
+    private function encabezadoPdf(int $idEmpresa, string $nombreEmpresa, string $titulo): string
+    {
+        $textos = '<h2>' . htmlspecialchars($nombreEmpresa) . '</h2>'
+            . '<h3>' . htmlspecialchars($titulo) . '</h3>'
+            . '<p>Generado: ' . date('d-m-Y H:i:s') . '</p>';
+        $logo = $this->logoPdf($idEmpresa);
+        if ($logo === '') {
+            return "<div class=\"header\" style=\"margin-bottom:8px;\">{$textos}</div>";
+        }
+        $celda = 'border:none;padding:0;vertical-align:middle;';
+        return '<table style="margin-bottom:8px;"><tr>'
+            . "<td style=\"width:22%;{$celda}\"><img src=\"" . htmlspecialchars($logo) . "\" style=\"max-width:40mm;max-height:18mm;\"></td>"
+            . "<td style=\"width:56%;{$celda}\"><div class=\"header\">{$textos}</div></td>"
+            . "<td style=\"width:22%;{$celda}\"></td>"
+            . '</tr></table>';
+    }
+
+    /**
+     * Ruta en disco del logo del establecimiento principal ('' si no hay). La tabla guarda la
+     * URL pública (empresa_establecimiento.logo_ruta) y se resuelve igual que en los demás PDF
+     * del sistema. Solo se devuelve si es una imagen legible: ante una imagen que no puede
+     * medir, Html2Pdf aborta el PDF entero, y un logo dañado no debe impedir sacar el reporte.
+     */
+    private function logoPdf(int $idEmpresa): string
+    {
+        $ruta = (string) ((new \App\models\Empresa())->getEstablecimientos($idEmpresa)[0]['logo_ruta'] ?? '');
+        if ($ruta === '') {
+            return '';
+        }
+        $clean = ltrim($ruta, '/');
+        if (strpos($clean, 'sistema/public/') === 0) {
+            $clean = substr($clean, strlen('sistema/public/'));
+        } elseif (strpos($clean, 'sistema/') === 0) {
+            $clean = substr($clean, strlen('sistema/'));
+        }
+        if (strpos($clean, 'public/') === 0) {
+            $clean = substr($clean, strlen('public/'));
+        }
+        foreach ([MVC_ROOT . '/public/' . $clean, MVC_ROOT . '/' . $clean] as $cand) {
+            if (is_file($cand) && @getimagesize($cand)) {
+                return $cand;
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Caja "Filtros aplicados" del PDF, con dos pares etiqueta/valor por fila.
+     * Html2Pdf no admite float ni flex y, con un colspan en la primera fila, ignora los anchos
+     * declarados de esa tabla: por eso el título va en su propia tabla de una celda y los pares
+     * en otra donde TODAS las filas llevan las mismas cuatro celdas con los mismos anchos (que
+     * una declare otros basta para que adopte ESOS y la tabla se salga de la hoja).
+     */
+    private function bloqueFiltrosPdf(array $filtrosTxt): string
+    {
+        if (!$filtrosTxt) {
+            return '';
+        }
+        $e     = static fn ($v): string => htmlspecialchars((string) $v);
+        $pares = [];
+        foreach ($filtrosTxt as $lbl => $val) {
+            $pares[] = [(string) $lbl, trim((string) $val)];
+        }
+        $filas = '';
+        for ($i = 0, $n = count($pares); $i < $n; $i += 2) {
+            [$lblA, $valA] = $pares[$i];
+            [$lblB, $valB] = $pares[$i + 1] ?? ['', ''];
+            $filas .= '<tr>'
+                . "<td class='f-lbl' style='width:16%;'>" . ($lblA !== '' ? $e($lblA) . ':' : '') . '</td>'
+                . "<td style='width:34%;'>" . $e($valA) . '</td>'
+                . "<td class='f-lbl' style='width:16%;'>" . ($lblB !== '' ? $e($lblB) . ':' : '') . '</td>'
+                . "<td style='width:34%;'>" . $e($valB) . '</td>'
+                . '</tr>';
+        }
+        return "<table class='fil-tit'><tr><td style='width:100%;'>Filtros aplicados</td></tr></table>"
+            . "<table class='filtros'>{$filas}</table>";
+    }
+
+    /** Estilos de la caja "Filtros aplicados" (mismo formato que en Cuentas por Cobrar). */
+    private const CSS_FILTROS_PDF = '
+        table.fil-tit { margin-bottom: 0; }
+        table.fil-tit td { background: #e9ecef; border: 1px solid #9aa7b4; padding: 3px 5px; font-size: 8.5pt; font-weight: bold; color: #1b2a3a; }
+        table.filtros { margin-bottom: 8px; }
+        table.filtros td { border: 1px solid #c3ccd6; padding: 2px 4px; font-size: 7.5pt; color: #000; }
+        table.filtros td.f-lbl { background: #f8f9fa; font-weight: bold; }
+    ';
+
+    /**
+     * Descripción legible de los filtros aplicados para la caja del PDF: etiqueta => valor,
+     * con los ids de cliente, vendedor y producto resueltos a nombre. Los filtros de uso
+     * ocasional (variante, info adicional, estado) solo aparecen cuando traen valor.
+     */
+    private function describirFiltros(array $idsEmpresa, array $filtros, bool $consolidado): array
+    {
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $tipoDocLbl = [
+            'FACTURA'          => 'Facturas de venta',
+            'RECIBO'           => 'Recibos de venta',
+            'NOTA_CREDITO'     => 'Notas de crédito en ventas',
+            'FACTURA_MENOS_NC' => 'Facturas de venta menos NC de ventas',
+        ];
+
+        $fmt   = static fn (string $f): string => $f !== '' ? date('d-m-Y', strtotime($f)) : '';
+        $desde = $fmt((string) ($filtros['fecha_desde'] ?? ''));
+        $hasta = $fmt((string) ($filtros['fecha_hasta'] ?? ''));
+        if ($desde !== '' && $hasta !== '') {
+            $periodo = "Del {$desde} al {$hasta}";
+        } elseif ($desde !== '') {
+            $periodo = "Desde {$desde}";
+        } elseif ($hasta !== '') {
+            $periodo = "Hasta {$hasta}";
+        } else {
+            $periodo = 'Sin límite de fechas';
+        }
+
+        $vendedorTxt = 'Todos';
+        if (\App\Helpers\AlcanceRegistros::idsVendedor($filtros)) {
+            // Usuario restringido (§6): el filtro de pantalla no aplica, ve solo su vendedor.
+            $propio = \App\Helpers\AlcanceRegistros::vendedorPropio($filtros, $idEmpresa, (int) ($_SESSION['id_usuario'] ?? 0));
+            $vendedorTxt = $propio[0]['nombre'] ?? 'Su vendedor';
+        } elseif (!empty($filtros['id_vendedor'])) {
+            $v = (new \App\repositories\modulos\VendedorRepository())->findById((int) $filtros['id_vendedor'], $idEmpresa);
+            $vendedorTxt = $v['nombre'] ?? ('#' . (int) $filtros['id_vendedor']);
+        }
+
+        $cxcRepo    = new \App\repositories\modulos\CuentasPorCobrarRepository();
+        $clienteTxt = 'Todos';
+        if (!empty($filtros['id_cliente'])) {
+            $ids = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string) $filtros['id_cliente']);
+            $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+            if ($ids) {
+                // El filtro viene expandido a las demás filas del mismo cliente (cédula/RUC y,
+                // en consolidado, otros establecimientos): se nombra una sola vez por cliente.
+                $nombres = [];
+                $vistos  = [];
+                foreach ($cxcRepo->getClientesPorIds($ids, $idsEmpresa) as $id => $c) {
+                    $clave = IdentificacionTercero::claveGrupo($c['identificacion'], 'id:' . $id);
+                    if (isset($vistos[$clave])) {
+                        continue;
+                    }
+                    $vistos[$clave] = true;
+                    $nombres[] = trim($c['nombre'] . ($c['identificacion'] !== '' ? " ({$c['identificacion']})" : ''));
+                }
+                $clienteTxt = $nombres ? implode(', ', $nombres) : implode(', ', array_map(static fn ($i) => "#{$i}", $ids));
+            }
+        }
+
+        $productoTxt = [];
+        $idsProd = $filtros['id_producto'] ?? '';
+        $idsProd = array_values(array_unique(array_filter(array_map('intval', is_array($idsProd) ? $idsProd : explode(',', (string) $idsProd)))));
+        if ($idsProd) {
+            $vistos = [];
+            foreach ($cxcRepo->getProductosPorIds($idsProd, $idsEmpresa) as $id => $p) {
+                $clave = $p['codigo'] !== '' ? 'c:' . $p['codigo'] : 'id:' . $id;
+                if (isset($vistos[$clave])) {
+                    continue;
+                }
+                $vistos[$clave] = true;
+                $productoTxt[] = trim(($p['codigo'] !== '' ? $p['codigo'] . ' - ' : '') . $p['nombre']);
+            }
+        }
+        if (trim((string) ($filtros['producto_texto'] ?? '')) !== '') {
+            $productoTxt[] = '"' . trim((string) $filtros['producto_texto']) . '"';
+        }
+
+        $out = [
+            'Alcance'           => $consolidado
+                ? $this->describirAlcance($idsEmpresa, true)
+                : 'Este establecimiento',
+            'Tipo de documento' => $tipoDocLbl[$filtros['tipo_documento'] ?? 'FACTURA'] ?? 'Facturas de venta',
+            'Período'           => $periodo,
+            'Agrupación'        => self::AGRUPACION_LBL[$filtros['agrupar_por'] ?? 'NINGUNO'] ?? 'Detallado',
+            'Borradores'        => match ($filtros['borradores'] ?? 'EXCLUIR') {
+                'INCLUIR' => 'Incluidos (válidos + borradores)',
+                'SOLO'    => 'Solo documentos en borrador',
+                default   => 'Excluidos (solo documentos válidos)',
+            },
+            'Vendedor'          => $vendedorTxt,
+            'Cliente'           => $clienteTxt,
+            'Producto'          => $productoTxt ? implode(', ', $productoTxt) : 'Todos',
+        ];
+        if (trim((string) ($filtros['variante_texto'] ?? '')) !== '') {
+            $out['Variante'] = trim((string) $filtros['variante_texto']);
+        }
+        if (trim((string) ($filtros['buscar_info'] ?? '')) !== '') {
+            $out['Info adicional'] = trim((string) $filtros['buscar_info']);
+        }
+        if (($filtros['estado'] ?? 'TODOS') !== 'TODOS') {
+            $out['Estado'] = ucfirst(strtolower((string) $filtros['estado']));
+        }
+        return $out;
     }
 }

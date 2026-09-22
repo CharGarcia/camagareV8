@@ -700,7 +700,7 @@ class FacturaVentaRepository extends BaseRepository
         if (trim((string) $nombreVendedor) !== '') {
             $this->query(
                 "INSERT INTO ventas_adicional (id_venta, nombre, valor) VALUES (?, 'Vendedor', ?)",
-                [$idVenta, $nombreVendedor]
+                [$idVenta, $this->caparTexto('valor', $nombreVendedor, 'ventas_adicional')]
             );
         }
     }
@@ -1027,10 +1027,27 @@ class FacturaVentaRepository extends BaseRepository
         $this->query($sql, [$data['id_venta'], $data['forma_pago'], $data['total'], $data['plazo'] ?? 0, $data['unidad_tiempo'] ?? 'dias']);
     }
 
+    /**
+     * Información adicional del comprobante. `nombre` y `valor` son VARCHAR(300)
+     * y reciben texto LIBRE de varios orígenes sin tope propio: lo que el usuario
+     * teclea en el modal, las Observaciones del documento —columna `text`— que
+     * Facturación de Consignaciones copia aquí (ConsignacionFacturaService::
+     * conCamposDeCabecera), el POS y las cargas masivas.
+     *
+     * PostgreSQL no trunca solo: un valor más largo aborta el INSERT con
+     * SQLSTATE[22001] y, como esto corre dentro de la transacción que crea la
+     * factura, se cae la emisión completa —en Facturación CV se revierte además el
+     * reingreso de inventario— con un mensaje que no dice qué campo sobró. Se capa
+     * aquí porque es el único punto por el que pasan todos los orígenes.
+     */
     public function insertInfoAdicional(array $data): void
     {
         $sql = "INSERT INTO ventas_adicional (id_venta, nombre, valor) VALUES (?, ?, ?)";
-        $this->query($sql, [$data['id_venta'], $data['nombre'], $data['valor']]);
+        $this->query($sql, [
+            $data['id_venta'],
+            $this->caparTexto('nombre', $data['nombre'] ?? '', 'ventas_adicional'),
+            $this->caparTexto('valor',  $data['valor']  ?? '', 'ventas_adicional'),
+        ]);
     }
 
     public function updateCabecera(int $id, array $data): void

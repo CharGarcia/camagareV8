@@ -551,11 +551,20 @@ class LiquidacionCompraRepository extends BaseRepository
         $this->query("DELETE FROM liquidaciones_pagos WHERE id_cabecera = ?", [$idCabecera]);
     }
 
+    /**
+     * `nombre` VARCHAR(100) y `valor` VARCHAR(300): texto libre del modal. Es la
+     * columna de concepto más corta de todos los documentos, y PostgreSQL no
+     * trunca: un valor más largo aborta el INSERT con SQLSTATE[22001] y se cae la
+     * liquidación entera. Se capa al largo real de cada columna (mismo criterio
+     * que FacturaVentaRepository::insertInfoAdicional).
+     */
     public function insertInfoAdicional(array $data): void
     {
         $sql = "INSERT INTO liquidaciones_adicional (id_cabecera, nombre, valor) VALUES (?, ?, ?)";
         $this->query($sql, [
-            (int) $data['id_cabecera'], $data['nombre'], $data['valor']
+            (int) $data['id_cabecera'],
+            $this->caparTexto('nombre', $data['nombre'] ?? '', 'liquidaciones_adicional'),
+            $this->caparTexto('valor',  $data['valor']  ?? '', 'liquidaciones_adicional'),
         ]);
     }
 

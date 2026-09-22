@@ -97,12 +97,200 @@ function RI_colores(n) {
 // ignora: si no, la que llegara última pisaría la tabla aunque fuera la más vieja.
 const RI_busquedas = {};
 
-function RI_fetchGenerar(tab, params, onOk, onError) {
+// ════════════════════════════════════════════════════════════════════
+// INDICADOR DE CARGA (bloqueo del botón Mostrar + barra de progreso)
+// ════════════════════════════════════════════════════════════════════
+/**
+ * Mientras una pestaña genera su reporte, su botón "Mostrar" queda DESHABILITADO —
+ * una consulta de este módulo puede tardar segundos y, sin bloquearlo, el usuario
+ * encadenaba clics y lanzaba varias consultas pesadas seguidas — y la tabla muestra
+ * un mensaje con barra de progreso y porcentaje. Con él se bloquean también el PDF,
+ * el Excel y el "Corregir todo" de esa pestaña (ver _btnAcciones).
+ *
+ * El porcentaje son dos tramos, porque las dos mitades de la espera se miden distinto:
+ *
+ *   0 – 80 %   "Consultando la base de datos". El servidor arma la respuesta entera
+ *              antes de enviar nada (ob_gzhandler la bufferiza), así que aquí NO hay
+ *              avance real que leer: es una ESTIMACIÓN por tiempo, tomando como
+ *              referencia lo que tardó la última consulta de esa misma pestaña
+ *              (guardada en localStorage; 4 s la primera vez). Hasta ese tiempo la
+ *              barra avanza lineal hasta 70 %; si se pasa, sigue avanzando cada vez
+ *              más lento y nunca llega al tramo siguiente. Al lado van los segundos
+ *              transcurridos, que sí son un dato exacto.
+ *   80 – 99 %  "Recibiendo datos". Aquí el porcentaje SÍ es real: bytes leídos del
+ *              stream contra el total que el servidor anuncia en la cabecera
+ *              X-Json-Bytes. No se usa Content-Length porque la respuesta viaja
+ *              comprimida y ese valor mide el gzip, no los bytes que el navegador va
+ *              entregando (5.000 filas son ~5 MB de JSON y unos cientos de KB de gzip).
+ *
+ * La barra nunca retrocede y no llega a 100: la tabla con los datos la reemplaza.
+ */
+const RI_CARGA_ESPERA_DEFECTO = 4000;   // ms de referencia hasta tener una medición propia
+
+const RI_Cargando = {
+    _tabs: {},
+
+    _btnMostrar(prefijo) {
+        return document.querySelector('#' + prefijo + '-form button[type="submit"]');
+    },
+
+    /** Las demás acciones de la pestaña que tampoco deben poder dispararse mientras
+     *  se genera: PDF, Excel y, en Auditoría, "Corregir todo" (que además estaría
+     *  operando sobre el resultado viejo). Se marcan en la vista con data-ri-accion. */
+    _btnAcciones(prefijo) {
+        return document.querySelectorAll('[data-ri-accion="' + prefijo + '"]');
+    },
+
+    /** Lo que tardó la última consulta de esta pestaña. localStorage puede fallar
+     *  (modo privado) o traer basura: ante cualquier duda, el valor por defecto. */
+    _esperaDe(tab) {
+        let ms = 0;
+        try { ms = parseInt(localStorage.getItem('ri_espera_' + tab) || '0', 10); } catch (e) { ms = 0; }
+        return (ms >= 150 && ms <= 600000) ? ms : RI_CARGA_ESPERA_DEFECTO;
+    },
+
+    _recordarEspera(tab, ms) {
+        try { localStorage.setItem('ri_espera_' + tab, String(Math.round(ms))); } catch (e) { /* sin persistencia */ }
+    },
+
+    _fmtBytes(n) {
+        if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+        if (n >= 1024) return Math.round(n / 1024) + ' KB';
+        return n + ' B';
+    },
+
+    iniciar(tab, ui) {
+        this.terminar(tab);   // por si quedó vivo el intervalo de una consulta cancelada
+
+        const st = {
+            prefijo: ui.prefijo, inicio: Date.now(), espera: this._esperaDe(tab),
+            pct: 0, bytes: 0, total: 0, recibiendo: false, msConsulta: 0, timer: null, pintado: false,
+        };
+        this._tabs[tab] = st;
+
+        const btn = this._btnMostrar(ui.prefijo);
+        if (btn) {
+            btn.dataset.riHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Cargando';
+        }
+        // "Corregir todo" puede venir ya deshabilitado por su propia corrección en curso:
+        // se recuerda su estado para devolvérselo y no habilitarlo por accidente.
+        this._btnAcciones(ui.prefijo).forEach(b => {
+            b.dataset.riOff = b.disabled ? '1' : '';
+            b.disabled = true;
+        });
+
+        const tbody = document.getElementById(ui.prefijo + '-tbody');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="${ui.colSpan}" class="py-5">
+                <div class="mx-auto text-center" style="max-width:340px;">
+                    <div class="fw-semibold mb-1"><i class="bi bi-hourglass-split me-1"></i>Generando el reporte…</div>
+                    <div class="small text-muted mb-2" id="${ui.prefijo}-carga-sub">Consultando la base de datos</div>
+                    <div class="progress" style="height:8px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             id="${ui.prefijo}-carga-barra" role="progressbar"
+                             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width:0%"></div>
+                    </div>
+                    <div class="small text-muted mt-2"><span id="${ui.prefijo}-carga-pct">0</span> %</div>
+                </div></td></tr>`;
+            st.pintado = true;
+        }
+
+        st.timer = setInterval(() => this._tick(tab), 150);
+        this._tick(tab);
+    },
+
+    /** Llegaron las cabeceras: termina el tramo estimado y empieza el real.
+     *  $bytes es lo que el servidor dice que pesa el JSON sin comprimir (0 = no lo dijo). */
+    recibiendo(tab, bytes) {
+        const st = this._tabs[tab];
+        if (!st) return;
+        st.recibiendo = true;
+        st.total = (bytes > 0) ? bytes : 0;
+        st.msConsulta = Date.now() - st.inicio;   // lo que tardó de verdad la consulta
+    },
+
+    bytes(tab, leidos) {
+        const st = this._tabs[tab];
+        if (!st) return;
+        st.bytes = leidos;
+        // Si el total anunciado se queda corto, algo no cuadra (una cabecera vieja en
+        // caché, por ejemplo): mejor quedarse sin % que mostrar uno imposible.
+        if (st.total > 0 && leidos > st.total) st.total = 0;
+    },
+
+    _tick(tab) {
+        const st = this._tabs[tab];
+        if (!st) return;
+        const t = Date.now() - st.inicio;
+
+        let pct;
+        let sub;
+        if (st.recibiendo) {
+            if (st.total > 0) {
+                pct = 80 + 19 * Math.min(1, st.bytes / st.total);
+                sub = `Recibiendo datos · ${this._fmtBytes(st.bytes)} de ${this._fmtBytes(st.total)}`;
+            } else {
+                pct = Math.max(st.pct, 80);
+                sub = `Recibiendo datos · ${this._fmtBytes(st.bytes)}`;
+            }
+        } else {
+            pct = (t < st.espera)
+                ? 70 * (t / st.espera)
+                : 70 + 10 * (1 - Math.exp(-(t - st.espera) / st.espera));
+            sub = `Consultando la base de datos · ${(t / 1000).toFixed(1)} s`;
+        }
+        st.pct = Math.max(st.pct, pct);
+
+        const barra = document.getElementById(st.prefijo + '-carga-barra');
+        const txt   = document.getElementById(st.prefijo + '-carga-pct');
+        const subEl = document.getElementById(st.prefijo + '-carga-sub');
+        // Si la tabla ya se repintó, no hay nada que animar (y el botón debe volver).
+        if (!barra) { if (st.pintado) this.terminar(tab); return; }
+        barra.style.width = st.pct.toFixed(1) + '%';
+        barra.setAttribute('aria-valuenow', Math.round(st.pct));
+        if (txt) txt.textContent = Math.round(st.pct);
+        if (subEl) subEl.textContent = sub;
+    },
+
+    /** Devuelve los botones de la pestaña a su estado normal. Con exito = true guarda cuánto tardó la
+     *  consulta, que es la referencia del tramo estimado de la próxima vez. */
+    terminar(tab, exito) {
+        const st = this._tabs[tab];
+        if (!st) return;
+        if (st.timer) clearInterval(st.timer);
+        if (exito && st.msConsulta > 0) this._recordarEspera(tab, st.msConsulta);
+
+        const btn = this._btnMostrar(st.prefijo);
+        if (btn) {
+            btn.disabled = false;
+            if (btn.dataset.riHtml) {
+                btn.innerHTML = btn.dataset.riHtml;
+                delete btn.dataset.riHtml;
+            }
+        }
+        this._btnAcciones(st.prefijo).forEach(b => {
+            b.disabled = b.dataset.riOff === '1';
+            delete b.dataset.riOff;
+        });
+        delete this._tabs[tab];
+    },
+};
+
+/**
+ * Lanza la consulta de una pestaña. `ui` ({ prefijo, colSpan }) es opcional: cuando
+ * viene, el botón Mostrar de esa pestaña se bloquea y la tabla muestra la barra de
+ * progreso hasta que llegan los datos (ver RI_Cargando).
+ */
+function RI_fetchGenerar(tab, params, onOk, onError, ui) {
     params.set('tab', tab);
     if (RI_busquedas[tab]) RI_busquedas[tab].abort();
     const control = new AbortController();
     RI_busquedas[tab] = control;
     const vigente = () => RI_busquedas[tab] === control;
+
+    if (ui) RI_Cargando.iniciar(tab, ui);
 
     fetch(BASE_URL + '/' + RUTA_MODULO + '/generarAjax', {
         method: 'POST',
@@ -111,17 +299,38 @@ function RI_fetchGenerar(tab, params, onOk, onError) {
         signal: control.signal,
     })
     .then(async response => {
-        const text = await response.text();
+        // Se lee el cuerpo por trozos para poder mostrar el avance real de la descarga.
+        // El total sale de X-Json-Bytes (bytes del JSON sin comprimir); Content-Length
+        // mide el gzip y no sirve como referencia de lo que el navegador va recibiendo.
+        RI_Cargando.recibiendo(tab, parseInt(response.headers.get('X-Json-Bytes') || '0', 10));
+        if (!response.body || !response.body.getReader) return response.text();
+
+        const reader = response.body.getReader();
+        const dec = new TextDecoder('utf-8');
+        let text = '';
+        let leidos = 0;
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            leidos += value.length;
+            text += dec.decode(value, { stream: true });
+            RI_Cargando.bytes(tab, leidos);
+        }
+        return text + dec.decode();
+    })
+    .then(text => {
         try { return JSON.parse(text); }
-        catch (e) { throw new Error(text.substring(0, 200)); }
+        catch (e) { throw new Error(String(text).substring(0, 200)); }
     })
     .then(res => {
         if (!vigente()) return;
+        RI_Cargando.terminar(tab, true);
         if (res.ok) onOk(res);
         else onError(res.error || 'Ocurrió un error al generar el reporte');
     })
     .catch(err => {
         if (err.name === 'AbortError' || !vigente()) return;
+        RI_Cargando.terminar(tab);
         console.error(err);
         onError(err.message);
     })
@@ -456,13 +665,14 @@ window.RI_Existencias = {
 
         const tbody = document.getElementById('ri-ex-tbody');
         const colSpan = this.colSpan(modo);
-        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
-
         RI_fetchGenerar('existencias', params, (res) => {
             tbody.innerHTML = res.rows;
+            // Filtros con los que se pintó esta tabla: el seguimiento de un negativo los reusa
+            // para rehacer la misma suma, en vez de releer el formulario (que pudo cambiar).
+            this.filtrosSaldo = res.filtros_saldo || {};
         }, (msg) => {
             tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
-        });
+        }, { prefijo: 'ri-ex', colSpan });
     },
 
     exportarExcel() {
@@ -569,13 +779,11 @@ window.RI_Movimientos = {
 
         const tbody = document.getElementById('ri-mv-tbody');
         const colSpan = modo === 'NINGUNO' ? 13 : (modo === 'PRODUCTO' ? 7 : 6);
-        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
-
         RI_fetchGenerar('movimientos', params, (res) => {
             tbody.innerHTML = res.rows;
         }, (msg) => {
             tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
-        });
+        }, { prefijo: 'ri-mv', colSpan });
     },
 
     exportarExcel() {
@@ -636,13 +844,11 @@ window.RI_Valorizacion = {
 
         const tbody = document.getElementById('ri-va-tbody');
         const colSpan = modo === 'PRODUCTO' ? 6 : 5;
-        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
-
         RI_fetchGenerar('valorizacion', params, (res) => {
             tbody.innerHTML = res.rows;
         }, (msg) => {
             tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
-        });
+        }, { prefijo: 'ri-va', colSpan });
     },
 
     exportarExcel() {
@@ -831,13 +1037,11 @@ window.RI_Consignaciones = {
 
         const tbody = document.getElementById('ri-cv-tbody');
         const colSpan = modo === 'NINGUNO' ? 10 : (modo === 'PRODUCTO' ? 4 : 3);
-        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
-
         RI_fetchGenerar('consignaciones', params, (res) => {
             tbody.innerHTML = res.rows;
         }, (msg) => {
             tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
-        });
+        }, { prefijo: 'ri-cv', colSpan });
     },
 
     exportarExcel() {
@@ -895,8 +1099,6 @@ window.RI_Auditoria = {
         const colSpan = 7;
 
         const tbody = document.getElementById('ri-au-tbody');
-        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
-
         RI_fetchGenerar('auditoria', params, (res) => {
             this.dibujarCabecera();
             tbody.innerHTML = res.rows;
@@ -911,7 +1113,7 @@ window.RI_Auditoria = {
             if (btnTodo) btnTodo.style.display = total > 0 ? '' : 'none';
         }, (msg) => {
             tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
-        });
+        }, { prefijo: 'ri-au', colSpan });
     },
 
     corregir(btn) {
@@ -1016,6 +1218,171 @@ window.RI_Auditoria = {
         } else if (confirm(`¿Corregir ${total} discrepancias ${alcance}?`)) {
             ejecutar();
         }
+    },
+};
+
+// ════════════════════════════════════════════════════════════════════
+// SEGUIMIENTO DE UN STOCK NEGATIVO
+// ════════════════════════════════════════════════════════════════════
+/**
+ * Se abre desde el número rojo de la columna Stock de Existencias (el botón lo pinta
+ * ReporteInventariosController::tdStockConSeguimiento, con la clave de la fila en sus
+ * data-seg-*). Muestra los movimientos de kardex que componen ESA fila, en orden y con
+ * saldo corrido, marcando dónde el saldo cruzó a negativo.
+ *
+ * La clave se toma tal cual del botón y no del selector Detalle: entre que se pintó la
+ * tabla y se pulsa el número, el usuario puede haber cambiado el Detalle sin pulsar
+ * Mostrar, y entonces el selector ya no describe las filas que están en pantalla.
+ */
+window.RI_Seguimiento = {
+    abrir(btn) {
+        const d = btn.dataset;
+        const modalEl = document.getElementById('ri-seg-modal');
+        const tbody = document.getElementById('ri-seg-tbody');
+        const grupos = document.getElementById('ri-seg-grupos-tbody');
+        const diag = document.getElementById('ri-seg-diagnostico');
+
+        document.getElementById('ri-seg-clave').innerHTML = this._clave(d);
+        // En "En general" la fila agrega TODOS los lotes, así que la segunda tabla no muestra
+        // "los otros" sino de qué se compone la fila: el título lo dice.
+        const titulo = document.getElementById('ri-seg-grupos-titulo');
+        if (titulo) {
+            titulo.textContent = (d.segCols || '')
+                ? 'Otros lotes del mismo producto y bodega'
+                : 'Lotes que componen esta fila';
+        }
+        diag.innerHTML = '';
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        grupos.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-muted small">Cargando…</td></tr>`;
+
+        if (typeof bootstrap !== 'undefined') {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        const params = new URLSearchParams({
+            id_producto: d.segProducto || '0',
+            id_bodega: d.segBodega || '0',
+            cols: d.segCols || '',
+            lote: d.segLote || '',
+            nup: d.segNup || '',
+            caducidad: d.segCaducidad || '',
+        });
+        // Los filtros con los que se generó la tabla, para que la suma del seguimiento sea
+        // la misma que la de la fila.
+        Object.entries(this._filtros()).forEach(([k, v]) => params.set(k, v));
+
+        fetch(BASE_URL + '/' + RUTA_MODULO + '/seguimientoNegativoAjax', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+            body: params.toString(),
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) {
+                tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger">${res.error || 'No se pudo cargar el seguimiento'}</td></tr>`;
+                grupos.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-muted small">—</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = res.rows;
+            grupos.innerHTML = res.grupos;
+            diag.innerHTML = this._diagnostico(res.resumen);
+        })
+        .catch(err => {
+            console.error(err);
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger">Error al cargar el seguimiento</td></tr>`;
+            grupos.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-muted small">—</td></tr>`;
+        });
+    },
+
+    /** Los filtros con los que se generó la tabla que está en pantalla, no los que tenga el
+     *  formulario ahora: entre el último Mostrar y el clic en el número, el usuario pudo
+     *  tocar los filtros sin volver a generar, y el seguimiento tiene que explicar la fila
+     *  que está viendo. Los guarda RI_Existencias.generar() con lo que devuelve el servidor
+     *  (filtros_saldo), que además decide cuáles aplican según el nivel de detalle. */
+    _filtros() {
+        return (window.RI_Existencias && window.RI_Existencias.filtrosSaldo) || {};
+    },
+
+    /** Cabecera: qué fila se está siguiendo. Solo se nombran las columnas que forman
+     *  parte de su clave; las demás no las puede afirmar esa fila. */
+    _clave(d) {
+        const cols = (d.segCols || '').split(',').filter(Boolean);
+        const partes = [`<b>${this._esc(d.segProductoNombre || '')}</b>`, this._esc(d.segBodegaNombre || '')];
+        // Comparación contra '' y no un ||: solo la cadena vacía significa NULL. Un lote que
+        // se llame literalmente "0" es un lote, y con || se habría rotulado "(sin lote)".
+        const val = (v, vacio) => (v === undefined || v === '') ? vacio : v;
+        if (cols.includes('lote')) partes.push('Lote: <b>' + this._esc(val(d.segLote, '(sin lote)')) + '</b>');
+        if (cols.includes('nup')) partes.push('NUP: <b>' + this._esc(val(d.segNup, '(sin NUP)')) + '</b>');
+        if (cols.includes('caducidad')) partes.push('Caducidad: <b>' + this._esc(val(this._fecha(d.segCaducidad), '(sin caducidad)')) + '</b>');
+        if (!cols.length) partes.push('<span class="fst-italic">todos los lotes y caducidades</span>');
+        const corte = this._filtros().fecha_corte || '';
+        if (corte) partes.push('Corte: <b>' + this._esc(this._fecha(corte)) + '</b>');
+        return partes.join(' &nbsp;·&nbsp; ');
+    },
+
+    /** El "por qué" en una frase, más los avisos de los dos casos que el usuario no
+     *  puede deducir mirando la tabla (sin entradas, y movimientos de otro ambiente). */
+    _diagnostico(r) {
+        if (!r || !r.total_movimientos) {
+            return '<div class="alert alert-secondary py-2 px-3 small mb-0">Esta fila no tiene movimientos de kardex.</div>';
+        }
+        const n = (v) => Number(v || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        let html = '';
+
+        if (r.cruce) {
+            const ref = r.cruce.referencia_id ? ` (ref. ${r.cruce.referencia_id})` : '';
+            html += `<div class="alert alert-danger py-2 px-3 small mb-2">
+                <i class="bi bi-exclamation-octagon me-1"></i>
+                El saldo cruza a negativo el <b>${this._esc(r.cruce.fecha)}</b> con
+                <b>${this._esc(r.cruce.origen)}</b>${ref}: salen <b>${n(Math.abs(r.cruce.cantidad))}</b>
+                y el saldo queda en <b>${n(r.cruce.saldo)}</b>. Esa fila va resaltada abajo.</div>`;
+        } else {
+            html += `<div class="alert alert-success py-2 px-3 small mb-2">
+                <i class="bi bi-check-circle me-1"></i>
+                El saldo nunca baja de cero en este historial.</div>`;
+        }
+
+        if (r.sin_entradas) {
+            html += `<div class="alert alert-warning py-2 px-3 small mb-2">
+                <i class="bi bi-box-arrow-in-down me-1"></i>
+                <b>Esta clave no tiene ninguna entrada</b>: solo salidas. El stock salió sin
+                haber ingresado nunca con este lote/caducidad —revisa si entró con otro lote
+                (tabla de abajo) o si falta registrar la compra o el ingreso.</div>`;
+        }
+        if (r.otro_ambiente > 0) {
+            html += `<div class="alert alert-warning py-2 px-3 small mb-2">
+                <i class="bi bi-eye-slash me-1"></i>
+                <b>${r.otro_ambiente}</b> movimiento(s) son de <b>otro ambiente</b>. Suman en
+                Existencias pero <b>no se ven en la pestaña Movimientos</b>, así que el negativo
+                parece salir de la nada si solo se mira allí. Van marcados en la tabla.</div>`;
+        }
+        if (r.truncado) {
+            html += `<div class="alert alert-secondary py-2 px-3 small mb-2">
+                Se muestran los primeros movimientos, no todo el historial: el saldo de la
+                última fila no es el de la existencia.</div>`;
+        }
+
+        html += `<div class="d-flex flex-wrap gap-3 small text-muted">
+            <span>Movimientos: <b class="text-dark">${r.total_movimientos}</b></span>
+            <span>Entradas: <b class="text-success">${n(r.entradas)}</b></span>
+            <span>Salidas: <b class="text-danger">${n(r.salidas)}</b></span>
+            <span>Saldo final: <b class="${Number(r.saldo_final) < 0 ? 'text-danger' : 'text-dark'}">${n(r.saldo_final)}</b></span>
+            <span>Del ${this._esc(r.primero)} al ${this._esc(r.ultimo)}</span>
+        </div>`;
+
+        return html;
+    },
+
+    _fecha(iso) {
+        if (!iso) return '';
+        const p = String(iso).substring(0, 10).split('-');
+        return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : iso;
+    },
+
+    _esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
     },
 };
 

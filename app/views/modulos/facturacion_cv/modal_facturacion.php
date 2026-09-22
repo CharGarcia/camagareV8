@@ -120,7 +120,9 @@
                                     </div>
                                     <div class="col-md-4">
                                         <label class="x-small fw-bold text-muted mb-1">Observaciones</label>
-                                        <input type="text" class="form-control form-control-sm border-primary border-opacity-10" id="faccv_observaciones" style="height:31px;" placeholder="Sale en la factura como info adicional" oninput="faccvInfoObservaciones()">
+                                        <!-- maxlength 300: esto viaja a ventas_adicional.valor, que es VARCHAR(300).
+                                             Sin tope visible el usuario escribía de más y la factura no se podía generar. -->
+                                        <input type="text" class="form-control form-control-sm border-primary border-opacity-10" id="faccv_observaciones" style="height:31px;" maxlength="300" placeholder="Sale en la factura como info adicional" oninput="faccvInfoObservaciones()">
                                     </div>
                                 </div>
 
@@ -710,7 +712,7 @@
         tr.dataset.tipo = tipo;
         tr.innerHTML = `
             <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:22px;font-size:0.78rem;" value="${esc(concepto)}" readonly></td>
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:22px;font-size:0.78rem;" value="${esc(v)}" ${o.detalleEditable ? '' : 'readonly'}></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:22px;font-size:0.78rem;" maxlength="300" value="${esc(v)}" ${o.detalleEditable ? '' : 'readonly'}></td>
             <td class="p-0 text-center pe-1"><span class="text-muted small" title="${esc(titulo)}"><i class="bi bi-lock-fill"></i></span></td>`;
         tb.appendChild(tr);
     }
@@ -1176,9 +1178,10 @@
         const tb = $('faccv_tbody_info');
         const tr = document.createElement('tr'); tr.className = 'row-faccv-info';
         const dis = readonly ? 'readonly' : '';
+        // maxlength 300: concepto y detalle van a ventas_adicional (VARCHAR(300) en las dos columnas).
         tr.innerHTML = `
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:22px;font-size:0.78rem;" placeholder="Concepto..." value="${esc(concepto || '')}" ${dis}></td>
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:22px;font-size:0.78rem;" placeholder="Detalle..." value="${esc(detalle || '')}" ${dis}></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:22px;font-size:0.78rem;" maxlength="300" placeholder="Concepto..." value="${esc(concepto || '')}" ${dis}></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:22px;font-size:0.78rem;" maxlength="300" placeholder="Detalle..." value="${esc(detalle || '')}" ${dis}></td>
             <td class="p-0 text-center pe-1">${readonly ? '' : `<button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none" onclick="this.closest('tr').remove();"><i class="bi bi-x-circle-fill"></i></button>`}</td>`;
         // Siempre antes de la primera fila fija (data-tipo): las fijas van al final.
         const primeraFija = tb.querySelector('tr[data-tipo]');

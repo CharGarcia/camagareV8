@@ -1082,9 +1082,10 @@
         if (!tbody) return;
         const tr = document.createElement('tr');
         tr.className = 'row-info-adicional-nc';
+        // maxlength: notas_credito_adicional.nombre es VARCHAR(300) y valor VARCHAR(500).
         tr.innerHTML = `
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto-nc" style="${NC_INFO_INPUT_STYLE}" placeholder="Concepto..." value="${(concepto || '').replace(/"/g, '&quot;')}"></td>
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle-nc" style="${NC_INFO_INPUT_STYLE}" placeholder="Detalle..." value="${(detalle || '').replace(/"/g, '&quot;')}"></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto-nc" style="${NC_INFO_INPUT_STYLE}" maxlength="300" placeholder="Concepto..." value="${(concepto || '').replace(/"/g, '&quot;')}"></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle-nc" style="${NC_INFO_INPUT_STYLE}" maxlength="500" placeholder="Detalle..." value="${(detalle || '').replace(/"/g, '&quot;')}"></td>
             <td class="p-0 text-center pe-1">
                 <button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none nc-edit-only" onclick="this.closest('tr').remove();">
                     <i class="bi bi-x-circle-fill"></i>
@@ -1112,7 +1113,7 @@
             fila.dataset.tipo = 'correo-cliente';
             fila.innerHTML = `
                 <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto-nc" style="${NC_INFO_INPUT_STYLE}" value="Correo del cliente" readonly></td>
-                <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle-nc" style="${NC_INFO_INPUT_STYLE}" value="${(email || '').replace(/"/g, '&quot;')}"></td>
+                <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle-nc" style="${NC_INFO_INPUT_STYLE}" maxlength="500" value="${(email || '').replace(/"/g, '&quot;')}"></td>
                 <td class="p-0 text-center pe-1"><span class="text-muted small" title="Se actualiza al cambiar el cliente"><i class="bi bi-lock-fill"></i></span></td>`;
             tbody.appendChild(fila);
         }

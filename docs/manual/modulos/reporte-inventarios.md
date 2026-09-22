@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica
-version: 1.22
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote
+version: 1.25
 orden: 40
 estado: activo
 ---
@@ -78,6 +78,20 @@ que está en poder de clientes siempre se pueden comparar en la misma fila.
 > El desglose por lote/caducidad se calcula desde el kardex, no desde el stock
 > guardado del producto: el sistema no almacena un stock por lote.
 
+**Los lotes agotados no aparecen.** En los tres desgloses (*Por lotes*, *Por
+caducidad* y *Lote + caducidad*) solo se listan las filas cuyo **stock total**
+—lo que hay en bodega más lo que está en poder de clientes— es **distinto de
+cero**. Un lote que entró y ya salió completo sumaría 0 y solo estorbaría: el
+kardex conserva todos los lotes que alguna vez existieron, así que sin este
+filtro el listado terminaba siendo casi todo histórico muerto. El total del
+reporte no cambia (esas filas aportaban 0). Para ver el movimiento de un lote
+ya agotado, está la pestaña **Movimientos**, filtrando por ese lote.
+
+> *En general* sí conserva las filas en cero: ahí la fila es el producto en la
+> bodega y "sin stock" (estado **QUIEBRE**) es justamente lo que se quiere ver.
+> Y si una fila del desglose muestra un total **negativo**, se sigue mostrando:
+> es una inconsistencia que hay que revisar en la pestaña *Auditoría*.
+
 ## Lote + consignación: qué lote tiene cada cliente
 
 Las otras opciones de *Detalle* responden "cuánto queda"; esta responde **"con
@@ -142,8 +156,29 @@ exportación) no deja esperando al resto del sistema: mientras carga se puede
 abrir otro módulo en otra pestaña del navegador o usar los buscadores de
 producto y cliente.
 
-Si se vuelve a pulsar **Mostrar** antes de que termine la búsqueda anterior,
-esa anterior se descarta y la tabla muestra solo el resultado de la última.
+El botón **Mostrar** se **bloquea** mientras esa pestaña genera su reporte —se
+pone en gris con un indicador girando— y se libera al llegar los datos o al
+fallar la consulta. Así no se lanzan cuatro consultas pesadas por impaciencia.
+Cada pestaña tiene su propio botón y su propio bloqueo: se puede dejar cargando
+*Movimientos* e irse a pedir *Existencias*.
+
+Con él se bloquean también las demás acciones de esa pestaña: **PDF**, **Excel**
+y, en *Auditoría*, **Corregir todo** —que mientras se recalcula estaría operando
+sobre el resultado anterior—. Todas vuelven a habilitarse al terminar.
+
+En la tabla aparece mientras tanto un mensaje **"Generando el reporte…"** con
+una barra de avance y su porcentaje. El avance tiene dos tramos y el pie de la
+barra dice en cuál va:
+
+| Tramo | Qué dice | De dónde sale el porcentaje |
+|---|---|---|
+| Hasta 80 % | *Consultando la base de datos · 3,2 s* | **Estimado.** El servidor arma la respuesta completa antes de mandar nada, así que no hay avance que informar. La referencia es lo que tardó la última consulta de esa misma pestaña en ese navegador. Si esta tarda más, la barra sigue avanzando cada vez más lento en lugar de quedarse quieta. Los **segundos** de al lado sí son exactos. |
+| 80 – 99 % | *Recibiendo datos · 1,4 MB de 4,7 MB* | **Real.** Son los datos que ya llegaron al navegador sobre el total que el servidor anunció. |
+
+La barra no llega a 100 %: al terminar, la tabla con los datos ocupa su lugar.
+
+Si aun así se llegaran a solapar dos búsquedas de la misma pestaña, la anterior
+se descarta y la tabla muestra solo el resultado de la última.
 
 ## Cómo se calcula el stock (saldo en vivo)
 
@@ -154,6 +189,56 @@ salidas restan) — nunca se confía en un campo de saldo guardado
 que un stock cacheado desincronizado (por ejemplo, por una migración
 incompleta) muestre un número que no corresponde a la suma real de
 movimientos.
+
+## Por qué una fila sale en negativo (seguimiento)
+
+En **Existencias**, cuando el stock de una fila es **negativo** el número se ve
+en rojo y se puede **pulsar**: abre el *Seguimiento del stock negativo*, que
+muestra exactamente los movimientos de kardex que producen ese número.
+
+Está disponible en *En general*, *Por lotes*, *Por caducidad* y *Lote +
+caducidad*. No está en los agrupados (por producto, categoría o bodega): esa
+fila resume varios productos o bodegas, así que no hay un historial único que
+seguir. Pulsar el número **no** abre la edición de mínimo/máximo: esa se sigue
+abriendo haciendo clic en el resto de la fila.
+
+El seguimiento respeta la clave de la fila: si estás en *Por lotes*, sigue ese
+lote (sumando todas sus caducidades, igual que la fila); si estás en *En
+general*, sigue el producto en esa bodega con todos sus lotes. También aplica
+la **fecha de corte** con la que se generó la tabla, para que el saldo final
+del seguimiento sea el mismo número que estás mirando.
+
+### Qué muestra
+
+1. **Un diagnóstico arriba**, en una frase: en qué fecha y con qué documento el
+   saldo cruzó a negativo por primera vez, y cuánto salió en ese movimiento.
+2. **Los movimientos, en orden cronológico**, con su **saldo corrido**. La fila
+   donde el saldo pasa a negativo va resaltada en rojo.
+3. **Los otros lotes del mismo producto y bodega**, con su saldo, ordenados de
+   más negativo a más positivo.
+
+### Las tres causas que el seguimiento nombra solo
+
+| Aviso | Qué significa | Qué revisar |
+|---|---|---|
+| **Esta clave no tiene ninguna entrada** | Solo hay salidas: el stock salió sin haber ingresado nunca con ese lote o esa caducidad | Suele ser una venta a la que se le asignó un lote que nunca se compró, o una compra/ingreso sin registrar |
+| **N movimientos son de otro ambiente** | Hay movimientos con un `tipo_ambiente` distinto al de la empresa. **Suman en Existencias pero no se ven en la pestaña Movimientos**, así que el negativo parece salir de la nada si solo se mira allí | Van marcados en la tabla del seguimiento con la etiqueta *otro ambiente* |
+| (sin aviso, pero visible abajo) **El mismo lote escrito de dos formas** | `A-123` y `A 123`, o uno con un espacio al final, se agrupan por separado: uno queda negativo y el otro con el positivo que le sobra | La tabla *Otros lotes del mismo producto y bodega* los pone juntos; se corrigen desde los documentos que los crearon |
+
+La tabla de abajo es la única parte del modal que **ignora** los filtros de lote,
+NUP y caducidad de la pantalla: si los aplicara, escondería justo el lote gemelo
+que se está buscando. En *En general* esa tabla no muestra "los otros" lotes sino
+**de qué se compone la fila**, y el título lo dice.
+
+> El seguimiento **no corrige nada**: solo explica. La corrección se hace en el
+> documento que originó el movimiento, o —cuando lo que está desfasado es el
+> stock guardado frente al kardex— desde la pestaña **Auditoría**.
+
+> No confundir con *Auditoría*: esa pestaña compara el stock **guardado** con el
+> del kardex y no detecta negativos (si los dos valores coinciden en −50, para
+> ella no hay discrepancia). El seguimiento es lo contrario: da por bueno el
+> kardex y explica cómo llegó a ser negativo.
+
 
 ## Para el conteo físico
 
@@ -365,6 +450,29 @@ ahí.
 
 ## Historial de cambios
 
+- **1.25** — **Existencias**: el stock negativo de una fila ahora se puede
+  pulsar y abre el **Seguimiento del stock negativo**: los movimientos de
+  kardex que componen esa fila, en orden y con saldo corrido, con la fila donde
+  el saldo cruzó a negativo resaltada, y los demás lotes del mismo producto y
+  bodega debajo. Nombra solo las dos causas que no se ven en la tabla: que la
+  clave no tenga ninguna entrada, y que haya movimientos de **otro ambiente**
+  (que suman en Existencias pero no aparecen en la pestaña Movimientos).
+  Disponible en *En general* y en los tres desgloses; respeta la fecha de corte
+  con la que se generó la tabla.
+- **1.24** — **Mientras carga**: el botón **Mostrar** de cada pestaña queda
+  bloqueado —junto con su PDF, su Excel y el *Corregir todo* de Auditoría—
+  mientras esa pestaña genera su reporte, así que ya no se pueden
+  encadenar consultas pesadas a fuerza de clics. En la tabla aparece un mensaje
+  *Generando el reporte…* con barra de avance y porcentaje: hasta el 80 % es una
+  estimación por tiempo (con los segundos transcurridos al lado, que sí son
+  exactos) y del 80 al 99 % es el avance real de la descarga de los datos.
+- **1.23** — **Existencias**: los desgloses *Por lotes*, *Por caducidad* y
+  *Lote + caducidad* ya no listan los lotes agotados. Solo salen las filas con
+  **stock total distinto de cero** (bodega + consignado). El kardex guarda
+  todos los lotes que alguna vez entraron, así que el listado venía cargado de
+  filas en 0 que no aportaban nada. Aplica también al PDF y al Excel. *En
+  general* no cambia: ahí las filas en cero (QUIEBRE) se siguen viendo, y un
+  total negativo en el desglose también, por ser una inconsistencia.
 - **1.22** — El **código del producto** pasa a ir pegado al nombre en las dos
   vistas donde estaban separados: en *Lote + consignación* queda justo antes de
   **Descripción** (pantalla, PDF y Excel), y en el **PDF/Excel de

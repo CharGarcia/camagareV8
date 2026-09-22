@@ -1061,14 +1061,16 @@
                 ? '<i class="bi bi-lock-fill text-muted opacity-50" title="Campo obligatorio"></i>'
                 : '<i class="bi bi-x-circle-fill text-danger" role="button" onclick="this.closest(\'tr\').remove()"></i>');
 
+        // maxlength: liquidaciones_adicional.nombre es VARCHAR(100) (la más corta de todos los
+        // documentos) y valor VARCHAR(300). Sin el tope visible el guardado fallaba entero.
         tr.innerHTML = `
             <td class="p-0">
                 <input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-nombre"
-                    placeholder="Concepto" value="${lcAttr(nombre)}" ${fija ? 'readonly' : ''} style="font-size:0.8rem">
+                    placeholder="Concepto" maxlength="100" value="${lcAttr(nombre)}" ${fija ? 'readonly' : ''} style="font-size:0.8rem">
             </td>
             <td class="p-0">
                 <input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-valor"
-                    placeholder="Detalle" value="${lcAttr(valor)}" ${soloLectura ? 'readonly' : ''} style="font-size:0.8rem">
+                    placeholder="Detalle" maxlength="300" value="${lcAttr(valor)}" ${soloLectura ? 'readonly' : ''} style="font-size:0.8rem">
             </td>
             <td class="p-1 text-center">
                 ${accion}

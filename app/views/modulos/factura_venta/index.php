@@ -5337,7 +5337,7 @@ $totalPages = $totalPagesOriginal;
             tr.dataset.tipo = 'correo-cliente';
             tr.innerHTML = `
                 <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:20px;font-size:0.78rem;" value="Correo del cliente" readonly></td>
-                <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:20px;font-size:0.78rem;" value="${email}"></td>
+                <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:20px;font-size:0.78rem;" maxlength="300" value="${email}"></td>
                 <td class="p-0 text-center pe-1">
                     <span class="text-muted small" title="Se actualiza al cambiar el cliente"><i class="bi bi-lock-fill"></i></span>
                 </td>
@@ -5382,9 +5382,10 @@ $totalPages = $totalPagesOriginal;
         const tbody = document.getElementById('m-tbody-info-adicional');
         const tr = document.createElement('tr');
         tr.className = 'row-info-adicional';
+        // maxlength 300: concepto y detalle van a ventas_adicional (VARCHAR(300) en las dos columnas).
         tr.innerHTML = `
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:20px;font-size:0.78rem;" placeholder="Concepto..."></td>
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:20px;font-size:0.78rem;" placeholder="Detalle..."></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:20px;font-size:0.78rem;" maxlength="300" placeholder="Concepto..."></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:20px;font-size:0.78rem;" maxlength="300" placeholder="Detalle..."></td>
             <td class="p-0 text-center pe-1">
                 <button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none" onclick="this.closest('tr').remove();">
                     <i class="bi bi-x-circle-fill"></i>

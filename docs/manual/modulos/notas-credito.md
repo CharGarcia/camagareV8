@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado
-version: 1.13
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota
+version: 1.14
 orden: 30
 estado: activo
 ---
@@ -40,6 +40,14 @@ llevarse por delante lo que ya rebajaron las dos anteriores.
 3. Deje solo las líneas y cantidades que se devuelven o rebajan.
 4. Revise el total.
 5. Guarde y envíe al SRI.
+
+### Información adicional
+
+Las filas de *Info. Adicional* (concepto / detalle) viajan en el XML y salen en el
+RIDE. El **concepto** admite hasta **300 caracteres** y el **detalle** hasta
+**500**; el campo no deja escribir más. Si un texto más largo llegara por otra
+vía (por ejemplo, copiado desde la factura de origen), se recorta al tope en vez
+de rechazar la nota.
 
 ### Cómo leer la columna Subtotal
 
@@ -216,6 +224,11 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.14** — Las filas de **Info. Adicional** tienen tope en pantalla (concepto
+  300 caracteres, detalle 500), el largo que admite cada línea del comprobante.
+  Un texto más largo que llegue por otra vía se recorta en lugar de hacer fallar
+  el guardado completo de la nota sin explicación.
 
 - **1.13** — Cada ítem cargado desde la factura queda enlazado a su **línea de factura** y
   devuelve el **lote y el NUP de esa línea**. Antes, en una devolución parcial de una factura
