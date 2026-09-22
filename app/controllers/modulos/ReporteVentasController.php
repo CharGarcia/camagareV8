@@ -567,14 +567,15 @@ class ReporteVentasController extends BaseModuloController
             }
 
             if ($filtros['agrupar_por'] === 'CLIENTE') {
-                // Misma estructura que la pantalla: el saldo por cobrar ocupa el lugar
-                // que tenía "Nro Facturas".
-                $headers = ['RUC/Cédula', 'Cliente', 'Saldo x Cobrar', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                // Como la pantalla, más la columna "Nro Documentos" (en pantalla ese conteo va como
+                // título del nombre del cliente; en el Excel sale como columna propia, tras el cliente).
+                $headers = ['RUC/Cédula', 'Cliente', 'Nro Documentos', 'Saldo x Cobrar', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = [
                         $r['cliente_ruc'],
                         $r['cliente_nombre'],
+                        (int)($r['cantidad_facturas'] ?? 0),
                         round((float)($r['saldo'] ?? 0), 2),
                         (float)$r['base_0'],
                         (float)$r['base_iva'],
@@ -1028,11 +1029,16 @@ class ReporteVentasController extends BaseModuloController
 
         if ($agrupar === 'CLIENTE') {
             return array_merge([
-                ['lbl' => 'Cliente', 'w' => 36, 'cls' => '',
-                 'val' => static fn (array $r): string => $desc((string) ($r['cliente_nombre'] ?? ''), (string) ($r['cliente_ruc'] ?? ''), $pt(36))],
-                ['lbl' => 'Saldo x Cobrar', 'w' => 13, 'cls' => 'text-end', 'tot' => $sumar('saldo'),
+                ['lbl' => 'Cliente', 'w' => 32, 'cls' => '',
+                 'val' => static fn (array $r): string => $desc((string) ($r['cliente_nombre'] ?? ''), (string) ($r['cliente_ruc'] ?? ''), $pt(32))],
+                // Número de documentos del cliente en el reporte (mismo conteo que el título del
+                // nombre en pantalla y la columna del Excel). La etiqueta 'Documentos' hace que
+                // filaTotalesPdf() sume sin decimales.
+                ['lbl' => 'Documentos', 'w' => 8, 'cls' => 'text-center', 'tot' => $sumar('cantidad_facturas'),
+                 'val' => static fn (array $r): string => (string) (int) ($r['cantidad_facturas'] ?? 0)],
+                ['lbl' => 'Saldo x Cobrar', 'w' => 12, 'cls' => 'text-end', 'tot' => $sumar('saldo'),
                  'val' => static fn (array $r): string => $num($r['saldo'] ?? 0)],
-            ], $importes(13, 11, 14));
+            ], $importes(12, 11, 13));
         }
 
         if ($agrupar === 'FECHA' || $agrupar === 'MES') {

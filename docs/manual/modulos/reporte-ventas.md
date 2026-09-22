@@ -162,7 +162,9 @@ fila, se ve cuánto compró el cliente y cuánto de eso sigue sin cobrarse.
   de crédito no genera saldo por cobrar), y en **Recibos de venta** es el total
   del recibo menos lo cobrado.
 - El **número de documentos** de cada cliente, que antes ocupaba esta columna,
-  sigue disponible: aparece al pasar el mouse por el nombre del cliente.
+  sigue disponible: aparece al pasar el mouse por el nombre del cliente y, en el
+  **PDF** y el **Excel**, como la columna **Documentos** / **Nro Documentos**,
+  justo después del cliente (en el PDF con su total al pie).
 - La columna ordena el reporte como cualquier otra, y sale igual en el PDF y en
   el Excel (con su total al pie, en el PDF).
 
@@ -337,7 +339,9 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 
 ## Historial de cambios
 
-- **1.9** — Los filtros **ya no consultan al cambiarlos**: el reporte se genera
+- **1.9** — En el **PDF y el Excel de la agrupación Por cliente** se agrega la
+  columna con el **número de documentos** de cada cliente (después del cliente,
+  antes del saldo; en el PDF con total al pie). Los filtros **ya no consultan al cambiarlos**: el reporte se genera
   solo al pulsar **Buscar** (o Enter); mientras haya filtros sin aplicar el
   botón se muestra en ámbar (igual que en el Reporte de Compras). Nueva
   agrupación **Unidades por Producto / Mes**: una fila por
