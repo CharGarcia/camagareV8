@@ -6,7 +6,7 @@ ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long
-version: 1.19
+version: 1.20
 orden: 47
 estado: activo
 ---
@@ -86,7 +86,7 @@ y solo cuando está correcto se emite la factura.
 3. **Agregar seleccionados** lleva las líneas a la tabla del documento. Si aún no
    hay cliente, se toma el de la consignación junto con su vendedor, días de
    crédito, forma de pago y correo.
-4. Se completan Info. Adicional, Forma de pago SRI y Crédito en el pie, igual que en una factura de venta. En *Info. Adicional* aparecen además, con un candado, las líneas que el sistema mantiene solo (correo del cliente, observaciones, vendedor y cajero): no se editan ahí, se cambian en su propio campo, y son las que viajarán a la factura.
+4. Se completan Info. Adicional, Forma de pago SRI y Crédito en el pie, igual que en una factura de venta. *Info. Adicional* arranca con una fila cuyo concepto ya dice **Observaciones** y el detalle en blanco: ahí se escribe lo que debe salir en la factura bajo ese concepto (si se deja vacío, la fila no viaja). Aparecen además, con un candado, las líneas que el sistema mantiene solo (correo del cliente, vendedor y cajero): no se editan ahí, se cambian en su propio campo, y son las que viajarán a la factura.
 5. **Guardar** deja el documento en **Borrador**: todavía no toca inventario ni
    emite nada, y se puede seguir editando.
 6. **Generar factura** guarda primero los cambios que estén en pantalla (por si
@@ -187,12 +187,12 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 | Serie | Sí | Punto de emisión con secuencial de facturación de consignaciones. |
 | Secuencial | — | Lo asigna el servidor al guardar; no se teclea. |
 | Vendedor | No | Se precarga con el vendedor del cliente. |
-| Observaciones | No | Nota del documento. **Sale en la factura** como una línea de información adicional con el concepto *Observaciones*. Máximo **300 caracteres**, que es lo que admite esa línea en la factura. |
+| Observaciones | No | Nota interna del documento. Pasa al campo Observaciones de la factura de venta (se imprime en el PDF del sistema), pero **no** se copia a la información adicional: lo que deba salir ahí se escribe en la fila *Observaciones* de la pestaña Info. Adicional. Máximo **300 caracteres**. |
 | Cliente a facturar | Sí | A quién se le emite. Puede ser distinto del cliente de la consignación. |
 | Precio | Sí | Precio de la consignación o uno de la lista de precios del producto. |
 | Cant. | Sí | Nunca mayor al saldo facturable de esa línea. |
 | Desc. | No | Descuento en dólares de la línea; tope = precio × cantidad. |
-| Info. Adicional | No | Pares concepto/detalle que viajan a la factura. Las filas con candado (correo del cliente, observaciones, vendedor, cajero) las completa el sistema. Concepto y detalle admiten **300 caracteres** cada uno. |
+| Info. Adicional | No | Pares concepto/detalle que viajan a la factura. La primera fila trae el concepto **Observaciones** ya escrito y el detalle en blanco para completarlo a mano; si queda vacía no se guarda ni viaja. Las filas con candado (correo del cliente, vendedor, cajero) las completa el sistema. Concepto y detalle admiten **300 caracteres** cada uno. |
 | Forma de pago SRI | No | Una o varias formas con su valor. Si no se indica ninguna, se emite una sola por el total. |
 | Días de crédito / Plazo | No | Se precargan con el plazo del cliente. |
 
@@ -220,7 +220,7 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   al centavo con la factura emitida.
 - Al generar la factura, el sistema completa su **información adicional** con lo que el documento ya tiene, sin teclear nada:
   - **Consignación**: el número de cada consignación facturada, solo el secuencial, sin la serie y sin los ceros de relleno (`001-001-000000012` se escribe `12`), separados por coma si son varias.
-  - **Observaciones**: lo escrito en el campo *Observaciones* del documento.
+  - **Observaciones**: solo si el usuario escribió el detalle de la fila *Observaciones* en la pestaña Info. Adicional. El campo *Observaciones* de la cabecera **no** se copia aquí.
   - **Vendedor** y **Cajero**: el vendedor del documento y el usuario que genera la factura, siempre que la empresa los tenga activados en su ficha (*¿Mostrar el cajero / el vendedor en la factura?*).
   - **Correo del cliente** y **RUC Proveedor**: los agrega la factura de venta, igual que en cualquier otra factura.
 - Si el documento ya trae una línea de información adicional escrita a mano con uno de esos conceptos, manda la suya: el sistema no la duplica ni la pisa. Todas estas líneas salen en el **RIDE** y viajan en el **XML** autorizado.
@@ -286,6 +286,13 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.20** — La pestaña **Info. Adicional** arranca con una fila cuyo concepto es
+  **Observaciones** y el detalle en blanco, para escribir a mano lo que debe salir
+  en la factura bajo ese concepto. Ya no se copia ahí el campo *Observaciones*
+  de la cabecera (ni al abrir el modal ni al generar la factura): ese campo es
+  una nota del documento y pasa solo a las observaciones de la factura de venta.
+  Si la fila se deja sin detalle, no se guarda ni viaja al comprobante; al
+  reabrir un borrador vuelve a ofrecerse vacía.
 - **1.19** — **Observaciones** y las filas de **Info. Adicional** (concepto y
   detalle) tienen un tope de **300 caracteres**, el mismo que admite cada línea
   de información adicional de la factura. Antes el campo no tenía límite y una

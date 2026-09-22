@@ -120,9 +120,9 @@
                                     </div>
                                     <div class="col-md-4">
                                         <label class="x-small fw-bold text-muted mb-1">Observaciones</label>
-                                        <!-- maxlength 300: esto viaja a ventas_adicional.valor, que es VARCHAR(300).
-                                             Sin tope visible el usuario escribía de más y la factura no se podía generar. -->
-                                        <input type="text" class="form-control form-control-sm border-primary border-opacity-10" id="faccv_observaciones" style="height:31px;" maxlength="300" placeholder="Sale en la factura como info adicional" oninput="faccvInfoObservaciones()">
+                                        <!-- maxlength 300: mismo tope que ventas_cabecera.observaciones. Esta nota NO viaja a la
+                                             info adicional de la factura: la fila "Observaciones" de esa pestaña se escribe aparte. -->
+                                        <input type="text" class="form-control form-control-sm border-primary border-opacity-10" id="faccv_observaciones" style="height:31px;" maxlength="300" placeholder="Nota interna del documento">
                                     </div>
                                 </div>
 
@@ -522,7 +522,7 @@
         $('faccv_aviso_cambio').classList.add('d-none');
         $('faccv_select_serie').disabled = false;
         $('faccv_fecha').value = CMG_fechaLocal();
-        $('faccv_tbody_info').innerHTML = ''; faccvAgregarInfo(); faccvInfoDerivadas();
+        $('faccv_tbody_info').innerHTML = ''; faccvAgregarInfo('Observaciones'); faccvInfoDerivadas();
         // Forma de pago por defecto de la empresa (hasta elegir cliente).
         if (window.EMPRESA_CONFIG && EMPRESA_CONFIG.id_forma_pago_sri_def) faccvAplicarFormaPago(EMPRESA_CONFIG.id_forma_pago_sri_def);
         const sel = $('faccv_select_serie');
@@ -614,15 +614,20 @@
         const tbInfo = $('faccv_tbody_info');
         tbInfo.innerHTML = '';
         faccvInfoDerivadas(editable);
-        const DERIVADAS = ['observaciones', 'vendedor', 'cajero'];
+        const DERIVADAS = ['vendedor', 'cajero'];
+        let hayObservaciones = false;
         (r.info_adicional || []).forEach(ia => {
             const nombre = ia.nombre || ia.concepto || '';
             const valor = ia.valor || ia.detalle || '';
             if (nombre === 'Correo del cliente') { faccvInfoCorreo(valor); return; }
             const tipo = nombre.trim().toLowerCase();
             if (DERIVADAS.includes(tipo) && tbInfo.querySelector(`tr[data-tipo="${tipo}"]`)) return;
+            if (tipo === 'observaciones') hayObservaciones = true;
             faccvAgregarInfo(nombre, valor, !editable);
         });
+        // La fila "Observaciones" (concepto fijo, detalle libre) se ofrece siempre en un
+        // borrador; si se guardó sin detalle no viene en info_adicional y se vuelve a pintar.
+        if (editable && !hayObservaciones) faccvAgregarInfo('Observaciones');
 
         const dets = r.detalles || [];
         body.innerHTML = ''; added.clear();
@@ -694,11 +699,15 @@
      * Si el valor viene vacío, la fila se elimina.
      *
      * `derivada = true` marca las filas que salen de OTRO campo del documento
-     * (observaciones, vendedor, cajero): se muestran para que se vea qué llevará
-     * la factura, pero NO se guardan en `info_adicional` del documento — al generar
-     * la factura las vuelve a armar el servidor desde la cabecera
+     * (vendedor, cajero): se muestran para que se vea qué llevará la factura, pero
+     * NO se guardan en `info_adicional` del documento — al generar la factura las
+     * vuelve a armar el servidor desde la cabecera
      * (ConsignacionFacturaService::conCamposDeCabecera), así nunca quedan
      * desfasadas respecto del campo del que salen.
+     *
+     * "Observaciones" NO es una fila derivada: es una fila libre con el concepto
+     * prellenado (ver faccvAgregarInfo) cuyo detalle escribe el usuario; no se copia
+     * desde el campo Observaciones del documento ni desde la consignación.
      */
     function faccvInfoFija(tipo, concepto, valor, titulo, opts) {
         const o = opts || {};
@@ -724,12 +733,9 @@
 
     /**
      * Filas derivadas de la cabecera del documento que viajan a la factura de venta:
-     * Observaciones siempre, Vendedor y Cajero según la configuración del
-     * establecimiento (los mismos interruptores que usa Factura de Venta).
+     * Vendedor y Cajero según la configuración del establecimiento (los mismos
+     * interruptores que usa Factura de Venta).
      */
-    window.faccvInfoObservaciones = function () {
-        faccvInfoFija('observaciones', 'Observaciones', $('faccv_observaciones')?.value || '', 'Sale de las Observaciones del documento', { derivada: true });
-    };
     window.faccvInfoVendedor = function () {
         if (!(window.EMPRESA_CONFIG && EMPRESA_CONFIG.mostrar_vendedor_factura)) return;
         const sel = $('faccv_id_vendedor');
@@ -743,9 +749,8 @@
         faccvInfoFija('cajero', 'Cajero', mostrar ? (window.FACCV_USUARIO_NOMBRE || '') : '', 'Usuario que genera la factura', { derivada: true });
     }
 
-    /** Refresca las tres filas derivadas de una sola vez. */
+    /** Refresca las filas derivadas de una sola vez. */
     function faccvInfoDerivadas(editable) {
-        faccvInfoObservaciones();
         faccvInfoVendedor();
         faccvInfoCajero(editable !== false);
     }
@@ -1186,12 +1191,15 @@
         // Siempre antes de la primera fila fija (data-tipo): las fijas van al final.
         const primeraFija = tb.querySelector('tr[data-tipo]');
         if (primeraFija) tb.insertBefore(tr, primeraFija); else tb.appendChild(tr);
-        if (!readonly) tr.querySelector('.input-info-concepto').focus();
+        // Fila vacía (botón "Agregar línea"): foco en el concepto. Con concepto
+        // prellenado (p. ej. "Observaciones" al abrir el modal) no se roba el foco.
+        if (!readonly && !concepto) tr.querySelector('.input-info-concepto').focus();
     };
     function collectInfo() {
         const out = [];
-        // Las filas derivadas (Observaciones / Vendedor / Cajero) no se guardan: se
-        // arman solas desde la cabecera, aquí y al generar la factura (ver faccvInfoFija).
+        // Las filas derivadas (Vendedor / Cajero) no se guardan: se arman solas desde
+        // la cabecera, aquí y al generar la factura (ver faccvInfoFija). "Observaciones"
+        // sí se guarda, como cualquier fila libre, solo si tiene detalle.
         document.querySelectorAll('#faccv_tbody_info .row-faccv-info:not(.faccv-info-derivada)').forEach(tr => {
             const nombre = (tr.querySelector('.input-info-concepto')?.value || '').trim();
             const valor  = (tr.querySelector('.input-info-detalle')?.value || '').trim();

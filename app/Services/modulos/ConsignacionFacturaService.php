@@ -178,15 +178,18 @@ class ConsignacionFacturaService
 
     /**
      * Completa la información adicional de la factura con los datos que el
-     * documento ya tiene en su cabecera: las Observaciones y —cuando el
-     * establecimiento los muestra— el Vendedor y el Cajero.
+     * documento ya tiene en su cabecera: —cuando el establecimiento los
+     * muestra— el Vendedor y el Cajero.
      *
-     * Por qué aquí: la información adicional (`ventas_adicional`) es lo único de
-     * este bloque que viaja en el XML autorizado y en el RIDE; las observaciones
-     * de `ventas_cabecera` solo se imprimen en el PDF propio del sistema. Las
-     * filas fijas de Vendedor/Cajero las escribe el JavaScript del modal de
-     * Factura de Venta, pantalla que este flujo no abre: la factura se crea
-     * entera en el servidor, así que se arman aquí.
+     * Por qué aquí: las filas fijas de Vendedor/Cajero las escribe el JavaScript
+     * del modal de Factura de Venta, pantalla que este flujo no abre: la factura
+     * se crea entera en el servidor, así que se arman aquí.
+     *
+     * Las Observaciones de la cabecera NO se copian: la fila "Observaciones" de
+     * la información adicional es una fila libre que el usuario escribe en la
+     * pestaña Info. Adicional del documento (concepto prellenado, detalle a
+     * mano) y llega aquí ya dentro de `$info`. El campo Observaciones del
+     * documento pasa a `ventas_cabecera.observaciones` por su propio camino.
      *
      * Reglas:
      * - No duplica: si el documento ya trae una fila con ese concepto (la
@@ -215,11 +218,6 @@ class ConsignacionFacturaService
             $v = $empresaConfig[$flag];
             return $v === true || in_array((string) $v, ['t', 'true', '1'], true);
         };
-
-        $observaciones = trim((string) ($doc['observaciones'] ?? ''));
-        if ($observaciones !== '' && !$yaEsta('Observaciones')) {
-            $info[] = ['nombre' => 'Observaciones', 'valor' => $observaciones];
-        }
 
         $vendedor = trim((string) ($doc['vendedor_nombre'] ?? ''));
         if ($vendedor !== '' && $activo('mostrar_vendedor_factura') && !$yaEsta('Vendedor')) {
@@ -800,8 +798,9 @@ class ConsignacionFacturaService
         if ($consigNums) {
             $infoFactura[] = ['nombre' => 'Consignación', 'valor' => implode(', ', $consigNums)];
         }
-        // …y los campos que el documento ya tiene en su cabecera (Observaciones y,
-        // según la configuración, Vendedor y Cajero).
+        // …y los campos que el documento ya tiene en su cabecera (según la
+        // configuración, Vendedor y Cajero). La fila "Observaciones" viene ya en
+        // $infoFactura si el usuario la escribió en la pestaña Info. Adicional.
         $infoFactura = $this->conCamposDeCabecera($infoFactura, $doc, $idUsuario, $empresaConfig);
 
         $payload = [
