@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/caja-pos
 tipo: modulo
 visibilidad: todos
-etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica, cierre de caja, arqueo, formas de pago, cobrado por forma de pago, correo de cierre, detalle del cierre, cambiar precio, editar precio, precio editable, envio a domicilio, delivery, precio variable, servicio del turno, propina voluntaria, reparto al personal
-version: 1.10
+etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica, cierre de caja, arqueo, formas de pago, cobrado por forma de pago, correo de cierre, detalle del cierre, cambiar precio, editar precio, precio editable, envio a domicilio, delivery, precio variable, servicio del turno, propina voluntaria, reparto al personal, detalle de impuestos, iva del turno, subtotal por tarifa, total vendido, total cobrado, reporte de cierre
+version: 1.11
 orden: 25
 estado: activo
 ---
@@ -180,11 +180,27 @@ que registrarlo desde el módulo *Ingresos*.
 ### El cierre se envía por correo
 
 Al confirmar, el sistema envía automáticamente el detalle del cierre al **correo
-registrado en la empresa** (*Empresa → Datos generales*). El mensaje lleva el
-turno y el cajero, las horas de apertura y cierre, el cobrado por forma de pago,
-el **servicio** y la **propina voluntaria** del turno —cada uno en su línea, igual
-que en pantalla—, y el arqueo completo: fondo inicial, esperado, contado y
-diferencia, más las observaciones si las hubo.
+registrado en la empresa** (*Empresa → Datos generales*). El correo tiene el
+**mismo formato que la tirilla del Reporte Restaurante**, con las mismas secciones
+en el mismo orden:
+
+1. **Encabezado**: nombre de la empresa, RUC y fecha de emisión.
+2. **Datos del turno**: número, cajero y horas de apertura y cierre.
+3. **Totales**: número de documentos y **Total vendido (sin imp.)**.
+4. **Detalle de impuestos**: subtotal por tarifa (15%, 5%, 0%, no objeto,
+   exento), subtotal sin impuestos, IVA por tarifa (e ICE si hay), servicio y
+   **Total con impuestos**. Se arma igual que el RIDE de la factura.
+5. **Resumen por forma de pago**: lo cobrado con impuestos en cada forma, el
+   **Total cobrado**, y el **servicio** y la **propina voluntaria** en líneas
+   separadas.
+6. **Arqueo de caja** (lo que la tirilla no tiene, porque solo existe al cerrar
+   un turno): cobrado y contado por forma de pago con su diferencia, fondo
+   inicial, cobrado según el sistema, confirmado por el cajero y **diferencia**.
+7. Las **observaciones** del cierre, si las hubo.
+
+El Total con impuestos del detalle de impuestos coincide con el Total cobrado del
+resumen por forma de pago: los dos salen de las mismas facturas y recibos del
+turno (sin anulados ni eliminados).
 
 Si la empresa no tiene correo configurado —o el envío falla— **la caja se cierra
 igual**: solo aparece un aviso explicando que el detalle no salió. El cierre
@@ -239,6 +255,11 @@ venta no deja cobrar y lo dice: hay que crearlas antes en **Formas de Cobros y
 Pagos**. Antes se cobraba igual con un "Efectivo" inventado, y esa venta quedaba sin
 su Ingreso —con la Cuenta por Cobrar abierta— sin avisar a nadie.
 ## Historial de cambios
+
+- **1.11** — El correo del cierre de caja sigue ahora el **formato de la tirilla
+  del Reporte Restaurante** e incluye el **detalle de impuestos** (subtotales por
+  tarifa, IVA, servicio y total con impuestos) y el **Total vendido (sin imp.)**.
+  El arqueo (contado y diferencia) sigue al final del correo.
 
 - **1.10** — El cierre ya no muestra una sola línea de "Propina": ahora separa
   el **Servicio** (el recargo del local) de la **Propina voluntaria** (la que

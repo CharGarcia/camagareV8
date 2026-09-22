@@ -507,8 +507,20 @@ class SincronizadorAsientosService
         ];
 
         // 5. Retenciones en Ventas (no se autorizan en SRI: solo se filtra por asiento faltante)
+        //    Una retención con valor retenido CERO no tiene nada que contabilizar: el builder devuelve
+        //    un asiento vacío y nunca se le enlaza asiento, así que quedaba "pendiente" para siempre.
+        //    Se considera con valor si lo tiene la cabecera (totales) o alguna línea del detalle.
         $trabajos[] = [
-            'sql'    => "SELECT id FROM retencion_venta_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL" . $excMig('retenciones_venta', 'retencion_venta_cabecera.id'),
+            'sql'    => "SELECT id FROM retencion_venta_cabecera
+                         WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL
+                           AND (
+                                 ABS(COALESCE(total_iva, 0)) + ABS(COALESCE(total_renta, 0)) + ABS(COALESCE(total_isd, 0)) >= 0.01
+                              OR EXISTS (
+                                     SELECT 1 FROM retencion_venta_detalle rvd
+                                     WHERE rvd.id_retencion = retencion_venta_cabecera.id
+                                       AND ABS(COALESCE(rvd.valor_retenido, 0)) >= 0.01
+                                 )
+                           )" . $excMig('retenciones_venta', 'retencion_venta_cabecera.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\RetencionVentaService(

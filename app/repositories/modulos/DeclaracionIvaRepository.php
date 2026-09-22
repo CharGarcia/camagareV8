@@ -134,6 +134,57 @@ class DeclaracionIvaRepository extends BaseRepository
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
     /**
+     * Notas de crédito de venta autorizadas del período con una tarifa de IVA que la factura que
+     * modifican no tiene (p. ej. factura al 0 % y NC como "No objeto"). La NC resta en los
+     * casilleros de SU tarifa, así que en ese caso no baja el casillero donde fue la venta.
+     *
+     * Se compara contra la línea de factura enlazada (notas_credito_detalle.id_venta_detalle)
+     * y, si la línea no está enlazada, contra todas las tarifas de la factura. Las NC cuya
+     * factura no está en el sistema se omiten: no hay contra qué comparar.
+     *
+     * @return array<int, array{id_nota_credito:int, nota_credito:string, factura:string,
+     *               tarifa_nc:string, tarifas_factura:string, base:float}>
+     */
+    public function getNotasCreditoTarifaDistinta(int $idEmpresa, string $fechaDesde, string $fechaHasta): array
+    {
+        $sql = "SELECT nc.id AS id_nota_credito,
+                       nc.establecimiento || '-' || nc.punto_emision || '-' || nc.secuencial AS nota_credito,
+                       nc.num_doc_modificado AS factura,
+                       COALESCE(t_nc.tarifa, 'Código ' || i.codigo_porcentaje) AS tarifa_nc,
+                       f.tarifas AS tarifas_factura,
+                       SUM(i.base_imponible) AS base
+                FROM notas_credito_cabecera nc
+                JOIN notas_credito_detalle d ON d.id_nota_credito = nc.id
+                JOIN notas_credito_detalle_impuestos i ON i.id_nota_credito_detalle = d.id AND i.codigo_impuesto = '2'
+                LEFT JOIN tarifa_iva t_nc ON t_nc.codigo = i.codigo_porcentaje
+                JOIN ventas_cabecera v ON v.id_empresa = nc.id_empresa AND v.eliminado = false
+                     AND v.establecimiento = split_part(nc.num_doc_modificado, '-', 1)
+                     AND v.punto_emision   = split_part(nc.num_doc_modificado, '-', 2)
+                     AND ltrim(v.secuencial, '0') = ltrim(split_part(nc.num_doc_modificado, '-', 3), '0')
+                CROSS JOIN LATERAL (
+                    SELECT array_agg(DISTINCT vi.codigo_porcentaje) AS codigos,
+                           string_agg(DISTINCT COALESCE(t.tarifa, 'Código ' || vi.codigo_porcentaje), ', ') AS tarifas
+                    FROM ventas_detalle vd
+                    JOIN ventas_detalle_impuestos vi ON vi.id_venta_detalle = vd.id AND vi.codigo_impuesto = '2'
+                    LEFT JOIN tarifa_iva t ON t.codigo = vi.codigo_porcentaje
+                    WHERE vd.id_venta = v.id
+                      AND (d.id_venta_detalle IS NULL OR vd.id = d.id_venta_detalle)
+                ) f
+                WHERE nc.id_empresa = :emp AND nc.estado = 'autorizado' AND nc.eliminado = false
+                  AND COALESCE(nc.cod_doc_modificado, '01') = '01'
+                  AND nc.fecha_emision BETWEEN :d AND :h
+                  AND nc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
+                  AND f.codigos IS NOT NULL
+                  AND NOT (i.codigo_porcentaje = ANY (f.codigos))
+                GROUP BY nc.id, nc.establecimiento, nc.punto_emision, nc.secuencial, nc.num_doc_modificado,
+                         i.codigo_porcentaje, t_nc.tarifa, f.tarifas
+                ORDER BY nc.establecimiento, nc.punto_emision, nc.secuencial";
+
+        return $this->query($sql, [':emp' => $idEmpresa, ':d' => $fechaDesde, ':h' => $fechaHasta])
+            ->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Años con transacciones que alimentan la declaración de IVA, en el ambiente de la empresa:
      * ventas, notas de crédito y de débito, compras, liquidaciones, retenciones (de venta y de
      * compra) e importaciones. Cada fuente usa la misma fecha que la declaración para ubicarla

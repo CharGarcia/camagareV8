@@ -74,6 +74,26 @@ class CajaSesionRepository extends BaseRepository
     }
 
     /**
+     * El turno con el nombre de quien lo abrió (`cajero_nombre`), para el correo
+     * del cierre. Aparte de findById() a propósito: ese es el que alimenta el
+     * "antes" de log_sistema, y sumarle una columna de otra tabla haría aparecer
+     * un campo que no es de caja_sesiones en la auditoría.
+     */
+    public function findConCajero(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT cs.*, u.nombre AS cajero_nombre
+                FROM {$this->table} cs
+                LEFT JOIN usuarios u ON u.id = cs.id_usuario
+                WHERE cs.id = :id
+                  AND cs.id_empresa = :id_empresa
+                  AND cs.eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
      * ¿Ese turno existe, sigue abierto y es de esta empresa? Lo usa quien recibe
      * un id_caja_sesion de afuera (abrir comanda) antes de atarle un documento:
      * de ese turno sale el punto de emisión con el que se factura.
@@ -301,6 +321,109 @@ class CajaSesionRepository extends BaseRepository
         }
 
         return ['servicio' => round($servicio, 2), 'voluntaria' => round($voluntaria, 2)];
+    }
+
+    /**
+     * Detalle de impuestos de los comprobantes del turno, para el correo del
+     * cierre: mismo cálculo que la tirilla del Reporte Restaurante
+     * (ReporteRestauranteRepository::getResumenImpuestos()), solo que los
+     * comprobantes salen del turno y no de los filtros del reporte. Mismos
+     * documentos que el arqueo: facturas y recibos del turno, sin anulados ni
+     * eliminados.
+     *
+     * Una línea sin fila de IVA se cuenta como base 0%, igual que el RIDE: así
+     * las bases siempre suman el subtotal.
+     *
+     * @return array{documentos:int, subtotal:float, servicio:float, total:float,
+     *               impuestos: list<array{codigo_impuesto:string, codigo_porcentaje:string,
+     *                                     tarifa:float, base:float, valor:float}>}
+     */
+    public function getResumenImpuestosDelTurno(int $idCajaSesion): array
+    {
+        $vacio = ['documentos' => 0, 'subtotal' => 0.0, 'servicio' => 0.0, 'total' => 0.0, 'impuestos' => []];
+
+        $cte = "
+            WITH docs AS (
+                SELECT 'FACTURA' AS tipo, v.id, v.total_sin_impuestos, v.propina, v.importe_total
+                  FROM ventas_cabecera v
+                 WHERE v.id_caja_sesion = :id1 AND v.eliminado = false AND v.estado <> 'anulado'
+                UNION ALL
+                SELECT 'RECIBO', r.id, r.total_sin_impuestos, r.propina, r.importe_total
+                  FROM recibos_venta_cabecera r
+                 WHERE r.id_caja_sesion = :id2 AND r.eliminado = false AND r.estado <> 'anulado'
+            )";
+        $params = [':id1' => $idCajaSesion, ':id2' => $idCajaSesion];
+
+        try {
+            $st = $this->db->prepare($cte . "
+                SELECT COUNT(*) AS documentos,
+                       COALESCE(SUM(total_sin_impuestos), 0) AS subtotal,
+                       COALESCE(SUM(propina), 0) AS servicio,
+                       COALESCE(SUM(importe_total), 0) AS total
+                FROM docs
+            ");
+            $st->execute($params);
+            $tot = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            $st = $this->db->prepare($cte . ",
+                impuestos AS (
+                    SELECT vi.codigo_impuesto, vi.codigo_porcentaje, vi.tarifa, vi.base_imponible AS base, vi.valor
+                      FROM docs d
+                      JOIN ventas_detalle vd ON vd.id_venta = d.id
+                      JOIN ventas_detalle_impuestos vi ON vi.id_venta_detalle = vd.id
+                     WHERE d.tipo = 'FACTURA'
+                    UNION ALL
+                    SELECT '2', '0', 0, vd.precio_total_sin_impuesto, 0
+                      FROM docs d
+                      JOIN ventas_detalle vd ON vd.id_venta = d.id
+                     WHERE d.tipo = 'FACTURA'
+                       AND NOT EXISTS (SELECT 1 FROM ventas_detalle_impuestos vi
+                                        WHERE vi.id_venta_detalle = vd.id AND TRIM(vi.codigo_impuesto) = '2')
+                    UNION ALL
+                    SELECT ri.codigo_impuesto, ri.codigo_porcentaje, ri.tarifa, ri.base_imponible, ri.valor
+                      FROM docs d
+                      JOIN recibos_venta_detalle rd ON rd.id_recibo = d.id
+                      JOIN recibos_venta_detalle_impuestos ri ON ri.id_recibo_detalle = rd.id
+                     WHERE d.tipo = 'RECIBO'
+                    UNION ALL
+                    SELECT '2', '0', 0, rd.precio_total_sin_impuesto, 0
+                      FROM docs d
+                      JOIN recibos_venta_detalle rd ON rd.id_recibo = d.id
+                     WHERE d.tipo = 'RECIBO'
+                       AND NOT EXISTS (SELECT 1 FROM recibos_venta_detalle_impuestos ri
+                                        WHERE ri.id_recibo_detalle = rd.id AND TRIM(ri.codigo_impuesto) = '2')
+                )
+                SELECT TRIM(codigo_impuesto) AS codigo_impuesto,
+                       TRIM(codigo_porcentaje) AS codigo_porcentaje,
+                       COALESCE(tarifa, 0) AS tarifa,
+                       COALESCE(SUM(base), 0) AS base,
+                       COALESCE(SUM(valor), 0) AS valor
+                FROM impuestos
+                GROUP BY TRIM(codigo_impuesto), TRIM(codigo_porcentaje), COALESCE(tarifa, 0)
+                ORDER BY 1, 3 DESC, 2
+            ");
+            $st->execute($params);
+            $filas = $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            // Mismo criterio defensivo que el resto del arqueo: el correo sale
+            // igual, solo sin este bloque.
+            error_log('[CajaSesion] No se pudo calcular el detalle de impuestos del turno: ' . $e->getMessage());
+            return $vacio;
+        }
+
+        return [
+            'documentos' => (int) ($tot['documentos'] ?? 0),
+            'subtotal'   => round((float) ($tot['subtotal'] ?? 0), 2),
+            'servicio'   => round((float) ($tot['servicio'] ?? 0), 2),
+            'total'      => round((float) ($tot['total'] ?? 0), 2),
+            'impuestos'  => array_map(static fn(array $r): array => [
+                'codigo_impuesto'   => (string) $r['codigo_impuesto'],
+                'codigo_porcentaje' => (string) $r['codigo_porcentaje'],
+                'tarifa'            => (float) $r['tarifa'],
+                'base'              => round((float) $r['base'], 2),
+                'valor'             => round((float) $r['valor'], 2),
+            ], $filas),
+        ];
     }
 
     public function cerrar(int $id, int $idEmpresa, array $data): bool

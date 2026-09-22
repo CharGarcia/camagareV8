@@ -5,8 +5,8 @@ categoria: Impuestos
 ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
-etiquetas: iva, declaracion de iva, notas de credito, nota de credito no resta, devoluciones en ventas, casillero 411, casillero 421, valor neto, formulario 104, selector de año, no aparece el año, año anterior, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula, no genera la declaracion, error al generar, value too long, invalid byte sequence, nombre de producto largo, tildes, acentos, caracteres raros
-version: 1.10
+etiquetas: iva, declaracion de iva, notas de credito, aviso nota de credito, tarifa distinta, no objeto de iva, casillero 441, casillero 413, casillero negativo, nota de credito no resta, devoluciones en ventas, casillero 411, casillero 421, valor neto, formulario 104, selector de año, no aparece el año, año anterior, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula, no genera la declaracion, error al generar, value too long, invalid byte sequence, nombre de producto largo, tildes, acentos, caracteres raros
+version: 1.11
 orden: 10
 estado: activo
 ---
@@ -51,7 +51,8 @@ en los casilleros que indique la configuración de casilleros IVA de la empresa
 | IVA vigente (15 %) | 411 | 421 |
 | IVA 5 % | 435 | 445 |
 | IVA 0 % | 413 | — |
-| No objeto de IVA | 441 | — |
+| Exento de IVA | 441 | — |
+| No objeto de IVA | sin casillero (configurable) | — |
 
 El **valor bruto** (401, 403…) no se toca: en el formulario 104 el bruto son
 las ventas del mes y el neto es el bruto menos las notas de crédito. Si en un
@@ -62,6 +63,30 @@ negativo bajo el tipo *Notas de crédito*.
 Si una tarifa no tiene casilleros configurados para notas de crédito (por
 ejemplo, el IVA 12 % de años anteriores), esas notas no restan nada. Revise la
 configuración de casilleros IVA de la empresa.
+
+### Aviso: notas de crédito que no restan donde corresponde
+
+Cada nota de crédito resta en los casilleros de **su propia tarifa de IVA**, no
+en los de la factura que corrige. Si se emitió con otra tarifa, la resta cae en
+el casillero equivocado. Por ejemplo, una factura vendida al **IVA 0 %** (403 y
+413) con su nota de crédito emitida como **No objeto de IVA** (441): el 413 queda
+sin rebajar y el 441 queda negativo, así que se muestra en cero.
+
+Para que no pase inadvertido, al presionar **GENERAR** aparece sobre el
+formulario un recuadro amarillo, *Notas de crédito que no restan en el casillero
+que corresponde*, con dos tipos de aviso:
+
+| Aviso | Qué significa |
+| --- | --- |
+| **NC … → factura …** | La nota de crédito lleva una tarifa de IVA que la factura no tiene. Indica ambas tarifas y la base afectada. Si la línea de la nota está enlazada a una línea de la factura, se compara contra esa línea. |
+| **Casillero …** | Las notas de crédito superan a los documentos de ese casillero. El formulario lo muestra en 0 y esa diferencia no se descuenta en ningún lado. |
+
+Los mismos avisos salen al final de la hoja *Resumen 104* del Excel.
+
+La solución es corregir la nota de crédito: debe llevar la **misma tarifa de IVA
+que la línea de la factura** que devuelve. No se omiten ni se mueven valores del
+formulario automáticamente, porque el formulario debe coincidir con los
+comprobantes autorizados por el SRI.
 
 ## Cómo se ve el formulario
 
@@ -279,6 +304,12 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
   generados antes de la versión 1.7, vuelva a presionar GENERAR y guarde de nuevo.
 
 ## Historial de cambios
+
+- **1.11** — Aviso de **notas de crédito que no restan en el casillero que
+  corresponde**: sale cuando la nota lleva una tarifa de IVA distinta a la de la
+  factura que corrige (por ejemplo, venta al 0 % y nota como *No objeto*), o
+  cuando un casillero queda negativo y el formulario lo muestra en cero. Aparece
+  sobre el formulario y en el Excel.
 
 - **1.10** — **Las notas de crédito de venta vuelven a restar en la
   declaración.** No restaban en ningún casillero: al guardarlas, el sistema

@@ -482,6 +482,41 @@ class DeclaracionIvaController extends BaseModuloController
                 }
             }
 
+            // Notas de crédito que no restan en el casillero que corresponde (mismo aviso que la
+            // pantalla): tarifa distinta a la de la factura, o casillero negativo mostrado en 0.
+            $avisosNc = $resumenCompleto['avisos_notas_credito'] ?? [];
+            if ($avisosNc) {
+                $rowIdx++;
+                $sheet1->setCellValue('A' . $rowIdx, 'NOTAS DE CRÉDITO QUE NO RESTAN EN EL CASILLERO QUE CORRESPONDE');
+                $sheet1->mergeCells("A{$rowIdx}:G{$rowIdx}");
+                $sheet1->getStyle("A{$rowIdx}")->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['rgb' => '664D03']],
+                    'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFF3CD']]
+                ]);
+                $rowIdx++;
+                $sheet1->setCellValue('A' . $rowIdx, 'Documento / Casillero');
+                $sheet1->setCellValue('B' . $rowIdx, 'Valor');
+                $sheet1->setCellValue('C' . $rowIdx, 'Motivo');
+                $sheet1->mergeCells("C{$rowIdx}:G{$rowIdx}");
+                $sheet1->getStyle("A{$rowIdx}:G{$rowIdx}")->getFont()->setBold(true);
+                $rowIdx++;
+                foreach ($avisosNc as $a) {
+                    if (($a['tipo'] ?? '') === 'casillero_negativo') {
+                        $etiqueta = 'Casillero ' . $a['casillero'] . (!empty($a['descripcion']) ? ' — ' . $a['descripcion'] : '');
+                        $valor = (float) $a['valor'];
+                    } else {
+                        $etiqueta = 'NC ' . $a['nota_credito'] . ' → factura ' . $a['factura'];
+                        $valor = (float) $a['base'];
+                    }
+                    $sheet1->setCellValue('A' . $rowIdx, $etiqueta);
+                    $sheet1->setCellValue('B' . $rowIdx, $valor);
+                    $sheet1->getStyle("B{$rowIdx}")->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet1->setCellValue('C' . $rowIdx, (string) ($a['motivo'] ?? ''));
+                    $sheet1->mergeCells("C{$rowIdx}:G{$rowIdx}");
+                    $rowIdx++;
+                }
+            }
+
             // ==========================================
             // HOJA 2: DETALLE DE CASILLEROS (una fila por casillero)
             // ==========================================

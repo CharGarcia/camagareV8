@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.7
+version: 1.8
 orden: 40
 estado: activo
 ---
@@ -161,8 +161,14 @@ cerrado.
 - **"No se puede ... porque su período contable está cerrado"**: la fecha de la
   retención cae en un mes ya cerrado. Reabra el período en Contabilidad →
   Períodos Contables si realmente necesita hacer el cambio.
+- **Una retención con valor cero no tiene asiento**: es lo esperado, no hay nada
+  que contabilizar. Tampoco aparece en el aviso de asientos pendientes.
 
 ## Historial de cambios
+
+- **1.8** — Corregido: las retenciones con **valor retenido cero** aparecían en el
+  aviso de asientos pendientes de generar, aunque no tienen nada que
+  contabilizar. Ya no se cuentan como pendientes.
 
 - **1.7** — Corregido: al buscar un **número de documento** en el cuadro aparecían
   también documentos que no lo tenían. La búsqueda libre miraba dentro de la **clave de

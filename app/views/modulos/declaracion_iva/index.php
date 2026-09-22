@@ -152,6 +152,7 @@
         <!-- Pestaña 1 -->
         <div class="tab-pane fade show active" id="resumen" role="tabpanel">
             <div id="avisoFormulas" class="alert alert-warning py-2 px-3 mb-2 d-none small"></div>
+            <div id="avisoNotasCredito" class="alert alert-warning py-2 px-3 mb-2 d-none small"></div>
             <div id="formSRI" class="sri-container"></div>
         </div>
         
@@ -449,12 +450,32 @@
             cont.classList.remove('d-none');
         }
 
+        // Notas de crédito que no restan en el casillero que corresponde: tarifa de IVA distinta a
+        // la de la factura que modifican, o casillero que queda negativo y se muestra en 0.
+        function renderAvisosNotasCredito(avisos) {
+            const cont = document.getElementById('avisoNotasCredito');
+            if (!avisos || !avisos.length) { cont.classList.add('d-none'); cont.innerHTML = ''; return; }
+            const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+            const titulo = a => a.tipo === 'casillero_negativo'
+                ? `Casillero ${esc(a.casillero)}${a.descripcion ? ' — ' + esc(a.descripcion) : ''}`
+                : `NC ${esc(a.nota_credito)} → factura ${esc(a.factura)}`;
+            cont.innerHTML =
+                `<div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>` +
+                `Notas de crédito que no restan en el casillero que corresponde (${avisos.length})</div>` +
+                '<ul class="mb-1 ps-3">' +
+                avisos.map(a => `<li><b>${titulo(a)}</b><br>${esc(a.motivo)}</li>`).join('') +
+                '</ul>' +
+                '<div class="text-muted" style="font-size:0.7rem;">La nota de crédito debe llevar la misma tarifa de IVA que la línea de la factura que corrige.</div>';
+            cont.classList.remove('d-none');
+        }
+
         function renderVentas(resumenData) {
             const layout = resumenData.layout;
             const valores = resumenData.valores;
             const isChecked = document.getElementById('checkSoloValores').checked;
 
             renderAvisosFormulas(resumenData.avisos_formulas);
+            renderAvisosNotasCredito(resumenData.avisos_notas_credito);
 
             ultimoLayout = layout;
             ultimosValores = valores;

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\Helpers\DetalleImpuestos;
 use App\models\Empresa;
 use App\repositories\modulos\CajaSesionRepository;
 use App\Rules\modulos\CajaSesionRules;
@@ -141,7 +142,7 @@ class CajaSesionService
 
             $this->repository->commit();
 
-            $sesionCerrada = $this->repository->findById($id, $idEmpresa) ?? $updateData;
+            $sesionCerrada = $this->repository->findConCajero($id, $idEmpresa) ?? $updateData;
             $sesionCerrada['formas_pago'] = $this->cruzarContado($formasPago, $contadas);
 
             // Separadas por origen: el recargo por servicio del local y la propina
@@ -150,6 +151,13 @@ class CajaSesionService
             $sesionCerrada['propina_servicio']   = $propinas['servicio'];
             $sesionCerrada['propina_voluntaria'] = $propinas['voluntaria'];
             $sesionCerrada['propina']            = round($propinas['servicio'] + $propinas['voluntaria'], 2);
+
+            // Detalle de impuestos de los comprobantes del turno: el mismo bloque
+            // que imprime la tirilla del Reporte Restaurante.
+            $resumenImp = $this->repository->getResumenImpuestosDelTurno($id);
+            $sesionCerrada['documentos']        = $resumenImp['documentos'];
+            $sesionCerrada['total_vendido']     = $resumenImp['subtotal'];
+            $sesionCerrada['detalle_impuestos'] = DetalleImpuestos::armar($resumenImp);
 
             // El correo va DESPUÉS del commit y no puede tumbar el cierre: la
             // caja ya está cuadrada y cerrada; si el correo falla, se avisa.
@@ -309,100 +317,125 @@ class CajaSesionService
         }
     }
 
-    /** Cuerpo HTML del correo de cierre. */
+    /**
+     * Cuerpo HTML del correo de cierre. Sigue el formato de la tirilla del
+     * Reporte Restaurante (reporte_restaurante/tirilla.php) —mismas secciones,
+     * mismo orden, mismas etiquetas—, para que el cierre y el reporte se lean
+     * igual: encabezado, datos, totales, DETALLE DE IMPUESTOS y RESUMEN POR
+     * FORMA DE PAGO. Lo que la tirilla no tiene es el ARQUEO (contado y
+     * diferencia): va al final porque solo existe al cerrar un turno.
+     */
     private function cuerpoCorreoCierre(array $empresa, array $sesion, array $formasPago): string
     {
         $e   = static fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
-        $m   = static fn($v) => '$ ' . number_format((float) $v, 2);
+        $m   = static fn($v) => '$' . number_format((float) $v, 2);
         $fec = static function (?string $f): string {
             return $f ? date('d-m-Y H:i:s', strtotime($f)) : '—';
         };
 
-        $filas = '';
-        foreach ($formasPago as $f) {
-            $dif = (float) ($f['diferencia'] ?? 0);
-            $filas .= '<tr>'
-                . '<td style="padding:6px 12px;border-bottom:1px solid #eee;">' . $e($f['nombre'])
-                . ($f['tipo'] !== '' ? ' <span style="color:#888;font-size:12px;">(' . $e($f['tipo']) . ')</span>' : '')
-                . '</td>'
-                . '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:center;">' . (int) $f['documentos'] . '</td>'
-                . '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;">' . $m($f['total']) . '</td>'
-                . '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;">' . $m($f['contado'] ?? $f['total']) . '</td>'
-                . '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;'
-                . (abs($dif) >= 0.01 ? 'color:#dc3545;font-weight:bold;' : 'color:#999;') . '">'
-                . (abs($dif) >= 0.01 ? $m($dif) : '—') . '</td>'
-                . '</tr>';
-        }
-        if ($filas === '') {
-            $filas = '<tr><td colspan="5" style="padding:10px 12px;color:#888;">El turno se cerró sin cobros registrados.</td></tr>';
+        // Piezas con el estilo de la tirilla: separador punteado, título de
+        // sección centrado en negrita y filas "etiqueta … importe".
+        $sep     = '<hr style="border:none;border-top:1px dashed #000;margin:6px 0;">';
+        $linea   = '<tr><td colspan="2"><hr style="border:none;border-top:1px solid #000;margin:2px 0;"></td></tr>';
+        $sub     = 'font-size:12px;';
+        $negrita = 'font-weight:bold;font-size:14px;';
+        $titulo  = static fn(string $t) => '<div style="text-align:center;font-weight:bold;">' . $t . '</div>';
+        $fila    = static fn(string $etq, string $valor, string $estilo = '') =>
+            '<tr style="' . $estilo . '"><td style="padding:1px 0;">' . $etq . '</td>'
+            . '<td style="padding:1px 0;text-align:right;white-space:nowrap;width:30%;">' . $valor . '</td></tr>';
+        $concepto = static fn(string $t) => '<tr><td colspan="2" style="padding:1px 0;">' . $t . '</td></tr>';
+        $tabla   = static fn(string $filas) =>
+            '<table style="width:100%;border-collapse:collapse;font-size:13px;">' . $filas . '</table>';
+        $chico   = static fn(string $t) => '<span style="' . $sub . '">' . $t . '</span>';
+
+        // Datos del turno (en la tirilla: los filtros aplicados).
+        $datos = '';
+        foreach ([
+            'Turno'    => '#' . (int) ($sesion['id'] ?? 0),
+            'Cajero'   => $sesion['usuario_nombre'] ?? $sesion['cajero_nombre'] ?? '—',
+            'Apertura' => $fec($sesion['fecha_apertura'] ?? null),
+            'Cierre'   => $fec($sesion['fecha_cierre'] ?? null),
+        ] as $etq => $valor) {
+            $datos .= '<tr><td style="padding:1px 0;width:38%;">' . $etq . ':</td><td style="padding:1px 0;">' . $e($valor) . '</td></tr>';
         }
 
-        $totalCobrado = array_sum(array_column($formasPago, 'total'));
-        // El recargo del local y la propina que dejó el cliente se muestran por
-        // separado: no se fijan igual ni se explican igual a quien reparte.
-        $servicio     = (float) ($sesion['propina_servicio']   ?? $sesion['propina'] ?? 0);
-        $voluntaria   = (float) ($sesion['propina_voluntaria'] ?? 0);
-        $filaPropina  = fn(string $etiqueta, float $valor) => '
-                        <tr>
-                            <td colspan="2" style="padding:2px 12px 8px;text-align:left;color:#666;font-size:13px;">
-                                ' . $etiqueta . '
-                            </td>
-                            <td style="padding:2px 12px 8px;text-align:right;color:#666;font-size:13px;">' . $m($valor) . '</td>
-                            <td colspan="2"></td>
-                        </tr>';
-        $diferencia   = (float) ($sesion['diferencia'] ?? 0);
-        $colorDif     = abs($diferencia) < 0.01 ? '#198754' : '#dc3545';
+        // Totales.
+        $totales = $fila('Documentos', (string) (int) ($sesion['documentos'] ?? 0))
+                 . $fila('TOTAL VENDIDO (sin&nbsp;imp.)', $m($sesion['total_vendido'] ?? 0), $negrita);
+
+        // Detalle de impuestos: la última fila (total con impuestos) en negrita.
+        $imp      = $sesion['detalle_impuestos'] ?? ['lineas' => [], 'total' => 0];
+        $filasImp = '';
+        foreach ($imp['lineas'] as $l) {
+            $filasImp .= $fila($e($l['etiqueta']), $m($l['valor']));
+        }
+        $filasImp .= $fila('TOTAL CON IMPUESTOS', $m($imp['total']), $negrita);
+
+        // Resumen por forma de pago: concepto, sublínea "TIPO — N cobro(s)" e importe.
+        $filasFp = '';
+        foreach ($formasPago as $f) {
+            $detalle  = trim(($f['tipo'] ?? '') . ' — ' . (int) $f['documentos'] . ' cobro(s)', ' —');
+            $filasFp .= $concepto($e($f['nombre'])) . $fila($chico($e($detalle)), $m($f['total']));
+        }
+        if ($filasFp !== '') {
+            $filasFp .= $linea;
+        }
+        $filasFp .= $fila('<strong>Total cobrado</strong>', '<strong>' . $m(array_sum(array_column($formasPago, 'total'))) . '</strong>')
+                  . $fila($chico('Servicio'), $chico($m($sesion['propina_servicio'] ?? $sesion['propina'] ?? 0)))
+                  . $fila($chico('Propina voluntaria'), $chico($m($sesion['propina_voluntaria'] ?? 0)));
+
+        // Arqueo: lo que confirmó el cajero contra lo cobrado, forma por forma.
+        $diferencia = (float) ($sesion['diferencia'] ?? 0);
+        $colorDif   = abs($diferencia) < 0.01 ? '#198754' : '#dc3545';
+        $filasArq   = '';
+        foreach ($formasPago as $f) {
+            $dif       = (float) ($f['diferencia'] ?? 0);
+            $filasArq .= $concepto($e($f['nombre']))
+                       . $fila(
+                           $chico('Cobrado ' . $m($f['total']) . ' · Contado ' . $m($f['contado'] ?? $f['total'])),
+                           abs($dif) >= 0.01 ? '<span style="color:#dc3545;font-weight:bold;">' . $m($dif) . '</span>' : '—'
+                       );
+        }
+        $filasArq = $filasArq === ''
+            ? '<tr><td colspan="2" style="padding:1px 0;text-align:center;">El turno se cerró sin cobros registrados.</td></tr>'
+            : $filasArq . $linea;
+        $filasArq .= $fila('Fondo inicial ' . $chico('(no entra en el arqueo)'), $m($sesion['fondo_inicial'] ?? 0))
+                   . $fila('Cobrado según el sistema', $m($sesion['monto_esperado'] ?? 0))
+                   . $fila('Confirmado por el cajero', $m($sesion['monto_contado'] ?? 0))
+                   . $fila('DIFERENCIA', '<span style="color:' . $colorDif . ';">' . $m($diferencia) . '</span>', $negrita);
 
         return '
-            <div style="font-family:Arial,sans-serif;color:#333;max-width:640px;margin:auto;">
-                <h2 style="color:#2563eb;margin-bottom:4px;">Cierre de caja</h2>
-                <p style="margin-top:0;color:#666;">' . $e($empresa['nombre'] ?? '') . '</p>
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.35;color:#000;max-width:420px;margin:auto;">
+                <div style="text-align:center;">
+                    <div style="font-size:15px;font-weight:bold;">' . $e($empresa['nombre_comercial'] ?? $empresa['nombre'] ?? '') . '</div>
+                    ' . (!empty($empresa['ruc']) ? '<div>RUC: ' . $e($empresa['ruc']) . '</div>' : '') . '
+                </div>
 
-                <table style="border-collapse:collapse;font-size:14px;margin-bottom:18px;">
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Turno</td><td style="padding:3px 0;"><strong>#' . (int) ($sesion['id'] ?? 0) . '</strong></td></tr>
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Cajero</td><td style="padding:3px 0;">' . $e($sesion['usuario_nombre'] ?? $sesion['cajero_nombre'] ?? '—') . '</td></tr>
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Apertura</td><td style="padding:3px 0;">' . $e($fec($sesion['fecha_apertura'] ?? null)) . '</td></tr>
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Cierre</td><td style="padding:3px 0;">' . $e($fec($sesion['fecha_cierre'] ?? null)) . '</td></tr>
-                </table>
+                ' . $sep . '
+                <div style="text-align:center;font-weight:bold;font-size:14px;">CIERRE DE CAJA</div>
+                <div style="text-align:center;">Emitido: ' . date('d-m-Y H:i') . '</div>
 
-                <h3 style="font-size:15px;margin-bottom:6px;">Arqueo por forma de pago</h3>
-                <table style="border-collapse:collapse;font-size:14px;width:100%;">
-                    <thead>
-                        <tr style="background:#f5f5f5;">
-                            <th style="padding:6px 12px;text-align:left;">Forma de pago</th>
-                            <th style="padding:6px 12px;text-align:center;">Docs.</th>
-                            <th style="padding:6px 12px;text-align:right;">Cobrado</th>
-                            <th style="padding:6px 12px;text-align:right;">Contado</th>
-                            <th style="padding:6px 12px;text-align:right;">Dif.</th>
-                        </tr>
-                    </thead>
-                    <tbody>' . $filas . '</tbody>
-                    <tfoot>
-                        <tr>
-                            <th style="padding:8px 12px;text-align:left;">Total</th>
-                            <th style="padding:8px 12px;"></th>
-                            <th style="padding:8px 12px;text-align:right;">' . $m($totalCobrado) . '</th>
-                            <th style="padding:8px 12px;text-align:right;">' . $m($sesion['monto_contado'] ?? 0) . '</th>
-                            <th style="padding:8px 12px;text-align:right;color:' . $colorDif . ';">' . $m($diferencia) . '</th>
-                        </tr>
-                        ' . $filaPropina('Servicio', $servicio) . '
-                        ' . $filaPropina('Propina voluntaria', $voluntaria) . '
-                    </tfoot>
-                </table>
+                ' . $sep . '
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">' . $datos . '</table>
 
-                <h3 style="font-size:15px;margin:18px 0 6px;">Resumen</h3>
-                <table style="border-collapse:collapse;font-size:14px;">
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Fondo inicial <span style="color:#999;font-size:12px;">(no entra en el arqueo)</span></td><td style="padding:3px 0;text-align:right;">' . $m($sesion['fondo_inicial'] ?? 0) . '</td></tr>
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Cobrado según el sistema</td><td style="padding:3px 0;text-align:right;">' . $m($sesion['monto_esperado'] ?? 0) . '</td></tr>
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Confirmado por el cajero</td><td style="padding:3px 0;text-align:right;">' . $m($sesion['monto_contado'] ?? 0) . '</td></tr>
-                    <tr><td style="padding:3px 12px 3px 0;color:#666;">Diferencia</td><td style="padding:3px 0;text-align:right;color:' . $colorDif . ';"><strong>' . $m($diferencia) . '</strong></td></tr>
-                </table>
+                ' . $sep . $tabla($totales) . '
+
+                ' . $sep . $titulo('DETALLE DE IMPUESTOS') . $tabla($filasImp) . '
+
+                ' . $sep . $titulo('RESUMEN POR FORMA DE PAGO') . '
+                <div style="text-align:center;' . $sub . '">Lo cobrado, con impuestos</div>
+                ' . $tabla($filasFp) . '
+
+                ' . $sep . $titulo('ARQUEO DE CAJA') . '
+                <div style="text-align:center;' . $sub . '">Lo confirmado por el cajero</div>
+                ' . $tabla($filasArq) . '
 
                 ' . (!empty($sesion['observaciones_cierre'])
-                        ? '<p style="font-size:14px;"><strong>Observaciones:</strong> ' . $e($sesion['observaciones_cierre']) . '</p>'
+                        ? $sep . '<div><strong>Observaciones:</strong> ' . $e($sesion['observaciones_cierre']) . '</div>'
                         : '') . '
 
-                <p style="color:#888;font-size:12px;margin-top:24px;">Enviado automáticamente al cerrar la caja, el ' . date('d-m-Y H:i:s') . '.</p>
+                ' . $sep . '
+                <div style="text-align:center;' . $sub . '">Enviado automáticamente al cerrar la caja, el ' . date('d-m-Y H:i:s') . '.</div>
             </div>';
     }
 }

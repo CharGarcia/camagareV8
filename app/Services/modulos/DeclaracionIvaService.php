@@ -247,13 +247,21 @@ class DeclaracionIvaService
         // 1. Obtener sumatorias desde base de datos (se mantienen los agrupados por código '401', etc)
         $rawSums = $this->resumenPorCasillerosGrupo($idsGrupo, $fechaDesde, $fechaHasta);
         $sums = [];
+        $casillerosNegativos = [];
         foreach ($rawSums as $row) {
             // Aplicar MAX(0, valor) para casilleros directos (facturas - notas de crédito)
-            $sums[$row['casillero']] = max(0, (float)$row['total']);
+            $total = (float) $row['total'];
+            if ($total < -0.005) {
+                $casillerosNegativos[(string) $row['casillero']] = round($total, 2);
+            }
+            $sums[$row['casillero']] = max(0, $total);
         }
 
         // 2. Obtener estructura oficial (ahora por filas de 7 columnas)
         $estructura = $this->repository->getEstructuraFormulario();
+
+        // 2-bis. Avisos de notas de crédito que no restan donde deberían (ver avisosNotasCredito()).
+        $avisosNotasCredito = $this->avisosNotasCredito($idsGrupo, $fechaDesde, $fechaHasta, $casillerosNegativos, $estructura);
 
         // 2b. Casilleros de conteo: filas cuya fuente es un conteo de documentos
         // del período (configurado en la estructura con fuente_valor)
@@ -414,7 +422,70 @@ class DeclaracionIvaService
             'total_480_481' => $totalTransferencias ?? 0.0,
             // Fórmulas configuradas que no llegan a verse en el formulario (ver paso 3).
             'avisos_formulas' => $avisosFormulas,
+            // Notas de crédito que no restan donde deberían (ver paso 2-bis).
+            'avisos_notas_credito' => $avisosNotasCredito,
         ];
+    }
+
+    /**
+     * Avisos de notas de crédito de venta que no restan en el casillero que corresponde:
+     *
+     *  - 'tarifa_distinta': la NC se emitió con una tarifa de IVA que la factura no tiene (p. ej.
+     *    factura al 0 % → 403/413 y NC como "No objeto" → 441). La NC resta en los casilleros de
+     *    su propia tarifa, así que el casillero de la venta queda sin rebajar.
+     *  - 'casillero_negativo': un casillero sumó negativo (las NC superan a las ventas o
+     *    compras de esa tarifa) y el formulario lo muestra en cero: ese valor no se descuenta en ningún lado.
+     *
+     * @param array<string,float> $casillerosNegativos casillero => suma negativa del período
+     */
+    private function avisosNotasCredito(array $idsGrupo, string $fechaDesde, string $fechaHasta, array $casillerosNegativos, array $estructura): array
+    {
+        $avisos = [];
+
+        foreach ($idsGrupo as $idEmp) {
+            foreach ($this->repository->getNotasCreditoTarifaDistinta($idEmp, $fechaDesde, $fechaHasta) as $r) {
+                $avisos[] = [
+                    'tipo'            => 'tarifa_distinta',
+                    'nota_credito'    => (string) $r['nota_credito'],
+                    'factura'         => (string) $r['factura'],
+                    'tarifa_nc'       => (string) $r['tarifa_nc'],
+                    'tarifas_factura' => (string) $r['tarifas_factura'],
+                    'base'            => round((float) $r['base'], 2),
+                    'motivo'          => sprintf(
+                        'La nota de crédito %s lleva %s, pero la factura %s vendió con %s. Resta en los casilleros de %s, no en los de la venta: el casillero de la factura queda sin rebajar (base %s).',
+                        $r['nota_credito'], $r['tarifa_nc'], $r['factura'], $r['tarifas_factura'], $r['tarifa_nc'],
+                        number_format((float) $r['base'], 2, '.', ',')
+                    ),
+                ];
+            }
+        }
+
+        if ($casillerosNegativos) {
+            $descripciones = [];
+            foreach ($estructura as $e) {
+                foreach (['casillero_bruto', 'casillero_neto', 'casillero_impuesto'] as $campo) {
+                    $codigo = trim((string) ($e[$campo] ?? ''));
+                    if ($codigo !== '' && !isset($descripciones[$codigo])) {
+                        $descripciones[$codigo] = (string) ($e['descripcion'] ?? '');
+                    }
+                }
+            }
+            ksort($casillerosNegativos, SORT_STRING);
+            foreach ($casillerosNegativos as $casillero => $total) {
+                $avisos[] = [
+                    'tipo'        => 'casillero_negativo',
+                    'casillero'   => (string) $casillero,
+                    'descripcion' => $descripciones[$casillero] ?? '',
+                    'valor'       => $total,
+                    'motivo'      => sprintf(
+                        'Las notas de crédito superan a los documentos de este casillero (suma %s). El formulario lo muestra en 0 y esa diferencia no se descuenta en ningún casillero.',
+                        number_format($total, 2, '.', ',')
+                    ),
+                ];
+            }
+        }
+
+        return $avisos;
     }
 
     /**
