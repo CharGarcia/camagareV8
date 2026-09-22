@@ -105,8 +105,7 @@ class DeclaracionIvaController extends BaseModuloController
         $this->requireLeer();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        // Por defecto se declara el mes anterior al actual
-        $anio = $_GET['anio'] ?? date('Y', strtotime('first day of last month'));
+        // Por defecto se declara el mes anterior al actual (el año se resuelve más abajo)
         $mes  = $_GET['mes']  ?? date('m', strtotime('first day of last month'));
 
         // El F104 se presenta por RUC completo y solo se puede generar (asiento/egreso) desde el
@@ -119,7 +118,16 @@ class DeclaracionIvaController extends BaseModuloController
         $empresaActual = $empresaRepo->getEmisorConfig($idEmpresa);
 
         $estructura = $this->repository->getEstructuraFormulario();
-        $anios      = $this->repository->getAniosConVentas($idEmpresa);
+        // Años de todas las fuentes de la declaración (ventas, compras, retenciones, etc.), de
+        // mayor a menor. Por defecto se selecciona el más reciente; si la empresa no tiene
+        // movimientos, el del mes anterior. El año pedido por URL se agrega si no está, para que
+        // el selector nunca quede vacío ni sin el período elegido.
+        $anios = $this->repository->getAniosDeclaracion($idEmpresa);
+        $anio  = (int) ($_GET['anio'] ?? ($anios[0] ?? date('Y', strtotime('first day of last month'))));
+        if (!in_array($anio, $anios, true)) {
+            $anios[] = (int) $anio;
+            rsort($anios);
+        }
 
         $this->viewWithLayout('layouts.main', 'modulos/declaracion_iva/index', [
             'titulo' => 'Declaración de IVA (form 104 SRI)',

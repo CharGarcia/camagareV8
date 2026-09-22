@@ -5,8 +5,8 @@ categoria: Impuestos
 ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
-etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula, no genera la declaracion, error al generar, value too long, invalid byte sequence, nombre de producto largo, tildes, acentos, caracteres raros
-version: 1.8
+etiquetas: iva, declaracion de iva, notas de credito, nota de credito no resta, devoluciones en ventas, casillero 411, casillero 421, valor neto, formulario 104, selector de año, no aparece el año, año anterior, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula, no genera la declaracion, error al generar, value too long, invalid byte sequence, nombre de producto largo, tildes, acentos, caracteres raros
+version: 1.10
 orden: 10
 estado: activo
 ---
@@ -23,6 +23,14 @@ empresa. Al crearla se indica el tipo y el periodo:
 - Mensual: año y **mes** (1 a 12).
 - Semestral: año y **semestre**.
 
+El selector de **año** muestra todos los años en que la empresa tiene
+transacciones que entran en la declaración: facturas de venta, notas de crédito
+y de débito, compras, liquidaciones de compra, retenciones (las que le hicieron
+y las que emitió) e importaciones (por su fecha de nacionalización). Solo se
+cuentan los documentos del ambiente de la empresa (pruebas o producción).
+Al entrar al módulo queda seleccionado el **año más reciente** de esa lista; si
+la empresa aún no tiene movimientos, el año del mes anterior.
+
 ## El recorrido
 
 1. **Cree la declaración** del periodo.
@@ -31,6 +39,29 @@ empresa. Al crearla se indica el tipo y el periodo:
 4. **Guarde** la declaración.
 5. **Genere el asiento** contable (es un paso aparte).
 6. **Genere el egreso** del pago, eligiendo a quién se paga y con qué concepto.
+
+## Notas de crédito de venta: qué casilleros restan
+
+Las notas de crédito de venta **autorizadas** del periodo restan de las ventas
+en los casilleros que indique la configuración de casilleros IVA de la empresa
+(tipo de documento *Nota de crédito venta*). Con la configuración estándar:
+
+| Tarifa | Valor neto | Impuesto generado |
+| --- | --- | --- |
+| IVA vigente (15 %) | 411 | 421 |
+| IVA 5 % | 435 | 445 |
+| IVA 0 % | 413 | — |
+| No objeto de IVA | 441 | — |
+
+El **valor bruto** (401, 403…) no se toca: en el formulario 104 el bruto son
+las ventas del mes y el neto es el bruto menos las notas de crédito. Si en un
+casillero las notas de crédito superan a las ventas, se muestra en cero. En la
+pestaña **Detalle de Casilleros**, cada nota de crédito aparece con valor
+negativo bajo el tipo *Notas de crédito*.
+
+Si una tarifa no tiene casilleros configurados para notas de crédito (por
+ejemplo, el IVA 12 % de años anteriores), esas notas no restan nada. Revise la
+configuración de casilleros IVA de la empresa.
 
 ## Cómo se ve el formulario
 
@@ -248,6 +279,21 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
   generados antes de la versión 1.7, vuelva a presionar GENERAR y guarde de nuevo.
 
 ## Historial de cambios
+
+- **1.10** — **Las notas de crédito de venta vuelven a restar en la
+  declaración.** No restaban en ningún casillero: al guardarlas, el sistema
+  buscaba su configuración de casilleros con un nombre que no existía y las
+  omitía. Ahora restan en el valor neto y el impuesto de su tarifa (411/421,
+  435/445…), aparecen en la pestaña *Detalle de Casilleros* y dejan de contarse
+  si se anulan o eliminan. En los periodos ya generados, presione **GENERAR**
+  para recalcular. Si el periodo ya estaba guardado, vuelva a guardarlo.
+
+- **1.9** — El selector de año ya muestra todos los años con transacciones de
+  la declaración: ventas, notas de crédito y de débito, compras, liquidaciones,
+  retenciones e importaciones. Antes solo miraba las facturas de venta (y las
+  compras únicamente si no había ninguna venta), así que un año con solo
+  compras o retenciones no aparecía. Al abrir el módulo queda seleccionado el
+  año más reciente con transacciones.
 
 - **1.8** — **GENERAR y GUARDAR ya no fallan por un ítem con nombre largo y
   tildes.** Al sincronizar el periodo, cada casillero guarda el nombre del

@@ -134,30 +134,41 @@ class DeclaracionIvaRepository extends BaseRepository
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
     /**
-     * Obtiene los años que tienen registros de ventas para la empresa.
-     * Si no hay ventas, se obtienen los años a partir de compras.
+     * Años con transacciones que alimentan la declaración de IVA, en el ambiente de la empresa:
+     * ventas, notas de crédito y de débito, compras, liquidaciones, retenciones (de venta y de
+     * compra) e importaciones. Cada fuente usa la misma fecha que la declaración para ubicarla
+     * en el período (importaciones: fecha de nacionalización).
+     *
+     * Cada rama agrupa por separado para que Postgres pueda resolver el DISTINCT de año por
+     * tabla antes de unir; el UNION final elimina los repetidos entre fuentes.
+     *
+     * @return int[] Años de mayor a menor.
      */
-    public function getAniosConVentas(int $idEmpresa): array
+    public function getAniosDeclaracion(int $idEmpresa): array
     {
-        $sql = "SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision) as anio
-                FROM ventas_cabecera
-                WHERE id_empresa = ? AND eliminado = false
-                ORDER BY anio DESC";
-        $st = $this->db->prepare($sql);
-        $st->execute([$idEmpresa]);
-        $anios = $st->fetchAll(\PDO::FETCH_COLUMN);
+        $fuentes = [
+            ['ventas_cabecera',           'fecha_emision'],
+            ['notas_credito_cabecera',    'fecha_emision'],
+            ['nota_debito_cabecera',      'fecha_emision'],
+            ['compras_cabecera',          'fecha_emision'],
+            ['liquidaciones_cabecera',    'fecha_emision'],
+            ['retencion_venta_cabecera',  'fecha_emision'],
+            ['retencion_compra_cabecera', 'fecha_emision'],
+            ['importaciones_cabecera',    'fecha_nacionalizacion'],
+        ];
 
-        if (!empty($anios)) {
-            return $anios;
+        $ramas = [];
+        foreach ($fuentes as [$tabla, $campoFecha]) {
+            $ramas[] = "SELECT DISTINCT EXTRACT(YEAR FROM {$campoFecha})::int AS anio
+                        FROM {$tabla}
+                        WHERE id_empresa = :emp AND eliminado = false
+                          AND {$campoFecha} IS NOT NULL
+                          AND CAST(tipo_ambiente AS VARCHAR) = (SELECT CAST(tipo_ambiente AS VARCHAR) FROM empresas WHERE id = :emp)";
         }
 
-        $sql = "SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision) as anio
-                FROM compras_cabecera
-                WHERE id_empresa = ? AND eliminado = false
-                ORDER BY anio DESC";
-        $st = $this->db->prepare($sql);
-        $st->execute([$idEmpresa]);
-        return $st->fetchAll(\PDO::FETCH_COLUMN);
+        $sql = "SELECT anio FROM (" . implode("\nUNION\n", $ramas) . ") a ORDER BY anio DESC";
+
+        return array_map('intval', $this->query($sql, [':emp' => $idEmpresa])->fetchAll(\PDO::FETCH_COLUMN));
     }
 
     /**

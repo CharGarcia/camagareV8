@@ -497,8 +497,7 @@ class NotaCreditoService
 
             // Limpiar casilleros de declaración 104 (igual que anular()) — solo aplica si
             // la NC llegó a estar autorizada y a marcar algún casillero.
-            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
-            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'notas de credito', $id);
+            $this->limpiarCasillerosDeclaracion($idEmpresa, $id);
 
             $this->repository->eliminarLogico($id, $idUsuario);
 
@@ -550,8 +549,7 @@ class NotaCreditoService
             $invService->revertirMovimientosPorReferencia('nota_credito', $id, $idEmpresa, $idUsuario, true);
 
             // Limpiar casilleros de declaracion 104
-            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
-            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'notas de credito', $id);
+            $this->limpiarCasillerosDeclaracion($idEmpresa, $id);
 
             // Anular el asiento contable de la NC si existe (antes no se hacía: una NC
             // anulada quedaba con su asiento "contabilizado" activo, igual que el hueco
@@ -633,6 +631,21 @@ class NotaCreditoService
         }
     }
 
+    /**
+     * Origen con que la NC de venta queda en casilleros_declaracion_sri. Debe ser el mismo que
+     * esperan DeclaracionIvaRepository (limpieza de huérfanos, detalle de casilleros) y la vista
+     * de la declaración; antes se grababa 'notas de credito' y esas piezas no la reconocían.
+     */
+    private const ORIGEN_CASILLEROS = 'notas_credito';
+
+    /** Borra los casilleros 104 de la NC, incluidos los que quedaran con el origen antiguo. */
+    private function limpiarCasillerosDeclaracion(int $idEmpresa, int $idNC): void
+    {
+        $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+        $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, self::ORIGEN_CASILLEROS, $idNC);
+        $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'notas de credito', $idNC);
+    }
+
     public function sincronizarCasilleros(int $idNC, array $data = null): void
     {
         $idEmpresa = $data ? (int)$data['id_empresa'] : 0;
@@ -654,13 +667,15 @@ class NotaCreditoService
         $fechaEmision = $data['fecha_emision'] ?? date('Y-m-d');
         
         $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
-        $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'notas de credito', $idNC);
+        $this->limpiarCasillerosDeclaracion($idEmpresa, $idNC);
 
-        // Obtener configuración de casilleros de la empresa
+        // Obtener configuración de casilleros de la empresa. La clave es 'nota_credito_venta'
+        // (así la guarda EmpresaService en empresa_casilleros_iva_sri); con 'nota_credito' nunca
+        // encontraba configuración y la NC no restaba nada en la declaración.
         $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
         $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
-        if (!$configDec || !isset($configDec['nota_credito'])) return;
-        $confNC = $configDec['nota_credito'];
+        if (!$configDec || !isset($configDec['nota_credito_venta'])) return;
+        $confNC = $configDec['nota_credito_venta'];
 
         $tarifaMap = $decIvaRepo->getMapaTarifasIva();
         $detalles = $data['detalles'] ?? [];
@@ -692,19 +707,19 @@ class NotaCreditoService
                 // Guardamos el valor NEGATIVO para que reste en la sumatoria final
                 if ($bruto !== '' && $base > 0) {
                     $decIvaRepo->insertarCasilleroDeclaracion([
-                        'id_empresa' => $idEmpresa, 'origen' => 'notas de credito', 'id_origen' => $idNC,
+                        'id_empresa' => $idEmpresa, 'origen' => self::ORIGEN_CASILLEROS, 'id_origen' => $idNC,
                         'fecha' => $fechaEmision, 'casillero' => $bruto, 'valor' => -1 * $base, 'concepto' => $concepto . ' (Base)'
                     ]);
                 }
                 if ($neto !== '' && $base > 0) {
                     $decIvaRepo->insertarCasilleroDeclaracion([
-                        'id_empresa' => $idEmpresa, 'origen' => 'notas de credito', 'id_origen' => $idNC,
+                        'id_empresa' => $idEmpresa, 'origen' => self::ORIGEN_CASILLEROS, 'id_origen' => $idNC,
                         'fecha' => $fechaEmision, 'casillero' => $neto, 'valor' => -1 * $base, 'concepto' => $concepto . ' (Base)'
                     ]);
                 }
                 if ($impC !== '' && $valorImp > 0) {
                     $decIvaRepo->insertarCasilleroDeclaracion([
-                        'id_empresa' => $idEmpresa, 'origen' => 'notas de credito', 'id_origen' => $idNC,
+                        'id_empresa' => $idEmpresa, 'origen' => self::ORIGEN_CASILLEROS, 'id_origen' => $idNC,
                         'fecha' => $fechaEmision, 'casillero' => $impC, 'valor' => -1 * $valorImp, 'concepto' => $concepto . ' (IVA)'
                     ]);
                 }
