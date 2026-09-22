@@ -94,7 +94,7 @@
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos</label>
                         <select id="rc-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:180px;"
-                                onchange="window.RC_generarReporte()"
+                                onchange="window.RC_filtrosCambiados()"
                                 title="Consolidado por RUC: <?php echo htmlspecialchars(implode(' · ', $establecimientos ?? [])); ?>">
                             <option value="ESTABLECIMIENTO" selected>Solo este (matriz)</option>
                             <option value="CONSOLIDADO">Consolidado (<?php echo count($establecimientos ?? []); ?> establec.)</option>
@@ -138,7 +138,7 @@
                             <input type="text" name="producto_texto" id="rc-producto-texto" class="form-control border-start-0 px-1 shadow-none"
                                    placeholder="Ej: cemento, cable..." autocomplete="off">
                             <button type="button" class="btn btn-outline-secondary" title="Limpiar"
-                                    onclick="document.getElementById('rc-producto-texto').value=''; window.RC_generarReporte();"><i class="bi bi-x-lg"></i></button>
+                                    onclick="document.getElementById('rc-producto-texto').value=''; window.RC_filtrosCambiados();"><i class="bi bi-x-lg"></i></button>
                         </div>
                         <div id="rc-dropdown-items" class="list-group shadow dropdown-predictivo position-absolute d-none"
                              style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
@@ -151,7 +151,7 @@
                             <input type="text" name="buscar_info" id="rc-buscar-info" class="form-control border-start-0 px-1 shadow-none"
                                    placeholder="Ej: placa, referencia..." autocomplete="off">
                             <button type="button" class="btn btn-outline-secondary" title="Limpiar"
-                                    onclick="document.getElementById('rc-buscar-info').value=''; window.RC_generarReporte();"><i class="bi bi-x-lg"></i></button>
+                                    onclick="document.getElementById('rc-buscar-info').value=''; window.RC_filtrosCambiados();"><i class="bi bi-x-lg"></i></button>
                         </div>
                         <div id="rc-dropdown-info" class="list-group shadow dropdown-predictivo position-absolute d-none"
                              style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>

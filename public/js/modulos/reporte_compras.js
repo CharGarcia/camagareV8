@@ -48,10 +48,10 @@ document.addEventListener('DOMContentLoaded', function () {
                                         <button type="button" class="btn-close btn-close-sm flex-shrink-0" style="font-size:.5rem;"></button>`;
                                     chip.querySelector('button').addEventListener('click', function () {
                                         chip.remove();
-                                        window.RC_generarReporte();
+                                        window.RC_filtrosCambiados();
                                     });
                                     chipsProv.appendChild(chip);
-                                    window.RC_generarReporte();
+                                    window.RC_filtrosCambiados();
                                 }
                             });
                             dropdownProv.appendChild(btn);
@@ -85,7 +85,31 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('rc-anio').addEventListener('change', window.RC_cambiarMesAnio);
 });
 
-// Buscador predictivo genérico de texto: rellena el input con el valor elegido y regenera.
+/* ════════════════════════════════════════════════════
+   LOS FILTROS NO CONSULTAN SOLOS
+   Cambiar cualquier filtro (selects, fechas, chips de proveedor, buscadores, botones
+   de limpiar) solo deja marcado que hay cambios sin aplicar: el botón Buscar pasa a
+   ámbar. El reporte se genera únicamente al pulsar Buscar (o Enter en el formulario).
+════════════════════════════════════════════════════ */
+window.rc_filtros_pendientes = true;   // al abrir, todavía no se ha buscado nada
+window.RC_filtrosCambiados = function () {
+    window.rc_filtros_pendientes = true;
+    const btn = document.getElementById('btn-generar-reporte');
+    if (!btn) return;
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-warning');
+    btn.title = 'Hay filtros sin aplicar: pulsa Buscar';
+};
+function RC_filtrosAplicados() {
+    window.rc_filtros_pendientes = false;
+    const btn = document.getElementById('btn-generar-reporte');
+    if (!btn) return;
+    btn.classList.remove('btn-warning');
+    btn.classList.add('btn-primary');
+    btn.title = '';
+}
+
+// Buscador predictivo genérico de texto: rellena el input con el valor elegido.
 function RC_predictivoTexto(inputId, dropdownId, endpoint, msgVacio) {
     const input = document.getElementById(inputId);
     const dd    = document.getElementById(dropdownId);
@@ -121,7 +145,7 @@ function RC_predictivoTexto(inputId, dropdownId, endpoint, msgVacio) {
                             btn.addEventListener('click', function () {
                                 input.value = it.valor;
                                 dd.classList.add('d-none');
-                                window.RC_generarReporte();
+                                window.RC_filtrosCambiados();
                             });
                             dd.appendChild(btn);
                         });
@@ -164,13 +188,13 @@ window.RC_onAgruparChange = function () {
         mesEl.disabled = true;
         if (mesEl.value !== 'TODOS') {
             mesEl.value = 'TODOS';
-            window.RC_cambiarMesAnio(); // recalcula el rango de fechas y genera el reporte
+            window.RC_cambiarMesAnio(); // recalcula el rango de fechas (no consulta)
             return;
         }
     } else {
         mesEl.disabled = false;
     }
-    window.RC_generarReporte();
+    window.RC_filtrosCambiados();
 };
 
 // ── Mes / Año ────────────────────────────────────────────────────────────────
@@ -192,11 +216,12 @@ window.RC_cambiarMesAnio = function () {
             document.getElementById('rc-fecha-hasta').value = `${anio}-${mes}-${String(ultimoDia).padStart(2, '0')}`;
         }
     }
-    window.RC_generarReporte();
+    window.RC_filtrosCambiados();
 };
 
-// ── Generar reporte (AJAX) ───────────────────────────────────────────────────
+// ── Generar reporte (AJAX) — solo desde el botón Buscar ─────────────────────
 window.RC_generarReporte = function () {
+    RC_filtrosAplicados();
     const form      = document.getElementById('form-filtros-reporte');
     const formData  = new FormData(form);
     const params    = new URLSearchParams(formData).toString();

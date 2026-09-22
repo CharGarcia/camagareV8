@@ -5,7 +5,7 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos
 version: 1.9
 orden: 10
 estado: activo
@@ -26,6 +26,15 @@ qué, en el periodo que se indique.
 | Borradores | *Sin borradores* (por defecto), *Con borradores* o *Solo borradores*. Ver la sección *Documentos en borrador* |
 
 Los filtros se combinan: *las ventas del producto X al cliente Y en marzo*.
+
+**El reporte solo se consulta al pulsar Buscar** (o Enter en el formulario).
+Cambiar un filtro —tipo de documento, agrupación, marca, categoría, año, mes,
+fechas, establecimientos, cliente, borradores, vendedor, producto, variante,
+info adicional o los botones de limpiar— no actualiza la tabla: el botón
+**Buscar se pone en ámbar** para avisar que hay filtros sin aplicar. Así se
+pueden ajustar varios filtros seguidos y lanzar una sola consulta. Ordenar por
+una columna sí regenera la tabla, siempre que no haya filtros pendientes; si
+los hay, el orden queda guardado y se aplica al pulsar Buscar.
 
 ## Filtrar por marca o categoría
 
@@ -323,18 +332,23 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 - **En Unidades por producto / mes falta un producto**: solo se listan los que
   vendieron más de cero unidades en el período (con *Facturas − NC*, más de lo
   que se devolvió).
+- **Cambié un filtro y la tabla no cambia**: los filtros no consultan solos;
+  pulse **Buscar** (el botón queda en ámbar mientras haya cambios sin aplicar).
 
 ## Historial de cambios
 
-- **1.9** — Nueva agrupación **Unidades por Producto / Mes**: una fila por
+- **1.9** — Los filtros **ya no consultan al cambiarlos**: el reporte se genera
+  solo al pulsar **Buscar** (o Enter); mientras haya filtros sin aplicar el
+  botón se muestra en ámbar (igual que en el Reporte de Compras). Nueva
+  agrupación **Unidades por Producto / Mes**: una fila por
   producto (código y descripción), **una columna por cada mes** del período
   elegido con las unidades vendidas, y la columna **Total** del período; solo
   los productos con ventas, con fila TOTAL al pie, gráfico de unidades por mes,
   orden por cualquier mes y PDF/Excel con las mismas columnas (horizontal con
   más de seis meses). Nuevos filtros **Marca** y **Categoría** (primera fila,
   después de *Agrupar por*, con favorito), que aplican a todas las vistas, al
-  PDF y al Excel; el buscador de *Cliente* se hizo más angosto para que quepan
-  en la misma fila. Nuevas secciones *Filtrar por marca o categoría* y *Unidades
+  PDF y al Excel; el buscador de *Cliente* ocupa el espacio que sobra de esa
+  fila. Nuevas secciones *Filtrar por marca o categoría* y *Unidades
   por producto / mes*.
 - **1.8** — **PDF rediseñado**. Ahora lleva el **logo de la empresa** en el
   encabezado, una caja **"Filtros aplicados"** con todo lo que se usó para armar

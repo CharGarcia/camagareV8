@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de compras, compras, cuanto compre, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc
-version: 1.2
+etiquetas: reporte de compras, compras, cuanto compre, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar
+version: 1.3
 orden: 20
 estado: activo
 ---
@@ -24,6 +24,13 @@ Es el espejo del reporte de ventas.
 | Producto | Compras de un producto concreto |
 
 Se combinan entre sí para acotar la consulta.
+
+**El reporte solo se consulta al pulsar Buscar** (o Enter en el formulario).
+Cambiar un filtro —tipo de documento, agrupación, año, mes, fechas,
+establecimientos, proveedor, producto, info adicional o los botones de
+limpiar— no actualiza la tabla: el botón **Buscar se pone en ámbar** para avisar
+que hay filtros sin aplicar. Así se pueden ajustar varios filtros seguidos y
+lanzar una sola consulta.
 
 El selector **Tipo de documento** empieza siempre con **Todas las compras** y
 luego ofrece únicamente los tipos que ya tienen compras registradas en la
@@ -89,9 +96,15 @@ Disponible en **PDF** y **Excel**.
   vincular al catálogo.
 - **Las cifras no cuadran con cuentas por pagar**: este reporte muestra lo
   comprado, no lo pendiente de pago.
+- **Cambié un filtro y la tabla no cambia**: los filtros no consultan solos;
+  pulse **Buscar** (el botón queda en ámbar mientras haya cambios sin aplicar).
 
 ## Historial de cambios
 
+- **1.3** — Los filtros **ya no consultan al cambiarlos**: el reporte se genera
+  solo al pulsar **Buscar** (o Enter). Mientras haya filtros sin aplicar, el
+  botón se muestra en ámbar. Antes cada cambio de selector, fecha, proveedor o
+  producto lanzaba una consulta.
 - **1.2** — Nuevo filtro **Establecimientos** (solo desde la matriz del grupo
   RUC) para consolidar las compras de todas las sucursales del mismo RUC: badge
   del establecimiento en el detallado, columna "Estab." en PDF y Excel, y línea

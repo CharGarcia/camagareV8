@@ -61,10 +61,10 @@ document.addEventListener('DOMContentLoaded', function () {
                                     `;
                                     chip.querySelector('button').addEventListener('click', function() {
                                         chip.remove();
-                                        window.RV_generarReporte();
+                                        window.RV_filtrosCambiados();
                                     });
                                     chipsCliente.appendChild(chip);
-                                    window.RV_generarReporte();
+                                    window.RV_filtrosCambiados();
                                 }
                             });
                             
@@ -101,7 +101,32 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('rv-anio').addEventListener('change', window.RV_cambiarMesAnio);
 });
 
-// Buscador predictivo genérico de texto: rellena el input con el valor elegido y regenera.
+/* ════════════════════════════════════════════════════
+   LOS FILTROS NO CONSULTAN SOLOS
+   Cambiar cualquier filtro (selects, fechas, chips de cliente, buscadores, botones
+   de limpiar) solo deja marcado que hay cambios sin aplicar: el botón Buscar pasa a
+   ámbar. El reporte se genera únicamente al pulsar Buscar (o Enter en el formulario).
+   Ordenar por una columna sí regenera, pero solo si no hay filtros pendientes.
+════════════════════════════════════════════════════ */
+window.rv_filtros_pendientes = true;   // al abrir, todavía no se ha buscado nada
+window.RV_filtrosCambiados = function () {
+    window.rv_filtros_pendientes = true;
+    const btn = document.getElementById('btn-generar-reporte');
+    if (!btn) return;
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-warning');
+    btn.title = 'Hay filtros sin aplicar: pulsa Buscar';
+};
+function RV_filtrosAplicados() {
+    window.rv_filtros_pendientes = false;
+    const btn = document.getElementById('btn-generar-reporte');
+    if (!btn) return;
+    btn.classList.remove('btn-warning');
+    btn.classList.add('btn-primary');
+    btn.title = '';
+}
+
+// Buscador predictivo genérico de texto: rellena el input con el valor elegido.
 function RV_predictivoTexto(inputId, dropdownId, endpoint, msgVacio) {
     const input = document.getElementById(inputId);
     const dd    = document.getElementById(dropdownId);
@@ -138,7 +163,7 @@ function RV_predictivoTexto(inputId, dropdownId, endpoint, msgVacio) {
                             btn.addEventListener('click', function () {
                                 input.value = it.valor;
                                 dd.classList.add('d-none');
-                                window.RV_generarReporte();
+                                window.RV_filtrosCambiados();
                             });
                             dd.appendChild(btn);
                         });
@@ -183,13 +208,13 @@ window.RV_onAgruparChange = function() {
         mesEl.disabled = (agruparPor === 'MES');
         if (mesEl.value !== 'TODOS') {
             mesEl.value = 'TODOS';
-            window.RV_cambiarMesAnio(); // recalcula el rango de fechas y genera el reporte
+            window.RV_cambiarMesAnio(); // recalcula el rango de fechas (no consulta)
             return;
         }
     } else {
         mesEl.disabled = false;
     }
-    window.RV_generarReporte();
+    window.RV_filtrosCambiados();
 };
 
 window.RV_cambiarMesAnio = function() {
@@ -214,12 +239,13 @@ window.RV_cambiarMesAnio = function() {
             document.getElementById('rv-fecha-hasta').value = strHasta;
         }
     }
-    
-    window.RV_generarReporte();
+
+    window.RV_filtrosCambiados();
 };
 
-// Función principal para pedir los datos via AJAX
+// Función principal para pedir los datos via AJAX (solo desde Buscar / orden de columnas)
 window.RV_generarReporte = function () {
+    RV_filtrosAplicados();
     const form = document.getElementById('form-filtros-reporte');
     const formData = new FormData(form);
     const params = new URLSearchParams(formData).toString();
@@ -572,7 +598,8 @@ function RV_engancharOrden(modo) {
             if (typeof window.CMG_guardarVista === 'function') {
                 window.CMG_guardarVista(RUTA_MODULO, { '__ordenCol__': th.dataset.sort, '__ordenDir__': nuevaDir }, { reload: false });
             }
-            window.RV_generarReporte();
+            // Con filtros sin aplicar no se consulta: el orden queda guardado y se usa al pulsar Buscar.
+            if (!window.rv_filtros_pendientes) window.RV_generarReporte();
         });
     });
 }

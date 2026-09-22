@@ -33,7 +33,7 @@
                             Tipo de Documento
                             <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_tipo_documento', 'tipo_documento') ?>
                         </label>
-                        <select name="tipo_documento" id="rv_tipo_documento" class="form-select form-select-sm shadow-none border" style="width:200px;" onchange="window.RV_generarReporte()">
+                        <select name="tipo_documento" id="rv_tipo_documento" class="form-select form-select-sm shadow-none border" style="width:200px;" onchange="window.RV_filtrosCambiados()">
                             <option value="FACTURA" selected>Facturas de Venta</option>
                             <option value="RECIBO">Recibos de Venta</option>
                             <option value="NOTA_CREDITO">Notas de Crédito en Ventas</option>
@@ -62,7 +62,7 @@
                             <i class="bi bi-tag me-1"></i>Marca
                             <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_id_marca', 'id_marca') ?>
                         </label>
-                        <select name="id_marca" id="rv_id_marca" class="form-select form-select-sm shadow-none border" style="width:140px;" onchange="window.RV_generarReporte()">
+                        <select name="id_marca" id="rv_id_marca" class="form-select form-select-sm shadow-none border" style="width:140px;" onchange="window.RV_filtrosCambiados()">
                             <option value="" selected>Todas</option>
                             <?php foreach (($marcas ?? []) as $mk): ?>
                                 <option value="<?= (int)$mk['id'] ?>"><?= htmlspecialchars($mk['nombre']) ?></option>
@@ -75,7 +75,7 @@
                             <i class="bi bi-diagram-3 me-1"></i>Categoría
                             <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_id_categoria', 'id_categoria') ?>
                         </label>
-                        <select name="id_categoria" id="rv_id_categoria" class="form-select form-select-sm shadow-none border" style="width:140px;" onchange="window.RV_generarReporte()">
+                        <select name="id_categoria" id="rv_id_categoria" class="form-select form-select-sm shadow-none border" style="width:140px;" onchange="window.RV_filtrosCambiados()">
                             <option value="" selected>Todas</option>
                             <?php foreach (($categorias ?? []) as $ct): ?>
                                 <option value="<?= (int)$ct['id'] ?>"><?= htmlspecialchars($ct['nombre']) ?></option>
@@ -116,7 +116,7 @@
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos</label>
                         <select id="rv-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:180px;"
-                                onchange="window.RV_generarReporte()"
+                                onchange="window.RV_filtrosCambiados()"
                                 title="Consolidado por RUC: <?php echo htmlspecialchars(implode(' · ', $establecimientos ?? [])); ?>">
                             <option value="ESTABLECIMIENTO" selected>Solo este (matriz)</option>
                             <option value="CONSOLIDADO">Consolidado (<?php echo count($establecimientos ?? []); ?> establec.)</option>
@@ -132,16 +132,15 @@
                         <input type="date" name="fecha_hasta" id="rv-fecha-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;" value="<?php echo date('Y-m-t'); ?>">
                     </div>
 
-                    <?php // Ancho fijo (no flex:1): así Marca y Categoría caben en esta misma fila. ?>
-                    <div class="position-relative" style="width:210px;">
+                    <?php // Ocupa todo lo que sobra de la fila (flex:1); el min-width bajo evita que salte solo a otra línea. ?>
+                    <div class="position-relative" style="flex:1 1 160px;min-width:160px;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Cliente</label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                             <input type="text" class="form-control border-start-0 px-1 shadow-none" id="rv-search-cliente" placeholder="Buscar clientes..." autocomplete="off">
                         </div>
                         <div id="rv-chips-cliente" class="d-flex flex-column gap-1 mt-2"></div>
-                        <?php // El dropdown es más ancho que el input (min-width) para que el nombre y la cédula se lean completos. ?>
-                        <div id="rv-dropdown-clientes" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;min-width:340px;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
+                        <div id="rv-dropdown-clientes" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
                 </div>
 
@@ -151,7 +150,7 @@
                             <i class="bi bi-pencil-square me-1"></i>Borradores
                             <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_borradores', 'borradores') ?>
                         </label>
-                        <select name="borradores" id="rv_borradores" class="form-select form-select-sm shadow-none border" style="width:150px;" onchange="window.RV_generarReporte()"
+                        <select name="borradores" id="rv_borradores" class="form-select form-select-sm shadow-none border" style="width:150px;" onchange="window.RV_filtrosCambiados()"
                                 title="Por defecto el reporte solo muestra documentos autorizados (recibos: emitidos). Los borradores aún no son ventas.">
                             <option value="EXCLUIR" selected>Sin borradores</option>
                             <option value="INCLUIR">Con borradores</option>
@@ -172,7 +171,7 @@
                                    title="<?= !empty($vendedores) ? 'Solo puedes consultar las ventas de tu vendedor' : 'No tienes un vendedor vinculado: ves solo lo que registraste' ?>"
                                    value="<?= htmlspecialchars($vendedores[0]['nombre'] ?? 'Sin vendedor vinculado') ?>">
                         <?php else: ?>
-                            <select name="id_vendedor" id="rv_id_vendedor" class="form-select form-select-sm shadow-none border w-100" onchange="window.RV_generarReporte()">
+                            <select name="id_vendedor" id="rv_id_vendedor" class="form-select form-select-sm shadow-none border w-100" onchange="window.RV_filtrosCambiados()">
                                 <option value="" selected>Todos</option>
                                 <?php foreach (($vendedores ?? []) as $vd): ?>
                                     <option value="<?= (int)$vd['id'] ?>"><?= htmlspecialchars($vd['nombre']) ?></option>
@@ -188,7 +187,7 @@
                             <input type="text" name="producto_texto" id="rv-producto-texto" class="form-control border-start-0 px-1 shadow-none"
                                    placeholder="Ej: pelota, servicio..." autocomplete="off">
                             <button type="button" class="btn btn-outline-secondary" title="Limpiar"
-                                    onclick="document.getElementById('rv-producto-texto').value=''; window.RV_generarReporte();"><i class="bi bi-x-lg"></i></button>
+                                    onclick="document.getElementById('rv-producto-texto').value=''; window.RV_filtrosCambiados();"><i class="bi bi-x-lg"></i></button>
                         </div>
                         <div id="rv-dropdown-items" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
@@ -198,9 +197,9 @@
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                             <input type="text" name="variante_texto" id="rv-variante-texto" class="form-control border-start-0 px-1 shadow-none"
-                                   placeholder="Ej: Rojo, Talla M..." autocomplete="off" onchange="window.RV_generarReporte()">
+                                   placeholder="Ej: Rojo, Talla M..." autocomplete="off" onchange="window.RV_filtrosCambiados()">
                             <button type="button" class="btn btn-outline-secondary" title="Limpiar"
-                                    onclick="document.getElementById('rv-variante-texto').value=''; window.RV_generarReporte();"><i class="bi bi-x-lg"></i></button>
+                                    onclick="document.getElementById('rv-variante-texto').value=''; window.RV_filtrosCambiados();"><i class="bi bi-x-lg"></i></button>
                         </div>
                     </div>
 
@@ -211,7 +210,7 @@
                             <input type="text" name="buscar_info" id="rv-buscar-info" class="form-control border-start-0 px-1 shadow-none"
                                    placeholder="Ej: placa, referencia..." autocomplete="off">
                             <button type="button" class="btn btn-outline-secondary" title="Limpiar"
-                                    onclick="document.getElementById('rv-buscar-info').value=''; window.RV_generarReporte();"><i class="bi bi-x-lg"></i></button>
+                                    onclick="document.getElementById('rv-buscar-info').value=''; window.RV_filtrosCambiados();"><i class="bi bi-x-lg"></i></button>
                         </div>
                         <div id="rv-dropdown-info" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
