@@ -488,10 +488,13 @@
 
         tr.innerHTML = `
         <td class="ps-3">
+            <input type="text" class="form-control form-control-sm input-detalle input-codigo"
+                value="${_esc(data.codigo_principal || '')}" placeholder="Código">
+        </td>
+        <td>
             <input type="text" class="form-control form-control-sm input-detalle input-descripcion"
                 value="${_esc(data.descripcion || '')}" placeholder="Buscar producto o escribe descripción...">
             <input type="hidden" class="input-id-producto" value="${data.id_producto || ''}">
-            <input type="hidden" class="input-codigo" value="${_esc(data.codigo_principal || '')}">
             <input type="hidden" class="input-imagen" value="${_esc(data.producto_imagen || data.imagen || '')}">
         </td>
         <td>
@@ -540,9 +543,13 @@
             </button>
         </td>`;
 
-        // Autocomplete descripción → productos
+        // Autocomplete código / descripción → productos. Los dos inputs comparten el
+        // mismo dropdown (se posiciona bajo el que disparó la búsqueda) y el backend ya
+        // busca por códigos y nombre, así que escribir en cualquiera encuentra el producto.
         // El dropdown se añade al <body> con position:fixed para escapar el overflow:hidden de la tabla
         const inpDesc = tr.querySelector('.input-descripcion');
+        const inpCod  = tr.querySelector('.input-codigo');
+        let   inpAct  = inpDesc;   // último input que abrió el dropdown
         const ddProd  = document.createElement('div');
         ddProd.className = 'list-group shadow d-none';
         ddProd.style.cssText = [
@@ -561,60 +568,63 @@
         ddProd._pfTr  = tr;      // referencia inversa para _pfSelProd
 
         function _posDdProd() {
-            const r = inpDesc.getBoundingClientRect();
+            const r = inpAct.getBoundingClientRect();
             ddProd.style.top   = r.bottom + 'px';
             ddProd.style.left  = r.left   + 'px';
             ddProd.style.width = Math.max(r.width, 340) + 'px';
         }
 
-        // Backspace / Delete con producto seleccionado → limpiar la fila
-        inpDesc.addEventListener('keydown', e => {
-            const idProd = tr.querySelector('.input-id-producto');
-            if ((e.key === 'Backspace' || e.key === 'Delete') && idProd && idProd.value) {
-                e.preventDefault();
-                inpDesc.value = '';
-                idProd.value = '';
-                tr.querySelector('.input-codigo').value = '';
-                ddProd.classList.add('d-none');
-            }
-        });
-
         let timer;
-        inpDesc.addEventListener('input', () => {
-            clearTimeout(timer);
-            const q = inpDesc.value.trim();
-            if (!q) {
-                ddProd.classList.add('d-none');
-                // Limpiar datos del producto al vaciar descripción
-                tr.querySelector('.input-id-producto').value = '';
-                tr.querySelector('.input-codigo').value = '';
-                return;
-            }
-            timer = setTimeout(async () => {
-                try {
-                    const res = await (await fetch(`${urlBase()}/getProductosAjax?q=${encodeURIComponent(q)}`)).json();
-                    if (!res.ok || !res.data?.length) {
-                        ddProd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados</div>';
-                    } else {
-                        ddProd.innerHTML = res.data.map(p =>
-                            `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;"
-                                 onclick='window._pfSelProd(this, ${JSON.stringify(p)})'>
-                                <span class="fw-semibold">${_esc(p.codigo || '')} — ${_esc(p.nombre || '')}</span>
-                                <span class="text-muted ms-2 float-end">$${parseFloat(p.precio_base || 0).toFixed(2)}</span>
-                            </div>`
-                        ).join('');
-                    }
-                    _posDdProd();
-                    ddProd.classList.remove('d-none');
-                } catch(e) { console.error(e); }
-            }, 280);
+        [inpCod, inpDesc].forEach(inp => {
+            // Backspace / Delete con producto seleccionado → limpiar la selección completa
+            // (código, descripción e id) de una vez, no letra por letra.
+            inp.addEventListener('keydown', e => {
+                const idProd = tr.querySelector('.input-id-producto');
+                if ((e.key === 'Backspace' || e.key === 'Delete') && idProd && idProd.value) {
+                    e.preventDefault();
+                    inpDesc.value = '';
+                    inpCod.value  = '';
+                    idProd.value  = '';
+                    ddProd.classList.add('d-none');
+                }
+            });
+
+            inp.addEventListener('input', () => {
+                clearTimeout(timer);
+                inpAct = inp;
+                const q = inp.value.trim();
+                if (!q) {
+                    ddProd.classList.add('d-none');
+                    // Sin texto ya no hay producto de catálogo: la línea queda como concepto libre
+                    tr.querySelector('.input-id-producto').value = '';
+                    return;
+                }
+                timer = setTimeout(async () => {
+                    try {
+                        const res = await (await fetch(`${urlBase()}/getProductosAjax?q=${encodeURIComponent(q)}`)).json();
+                        if (!res.ok || !res.data?.length) {
+                            ddProd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados</div>';
+                        } else {
+                            ddProd.innerHTML = res.data.map(p =>
+                                `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;"
+                                     onclick='window._pfSelProd(this, ${JSON.stringify(p)})'>
+                                    <span class="fw-semibold">${_esc(p.codigo || '')} — ${_esc(p.nombre || '')}</span>
+                                    <span class="text-muted ms-2 float-end">$${parseFloat(p.precio_base || 0).toFixed(2)}</span>
+                                </div>`
+                            ).join('');
+                        }
+                        _posDdProd();
+                        ddProd.classList.remove('d-none');
+                    } catch(e) { console.error(e); }
+                }, 280);
+            });
         });
         // Reposicionar si la tabla hace scroll
         document.querySelector('.table-responsive')?.addEventListener('scroll', () => {
             if (!ddProd.classList.contains('d-none')) _posDdProd();
         });
         document.addEventListener('click', e => {
-            if (!inpDesc.contains(e.target) && !ddProd.contains(e.target)) ddProd.classList.add('d-none');
+            if (!inpDesc.contains(e.target) && !inpCod.contains(e.target) && !ddProd.contains(e.target)) ddProd.classList.add('d-none');
         });
 
         // Eventos de cálculo (igual que calcSinImp / calcConImp / syncPrecioIva en FV)
@@ -1175,10 +1185,13 @@
 
         tr.innerHTML = `
         <td class="ps-3">
+            <input type="text" class="form-control form-control-sm input-detalle plt-input-codigo"
+                value="${_esc(data.codigo_principal || '')}" placeholder="Código">
+        </td>
+        <td>
             <input type="text" class="form-control form-control-sm input-detalle plt-input-descripcion"
                 value="${_esc(data.descripcion || '')}" placeholder="Buscar producto o escribe descripción...">
             <input type="hidden" class="plt-input-id-producto" value="${data.id_producto || ''}">
-            <input type="hidden" class="plt-input-codigo" value="${_esc(data.codigo_principal || '')}">
         </td>
         <td>
             <input type="text" class="form-control form-control-sm input-detalle plt-input-adicional text-muted fst-italic"
@@ -1207,9 +1220,12 @@
             </button>
         </td>`;
 
-        // Autocomplete descripción → productos (mismo patrón que la tabla de detalle
-        // de la proforma, dropdown anclado al body para escapar el overflow de la tabla)
+        // Autocomplete código / descripción → productos (mismo patrón que la tabla de
+        // detalle de la proforma: los dos inputs comparten el dropdown, anclado al body
+        // para escapar el overflow de la tabla)
         const inpDesc = tr.querySelector('.plt-input-descripcion');
+        const inpCod  = tr.querySelector('.plt-input-codigo');
+        let   inpAct  = inpDesc;
         const ddProd  = document.createElement('div');
         ddProd.className = 'list-group shadow d-none';
         ddProd.style.cssText = [
@@ -1222,54 +1238,56 @@
         ddProd._pltTr = tr;
 
         function _posDdProd() {
-            const r = inpDesc.getBoundingClientRect();
+            const r = inpAct.getBoundingClientRect();
             ddProd.style.top   = r.bottom + 'px';
             ddProd.style.left  = r.left   + 'px';
             ddProd.style.width = Math.max(r.width, 340) + 'px';
         }
 
-        inpDesc.addEventListener('keydown', e => {
-            const idProd = tr.querySelector('.plt-input-id-producto');
-            if ((e.key === 'Backspace' || e.key === 'Delete') && idProd && idProd.value) {
-                e.preventDefault();
-                inpDesc.value = '';
-                idProd.value = '';
-                tr.querySelector('.plt-input-codigo').value = '';
-                ddProd.classList.add('d-none');
-            }
-        });
-
         let timer;
-        inpDesc.addEventListener('input', () => {
-            clearTimeout(timer);
-            const q = inpDesc.value.trim();
-            if (!q) {
-                ddProd.classList.add('d-none');
-                tr.querySelector('.plt-input-id-producto').value = '';
-                tr.querySelector('.plt-input-codigo').value = '';
-                return;
-            }
-            timer = setTimeout(async () => {
-                try {
-                    const res = await (await fetch(`${urlBase()}/getProductosAjax?q=${encodeURIComponent(q)}`)).json();
-                    if (!res.ok || !res.data?.length) {
-                        ddProd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados</div>';
-                    } else {
-                        ddProd.innerHTML = res.data.map(p =>
-                            `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;"
-                                 onclick='window._pltSelProd(this, ${JSON.stringify(p)})'>
-                                <span class="fw-semibold">${_esc(p.codigo || '')} — ${_esc(p.nombre || '')}</span>
-                                <span class="text-muted ms-2 float-end">$${parseFloat(p.precio_base || 0).toFixed(2)}</span>
-                            </div>`
-                        ).join('');
-                    }
-                    _posDdProd();
-                    ddProd.classList.remove('d-none');
-                } catch (e) { console.error(e); }
-            }, 280);
+        [inpCod, inpDesc].forEach(inp => {
+            inp.addEventListener('keydown', e => {
+                const idProd = tr.querySelector('.plt-input-id-producto');
+                if ((e.key === 'Backspace' || e.key === 'Delete') && idProd && idProd.value) {
+                    e.preventDefault();
+                    inpDesc.value = '';
+                    inpCod.value  = '';
+                    idProd.value  = '';
+                    ddProd.classList.add('d-none');
+                }
+            });
+
+            inp.addEventListener('input', () => {
+                clearTimeout(timer);
+                inpAct = inp;
+                const q = inp.value.trim();
+                if (!q) {
+                    ddProd.classList.add('d-none');
+                    tr.querySelector('.plt-input-id-producto').value = '';
+                    return;
+                }
+                timer = setTimeout(async () => {
+                    try {
+                        const res = await (await fetch(`${urlBase()}/getProductosAjax?q=${encodeURIComponent(q)}`)).json();
+                        if (!res.ok || !res.data?.length) {
+                            ddProd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados</div>';
+                        } else {
+                            ddProd.innerHTML = res.data.map(p =>
+                                `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;"
+                                     onclick='window._pltSelProd(this, ${JSON.stringify(p)})'>
+                                    <span class="fw-semibold">${_esc(p.codigo || '')} — ${_esc(p.nombre || '')}</span>
+                                    <span class="text-muted ms-2 float-end">$${parseFloat(p.precio_base || 0).toFixed(2)}</span>
+                                </div>`
+                            ).join('');
+                        }
+                        _posDdProd();
+                        ddProd.classList.remove('d-none');
+                    } catch (e) { console.error(e); }
+                }, 280);
+            });
         });
         document.addEventListener('click', e => {
-            if (!inpDesc.contains(e.target) && !ddProd.contains(e.target)) ddProd.classList.add('d-none');
+            if (!inpDesc.contains(e.target) && !inpCod.contains(e.target) && !ddProd.contains(e.target)) ddProd.classList.add('d-none');
         });
 
         return tr;

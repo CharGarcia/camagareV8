@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips
-version: 1.15
+etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips
+version: 1.16
 orden: 15
 estado: activo
 ---
@@ -41,6 +41,17 @@ Cualquier otro salto se rechaza. El significado de cada uno:
 4. Guarde. La proforma queda en **borrador**.
 5. Envíela al cliente. Si la acepta, cámbiela a **aprobada**.
 6. Pulse **Convertir a factura**.
+
+**Buscar el producto por código o por descripción.** Cada línea del detalle
+tiene dos columnas para ubicar el producto: **Código** y **Descripción**.
+Escriba en cualquiera de las dos y se despliega la misma lista de sugerencias
+(código, nombre y precio); al elegir una, la línea se completa con el código, el
+nombre, el precio y el IVA del producto. Con un producto ya elegido, **Backspace
+o Supr** en cualquiera de esos dos campos limpia la selección completa (código,
+descripción y producto) de una vez, para volver a buscar. Si escribe a mano sin
+elegir nada de la lista, la línea queda como concepto libre y se guarda tal cual
+lo escribió, código incluido. La tabla de ítems de una **plantilla** funciona
+igual.
 
 ## Convertir en factura
 
@@ -474,6 +485,12 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.16** — El detalle de la proforma (y el de las plantillas) muestra la
+  columna **Código** junto a *Descripción*. El código se puede escribir y
+  también sirve para **buscar el producto**: al teclear en Código o en
+  Descripción se despliega la misma lista de sugerencias. Antes el código solo
+  se veía en el PDF, el Excel y la pestaña *Info Productos*. Nuevo apartado
+  *Buscar el producto por código o por descripción* en *Cómo se usa*.
 - **1.15** — El botón **Enviar a pedidos** ya funciona (antes solo avisaba
   "próximamente"). Genera un pedido en estado *Pendiente* con el cliente, los
   productos, las cantidades y los precios de la proforma; los datos de entrega se

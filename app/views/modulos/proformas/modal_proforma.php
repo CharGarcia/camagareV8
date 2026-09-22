@@ -331,8 +331,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                     <table class="table table-sm table-detalle mb-0 text-nowrap" id="pf_tablaDetalle">
                                         <thead>
                                             <tr class="table-light border-bottom">
-                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:20%;">Descripción</th>
-                                                <th class="py-2 small fw-bold text-muted" style="width:10%;">Adicional</th>
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:9%;">Código</th>
+                                                <th class="py-2 small fw-bold text-muted" style="width:18%;">Descripción</th>
+                                                <th class="py-2 small fw-bold text-muted" style="width:9%;">Adicional</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width:6%;">Cant.</th>
                                                 <th class="py-2 small fw-bold text-muted" style="width:12%;">Precios</th>
                                                 <th class="py-2 small fw-bold text-muted text-end" style="width:8%;">P. Sin Imp.</th>
@@ -743,8 +744,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                             <table class="table table-sm table-detalle mb-0 text-nowrap">
                                 <thead>
                                     <tr class="table-light border-bottom">
-                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width:28%;">Descripción</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width:20%;">Adicional</th>
+                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width:12%;">Código</th>
+                                        <th class="py-2 small fw-bold text-muted" style="width:24%;">Descripción</th>
+                                        <th class="py-2 small fw-bold text-muted" style="width:12%;">Adicional</th>
                                         <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Cant.</th>
                                         <th class="py-2 small fw-bold text-muted text-end" style="width:14%;">P. Unit.</th>
                                         <th class="py-2 small fw-bold text-muted text-end" style="width:12%;">Desc.</th>
