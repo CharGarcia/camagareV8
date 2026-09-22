@@ -132,7 +132,8 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 - **Asientos Contables, Mayores, Estados Financieros y Balance de
   Comprobación** conservan su aviso de siempre: al entrar, preguntan si desea
   generar los asientos pendientes de **todos** los módulos y muestran el detalle
-  de qué cuenta falta en cada caso. Ese aviso sigue siendo el lugar donde ver los
+  de qué cuenta falta en cada caso. En Mayores, Estados Financieros y Balance
+  de Comprobación el reporte no se puede generar hasta que ese aviso se resuelva. Ese aviso sigue siendo el lugar donde ver los
   problemas: la generación automática es silenciosa a propósito, pero no esconde
   nada.
 - **Configuración Contable**: es donde se corrigen las cuentas. Cada cambio que

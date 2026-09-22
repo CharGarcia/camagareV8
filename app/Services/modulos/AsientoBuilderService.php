@@ -1331,10 +1331,18 @@ class AsientoBuilderService
      * Subtotal/Gasto — comportamiento por defecto, igual que antes; null=todas, para Por Pagar).
      * Nunca postea con id_cuenta=0: lo no resuelto ni por línea ni por la base va en 'sin_cuenta'.
      *
+     * $tablaDetalle/$colCabecera: tabla de líneas del documento y su columna hacia la cabecera.
+     * Por defecto Compras; Liquidaciones de Compra pasa 'liquidaciones_detalle'/'id_cabecera'.
+     * Solo se admiten esas dos combinaciones (se interpolan en el SQL).
+     *
      * @return array{partes: array<int,array{id_cuenta:int,cuenta_codigo:string,cuenta_nombre:string,monto:float}>, sin_cuenta: float}
      */
-    private function repartirComprasPorItem(\PDO $db, int $idEmpresa, int $idCompra, int $idAsientoTipo, array $cuentaBase, float $montoTotal, string $valorExpr = 'd.precio_total_sin_impuesto', string $joinsExtra = '', ?bool $soloInventariable = false): array
+    private function repartirComprasPorItem(\PDO $db, int $idEmpresa, int $idCompra, int $idAsientoTipo, array $cuentaBase, float $montoTotal, string $valorExpr = 'd.precio_total_sin_impuesto', string $joinsExtra = '', ?bool $soloInventariable = false, string $tablaDetalle = 'compras_detalle', string $colCabecera = 'id_compra'): array
     {
+        $tablasPermitidas = ['compras_detalle' => 'id_compra', 'liquidaciones_detalle' => 'id_cabecera'];
+        if (($tablasPermitidas[$tablaDetalle] ?? null) !== $colCabecera) {
+            throw new \InvalidArgumentException("Tabla de detalle no soportada para el reparto por línea: {$tablaDetalle}.{$colCabecera}");
+        }
         $idCuentaBase = (int)($cuentaBase['id_cuenta'] ?? 0);
         $baseLinea = [
             'id_cuenta'     => $idCuentaBase,
@@ -1361,7 +1369,7 @@ class AsientoBuilderService
         $sql = "SELECT COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
                        ROUND(SUM({$valorExpr})::numeric, 2) AS monto
-                FROM compras_detalle d
+                FROM {$tablaDetalle} d
                 LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
                 LEFT JOIN asientos_programados ap_i
@@ -1374,7 +1382,7 @@ class AsientoBuilderService
                        ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
                       AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
                 LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
-                WHERE d.id_compra = :id_doc
+                WHERE d.{$colCabecera} = :id_doc
                   {$filtroInv}
                 GROUP BY COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
         $st = $db->prepare($sql);
@@ -2694,52 +2702,74 @@ class AsientoBuilderService
         $gastoLineas = null; $inventarioLineas = null; $porPagarLineas = null;
         $sinCuentaExtra = [];
         if ($repartePorLinea && $idCompra > 0) {
-            // LATERAL por línea, no subconsulta agregada sobre toda la tabla: mismo motivo que en
-            // armarDistribucionVentasFactura(). Usa idx_compras_impuestos_detalle.
-            $joinImpuestosPorLinea = "LEFT JOIN LATERAL (
-                    SELECT SUM(i.valor) AS total_impuestos
-                    FROM compras_detalle_impuestos i
-                    WHERE i.id_compra_detalle = d.id AND i.codigo_impuesto = '2'
-                ) imp_pp ON true";
-
-            foreach ($reglas as $rr) {
-                $cod = strtoupper($rr['asiento_tipo_codigo'] ?? $rr['codigo'] ?? '');
-                $con = strtolower($rr['asiento_tipo_referencia'] ?? $rr['concepto'] ?? $rr['referencia'] ?? '');
-                $cuentaBaseRr = ['id_cuenta' => (int)($rr['id_cuenta'] ?? 0), 'cuenta_codigo' => $rr['cuenta_codigo'] ?? '', 'cuenta_nombre' => $rr['cuenta_nombre'] ?? ''];
-                $refConcepto = $rr['asiento_tipo_referencia'] ?? $rr['concepto'] ?? $rr['referencia'] ?? '';
-
-                if ((str_contains($cod, 'PORPAGAR') || str_contains($con, 'pagar')) && $importeTotal > 0) {
-                    $res = $this->repartirComprasPorItem(
-                        $db, $idEmpresa, $idCompra, (int)$rr['id_asiento_tipo'], $cuentaBaseRr, $importeTotal,
-                        '(d.precio_total_sin_impuesto + COALESCE(imp_pp.total_impuestos, 0))', $joinImpuestosPorLinea, null
-                    );
-                    $porPagarLineas = $res['partes'];
-                    if ($res['sin_cuenta'] >= 0.01) {
-                        $sinCuentaExtra[] = $refConcepto . ' (algunas líneas sin cuenta por ítem/categoría/marca, ni en la General)';
-                    }
-                } elseif ((str_contains($cod, 'SUBTOTAL') || str_contains($con, 'subtotal')) && $subGasto > 0) {
-                    $res = $this->repartirComprasPorItem(
-                        $db, $idEmpresa, $idCompra, (int)$rr['id_asiento_tipo'], $cuentaBaseRr, $subGasto,
-                        'd.precio_total_sin_impuesto', '', false
-                    );
-                    $gastoLineas = $res['partes'];
-                    if ($res['sin_cuenta'] >= 0.01) {
-                        $sinCuentaExtra[] = $refConcepto . ' (algunas líneas sin cuenta por ítem/categoría/marca, ni en la General)';
-                    }
-                } elseif ((str_contains($cod, 'INVENTARIO') || str_contains($con, 'inventario')) && $subInventario > 0) {
-                    $res = $this->repartirComprasPorItem(
-                        $db, $idEmpresa, $idCompra, (int)$rr['id_asiento_tipo'], $cuentaBaseRr, $subInventario,
-                        'd.precio_total_sin_impuesto', '', true
-                    );
-                    $inventarioLineas = $res['partes'];
-                    if ($res['sin_cuenta'] >= 0.01) {
-                        $sinCuentaExtra[] = $refConcepto . ' (algunas líneas sin cuenta por ítem/categoría/marca, ni en la General)';
-                    }
-                }
-            }
+            [$gastoLineas, $inventarioLineas, $porPagarLineas, $sinCuentaExtra] = $this->repartirAdquisicionPorLinea(
+                $db, $idEmpresa, $idCompra, $reglas, $importeTotal, $subGasto, $subInventario,
+                'compras_detalle', 'id_compra', 'compras_detalle_impuestos', 'id_compra_detalle'
+            );
         }
 
         return $this->ensamblarAdquisicion($reglas, $importeTotal, $subInventario, $subGasto, $propina, $ivaRows, $reversa, $gastoLineas, $porPagarLineas, $inventarioLineas, $sinCuentaExtra);
+    }
+
+    /**
+     * Reparto por línea (item_compra → categoría → marca → General) de un documento de adquisición:
+     * Por Pagar, Subtotal/Gasto e Inventario reparten cada uno con SU PROPIA cascada. Compartido por
+     * Compras y Liquidaciones de Compra; el llamador decide si aplica (solo cuando el proveedor NO
+     * tiene reglas propias — Opción 2). ICE/Descuento siguen fuera de alcance (subtotal neto por línea).
+     *
+     * @return array{0: ?array, 1: ?array, 2: ?array, 3: array} [gastoLineas, inventarioLineas, porPagarLineas, sinCuentaExtra]
+     */
+    private function repartirAdquisicionPorLinea(\PDO $db, int $idEmpresa, int $idDoc, array $reglas, float $importeTotal, float $subGasto, float $subInventario, string $tablaDetalle, string $colCabecera, string $tablaImpuestos, string $colImpDetalle): array
+    {
+        $gastoLineas = null; $inventarioLineas = null; $porPagarLineas = null;
+        $sinCuentaExtra = [];
+
+        $impuestosPermitidos = ['compras_detalle_impuestos' => 'id_compra_detalle', 'liquidaciones_detalle_impuestos' => 'id_detalle'];
+        if (($impuestosPermitidos[$tablaImpuestos] ?? null) !== $colImpDetalle) {
+            throw new \InvalidArgumentException("Tabla de impuestos no soportada para el reparto por línea: {$tablaImpuestos}.{$colImpDetalle}");
+        }
+
+        // LATERAL por línea, no subconsulta agregada sobre toda la tabla: mismo motivo que en
+        // armarDistribucionVentasFactura().
+        $joinImpuestosPorLinea = "LEFT JOIN LATERAL (
+                SELECT SUM(i.valor) AS total_impuestos
+                FROM {$tablaImpuestos} i
+                WHERE i.{$colImpDetalle} = d.id AND i.codigo_impuesto = '2'
+            ) imp_pp ON true";
+
+        foreach ($reglas as $rr) {
+            $cod = strtoupper($rr['asiento_tipo_codigo'] ?? $rr['codigo'] ?? '');
+            $con = strtolower($rr['asiento_tipo_referencia'] ?? $rr['concepto'] ?? $rr['referencia'] ?? '');
+            $cuentaBaseRr = ['id_cuenta' => (int)($rr['id_cuenta'] ?? 0), 'cuenta_codigo' => $rr['cuenta_codigo'] ?? '', 'cuenta_nombre' => $rr['cuenta_nombre'] ?? ''];
+            $refConcepto = $rr['asiento_tipo_referencia'] ?? $rr['concepto'] ?? $rr['referencia'] ?? '';
+
+            $res = null;
+            if ((str_contains($cod, 'PORPAGAR') || str_contains($con, 'pagar')) && $importeTotal > 0) {
+                $res = $this->repartirComprasPorItem(
+                    $db, $idEmpresa, $idDoc, (int)$rr['id_asiento_tipo'], $cuentaBaseRr, $importeTotal,
+                    '(d.precio_total_sin_impuesto + COALESCE(imp_pp.total_impuestos, 0))', $joinImpuestosPorLinea, null,
+                    $tablaDetalle, $colCabecera
+                );
+                $porPagarLineas = $res['partes'];
+            } elseif ((str_contains($cod, 'SUBTOTAL') || str_contains($con, 'subtotal')) && $subGasto > 0) {
+                $res = $this->repartirComprasPorItem(
+                    $db, $idEmpresa, $idDoc, (int)$rr['id_asiento_tipo'], $cuentaBaseRr, $subGasto,
+                    'd.precio_total_sin_impuesto', '', false, $tablaDetalle, $colCabecera
+                );
+                $gastoLineas = $res['partes'];
+            } elseif ((str_contains($cod, 'INVENTARIO') || str_contains($con, 'inventario')) && $subInventario > 0) {
+                $res = $this->repartirComprasPorItem(
+                    $db, $idEmpresa, $idDoc, (int)$rr['id_asiento_tipo'], $cuentaBaseRr, $subInventario,
+                    'd.precio_total_sin_impuesto', '', true, $tablaDetalle, $colCabecera
+                );
+                $inventarioLineas = $res['partes'];
+            }
+            if ($res !== null && $res['sin_cuenta'] >= 0.01) {
+                $sinCuentaExtra[] = $refConcepto . ' (algunas líneas sin cuenta por ítem/categoría/marca, ni en la General)';
+            }
+        }
+
+        return [$gastoLineas, $inventarioLineas, $porPagarLineas, $sinCuentaExtra];
     }
 
     /**
@@ -2749,8 +2779,8 @@ class AsientoBuilderService
      * SUBTOTAL (gasto/costo), PORPAGAR (pasivo), PROPINA. El IVA crédito se pasa en $ivaRows
      * (lado natural = Debe). Reutilizado por compras y liquidaciones.
      *
-     * $gastoLineas/$porPagarLineas/$inventarioLineas (2026-08-01, solo los usa Compras — Liquidaciones
-     * sigue sin reparto por línea, no los pasa): si vienen no-null, cada uno reemplaza su línea única
+     * $gastoLineas/$porPagarLineas/$inventarioLineas (2026-08-01 Compras; 2026-09-22 también
+     * Liquidaciones, vía repartirAdquisicionPorLinea()): si vienen no-null, cada uno reemplaza su línea única
      * por varias (una por cuenta resuelta vía Producto/Categoría/Marca), igual patrón que ya tenía
      * Subtotal/Gasto. $sinCuentaExtra son mensajes ya armados por el caller sobre líneas sin cuenta
      * en ese reparto, para no perder el detalle al fusionarlos con $reglasSinCuenta.
@@ -2995,10 +3025,38 @@ class AsientoBuilderService
             ];
         }
 
-        // 4. Reglas base de adquisiciones_compras (mismas cuentas que una compra)
+        // 4. Reglas base de adquisiciones_compras (mismas cuentas que una compra), con la misma
+        //    cascada de ENTIDAD que Compras (generarAsientoSugerido, Opción 2): si el proveedor tiene
+        //    cuentas propias configuradas (Por pagar, Subtotal/Gasto, Inventario…), mandan sobre la
+        //    General. Antes solo se leía la General y una liquidación cuyo proveedor tenía sus cuentas
+        //    quedaba "pendiente de asiento" por cuentas que en realidad sí estaban configuradas.
         $reglas = $this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'adquisiciones_compras');
+        $cuentasProveedor = $idProveedor > 0
+            ? $this->resolverCuentasPorMetodo($idEmpresa, 'adquisiciones_compras', 'proveedor', ['id_proveedor' => $idProveedor])
+            : [];
+        foreach ($reglas as &$r) {
+            $idAsientoTipo = (int) ($r['id_asiento_tipo'] ?? 0);
+            if (isset($cuentasProveedor[$idAsientoTipo])) {
+                $r['id_cuenta']     = $cuentasProveedor[$idAsientoTipo]['id_cuenta'];
+                $r['cuenta_codigo'] = $cuentasProveedor[$idAsientoTipo]['cuenta_codigo'];
+                $r['cuenta_nombre'] = $cuentasProveedor[$idAsientoTipo]['cuenta_nombre'];
+                $r['__cuenta_de_entidad__'] = true;
+            }
+        }
+        unset($r);
 
-        return $this->ensamblarAdquisicion($reglas, $importeTotal, $subInventario, $subGasto, 0.0, $ivaRows, false);
+        // 5. Si el proveedor NO tiene cuentas propias, se reparte por línea (ítem → categoría →
+        //    marca → General) igual que Compras; si las tiene, manda el proveedor (Opción 2).
+        $gastoLineas = null; $inventarioLineas = null; $porPagarLineas = null;
+        $sinCuentaExtra = [];
+        if (empty($cuentasProveedor)) {
+            [$gastoLineas, $inventarioLineas, $porPagarLineas, $sinCuentaExtra] = $this->repartirAdquisicionPorLinea(
+                $db, $idEmpresa, $idLiquidacion, $reglas, $importeTotal, $subGasto, $subInventario,
+                'liquidaciones_detalle', 'id_cabecera', 'liquidaciones_detalle_impuestos', 'id_detalle'
+            );
+        }
+
+        return $this->ensamblarAdquisicion($reglas, $importeTotal, $subInventario, $subGasto, 0.0, $ivaRows, false, $gastoLineas, $porPagarLineas, $inventarioLineas, $sinCuentaExtra);
     }
 
     /**

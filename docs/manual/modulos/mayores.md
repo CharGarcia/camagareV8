@@ -6,7 +6,7 @@ ruta_modulo: modulos/mayores
 tipo: modulo
 visibilidad: todos
 etiquetas: mayor, mayores, libro mayor, movimientos de cuenta, saldo de cuenta, auxiliar, cuadre
-version: 1.0
+version: 1.1
 orden: 40
 estado: activo
 ---
@@ -39,6 +39,10 @@ mayor calculado con asientos pendientes muestra saldos incompletos.
 
 Si prefiere revisar primero y generar después, puede continuar sin generarlos.
 
+Mientras el sistema verifica si hay asientos pendientes, y hasta que usted
+responda el aviso (o termine la generación), el botón **Generar** y las
+exportaciones quedan bloqueados.
+
 ## Errores frecuentes
 
 - **El saldo no coincide con el balance**: puede haber asientos pendientes de
@@ -49,4 +53,7 @@ Si prefiere revisar primero y generar después, puede continuar sin generarlos.
 
 ## Historial de cambios
 
+- **1.1** — El aviso de asientos pendientes ya no muestra la sección **Otros
+  avisos**; mientras el aviso no se resuelve, **Generar** y las exportaciones
+  quedan bloqueados.
 - **1.0** — Versión inicial.

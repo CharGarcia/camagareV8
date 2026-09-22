@@ -46,9 +46,11 @@
 
     /** Arma y muestra el resultado final (generados + resumen + detalle + avisos), acumulados de todos los pasos. */
     function mostrarResultado(opts) {
-        const { resumen, detalle, warnings, generados, interrumpido, onGenerado } = opts;
+        // Los `warnings` del backend (conceptos/formas de pago sin cuenta, etc.) ya NO se muestran
+        // como "Otros avisos": solo se informa lo generado y lo que quedó pendiente por módulo.
+        const { resumen, detalle, generados, interrumpido, onGenerado } = opts;
         const info = Array.isArray(opts.info) ? opts.info : [];
-        const hayPendientes = !!resumen || warnings.length > 0;
+        const hayPendientes = !!resumen;
 
         let html = '';
         if (interrumpido) {
@@ -69,10 +71,6 @@
                 + `<ul id="${idDetalle}" class="mb-0 mt-1 small" style="display:none;">`
                 + detalle.map(d => `<li class="mb-1">${escapeHtml(d)}</li>`).join('') + `</ul></div>`;
         }
-        if (warnings.length) {
-            html += `<div class="text-start small"><strong>Otros avisos:</strong>`
-                + `<ul class="mb-0 mt-1 small">${warnings.map(w => `<li class="mb-1">${escapeHtml(w)}</li>`).join('')}</ul></div>`;
-        }
         if (!html) html = 'No quedaron asientos por generar.';
         if (info.length) {
             // Informativo: no cambia el ícono ni el título (no es un pendiente ni un error).
@@ -87,21 +85,68 @@
                 html: html,
                 width: (detalle.length || info.length) ? 640 : undefined,
                 confirmButtonText: 'Aceptar',
-            }).then(() => { if (typeof onGenerado === 'function') onGenerado(); });
-        } else if (typeof onGenerado === 'function') {
-            onGenerado();
+            }).then(() => {
+                terminar();
+                if (typeof onGenerado === 'function') onGenerado();
+            });
+        } else {
+            terminar();
+            if (typeof onGenerado === 'function') onGenerado();
         }
     }
+
+    // ── Bloqueo de la generación de balances mientras el aviso no esté resuelto ────────────
+    // Desde que se empieza a consultar si hay asientos pendientes hasta que el usuario responde
+    // el aviso (o termina la generación), los botones indicados en `opts.bloquear` quedan
+    // deshabilitados y CMG_asientosPendientesBloqueado() devuelve true, para que los reportes
+    // (Balance de Comprobación, Estados Financieros, Mayores) no se generen con asientos faltantes.
+    let verificando = false;
+    let elementosBloqueados = [];
+
+    function bloquear(selectores) {
+        verificando = true;
+        elementosBloqueados = [];
+        (selectores || []).forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+                elementosBloqueados.push({ el, disabled: el.disabled, title: el.getAttribute('title') });
+                el.disabled = true;
+                el.setAttribute('title', 'Verificando asientos contables pendientes…');
+            });
+        });
+    }
+
+    function terminar() {
+        if (!verificando) return;
+        verificando = false;
+        elementosBloqueados.forEach(({ el, disabled, title }) => {
+            el.disabled = disabled;
+            if (title === null) el.removeAttribute('title'); else el.setAttribute('title', title);
+        });
+        elementosBloqueados = [];
+    }
+
+    /** true (y avisa) si todavía no se resolvió el aviso de asientos pendientes. */
+    window.CMG_asientosPendientesBloqueado = function () {
+        if (!verificando) return false;
+        const msg = 'Espere a que termine la verificación de asientos contables pendientes antes de generar el reporte.';
+        if (window.Swal && !Swal.isVisible()) {
+            Swal.fire({ icon: 'info', title: 'Verificando asientos', text: msg, timer: 2500, showConfirmButton: false });
+        } else if (!window.Swal) {
+            window.alert(msg);
+        }
+        return true;
+    };
 
     /** Respaldo sin barra de progreso (SweetAlert2 no disponible): una sola llamada bloqueante, como antes. */
     function generarSinProgreso(urlBase, onGenerado) {
         return fetch(`${urlBase}/sincronizarAjax`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(r => r.json())
             .then(json => {
+                terminar();
                 if (!json || json.success === false) return;
                 if (typeof onGenerado === 'function') onGenerado();
             })
-            .catch(() => { /* silencioso: no hay Swal para avisar el error */ });
+            .catch(() => { terminar(); /* silencioso: no hay Swal para avisar el error */ });
     }
 
     function generar(urlBase, onGenerado) {
@@ -123,7 +168,6 @@
             if (result.dismiss === Swal.DismissReason.cancel) cancelado = true;
         });
 
-        const acumWarnings = [];
         const acumDetalle = [];
         const acumInfo = [];
         const acumResumen = {};
@@ -153,7 +197,6 @@
 
                 totalPasos = json.totalPasos || totalPasos;
                 generados += json.generados || 0;
-                if (Array.isArray(json.warnings)) acumWarnings.push(...json.warnings);
                 if (Array.isArray(json.detalle)) acumDetalle.push(...json.detalle);
                 if (Array.isArray(json.info)) json.info.forEach(i => { if (!acumInfo.includes(i)) acumInfo.push(i); });
                 if (json.resumenPorModulo && typeof json.resumenPorModulo === 'object') {
@@ -171,6 +214,7 @@
             Swal.close();
 
             if (errorMsg) {
+                terminar();
                 Swal.fire({ icon: 'error', title: 'Error', text: errorMsg });
                 return;
             }
@@ -178,7 +222,7 @@
             const partes = Object.entries(acumResumen).map(([mod, cnt]) => `${cnt} en ${mod}`);
             const resumen = partes.length ? `Hay asiento(s) por generar: ${partes.join(', ')}. Revise la configuración contable.` : null;
 
-            mostrarResultado({ resumen, detalle: acumDetalle, warnings: acumWarnings, info: acumInfo, generados, interrumpido, onGenerado });
+            mostrarResultado({ resumen, detalle: acumDetalle, info: acumInfo, generados, interrumpido, onGenerado });
         })();
     }
 
@@ -186,6 +230,8 @@
      * @param {Object} opts
      * @param {string} opts.urlBase      Base del módulo (p. ej. ".../modulos/asientos_contables").
      * @param {Function} [opts.onGenerado] Callback tras generar con éxito (p. ej. refrescar la tabla/reporte).
+     * @param {string[]} [opts.bloquear]  Selectores de botones a deshabilitar hasta que el aviso se resuelva
+     *                                    (p. ej. ['#btnGenerar']). Ver CMG_asientosPendientesBloqueado().
      */
     window.CMG_verificarAsientosPendientes = function (opts) {
         opts = opts || {};
@@ -193,17 +239,21 @@
         const onGenerado = opts.onGenerado;
         if (!urlBase) return;
 
+        bloquear(opts.bloquear);
+
         fetch(`${urlBase}/contarPendientesAjax`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(r => r.json())
             .then(json => {
-                if (!json || !json.ok) return;
+                if (!json || !json.ok) { terminar(); return; }
                 const n = parseInt(json.pendientes, 10) || 0;
-                if (n < 1) return;
+                if (n < 1) { terminar(); return; }
 
                 if (!window.Swal) {
                     // Sin SweetAlert: confirm nativo como respaldo.
                     if (window.confirm(`Hay ${n} documento(s) sin asiento contable generado. ¿Desea generarlos ahora?`)) {
                         generar(urlBase, onGenerado);
+                    } else {
+                        terminar();
                     }
                     return;
                 }
@@ -221,8 +271,9 @@
                     reverseButtons: true,
                 }).then(res => {
                     if (res.isConfirmed) generar(urlBase, onGenerado);
+                    else terminar();
                 });
             })
-            .catch(() => { /* Silencioso: no bloquear el módulo por el aviso. */ });
+            .catch(() => { terminar(); /* Silencioso: no bloquear el módulo por el aviso. */ });
     };
 })();

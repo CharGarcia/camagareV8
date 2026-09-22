@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion
-version: 1.12
+version: 1.13
 orden: 40
 estado: activo
 ---
@@ -217,6 +217,11 @@ vuelva a intentarlo.
   que el SRI acepte el comprobante.
 - **El SRI rechaza el comprobante**: revise que los datos del proveedor sean
   correctos y que el sustento elegido corresponda al tipo de compra.
+- **Aviso de asiento pendiente aunque el proveedor tiene sus cuentas**: desde la
+  versión 1.13 el asiento resuelve las cuentas igual que una compra: primero las
+  del **proveedor**; si no tiene, las de cada línea por **ítem, categoría o
+  marca**; y al final la configuración General. Si el aviso persiste,
+  "Ver detalle" indica la cuenta que realmente falta (p. ej. el IVA de una tarifa).
 
 ## Períodos contables cerrados
 
@@ -237,6 +242,13 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.13** — Corregido: el asiento contable de la liquidación ignoraba las cuentas
+  configuradas en el **proveedor** y solo leía la configuración General, por lo
+  que aparecían avisos de asientos pendientes de liquidaciones cuyo proveedor ya
+  tenía sus cuentas. Ahora se aplica la misma cascada que en Compras: si el
+  proveedor tiene cuentas propias, mandan; si no, cada línea toma la cuenta de su
+  **ítem → categoría → marca**, y por último la General (por pagar, gasto e
+  inventario).
 - **1.12** — Las filas de **Info. Adicional** tienen tope en pantalla (concepto
   100 caracteres, detalle 300). Antes un concepto de más de 100 caracteres hacía
   fallar el guardado completo de la liquidación sin explicación; ahora el campo

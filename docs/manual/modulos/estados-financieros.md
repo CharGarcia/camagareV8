@@ -6,7 +6,7 @@ ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
 etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados
-version: 1.9
+version: 1.10
 orden: 50
 estado: activo
 ---
@@ -335,6 +335,10 @@ Revise en este orden:
 
 ## Historial de cambios
 
+- **1.10** — El aviso de asientos pendientes ya no muestra la sección **Otros
+  avisos**; mientras el aviso no se resuelve (verificación, respuesta del
+  usuario o generación en curso), **Generar** y las exportaciones quedan
+  bloqueados.
 - **1.9** — Nuevo botón **Revisar Supercias**: diagnóstico de la empresa con
   sugerencias de casillero por cuenta aplicables con un clic, y revisión
   automática antes de cada descarga Supercias. Guía nueva *Presentar los

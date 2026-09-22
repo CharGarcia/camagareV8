@@ -6,7 +6,7 @@ ruta_modulo: modulos/balance-comprobacion
 tipo: modulo
 visibilidad: todos
 etiquetas: balance de comprobacion, balance de sumas y saldos, cuadre contable, debe haber, saldo deudor acreedor, comprobacion de saldos, sumas y saldos
-version: 1.0
+version: 1.1
 orden: 45
 estado: activo
 ---
@@ -46,6 +46,11 @@ Al abrir el módulo, si hay documentos sin su asiento contable generado, el
 sistema **pregunta** si desea generarlos antes de continuar. Conviene aceptar:
 un balance calculado con asientos pendientes queda incompleto.
 
+Mientras el sistema verifica si hay asientos pendientes, y hasta que usted
+responda el aviso (o termine la generación), el botón **Generar** y las
+exportaciones quedan bloqueados: así el balance nunca se calcula con asientos
+que faltan sin que usted lo haya decidido.
+
 ## Errores frecuentes
 
 - **El balance no cuadra**: casi siempre son asientos pendientes de generar;
@@ -57,4 +62,7 @@ un balance calculado con asientos pendientes queda incompleto.
 
 ## Historial de cambios
 
+- **1.1** — El aviso de asientos pendientes ya no muestra la sección **Otros
+  avisos**; mientras el aviso no se resuelve, **Generar** y las exportaciones
+  quedan bloqueados.
 - **1.0** — Versión inicial.

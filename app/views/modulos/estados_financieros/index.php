@@ -395,6 +395,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         if (typeof window.CMG_verificarAsientosPendientes === 'function') {
             window.CMG_verificarAsientosPendientes({
                 urlBase: urlBase,
+                bloquear: ['#btnGenerar'],
                 onGenerado: () => {
                     if (typeof generarReporte === 'function') generarReporte();
                 }
@@ -567,6 +568,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     }
 
     async function generarReporte() {
+        if (window.CMG_asientosPendientesBloqueado && window.CMG_asientosPendientesBloqueado()) return;
         const form = document.getElementById('formFiltros');
         if (!form.checkValidity()) {
             form.reportValidity();
@@ -1217,6 +1219,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     }
 
     async function exportar(formato, omitirRevision = false) {
+        if (window.CMG_asientosPendientesBloqueado && window.CMG_asientosPendientesBloqueado()) return;
         const fInicio = document.getElementById('fecha_inicio').value;
         const fFin = document.getElementById('fecha_fin').value;
         const nivel = document.getElementById('filtro_nivel').value;

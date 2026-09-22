@@ -293,6 +293,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
     }
 
     async function generarReporte() {
+        if (window.CMG_asientosPendientesBloqueado && window.CMG_asientosPendientesBloqueado()) return;
         const form = document.getElementById('formFiltros');
         if (!form.checkValidity()) {
             form.reportValidity();
@@ -445,6 +446,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
     }
 
     function exportar(formato) {
+        if (window.CMG_asientosPendientesBloqueado && window.CMG_asientosPendientesBloqueado()) return;
         const filtros = getFiltrosActuales();
         if (!filtros.fecha_inicio || !filtros.fecha_fin) {
             Swal.fire({ icon: 'warning', title: 'Atención', text: 'Por favor seleccione un rango de fechas válido.' });
@@ -464,6 +466,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         if (typeof window.CMG_verificarAsientosPendientes !== 'function') return;
         window.CMG_verificarAsientosPendientes({
             urlBase: urlBase,
+            bloquear: ['#btnGenerar'],
             onGenerado: () => {
                 const cont = document.getElementById('content-reporte');
                 if (cont && cont.innerHTML.trim() && typeof generarReporte === 'function') generarReporte();
