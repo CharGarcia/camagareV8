@@ -667,7 +667,11 @@ class NotaCreditoService
 
         foreach ($detalles as $det) {
             $desc = !empty($det['producto_nombre']) ? $det['producto_nombre'] : (!empty($det['descripcion']) ? $det['descripcion'] : 'Sin concepto');
-            $concepto = substr(trim($desc), 0, 255);
+            // 240 y no 255: al concepto se le concatena " (Base)" / " (IVA)" justo abajo,
+            // así que cortar en el largo de la columna dejaba 262 caracteres y el INSERT
+            // moría con SQLSTATE[22001] donde `concepto` es varchar(255). mb_substr, además,
+            // para no partir una tilde a la mitad (substr corta bytes, no caracteres).
+            $concepto = mb_substr(trim($desc), 0, 240);
             $impuestos = $det['impuestos'] ?? [];
             foreach ($impuestos as $imp) {
                 // Solo IVA (codigo_impuesto = 2)

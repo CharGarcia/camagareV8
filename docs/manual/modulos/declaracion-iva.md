@@ -5,8 +5,8 @@ categoria: Impuestos
 ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
-etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula
-version: 1.7
+etiquetas: iva, declaracion de iva, formulario 104, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula, no genera la declaracion, error al generar, value too long, invalid byte sequence, nombre de producto largo, tildes, acentos, caracteres raros
+version: 1.8
 orden: 10
 estado: activo
 ---
@@ -248,6 +248,16 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
   generados antes de la versión 1.7, vuelva a presionar GENERAR y guarde de nuevo.
 
 ## Historial de cambios
+
+- **1.8** — **GENERAR y GUARDAR ya no fallan por un ítem con nombre largo y
+  tildes.** Al sincronizar el periodo, cada casillero guarda el nombre del
+  producto o servicio que lo originó. Ese nombre se recortaba mal: si el corte
+  caía justo sobre una letra acentuada (*á*, *é*, *ó*, *ñ*…), el texto quedaba
+  partido a la mitad y la base rechazaba la operación con un error técnico
+  (*invalid byte sequence for encoding UTF8*), dejando el periodo sin generar.
+  Ahora el recorte respeta los caracteres completos y deja sitio para las
+  etiquetas "(Base)" y "(IVA)". Afecta a facturas de venta, compras,
+  liquidaciones de compra y notas de crédito.
 
 - **1.7** — Las retenciones de IVA emitidas como agente de retención (casilleros 721 a
   731) ya llegan al formulario. Antes ninguna entraba: el módulo buscaba las retenciones de

@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina
-version: 2.20
+version: 2.21
 orden: 40
 estado: activo
 ---
@@ -177,7 +177,10 @@ qué cartera es, sin depender de quién lo generó. Los filtros que no se usaron
 salen como *Todos*.
 
 Más abajo van las **tarjetas de totales** (documentos, saldo total, vencido y al
-día; la vista *Por producto* no las lleva) y la tabla.
+día; la vista *Por producto* no las lleva) y la tabla. Si los filtros no
+devuelven ningún documento, la tabla sale con sus encabezados y una línea que lo
+dice —*No se encontraron cuentas por cobrar con los filtros aplicados*—, en vez
+de una hoja con las tarjetas en cero y nada debajo.
 
 La hoja es **A4 vertical** y la tabla sale con letra de **8 puntos** (8.5 en los
 encabezados de columna y en el título del recuadro de filtros), un tamaño pensado
@@ -663,6 +666,12 @@ Y dos casos que el reporte **no** descuenta a propósito:
   (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
+
+- **2.21** — El **PDF de la vista *Detallado*** ya avisa cuando el filtro no
+  devuelve nada: antes salía con las tarjetas en cero, sin encabezados de tabla y
+  sin explicación; ahora imprime la cabecera de columnas y la línea *No se
+  encontraron cuentas por cobrar con los filtros aplicados*, como ya hacían las
+  vistas *Por cliente* y *Por producto*. Actualizada *El PDF del listado*.
 
 - **2.20** — **El PDF *Por cliente* ya no sale con las líneas montadas.** Cuando
   la sección de un cliente empezaba en el último centímetro de la hoja, su

@@ -6005,7 +6005,7 @@ class MigracionMysqlService
                     $insCab->execute([
                         ':e' => $idEmpresa, ':prov' => $idProv, ':u' => $idUsuario, ':est' => $idEst, ':pto' => $idPto,
                         ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':clave' => self::claveAcceso($ec['aut_sri']),
-                        ':aut' => self::numAutorizacion($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1',
+                        ':aut' => self::numAutorizacion($ec['aut_sri']), ':amb' => $this->ambienteEmpresa($pg, $idEmpresa),
                         ':tds' => (string) ($ec['tipo_comprobante'] ?: '01'), ':nds' => self::nz($ec['numero_comprobante']),
                         ':fds' => $fds, ':tot' => (float) $ec['total_retencion'], ':per' => $per, ':estado' => $estado, ':ecorreo' => $this->estadoCorreoSri($estado), ':cb' => $idUsuario,
                     ]);

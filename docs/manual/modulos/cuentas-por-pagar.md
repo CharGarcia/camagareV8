@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina
-version: 1.23
+etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, nota de debito, notas de debito, nd del proveedor, no cuadra el pdf, total menos pagado no da el saldo, totales repetidos, totales en cada hoja, letra del pdf, pdf se lee chiquito, cuadricula del pdf, columna documento cortada
+version: 1.24
 orden: 50
 estado: activo
 ---
@@ -88,8 +88,8 @@ esté el listado en ese momento:
   y ninguna línea se parte entre una hoja y la siguiente: cada documento sale
   entero en una sola página.
 - **Excel**: una **sección por proveedor** (título con su identificación, nombre
-  y saldo, en el mismo formato del PDF), sus documentos con esas mismas columnas —más *Tipo* y
-  *Estado*, que en una hoja de cálculo no estorban— y el **TOTAL GENERAL** al
+  y saldo, en el mismo formato del PDF), sus documentos con esas mismas columnas —más *Tipo*,
+  *ND* y *Estado*, que en una hoja de cálculo no estorban— y el **TOTAL GENERAL** al
   final de la hoja. El proveedor no va como columna: es el título de la sección,
   igual que la cuenta en el mayor.
 - En **consolidado por RUC** ambos archivos agregan la columna **Estab.** con el
@@ -109,6 +109,28 @@ Menos lo ya pagado mediante egresos.
 El **vencimiento** se calcula con el *plazo* configurado en la ficha del
 proveedor. Si un documento vence antes de lo que esperaba, ese es el campo a
 revisar.
+
+## El PDF y el Excel de la vista Detallado
+
+Con la vista **Detallado** activa (una fila por documento), los botones **PDF** y
+**Excel** exportan lo mismo que se ve en pantalla.
+
+- El **PDF** sale en hoja vertical con las columnas *Documento* (con su tipo
+  encima: `Fac.`, `Liq.`, `Imp.` o `Saldo ini.`), *Proveedor*, *F. Emisión*,
+  *F. Vencimiento* (con el estado debajo: *Pagada*, *Vigente* o *Nd vencida*),
+  *Total*, *Pagado/Ret/NC* y *Saldo*. La fila **TOTALES** se imprime **una sola
+  vez, al final del reporte**.
+- **La columna *Pagado/Ret/NC* descuenta las notas de débito.** La ND del
+  proveedor *suma* a lo que se le debe, así que se resta de esa columna para que
+  la cuenta cierre: **Total − Pagado/Ret/NC = Saldo**, con o sin notas de débito.
+- El **Excel** trae esas cifras en columnas separadas —*Total*, *Abonos*,
+  *Notas de Crédito*, *Notas de Débito*, *Retenciones*, *Pagado* y *Saldo*—, más
+  el RUC, los días vencidos y el estado. La columna *Pagado* es
+  `abonos + notas de crédito + retenciones − notas de débito`.
+- En **consolidado por RUC** ambos archivos agregan la columna **Estab.**
+- Si los filtros no devuelven ningún documento, el PDF sale con los encabezados
+  de la tabla y la línea *No se encontraron cuentas por pagar con los filtros
+  aplicados*, en vez de una hoja con las tarjetas en cero y nada debajo.
 
 ## Buscar el proveedor: tildes, ñ y varias palabras
 
@@ -333,6 +355,30 @@ la factura que modifican. Mismo criterio que
 el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
+
+- **1.24** — Tres arreglos en los archivos del módulo:
+  - **La fila TOTALES ya no se repite en cada hoja del PDF.** En la vista
+    *Detallado* salía al pie de **todas** las páginas y siempre con el total del
+    reporte completo, como si fuera el total de esa hoja. Ahora se imprime una
+    sola vez, al final.
+  - **Las notas de débito ya cuadran.** La ND del proveedor suma a lo que se le
+    debe, pero el PDF *Detallado* no la descontaba de *Pagado/Ret/NC*: un
+    documento con ND mostraba `Total − Pagado/Ret/NC ≠ Saldo`. En el **Excel**
+    detallado se agrega además la columna **Notas de Débito** (y la columna
+    *Pagado* ya la resta), y el Excel *Por proveedor* agrega la columna **ND**.
+  - **Los PDF se leen más grandes y la cuadrícula se ve al imprimir**: la tabla
+    pasa de 7 a **8 puntos**, los encabezados de 7.5 a **8.5**, y las líneas de
+    las tablas pasan de gris claro a **gris marcado**, igual que en Cuentas por
+    cobrar. Con la letra más grande, la columna *Documento* de la vista
+    *Detallado* se ensancha (del 14% al 17%, a costa de *Proveedor*, que parte el
+    nombre en varias líneas) para que el número no invada la columna vecina.
+  - **El PDF *Detallado* avisa cuando no hay resultados**: antes salía con las
+    tarjetas en cero, sin encabezados de tabla y sin explicación; ahora imprime
+    la cabecera de columnas y la línea *No se encontraron cuentas por pagar con
+    los filtros aplicados*, como ya hacía la vista *Por proveedor*.
+
+  Nueva sección *El PDF y el Excel de la vista Detallado*; actualizada
+  *PDF y Excel de esta vista*.
 
 - **1.23** — **El PDF *Por proveedor* ya no sale con las líneas montadas.**
   Cuando la sección de un proveedor empezaba en el último centímetro de la hoja,

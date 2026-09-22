@@ -2190,7 +2190,10 @@ $plantillasFiltradas = [];
                     </tr>
                 </thead>
                 <tbody>
-                    <?= $filaHtml ?>
+                    <?php // Sin resultados: una fila con el aviso, igual que las vistas "Por
+                          // cliente" y "Por producto". Además hace que Html2Pdf dibuje el
+                          // encabezado de la tabla, que con el <tbody> vacío no se pintaba. ?>
+                    <?= $filaHtml ?: "<tr><td colspan='" . ($consolidado ? 9 : 8) . "' class='text-center' style='width:100%;'>No se encontraron cuentas por cobrar con los filtros aplicados.</td></tr>" ?>
                 </tbody>
                 <tfoot>
                     <tr style="background:#f8f9fa;font-weight:bold;">

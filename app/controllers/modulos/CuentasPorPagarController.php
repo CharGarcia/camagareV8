@@ -462,13 +462,15 @@ class CuentasPorPagarController extends BaseModuloController
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
             $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
 
-            $headers = ['Tipo', 'Documento', 'Proveedor', 'RUC', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Pagado', 'Saldo', 'Estado'];
+            // "Notas de Débito" va junto a las de crédito: la ND del proveedor SUMA al
+            // documento y sin ella la hoja no cuadraba (Total − Pagado ≠ Saldo).
+            $headers = ['Tipo', 'Documento', 'Proveedor', 'RUC', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Notas de Débito', 'Retenciones', 'Pagado', 'Saldo', 'Estado'];
             // Columnas de montos (1-based): número con 2 decimales, sin separador de miles
-            $formatos = array_fill_keys([8, 9, 10, 11, 12, 13], '0.00');
+            $formatos = array_fill_keys([8, 9, 10, 11, 12, 13, 14], '0.00');
             if ($consolidado) {
                 // Consolidado: primera columna con el establecimiento dueño del documento
                 array_unshift($headers, 'Estab.');
-                $formatos = array_fill_keys([9, 10, 11, 12, 13, 14], '0.00');
+                $formatos = array_fill_keys([9, 10, 11, 12, 13, 14, 15], '0.00');
             }
 
             $exportData = [];
@@ -478,6 +480,7 @@ class CuentasPorPagarController extends BaseModuloController
                 $estadoCxP = $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE');
                 $abonos    = (float)($r['total_pagado'] ?? 0);
                 $nc        = (float)($r['total_nc'] ?? 0);
+                $nd        = (float)($r['total_nd'] ?? 0);
                 $ret       = (float)($r['total_retenido'] ?? 0);
                 $exportData[] = [
                     ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
@@ -496,8 +499,10 @@ class CuentasPorPagarController extends BaseModuloController
                     round((float)$r['total'], 2),
                     round($abonos, 2),
                     round($nc, 2),
+                    round($nd, 2),
                     round($ret, 2),
-                    round($abonos + $nc + $ret, 2),
+                    // Lo que ya no se debe del documento: la ND resta porque suma al total.
+                    round($abonos + $nc + $ret - $nd, 2),
                     round($saldo, 2),
                     $estadoCxP,
                 ];
@@ -542,9 +547,13 @@ class CuentasPorPagarController extends BaseModuloController
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
 
             // Consolidado: columna "Estab." al inicio; se le resta ancho a "Proveedor" para
-            // que la suma siga en 100% (table-layout: fixed).
+            // que la suma siga en 100% (table-layout: fixed). "Documento" necesita 17%: con
+            // la tabla a 8 pt un número como 001-002-000001333 mide 72 pt y en el 14% de
+            // antes (73 pt menos el padding) se salía sobre la columna del proveedor, que en
+            // cambio parte el nombre en varias líneas sin problema.
             $wEst  = $consolidado ? 6 : 0;
-            $wProv = 28 - $wEst;
+            $wDoc  = 17;
+            $wProv = 25 - $wEst;
             $tdEst = fn (array $r): string => $consolidado
                 ? "<td class='text-center' style='width:{$wEst}%;'>" . htmlspecialchars((string)($r['establecimiento'] ?? '')) . "</td>"
                 : '';
@@ -559,7 +568,13 @@ class CuentasPorPagarController extends BaseModuloController
                 $ts    = (float)$r['total'];
                 $tp    = (float)$r['total_pagado'];
                 $tsal  = (float)$r['saldo'];
-                $tret  = (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
+                // La nota de débito del proveedor SUMA al documento (el saldo la incluye:
+                // total + ND − NC − pagos − retenciones), así que se resta de esta columna
+                // para que Total − Pagado/Ret/NC siga dando el Saldo. Es lo mismo que hace
+                // la pantalla (`nc + ret - nd` en CXP_filaHtml); sin esto, un documento con
+                // nota de débito salía descuadrado en el PDF.
+                $tret  = (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0)
+                       - (float)($r['total_nd'] ?? 0);
                 $totalTotal  += $ts;
                 $totalPagRet += $tp + $tret;
                 $totalSaldo  += $tsal;
@@ -579,7 +594,7 @@ class CuentasPorPagarController extends BaseModuloController
                 };
 
                 $filaHtml .= "<tr style='{$color}'>{$tdEst($r)}
-                    <td style='width:14%;'><small style='color:#6c757d;'>{$tipo}</small><br>" . htmlspecialchars($r['numero_documento'] ?? '') . "</td>
+                    <td style='width:{$wDoc}%;'><small style='color:#6c757d;'>{$tipo}</small><br>" . htmlspecialchars($r['numero_documento'] ?? '') . "</td>
                     <td style='width:{$wProv}%;'>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "</td>
                     <td class='text-center' style='width:12%;'>{$fEmis}</td>
                     <td class='text-center' style='width:16%;'>{$fVenc}<br>{$badge}</td>
@@ -594,14 +609,15 @@ class CuentasPorPagarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 7.5pt; }
-                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; }
+                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: 8.5pt; }
+                td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
                 .header h3 { margin: 0 0 2px 0; font-size: 10pt; color: #555; }
                 .header p  { margin: 0; font-size: 7.5pt; color: #777; }
+                table.tot td { background: #f8f9fa; font-weight: bold; }
                 .stats-box { text-align: center; padding: 5px; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
             </style>
@@ -635,7 +651,7 @@ class CuentasPorPagarController extends BaseModuloController
                 <thead>
                     <tr>
                         <?php if ($consolidado): ?><th style="width:<?= $wEst ?>%;">Estab.</th><?php endif; ?>
-                        <th style="width:14%;">Documento</th>
+                        <th style="width:<?= $wDoc ?>%;">Documento</th>
                         <th style="width:<?= $wProv ?>%;">Proveedor</th>
                         <th style="width:12%;">F. Emisión</th>
                         <th style="width:16%;">F. Vencimiento</th>
@@ -645,16 +661,24 @@ class CuentasPorPagarController extends BaseModuloController
                     </tr>
                 </thead>
                 <tbody>
-                    <?= $filaHtml ?>
+                    <?php // Sin resultados: una fila con el aviso, igual que la vista "Por
+                          // proveedor". Además hace que Html2Pdf dibuje el encabezado de la
+                          // tabla, que con el <tbody> vacío no llegaba a pintarse. ?>
+                    <?= $filaHtml ?: "<tr><td colspan='" . ($consolidado ? 8 : 7) . "' class='text-center' style='width:100%;'>No se encontraron cuentas por pagar con los filtros aplicados.</td></tr>" ?>
                 </tbody>
-                <tfoot>
-                    <tr style="background:#f8f9fa;font-weight:bold;">
-                        <td colspan="<?= $consolidado ? 5 : 4 ?>" class="text-end" style="width:70%;">TOTALES:</td>
-                        <td class="text-end" style="width:10%;">$<?= number_format($totalTotal, 2) ?></td>
-                        <td class="text-end" style="width:10%;color:#198754;">$<?= number_format($totalPagRet, 2) ?></td>
-                        <td class="text-end" style="width:10%;color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
-                    </tr>
-                </tfoot>
+            </table>
+            <!-- La fila de totales va en su propia tabla, NO en un <tfoot>: Html2Pdf dibuja
+                 el tfoot al pie de CADA página, así que el total del reporte salía repetido
+                 en todas las hojas (y con la cifra global, como si fuera el total de esa
+                 hoja). El 70% de la etiqueta equivale a Documento + Proveedor + las dos
+                 fechas (y al Estab. cuando va), con o sin consolidado. -->
+            <table class="tot">
+                <tr>
+                    <td class="text-end" style="width:70%;">TOTALES:</td>
+                    <td class="text-end" style="width:10%;">$<?= number_format($totalTotal, 2) ?></td>
+                    <td class="text-end" style="width:10%;color:#198754;">$<?= number_format($totalPagRet, 2) ?></td>
+                    <td class="text-end" style="width:10%;color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
+                </tr>
             </table>
             </page>
             <?php
@@ -749,7 +773,9 @@ class CuentasPorPagarController extends BaseModuloController
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
             $filtrosTxt    = ['Vista' => 'Por proveedor (formato mayor)'] + $this->describirFiltros($idsEmpresa, $filtros);
 
-            $headers = ['Fecha', 'N. Documento', 'Tipo', 'Total', 'NC', 'Abonos', 'Retenciones',
+            // 'ND' junto a 'NC': la nota de débito del proveedor suma al documento y sin ella
+            // las columnas no cuadran con el saldo.
+            $headers = ['Fecha', 'N. Documento', 'Tipo', 'Total', 'NC', 'ND', 'Abonos', 'Retenciones',
                         'Saldo', 'Días Vencidos', 'Estado'];
             if ($consolidado) {
                 array_unshift($headers, 'Estab.');
@@ -761,6 +787,7 @@ class CuentasPorPagarController extends BaseModuloController
             $secciones = [];
             $totTotal  = 0.0;
             $totNc     = 0.0;
+            $totNd     = 0.0;
             $totAbonos = 0.0;
             $totRet    = 0.0;
             $totSaldo  = 0.0;
@@ -776,6 +803,7 @@ class CuentasPorPagarController extends BaseModuloController
                 foreach ($g['items'] as $r) {
                     $dias  = (int)($r['dias_vencido'] ?? 0);
                     $saldo = (float)($r['saldo'] ?? 0);
+                    $totNd += (float)($r['total_nd'] ?? 0);
                     $filasSec[] = [
                         ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
                         $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
@@ -783,6 +811,7 @@ class CuentasPorPagarController extends BaseModuloController
                         $this->getTipoLabel((string)($r['tipo_fuente'] ?? '')),
                         round((float)($r['total'] ?? 0), 2),
                         round((float)($r['total_nc'] ?? 0), 2),
+                        round((float)($r['total_nd'] ?? 0), 2),
                         round((float)($r['total_pagado'] ?? 0), 2),
                         round((float)($r['total_retenido'] ?? 0), 2),
                         round($saldo, 2),
@@ -806,7 +835,7 @@ class CuentasPorPagarController extends BaseModuloController
             $filaFinal = [
                 ...array_fill(0, $huecos, ''),
                 'TOTAL GENERAL (' . count($grupos) . ' proveedor' . (count($grupos) !== 1 ? 'es' : '') . ')',
-                round($totTotal, 2), round($totNc, 2), round($totAbonos, 2),
+                round($totTotal, 2), round($totNc, 2), round($totNd, 2), round($totAbonos, 2),
                 round($totRet, 2), round($totSaldo, 2), '', '',
             ];
 
@@ -942,8 +971,8 @@ class CuentasPorPagarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 6px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #ccc; padding: 3px 3px; text-align: center; font-size: 7.5pt; }
-                td { border: 1px solid #ddd; padding: 2px 3px; font-size: 7pt; overflow: hidden; word-wrap: break-word; }
+                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: 8.5pt; }
+                td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }

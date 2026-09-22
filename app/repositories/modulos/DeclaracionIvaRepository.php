@@ -229,6 +229,12 @@ class DeclaracionIvaRepository extends BaseRepository
     {
         $sql = "INSERT INTO casilleros_declaracion_sri (id_empresa, origen, id_origen, fecha, casillero, valor, concepto, tipo_ambiente)
                 VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?))";
+        // `concepto` es la descripción del ítem que originó la fila: texto libre y, desde que
+        // el nombre del producto admite 300 caracteres, más largo que antes. La columna es
+        // `text` en desarrollo pero varchar en bases más viejas, así que se capa al largo real
+        // de cada ambiente (caparTexto no toca nada si la columna no tiene límite). `casillero`
+        // NO se capa a propósito: un código recortado sería un dato mal declarado, y ahí sí
+        // conviene que el error salte.
         $st = $this->db->prepare($sql);
         $st->execute([
             $datos['id_empresa'],
@@ -237,7 +243,7 @@ class DeclaracionIvaRepository extends BaseRepository
             $datos['fecha'],
             $datos['casillero'],
             $datos['valor'],
-            $datos['concepto'] ?? null,
+            $this->caparTexto('concepto', $datos['concepto'] ?? null, 'casilleros_declaracion_sri'),
             $datos['id_empresa']
         ]);
     }

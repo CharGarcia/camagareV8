@@ -604,7 +604,7 @@ class ClienteRepository extends BaseRepository
             ':longitud'         => $data['longitud'] ?? null,
             ':geocodificado_en' => (isset($data['latitud']) && $data['latitud'] !== null) ? date('Y-m-d H:i:s') : null,
             ':dias_visita'       => $this->arrayAPostgres($data['dias_visita'] ?? null),
-            ':frecuencia_visita' => $data['frecuencia_visita'] ?? null,
+            ':frecuencia_visita' => $this->caparTexto('frecuencia_visita', $data['frecuencia_visita'] ?? null),
             ':semanas_visita'    => $this->arrayAPostgres($data['semanas_visita'] ?? null),
             ':orden_visita'      => $data['orden_visita'] ?? null,
             ':hora_visita_desde' => $data['hora_visita_desde'] ?? null,
@@ -681,7 +681,9 @@ class ClienteRepository extends BaseRepository
             ':latitud'          => $data['latitud'] ?? null,
             ':longitud'         => $data['longitud'] ?? null,
             ':dias_visita'       => $this->arrayAPostgres($data['dias_visita'] ?? null),
-            ':frecuencia_visita' => $data['frecuencia_visita'] ?? null,
+            // Última columna varchar corta de la ficha que quedaba sin capar (ver el
+            // comentario del insert): completa la fila, igual que nombre/teléfono/dirección.
+            ':frecuencia_visita' => $this->caparTexto('frecuencia_visita', $data['frecuencia_visita'] ?? null),
             ':semanas_visita'    => $this->arrayAPostgres($data['semanas_visita'] ?? null),
             ':orden_visita'      => $data['orden_visita'] ?? null,
             ':hora_visita_desde' => $data['hora_visita_desde'] ?? null,

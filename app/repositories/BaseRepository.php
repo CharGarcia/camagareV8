@@ -199,6 +199,14 @@ abstract class BaseRepository
      * esquema y no queda desfasado cuando el ALTER que ensancha la columna se
      * despliega después que este código. Devuelve el valor intacto si la columna
      * no existe o no tiene límite (text).
+     *
+     * También descarta los bytes que no forman UTF-8 válido, aunque la columna
+     * no tenga límite: PostgreSQL rechaza el INSERT con SQLSTATE[22021] "invalid
+     * byte sequence for encoding UTF8" y tumba la operación igual que el
+     * truncado. Pasa cuando alguien cortó el texto con substr() —que corta
+     * bytes, no caracteres, y parte una tilde a la mitad— o cuando el dato llega
+     * de una migración con otra codificación. Vale la pena aquí: el valor nunca
+     * debería escribirse con bytes rotos, tenga o no tope la columna.
      */
     public function caparTexto(string $columna, $valor, ?string $tabla = null): ?string
     {
@@ -209,6 +217,13 @@ abstract class BaseRepository
         $valor = (string) $valor;
         if ($valor === '') {
             return '';
+        }
+
+        if (!mb_check_encoding($valor, 'UTF-8')) {
+            $limpio = @iconv('UTF-8', 'UTF-8//IGNORE', $valor);   // //IGNORE descarta lo inválido
+            if ($limpio !== false) {
+                $valor = $limpio;
+            }
         }
 
         $max = $this->longitudMaxima($tabla ?? $this->table, $columna);
