@@ -89,6 +89,13 @@ class TransferenciaFormatoConfigurable implements TransferenciaFormatterInterfac
             }
         }
 
+        // Texto que el banco exige delante del dato (p. ej. "|" antes del correo en
+        // Produbanco). Va después de las transformaciones para que "solo
+        // alfanumérico" no lo borre, y solo si hay dato: una celda vacía queda vacía.
+        if (!empty($campo['prefijo']) && (string) $valor !== '') {
+            $valor = $campo['prefijo'] . $valor;
+        }
+
         if (!empty($campo['longitud_fija'])) {
             $valor = $this->aplicarLongitudFija((string) $valor, $campo);
         }

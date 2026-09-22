@@ -5,9 +5,11 @@
 /** @var array $bancos */
 /** @var array $origenDato */
 /** @var array $tiposArchivo */
+/** @var array $delimitadores */
 $base = BASE_URL;
 $rows = $rows ?? [];
 $buscar = $buscar ?? '';
+$delimitadores = $delimitadores ?? [',' => 'Coma ( , )'];
 $msg = $_SESSION['config_msg'] ?? null;
 unset($_SESSION['config_msg']);
 
@@ -129,7 +131,11 @@ $rowsHtml = $rowsHtml ?? '';
                         </div>
                         <div class="col-md-3 tf-solo-delimitado d-none">
                             <label class="form-label small fw-bold">Delimitador</label>
-                            <input type="text" id="tf-delimitador" name="delimitador" class="form-control form-control-sm" maxlength="1" placeholder=",">
+                            <select id="tf-delimitador" name="delimitador" class="form-select form-select-sm">
+                                <?php foreach ($delimitadores as $valor => $etiqueta): ?>
+                                    <option value="<?= htmlspecialchars($valor) ?>"><?= htmlspecialchars($etiqueta) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                         <div class="col-md-3 d-flex align-items-end">
                             <div class="form-check">

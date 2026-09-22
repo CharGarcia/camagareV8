@@ -179,7 +179,9 @@ class TransferenciaLoteRepository extends BaseRepository
 
     /**
      * Pagos de egresos (proveedores y/o nómina) marcados como TRANSFERENCIA que
-     * aún no están reservados en ningún lote activo (no RECHAZADO/ANULADO).
+     * aún no están reservados en ningún lote activo (no RECHAZADO/ANULADO) y cuyo
+     * beneficiario tiene banco y número de cuenta registrados (sin eso no se
+     * puede generar el archivo de transferencia, así que ni se listan).
      * $tipo: 'PROVEEDORES' | 'NOMINA' | 'AMBOS'.
      */
     public function getPagosDisponibles(int $idEmpresa, string $tipo, string $buscar = ''): array
@@ -187,6 +189,8 @@ class TransferenciaLoteRepository extends BaseRepository
         $where  = "WHERE ec.id_empresa = :e
                     AND ec.eliminado = false AND ep.eliminado = false AND ec.estado <> 'anulado'
                     AND ep.tipo_operacion_bancaria = 'TRANSFERENCIA'
+                    AND b.id IS NOT NULL
+                    AND TRIM(COALESCE(prov.numero_cta, emp.numero_cuenta, '')) <> ''
                     AND NOT EXISTS (
                         SELECT 1 FROM transferencias_lotes_detalle tld
                         INNER JOIN transferencias_lotes tl ON tl.id = tld.id_lote

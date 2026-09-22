@@ -6,8 +6,8 @@ ruta_modulo: config/transferencia-formatos
 requiere_permiso_modulo: no
 tipo: modulo
 visibilidad: superadmin
-etiquetas: formatos de transferencia, layout bancario, archivo del banco, cash management, pago masivo, carga de pagos, produbanco, pichincha, banco bolivariano, columnas del archivo, plantilla del banco, xlsx csv txt ancho fijo, transferencias, rol de pagos
-version: 1.1
+etiquetas: formatos de transferencia, layout bancario, archivo del banco, cash management, pago masivo, carga de pagos, produbanco, pichincha, banco bolivariano, columnas del archivo, plantilla del banco, xlsx csv txt ancho fijo, txt tabulado, separado por tabulaciones, delimitador tab, prefijo, transferencias, rol de pagos
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -57,7 +57,7 @@ Solo el **nivel 3 (superadministrador)** entra a esta pantalla.
 | Nombre | Sí | Cómo se llama el formato en la lista al crear un lote. |
 | Banco | No | Banco al que corresponde. Vacío = formato genérico. |
 | Tipo de archivo | Sí | Excel (.xlsx), CSV, TXT delimitado o TXT de ancho fijo. |
-| Delimitador | Solo CSV/TXT | Carácter que separa las columnas (coma, punto y coma, tabulador…). |
+| Delimitador | Solo CSV/TXT | Se elige de la lista: coma, punto y coma, barra vertical o **tabulador**. Si el archivo del banco se ve "en columnas" al abrirlo en el Bloc de notas, casi siempre es tabulador. |
 | Nombre de la hoja | Solo Excel | Nombre de la pestaña del archivo generado. |
 | Incluye encabezado | No | Escribe una primera fila con las etiquetas de las columnas. |
 | Estado | Sí | Activo o inactivo. Un formato inactivo no aparece al crear lotes. |
@@ -75,6 +75,7 @@ Solo el **nivel 3 (superadministrador)** entra a esta pantalla.
 | Mayúsculas / quitar tildes / solo alfanumérico | No | Limpieza del texto antes de escribirlo. |
 | Máx. caracteres | No | Corta el texto al largo que acepta el banco. |
 | Mapeo de valores | No | Traduce el valor interno al del banco, una línea por regla: `ahorros=AHO`. |
+| Prefijo | No | Texto (hasta 10 caracteres) que se escribe **delante** del dato, p. ej. la barra vertical antes del correo. Solo se agrega si el dato tiene valor: una celda vacía queda vacía. Está en las opciones avanzadas de la columna (ícono de ajustes). |
 
 ### Orígenes de dato disponibles
 
@@ -114,7 +115,7 @@ tanto para pagos a proveedores como para nómina: el layout es el mismo.
 | 1 | TIPO: PAGOS | Texto fijo | Siempre `PA`. |
 | 2 | NUMERO DE CUENTA DE EMPRESA | Cuenta de origen | La cuenta emisora de la forma de pago del lote, tal como está registrada. |
 | 3 | NUMERO SECUENCIAL | Secuencial | 1, 2, 3… dentro del lote. |
-| 4 | NUMERO DE COMPROBANTE DE PAGO | Número de egreso | Opcional para el banco. |
+| 4 | NUMERO DE COMPROBANTE DE PAGO | — | Se deja en blanco (opcional para el banco), igual que en el archivo que el banco acepta. |
 | 5 | CODIGO DE EMPLEADO | Identificación | Cédula o RUC del beneficiario. |
 | 6 | MONEDA | Moneda | Siempre `USD`. |
 | 7 | VALOR | Monto | Entero en centavos, sin punto: $180.00 se escribe `18000`. |
@@ -136,6 +137,20 @@ arriba) y los datos desde la segunda fila. Las filas decorativas de la plantilla
 del banco (el título, la numeración 1…20 y la fila MANDATORIO/OPCIONAL) no se
 reproducen.
 
+### Produbanco en TXT (separado por tabulaciones)
+
+Si el banco pide el archivo como `.txt` en lugar de Excel, edite el formato y:
+
+1. Cambie **Tipo de archivo** a *TXT delimitado*.
+2. En **Delimitador** elija *Tabulador*.
+3. Desmarque **Incluye encabezado** (el TXT del banco empieza directo con los datos).
+4. En la columna 20 (*REFERENCIA ADICIONAL*) abra las opciones avanzadas y ponga `|` en **Prefijo**: el correo sale como `|correo@dominio.com`.
+
+No hace falta tocar las demás columnas: las 20 se escriben en el mismo orden,
+las que van en blanco dejan su tabulador para no correr las siguientes. El
+cambio aplica a partir de la próxima vez que se genere el archivo de un lote;
+los archivos ya generados siguen siendo Excel hasta que se regeneren.
+
 ## Integraciones con otros módulos
 
 - **Transferencias** (`modulos/transferencias`): al crear un lote se elige uno de
@@ -156,10 +171,12 @@ reproducen.
   correo registrado en su ficha.
 - **El nombre del beneficiario sale cortado**: es intencional cuando el banco
   limita el largo (Produbanco: 40 caracteres).
+- **El TXT sale separado por comas en vez de tabuladores**: en *Delimitador* elija *Tabulador* (antes no se podía escribir un tab en ese campo y se guardaba una coma).
 - **No puedo eliminar un formato**: ya hay lotes que lo usan. Desactívelo.
 
 ## Historial de cambios
 
+- **1.2** — El delimitador se elige de una lista que incluye el **tabulador**, y cada columna admite un **prefijo** (p. ej. `|` antes del correo en Produbanco). Se documenta cómo pasar Produbanco a TXT tabulado. En Produbanco la columna 4 (número de comprobante) pasa a ir en blanco.
 - **1.1** — Se agrega el origen de dato **correo electrónico del beneficiario** y
   se precarga el formato **Produbanco (Cash Management)** con sus 20 columnas.
 - **1.0** — Versión inicial.

@@ -575,7 +575,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         // cargados, y tapar el resto con un loader mientras se completa vía AJAX (detalles,
         // catálogos, asiento). Antes se hacía todo esto ANTES de mostrar el modal, y el
         // usuario se quedaba mirando la pantalla sin nada varios segundos.
-        new bootstrap.Modal(document.getElementById('modalConsignacion'), { focus: false }).show();
+        // getOrCreateInstance (y no `new`): tras guardar, el modal se queda abierto y se recarga
+        // llamando aquí otra vez. Con `new` se crearía una segunda instancia que volvería a
+        // montar el backdrop sobre el que ya está puesto.
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConsignacion'), { focus: false }).show();
         document.getElementById('cons-modal-loader')?.classList.remove('d-none');
 
         try {
@@ -1570,9 +1573,40 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             const data = await res.json();
             if(data.ok) {
                 consLimpiarBorrador();
+                // El pedido que se usó para armar la consignación ya está despachado: como el
+                // modal no se cierra, el candado se suelta aquí y no en 'hidden.bs.modal'.
+                if (typeof window.CMG_Bloqueo !== 'undefined') window.CMG_Bloqueo.detener();
                 Swal.fire('Éxito', data.msg, 'success');
-                bootstrap.Modal.getInstance(document.getElementById('modalConsignacion')).hide();
-                cargarGrid();
+
+                // El modal NO se cierra al guardar: se recarga con el documento tal como quedó
+                // (número definitivo, estado, botones de PDF/correo/WhatsApp) para poder seguir
+                // trabajando en él. Además deja puesto cons_id, así el siguiente Guardar
+                // ACTUALIZA esta consignación en vez de crear otra.
+                const idGuardado = data.id || document.getElementById('cons_id').value;
+                await cargarGrid();
+                const filaGuardada = Array.from(document.querySelectorAll('#grid-body tr[data-row]'))
+                    .find(tr => {
+                        try { return String(JSON.parse(tr.getAttribute('data-row')).id) === String(idGuardado); }
+                        catch (e) { return false; }
+                    });
+                if (filaGuardada) {
+                    await abrirModalConsignacionVer(filaGuardada);
+                } else {
+                    // No aparece en la página visible del listado (hay un filtro puesto, o quedó
+                    // en otra página): se deja al menos identificada, con su número definitivo.
+                    document.getElementById('cons_id').value = idGuardado;
+                    CONS_BLOQUEAR_SECUENCIAL = true;
+                    if (data.numero) {
+                        const corte = data.numero.lastIndexOf('-');
+                        document.getElementById('cons_serie_hidden').value = data.numero.slice(0, corte);
+                        document.getElementById('cons_secuencial').value = data.numero.slice(corte + 1);
+                        document.getElementById('tituloModalConsignacion').textContent = 'Consignación en Ventas: ' + data.numero;
+                    }
+                    // Mismo modo lectura/edición que si se abriera desde el listado: una
+                    // consignación guardada solo se edita en Borrador.
+                    const estadoGuardado = document.getElementById('cons_estado_selector')?.value || 'Emitida';
+                    if (typeof consAplicarEditable === 'function') consAplicarEditable(estadoGuardado);
+                }
             } else {
                 Swal.fire('Error', data.error, 'error');
             }

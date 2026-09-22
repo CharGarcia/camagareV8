@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/transferencias
 tipo: modulo
 visibilidad: admin
-etiquetas: transferencias, archivo bancario, pago masivo, lote de pagos, nomina, proveedores, banco, aprobacion, filtro de estado, lotes pendientes, sin aprobar, no aparece el lote, donde estan los lotes aprobados
-version: 1.3
+etiquetas: transferencias, archivo bancario, pago masivo, lote de pagos, nomina, proveedores, banco, aprobacion, filtro de estado, lotes pendientes, sin aprobar, no aparece el lote, donde estan los lotes aprobados, pagos pendientes de transferencia, no aparece el egreso, sin cuenta bancaria
+version: 1.4
 orden: 90
 estado: activo
 ---
@@ -75,10 +75,21 @@ guardado en el registro y en el log del sistema.
 Cada pago necesita que el proveedor o el empleado tenga registrados su **banco,
 número y tipo de cuenta**. Sin esos datos, esa línea no puede ir en el archivo.
 
+Por eso, al pulsar **Mostrar pagos pendientes de transferencia** en el modal del
+lote, la lista trae solo los pagos que cumplen las tres condiciones:
+
+- el egreso se pagó con forma de pago de tipo **transferencia**;
+- el beneficiario tiene **banco y número de cuenta** en su ficha;
+- el pago **todavía no está en otro lote** activo (los lotes rechazados o
+  anulados liberan sus pagos).
+
+Un pago cuyo beneficiario no tiene cuenta no aparece en la lista: complete los
+datos bancarios en la ficha del proveedor o del empleado y vuelva a buscar.
+
 ## Errores frecuentes
 
-- **Un pago no entra en el lote**: al beneficiario le faltan los datos bancarios
-  en su ficha.
+- **Un egreso no aparece en los pagos pendientes**: al beneficiario le faltan el
+  banco o el número de cuenta en su ficha, o el pago ya está en otro lote.
 - **El banco rechaza el archivo**: revise el formato elegido y que los números de
   cuenta no tengan espacios ni guiones.
 - **Un egreso ya está en otro lote**: el control anti-duplicados lo bloqueó;
@@ -96,3 +107,4 @@ número y tipo de cuenta**. Sin esos datos, esa línea no puede ir en el archivo
 - **1.1** — La configuración de la aprobación se movió al módulo **Aprobaciones**; se agrega monto mínimo.
 - **1.2** — El listado abre mostrando solo los lotes sin aprobar y se agrega un selector de estado para ver el resto.
 - **1.3** — Se elimina el aviso por correo a los aprobadores: la aprobación se hace entrando al módulo. El aprobador ve los lotes pendientes aunque los haya armado otra persona, y aprueba con los mismos botones que un superadministrador, incluidos sus propios lotes.
+- **1.4** — *Mostrar pagos pendientes de transferencia* lista solo los pagos cuyo beneficiario tiene banco y número de cuenta registrados; los que no los tienen ya no aparecen (antes salían en rojo, sin poder seleccionarse).

@@ -76,7 +76,11 @@
                             <label class="form-check-label">Solo alfanumérico</label>
                         </div>
                     </div>
-                    <div class="col-md-5">
+                    <div class="col-md-1">
+                        <label class="form-label mb-0" title="Texto que se antepone al dato (solo si el dato no está vacío). Ej: | antes del correo en Produbanco.">Prefijo</label>
+                        <input type="text" maxlength="10" class="form-control form-control-sm tf-c-prefijo" value="${escHtml(c.prefijo || '')}" placeholder="Ej: |">
+                    </div>
+                    <div class="col-md-4">
                         <label class="form-label mb-0">Mapeo de valores (uno por línea, "clave=valor")</label>
                         <textarea class="form-control form-control-sm tf-c-mapeo" rows="2" placeholder="ahorros=AHO&#10;corriente=CTE">${escHtml(mapeoToTexto(c.mapeo_valores))}</textarea>
                     </div>
@@ -183,7 +187,7 @@
         document.getElementById('tf-descripcion').value = f.descripcion || '';
         document.getElementById('tf-tipo-archivo').value = f.tipo_archivo || 'xlsx';
         document.getElementById('tf-nombre-hoja').value = f.nombre_hoja || '';
-        document.getElementById('tf-delimitador').value = f.delimitador || '';
+        setDelimitador(f.delimitador);
         document.getElementById('tf-encabezado').checked = f.incluye_encabezado !== false;
         document.getElementById('tfModalTitle').innerHTML = '<i class="bi bi-pencil"></i> Editar formato';
 
@@ -197,6 +201,16 @@
         toggleTipoArchivo();
         new bootstrap.Modal(document.getElementById('tfModal')).show();
     };
+
+    /** El tab se guarda como "\t" pero en el select es la opción `TAB`. Un carácter guardado antes que no esté en la lista se agrega como opción para no perderlo al editar. */
+    function setDelimitador(delim) {
+        const sel = document.getElementById('tf-delimitador');
+        const valor = delim === '\t' ? 'TAB' : (delim || ',');
+        if (!Array.from(sel.options).some(o => o.value === valor)) {
+            sel.add(new Option(`Otro ( ${valor} )`, valor));
+        }
+        sel.value = valor;
+    }
 
     function setSoloLectura(soloLectura) {
         ['tf-tipo-archivo', 'tf-nombre-hoja', 'tf-delimitador', 'tf-encabezado'].forEach(id => {
@@ -235,6 +249,7 @@
                         decimales: avanzada.querySelector('.tf-c-decimales').value,
                         solo_alfanumerico: avanzada.querySelector('.tf-c-alfanum').checked,
                         mapeo_valores: avanzada.querySelector('.tf-c-mapeo').value,
+                        prefijo: avanzada.querySelector('.tf-c-prefijo').value.trim(),
                     });
                 });
 

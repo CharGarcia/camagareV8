@@ -9,6 +9,8 @@
 -- 1..20 y MANDATORIO/OPCIONAL) no se reproducen.
 --
 -- Reglas no evidentes tomadas de los comentarios de la plantilla del banco:
+--   col  4  NUMERO DE COMPROBANTE DE PAGO : opcional; se deja vacía, igual que
+--           en el archivo que el banco acepta (texto fijo sin valor).
 --   col  2  NUMERO DE CUENTA DE EMPRESA : cuenta emisora, la de la forma de
 --           pago de origen del lote; se escribe tal cual está registrada.
 --   col  7  VALOR        : entero sin punto ni separadores; los 2 últimos
@@ -45,7 +47,7 @@ SELECT
   {"orden":1,"etiqueta":"TIPO: PAGOS","origen_dato":"texto_fijo","valor_fijo":"PA","tipo_dato":"texto","formato_numero":null,"decimales":2,"longitud_fija":null,"relleno_caracter":null,"alineacion":null,"mayusculas":false,"quitar_tildes":false,"solo_alfanumerico":false,"max_caracteres":null,"mapeo_valores":null},
   {"orden":2,"etiqueta":"NUMERO DE CUENTA DE EMPRESA","origen_dato":"cuenta_empresa","valor_fijo":null,"tipo_dato":"texto","formato_numero":null,"decimales":2,"longitud_fija":null,"relleno_caracter":null,"alineacion":null,"mayusculas":false,"quitar_tildes":false,"solo_alfanumerico":false,"max_caracteres":null,"mapeo_valores":null},
   {"orden":3,"etiqueta":"NUMERO SECUENCIAL","origen_dato":"secuencial","valor_fijo":null,"tipo_dato":"numero","formato_numero":null,"decimales":0,"longitud_fija":null,"relleno_caracter":null,"alineacion":null,"mayusculas":false,"quitar_tildes":false,"solo_alfanumerico":false,"max_caracteres":null,"mapeo_valores":null},
-  {"orden":4,"etiqueta":"NUMERO DE COMPROBANTE DE PAGO","origen_dato":"numero_egreso","valor_fijo":null,"tipo_dato":"texto","formato_numero":null,"decimales":2,"longitud_fija":null,"relleno_caracter":null,"alineacion":null,"mayusculas":false,"quitar_tildes":false,"solo_alfanumerico":false,"max_caracteres":null,"mapeo_valores":null},
+  {"orden":4,"etiqueta":"NUMERO DE COMPROBANTE DE PAGO","origen_dato":"texto_fijo","valor_fijo":"","tipo_dato":"texto","formato_numero":null,"decimales":2,"longitud_fija":null,"relleno_caracter":null,"alineacion":null,"mayusculas":false,"quitar_tildes":false,"solo_alfanumerico":false,"max_caracteres":null,"mapeo_valores":null},
   {"orden":5,"etiqueta":"CODIGO DE EMPLEADO","origen_dato":"identificacion","valor_fijo":null,"tipo_dato":"texto","formato_numero":null,"decimales":2,"longitud_fija":null,"relleno_caracter":null,"alineacion":null,"mayusculas":false,"quitar_tildes":false,"solo_alfanumerico":false,"max_caracteres":20,"mapeo_valores":null},
   {"orden":6,"etiqueta":"MONEDA","origen_dato":"moneda","valor_fijo":null,"tipo_dato":"texto","formato_numero":null,"decimales":2,"longitud_fija":null,"relleno_caracter":null,"alineacion":null,"mayusculas":false,"quitar_tildes":false,"solo_alfanumerico":false,"max_caracteres":null,"mapeo_valores":null},
   {"orden":7,"etiqueta":"VALOR","origen_dato":"monto","valor_fijo":null,"tipo_dato":"numero","formato_numero":"entero_centavos","decimales":2,"longitud_fija":null,"relleno_caracter":null,"alineacion":null,"mayusculas":false,"quitar_tildes":false,"solo_alfanumerico":false,"max_caracteres":null,"mapeo_valores":null},

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido
-version: 1.26
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir
+version: 1.27
 orden: 45
 estado: activo
 ---
@@ -317,6 +317,26 @@ documentos **anulados** no cuentan.
   la sección *Consignaciones en Ventas* de Configuración contable y vuelva a abrir
   la pestaña; el asiento se genera en ese momento.
 
+## Al guardar, la consignación queda abierta
+
+El modal **ya no se cierra** al guardar. Se queda abierto mostrando la consignación
+tal como quedó registrada: con su **número definitivo**, su estado y los botones de
+PDF, correo y WhatsApp ya disponibles. Así se puede imprimirla, enviarla o revisar
+la pestaña del asiento sin tener que buscarla otra vez en el listado.
+
+Lo que se ve después de guardar no es lo que había en pantalla, sino el documento
+**recargado desde la base**: si el servidor asignó un número distinto al de la vista
+previa, o el estado cambió, se ve al instante.
+
+Una consignación recién guardada queda en estado **Emitida**, así que el modal se
+muestra **en modo lectura**, exactamente igual que si la abriera desde el listado:
+para retocarla, cambie el estado a **Borrador** con el selector de arriba y los
+campos se desbloquean. Estando en Borrador, el botón pasa a llamarse **Actualizar**
+y guarda sobre la misma consignación, sin crear otra.
+
+Para registrar una nueva, cierre el modal y use **Nueva consignación**. El listado
+del fondo se actualiza igual que antes, con la consignación ya incluida.
+
 ## El número no se puede repetir
 
 El número que se ve al abrir una consignación nueva es una **vista previa**: el
@@ -396,6 +416,11 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.27** — Al guardar, el **modal ya no se cierra**: se queda abierto con la
+  consignación recargada desde la base (número definitivo, estado y botones de PDF,
+  correo y WhatsApp), en modo lectura como al abrirla desde el listado. El documento
+  queda identificado, así que lo que se guarde después actualiza esa misma
+  consignación en vez de crear otra.
 - **1.26** — El **NUP no puede repetirse dentro del mismo lote del mismo producto**
   en una consignación: se avisa al traer ítems de un pedido y se bloquea al guardar,
   también en los ítems agregados a mano y al editar un documento ya guardado. El

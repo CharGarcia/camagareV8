@@ -15,6 +15,18 @@ class TransferenciaFormatoService
 {
     public const TIPOS_ARCHIVO = ['xlsx', 'csv', 'txt_delimitado', 'txt_ancho_fijo'];
 
+    /**
+     * Delimitadores que ofrece la vista. El tabulador viaja como la palabra
+     * `TAB` (un <input> no permite escribir un tab y trim() lo borraría) y se
+     * guarda como el carácter real "\t".
+     */
+    public const DELIMITADORES = [
+        ','   => 'Coma ( , )',
+        ';'   => 'Punto y coma ( ; )',
+        '|'   => 'Barra vertical ( | )',
+        'TAB' => 'Tabulador',
+    ];
+
     /** Whitelist de datos disponibles para mapear en una columna del layout. */
     public const ORIGEN_DATO = [
         'tipo_beneficiario'       => 'Tipo de beneficiario (PROVEEDOR / EMPLEADO)',
@@ -131,7 +143,7 @@ class TransferenciaFormatoService
             'nombre'             => $nombre,
             'descripcion'        => trim((string) ($data['descripcion'] ?? '')),
             'tipo_archivo'       => $tipoArchivo,
-            'delimitador'        => in_array($tipoArchivo, ['csv', 'txt_delimitado'], true) ? (trim((string) ($data['delimitador'] ?? '')) ?: ',') : null,
+            'delimitador'        => in_array($tipoArchivo, ['csv', 'txt_delimitado'], true) ? $this->normalizarDelimitador($data['delimitador'] ?? '') : null,
             'incluye_encabezado' => !empty($data['incluye_encabezado']),
             'nombre_hoja'        => $tipoArchivo === 'xlsx' ? (trim((string) ($data['nombre_hoja'] ?? '')) ?: 'Transferencias') : null,
             'campos'             => $campos,
@@ -175,9 +187,21 @@ class TransferenciaFormatoService
                 'solo_alfanumerico' => !empty($c['solo_alfanumerico']),
                 'max_caracteres'    => isset($c['max_caracteres']) && $c['max_caracteres'] !== '' ? max(1, (int) $c['max_caracteres']) : null,
                 'mapeo_valores'     => $this->normalizarMapeo($c['mapeo_valores'] ?? null),
+                'prefijo'           => mb_substr(trim((string) ($c['prefijo'] ?? '')), 0, 10) ?: null,
             ];
         }
         return $out;
+    }
+
+    /** `TAB` (o un tab real) → "\t"; cualquier otro valor se toma tal cual (1 carácter); vacío → coma. */
+    private function normalizarDelimitador($valor): string
+    {
+        $valor = (string) $valor;
+        if ($valor === "\t" || strtoupper(trim($valor)) === 'TAB') {
+            return "\t";
+        }
+        $valor = trim($valor);
+        return $valor !== '' ? mb_substr($valor, 0, 1) : ',';
     }
 
     /** Acepta un array asociativo ya decodificado o el texto "clave=valor" por línea que arma la vista. */

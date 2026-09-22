@@ -51,6 +51,7 @@ class TransferenciaFormatoController extends Controller
             'bancos'      => (new BancoEcuador())->getAll(),
             'origenDato'  => TransferenciaFormatoService::ORIGEN_DATO,
             'tiposArchivo'=> TransferenciaFormatoService::TIPOS_ARCHIVO,
+            'delimitadores' => TransferenciaFormatoService::DELIMITADORES,
         ]);
     }
 

@@ -354,17 +354,17 @@ async function TR_cargarSelector() {
             return;
         }
         body.innerHTML = json.data.map(p => {
-            const sinCuenta = !p.id_banco || !p.numero_cuenta;
+            // El backend solo devuelve pagos con banco y número de cuenta: toda fila es seleccionable.
             const tipoLabel = p.tipo_sujeto === 'PROVEEDOR' ? 'Proveedor' : (p.tipo_sujeto === 'EMPLEADO' ? 'Nómina' : TR_esc(p.tipo_sujeto || '-'));
-            return `<tr class="${sinCuenta ? 'table-danger' : 'tr-sel-fila'}" style="${sinCuenta ? '' : 'cursor:pointer;'}" title="${sinCuenta ? 'Sin banco/cuenta registrada' : ''}" onclick="TR_toggleFila(event, this)">
-                <td><input type="checkbox" class="form-check-input tr-sel-pago" value="${p.id_egreso_pago}" ${sinCuenta ? 'disabled' : ''}></td>
+            return `<tr class="tr-sel-fila" style="cursor:pointer;" onclick="TR_toggleFila(event, this)">
+                <td><input type="checkbox" class="form-check-input tr-sel-pago" value="${p.id_egreso_pago}"></td>
                 <td>${TR_esc(p.numero_egreso)}</td>
                 <td>${tipoLabel}</td>
                 <td>${TR_formatFecha(p.fecha_emision)}</td>
                 <td>${TR_esc(p.beneficiario)}</td>
-                <td>${sinCuenta ? '<span class="text-danger">Sin banco</span>' : TR_esc(p.banco_nombre)}</td>
-                <td>${sinCuenta ? '-' : TR_esc(p.tipo_cuenta)}</td>
-                <td>${sinCuenta ? '-' : TR_esc(p.numero_cuenta)}</td>
+                <td>${TR_esc(p.banco_nombre)}</td>
+                <td>${TR_esc(p.tipo_cuenta)}</td>
+                <td>${TR_esc(p.numero_cuenta)}</td>
                 <td class="text-end">$ ${parseFloat(p.monto || 0).toFixed(2)}</td>
             </tr>`;
         }).join('');
@@ -376,15 +376,15 @@ async function TR_cargarSelector() {
 /** Permite seleccionar el pago haciendo clic en cualquier parte de la fila (no solo el checkbox). */
 function TR_toggleFila(e, tr) {
     const chk = tr.querySelector('.tr-sel-pago');
-    if (!chk || chk.disabled) return;
+    if (!chk) return;
     if (e.target.tagName !== 'INPUT') chk.checked = !chk.checked;
     tr.classList.toggle('table-primary', chk.checked);
     TR_sincronizarCheckTodos();
 }
 
-/** Checkbox del encabezado: marca/desmarca todas las filas seleccionables. */
+/** Checkbox del encabezado: marca/desmarca todas las filas. */
 function TR_marcarTodos(chkHeader) {
-    document.querySelectorAll('#tr-selector-body .tr-sel-pago:not(:disabled)').forEach(chk => {
+    document.querySelectorAll('#tr-selector-body .tr-sel-pago').forEach(chk => {
         chk.checked = chkHeader.checked;
         chk.closest('tr').classList.toggle('table-primary', chk.checked);
     });
@@ -394,7 +394,7 @@ function TR_marcarTodos(chkHeader) {
 function TR_sincronizarCheckTodos() {
     const chkTodos = document.getElementById('tr-sel-todos');
     if (!chkTodos) return;
-    const filas = Array.from(document.querySelectorAll('#tr-selector-body .tr-sel-pago:not(:disabled)'));
+    const filas = Array.from(document.querySelectorAll('#tr-selector-body .tr-sel-pago'));
     const marcadas = filas.filter(c => c.checked).length;
     chkTodos.checked = filas.length > 0 && marcadas === filas.length;
     chkTodos.indeterminate = marcadas > 0 && marcadas < filas.length;
