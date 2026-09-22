@@ -711,7 +711,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     // ── Observaciones automáticas ─────────────────────────────────────────────
     // "Observaciones del Egreso" se arma sola con lo que se va cargando: "Pago factura de compra
-    // 001-001-000000123; liquidación de compra 001-001-000000045" más la descripción de cada
+    // 123; liquidación de compra 45" más la descripción de cada
     // línea de "Otros conceptos". En cuanto el usuario escribe su propio texto el campo ya no se
     // toca; si lo vacía por completo, vuelve a completarse solo con el siguiente cambio.
     let egObsAuto = true;
@@ -723,12 +723,22 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         LIQUIDACION: ['liquidación de compra', 'liquidaciones de compra']
     };
 
+    // Facturas y liquidaciones de compra: solo el secuencial, sin establecimiento/punto ni ceros
+    // a la izquierda ("002-004-000042869" → "42869"). Nómina conserva su número completo.
+    const EG_OBS_SECUENCIAL_CORTO = ['COMPRA', 'LIQUIDACION'];
+
+    function egSecuencialCorto(numero) {
+        const partes = String(numero || '').trim().split('-');
+        const ultimo = partes[partes.length - 1].replace(/^0+(?=\d)/, '');
+        return ultimo !== '' ? ultimo : String(numero || '');
+    }
+
     function egGenerarObservaciones() {
         // Mismo filtro que egConstruirDetalles(): un documento desmarcado o en $0 no se guarda.
         const grupos = {};
         docsEgreso.filter(d => d.seleccionado && d.pagado > 0).forEach(d => {
             const tipo = d.tipo_bd || '';
-            (grupos[tipo] = grupos[tipo] || []).push(d.numero);
+            (grupos[tipo] = grupos[tipo] || []).push(EG_OBS_SECUENCIAL_CORTO.includes(tipo) ? egSecuencialCorto(d.numero) : d.numero);
         });
         const partes = Object.keys(grupos).map(tipo => {
             const nums = grupos[tipo];
@@ -740,7 +750,27 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const desc = String(m.desc || '').trim();
             if (desc) textos.push(desc);
         });
+        // Formas de pago: "Pagado con EFECTIVO $50.00, BANCO PICHINCHA $500.00 (cheque #45),
+        // BANCO GUAYAQUIL $100.00 (transferencia ref. 4455)". Los cheques anulados no están en
+        // pagosEgreso, así que no salen en el texto.
+        const formas = pagosEgreso.map(egTextoFormaPago).filter(Boolean);
+        if (formas.length) textos.push('Pagado con ' + formas.join(', '));
         return textos.join('; ');
+    }
+
+    const EG_OBS_OPERACION = { TRANSFERENCIA: 'transferencia', DEPOSITO: 'depósito', DEBITO: 'débito' };
+
+    function egTextoFormaPago(p) {
+        const nombre = String(p.nombre || '').trim();
+        if (!nombre) return '';
+        const detalles = [];
+        const op = String(p.tipo_operacion_bancaria || '').toUpperCase();
+        if (op === 'CHEQUE') detalles.push('cheque #' + (p.numero_cheque || '?'));
+        else if (op) detalles.push(EG_OBS_OPERACION[op] || op.toLowerCase());
+        const ref = String(p.ref || '').trim();
+        if (ref) detalles.push('ref. ' + ref);
+        const monto = Number(p.monto) || 0;
+        return `${nombre} $${monto.toFixed(2)}` + (detalles.length ? ` (${detalles.join(' ')})` : '');
     }
 
     function egActualizarObservacionesAuto() {
@@ -1597,6 +1627,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         f.className = 'fw-bold ' + (Math.abs(sum - final) < 0.01 ? 'text-success' : 'text-danger');
 
         renderPagosAnuladosEgreso();
+        egActualizarObservacionesAuto(); // las formas de pago también van en el texto
     }
 
     function renderPagosAnuladosEgreso() {

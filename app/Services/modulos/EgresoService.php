@@ -880,8 +880,19 @@ class EgresoService
 
         $num        = $egreso['numero_egreso'] ?? (string) $idEgreso;
         $tipoSujeto = strtolower((string) ($egreso['tipo_sujeto'] ?? ''));
+        // Referencia de cada línea = "Egreso 18 · <detalle de la línea>": el egreso con solo su
+        // secuencial (misma regla que Observaciones) y lo que esa línea representa —"Pago factura
+        // de compra 42869", "Pago: BANCO PICHINCHA (cheque #45)", la descripción de un otro
+        // concepto—. Es lo que muestra la pestaña Asiento y la columna Documento Ref. de Mayores
+        // (documento_referencia manda sobre referencia_detalle). Espejo de IngresoService.
+        $numCorto = AsientoBuilderService::secuencialCorto((string) $num);
+        $prefijo  = 'Egreso ' . ($numCorto !== '' ? $numCorto : $num);
         foreach ($detalles as &$d) {
-            $d['documento_referencia'] = 'Egreso ' . $num;
+            $refLinea = trim((string) ($d['referencia_detalle'] ?? ''));
+            $d['documento_referencia'] = mb_substr($refLinea !== '' ? $prefijo . ' · ' . $refLinea : $prefijo, 0, 100);
+            if ($refLinea !== '') {
+                $d['referencia_detalle'] = mb_substr($refLinea, 0, 500);
+            }
             if ($tipoSujeto === 'proveedor' && !empty($egreso['id_proveedor'])) {
                 $d['id_entidad']   = (int) $egreso['id_proveedor'];
                 $d['tipo_entidad'] = 'proveedor';

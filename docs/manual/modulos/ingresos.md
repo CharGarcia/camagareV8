@@ -6,7 +6,7 @@ ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
 etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres
-version: 3.1
+version: 3.2
 orden: 10
 estado: activo
 ---
@@ -118,12 +118,22 @@ llenando solo con lo que se carga en el detalle, sin escribir nada:
 
 | Lo que se carga | Texto en Observaciones |
 |-----------------|------------------------|
-| Una factura de venta | `Cobro factura de venta 001-001-000000001` |
-| Varias facturas de venta | `Cobro facturas de venta 001-001-000000001, 001-001-000000002` |
-| Una factura y un recibo | `Cobro factura de venta 001-001-000000001; recibo de venta 001-002-000000004` |
+| Una factura de venta | `Cobro factura de venta 1` |
+| Varias facturas de venta | `Cobro facturas de venta 1, 2` |
+| Una factura y un recibo | `Cobro factura de venta 1; recibo de venta 4` |
 | Una factura de reembolso | `Cobro factura de reembolso 001-001-000000009` |
 | Un saldo inicial | `Cobro saldo inicial` y el número del documento |
 | Una línea de "Otros conceptos" | Su descripción, tal como se escribe |
+| Las formas de cobro | `Cobrado con EFECTIVO $50.00, BANCO PICHINCHA $100.00 (transferencia ref. 4455), BANCO GUAYAQUIL $30.00 (cheque #123)` |
+
+- Las **facturas y los recibos de venta** van solo con su **secuencial**, sin
+  establecimiento ni punto de emisión y sin los ceros de la izquierda: la
+  factura `001-001-000000123` aparece como `123`. Las facturas de reembolso y
+  los saldos iniciales conservan su número completo.
+- Las **formas de cobro** van al final, después de "Cobrado con": cada una con
+  su nombre y su monto y, entre paréntesis, el tipo de operación bancaria
+  (transferencia, depósito o el número de cheque) y la referencia si se
+  escribió una. Si quita una forma de cobro, sale del texto.
 
 - Si quita un documento, lo desmarca o deja su monto en cero, sale del texto:
   ya no se va a cobrar.
@@ -261,6 +271,21 @@ Las líneas de "Otros conceptos" van al asiento con la cuenta de cada línea: la
 que propone el concepto o la que se elija a mano (ver *Cuenta contable de las
 líneas de "Otros conceptos"*).
 
+**Referencia de cada línea.** Cada línea del asiento lleva como referencia el
+ingreso, con solo su secuencial, y lo que esa línea representa, con el mismo
+detalle que las *Observaciones que se completan solas*:
+
+| Línea | Referencia |
+|-------|------------|
+| Forma de cobro (banco / caja) | `Ingreso 8 · Cobro: BANCO PICHINCHA (transferencia ref. 4455)` o `… (cheque #123)` |
+| Cartera cancelada | `Ingreso 8 · Cobro facturas de venta 1, 2; recibo de venta 4` |
+| Línea de "Otros conceptos" | `Ingreso 8 · ` y la descripción de la línea |
+
+Es lo que se ve en la pestaña *Asiento* del ingreso, en el modal del Libro
+Diario y en la columna *Documento Ref.* de Mayores. Los asientos ya generados
+conservan su referencia anterior (`Ingreso 001-101-000000008`) hasta que el
+ingreso se vuelva a guardar o se regenere el asiento.
+
 ## Buscar y filtrar el listado
 
 Arriba de la tabla hay dos piezas: el botón **Filtros** y el cuadro de búsqueda.
@@ -388,6 +413,19 @@ deseable; para el contador o el administrador, active el acceso total.
   detalle más largo va en **Observaciones Generales**.
 
 ## Historial de cambios
+
+- **3.2** — **Observaciones automáticas: secuencial corto y formas de cobro.**
+  Las facturas y los recibos de venta ya no van con el número completo (`Cobro
+  factura de venta 001-001-000000123`) sino solo con el secuencial, sin
+  establecimiento ni punto y sin ceros a la izquierda (`Cobro factura de venta
+  123`); reembolsos y saldos iniciales siguen con su número completo. Además, el texto
+  ahora cierra con las **formas de cobro** cargadas: `Cobrado con EFECTIVO
+  $50.00, BANCO PICHINCHA $100.00 (transferencia ref. 4455)`, con el número de
+  cheque cuando corresponde. La **referencia de cada línea del asiento** sigue
+  la misma regla: antes todas decían `Ingreso 001-101-000000008`; ahora dicen
+  `Ingreso 8 · Cobro facturas de venta 1, 2`, `Ingreso 8 · Cobro: BANCO
+  PICHINCHA (cheque #123)`, etc. (ver *Asiento contable*). Mismo cambio en
+  *Egresos*.
 
 - **3.1** — **El ingreso ya no se pierde por un texto largo.** *Referencia /
   Glosa General* pasa de 100 a **255 caracteres** y muestra el tope al escribir

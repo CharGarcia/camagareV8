@@ -693,7 +693,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     // ── Observaciones automáticas ─────────────────────────────────────────────
     // "Observaciones Generales" se arma sola con lo que se va cargando: "Cobro factura de venta
-    // 001-001-000000001; recibo de venta 001-001-000000004" más la descripción de cada línea de
+    // 1; recibo de venta 4" más la descripción de cada línea de
     // "Otros conceptos". En cuanto el usuario escribe su propio texto el campo ya no se toca; si
     // lo vacía por completo, vuelve a completarse solo con el siguiente cambio.
     let ingObsAuto = true;
@@ -705,12 +705,22 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         SALDO_INICIAL:     ['saldo inicial', 'saldos iniciales']
     };
 
+    // Facturas y recibos de venta: solo el secuencial, sin establecimiento/punto ni ceros a la
+    // izquierda ("001-001-000000123" → "123"). Los demás tipos conservan su número completo.
+    const ING_OBS_SECUENCIAL_CORTO = ['FACTURA', 'RECIBO'];
+
+    function ingSecuencialCorto(numero) {
+        const partes = String(numero || '').trim().split('-');
+        const ultimo = partes[partes.length - 1].replace(/^0+(?=\d)/, '');
+        return ultimo !== '' ? ultimo : String(numero || '');
+    }
+
     function ingGenerarObservaciones() {
         // Mismo filtro que guardarIngreso(): un documento desmarcado o en $0 no se guarda.
         const grupos = {};
         docPendientes.filter(f => f.seleccionado && f.cobrado > 0).forEach(f => {
             const tipo = f.tipo_documento || 'FACTURA';
-            (grupos[tipo] = grupos[tipo] || []).push(f.numero);
+            (grupos[tipo] = grupos[tipo] || []).push(ING_OBS_SECUENCIAL_CORTO.includes(tipo) ? ingSecuencialCorto(f.numero) : f.numero);
         });
         const partes = Object.keys(grupos).map(tipo => {
             const nums = grupos[tipo];
@@ -722,7 +732,26 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const desc = String(d.descripcion || '').trim();
             if (desc) textos.push(desc);
         });
+        // Formas de cobro: "Cobrado con EFECTIVO $50.00, BANCO PICHINCHA $100.00 (transferencia
+        // ref. 4455), BANCO GUAYAQUIL $30.00 (cheque #123)".
+        const formas = formasPagoData.map(ingTextoFormaCobro).filter(Boolean);
+        if (formas.length) textos.push('Cobrado con ' + formas.join(', '));
         return textos.join('; ');
+    }
+
+    const ING_OBS_OPERACION = { TRANSFERENCIA: 'transferencia', DEPOSITO: 'depósito', DEBITO: 'débito' };
+
+    function ingTextoFormaCobro(p) {
+        const nombre = String(p.formaNombre || '').trim();
+        if (!nombre) return '';
+        const detalles = [];
+        const op = String(p.tipo_operacion_bancaria || '').toUpperCase();
+        if (op === 'CHEQUE') detalles.push('cheque #' + (p.numero_cheque || '?'));
+        else if (op) detalles.push(ING_OBS_OPERACION[op] || op.toLowerCase());
+        const ref = String(p.referencia || '').trim();
+        if (ref) detalles.push('ref. ' + ref);
+        const monto = Number(p.monto) || 0;
+        return `${nombre} $${monto.toFixed(2)}` + (detalles.length ? ` (${detalles.join(' ')})` : '');
     }
 
     function ingActualizarObservacionesAuto() {
@@ -1865,6 +1894,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             });
         }
         recalcularSumariaCobros();
+        ingActualizarObservacionesAuto(); // las formas de cobro también van en el texto
     }
 
     function agregarLineaCobro() {

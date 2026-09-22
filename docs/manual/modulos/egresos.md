@@ -6,7 +6,7 @@ ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres
-version: 1.24
+version: 1.25
 orden: 20
 estado: activo
 ---
@@ -134,11 +134,21 @@ llenando solo con lo que se carga en el detalle, sin escribir nada:
 
 | Lo que se carga | Texto en Observaciones |
 |-----------------|------------------------|
-| Una factura de compra | `Pago factura de compra 002-004-000042869` |
-| Varias facturas de compra | `Pago facturas de compra 002-004-000042869, 001-001-000000111` |
-| Una compra y una liquidación | `Pago factura de compra 002-004-000042869; liquidación de compra 001-001-000000045` |
+| Una factura de compra | `Pago factura de compra 42869` |
+| Varias facturas de compra | `Pago facturas de compra 42869, 111` |
+| Una compra y una liquidación | `Pago factura de compra 42869; liquidación de compra 45` |
 | Nómina (roles, anticipos, préstamos, décimos) | `Pago Rol Mensual 9/2026`, `Pago Décimo Tercero 2026`… |
 | Una línea de "Otros conceptos" | Su descripción, tal como se escribe |
+| Las formas de pago | `Pagado con EFECTIVO $50.00, BANCO PICHINCHA $500.00 (cheque #45), BANCO GUAYAQUIL $100.00 (transferencia ref. 4455)` |
+
+- Las **facturas y las liquidaciones de compra** van solo con su **secuencial**,
+  sin establecimiento ni punto de emisión y sin los ceros de la izquierda: la
+  factura `002-004-000042869` aparece como `42869`. Los documentos de nómina
+  conservan su número completo.
+- Las **formas de pago** van al final, después de "Pagado con": cada una con su
+  nombre y su monto y, entre paréntesis, el tipo de operación bancaria
+  (transferencia, depósito, débito o el número de cheque) y la referencia si se
+  escribió una. Si quita una forma de pago, o anula un cheque, sale del texto.
 
 - El texto no repite el **beneficiario**: el proveedor o el empleado ya tienen su
   propia columna en el listado y su campo en el comprobante.
@@ -365,6 +375,22 @@ la empresa; al anularlo, el asiento se anula. Las líneas de "Otros conceptos" v
 al asiento con la cuenta de cada línea: la que propone el concepto o la que se
 elija a mano (ver *Cuenta contable de las líneas de "Otros conceptos"*).
 
+**Referencia de cada línea.** Cada línea del asiento lleva como referencia el
+egreso, con solo su secuencial, y lo que esa línea representa, con el mismo
+detalle que las *Observaciones que se completan solas*:
+
+| Línea | Referencia |
+|-------|------------|
+| Forma de pago (banco / caja) | `Egreso 18 · Pago: BANCO PICHINCHA (cheque #45)` o `… (transferencia ref. 4455)` |
+| Cartera cancelada | `Egreso 18 · Pago factura de compra 42869; liquidación de compra 45` |
+| Nómina | `Egreso 18 · ` y la cuenta de nómina de siempre (`Sueldos por Pagar (rol mensual)`…) |
+| Línea de "Otros conceptos" | `Egreso 18 · ` y la descripción de la línea |
+
+Es lo que se ve en la pestaña *Asiento* del egreso, en el modal del Libro Diario
+y en la columna *Documento Ref.* de Mayores. Los asientos ya generados conservan
+su referencia anterior (`Egreso 001-001-000000018`) hasta que el egreso se vuelva
+a guardar o se regenere el asiento.
+
 ## Buscar y filtrar el listado
 
 Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
@@ -495,6 +521,18 @@ ve solo los que registró.
   egreso no se guardaba. Desde la 1.24 ese campo admite 255 caracteres.
 
 ## Historial de cambios
+
+- **1.25** — **Observaciones automáticas: secuencial corto y formas de pago.**
+  Las facturas y las liquidaciones de compra ya no van con el número completo
+  (`Pago factura de compra 002-004-000042869`) sino solo con el secuencial, sin
+  establecimiento ni punto y sin ceros a la izquierda (`Pago factura de compra
+  42869`); la nómina sigue con su número completo. Además, el texto ahora
+  cierra con las **formas de pago** cargadas: `Pagado con EFECTIVO $50.00, BANCO
+  PICHINCHA $500.00 (cheque #45)`, con el tipo de operación y la referencia
+  cuando las hay. La **referencia de cada línea del asiento** sigue la misma
+  regla: antes todas decían `Egreso 001-001-000000018`; ahora dicen `Egreso 18 ·
+  Pago factura de compra 42869`, `Egreso 18 · Pago: BANCO PICHINCHA (cheque
+  #45)`, etc. (ver *Asiento contable*). Mismo cambio en *Ingresos*.
 
 - **1.24** — **El egreso ya no se pierde por un texto largo.** *Nº Referencia /
   Comprobante* pasa de 100 a **255 caracteres**, con el tope visible al escribir

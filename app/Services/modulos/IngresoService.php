@@ -700,8 +700,19 @@ class IngresoService
         AsientoBuilderService::verificarCuadre($detalles, $builder->getMotivosFaltantes());
 
         $num = $ingreso['numero_ingreso'] ?? (string) $idIngreso;
+        // Referencia de cada línea = "Ingreso 8 · <detalle de la línea>": el ingreso con solo su
+        // secuencial (misma regla que Observaciones) y lo que esa línea representa —"Cobro
+        // facturas de venta 1, 2", "Cobro: BANCO PICHINCHA (transferencia ref. 4455)", la
+        // descripción de un otro concepto—. Es lo que muestra la pestaña Asiento y la columna
+        // Documento Ref. de Mayores (documento_referencia manda sobre referencia_detalle).
+        $numCorto = AsientoBuilderService::secuencialCorto((string) $num);
+        $prefijo  = 'Ingreso ' . ($numCorto !== '' ? $numCorto : $num);
         foreach ($detalles as &$d) {
-            $d['documento_referencia'] = 'Ingreso ' . $num;
+            $refLinea = trim((string) ($d['referencia_detalle'] ?? ''));
+            $d['documento_referencia'] = mb_substr($refLinea !== '' ? $prefijo . ' · ' . $refLinea : $prefijo, 0, 100);
+            if ($refLinea !== '') {
+                $d['referencia_detalle'] = mb_substr($refLinea, 0, 500);
+            }
             if (!empty($ingreso['id_cliente'])) {
                 $d['id_entidad']   = (int) $ingreso['id_cliente'];
                 $d['tipo_entidad'] = 'cliente';

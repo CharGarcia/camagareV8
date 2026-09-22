@@ -571,7 +571,8 @@ class CuentasPorCobrarController extends BaseModuloController
                 $totRet    += $g['retenciones'];
                 $totSaldo  += $g['saldo'];
 
-                if ($cuerpo === '') {
+                $primerCliente = ($cuerpo === '');
+                if ($primerCliente) {
                     $cuerpo .= "<table class='cli'><thead><tr>{$thCols}</tr></thead><tbody>";
                 } else {
                     // Hueco entre un cliente y el siguiente (antes era el margin-bottom de la
@@ -587,6 +588,17 @@ class CuentasPorCobrarController extends BaseModuloController
                 $cuerpo .= "<tr class='grp'><td colspan='{$nCols}'>"
                     . $e($titulo) . " &nbsp;&middot;&nbsp; saldo: " . number_format($g['saldo'], 2)
                     . "</td></tr>";
+
+                // Encabezado de columnas bajo CADA cliente. Con una sola tabla, el <thead>
+                // solo se dibuja al principio de cada página, así que el cliente que empieza
+                // a media hoja quedaba con sus documentos sin rótulo de columnas. Va como
+                // fila normal del <tbody> con celdas <th> (hereda el mismo estilo): NO como
+                // un segundo <thead>, porque volver a abrir <thead> a media tabla reactiva
+                // el corte de filas entre páginas que se arregló al unificar la tabla.
+                // El primero no lo lleva: el <thead> de la tabla está justo encima.
+                if (!$primerCliente) {
+                    $cuerpo .= "<tr class='cab'>{$thCols}</tr>";
+                }
 
                 foreach ($g['items'] as $r) {
                     $dias   = (int)($r['dias_vencido'] ?? 0);

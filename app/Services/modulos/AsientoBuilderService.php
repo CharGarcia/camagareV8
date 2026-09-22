@@ -72,6 +72,95 @@ class AsientoBuilderService
     ];
 
     /**
+     * Etiquetas [singular, plural] con las que la referencia de las líneas de cartera nombra
+     * los documentos cobrados/pagados: "Cobro facturas de venta 1, 2; recibo de venta 4",
+     * "Pago factura de compra 42869; liquidación de compra 45". Son las MISMAS que usa el modal
+     * para armar Observaciones (ING_OBS_TIPOS / EG_OBS_TIPOS en las vistas de Ingresos y
+     * Egresos), así que la referencia del asiento dice lo mismo que el documento.
+     */
+    private const ETIQUETA_DOC_CARTERA_VENTAS = [
+        'FACTURA' => ['factura de venta', 'facturas de venta'],
+        'RECIBO'  => ['recibo de venta', 'recibos de venta'],
+    ];
+
+    private const ETIQUETA_DOC_CARTERA_COMPRAS = [
+        'COMPRA'      => ['factura de compra', 'facturas de compra'],
+        'LIQUIDACION' => ['liquidación de compra', 'liquidaciones de compra'],
+    ];
+
+    /** Cómo se lee el tipo de operación bancaria de una forma de cobro/pago en la referencia. */
+    private const OPERACION_BANCARIA_TEXTO = [
+        'TRANSFERENCIA' => 'transferencia',
+        'DEPOSITO'      => 'depósito',
+        'DEBITO'        => 'débito',
+    ];
+
+    /**
+     * Solo el secuencial de un número de documento, sin establecimiento/punto ni ceros a la
+     * izquierda: "001-001-000000123" → "123". Espejo exacto de ingSecuencialCorto() /
+     * egSecuencialCorto() del modal. Si el número no trae guiones se le quitan los ceros al
+     * número completo; si viene vacío devuelve ''.
+     */
+    public static function secuencialCorto(string $numero): string
+    {
+        $numero = trim($numero);
+        if ($numero === '') {
+            return '';
+        }
+        $partes = explode('-', $numero);
+        $ultimo = (string) end($partes);
+        $corto  = preg_replace('/^0+(?=\d)/', '', $ultimo) ?? $ultimo;
+        return $corto !== '' ? $corto : $numero;
+    }
+
+    /**
+     * "Cobro facturas de venta 1, 2; recibo de venta 4" a partir de los documentos que caen en
+     * una misma cuenta de cartera. Si ningún documento trae número (detalle antiguo sin
+     * numero_documento) devuelve '' para que quien llama use el nombre genérico de antes.
+     *
+     * @param array<string, array<string, true>> $docsPorTipo tipo_documento => [secuencial => true]
+     * @param array<string, array{0: string, 1: string}> $etiquetas
+     */
+    private static function referenciaCartera(string $verbo, array $etiquetas, array $docsPorTipo): string
+    {
+        $partes = [];
+        foreach ($docsPorTipo as $tipo => $nums) {
+            $nums = array_keys($nums);
+            if (empty($nums)) {
+                continue;
+            }
+            [$singular, $plural] = $etiquetas[$tipo] ?? ['documento', 'documentos'];
+            $partes[] = (count($nums) > 1 ? $plural : $singular) . ' ' . implode(', ', $nums);
+        }
+        return $partes ? $verbo . ' ' . implode('; ', $partes) : '';
+    }
+
+    /**
+     * "BANCO PICHINCHA (transferencia ref. 4455)", "BANCO GUAYAQUIL (cheque #123)", "EFECTIVO".
+     * Mismo detalle que el modal pone en Observaciones para cada forma de cobro/pago, sin el
+     * monto: ese ya va en el Debe/Haber de la propia línea.
+     *
+     * @param array{forma_nombre?: ?string, tipo_operacion_bancaria?: ?string, numero_cheque?: ?string, pago_referencia?: ?string} $p
+     */
+    private static function textoFormaPago(array $p): string
+    {
+        $nombre   = trim((string) ($p['forma_nombre'] ?? ''));
+        $detalles = [];
+        $op = strtoupper(trim((string) ($p['tipo_operacion_bancaria'] ?? '')));
+        if ($op === 'CHEQUE') {
+            $numChq     = trim((string) ($p['numero_cheque'] ?? ''));
+            $detalles[] = 'cheque #' . ($numChq !== '' ? $numChq : '?');
+        } elseif ($op !== '') {
+            $detalles[] = self::OPERACION_BANCARIA_TEXTO[$op] ?? strtolower($op);
+        }
+        $ref = trim((string) ($p['pago_referencia'] ?? ''));
+        if ($ref !== '') {
+            $detalles[] = 'ref. ' . $ref;
+        }
+        return $nombre . ($detalles ? ' (' . implode(' ', $detalles) . ')' : '');
+    }
+
+    /**
      * tipo_documento => código (asientos_tipo) del slot de cartera con el que ese documento
      * resolvió su Cuenta por Cobrar/Pagar. Sirve para quedarse SOLO con esas cuentas al leer el
      * asiento del documento: el Debe de una venta no es únicamente la cartera —lleva también
@@ -4053,7 +4142,7 @@ class AsientoBuilderService
         //    registrarse (puede estar repartida en varias cuentas por línea/Cliente/Producto —
         //    misma cascada que Compras), no la cuenta del concepto elegido en el ingreso.
         $restante = $totalMovido;
-        [$lineasCartera, $totalCartera] = $this->contrapartidaCarteraVentas($db, $idEmpresa, $idIngreso);
+        [$lineasCartera, $totalCartera, $refCarteraNoResuelta] = $this->contrapartidaCarteraVentas($db, $idEmpresa, $idIngreso);
         if ($totalCartera > 0) {
             foreach ($lineasCartera as $l) {
                 $detalles[] = $l;
@@ -4061,7 +4150,8 @@ class AsientoBuilderService
             $restante = round($restante - $totalCartera, 2);
         }
         // Documentos sin asiento propio resoluble (o sin línea de Debe): su monto se queda en
-        // $restante y cae al camino normal (cuenta del concepto).
+        // $restante y cae al camino normal (cuenta del concepto). Su referencia, eso sí, sigue
+        // nombrando los documentos ("Cobro factura de venta 123") en vez del nombre del concepto.
 
         // ── HABER (resto): contrapartida repartida por la cuenta de cada línea de descripción.
         //    Por defecto la cuenta del concepto; si la línea trae otra, manda la de la línea.
@@ -4069,7 +4159,7 @@ class AsientoBuilderService
             $contrapartida = $this->contrapartidaPorCuenta(
                 $db, $idEmpresa, $idIngreso, 'ingreso',
                 $conceptoIdCuenta,
-                (string) ($ingreso['concepto_nombre'] ?? 'Ingreso'),
+                $refCarteraNoResuelta !== '' ? $refCarteraNoResuelta : (string) ($ingreso['concepto_nombre'] ?? 'Ingreso'),
                 $restante, $detallesConCuenta
             );
             // Igual que en el egreso: el trozo no cubierto es el hueco del Haber (ver comentario
@@ -4226,7 +4316,7 @@ class AsientoBuilderService
         //    Cuenta por Pagar que el documento acreditó en su propio asiento al registrarse
         //    (puede estar repartida en varias cuentas por línea/Producto/Categoría/Marca — ver
         //    contrapartidaCarteraCompras), no la cuenta del concepto elegido en el egreso.
-        [$lineasCartera, $totalCartera] = $this->contrapartidaCarteraCompras($db, $idEmpresa, $idEgreso);
+        [$lineasCartera, $totalCartera, $refCarteraNoResuelta] = $this->contrapartidaCarteraCompras($db, $idEmpresa, $idEgreso);
         if ($totalCartera > 0) {
             foreach ($lineasCartera as $l) {
                 $detalles[] = $l;
@@ -4234,7 +4324,8 @@ class AsientoBuilderService
             $restante = round($restante - $totalCartera, 2);
         }
         // Documentos sin asiento propio resoluble (o sin línea de Haber): su monto se queda en
-        // $restante y cae al camino normal (cuenta del concepto).
+        // $restante y cae al camino normal (cuenta del concepto). Su referencia, eso sí, sigue
+        // nombrando los documentos ("Pago factura de compra 42869") en vez del nombre del concepto.
 
         // ── DEBE (resto): contrapartida repartida por la cuenta de cada línea de descripción.
         //    Por defecto la cuenta del concepto; si la línea trae otra, manda la de la línea.
@@ -4242,7 +4333,7 @@ class AsientoBuilderService
             $contrapartida = $this->contrapartidaPorCuenta(
                 $db, $idEmpresa, $idEgreso, 'egreso',
                 $conceptoIdCuenta,
-                (string) ($egreso['concepto_nombre'] ?? 'Egreso'),
+                $refCarteraNoResuelta !== '' ? $refCarteraNoResuelta : (string) ($egreso['concepto_nombre'] ?? 'Egreso'),
                 $restante, $detallesConCuenta
             );
             // Lo que la contrapartida no llegó a cubrir es exactamente el hueco del Debe. Se anota
@@ -4528,7 +4619,8 @@ class AsientoBuilderService
 
     private function contrapartidaCarteraCompras(\PDO $db, int $idEmpresa, int $idEgreso): array
     {
-        $sql = "SELECT tipo_documento, id_referencia_documento, SUM(monto_pagado) AS total_pagado
+        $sql = "SELECT tipo_documento, id_referencia_documento, SUM(monto_pagado) AS total_pagado,
+                       MAX(numero_documento) AS numero_documento
                 FROM egresos_detalle
                 WHERE id_egreso = :id AND eliminado = FALSE
                   AND tipo_documento IN ('COMPRA','LIQUIDACION')
@@ -4539,6 +4631,8 @@ class AsientoBuilderService
         $documentos = $st->fetchAll(\PDO::FETCH_ASSOC);
 
         $lineasPorCuenta = [];
+        $docsPorCuenta   = []; // id_cuenta => tipo_documento => [secuencial corto => true]
+        $docsNoResueltos = []; // tipo_documento => [secuencial corto => true] (sin asiento propio)
         $totalResuelto = 0.0;
 
         foreach ($documentos as $doc) {
@@ -4569,10 +4663,19 @@ class AsientoBuilderService
 
             $totalHaberDoc = round((float) array_sum(array_column($haberLineas, 'monto')), 2);
             if (empty($haberLineas) || $totalHaberDoc <= 0) {
-                continue; // documento sin asiento propio (o sin Haber): cae al camino normal
+                // Documento sin asiento propio (o sin Haber): cae al camino normal. Se anota su
+                // número para que la línea del concepto también diga qué documento se pagó.
+                $nc = self::secuencialCorto((string) ($doc['numero_documento'] ?? ''));
+                if ($nc !== '') {
+                    $docsNoResueltos[$tipoDoc][$nc] = true;
+                }
+                continue;
             }
 
+            // Referencia genérica de respaldo; al final se reemplaza por "Pago factura de compra
+            // 42869; liquidación de compra 45" con los documentos que cayeron en cada cuenta.
             $referencia = self::NOMBRE_CONTRAPARTIDA_CARTERA_COMPRAS[$tipoDoc] ?? $tipoDoc;
+            $numCorto   = self::secuencialCorto((string) ($doc['numero_documento'] ?? ''));
             $acumuladoDoc = 0.0;
             $ultimaCuentaDoc = null;
             foreach ($haberLineas as $hl) {
@@ -4581,6 +4684,9 @@ class AsientoBuilderService
                 $monto      = round($totalPagado * $proporcion, 2);
                 if (!isset($lineasPorCuenta[$idCuenta])) {
                     $lineasPorCuenta[$idCuenta] = ['id_cuenta_contable' => $idCuenta, 'debe' => 0.0, 'haber' => 0.0, 'referencia_detalle' => $referencia];
+                }
+                if ($numCorto !== '') {
+                    $docsPorCuenta[$idCuenta][$tipoDoc][$numCorto] = true;
                 }
                 $lineasPorCuenta[$idCuenta]['debe'] = round($lineasPorCuenta[$idCuenta]['debe'] + $monto, 2);
                 $acumuladoDoc = round($acumuladoDoc + $monto, 2);
@@ -4596,7 +4702,19 @@ class AsientoBuilderService
             $totalResuelto = round($totalResuelto + $totalPagado, 2);
         }
 
-        return [array_values($lineasPorCuenta), $totalResuelto];
+        foreach ($lineasPorCuenta as $idCuenta => &$linea) {
+            $ref = self::referenciaCartera('Pago', self::ETIQUETA_DOC_CARTERA_COMPRAS, $docsPorCuenta[$idCuenta] ?? []);
+            if ($ref !== '') {
+                $linea['referencia_detalle'] = $ref;
+            }
+        }
+        unset($linea);
+
+        // Tercer elemento: referencia para el tramo que cae al concepto ("Pago factura de compra
+        // 42869") o '' si todos los documentos resolvieron por su propio asiento.
+        $refNoResueltos = self::referenciaCartera('Pago', self::ETIQUETA_DOC_CARTERA_COMPRAS, $docsNoResueltos);
+
+        return [array_values($lineasPorCuenta), $totalResuelto, $refNoResueltos];
     }
 
     /**
@@ -4611,7 +4729,8 @@ class AsientoBuilderService
      */
     private function contrapartidaCarteraVentas(\PDO $db, int $idEmpresa, int $idIngreso): array
     {
-        $sql = "SELECT tipo_documento, id_referencia_documento, SUM(monto_cobrado) AS total_cobrado
+        $sql = "SELECT tipo_documento, id_referencia_documento, SUM(monto_cobrado) AS total_cobrado,
+                       MAX(numero_documento) AS numero_documento
                 FROM ingresos_detalle
                 WHERE id_ingreso = :id
                   AND tipo_documento IN ('FACTURA','RECIBO')
@@ -4622,6 +4741,8 @@ class AsientoBuilderService
         $documentos = $st->fetchAll(\PDO::FETCH_ASSOC);
 
         $lineasPorCuenta = [];
+        $docsPorCuenta   = []; // id_cuenta => tipo_documento => [secuencial corto => true]
+        $docsNoResueltos = []; // tipo_documento => [secuencial corto => true] (sin asiento propio)
         $totalResuelto = 0.0;
 
         foreach ($documentos as $doc) {
@@ -4655,10 +4776,19 @@ class AsientoBuilderService
 
             $totalDebeDoc = round((float) array_sum(array_column($debeLineas, 'monto')), 2);
             if (empty($debeLineas) || $totalDebeDoc <= 0) {
-                continue; // documento sin asiento propio (o sin Debe): cae al camino normal
+                // Documento sin asiento propio (o sin Debe): cae al camino normal. Se anota su
+                // número para que la línea del concepto también diga qué documento se cobró.
+                $nc = self::secuencialCorto((string) ($doc['numero_documento'] ?? ''));
+                if ($nc !== '') {
+                    $docsNoResueltos[$tipoDoc][$nc] = true;
+                }
+                continue;
             }
 
+            // Referencia genérica de respaldo; al final se reemplaza por "Cobro facturas de venta
+            // 1, 2; recibo de venta 4" con los documentos que cayeron en cada cuenta.
             $referencia = self::NOMBRE_CONTRAPARTIDA_CARTERA_VENTAS[$tipoDoc] ?? $tipoDoc;
+            $numCorto   = self::secuencialCorto((string) ($doc['numero_documento'] ?? ''));
             $acumuladoDoc = 0.0;
             $ultimaCuentaDoc = null;
             foreach ($debeLineas as $dl) {
@@ -4667,6 +4797,9 @@ class AsientoBuilderService
                 $monto      = round($totalCobrado * $proporcion, 2);
                 if (!isset($lineasPorCuenta[$idCuenta])) {
                     $lineasPorCuenta[$idCuenta] = ['id_cuenta_contable' => $idCuenta, 'debe' => 0.0, 'haber' => 0.0, 'referencia_detalle' => $referencia];
+                }
+                if ($numCorto !== '') {
+                    $docsPorCuenta[$idCuenta][$tipoDoc][$numCorto] = true;
                 }
                 $lineasPorCuenta[$idCuenta]['haber'] = round($lineasPorCuenta[$idCuenta]['haber'] + $monto, 2);
                 $acumuladoDoc = round($acumuladoDoc + $monto, 2);
@@ -4682,7 +4815,19 @@ class AsientoBuilderService
             $totalResuelto = round($totalResuelto + $totalCobrado, 2);
         }
 
-        return [array_values($lineasPorCuenta), $totalResuelto];
+        foreach ($lineasPorCuenta as $idCuenta => &$linea) {
+            $ref = self::referenciaCartera('Cobro', self::ETIQUETA_DOC_CARTERA_VENTAS, $docsPorCuenta[$idCuenta] ?? []);
+            if ($ref !== '') {
+                $linea['referencia_detalle'] = $ref;
+            }
+        }
+        unset($linea);
+
+        // Tercer elemento: referencia para el tramo que cae al concepto ("Cobro factura de venta
+        // 123") o '' si todos los documentos resolvieron por su propio asiento.
+        $refNoResueltos = self::referenciaCartera('Cobro', self::ETIQUETA_DOC_CARTERA_VENTAS, $docsNoResueltos);
+
+        return [array_values($lineasPorCuenta), $totalResuelto, $refNoResueltos];
     }
 
     /**
@@ -4949,6 +5094,7 @@ class AsientoBuilderService
         $filtroElim = $flujo === 'egreso' ? " AND p.eliminado = FALSE AND COALESCE(p.estado_cheque, 'vigente') <> 'anulado'" : '';
 
         $sql = "SELECT p.{$colForma} AS id_forma, p.monto,
+                       p.referencia AS pago_referencia, p.tipo_operacion_bancaria, p.numero_cheque,
                        f.nombre AS forma_nombre,
                        COALESCE(ap.id_cuenta, f.id_cuenta_contable) AS id_cuenta,
                        pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
@@ -4988,7 +5134,9 @@ class AsientoBuilderService
                 'cuenta_nombre'      => $p['cuenta_nombre'],
                 'debe'               => $esDebe ? $monto : 0.0,
                 'haber'              => $esDebe ? 0.0 : $monto,
-                'referencia_detalle' => ($esDebe ? 'Cobro: ' : 'Pago: ') . ($p['forma_nombre'] ?? ''),
+                // "Cobro: BANCO PICHINCHA (transferencia ref. 4455)", "Pago: BANCO X (cheque #45)":
+                // mismo detalle que el modal pone en Observaciones (ver textoFormaPago).
+                'referencia_detalle' => ($esDebe ? 'Cobro: ' : 'Pago: ') . self::textoFormaPago($p),
             ];
         }
 
