@@ -17,6 +17,20 @@ class TransferenciaLoteRepository extends BaseRepository
 {
     public const COLUMNAS_ORDEN = ['numero', 'fecha_pago', 'tipo_lote', 'estado', 'monto_total', 'created_at'];
 
+    /** Estados posibles de un lote. Whitelist del filtro de estado del listado. */
+    public const ESTADOS = [
+        'BORRADOR', 'PENDIENTE_APROBACION', 'APROBADO',
+        'GENERADO', 'CONFIRMADO', 'RECHAZADO', 'ANULADO',
+    ];
+
+    /**
+     * Lotes que todavía no pasaron por la aprobación: lo que le queda por
+     * gestionar al usuario. Es el filtro con el que abre el listado.
+     * RECHAZADO y ANULADO quedan fuera a propósito: tampoco fueron aprobados,
+     * pero son lotes cerrados, no trabajo pendiente.
+     */
+    public const ESTADOS_NO_APROBADOS = ['BORRADOR', 'PENDIENTE_APROBACION'];
+
     /**
      * proveedores.tipo_cta es un código entero (1=Ahorros, 2=Corriente, 3=Virtual, 4=Otro,
      * ver app/views/modulos/proveedores/modal_proveedor.php), mientras que
@@ -36,7 +50,15 @@ class TransferenciaLoteRepository extends BaseRepository
 
     // ─── LISTADO / DETALLE ──────────────────────────────────────────────────────
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
+    /**
+     * @param string $filtroEstado 'pendientes' (solo ESTADOS_NO_APROBADOS, por
+     *        defecto), 'todos', o uno de ESTADOS. Se ignora si la búsqueda ya
+     *        trae un filtro `estado:` escrito a mano, que es más específico.
+     * @param bool $esAprobador Si el usuario aprueba lotes de pago bancario, el
+     *        filtro de "registros propios" no debe esconderle los lotes que
+     *        están esperando su aprobación: son justamente los ajenos.
+     */
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, string $filtroEstado = 'pendientes', bool $esAprobador = false): array
     {
         if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
             $ordenCol = 'numero';
@@ -47,7 +69,9 @@ class TransferenciaLoteRepository extends BaseRepository
         $params = [':e' => $idEmpresa];
 
         if ($idUsuarioFiltro !== null) {
-            $where .= " AND l.created_by = :uid";
+            $where .= $esAprobador
+                ? " AND (l.created_by = :uid OR l.estado = 'PENDIENTE_APROBACION')"
+                : " AND l.created_by = :uid";
             $params[':uid'] = $idUsuarioFiltro;
         }
 
@@ -61,6 +85,24 @@ class TransferenciaLoteRepository extends BaseRepository
             'numerico' => ['numero' => 'l.numero', 'monto' => 'l.monto_total'],
             'fecha'    => ['fecha' => 'l.fecha_pago'],
         ]);
+
+        // Filtro de estado del selector. Si el usuario escribió `estado:…` en el
+        // buscador, ese gana: si no, los dos se sumarían y el listado saldría
+        // vacío sin que se entienda por qué.
+        if (!isset($parsed['filtros']['estado'])) {
+            if ($filtroEstado === 'pendientes') {
+                $marcas = [];
+                foreach (self::ESTADOS_NO_APROBADOS as $i => $e) {
+                    $marcas[] = ":fe$i";
+                    $params[":fe$i"] = $e;
+                }
+                $where .= " AND l.estado IN (" . implode(', ', $marcas) . ")";
+            } elseif (in_array($filtroEstado, self::ESTADOS, true)) {
+                $where .= " AND l.estado = :fe";
+                $params[':fe'] = $filtroEstado;
+            }
+            // 'todos' (o cualquier valor desconocido): sin filtro de estado.
+        }
 
         $joins = "LEFT JOIN empresa_formas_pago fp ON fp.id = l.id_forma_pago_origen";
 

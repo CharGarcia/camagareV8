@@ -46,10 +46,27 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                     <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                     <input type="text" id="tr-buscar" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar por número, tipo, estado…" value="<?= htmlspecialchars($buscar ?? '') ?>" autocomplete="off">
                     <?php if (!empty($buscar)): ?>
-                        <a href="<?= $urlBase ?>/index" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
+                        <a href="<?= $urlBase ?>/index?estado=<?= urlencode($filtroEstado ?? 'pendientes') ?>" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
                     <?php endif; ?>
                 </div>
             </form>
+            <?php
+            // Filtro de estado. El listado abre en "Sin aprobar" (borradores y
+            // pendientes de aprobación); desde aquí se ve el resto.
+            $etiquetasEstado = [
+                'BORRADOR' => 'Borrador', 'PENDIENTE_APROBACION' => 'Pendiente de aprobación',
+                'APROBADO' => 'Aprobado', 'GENERADO' => 'Generado', 'CONFIRMADO' => 'Confirmado',
+                'RECHAZADO' => 'Rechazado', 'ANULADO' => 'Anulado',
+            ];
+            $filtroEstado = $filtroEstado ?? 'pendientes';
+            ?>
+            <select id="tr-estado" class="form-select form-select-sm" style="width: 190px;" onchange="TR_buscar(1)" title="Filtrar por estado">
+                <option value="pendientes" <?= $filtroEstado === 'pendientes' ? 'selected' : '' ?>>Sin aprobar</option>
+                <option value="todos" <?= $filtroEstado === 'todos' ? 'selected' : '' ?>>Todos los estados</option>
+                <?php foreach (($estadosLote ?? []) as $e): ?>
+                    <option value="<?= htmlspecialchars($e) ?>" <?= $filtroEstado === $e ? 'selected' : '' ?>><?= htmlspecialchars($etiquetasEstado[$e] ?? $e) ?></option>
+                <?php endforeach; ?>
+            </select>
             <div class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
@@ -58,10 +75,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                 ];
                 echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig, $rutaModulo);
                 ?>
-                <a href="<?= $urlBase ?>/exportPdf?b=<?= urlencode($buscar ?? '') ?>&sort=<?= urlencode($ordenCol ?? '') ?>&dir=<?= urlencode($ordenDir ?? '') ?>" target="_blank" class="btn btn-outline-danger" title="Descargar PDF">
+                <a href="<?= $urlBase ?>/exportPdf?b=<?= urlencode($buscar ?? '') ?>&estado=<?= urlencode($filtroEstado) ?>&sort=<?= urlencode($ordenCol ?? '') ?>&dir=<?= urlencode($ordenDir ?? '') ?>" target="_blank" class="btn btn-outline-danger" title="Descargar PDF">
                     <i class="bi bi-file-earmark-pdf"></i> PDF
                 </a>
-                <a href="<?= $urlBase ?>/exportExcel?b=<?= urlencode($buscar ?? '') ?>&sort=<?= urlencode($ordenCol ?? '') ?>&dir=<?= urlencode($ordenDir ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
+                <a href="<?= $urlBase ?>/exportExcel?b=<?= urlencode($buscar ?? '') ?>&estado=<?= urlencode($filtroEstado) ?>&sort=<?= urlencode($ordenCol ?? '') ?>&dir=<?= urlencode($ordenDir ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>
             </div>

@@ -52,9 +52,9 @@ class TransferenciaLoteService
 
     // ─── Listado / detalle ────────────────────────────────────────────────────
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, string $filtroEstado = 'pendientes', bool $esAprobador = false): array
     {
-        return $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $filtroEstado, $esAprobador);
     }
 
     public function getDetalleCompleto(int $idLote, int $idEmpresa): ?array
@@ -237,13 +237,14 @@ class TransferenciaLoteService
             return ['estado' => 'APROBADO'];
         }
 
-        $token = bin2hex(random_bytes(24));
-        $this->repo->actualizarEstado($idLote, $idEmpresa, 'PENDIENTE_APROBACION', ['token_aprobacion' => $token]);
+        // Sin correo y sin token: la aprobación de lotes de pago se hace SOLO
+        // entrando al módulo (decisión del usuario, 2026-09-22). El listado abre
+        // filtrado en "Sin aprobar", así que el aprobador ve lo que le toca al
+        // entrar. Al no emitir token no queda ningún enlace que apruebe sin
+        // sesión; la ruta pública /aprobar-transferencia sigue existiendo para
+        // los lotes que ya tenían token emitido antes de este cambio.
+        $this->repo->actualizarEstado($idLote, $idEmpresa, 'PENDIENTE_APROBACION', ['token_aprobacion' => null]);
         $this->log->registrar($idUsuario, $idEmpresa, 'enviar_aprobacion', 'transferencias_lotes', $idLote, ['estado' => 'BORRADOR'], ['estado' => 'PENDIENTE_APROBACION']);
-
-        if ($cfg['notificar']) {
-            try { $this->notificarAprobadores($idEmpresa, $idLote, $cfg['aprobadores'], $token, $idUsuario); } catch (\Throwable $e) {}
-        }
 
         return ['estado' => 'PENDIENTE_APROBACION'];
     }
@@ -255,9 +256,11 @@ class TransferenciaLoteService
         if (!in_array($lote['estado'], ['BORRADOR', 'PENDIENTE_APROBACION'], true)) {
             throw new \InvalidArgumentException('Solo se pueden aprobar lotes en borrador o pendientes de aprobación.');
         }
-        if (!$auto && $nivel < 3 && (int) ($lote['created_by'] ?? 0) === $idUsuario) {
-            throw new \InvalidArgumentException('No puede aprobar un lote que usted mismo armó. Debe aprobarlo otro usuario autorizado.');
-        }
+        // Un aprobador configurado aprueba igual que un nivel 3, incluidos los
+        // lotes que él mismo armó (decisión del usuario, 2026-09-22). Antes
+        // regía una segregación de funciones que exigía un segundo par de ojos
+        // para los niveles 1 y 2; quién aprueba queda registrado en
+        // `aprobado_por` y en log_sistema.
 
         $this->repo->actualizarEstado($idLote, $idEmpresa, 'APROBADO', [
             'aprobado_por' => $idUsuario ?: null,
@@ -273,9 +276,9 @@ class TransferenciaLoteService
         $lote = $this->repo->getById($idLote, $idEmpresa);
         if (!$lote) throw new \InvalidArgumentException('Lote no encontrado.');
         if ($lote['estado'] !== 'PENDIENTE_APROBACION') throw new \InvalidArgumentException('Solo se pueden rechazar lotes pendientes de aprobación.');
-        if ($nivel < 3 && (int) ($lote['created_by'] ?? 0) === $idUsuario) {
-            throw new \InvalidArgumentException('No puede rechazar un lote que usted mismo armó.');
-        }
+        // Mismo criterio que aprobar(): el aprobador puede rechazar también su
+        // propio lote. Los botones Aprobar y Rechazar se muestran juntos, así
+        // que dejar uno restringido haría fallar el otro sin explicación.
 
         $this->repo->actualizarEstado($idLote, $idEmpresa, 'RECHAZADO', [
             'rechazado_por'  => $idUsuario,
@@ -425,6 +428,13 @@ class TransferenciaLoteService
 
     // ─── Notificación (correo a aprobadores) ────────────────────────────────────
 
+    /**
+     * SIN USO desde 2026-09-22: este módulo ya no avisa por correo cuando un
+     * lote queda pendiente (ver enviarAprobacion()). Se conserva —junto con
+     * notificar_lote_transferencia_pendiente() en helpers/mail.php— por si se
+     * decide reactivar el aviso; para hacerlo basta volver a llamarlo desde
+     * enviarAprobacion() y emitir de nuevo el token.
+     */
     private function notificarAprobadores(int $idEmpresa, int $idLote, array $idsAprobadores, ?string $token = null, int $creadorId = 0): void
     {
         $idsAprobadores = array_values(array_filter($idsAprobadores, static fn($id) => (int) $id !== $creadorId));

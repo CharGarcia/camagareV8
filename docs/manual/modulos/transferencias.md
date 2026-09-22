@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/transferencias
 tipo: modulo
 visibilidad: admin
-etiquetas: transferencias, archivo bancario, pago masivo, lote de pagos, nomina, proveedores, banco, aprobacion
-version: 1.1
+etiquetas: transferencias, archivo bancario, pago masivo, lote de pagos, nomina, proveedores, banco, aprobacion, filtro de estado, lotes pendientes, sin aprobar, no aparece el lote, donde estan los lotes aprobados
+version: 1.3
 orden: 90
 estado: activo
 ---
@@ -28,6 +28,20 @@ el banco.
 4. **Genere el archivo** en el formato de su banco.
 5. Súbalo al portal del banco.
 
+## Qué lotes se ven al entrar
+
+La pantalla abre mostrando solo los lotes **sin aprobar**: los que están en
+*Borrador* y los *Pendientes de aprobación*, que son los que todavía le piden
+algo. En cuanto un lote se aprueba, deja de aparecer en esa vista.
+
+Para ver el resto está el selector de **estado**, junto al buscador: elija
+*Todos los estados* para ver el historial completo, o un estado puntual
+(*Aprobado*, *Generado*, *Confirmado*, *Rechazado*, *Anulado*). El PDF y el
+Excel se descargan con el mismo filtro que tenga la pantalla en ese momento.
+
+Si escribe `estado:APROBADO` directamente en el buscador, manda lo que escribió y
+el selector se ignora.
+
 ## Aprobación y anti-duplicados
 
 Un lote requiere **aprobación** antes de generarse, y el sistema controla que un
@@ -40,6 +54,21 @@ bancario*, se eligen los aprobadores y, si se quiere, un **monto mínimo** por
 debajo del cual el lote se aprueba solo. Si el proceso no está configurado, el
 lote se aprueba automáticamente al enviarlo. Antes esta configuración estaba en
 *Empresa → Pagos al Banco*.
+
+### Cómo aprueba el aprobador
+
+**El sistema no envía ningún correo** cuando un lote queda pendiente. Quien
+aprueba entra al módulo y lo hace desde ahí:
+
+1. Abre **Cargar transferencias**. La pantalla ya viene filtrada en *Sin
+   aprobar*, así que los lotes que esperan su decisión están a la vista —
+   también los que armó otra persona, aunque su permiso sea solo de registros
+   propios.
+2. Abre el lote y usa los botones **Aprobar** o **Rechazar**.
+
+Un aprobador configurado tiene los mismos botones que un superadministrador,
+**incluso en los lotes que él mismo armó**. Quién aprobó cada lote queda
+guardado en el registro y en el log del sistema.
 
 ## Datos bancarios del beneficiario
 
@@ -54,8 +83,16 @@ número y tipo de cuenta**. Sin esos datos, esa línea no puede ir en el archivo
   cuenta no tengan espacios ni guiones.
 - **Un egreso ya está en otro lote**: el control anti-duplicados lo bloqueó;
   revise el lote anterior.
+- **Desapareció un lote que acabo de aprobar**: no se borró. La pantalla abre
+  filtrada en *Sin aprobar*; cámbiela a *Todos los estados* o a *Aprobado*.
+- **No me llegó el correo para aprobar**: no existe ese correo. La aprobación se
+  hace entrando al módulo.
+- **No veo los botones Aprobar/Rechazar**: no está configurado como aprobador
+  del proceso *Lotes de pago bancario* en el módulo **Aprobaciones**.
 
 ## Historial de cambios
 
 - **1.0** — Versión inicial.
 - **1.1** — La configuración de la aprobación se movió al módulo **Aprobaciones**; se agrega monto mínimo.
+- **1.2** — El listado abre mostrando solo los lotes sin aprobar y se agrega un selector de estado para ver el resto.
+- **1.3** — Se elimina el aviso por correo a los aprobadores: la aprobación se hace entrando al módulo. El aprobador ve los lotes pendientes aunque los haya armado otra persona, y aprueba con los mismos botones que un superadministrador, incluidos sus propios lotes.

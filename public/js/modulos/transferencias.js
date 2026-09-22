@@ -12,7 +12,8 @@ document.getElementById('tr-modal-lote').addEventListener('hidden.bs.modal', fun
 
 function TR_buscar(p = 1) {
     const b = document.getElementById('tr-buscar').value;
-    window.location.href = `${TR_URL}/index?b=${encodeURIComponent(b)}&page=${p}&sort=${TR_currentSort}&dir=${TR_currentDir}`;
+    const estado = document.getElementById('tr-estado')?.value || 'pendientes';
+    window.location.href = `${TR_URL}/index?b=${encodeURIComponent(b)}&estado=${encodeURIComponent(estado)}&page=${p}&sort=${TR_currentSort}&dir=${TR_currentDir}`;
 }
 
 function TR_esc(s) {
@@ -218,8 +219,10 @@ async function TR_cargarLote(id) {
             </div>`;
 
         // Botones según estado + segregación de funciones.
-        const esCreador = String(l.created_by) === String(TR_ID_USUARIO);
-        const puedeAprobar = TR_ES_APROBADOR && (TR_ES_SUPERADMIN || !esCreador);
+        // Un aprobador configurado ve Aprobar/Rechazar igual que un nivel 3,
+        // incluso en los lotes que él mismo armó (decisión del usuario,
+        // 2026-09-22). El backend aplica el mismo criterio.
+        const puedeAprobar = TR_ES_APROBADOR;
 
         TR_ocultarBotones();
         const show = (id) => { const el = document.getElementById(id); if (el) el.classList.remove('d-none'); };
@@ -236,7 +239,7 @@ async function TR_cargarLote(id) {
         if (l.estado === 'PENDIENTE_APROBACION') {
             if (puedeAprobar) { show('tr-btn-aprobar'); show('tr-btn-rechazar'); }
             else {
-                const quien = TR_APROBADORES.length ? TR_APROBADORES.join(', ') : 'un usuario autorizado (configúrelos en Empresa → Pagos al Banco)';
+                const quien = TR_APROBADORES.length ? TR_APROBADORES.join(', ') : 'un usuario autorizado (configúrelos en Aprobaciones → Lotes de pago bancario)';
                 document.getElementById('tr-detalle-msg').innerHTML = `<div class="alert alert-info py-2 px-3 small mb-2"><i class="bi bi-hourglass-split me-1"></i>Pendiente de aprobación por: <strong>${quien}</strong>.</div>`;
             }
         }

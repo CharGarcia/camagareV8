@@ -5,6 +5,7 @@ namespace App\controllers\modulos;
 
 use App\Services\modulos\TransferenciaLoteService;
 use App\repositories\modulos\FormaPagoRepository;
+use App\repositories\modulos\TransferenciaLoteRepository;
 use App\repositories\TransferenciaFormatoRepository;
 
 /**
@@ -34,6 +35,20 @@ class TransferenciasController extends BaseModuloController
         return empty($this->getPermisos()['todo']) ? (int) ($_SESSION['id_usuario'] ?? 0) : null;
     }
 
+    /**
+     * Estado con el que se filtra el listado. Por defecto 'pendientes' (lotes
+     * que aún no fueron aprobados); el selector de la vista permite ver
+     * 'todos' o un estado puntual.
+     */
+    private function filtroEstado(): string
+    {
+        $estado = trim($_GET['estado'] ?? '');
+        if ($estado === 'todos' || in_array($estado, TransferenciaLoteRepository::ESTADOS, true)) {
+            return $estado;
+        }
+        return 'pendientes';
+    }
+
     public function index(): void
     {
         $this->requireLeer();
@@ -44,13 +59,14 @@ class TransferenciasController extends BaseModuloController
         $ordenCol = trim($_GET['sort'] ?? 'numero');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? 'DESC'));
         $perPage  = 20;
-
-        $res   = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $this->idUsuarioFiltro());
-        $total = $res['total'];
+        $filtroEstado = $this->filtroEstado();
 
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         $esAprobador = $this->service->esAprobador($idUsuario, $idEmpresa, $nivel);
+
+        $res   = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $filtroEstado, $esAprobador);
+        $total = $res['total'];
 
         $formaPagoRepo = new FormaPagoRepository();
         // Solo cuentas bancarias de la empresa (tipo='BANCO'): una transferencia
@@ -69,6 +85,8 @@ class TransferenciasController extends BaseModuloController
             'perPage'      => $perPage,
             'totalPages'   => $perPage > 0 ? (int) ceil($total / $perPage) : 1,
             'buscar'       => $buscar,
+            'filtroEstado' => $filtroEstado,
+            'estadosLote'  => TransferenciaLoteRepository::ESTADOS,
             'ordenCol'     => $ordenCol,
             'ordenDir'     => $ordenDir,
             'esAprobador'  => $esAprobador,
@@ -399,7 +417,12 @@ class TransferenciasController extends BaseModuloController
         $buscar    = trim($_GET['b'] ?? '');
         $ordenCol  = trim($_GET['sort'] ?? 'numero');
         $ordenDir  = strtoupper(trim($_GET['dir'] ?? 'DESC'));
-        $res = $this->service->getListado($idEmpresa, $buscar, 1, 10000, $ordenCol, $ordenDir, $this->idUsuarioFiltro());
+        $esAprobador = $this->service->esAprobador(
+            (int) ($_SESSION['id_usuario'] ?? 0),
+            $idEmpresa,
+            (int) ($_SESSION['nivel'] ?? 1)
+        );
+        $res = $this->service->getListado($idEmpresa, $buscar, 1, 10000, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $this->filtroEstado(), $esAprobador);
         return $res['rows'];
     }
 
