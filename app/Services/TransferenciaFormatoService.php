@@ -25,6 +25,7 @@ class TransferenciaFormatoService
         'tipo_cuenta'             => 'Tipo de cuenta (ahorros / corriente / virtual / otro)',
         'numero_cuenta'           => 'Número de cuenta del beneficiario',
         'telefono'                => 'Teléfono del beneficiario',
+        'correo'                  => 'Correo electrónico del beneficiario',
         'monto'                   => 'Monto a transferir',
         'concepto'                => 'Concepto / referencia del pago',
         'numero_egreso'           => 'Número de egreso',

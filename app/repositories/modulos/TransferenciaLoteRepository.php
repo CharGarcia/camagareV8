@@ -121,7 +121,8 @@ class TransferenciaLoteRepository extends BaseRepository
     {
         $st = $this->db->prepare(
             "SELECT d.*, ec.numero_egreso, b.codigo_banco, b.nombre_banco AS banco_nombre,
-                    COALESCE(prov.telefono, emp.telefono) AS telefono
+                    COALESCE(prov.telefono, emp.telefono) AS telefono,
+                    COALESCE(prov.email, emp.email) AS correo
              FROM transferencias_lotes_detalle d
              LEFT JOIN egresos_cabecera ec ON ec.id = d.id_egreso
              LEFT JOIN bancos_ecuador b ON b.id = d.id_banco_ecuador

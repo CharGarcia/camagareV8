@@ -107,6 +107,7 @@ class TransferenciaFormatoConfigurable implements TransferenciaFormatterInterfac
             'tipo_cuenta'               => $linea['tipo_cuenta'] ?? '',
             'numero_cuenta'             => $linea['numero_cuenta'] ?? '',
             'telefono'                  => $linea['telefono'] ?? '',
+            'correo'                    => $linea['correo'] ?? '',
             'monto'                     => $linea['monto'] ?? 0,
             'concepto'                  => $linea['concepto'] ?? '',
             'numero_egreso'             => $linea['numero_egreso'] ?? '',
