@@ -2011,7 +2011,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const t = new bootstrap.Tab(document.querySelector('#tabsModalEgreso a[href="#eg-tab-general"]'));
         t.show();
         
-        const m = new bootstrap.Modal(document.getElementById('modalNuevoEgreso'));
+        // getOrCreateInstance (no `new`): si el modal ya está abierto —al recargarlo tras guardar—
+        // reutiliza la instancia y show() no hace nada, en vez de crear otra con su propio fondo.
+        const m = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNuevoEgreso'));
         m.show();
     }
 
@@ -2176,7 +2178,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }).then(r=>r.json()).then(res => {
             b.disabled = false;
             if(res.ok) {
-                bootstrap.Modal.getInstance(document.getElementById('modalNuevoEgreso')).hide();
+                // El modal NO se cierra: se recarga en el mismo lugar con el egreso ya guardado
+                // (número asignado, botones de PDF/correo/cheques, pestaña Asiento), para seguir
+                // trabajando sobre él. abrirModalEgreso() usa getOrCreateInstance, así que el
+                // show() sobre el modal ya abierto no duplica el fondo.
+                abrirModalEgresoVer(res.id);
                 // Actualizar el registro en el listado (misma página, orden y filtros)
                 EGR_mostrarRegistroGuardado(res.id, res.fila);
                 Toast.fire({ icon: 'success', title: res.mensaje });
@@ -2582,7 +2588,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             btn.disabled = false;
             btn.innerHTML = oldHtml;
             if (res.ok) {
-                bootstrap.Modal.getInstance(document.getElementById('modalNuevoEgreso')).hide();
+                // Igual que al guardar: el modal se queda abierto y se recarga con lo actualizado.
+                abrirModalEgresoVer(res.id || id);
                 // Actualizar el registro en el listado (misma página, orden y filtros)
                 EGR_mostrarRegistroGuardado(res.id || id, res.fila);
                 Toast.fire({ icon: 'success', title: res.mensaje });

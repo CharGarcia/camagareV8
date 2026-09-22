@@ -188,10 +188,14 @@ el historial de auditoría con los datos anteriores y los nuevos.
 ## Qué pasa en el listado al guardar
 
 Al pulsar **Guardar** (ingreso nuevo) o **Actualizar** (ingreso editado), el
-modal se cierra y el listado se actualiza **sin moverse de donde estaba**: sigue
-en la misma página, con el mismo texto de búsqueda, los mismos filtros y el mismo
-orden. La fila del ingreso guardado se resalta en verde unos segundos, ya con los
-datos nuevos (fecha, Recibo de, observaciones, monto y tipo).
+modal **no se cierra**: se recarga en el mismo lugar con el ingreso ya guardado
+—el número asignado, los botones de PDF y correo y la pestaña *Asiento*— para
+seguir trabajando sobre él (imprimirlo, enviarlo, revisar el asiento). Se cierra
+solo con la X o con Cancelar. Mientras tanto, el listado de atrás se actualiza
+**sin moverse de donde estaba**: sigue en la misma página, con el mismo texto de
+búsqueda, los mismos filtros y el mismo orden. La fila del ingreso guardado se
+resalta en verde unos segundos, ya con los datos nuevos (fecha, Recibo de,
+observaciones, monto y tipo).
 
 Si ese ingreso no cae en la página que se está viendo —por ejemplo, uno nuevo
 mientras se ve la página 3, o uno que ya no cumple el filtro activo—, se muestra
@@ -424,8 +428,10 @@ deseable; para el contador o el administrador, active el acceso total.
   cheque cuando corresponde. La **referencia de cada línea del asiento** sigue
   la misma regla: antes todas decían `Ingreso 001-101-000000008`; ahora dicen
   `Ingreso 8 · Cobro facturas de venta 1, 2`, `Ingreso 8 · Cobro: BANCO
-  PICHINCHA (cheque #123)`, etc. (ver *Asiento contable*). Mismo cambio en
-  *Egresos*.
+  PICHINCHA (cheque #123)`, etc. (ver *Asiento contable*). Y al **Guardar** o
+  **Actualizar**, el modal ya no se cierra: se recarga con el ingreso guardado
+  para imprimirlo, enviarlo o revisar su asiento sin volver a abrirlo (ver *Qué
+  pasa en el listado al guardar*). Mismo cambio en *Egresos*.
 
 - **3.1** — **El ingreso ya no se pierde por un texto largo.** *Referencia /
   Glosa General* pasa de 100 a **255 caracteres** y muestra el tope al escribir

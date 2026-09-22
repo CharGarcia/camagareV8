@@ -205,11 +205,11 @@ if (!defined('LEAFLET_LOADED')) {
                                     <input type="text" class="form-control form-control-sm" name="direccion" id="cliente_direccion" maxlength="255">
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="cliente_plazo" class="form-label small fw-bold">Plazo de Crédito (Días)</label>
+                                    <label for="cliente_plazo" class="form-label small fw-bold d-flex align-items-center">Plazo de Crédito (Días) <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_plazo', 'plazo') ?></label>
                                     <input type="number" class="form-control form-control-sm" name="plazo" id="cliente_plazo" min="0" value="0">
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="cliente_vendedor" class="form-label small fw-bold">Vendedor asignado</label>
+                                    <label for="cliente_vendedor" class="form-label small fw-bold d-flex align-items-center">Vendedor asignado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_vendedor', 'id_vendedor') ?></label>
                                     <select class="form-select form-select-sm" name="id_vendedor" id="cliente_vendedor">
                                         <option value="">- Sin vendedor asignado -</option>
                                     </select>

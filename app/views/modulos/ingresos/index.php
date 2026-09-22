@@ -2098,7 +2098,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             stab.show();
         }
 
-        const modal = new bootstrap.Modal(document.getElementById('modalNuevoIngreso'));
+        // getOrCreateInstance (no `new`): si el modal ya está abierto —al recargarlo tras guardar—
+        // reutiliza la instancia y show() no hace nada, en vez de crear otra con su propio fondo.
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNuevoIngreso'));
         modal.show();
     }
 
@@ -2270,10 +2272,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 btn.disabled = false;
                 btn.innerHTML = oldHtml;
                 if (res.ok) {
-                    // Bootstrap Modal hide workaround
-                    const modalEl = document.getElementById('modalNuevoIngreso');
-                    const modal = bootstrap.Modal.getInstance(modalEl);
-                    if (modal) modal.hide();
+                    // El modal NO se cierra: se recarga en el mismo lugar con el ingreso ya guardado
+                    // (número asignado, botones de PDF/correo, pestaña Asiento), para seguir
+                    // trabajando sobre él. abrirModalIngreso() usa getOrCreateInstance, así que el
+                    // show() sobre el modal ya abierto no duplica el fondo.
+                    abrirModalIngresoVer(res.id);
 
                     // Actualizar el registro en el listado (misma página, orden y filtros)
                     ING_mostrarRegistroGuardado(res.id, res.fila);

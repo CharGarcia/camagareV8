@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
-version: 2.1
+version: 2.2
 orden: 10
 estado: activo
 ---
@@ -31,6 +31,13 @@ volver a escribir sus datos.
 4. Guarde. El cliente queda disponible de inmediato en facturas y proformas.
 
 Para modificar un cliente existente, haga clic sobre su fila en el listado.
+
+**Valores por defecto (estrella de favoritos).** Junto a *Tipo de
+identificación*, *Estado*, *Provincia*, *Plazo de Crédito (Días)*, *Vendedor
+asignado* y *Frecuencia de visita* hay una estrella. Escriba o seleccione el valor que usa casi siempre
+y pulse la estrella: cada vez que abra **Nuevo**, ese campo ya vendrá cargado.
+Para quitarlo, pulse la estrella otra vez con el mismo valor puesto. El favorito
+es por usuario y por empresa.
 
 Al guardar, la ficha **no se cierra**: se queda abierta y se refresca con lo que
 quedó realmente grabado, para que siga completando pestañas sin volver a buscar
@@ -385,6 +392,8 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **2.2** — Estrella de favoritos en *Plazo de Crédito (Días)* y *Vendedor
+  asignado*: los valores marcados se precargan al crear un cliente nuevo.
 - **2.1** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en todas las columnas del listado (identificación,
   razón social, correo, teléfono, dirección, plazo, provincia, ciudad y

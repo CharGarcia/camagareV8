@@ -227,10 +227,14 @@ historial de auditoría con los datos anteriores y los nuevos.
 ## Qué pasa en el listado al guardar
 
 Al pulsar **Guardar** (egreso nuevo) o **Actualizar** (egreso editado), el modal
-se cierra y el listado se actualiza **sin moverse de donde estaba**: sigue en la
-misma página, con el mismo texto de búsqueda, los mismos filtros y el mismo
-orden. La fila del egreso guardado se resalta en verde unos segundos, ya con los
-datos nuevos (fecha, beneficiario, observaciones, monto y tipo).
+**no se cierra**: se recarga en el mismo lugar con el egreso ya guardado —el
+número asignado, los botones de PDF, correo e impresión de cheques y la pestaña
+*Asiento*— para seguir trabajando sobre él. Se cierra solo con la X o con
+Cancelar. Mientras tanto, el listado de atrás se actualiza **sin moverse de donde
+estaba**: sigue en la misma página, con el mismo texto de búsqueda, los mismos
+filtros y el mismo orden. La fila del egreso guardado se resalta en verde unos
+segundos, ya con los datos nuevos (fecha, beneficiario, observaciones, monto y
+tipo).
 
 Si ese egreso no cae en la página que se está viendo —por ejemplo, uno nuevo
 mientras se ve la página 3, o uno que ya no cumple el filtro activo—, se muestra
@@ -532,7 +536,10 @@ ve solo los que registró.
   cuando las hay. La **referencia de cada línea del asiento** sigue la misma
   regla: antes todas decían `Egreso 001-001-000000018`; ahora dicen `Egreso 18 ·
   Pago factura de compra 42869`, `Egreso 18 · Pago: BANCO PICHINCHA (cheque
-  #45)`, etc. (ver *Asiento contable*). Mismo cambio en *Ingresos*.
+  #45)`, etc. (ver *Asiento contable*). Y al **Guardar** o **Actualizar**, el
+  modal ya no se cierra: se recarga con el egreso guardado para imprimirlo,
+  enviarlo, imprimir cheques o revisar su asiento sin volver a abrirlo (ver *Qué
+  pasa en el listado al guardar*). Mismo cambio en *Ingresos*.
 
 - **1.24** — **El egreso ya no se pierde por un texto largo.** *Nº Referencia /
   Comprobante* pasa de 100 a **255 caracteres**, con el tope visible al escribir
