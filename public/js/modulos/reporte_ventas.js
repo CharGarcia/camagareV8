@@ -172,13 +172,15 @@ window.RV_setVistaAgrupacion = function(valor) {
 };
 
 // Maneja el cambio de "Agrupar Por": al elegir "Por Mes" se fuerza el filtro Mes a "Todos".
+// En "Unidades por Producto / Mes" también se abre al año completo (una columna por mes),
+// pero el selector queda habilitado por si se quiere acotar a menos meses.
 window.RV_onAgruparChange = function() {
     const agruparPor = document.getElementById('rv_agrupar_por').value;
     const mesEl = document.getElementById('rv-mes');
     RV_sincronizarBotonesVista();
 
-    if (agruparPor === 'MES') {
-        mesEl.disabled = true;
+    if (agruparPor === 'MES' || agruparPor === 'PRODUCTO_MES') {
+        mesEl.disabled = (agruparPor === 'MES');
         if (mesEl.value !== 'TODOS') {
             mesEl.value = 'TODOS';
             window.RV_cambiarMesAnio(); // recalcula el rango de fechas y genera el reporte
@@ -224,11 +226,12 @@ window.RV_generarReporte = function () {
     
     const agruparPor = document.getElementById('rv_agrupar_por').value;
 
-    // Actualizar cabeceras de la tabla según la agrupación elegida
-    RV_dibujarCabecera(agruparPor);
+    // Actualizar cabeceras de la tabla según la agrupación elegida. En "Unidades por
+    // Producto / Mes" las columnas de mes las manda el servidor (res.meses): mientras
+    // llega la respuesta se conservan las del reporte anterior, si lo hubo.
+    const colSpanActual = RV_dibujarCabecera(agruparPor, agruparPor === 'PRODUCTO_MES' ? (window.rv_last_meses || {}) : {});
 
     const tbody = document.getElementById('rv_tbody');
-    const colSpanActual = agruparPor === 'NINGUNO' ? 12 : (agruparPor === 'PRODUCTO' ? 7 : (agruparPor === 'VARIANTE' ? 8 : 6));
     tbody.innerHTML = `<tr><td colspan="${colSpanActual}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><br><span class="text-muted small mt-2 d-inline-block">Generando reporte...</span></td></tr>`;
 
     fetch(BASE_URL + '/' + RUTA_MODULO + '/generarAjax', {
@@ -250,6 +253,11 @@ window.RV_generarReporte = function () {
     })
     .then(res => {
         if (res.ok) {
+            if (res.agrupacion === 'PRODUCTO_MES') {
+                // Cabecera definitiva con los meses del período consultado.
+                window.rv_last_meses = res.meses || {};
+                RV_dibujarCabecera('PRODUCTO_MES', window.rv_last_meses);
+            }
             tbody.innerHTML = res.rows;
 
             // Actualizar tarjetas estadísticas
@@ -300,6 +308,7 @@ window.RV_generarReporte = function () {
 
 window.rv_last_raw_data = null;
 window.rv_last_agrupacion = null;
+window.rv_last_meses = null;   // {'YYYY-MM': 'Ene 2026', …} del último "Unidades por Producto / Mes"
 let chartInstance = null;
 
 window.RV_cambiarTipoGrafico = function() {
@@ -341,9 +350,17 @@ function RV_dibujarGrafico(rawData, agrupacion) {
 
     let labels = [];
     let dataTotales = [];
-    let defaultType = 'bar'; 
+    let defaultType = 'bar';
+    // Unidades por producto y mes: el gráfico es la curva de unidades vendidas por mes
+    // (suma de todos los productos), no un importe: sin "$" en el eje ni en la leyenda.
+    const esUnidades = (agrupacion === 'PRODUCTO_MES');
 
-    if (agrupacion === 'CLIENTE') {
+    if (esUnidades) {
+        const meses = window.rv_last_meses || {};
+        labels = Object.keys(meses).map(m => meses[m]);
+        dataTotales = Object.keys(meses).map(m => rawData.reduce((acc, r) => acc + (parseFloat((r.meses || {})[m]) || 0), 0));
+        defaultType = 'line';
+    } else if (agrupacion === 'CLIENTE') {
         labels = rawData.map(r => r.cliente_nombre);
         dataTotales = rawData.map(r => parseFloat(r.total));
     } else if (agrupacion === 'PRODUCTO') {
@@ -390,7 +407,7 @@ function RV_dibujarGrafico(rawData, agrupacion) {
         data: {
             labels: labels,
             datasets: [{
-                label: 'Gran Total ($)',
+                label: esUnidades ? 'Unidades vendidas' : 'Gran Total ($)',
                 data: dataTotales,
                 backgroundColor: backgroundColor,
                 borderColor: borderColor,
@@ -409,7 +426,7 @@ function RV_dibujarGrafico(rawData, agrupacion) {
                 y: {
                     beginAtZero: true,
                     ticks: {
-                        callback: function(value) { return '$' + value; }
+                        callback: function(value) { return esUnidades ? value : '$' + value; }
                     }
                 }
             }
@@ -485,6 +502,17 @@ const RV_COLUMNAS = {
             ['total',             'Gran Total',       'text-end pe-4'],
         ]
     },
+    // Unidades por producto y mes: entre Descripción y Total van las columnas de mes, que
+    // dependen del período consultado (las arma RV_columnasDe con res.meses; la clave de
+    // orden de cada una es `mes:YYYY-MM`, que el servidor valida contra ese mismo período).
+    PRODUCTO_MES: {
+        def: ['total_unidades', 'DESC'],
+        cols: [
+            ['producto_codigo',   'Código',           'ps-4'],
+            ['producto_nombre',   'Descripción',      ''],
+            ['total_unidades',    'Total',            'text-end pe-4'],
+        ]
+    },
     NINGUNO: {
         def: ['fecha_emision', 'DESC'],
         cols: [
@@ -549,14 +577,26 @@ function RV_engancharOrden(modo) {
     });
 }
 
-function RV_dibujarCabecera(agruparPor) {
+// Columnas de un modo. En PRODUCTO_MES intercala una columna por cada mes recibido
+// ({'YYYY-MM': 'Ene 2026', …}) entre la descripción y el total.
+function RV_columnasDe(modo, meses) {
+    const base = RV_COLUMNAS[modo].cols;
+    if (modo !== 'PRODUCTO_MES') return base;
+    const colsMes = Object.keys(meses || {}).map(m => ['mes:' + m, meses[m], 'text-end']);
+    return [base[0], base[1], ...colsMes, base[2]];
+}
+
+// Dibuja la cabecera del modo y devuelve el número de columnas (para los colspan).
+function RV_dibujarCabecera(agruparPor, meses) {
     const modo = RV_COLUMNAS[agruparPor] ? agruparPor : 'NINGUNO';
-    const cols = RV_COLUMNAS[modo].cols;
+    const cols = RV_columnasDe(modo, meses);
 
     // Un orden guardado de otra agrupación (p. ej. "Cliente" al pasar a "Por mes") no
-    // aplica aquí: se vuelve al orden por defecto del modo.
+    // aplica aquí: se vuelve al orden por defecto del modo. Un mes de otro período
+    // (`mes:…`) se conserva hasta conocer los meses del nuevo: el servidor lo ignora si
+    // no está en el período y ordena por el total.
     const [colActual] = RV_ordenActual();
-    if (colActual && !cols.some(c => c[0] === colActual)) RV_fijarOrden('', 'DESC');
+    if (colActual && !cols.some(c => c[0] === colActual) && !(modo === 'PRODUCTO_MES' && colActual.startsWith('mes:'))) RV_fijarOrden('', 'DESC');
 
     document.getElementById('rv_thead').innerHTML =
         '<tr class="text-secondary" style="font-family: \'Outfit\', sans-serif;">'
@@ -567,6 +607,7 @@ function RV_dibujarCabecera(agruparPor) {
         + '</tr>';
 
     RV_engancharOrden(modo);
+    return cols.length;
 }
 
 window.RV_exportarExcel = function() {

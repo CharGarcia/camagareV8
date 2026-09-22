@@ -64,6 +64,33 @@ class ReporteVentasRepository extends BaseRepository
     }
 
     /**
+     * Consolidado: `marcas` y `categorias` son por establecimiento, así que el filtro por
+     * marca/categoría se expande a las homónimas (mismo nombre, sin distinguir mayúsculas ni
+     * espacios) de las demás empresas del alcance. Devuelve la unión con el id original.
+     */
+    public function expandirCatalogoPorNombre(string $tabla, int $id, int|array $idsEmpresa): array
+    {
+        if (!in_array($tabla, ['marcas', 'categorias'], true)) {
+            throw new \InvalidArgumentException("Catálogo no admitido: {$tabla}");
+        }
+        $idsEmp = array_values(array_unique(array_filter(array_map('intval', (array) $idsEmpresa))));
+        if ($id <= 0 || !$idsEmp) {
+            return $id > 0 ? [$id] : [];
+        }
+        $params = [':id' => $id];
+        $inE = [];
+        foreach ($idsEmp as $i => $e) { $inE[] = ":xe{$i}"; $params[":xe{$i}"] = $e; }
+        $st = $this->db->prepare("SELECT t2.id
+                                  FROM {$tabla} t1
+                                  JOIN {$tabla} t2 ON LOWER(TRIM(t2.nombre)) = LOWER(TRIM(t1.nombre))
+                                                  AND t2.eliminado = false
+                                                  AND t2.id_empresa IN (" . implode(',', $inE) . ")
+                                  WHERE t1.id = :id");
+        $st->execute($params);
+        return array_values(array_unique(array_merge([$id], array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)))));
+    }
+
+    /**
      * Configuración de la fuente de datos según el tipo de documento:
      *  - FACTURA         → ventas_*
      *  - RECIBO          → recibos_venta_*
@@ -234,6 +261,16 @@ class ReporteVentasRepository extends BaseRepository
             'valor_iva'         => 'valor_iva {dir}',
             'total'             => 'total {dir}',
         ],
+        // Unidades por producto y mes: la fila se arma en PHP (pivote), así que aquí solo
+        // importa la lista blanca y el orden por defecto; las expresiones no van a SQL. Las
+        // columnas de cada mes (`mes:YYYY-MM`) se validan aparte contra los meses del período
+        // (ver getReporteUnidadesProductoMes).
+        'PRODUCTO_MES' => [
+            '_def'            => ['total_unidades', 'DESC'],
+            'producto_codigo' => 'producto_codigo {dir}',
+            'producto_nombre' => 'producto_nombre {dir}',
+            'total_unidades'  => 'total_unidades {dir}',
+        ],
     ];
 
     /** Agrupación que corresponde a cada método (para ordenar el neto Facturas − NC). */
@@ -244,6 +281,7 @@ class ReporteVentasRepository extends BaseRepository
         'getReporteAgrupadoVariante' => 'VARIANTE',
         'getReporteAgrupadoFecha'    => 'FECHA',
         'getReporteAgrupadoMes'      => 'MES',
+        'getUnidadesProductoMesPlano' => 'PRODUCTO_MES',
     ];
 
     /** Columna y dirección efectivas: valida contra la lista blanca del modo. */
@@ -598,6 +636,32 @@ class ReporteVentasRepository extends BaseRepository
             }
         }
 
+        // Filtro por Marca / Categoría del producto de la línea. En los agrupados por línea
+        // (alias de detalle) acota las líneas; en los que van por documento, entran los
+        // documentos que tengan al menos una línea de esa marca/categoría (igual que el
+        // filtro por id de producto). En consolidado, el controller ya expandió el id a las
+        // marcas/categorías homónimas de los demás establecimientos (expandirCatalogoPorNombre).
+        foreach (['id_marca', 'id_categoria'] as $atributo) {
+            $ids = array_values(array_filter(array_map('intval', (array) ($filtros[$atributo] ?? []))));
+            if (!$ids) {
+                continue;
+            }
+            $ph = [];
+            foreach ($ids as $i => $id) {
+                $ph[] = ":{$atributo}{$i}";
+                $params[":{$atributo}{$i}"] = $id;
+            }
+            $cond = "EXISTS (SELECT 1 FROM productos pat WHERE pat.id = {alias}.id_producto
+                             AND pat.{$atributo} IN (" . implode(',', $ph) . "))";
+            if ($aliasDetalle) {
+                $where .= " AND " . str_replace('{alias}', $aliasDetalle, $cond);
+            } else {
+                $where .= " AND EXISTS (SELECT 1 FROM {$f['det']} vda
+                                        WHERE vda.{$f['fk_det']} = {$aliasVenta}.id
+                                          AND " . str_replace('{alias}', 'vda', $cond) . ")";
+            }
+        }
+
         // Filtro por Producto = texto de los ítems del documento (descripción o código de línea)
         if (!empty($filtros['producto_texto'])) {
             $where .= " AND EXISTS (
@@ -926,6 +990,137 @@ class ReporteVentasRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ── Unidades vendidas por producto y mes ──────────────────────────────────
+
+    /**
+     * Filas planas producto × mes con las unidades vendidas (SUM(cantidad) de las líneas).
+     * Es la consulta base de getReporteUnidadesProductoMes(), que la pivotea; va aparte
+     * para que el neto "Facturas − NC" pueda restar las unidades devueltas mes a mes
+     * (combinarNeto). El código sale del catálogo y, para líneas sin producto (concepto
+     * libre), del código escrito en la línea.
+     */
+    public function getUnidadesProductoMesPlano(int|array $idEmpresa, array $filtros): array
+    {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getUnidadesProductoMesPlano',
+                ['id_producto', 'producto_codigo', 'producto_nombre', 'mes'], ['cantidad']);
+        }
+
+        $f = $this->fuente($filtros);
+        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', 'd');
+
+        $sql = "
+            SELECT
+                d.id_producto,
+                COALESCE(NULLIF(TRIM(p.codigo), ''), d.codigo_principal, '') AS producto_codigo,
+                COALESCE(p.nombre, d.descripcion) AS producto_nombre,
+                TO_CHAR(v.fecha_emision, 'YYYY-MM') AS mes,
+                SUM(d.cantidad) AS cantidad
+            FROM {$f['det']} d
+            JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
+            LEFT JOIN productos p ON p.id = d.id_producto
+            WHERE {$where}
+            GROUP BY 1, 2, 3, 4
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Unidades vendidas por producto y por mes: una fila por producto con la cantidad de
+     * cada mes del período y el total. Devuelve ['meses' => ['YYYY-MM', …], 'rows' => […]].
+     *
+     * - Los meses son los del rango de fechas del filtro (todos, tengan o no ventas); si
+     *   falta una de las fechas, ese extremo se toma del primer/último mes con datos.
+     * - Solo salen los productos con total > 0: en el neto "Facturas − NC", los que quedaron
+     *   en cero o en negativo por devoluciones también se omiten.
+     * - Un mismo código es una sola fila: en consolidado por RUC, el producto de cada
+     *   establecimiento (id distinto, mismo código) se suma en la misma fila.
+     * - El orden se aplica en PHP (la fila se arma aquí, no en SQL): código, nombre, total o
+     *   cualquier mes del período (`orden_col = mes:YYYY-MM`); desempate por nombre.
+     */
+    public function getReporteUnidadesProductoMes(int|array $idEmpresa, array $filtros): array
+    {
+        $plano = $this->getUnidadesProductoMesPlano($idEmpresa, $filtros);
+        $meses = self::mesesEntre(
+            (string) ($filtros['fecha_desde'] ?? ''),
+            (string) ($filtros['fecha_hasta'] ?? ''),
+            array_column($plano, 'mes')
+        );
+
+        $idx = [];
+        foreach ($plano as $r) {
+            $codigo = trim((string) ($r['producto_codigo'] ?? ''));
+            $nombre = (string) ($r['producto_nombre'] ?? '');
+            $k = $codigo !== '' ? 'c:' . $codigo
+               : ($r['id_producto'] !== null ? 'p:' . $r['id_producto'] : 't:' . $nombre);
+            if (!isset($idx[$k])) {
+                $idx[$k] = [
+                    'id_producto'     => $r['id_producto'],
+                    'producto_codigo' => $codigo,
+                    'producto_nombre' => $nombre,
+                    'meses'           => array_fill_keys($meses, 0.0),
+                    'total_unidades'  => 0.0,
+                ];
+            }
+            $cant = (float) ($r['cantidad'] ?? 0);
+            if (array_key_exists((string) $r['mes'], $idx[$k]['meses'])) {
+                $idx[$k]['meses'][$r['mes']] += $cant;
+            }
+            $idx[$k]['total_unidades'] += $cant;
+        }
+        $rows = array_values(array_filter($idx, static fn (array $r): bool => $r['total_unidades'] > 0.000001));
+
+        // Orden: un mes del período, o una de las columnas fijas (lista blanca del modo).
+        $colPedida = (string) ($filtros['orden_col'] ?? '');
+        if (preg_match('/^mes:(\d{4}-\d{2})$/', $colPedida, $m) && in_array($m[1], $meses, true)) {
+            $mes = $m[1];
+            $dir = strtoupper((string) ($filtros['orden_dir'] ?? '')) === 'ASC' ? 'ASC' : 'DESC';
+            $val = static fn (array $r) => (float) ($r['meses'][$mes] ?? 0);
+        } else {
+            [$col, $dir] = $this->resolverOrden($filtros, 'PRODUCTO_MES');
+            $val = static fn (array $r) => $r[$col] ?? null;
+        }
+        $signo = $dir === 'ASC' ? 1 : -1;
+        usort($rows, static function (array $a, array $b) use ($val, $signo): int {
+            $x = $val($a);
+            $y = $val($b);
+            $cmp = (is_numeric($x) && is_numeric($y))
+                ? ((float) $x <=> (float) $y)
+                : strcasecmp((string) $x, (string) $y);
+            return ($signo * $cmp) ?: strcasecmp($a['producto_nombre'], $b['producto_nombre']);
+        });
+
+        return ['meses' => $meses, 'rows' => $rows];
+    }
+
+    /**
+     * Meses 'YYYY-MM' consecutivos entre dos fechas. Si falta una de ellas (o no tiene
+     * forma de fecha), ese extremo se toma del primer/último mes con datos. Tope de 120
+     * meses para que un rango abierto sobre muchos años no produzca una tabla inmanejable.
+     */
+    private static function mesesEntre(string $desde, string $hasta, array $mesesConDatos): array
+    {
+        $mesesConDatos = array_values(array_unique(array_filter(array_map('strval', $mesesConDatos))));
+        sort($mesesConDatos);
+        $ok  = static fn (string $f): bool => (bool) preg_match('/^\d{4}-\d{2}/', $f);
+        $ini = $ok($desde) ? substr($desde, 0, 7) : ($mesesConDatos[0] ?? '');
+        $fin = $ok($hasta) ? substr($hasta, 0, 7) : ($mesesConDatos ? end($mesesConDatos) : '');
+        if ($ini === '' || $fin === '' || $ini > $fin) {
+            return [];
+        }
+        $out  = [];
+        $cur  = new \DateTimeImmutable($ini . '-01');
+        $tope = new \DateTimeImmutable($fin . '-01');
+        while ($cur <= $tope && count($out) < 120) {
+            $out[] = $cur->format('Y-m');
+            $cur   = $cur->modify('+1 month');
+        }
+        return $out;
     }
 
     /**

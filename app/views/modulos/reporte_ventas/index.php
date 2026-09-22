@@ -53,6 +53,33 @@
                             <option value="VARIANTE">Por Variante</option>
                             <option value="FECHA">Por Fecha</option>
                             <option value="MES">Por Mes</option>
+                            <option value="PRODUCTO_MES">Unidades por Producto / Mes</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase d-flex align-items-center" style="font-size:.65rem;">
+                            <i class="bi bi-tag me-1"></i>Marca
+                            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_id_marca', 'id_marca') ?>
+                        </label>
+                        <select name="id_marca" id="rv_id_marca" class="form-select form-select-sm shadow-none border" style="width:140px;" onchange="window.RV_generarReporte()">
+                            <option value="" selected>Todas</option>
+                            <?php foreach (($marcas ?? []) as $mk): ?>
+                                <option value="<?= (int)$mk['id'] ?>"><?= htmlspecialchars($mk['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase d-flex align-items-center" style="font-size:.65rem;">
+                            <i class="bi bi-diagram-3 me-1"></i>Categoría
+                            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_id_categoria', 'id_categoria') ?>
+                        </label>
+                        <select name="id_categoria" id="rv_id_categoria" class="form-select form-select-sm shadow-none border" style="width:140px;" onchange="window.RV_generarReporte()">
+                            <option value="" selected>Todas</option>
+                            <?php foreach (($categorias ?? []) as $ct): ?>
+                                <option value="<?= (int)$ct['id'] ?>"><?= htmlspecialchars($ct['nombre']) ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
 
@@ -105,14 +132,16 @@
                         <input type="date" name="fecha_hasta" id="rv-fecha-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;" value="<?php echo date('Y-m-t'); ?>">
                     </div>
 
-                    <div class="position-relative" style="flex:1 1 200px;">
+                    <?php // Ancho fijo (no flex:1): así Marca y Categoría caben en esta misma fila. ?>
+                    <div class="position-relative" style="width:210px;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Cliente</label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                             <input type="text" class="form-control border-start-0 px-1 shadow-none" id="rv-search-cliente" placeholder="Buscar clientes..." autocomplete="off">
                         </div>
                         <div id="rv-chips-cliente" class="d-flex flex-column gap-1 mt-2"></div>
-                        <div id="rv-dropdown-clientes" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
+                        <?php // El dropdown es más ancho que el input (min-width) para que el nombre y la cédula se lean completos. ?>
+                        <div id="rv-dropdown-clientes" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;min-width:340px;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
                 </div>
 

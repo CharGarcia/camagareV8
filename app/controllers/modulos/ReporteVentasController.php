@@ -54,6 +54,10 @@ class ReporteVentasController extends BaseModuloController
         $idsConsolidado   = $empresaRepo->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
         $establecimientos = $idsConsolidado ? $empresaRepo->getEtiquetasEstablecimiento($idsConsolidado) : [];
 
+        // Marcas y categorías de la empresa activa para los selectores del filtro.
+        $marcas     = (new \App\repositories\modulos\MarcaRepository())->getCombo($idEmpresa);
+        $categorias = (new \App\repositories\modulos\CategoriaRepository())->getCombo($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos/reporte_ventas/index', [
             'titulo'      => 'Reporte de Ventas',
             'perm'        => $this->getPermisos(),
@@ -68,6 +72,8 @@ class ReporteVentasController extends BaseModuloController
             'anios'       => $anios,
             'vendedores'  => $vendedores,
             'vendedorFijo' => $vendedorFijo,
+            'marcas'      => $marcas,
+            'categorias'  => $categorias,
             'puedeConsolidar'  => !empty($idsConsolidado),
             'establecimientos' => $establecimientos,
             'fullWidth'   => true,
@@ -77,14 +83,19 @@ class ReporteVentasController extends BaseModuloController
 
     private function getFiltrosDesdeRequest(): array
     {
+        $agrupar = strtoupper(trim((string) ($_REQUEST['agrupar_por'] ?? 'NINGUNO')));
         return [
             'tipo_documento' => $_REQUEST['tipo_documento'] ?? 'FACTURA',
-            'agrupar_por'    => $_REQUEST['agrupar_por'] ?? 'NINGUNO',
+            'agrupar_por'    => isset(self::AGRUPACION_LBL[$agrupar]) ? $agrupar : 'NINGUNO',
             'fecha_desde'    => $_REQUEST['fecha_desde'] ?? '',
             'fecha_hasta'    => $_REQUEST['fecha_hasta'] ?? '',
             'id_cliente'     => $_REQUEST['id_cliente'] ?? '',
             'id_vendedor'    => (int)($_REQUEST['id_vendedor'] ?? 0),
             'id_producto'    => $_REQUEST['id_producto'] ?? '',
+            // Marca y categoría del producto (selectores). En consolidado, resolverAlcance()
+            // los expande a las homónimas de los demás establecimientos.
+            'id_marca'       => (int)($_REQUEST['id_marca'] ?? 0),
+            'id_categoria'   => (int)($_REQUEST['id_categoria'] ?? 0),
             'producto_texto' => trim($_REQUEST['producto_texto'] ?? ''),
             'variante_texto' => trim($_REQUEST['variante_texto'] ?? ''),
             'estado'         => $_REQUEST['estado'] ?? 'TODOS',
@@ -175,8 +186,91 @@ class ReporteVentasController extends BaseModuloController
                 $raw = is_array($filtros['id_producto']) ? $filtros['id_producto'] : explode(',', (string) $filtros['id_producto']);
                 $filtros['id_producto'] = $this->repository->expandirProductosPorCodigo($raw, $idsEmpresa);
             }
+            // Marcas y categorías son por establecimiento: se cruzan por nombre.
+            if (!empty($filtros['id_marca'])) {
+                $filtros['id_marca'] = $this->repository->expandirCatalogoPorNombre('marcas', (int) $filtros['id_marca'], $idsEmpresa);
+            }
+            if (!empty($filtros['id_categoria'])) {
+                $filtros['id_categoria'] = $this->repository->expandirCatalogoPorNombre('categorias', (int) $filtros['id_categoria'], $idsEmpresa);
+            }
         }
         return [$idsEmpresa, $consolidado];
+    }
+
+    /**
+     * Filas del reporte según la agrupación elegida. Devuelve [filas, meses]: `meses` solo
+     * trae valor en "Unidades por producto y mes", cuyas columnas dependen del período.
+     * Único punto de despacho para la pantalla, el Excel y el PDF.
+     */
+    private function consultarFilas(int|array $idEmpresa, array $filtros): array
+    {
+        switch ((string) ($filtros['agrupar_por'] ?? 'NINGUNO')) {
+            case 'CLIENTE':
+                return [$this->repository->getReporteAgrupadoCliente($idEmpresa, $filtros), []];
+            case 'PRODUCTO':
+                return [$this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros), []];
+            case 'VARIANTE':
+                return [$this->repository->getReporteAgrupadoVariante($idEmpresa, $filtros), []];
+            case 'FECHA':
+                return [$this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros), []];
+            case 'MES':
+                return [$this->repository->getReporteAgrupadoMes($idEmpresa, $filtros), []];
+            case 'PRODUCTO_MES':
+                $r = $this->repository->getReporteUnidadesProductoMes($idEmpresa, $filtros);
+                return [$r['rows'], $r['meses']];
+            default:
+                return [$this->repository->getReporteDetallado($idEmpresa, $filtros), []];
+        }
+    }
+
+    /** Número de columnas de la tabla de la pantalla en cada agrupación (para el colspan). */
+    private static function numColumnas(string $agrupar, array $meses): int
+    {
+        return match ($agrupar) {
+            'NINGUNO'      => 12,
+            'PRODUCTO'     => 7,
+            'VARIANTE'     => 8,
+            'PRODUCTO_MES' => 3 + count($meses),
+            default        => 6,
+        };
+    }
+
+    /** Cantidad de unidades: sin decimales si es entera, con dos si no. */
+    private static function fmtCantidad(float $n): string
+    {
+        return number_format($n, abs($n - round($n)) < 0.00001 ? 0 : 2);
+    }
+
+    /** 'YYYY-MM' → 'Ene 2026' (cabeceras de las columnas de mes). */
+    private static function formatearMesCorto(string $mes): string
+    {
+        if (!preg_match('/^(\d{4})-(\d{2})$/', $mes, $m)) {
+            return $mes;
+        }
+        $cortos = ['01' => 'Ene', '02' => 'Feb', '03' => 'Mar', '04' => 'Abr', '05' => 'May', '06' => 'Jun',
+                   '07' => 'Jul', '08' => 'Ago', '09' => 'Sep', '10' => 'Oct', '11' => 'Nov', '12' => 'Dic'];
+        return ($cortos[$m[2]] ?? $m[2]) . ' ' . $m[1];
+    }
+
+    /** Suma de una columna de mes (o del total) sobre las filas de unidades por producto y mes. */
+    private static function sumarUnidades(array $rows, ?string $mes): float
+    {
+        return array_sum(array_map(
+            static fn (array $r): float => (float) ($mes === null ? ($r['total_unidades'] ?? 0) : ($r['meses'][$mes] ?? 0)),
+            $rows
+        ));
+    }
+
+    /** Fila de totales al pie de la tabla "Unidades por producto y mes" (pantalla). */
+    private function renderFilaTotalesUnidadesHtml(array $rows, array $meses): string
+    {
+        $n    = count($rows);
+        $html = "<tr class='table-light fw-bold'><td class='ps-4' colspan='2'>TOTAL ({$n} producto" . ($n !== 1 ? 's' : '') . ")</td>";
+        foreach ($meses as $m) {
+            $html .= "<td class='text-end'>" . self::fmtCantidad(self::sumarUnidades($rows, $m)) . "</td>";
+        }
+        $html .= "<td class='text-end pe-4 text-primary'>" . self::fmtCantidad(self::sumarUnidades($rows, null)) . "</td></tr>";
+        return $html;
     }
 
     /** Texto del alcance para el encabezado del PDF ('' si no es consolidado). */
@@ -202,19 +296,7 @@ class ReporteVentasController extends BaseModuloController
             $idEmpresa = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
 
             // Consultar datos
-            if ($filtros['agrupar_por'] === 'CLIENTE') {
-                $rows = $this->repository->getReporteAgrupadoCliente($idEmpresa, $filtros);
-            } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
-                $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
-            } elseif ($filtros['agrupar_por'] === 'VARIANTE') {
-                $rows = $this->repository->getReporteAgrupadoVariante($idEmpresa, $filtros);
-            } elseif ($filtros['agrupar_por'] === 'FECHA') {
-                $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
-            } elseif ($filtros['agrupar_por'] === 'MES') {
-                $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $filtros);
-            } else {
-                $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
-            }
+            [$rows, $meses] = $this->consultarFilas($idEmpresa, $filtros);
 
             // Consultar estadísticas globales (solo afectan a las facturas, sin agrupar por detalle)
             $stats = $this->repository->getEstadisticas($idEmpresa, $filtros);
@@ -225,9 +307,7 @@ class ReporteVentasController extends BaseModuloController
             // Generar HTML de las filas según la agrupación
             ob_start();
             if (empty($rows)) {
-                $colSpan = ($filtros['agrupar_por'] === 'NINGUNO') ? 12 :
-                           (($filtros['agrupar_por'] === 'PRODUCTO') ? 7 :
-                           (($filtros['agrupar_por'] === 'VARIANTE') ? 8 : 6));
+                $colSpan = self::numColumnas((string) $filtros['agrupar_por'], $meses);
                 $mensajeVacio = 'No se encontraron resultados.';
                 if (!empty($filtros['fecha_desde']) && !empty($filtros['fecha_hasta'])) {
                     $desde = date('d-m-Y', strtotime($filtros['fecha_desde']));
@@ -237,7 +317,10 @@ class ReporteVentasController extends BaseModuloController
                 echo '<tr><td colspan="'.$colSpan.'" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>'.htmlspecialchars($mensajeVacio).'</td></tr>';
             } else {
                 foreach ($rows as $r) {
-                    echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por'], $filtros['tipo_documento'] ?? 'FACTURA', $consolidado);
+                    echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por'], $filtros['tipo_documento'] ?? 'FACTURA', $consolidado, $meses);
+                }
+                if ($filtros['agrupar_por'] === 'PRODUCTO_MES') {
+                    echo $this->renderFilaTotalesUnidadesHtml($rows, $meses);
                 }
             }
             $rowsHtml = ob_get_clean();
@@ -249,6 +332,9 @@ class ReporteVentasController extends BaseModuloController
                 'stats'       => $stats,
                 'estados'     => $resumenEstados,
                 'agrupacion'  => $filtros['agrupar_por'],
+                // Columnas de mes de "Unidades por producto y mes" ('YYYY-MM' => 'Ene 2026');
+                // el JS arma la cabecera con ellas. Vacío en las demás agrupaciones.
+                'meses'       => array_combine($meses, array_map([self::class, 'formatearMesCorto'], $meses)) ?: new \stdClass(),
                 'consolidado' => $consolidado,
                 'borradores'  => $filtros['borradores'],
             ]);
@@ -268,7 +354,7 @@ class ReporteVentasController extends BaseModuloController
         exit;
     }
 
-    private function renderFilaAgrupadaHtml(array $r, string $agruparPor, string $tipoDocumento = 'FACTURA', bool $consolidado = false): string
+    private function renderFilaAgrupadaHtml(array $r, string $agruparPor, string $tipoDocumento = 'FACTURA', bool $consolidado = false, array $meses = []): string
     {
         // Consolidado por RUC: badge con el establecimiento dueño del documento (solo en el
         // detallado; las agrupaciones suman todos los establecimientos en una fila).
@@ -281,7 +367,7 @@ class ReporteVentasController extends BaseModuloController
         // Solo el modo detallado corresponde a un documento real: se marca la fila
         // para poder abrir el panel lateral con su detalle (ver offcanvas_doc_preview).
         $attrs = '';
-        if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'VARIANTE', 'FECHA', 'MES'], true) && !empty($r['id'])) {
+        if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'VARIANTE', 'FECHA', 'MES', 'PRODUCTO_MES'], true) && !empty($r['id'])) {
             // En el neto (Facturas − NC) cada fila trae su propio tipo; si no, deriva del filtro.
             $tipoDoc = $r['_doc_tipo'] ?? match ($tipoDocumento) {
                 'RECIBO'       => 'RECIBO',
@@ -348,6 +434,18 @@ class ReporteVentasController extends BaseModuloController
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
             $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+        } elseif ($agruparPor === 'PRODUCTO_MES') {
+            // Unidades por producto y mes: código, descripción, una celda por mes del
+            // período (en gris cuando no hubo ventas) y el total del período.
+            $html .= "<td class='ps-4'><span class='fw-bold'>".htmlspecialchars($r['producto_codigo'] ?? '')."</span></td>";
+            $html .= "<td>".htmlspecialchars($r['producto_nombre'] ?? '')."</td>";
+            foreach ($meses as $m) {
+                $c = (float) ($r['meses'][$m] ?? 0);
+                $html .= abs($c) < 0.000001
+                    ? "<td class='text-end text-muted'>0</td>"
+                    : "<td class='text-end'>".self::fmtCantidad($c)."</td>";
+            }
+            $html .= "<td class='text-end pe-4 fw-bold text-primary'>".self::fmtCantidad((float) ($r['total_unidades'] ?? 0))."</td>";
         } else {
             // DETALLADO / NINGUNO
             $estado = strtolower($r['estado'] ?? '');
@@ -459,19 +557,7 @@ class ReporteVentasController extends BaseModuloController
         $idEmpresa       = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
 
         // Consultar datos
-        if ($filtros['agrupar_por'] === 'CLIENTE') {
-            $rows = $this->repository->getReporteAgrupadoCliente($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
-            $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'VARIANTE') {
-            $rows = $this->repository->getReporteAgrupadoVariante($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'FECHA') {
-            $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'MES') {
-            $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $filtros);
-        } else {
-            $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
-        }
+        [$rows, $meses] = $this->consultarFilas($idEmpresa, $filtros);
 
         try {
             $empresa = (new \App\models\Empresa())->getPorId($idEmpresaActiva);
@@ -553,6 +639,24 @@ class ReporteVentasController extends BaseModuloController
                         (float)$r['total']
                     ];
                 }
+            } elseif ($filtros['agrupar_por'] === 'PRODUCTO_MES') {
+                // Una columna por mes del período + total, y la fila de totales al final.
+                $headers = array_merge(['Código', 'Descripción'], array_map([self::class, 'formatearMesCorto'], $meses), ['Total']);
+                $exportData = [];
+                foreach ($rows as $r) {
+                    $exportData[] = array_merge(
+                        [$r['producto_codigo'], $r['producto_nombre']],
+                        array_map(static fn (string $m): float => (float) ($r['meses'][$m] ?? 0), $meses),
+                        [(float) $r['total_unidades']]
+                    );
+                }
+                if ($rows) {
+                    $exportData[] = array_merge(
+                        ['TOTAL', count($rows) . ' producto' . (count($rows) !== 1 ? 's' : '')],
+                        array_map(static fn (string $m): float => self::sumarUnidades($rows, $m), $meses),
+                        [self::sumarUnidades($rows, null)]
+                    );
+                }
             } else {
                 // Consolidado: columna "Estab." al inicio con el establecimiento dueño del documento.
                 // Con borradores: columna "Estado" para distinguirlos de los documentos válidos.
@@ -609,20 +713,7 @@ class ReporteVentasController extends BaseModuloController
         $agrupar         = (string) $filtros['agrupar_por'];
 
         // Consultar datos
-        if ($agrupar === 'CLIENTE') {
-            $rows = $this->repository->getReporteAgrupadoCliente($idEmpresa, $filtros);
-        } elseif ($agrupar === 'PRODUCTO') {
-            $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
-        } elseif ($agrupar === 'VARIANTE') {
-            $rows = $this->repository->getReporteAgrupadoVariante($idEmpresa, $filtros);
-        } elseif ($agrupar === 'FECHA') {
-            $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
-        } elseif ($agrupar === 'MES') {
-            $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $filtros);
-        } else {
-            $agrupar = 'NINGUNO';
-            $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
-        }
+        [$rows, $meses] = $this->consultarFilas($idEmpresa, $filtros);
 
         $totales = $this->repository->getEstadisticas($idEmpresa, $filtros);
 
@@ -634,9 +725,8 @@ class ReporteVentasController extends BaseModuloController
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) require_once $autoload;
 
-            $detallado = ($agrupar === 'NINGUNO');
-            $html      = $this->htmlPdf($agrupar, $consolidado, $rows, $totales, $filtrosTxt, $idEmpresaActiva, $nombreEmpresa);
-            $html2pdf  = new \Spipu\Html2Pdf\Html2Pdf($detallado ? 'L' : 'P', 'A4', 'es');
+            $html      = $this->htmlPdf($agrupar, $consolidado, $rows, $totales, $filtrosTxt, $idEmpresaActiva, $nombreEmpresa, $meses);
+            $html2pdf  = new \Spipu\Html2Pdf\Html2Pdf(self::pdfHorizontal($agrupar, $meses) ? 'L' : 'P', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('ReporteVentas_' . ucfirst(strtolower($agrupar)) . '_' . date('Ymd_His') . '.pdf', 'D');
             exit;
@@ -650,12 +740,11 @@ class ReporteVentasController extends BaseModuloController
      * exportPdf() para poder generarlo —y medirlo— con cualquier juego de filas.
      */
     private function htmlPdf(string $agrupar, bool $consolidado, array $rows, array $totales,
-                             array $filtrosTxt, int $idEmpresaActiva, string $nombreEmpresa): string
+                             array $filtrosTxt, int $idEmpresaActiva, string $nombreEmpresa, array $meses = []): string
     {
-        $detallado = ($agrupar === 'NINGUNO');
-        $cols      = $this->columnasPdf($agrupar, $consolidado);
+        $cols      = $this->columnasPdf($agrupar, $consolidado, $meses);
         $nCols     = count($cols);
-        $fs        = $detallado ? '7pt' : '8pt';   // el detallado lleva el doble de columnas
+        $fs        = self::pdfFuentePt($agrupar, $meses) . 'pt';
 
         // Cuerpo: los mismos anchos que el <thead>, celda por celda (obligatorio en
         // Html2Pdf). Filas alternas en gris muy claro: no admite :nth-child, así que el
@@ -769,14 +858,15 @@ class ReporteVentasController extends BaseModuloController
         return $ancho;
     }
 
-    /** Nombre legible de cada agrupación (título del PDF y caja de filtros). */
+    /** Nombre legible de cada agrupación (título del PDF y caja de filtros). También es la lista blanca de `agrupar_por`. */
     private const AGRUPACION_LBL = [
-        'NINGUNO'  => 'Detallado',
-        'CLIENTE'  => 'Por cliente',
-        'PRODUCTO' => 'Por producto',
-        'VARIANTE' => 'Por variante',
-        'FECHA'    => 'Por fecha',
-        'MES'      => 'Por mes',
+        'NINGUNO'      => 'Detallado',
+        'CLIENTE'      => 'Por cliente',
+        'PRODUCTO'     => 'Por producto',
+        'VARIANTE'     => 'Por variante',
+        'FECHA'        => 'Por fecha',
+        'MES'          => 'Por mes',
+        'PRODUCTO_MES' => 'Unidades por producto y mes',
     ];
 
     /** Qué cuenta cada fila del listado, para la etiqueta "TOTALES GENERALES (N …)". */
@@ -784,12 +874,33 @@ class ReporteVentasController extends BaseModuloController
     {
         return match ($agrupar) {
             'CLIENTE'  => $n === 1 ? 'cliente'   : 'clientes',
-            'PRODUCTO' => $n === 1 ? 'producto'  : 'productos',
+            'PRODUCTO', 'PRODUCTO_MES' => $n === 1 ? 'producto' : 'productos',
             'VARIANTE' => $n === 1 ? 'variante'  : 'variantes',
             'FECHA'    => $n === 1 ? 'día'       : 'días',
             'MES'      => $n === 1 ? 'mes'       : 'meses',
             default    => $n === 1 ? 'documento' : 'documentos',
         };
+    }
+
+    /**
+     * Orientación de la hoja: horizontal para el detallado (doce columnas) y para
+     * "Unidades por producto y mes" cuando el período pasa de seis meses.
+     */
+    private static function pdfHorizontal(string $agrupar, array $meses): bool
+    {
+        return $agrupar === 'NINGUNO' || ($agrupar === 'PRODUCTO_MES' && count($meses) > 6);
+    }
+
+    /**
+     * Tamaño de letra del listado del PDF, en puntos: 8 en los agrupados, 7 cuando la hoja
+     * va horizontal y 6 en unidades por producto y mes con más de un año de columnas.
+     */
+    private static function pdfFuentePt(string $agrupar, array $meses): float
+    {
+        if ($agrupar === 'PRODUCTO_MES' && count($meses) > 12) {
+            return 6.0;
+        }
+        return self::pdfHorizontal($agrupar, $meses) ? 7.0 : 8.0;
     }
 
     /**
@@ -802,17 +913,16 @@ class ReporteVentasController extends BaseModuloController
      * descriptiva (producto, cliente) se lleva todo lo que sobra tras dar a cada importe lo
      * justo para su cifra más larga.
      */
-    private function columnasPdf(string $agrupar, bool $consolidado): array
+    private function columnasPdf(string $agrupar, bool $consolidado, array $meses = []): array
     {
         $e    = static fn ($v): string => htmlspecialchars((string) $v);
         $num  = static fn ($v): string => number_format((float) $v, 2);
 
         // Ancho útil de la hoja y tamaños de letra de este PDF (ver htmlPdf()). El ancho en
         // puntos de una columna es su % menos el padding y los bordes de la celda.
-        $detallado = ($agrupar === 'NINGUNO');
-        $util      = $detallado ? 796.5 : 549.9;   // A4 horizontal / retrato con 8 mm de margen
-        $ptFila    = $detallado ? 7.0 : 8.0;       // font-size del <td>
-        $ptSub     = 6.5;                          // font-size del subtexto (.sub)
+        $util      = self::pdfHorizontal($agrupar, $meses) ? 796.5 : 549.9;   // A4 horizontal / retrato con 8 mm de margen
+        $ptFila    = self::pdfFuentePt($agrupar, $meses);                     // font-size del <td>
+        $ptSub     = 6.5;                                                     // font-size del subtexto (.sub)
         $pt        = static fn (int $w): float => $w / 100 * $util - 6.0;
 
         // Html2Pdf reparte el texto en líneas por los espacios, pero NO parte una "palabra"
@@ -875,6 +985,32 @@ class ReporteVentasController extends BaseModuloController
                 ['lbl' => 'T.IVA', 'w' => 7, 'cls' => 'text-center',
                  'val' => static fn (array $r): string => (float) ($r['tarifa_iva'] ?? 0) . '%'],
             ], $importes(10, 10, 12));
+        }
+
+        if ($agrupar === 'PRODUCTO_MES') {
+            // Código y total fijos; los meses se reparten lo que queda hasta dejar a la
+            // descripción al menos un 22 %, y cada mes se acota entre 4 % y 9 %.
+            $n     = count($meses);
+            $wCod  = 11;
+            $wTot  = 8;
+            $wMes  = $n > 0 ? max(4, min(9, (int) floor((100 - $wCod - $wTot - 22) / $n))) : 0;
+            $wDesc = 100 - $wCod - $wTot - $wMes * $n;
+            $cant  = static fn ($v): string => self::fmtCantidad((float) $v);
+            $cols  = [
+                ['lbl' => 'Código', 'w' => $wCod, 'cls' => '',
+                 'val' => static fn (array $r): string => $wrap((string) ($r['producto_codigo'] ?? ''), $pt($wCod), $ptFila)],
+                ['lbl' => 'Descripción', 'w' => $wDesc, 'cls' => '',
+                 'val' => static fn (array $r): string => $wrap((string) ($r['producto_nombre'] ?? ''), $pt($wDesc), $ptFila)],
+            ];
+            foreach ($meses as $m) {
+                $cols[] = ['lbl' => self::formatearMesCorto($m), 'w' => $wMes, 'cls' => 'text-end', 'fmt' => $cant,
+                           'tot' => static fn (array $rows): float => self::sumarUnidades($rows, $m),
+                           'val' => static fn (array $r): string => $cant($r['meses'][$m] ?? 0)];
+            }
+            $cols[] = ['lbl' => 'Total', 'w' => $wTot, 'cls' => 'text-end', 'fmt' => $cant,
+                       'tot' => static fn (array $rows): float => self::sumarUnidades($rows, null),
+                       'val' => static fn (array $r): string => "<span style='font-weight:bold;'>" . $cant($r['total_unidades'] ?? 0) . '</span>'];
+            return $cols;
         }
 
         if ($agrupar === 'VARIANTE') {
@@ -977,7 +1113,10 @@ class ReporteVentasController extends BaseModuloController
                 $monto = $c['tot'] instanceof \Closure
                     ? (float) ($c['tot'])($rows)
                     : (float) ($totales[$c['tot']] ?? 0);
-                if ($c['lbl'] === 'Documentos') {
+                if (isset($c['fmt'])) {
+                    // Formato propio de la columna (unidades, sin símbolo de moneda).
+                    $val = ($c['fmt'])($monto);
+                } elseif ($c['lbl'] === 'Documentos') {
                     $val = number_format($monto, 0);
                 } elseif ($c['lbl'] === 'Total') {
                     $val = "<span style='color:#146c43;'>$" . number_format($monto, 2) . '</span>';
@@ -1182,6 +1321,20 @@ class ReporteVentasController extends BaseModuloController
             $productoTxt[] = '"' . trim((string) $filtros['producto_texto']) . '"';
         }
 
+        // Marca y categoría: el filtro puede venir expandido (consolidado); se nombra la de
+        // la empresa activa, que es la que el usuario eligió en el selector.
+        $marcaTxt = $categoriaTxt = '';
+        $idsMarca = array_values(array_filter(array_map('intval', (array) ($filtros['id_marca'] ?? []))));
+        if ($idsMarca) {
+            $m = (new \App\repositories\modulos\MarcaRepository())->getDetalleCompleto($idsMarca[0], $idEmpresa);
+            $marcaTxt = $m['nombre'] ?? ('#' . $idsMarca[0]);
+        }
+        $idsCat = array_values(array_filter(array_map('intval', (array) ($filtros['id_categoria'] ?? []))));
+        if ($idsCat) {
+            $c = (new \App\repositories\modulos\CategoriaRepository())->getDetalleCompleto($idsCat[0], $idEmpresa);
+            $categoriaTxt = $c['nombre'] ?? ('#' . $idsCat[0]);
+        }
+
         $out = [
             'Alcance'           => $consolidado
                 ? $this->describirAlcance($idsEmpresa, true)
@@ -1198,6 +1351,12 @@ class ReporteVentasController extends BaseModuloController
             'Cliente'           => $clienteTxt,
             'Producto'          => $productoTxt ? implode(', ', $productoTxt) : 'Todos',
         ];
+        if ($marcaTxt !== '') {
+            $out['Marca'] = $marcaTxt;
+        }
+        if ($categoriaTxt !== '') {
+            $out['Categoría'] = $categoriaTxt;
+        }
         if (trim((string) ($filtros['variante_texto'] ?? '')) !== '') {
             $out['Variante'] = trim((string) $filtros['variante_texto']);
         }

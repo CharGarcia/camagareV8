@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina
-version: 1.8
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos
+version: 1.9
 orden: 10
 estado: activo
 ---
@@ -22,9 +22,37 @@ qué, en el periodo que se indique.
 | Cliente | Ventas de un cliente concreto |
 | Vendedor | Ventas de un vendedor concreto. Las notas de crédito no llevan vendedor propio: se les atribuye el vendedor de la factura que modifican, así que sí entran en el filtro (también en *Facturas − NC*) |
 | Producto | Ventas de un producto concreto |
+| Marca / Categoría | Solo los productos de esa marca o categoría (las de la ficha del producto). Están en la primera fila, a continuación de *Agrupar por*. Ver la sección *Filtrar por marca o categoría* |
 | Borradores | *Sin borradores* (por defecto), *Con borradores* o *Solo borradores*. Ver la sección *Documentos en borrador* |
 
 Los filtros se combinan: *las ventas del producto X al cliente Y en marzo*.
+
+## Filtrar por marca o categoría
+
+Los selectores **Marca** y **Categoría** (primera fila, después de *Agrupar por*)
+acotan el reporte a los productos que tienen esa marca o esa categoría en su
+ficha (módulo *Productos*). Solo listan las marcas y categorías de la empresa
+activa, y se pueden combinar entre sí y con el resto de filtros. La estrella
+junto a cada uno lo guarda como favorito.
+
+Qué cambia según la vista:
+
+- En **Por producto**, **Por variante** y **Unidades por producto / mes** se
+  filtran las **líneas**: solo aparecen los productos de esa marca o categoría,
+  con sus cantidades e importes.
+- En el **Detallado**, **Por cliente**, **Por fecha** y **Por mes** se filtran
+  los **documentos**: entra toda factura que tenga al menos una línea de esa
+  marca o categoría, con su **total completo** (no solo la parte de esa marca).
+  Es la misma regla que ya aplicaba el filtro *Producto*. Para ver únicamente
+  lo vendido de la marca, use *Por producto* o *Unidades por producto / mes*.
+- Las tarjetas de arriba (documentos y totales) siguen a los documentos, así que
+  en las vistas por línea pueden ser mayores que la suma de la tabla.
+- En **consolidado por RUC**, la marca o categoría elegida se cruza **por
+  nombre** con las de los demás establecimientos (cada uno tiene su propia
+  lista); si en una sucursal la marca se llama distinto, sus ventas no entran.
+- Un producto **sin marca** (o sin categoría) en su ficha nunca sale al filtrar
+  por marca (o categoría).
+- El PDF indica la marca y la categoría usadas en la caja *Filtros aplicados*.
 
 ## El estado importa
 
@@ -129,6 +157,44 @@ fila, se ve cuánto compró el cliente y cuánto de eso sigue sin cobrarse.
 - La columna ordena el reporte como cualquier otra, y sale igual en el PDF y en
   el Excel (con su total al pie, en el PDF).
 
+### Unidades por producto / mes
+
+La agrupación **Unidades por Producto / Mes** responde a *cuántas unidades de
+cada producto se vendieron cada mes*. Es una tabla de cantidades, no de dinero:
+
+- Una **fila por producto** con su **código**, su **descripción**, **una columna
+  por cada mes** del período elegido y, al final, la columna **Total** con las
+  unidades del producto en todo el período.
+- Los meses son los que abarcan las fechas *Desde* y *Hasta* del filtro,
+  **tengan o no ventas** (un mes sin ventas sale en cero, en gris). Con el año
+  completo salen doce columnas; con un solo mes, una. Al elegir esta agrupación,
+  el selector *Mes* pasa a *Todos* para abrir el año entero, pero se puede volver
+  a acotar. Si se deja alguna fecha vacía, ese extremo se toma del primer o
+  último mes con ventas.
+- **Solo aparecen los productos que vendieron algo** en el período (total mayor
+  que cero). Los que no se movieron no ocupan fila.
+- La última fila, **TOTAL**, suma cada mes y el total de todos los productos
+  listados, y el título indica cuántos productos son.
+- Las cantidades se muestran sin decimales cuando son enteras y con dos cuando
+  no (p. ej. 2.50 kg).
+- El producto se identifica por su **código**: en consolidado por RUC, el mismo
+  código de distintos establecimientos se suma en una sola fila. Una línea sin
+  producto del catálogo (concepto libre) muestra el código y la descripción que
+  se escribieron en la factura.
+- Con **Facturas − NC**, a cada mes se le restan las unidades devueltas en notas
+  de crédito de ese mes; un producto que quede en cero o en negativo no aparece.
+- Con **Recibos de venta** o **Notas de crédito** se cuentan las unidades de
+  esos documentos.
+- El gráfico muestra la **curva de unidades vendidas por mes** (la suma de todos
+  los productos de la tabla), sin signo de dólar.
+- Se combina con todos los filtros, en especial **Marca** y **Categoría** (ver
+  *Filtrar por marca o categoría*): *cuántas unidades de la marca X vendí cada
+  mes de este año*.
+- Ordena por código, descripción, total o **por cualquier mes** (clic en la
+  cabecera del mes). El PDF y el Excel salen con las mismas columnas, la misma
+  fila TOTAL y el mismo orden; con más de seis meses el PDF sale en hoja
+  horizontal.
+
 ## Ordenar los resultados
 
 Los títulos de las columnas ordenan el reporte: un clic ordena de menor a mayor y
@@ -141,7 +207,10 @@ ordenando. Funciona en el detallado y en todas las agrupaciones: por ejemplo,
 - Cada agrupación ordena por sus propias columnas. Si cambia de agrupación y la
   columna elegida no existe en la nueva, se vuelve al orden habitual de esa
   vista: el detallado por fecha, *Por cliente* por total, *Por producto* y *Por
-  variante* por cantidad vendida, y *Por fecha* / *Por mes* por el periodo.
+  variante* por cantidad vendida, *Por fecha* / *Por mes* por el periodo y
+  *Unidades por producto / mes* por el total de unidades.
+- En *Unidades por producto / mes* también ordena **cada columna de mes**. Si
+  después cambia el período y ese mes ya no está, se vuelve al orden por total.
 - El orden elegido **se recuerda** para la próxima vez que abra el reporte.
 
 ## Quién ve qué: nivel del usuario y permiso de Acceso total
@@ -210,9 +279,11 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 - **El listado ocupa todo el ancho de la hoja.** En las vistas agrupadas la hoja
   va vertical y la columna descriptiva (producto, cliente) se lleva el espacio
   que sobra, para que los nombres largos se lean; en la vista **Detallado**, que
-  tiene doce columnas, la hoja sale **horizontal**. Un nombre o un código más
-  largo que su columna se parte en varias líneas: nunca se pisa con la columna
-  vecina ni se sale de la hoja.
+  tiene doce columnas, la hoja sale **horizontal**, igual que **Unidades por
+  producto / mes** cuando el período pasa de seis meses (con más de doce, la
+  letra se reduce un punto para que entren todas las columnas). Un nombre o un
+  código más largo que su columna se parte en varias líneas: nunca se pisa con
+  la columna vecina ni se sale de la hoja.
 - Cada producto o cliente muestra su **código o RUC** debajo del nombre, igual
   que en la pantalla, y las filas van sombreadas de forma alterna.
 - La **cabecera de la tabla se repite en cada página**, abajo a la derecha va
@@ -243,9 +314,28 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 - **El Excel salió en otro orden**: se exporta con el orden que estaba marcado en
   la pantalla; si cambió la agrupación después de ordenar, revise la flecha de la
   cabecera antes de descargar.
+- **Filtro por marca y el total no baja**: en el Detallado y en las vistas por
+  cliente, fecha o mes, el filtro deja el documento completo si tiene una línea
+  de esa marca. Para ver solo lo vendido de la marca use *Por producto* o
+  *Unidades por producto / mes*.
+- **Un producto no sale al filtrar por marca o categoría**: revise que las
+  tenga asignadas en su ficha (módulo *Productos*).
+- **En Unidades por producto / mes falta un producto**: solo se listan los que
+  vendieron más de cero unidades en el período (con *Facturas − NC*, más de lo
+  que se devolvió).
 
 ## Historial de cambios
 
+- **1.9** — Nueva agrupación **Unidades por Producto / Mes**: una fila por
+  producto (código y descripción), **una columna por cada mes** del período
+  elegido con las unidades vendidas, y la columna **Total** del período; solo
+  los productos con ventas, con fila TOTAL al pie, gráfico de unidades por mes,
+  orden por cualquier mes y PDF/Excel con las mismas columnas (horizontal con
+  más de seis meses). Nuevos filtros **Marca** y **Categoría** (primera fila,
+  después de *Agrupar por*, con favorito), que aplican a todas las vistas, al
+  PDF y al Excel; el buscador de *Cliente* se hizo más angosto para que quepan
+  en la misma fila. Nuevas secciones *Filtrar por marca o categoría* y *Unidades
+  por producto / mes*.
 - **1.8** — **PDF rediseñado**. Ahora lleva el **logo de la empresa** en el
   encabezado, una caja **"Filtros aplicados"** con todo lo que se usó para armar
   el reporte y una banda con los indicadores de las tarjetas. El listado **ocupa
