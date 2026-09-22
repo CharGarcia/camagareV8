@@ -39,6 +39,13 @@ $urlBase  = rtrim(BASE_URL, '/') . '/' . $rutaModulo;
     #tri-tbody-detalle select { padding: 0 4px; height: 22px; font-size: 0.78rem; border: 1px solid #dee2e6; border-radius: 3px; width: 100%; }
     #tri-tbody-detalle input[readonly] { background: #f8f9fa; }
     .tri-dropdown-prod { max-height: 220px; overflow-y: auto; }
+    /* Advertencia "el lote está en otra bodega" (celda Lote). Ancho mínimo para
+       que el resumen no se parta en una columna estrecha; el detalle se pliega. */
+    #tri-tbody-detalle .tri-aviso-bodegas { min-width: 215px; font-size: .72rem; }
+    #tri-tbody-detalle .tri-aviso-bodegas [role="button"] { cursor: pointer; }
+    /* Un producto puede estar repartido en decenas de lotes: el detalle abierto
+       hace scroll en vez de estirar la fila. */
+    #tri-tbody-detalle .tri-aviso-detalle { max-height: 140px; overflow-y: auto; }
     /* La tabla se extiende libremente hacia abajo; hace scroll la página */
     @media (max-width: 767.98px) {
         #modulo-<?= $idModulo ?> .tri-scroll { max-height: none !important; height: auto !important; overflow-y: visible !important; }

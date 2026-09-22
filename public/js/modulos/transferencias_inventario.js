@@ -251,11 +251,18 @@
                         dd.classList.remove('d-none');
                         return;
                     }
+                    // Código, nombre y stock en tres columnas flex: así el código
+                    // queda alineado entre filas en vez de correrse según el largo
+                    // del nombre, y el badge de stock no se monta sobre el texto
+                    // (con float-end se solapaba cuando el nombre era largo).
                     dd.innerHTML = res.data.map(p => `
-                        <button type="button" class="list-group-item list-group-item-action py-1 small"
+                        <button type="button" class="list-group-item list-group-item-action py-1 small d-flex align-items-center gap-2"
                                 onclick="window.TRI_agregarProducto(${p.id}, '${esc(p.codigo)}', '${esc(p.nombre)}', ${p.id_medida_base || 'null'}, ${num(p.stock)})">
-                            <span class="fw-bold">${esc(p.codigo)}</span> — ${esc(p.nombre)}
-                            <span class="badge ${num(p.stock) > 0 ? 'bg-success' : 'bg-secondary'} bg-opacity-10 ${num(p.stock) > 0 ? 'text-success' : 'text-secondary'} border float-end">
+                            <span class="fw-bold text-truncate flex-shrink-0" style="width:110px;" title="${esc(p.codigo)}">
+                                ${esc(p.codigo) || '<span class="fw-normal text-muted fst-italic">sin código</span>'}
+                            </span>
+                            <span class="text-truncate flex-grow-1 text-start" title="${esc(p.nombre)}">${esc(p.nombre)}</span>
+                            <span class="badge ${num(p.stock) > 0 ? 'bg-success' : 'bg-secondary'} bg-opacity-10 ${num(p.stock) > 0 ? 'text-success' : 'text-secondary'} border flex-shrink-0">
                                 Stock: ${num(p.stock).toFixed(2)}
                             </span>
                         </button>`).join('');
@@ -293,6 +300,7 @@
             costo_unitario: 0,
             lotes: [],
             lotes_otras_bodegas: [],
+            aviso_abierto: false,
             series: [],
         };
         lineas.push(linea);
@@ -318,6 +326,7 @@
                 if (!res.ok) return;
                 l.lotes = res.lotes || [];
                 l.lotes_otras_bodegas = res.lotes_otras_bodegas || [];
+                l.aviso_abierto = false;   // al cambiar de bodega el detalle ya no aplica
                 l.stock = num(res.stock);
                 l.costo_unitario = num(res.costo);
 
@@ -335,50 +344,70 @@
     }
 
     /**
-     * Aviso "el lote que busca está en otra bodega".
+     * Advertencia "el lote que busca está en otra bodega".
      *
      * El selector solo ofrece lotes con saldo en la bodega de ORIGEN, así que un
      * lote agotado ahí desaparece de la lista sin explicación — y si queda uno
      * solo, además se auto-selecciona y parece que el sistema eligió mal. Esta
-     * línea dice dónde sí está, para que el usuario cambie la bodega de origen
-     * en vez de dar por perdido el stock.
+     * advertencia dice dónde sí está, para que el usuario cambie la bodega de
+     * origen en vez de dar por perdido el stock.
      *
-     * Con pocos lotes fuera se nombran uno por uno (el caso útil: "busco este
-     * lote"); con muchos se resume por bodega y el detalle completo queda en el
-     * title, para no convertir una celda de la tabla en un párrafo.
+     * Va plegada: en la celda solo entra el triángulo de advertencia con una
+     * frase corta, y el detalle (lote, bodega y cantidad, fila por fila) se abre
+     * al hacer clic. Un producto puede tener decenas de lotes repartidos, y
+     * volcarlos siempre convertiría una celda de la tabla en un párrafo.
+     *
+     * El estado abierto/cerrado vive en la línea (`aviso_abierto`) y no en el DOM
+     * porque render() repinta la tabla entera con cualquier cambio: guardado en
+     * el HTML, el detalle se cerraría solo al tocar una cantidad.
      */
     function avisoOtrasBodegas(l) {
         const otros = l.lotes_otras_bodegas || [];
         if (!otros.length) return '';
 
         const nombreLote = x => (x.numero_lote === 'sin_lote' ? 'Sin lote' : x.numero_lote);
-        const detalle = otros
-            .map(x => `${nombreLote(x)} — ${x.bodega} (${num(x.stock_lote).toFixed(2)})`)
-            .join('\n');
+        const bodegas = [...new Set(otros.map(x => x.bodega))];
 
-        let texto;
-        if (otros.length <= 3) {
-            texto = otros
-                .map(x => `<b>${esc(nombreLote(x))}</b> en ${esc(x.bodega)} (${num(x.stock_lote).toFixed(2)})`)
-                .join(', ');
-        } else {
-            const bodegas = [...new Set(otros.map(x => x.bodega))];
-            const listaBodegas = bodegas.slice(0, 2).map(esc).join(', ')
-                + (bodegas.length > 2 ? ` y ${bodegas.length - 2} más` : '');
-            texto = `${otros.length} lotes con saldo en ${listaBodegas}`;
-        }
+        // Sin nada disponible aquí la advertencia explica por qué la lista está
+        // vacía; con lotes disponibles solo apunta a que hay más en otro sitio.
+        const resumen = (l.lotes && l.lotes.length)
+            ? (otros.length === 1
+                ? 'Hay 1 lote más en otra bodega'
+                : `Hay ${otros.length} lotes más en otra bodega`)
+            : (bodegas.length === 1
+                ? `Sin stock aquí; hay en ${esc(bodegas[0])}`
+                : `Sin stock aquí; hay en ${bodegas.length} bodegas`);
 
-        // Sin nada disponible aquí el aviso es la única pista que tiene el usuario:
-        // se destaca. Si ya hay lotes en esta bodega, va discreto para no estorbar.
-        const critico = !(l.lotes && l.lotes.length);
-        const clase = critico ? 'text-danger' : 'text-muted';
-        const icono = critico ? 'bi-exclamation-triangle-fill' : 'bi-info-circle';
-        const prefijo = critico ? 'No hay stock aquí. Sí hay: ' : 'También en otra bodega: ';
+        const abierto = !!l.aviso_abierto;
+        const filas = otros.map(x => `
+            <div class="d-flex justify-content-between gap-2">
+                <span class="text-truncate">${esc(nombreLote(x))} · ${esc(x.bodega)}</span>
+                <span class="fw-semibold flex-shrink-0">${num(x.stock_lote).toFixed(2)}</span>
+            </div>`).join('');
 
-        return `<div class="small ${clase} mt-1 lh-sm" title="${esc(detalle)}">
-                    <i class="bi ${icono} me-1"></i>${prefijo}${texto}
+        return `<div class="alert alert-warning py-1 px-2 mt-1 mb-0 small lh-sm tri-aviso-bodegas">
+                    <div role="button" tabindex="0" class="d-flex align-items-center gap-1"
+                         onclick="window.TRI_toggleAviso(${l.uid})"
+                         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.TRI_toggleAviso(${l.uid});}"
+                         title="${abierto ? 'Ocultar el detalle' : 'Ver en qué bodega está'}">
+                        <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
+                        <span class="text-truncate">${resumen}</span>
+                        <i class="bi bi-chevron-${abierto ? 'up' : 'down'} ms-auto flex-shrink-0"></i>
+                    </div>
+                    ${abierto ? `<div class="mt-1 pt-1 border-top border-warning-subtle">
+                        <div class="tri-aviso-detalle">${filas}</div>
+                        <div class="mt-1 fst-italic">Cambie la bodega de origen para usarlo.</div>
+                    </div>` : ''}
                 </div>`;
     }
+
+    /** Despliega/pliega el detalle de la advertencia de otras bodegas. */
+    window.TRI_toggleAviso = function (uid) {
+        const l = buscarLinea(uid);
+        if (!l) return;
+        l.aviso_abierto = !l.aviso_abierto;
+        render();
+    };
 
     function aplicarLote(l, numeroLote) {
         l.numero_lote = numeroLote || '';
@@ -462,7 +491,7 @@
         if (!tbody) return;
 
         if (!lineas.length) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Sin productos agregados.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Sin productos agregados.</td></tr>';
             el('tri-total-items').textContent = '0.00';
             el('tri-total-costo').textContent = '$0.00';
             return;
@@ -496,7 +525,8 @@
 
             return `<tr>
                 <td class="text-center text-muted">${idx + 1}</td>
-                <td><span class="fw-bold">${esc(l.codigo)}</span> ${esc(l.nombre)}</td>
+                <td class="fw-bold text-truncate" title="${esc(l.codigo)}">${esc(l.codigo) || '<span class="fw-normal text-muted">—</span>'}</td>
+                <td>${esc(l.nombre)}</td>
                 <td>${lotesHtml}</td>
                 <td>${soloLectura
                         ? (l.fecha_caducidad ? esc(l.fecha_caducidad.split('-').reverse().join('-')) : '—')
@@ -626,6 +656,7 @@
             costo_unitario: num(d.costo_unitario),
             lotes: [],
             lotes_otras_bodegas: [],
+            aviso_abierto: false,
             series: [],
         }));
 

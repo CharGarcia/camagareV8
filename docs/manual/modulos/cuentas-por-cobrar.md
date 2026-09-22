@@ -673,6 +673,14 @@ Y dos casos que el reporte **no** descuenta a propósito:
   encontraron cuentas por cobrar con los filtros aplicados*, como ya hacían las
   vistas *Por cliente* y *Por producto*. Actualizada *El PDF del listado*.
 
+  En pantalla, los **mensajes que ocupan toda la fila** de la tabla (*Elija los
+  filtros y presione Aplicar*, *Cargando…*, *No se encontraron cuentas por
+  cobrar*, los de error) se **ajustan al número de columnas de la vista activa**.
+  En la vista *Por cliente* con la columna *Asesor* oculta —al filtrar por un
+  vendedor, o siendo un usuario vendedor— la tabla tiene 10 columnas y esos
+  mensajes seguían ocupando 11: el navegador agregaba una columna de más y la
+  fila se salía del ancho de los encabezados.
+
 - **2.20** — **El PDF *Por cliente* ya no sale con las líneas montadas.** Cuando
   la sección de un cliente empezaba en el último centímetro de la hoja, su
   primera línea se partía: unos datos quedaban pisando el pie de esa página, el

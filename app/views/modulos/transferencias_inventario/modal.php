@@ -119,6 +119,7 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th style="width:32px;" class="text-center">#</th>
+                                        <th style="width:110px;">Código</th>
                                         <th style="min-width:200px;">Producto</th>
                                         <th style="width:150px;">Lote</th>
                                         <th style="width:115px;">Caducidad</th>
@@ -131,11 +132,11 @@
                                     </tr>
                                 </thead>
                                 <tbody id="tri-tbody-detalle">
-                                    <tr id="tri-fila-vacia"><td colspan="10" class="text-center text-muted py-4">Sin productos agregados.</td></tr>
+                                    <tr id="tri-fila-vacia"><td colspan="11" class="text-center text-muted py-4">Sin productos agregados.</td></tr>
                                 </tbody>
                                 <tfoot class="table-light">
                                     <tr>
-                                        <th colspan="6" class="text-end">Totales</th>
+                                        <th colspan="7" class="text-end">Totales</th>
                                         <th class="text-end" id="tri-total-items">0.00</th>
                                         <th></th>
                                         <th class="text-end" id="tri-total-costo">$0.00</th>

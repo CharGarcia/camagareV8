@@ -136,11 +136,21 @@ function CXC_initOrden() {
 /* ════════════════════════════════════════════════════
    CARGAR DATOS PRINCIPALES
 ════════════════════════════════════════════════════ */
+/* Columnas que tiene la tabla en la vista activa: la cabecera estándar (vistas Detallado y
+   Por producto) lleva 11; la de "Por cliente" pierde la de Asesor cuando el listado ya está
+   acotado a un asesor (CXC_sinAsesor), y entonces son 10. Los mensajes que ocupan la fila
+   entera —estado inicial, cargando, error, sin resultados— deben usar ESTE número: con un
+   colspan mayor que las columnas reales el navegador agrega una columna fantasma y la fila
+   del mensaje se sale del ancho del <thead>. */
+function CXC_nCols() {
+    return (CXC_vista === 'agrupado' && CXC_sinAsesor()) ? 10 : 11;
+}
+
 /* Mensaje de la tabla mientras no se haya aplicado ningún filtro (al entrar al módulo). */
 function CXC_estadoInicial() {
     const tbody = document.getElementById('cxc-tbody');
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
+        tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-5 text-muted">
             <i class="bi bi-funnel fs-3 d-block mb-2 text-success opacity-50"></i>
             Elija los filtros y presione <span class="fw-semibold text-success">Aplicar</span> para ver las cuentas por cobrar.
         </td></tr>`;
@@ -158,7 +168,7 @@ function CXC_recargar() {
 async function CXC_cargar() {
     CXC_cargado = true;
     const tbody = document.getElementById('cxc-tbody');
-    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4"><div class="spinner-border spinner-border-sm text-success me-2"></div>Cargando…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-4"><div class="spinner-border spinner-border-sm text-success me-2"></div>Cargando…</td></tr>`;
     CXC_seleccionados.clear();
 
     const params = new URLSearchParams({
@@ -186,7 +196,7 @@ async function CXC_cargar() {
         const data = await r.json();
 
         if (!data.ok) {
-            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>${data.error || 'Error al cargar'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>${data.error || 'Error al cargar'}</td></tr>`;
             return;
         }
 
@@ -208,7 +218,7 @@ async function CXC_cargar() {
         CXC_renderTabla(CXC_filtradoLocal);
 
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
         console.error('[CXC]', e);
     }
 }
@@ -239,7 +249,7 @@ function CXC_renderTabla(filas) {
 
     if (!filas.length) {
         label.textContent = '0 registros';
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
+        tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-5 text-muted">
             <i class="bi bi-wallet2 fs-3 d-block mb-2 text-success opacity-40"></i>
             No se encontraron cuentas por cobrar con los filtros aplicados.
         </td></tr>`;
@@ -718,7 +728,7 @@ function CXC_renderAgrupadoProducto(filas) {
     label.textContent = `${filas.length} docs · ${grupos.length} producto${grupos.length !== 1 ? 's' : ''}`;
 
     if (!grupos.length) {
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
+        tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-5 text-muted">
             <i class="bi bi-box-seam fs-3 d-block mb-2 text-success opacity-40"></i>
             No hay documentos con líneas de producto para los filtros aplicados.
         </td></tr>`;
@@ -747,7 +757,7 @@ function CXC_renderAgrupadoProducto(filas) {
         }
     }
     if (sinLineas > 0) {
-        html += `<tr><td colspan="11" class="text-muted small py-2 text-center">
+        html += `<tr><td colspan="${CXC_nCols()}" class="text-muted small py-2 text-center">
             ${sinLineas} saldo${sinLineas !== 1 ? 's' : ''} inicial${sinLineas !== 1 ? 'es' : ''} sin líneas de producto no se muestra${sinLineas !== 1 ? 'n' : ''} en esta vista.
         </td></tr>`;
     }

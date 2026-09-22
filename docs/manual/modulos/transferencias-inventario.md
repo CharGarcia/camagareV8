@@ -45,12 +45,14 @@ la trazabilidad no se pierde al cambiar de bodega.
    bodegas pertenecen a locales distintos aparece la etiqueta *Entre establecimientos*.
 3. Escriba quién **entrega** y quién **recibe** (opcional, sale impreso en el acta).
 4. Busque el producto por código o nombre en **Agregar producto**: la lista muestra
-   el stock disponible en la bodega de origen.
+   el **código**, el nombre y el stock disponible en la bodega de origen, en tres
+   columnas alineadas. Una vez agregado, el código queda en su propia columna del
+   detalle.
 5. Por cada línea, elija el **lote** (si el producto maneja lotes) y la **serie/NUP**
    (si maneja series), y escriba la **cantidad**. El sistema no deja pasar de lo
    disponible. Si el lote que busca tiene saldo en **otra bodega**, debajo del
-   selector aparece un aviso diciendo en cuál y con cuántas unidades (ver
-   *El lote que busco no aparece en la lista*).
+   selector aparece una **advertencia amarilla**; púlsela para ver en qué bodega
+   está y cuántas unidades tiene (ver *El lote que busco no aparece en la lista*).
 6. Pulse **Registrar transferencia**. El stock se mueve en ese momento.
 7. Desde el documento ya guardado puede **imprimir el acta** (PDF con las firmas de
    entrega y recepción) y, si cruza establecimientos, **Generar guía de remisión**.
@@ -153,6 +155,7 @@ el comentario. Las transferencias **anuladas** no se pueden enviar ni confirmar.
 | Entrega (responsable) | No | Quién despacha físicamente. Aparece en el acta. |
 | Recibe (responsable) | No | Quién recibe físicamente. Aparece en el acta. |
 | Observaciones | No | Motivo del traslado. |
+| Código | — | **No se digita**: es el código del producto, en su propia columna. Si el producto no tiene código, sale un guion. |
 | Producto | Sí | Producto inventariable con existencias en la bodega de origen. |
 | Lote | Depende | Obligatorio si quiere descontar de un lote concreto; muestra el saldo de cada lote. |
 | Caducidad | No | Se llena sola con la del lote; viaja a la bodega de destino. |
@@ -233,8 +236,11 @@ Además, el usuario solo puede transferir entre bodegas a las que tenga acceso
   saldo en la **bodega de origen** que eligió arriba. Si ese lote se agotó ahí,
   desaparece de la lista aunque el Reporte de Inventarios lo muestre con
   existencias, porque el reporte suma **todas** las bodegas. Debajo del selector
-  aparece un aviso con la bodega donde sí está y cuántas unidades tiene: cambie la
-  **bodega de origen** a esa y el lote volverá a aparecer. Dos precisiones:
+  aparece entonces una **advertencia amarilla** con un resumen (*«Sin stock aquí;
+  hay en CENTRAL 2»*); **haga clic sobre ella** y se despliega el detalle: cada
+  lote, en qué bodega está y cuántas unidades tiene. Cambie la **bodega de
+  origen** a esa y el lote volverá a aparecer en la lista. Vuelva a pulsar la
+  advertencia para plegarla. Dos precisiones:
   - El aviso solo nombra bodegas a las que usted tiene acceso.
   - Si el número que vio en el reporte era de las columnas **Consignación** o
     **Stock Total**, esa mercadería está en poder del cliente y no se puede
@@ -255,11 +261,15 @@ Además, el usuario solo puede transferir entre bodegas a las que tenga acceso
 
 ## Historial de cambios
 
-- **1.3** — El selector de lote avisa cuando el lote que se busca **tiene saldo en
-  otra bodega**: indica en cuál y con cuántas unidades, para no dar por perdido un
-  stock que solo está en otro sitio. Si el producto no tiene nada en la bodega de
-  origen el aviso se destaca en rojo. Solo se nombran bodegas a las que el usuario
-  tiene acceso.
+- **1.3** — El selector de lote muestra una **advertencia** cuando el lote que se
+  busca **tiene saldo en otra bodega**, para no dar por perdido un stock que solo
+  está en otro sitio. Plegada resume la situación en una línea; al **hacer clic**
+  se despliega el detalle con cada lote, su bodega y sus unidades. Solo se nombran
+  bodegas a las que el usuario tiene acceso.
+  El **código del producto** pasa a tener **columna propia** en el detalle de la
+  transferencia (antes iba pegado al nombre), se alinea en su propia columna en el
+  buscador de productos, y ahora también sale en el **correo del acta**, que hasta
+  ahora listaba los productos solo por nombre.
 
 - **1.2** — La transferencia se puede **enviar por correo** desde cada fila del
   listado (o desde el documento abierto), eligiendo usuarios del sistema o

@@ -807,7 +807,9 @@ class TransferenciasInventarioController extends BaseModuloController
         $filas = '';
         foreach (($doc['detalles'] ?? []) as $d) {
             $filas .= '<tr>'
-                . '<td style="padding:5px 8px;border-bottom:1px solid #eee;">' . $e($d['producto_nombre'] ?? '')
+                . '<td style="padding:5px 8px;border-bottom:1px solid #eee;">'
+                . (!empty($d['producto_codigo']) ? '<b>' . $e($d['producto_codigo']) . '</b> — ' : '')
+                . $e($d['producto_nombre'] ?? '')
                 . (!empty($d['numero_lote']) ? '<span style="color:#777;font-size:12px;"> · lote ' . $e($d['numero_lote']) . '</span>' : '')
                 . (!empty($d['nup']) ? '<span style="color:#777;font-size:12px;"> · serie ' . $e($d['nup']) . '</span>' : '')
                 . '</td>'
