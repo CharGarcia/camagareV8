@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver
-version: 1.10
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada
+version: 1.11
 orden: 2
 estado: activo
 ---
@@ -253,7 +253,31 @@ Qué respeta la migración:
   siguen sin factura, con el motivo (por ejemplo, *la factura
   001-001-000012345 no está en el sistema*).
 
+## Asientos de compra con el IVA multiplicado por 1000
+
+El sistema anterior grabó algunos asientos de compra —casi todos de **notas de
+crédito** de 2025 y 2026— con el IVA **mil veces mayor** que el real. Por ejemplo,
+una nota de crédito de $248,69 + IVA $37,30 quedó en el diario con IVA
+$37.303,20 y Cuentas por pagar $37.551,89. El documento está bien; solo el
+asiento venía mal.
+
+- Al migrar **Contabilidad**, la herramienta detecta ese patrón (el IVA
+  equivale a una tarifa de entre 4.000 % y 16.000 % de la base) y lo corrige
+  al importar: divide el IVA para 1000 y ajusta Cuentas por pagar en la misma
+  diferencia, así el asiento queda cuadrado.
+- El resumen de la migración avisa cuántos asientos se corrigieron y muestra
+  los primeros, con el IVA antes y después.
+- Los asientos descuadrados que **no** siguen ese patrón no se tocan: se
+  revisan a mano.
+- Para los asientos que ya estaban migrados antes de esta corrección, basta
+  volver a correr **Contabilidad** (reconstruye el detalle ya corregido), o
+  usar el script `database/migrations/20260923_corregir_iva_x1000_asientos_migrados.sql`
+  sin volver a migrar.
+
 ## Errores frecuentes
+
+- **El asiento de una compra migrada tiene el IVA mucho mayor que el
+  documento**: ver *Asientos de compra con el IVA multiplicado por 1000*.
 
 - **Los cambios de productos migrados dicen "Sin factura" o no muestran los
   NUP**: se migraron con una versión anterior de la herramienta, o antes que
@@ -324,6 +348,11 @@ Qué respeta la migración:
   datos reales todavía).
 
 ## Historial de cambios
+
+- **1.11** — **Contabilidad**: los asientos de compra que el sistema anterior
+  grabó con el **IVA multiplicado por 1000** se corrigen al importar, y el
+  resumen avisa cuáles fueron. Volver a migrar Contabilidad corrige los que ya
+  estaban cargados; también hay un script para corregirlos sin re-migrar.
 
 - **1.10** — La **facturación de consignaciones** y los **retornos de
   consignación** migrados ya traen la **fecha de vencimiento** de cada unidad:

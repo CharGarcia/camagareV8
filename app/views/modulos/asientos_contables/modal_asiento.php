@@ -56,8 +56,8 @@
                             <thead class="table-light sticky-top">
                                 <tr>
                                     <th style="min-width: 250px;">Cuenta Contable</th>
-                                    <th style="min-width: 150px;">Centro Costo</th>
-                                    <th style="min-width: 150px;">Proyecto</th>
+                                    <th style="min-width: 150px;" class="asiento-col-centro">Centro Costo</th>
+                                    <th style="min-width: 150px;" class="asiento-col-proyecto">Proyecto</th>
                                     <th style="min-width: 150px;">Documento/Ref</th>
                                     <th style="width: 130px;" class="text-end">Debe</th>
                                     <th style="width: 130px;" class="text-end">Haber</th>
@@ -69,20 +69,20 @@
                             </tbody>
                             <tfoot class="table-light sticky-bottom">
                                 <tr>
-                                    <td colspan="4" class="text-end fw-bold">TOTALES</td>
+                                    <td colspan="4" class="text-end fw-bold asiento-colspan-etiqueta">TOTALES</td>
                                     <td class="text-end fw-bold text-success fs-6" id="asientoTotalDebe">$0.00</td>
                                     <td class="text-end fw-bold text-danger fs-6" id="asientoTotalHaber">$0.00</td>
                                     <td></td>
                                 </tr>
                                 <tr>
-                                    <td colspan="4" class="text-end fw-bold text-muted small">DIFERENCIA</td>
+                                    <td colspan="4" class="text-end fw-bold text-muted small asiento-colspan-etiqueta">DIFERENCIA</td>
                                     <td colspan="2" class="text-center fw-bold fs-6" id="asientoDiferencia">$0.00</td>
                                     <td></td>
                                 </tr>
                                 <!-- Cuadre contra el documento origen: solo aparece en asientos que
                                      vienen de un documento (factura, compra, ingreso…). -->
                                 <tr id="asientoFilaCuadreDoc" class="d-none">
-                                    <td colspan="4" class="text-end fw-bold text-muted small" id="asientoCuadreDocEtiqueta">TOTAL DOCUMENTO</td>
+                                    <td colspan="4" class="text-end fw-bold text-muted small asiento-colspan-etiqueta" id="asientoCuadreDocEtiqueta">TOTAL DOCUMENTO</td>
                                     <td class="text-end fw-bold fs-6" id="asientoCuadreDocTotal">$0.00</td>
                                     <td colspan="2" class="small" id="asientoCuadreDocEstado"></td>
                                 </tr>

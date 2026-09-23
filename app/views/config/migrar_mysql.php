@@ -671,6 +671,10 @@ $base = BASE_URL;
                         : '';
                     html += `<br><span class="text-info small">ℹ ${fmt(d.vinculados)} ya existía(n) en el sistema (mismo nombre/identificación o número) → se vincularon, NO se duplicaron${muestra}</span>`;
                 }
+                if (d.iva_x1000_corregidos > 0) {
+                    const muestra = (d.iva_x1000_muestra || []).map(x => String(x).replace(/</g, '&lt;')).join(', ');
+                    html += `<br><span class="text-warning small">🛠 ${fmt(d.iva_x1000_corregidos)} asiento(s) de compra venían del sistema anterior con el IVA multiplicado por 1000 → se corrigieron al importar${muestra ? ': ' + muestra : ''}${d.iva_x1000_corregidos > (d.iva_x1000_muestra || []).length ? '…' : ''}</span>`;
+                }
                 if (d.revividos > 0) {
                     html += `<br><span class="text-success small">♻ ${fmt(d.revividos)} estaban eliminado(s) y se restauraron (volvieron a mostrarse).</span>`;
                 }

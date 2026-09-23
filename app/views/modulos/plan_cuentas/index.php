@@ -341,7 +341,7 @@ $proyectos  = $proyectos ?? [];
                                 <span class="status-dot ms-2" style="background-color: ${node.status == 1 ? '#198754' : '#6c757d'}"></span>
                             </button>
                             <div class="pe-3 d-flex gap-1 bg-white">
-                                <button class="btn btn-outline-primary btn-xs border-0 rounded-circle" onclick="abrirModalEditarLocal('${node.codigo}')" title="Configuración"><i class="bi bi-gear"></i></button>
+                                <button class="btn btn-outline-primary btn-xs border-0 rounded-circle" onclick="abrirModalEditarLocal('${node.codigo}')" title="Editar"><i class="bi bi-pencil-square"></i></button>
                                 ${parseInt(node.nivel) < 5 ? `<button class="btn btn-outline-success btn-xs border-0 rounded-circle" onclick="abrirModalCrearHijo('${node.codigo}')" title="Añadir"><i class="bi bi-plus-circle"></i></button>` : ''}
                                 ${parseInt(node.nivel) > 1 && !hasChildren ? `<button class="btn btn-outline-danger btn-xs border-0 rounded-circle" onclick="eliminarAccionDetalle(${node.id})" title="Borrar"><i class="bi bi-trash"></i></button>` : ''}
                             </div>
@@ -370,7 +370,7 @@ $proyectos  = $proyectos ?? [];
                             <span class="text-dark flex-grow-1" style="font-size: 0.85rem;">${node.nombre} ${controlTags}</span>
                             <span class="status-dot ms-2" style="background-color: ${node.status == 1 ? '#198754' : '#6c757d'}"></span>
                             <div class="d-flex gap-1 ms-3">
-                                <button class="btn btn-outline-primary btn-xs border-0 rounded-circle" onclick="abrirModalEditarLocal('${node.codigo}')" title="Configuración"><i class="bi bi-gear"></i></button>
+                                <button class="btn btn-outline-primary btn-xs border-0 rounded-circle" onclick="abrirModalEditarLocal('${node.codigo}')" title="Editar"><i class="bi bi-pencil-square"></i></button>
                                 <button class="btn btn-outline-danger btn-xs border-0 rounded-circle" onclick="eliminarAccionDetalle(${node.id})" title="Borrar"><i class="bi bi-trash"></i></button>
                             </div>
                         </div>

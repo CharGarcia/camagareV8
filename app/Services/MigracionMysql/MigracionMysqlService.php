@@ -3562,6 +3562,7 @@ class MigracionMysqlService
             try {
                 $pg->beginTransaction();
                 $lineas = [];
+                $esIvaLinea = [];
                 $td = 0.0;
                 $th = 0.0;
                 $sinCuenta = false;
@@ -3583,6 +3584,7 @@ class MigracionMysqlService
                         if ($idEnt) { $tipEnt = $tipoTercero; } else { $idEnt = null; }
                     }
                     $lineas[] = [$idc, (float) $d['debe'], (float) $d['haber'], $ref, $idEnt, $tipEnt];
+                    $esIvaLinea[] = self::esCuentaIvaCompras((string) ($oldCuentas[(int) $d['id_cuenta']]['nombre'] ?? ''));
                     $td += (float) $d['debe'];
                     $th += (float) $d['haber'];
                 }
@@ -3590,6 +3592,20 @@ class MigracionMysqlService
                     $pg->rollBack();
                     $res['omitidos']++;
                     continue;
+                }
+                // El sistema viejo grabó algunos asientos de compra con el IVA multiplicado x1000
+                // (caso COM377787: IVA 37303.20 por 37.30). Se corrige al importar, porque re-migrar
+                // reconstruye el detalle y traería de vuelta el valor malo.
+                if ($tcomp === 'compras') {
+                    $corr = self::corregirIvaX1000($lineas, $esIvaLinea);
+                    if ($corr !== null) {
+                        $td = $corr['debe'];
+                        $th = $corr['haber'];
+                        $res['iva_x1000_corregidos'] = ($res['iva_x1000_corregidos'] ?? 0) + 1;
+                        if (count($res['iva_x1000_muestra'] ?? []) < 10) {
+                            $res['iva_x1000_muestra'][] = (string) $e['codigo_unico'] . ' (IVA ' . number_format($corr['iva_antes'], 2, '.', '') . ' → ' . number_format($corr['iva_despues'], 2, '.', '') . ')';
+                        }
+                    }
                 }
                 $fe   = substr((string) $e['fecha_asiento'], 0, 10);
                 $conc = (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']);
@@ -3630,6 +3646,65 @@ class MigracionMysqlService
         // contra la cuenta de Utilidad/Pérdida configurada en 'cierre_ejercicio'.
         $this->cerrarEjercicioMigrado($idEmpresa, $idUsuario, $pg, $res);
         return $res;
+    }
+
+    /** Cuenta de IVA en compras (crédito tributario): nombre con "IVA", sin ser de retención. */
+    private static function esCuentaIvaCompras(string $nombre): bool
+    {
+        return stripos($nombre, 'IVA') !== false && stripos($nombre, 'RET') === false;
+    }
+
+    /**
+     * Detecta y corrige un asiento de compra del sistema viejo con el IVA multiplicado x1000
+     * (la base viene bien; la tarifa aparente sale en ~15000 % en vez de 15 %). Criterio:
+     * IVA / (total - IVA) entre 40 y 160, es decir 5 %..15 % por 1000. Los descuadres que no
+     * siguen ese patrón no se tocan (revisión manual).
+     *
+     * Corrige in situ: cada línea de IVA se divide para 1000 y la contrapartida (la línea
+     * no-IVA con el importe total, normalmente Cuentas por pagar) baja en la misma diferencia,
+     * así el asiento sigue cuadrado. Si no hay una contrapartida clara, no corrige nada.
+     *
+     * @param array $lineas     [[idCuenta, debe, haber, ...], ...] (se modifica por referencia)
+     * @param bool[] $esIvaLinea misma posición que $lineas
+     * @return array{debe:float, haber:float, iva_antes:float, iva_despues:float}|null  null = no aplica
+     */
+    private static function corregirIvaX1000(array &$lineas, array $esIvaLinea): ?array
+    {
+        $iva = 0.0; $td = 0.0; $th = 0.0;
+        foreach ($lineas as $i => $ln) {
+            $td += $ln[1];
+            $th += $ln[2];
+            if (!empty($esIvaLinea[$i])) { $iva += $ln[1] + $ln[2]; }
+        }
+        $total = round(max($td, $th), 2);
+        $iva   = round($iva, 2);
+        $base  = round($total - $iva, 2);
+        if ($iva <= 0 || $base <= 0.01) return null;
+        $ratio = $iva / $base;
+        if ($ratio < 40 || $ratio > 160) return null;
+
+        // Contrapartida: la línea no-IVA que lleva el importe total.
+        $idxContra = null;
+        foreach ($lineas as $i => $ln) {
+            if (empty($esIvaLinea[$i]) && abs(($ln[1] + $ln[2]) - $total) < 0.005) { $idxContra = $i; break; }
+        }
+        if ($idxContra === null) return null;
+
+        $ivaNuevo = 0.0;
+        foreach ($lineas as $i => &$ln) {
+            if (empty($esIvaLinea[$i])) continue;
+            $ln[1] = round($ln[1] / 1000, 2);
+            $ln[2] = round($ln[2] / 1000, 2);
+            $ivaNuevo += $ln[1] + $ln[2];
+        }
+        unset($ln);
+        $delta = round($iva - $ivaNuevo, 2);
+        if ($lineas[$idxContra][1] > 0) { $lineas[$idxContra][1] = round($lineas[$idxContra][1] - $delta, 2); }
+        else                            { $lineas[$idxContra][2] = round($lineas[$idxContra][2] - $delta, 2); }
+
+        $td = 0.0; $th = 0.0;
+        foreach ($lineas as $ln) { $td += $ln[1]; $th += $ln[2]; }
+        return ['debe' => round($td, 2), 'haber' => round($th, 2), 'iva_antes' => $iva, 'iva_despues' => round($ivaNuevo, 2)];
     }
 
     /** Cuentas configuradas del tipo 'cierre_ejercicio': id de la cuenta de Utilidad y de Pérdida. */

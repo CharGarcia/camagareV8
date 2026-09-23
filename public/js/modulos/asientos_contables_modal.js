@@ -50,6 +50,21 @@
         }
     }
 
+    // Centro de costo y proyecto solo se muestran si la empresa tiene registros activos de
+    // cada uno: sin ninguno, la columna solo tendría un select vacío. La celda sigue en el
+    // DOM (oculta) para que ASIENTO_guardar() lea su valor igual que siempre.
+    function aplicarColumnasOpcionales() {
+        const mostrarCentro = centrosCosto.length > 0;
+        const mostrarProyecto = proyectos.length > 0;
+        document.querySelectorAll('#tablaAsientoDetalles .asiento-col-centro')
+            .forEach(el => el.classList.toggle('d-none', !mostrarCentro));
+        document.querySelectorAll('#tablaAsientoDetalles .asiento-col-proyecto')
+            .forEach(el => el.classList.toggle('d-none', !mostrarProyecto));
+        const colspan = 2 + (mostrarCentro ? 1 : 0) + (mostrarProyecto ? 1 : 0);
+        document.querySelectorAll('#tablaAsientoDetalles .asiento-colspan-etiqueta')
+            .forEach(el => { el.colSpan = colspan; });
+    }
+
     function generarSelectOptions(lista, valueKey, textKey, selectedValue) {
         let html = '<option value="">-- Seleccionar --</option>';
         lista.forEach(item => {
@@ -94,6 +109,7 @@
         document.getElementById('asiento_numero').value       = '';
 
         await cargarDatosAuxiliares();
+        aplicarColumnasOpcionales();
 
         if (id > 0) {
             try {
@@ -140,6 +156,7 @@
         document.getElementById('asiento_fecha').value = getCurrentLocalDate();
 
         await cargarDatosAuxiliares();
+        aplicarColumnasOpcionales();
 
         try {
             const resp = await fetch(`${API_ASIENTOS}/getDetalleAjax?modulo=${modulo}&id_ref=${idRef}`);
@@ -251,12 +268,12 @@
                     <div class="list-group position-absolute shadow cuenta-results" style="z-index: 1050; max-height: 250px; min-width: 450px; max-width: 600px; width: max-content; overflow-y: auto; display: none;"></div>
                 </div>
             </td>
-            <td>
+            <td class="asiento-col-centro${centrosCosto.length ? '' : ' d-none'}">
                 <select class="form-select form-select-sm centro-costo">
                     ${generarSelectOptions(centrosCosto, 'id', 'nombre', idCentro)}
                 </select>
             </td>
-            <td>
+            <td class="asiento-col-proyecto${proyectos.length ? '' : ' d-none'}">
                 <select class="form-select form-select-sm proyecto">
                     ${generarSelectOptions(proyectos, 'id', 'nombre', idProyecto)}
                 </select>
