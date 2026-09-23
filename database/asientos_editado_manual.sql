@@ -9,6 +9,15 @@
 -- la pestaña del documento) queda marcado, y los services de los módulos lo respetan —
 -- no lo vuelven a armar. Se limpia con «Restaurar asiento automático», que regenera el
 -- asiento desde las reglas contables.
+--
+-- CÓMO CORRERLO (23-09-2026): SOLO, en su propia ejecución de pgAdmin — no pegado junto con
+-- otros scripts. El ALTER necesita la tabla en exclusiva: si en la misma ejecución antes se creó
+-- un índice sobre asientos_contables_cabecera (p. ej. 20260923_busqueda_trigram_asientos.sql),
+-- choca con los usuarios que están guardando asientos y PostgreSQL cancela el script con
+-- «deadlock detected» (40P01). El lock_timeout hace que, si la tabla está ocupada, falle en
+-- 5 segundos sin frenar a nadie en vez de quedarse esperando; en ese caso, volver a correrlo.
+SET lock_timeout = '5s';
+
 ALTER TABLE asientos_contables_cabecera
     ADD COLUMN IF NOT EXISTS editado_manual BOOLEAN NOT NULL DEFAULT false;
 

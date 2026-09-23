@@ -62,3 +62,23 @@ ANALYZE asientos_contables_detalle;
 -- =============================================================================
 -- DROP INDEX IF EXISTS idx_trgm_asientos_cabecera;
 -- DROP INDEX IF EXISTS idx_trgm_asientos_det_ref;
+
+-- =============================================================================
+-- VARIANTE SIN BLOQUEAR ESCRITURAS (recomendada con usuarios trabajando)
+-- =============================================================================
+-- No pegar este archivo junto con otros scripts (en especial asientos_editado_manual.sql):
+-- pgAdmin corre todo lo pegado en UNA transacción, el índice deja bloqueadas las escrituras
+-- de la tabla hasta el final, y un ALTER TABLE posterior sobre la misma tabla termina en
+-- «deadlock detected» (pasó el 23-09-2026; PostgreSQL deshace todo y no queda nada aplicado).
+--
+-- Con CONCURRENTLY el índice se construye sin frenar a nadie (tarda un poco más). Va FUERA
+-- de toda transacción: seleccionar y ejecutar UNA sentencia a la vez (primero la sección 1
+-- de arriba, luego cada una de estas):
+--   CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trgm_asientos_cabecera ON asientos_contables_cabecera USING gin (…misma expresión de la sección 2…);
+--   CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trgm_asientos_det_ref  ON asientos_contables_detalle  USING gin (…misma expresión de la sección 3…);
+--   ANALYZE asientos_contables_cabecera;
+--   ANALYZE asientos_contables_detalle;
+-- Si una de ellas se interrumpe, puede quedar un índice INVÁLIDO con ese nombre (el IF NOT
+-- EXISTS lo saltaría): comprobarlo con
+--   SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE NOT i.indisvalid;
+-- y, si aparece, borrarlo (DROP INDEX CONCURRENTLY nombre;) y volver a crearlo.
