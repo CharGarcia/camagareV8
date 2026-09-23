@@ -90,20 +90,6 @@ class ConciliacionPerfilRepository extends BaseRepository
         return $st->rowCount() > 0;
     }
 
-    public function cambiarActivo(int $id, bool $activo, int $idUsuario): bool
-    {
-        $st = $this->db->prepare(
-            "UPDATE conciliacion_perfiles
-             SET activo = :activo, updated_by = :usuario, updated_at = CURRENT_TIMESTAMP
-             WHERE id = :id AND eliminado = FALSE"
-        );
-        $st->bindValue(':activo', $activo, PDO::PARAM_BOOL);
-        $st->bindValue(':usuario', $idUsuario, PDO::PARAM_INT);
-        $st->bindValue(':id', $id, PDO::PARAM_INT);
-        $st->execute();
-        return $st->rowCount() > 0;
-    }
-
     /** Eliminación lógica: las cargas antiguas conservan la referencia y siguen mostrando el nombre. */
     public function eliminar(int $id, int $idUsuario): bool
     {

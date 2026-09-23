@@ -84,24 +84,6 @@ class ConciliacionPerfilService
         return $perfil;
     }
 
-    public function cambiarActivo(int $id, bool $activo, int $idUsuario): void
-    {
-        $antes = $this->repo->getById($id);
-        if (!$antes) {
-            throw new \Exception('El perfil indicado no existe.');
-        }
-
-        $this->repo->beginTransaction();
-        try {
-            $this->repo->cambiarActivo($id, $activo, $idUsuario);
-            $this->log->registrar($idUsuario, null, 'cambiar_estado', 'conciliacion_perfiles', $id, ['activo' => (bool) $antes['activo']], ['activo' => $activo]);
-            $this->repo->commit();
-        } catch (\Throwable $e) {
-            $this->repo->rollBack();
-            throw $e;
-        }
-    }
-
     public function eliminar(int $id, int $idUsuario): void
     {
         $antes = $this->repo->getById($id);

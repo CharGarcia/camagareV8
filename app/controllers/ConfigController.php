@@ -208,7 +208,6 @@ class ConfigController extends Controller
         match ($sub) {
             'listar'       => $c->listarAjax(),
             'guardar'      => $c->guardarAjax(),
-            'estado'       => $c->cambiarEstadoAjax(),
             'eliminar'     => $c->eliminarAjax(),
             'previsualizar' => $c->previsualizarArchivoAjax(),
             'sugerirRegex' => $c->sugerirRegexPdfAjax(),

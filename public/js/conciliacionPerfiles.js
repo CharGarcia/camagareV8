@@ -8,6 +8,7 @@
 
     const state = {
         perfiles: {}, // id -> perfil
+        orden: { col: 'nombre_banco', dir: 'ASC' },
     };
 
     function esc(v) {
@@ -89,31 +90,32 @@
 
     CP.render = function () {
         const filtro = ($('cp-buscar').value || '').trim().toLowerCase();
+        const { col, dir } = state.orden;
+        const valor = (p) => {
+            if (col === 'activo') return esActivo(p) ? '1' : '0';
+            return String(p[col] ?? '').toLowerCase();
+        };
         const filas = Object.values(state.perfiles)
-            .filter((p) => !filtro || `${p.nombre_perfil} ${p.nombre_banco || ''}`.toLowerCase().includes(filtro))
-            .sort((a, b) => `${a.nombre_banco || ''}|${a.nombre_perfil}`.localeCompare(`${b.nombre_banco || ''}|${b.nombre_perfil}`, 'es'));
+            .filter((p) => !filtro || `${p.nombre_perfil} ${p.nombre_banco || 'genérico'} ${p.tipo_archivo}`.toLowerCase().includes(filtro))
+            .sort((a, b) => {
+                const r = valor(a).localeCompare(valor(b), 'es') || a.nombre_perfil.localeCompare(b.nombre_perfil, 'es') || (b.id - a.id);
+                return dir === 'DESC' ? -r : r;
+            });
 
         const tbody = $('cp-tbody');
         if (!filas.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-5"><i class="bi bi-inbox d-block mb-2" style="font-size:1.5rem;"></i>No hay perfiles configurados.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>No hay perfiles registrados.</td></tr>';
             return;
         }
 
-        tbody.innerHTML = filas.map((p) => {
-            const activo = esActivo(p);
-            const tipo = p.tipo_archivo === 'PDF' ? 'PDF' : 'Excel / CSV';
-            return `<tr>
-                <td class="ps-3">${esc(p.nombre_banco || 'Genérico')}</td>
+        tbody.innerHTML = filas.map((p) => `
+            <tr class="perfil-row" role="button" tabindex="0" data-id="${p.id}">
+                <td>${esc(p.nombre_banco || 'Genérico')}</td>
                 <td>${esc(p.nombre_perfil)}</td>
-                <td><span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">${tipo}</span></td>
-                <td class="text-center">${activo ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>'}</td>
-                <td class="small text-muted">${fmtDateTime(p.updated_at || p.created_at)}</td>
-                <td class="text-center pe-3 text-nowrap">
-                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 border-0" title="Editar" onclick="CP.abrirModal(${p.id})"><i class="bi bi-pencil"></i></button>
-                    <button type="button" class="btn btn-sm btn-outline-${activo ? 'secondary' : 'success'} py-0 px-1 border-0" title="${activo ? 'Desactivar' : 'Activar'}" onclick="CP.cambiarEstado(${p.id}, ${activo ? 'false' : 'true'})"><i class="bi bi-${activo ? 'pause-circle' : 'play-circle'}"></i></button>
-                </td>
-            </tr>`;
-        }).join('');
+                <td>${p.tipo_archivo === 'PDF' ? 'PDF' : 'Excel / CSV'}</td>
+                <td class="text-center">${esActivo(p) ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>'}</td>
+            </tr>
+        `).join('');
     };
 
     CP.recargar = async function () {
@@ -131,15 +133,6 @@
         CP.render();
     };
 
-    CP.cambiarEstado = async function (id, activo) {
-        const json = await postJson('estado', { id, activo });
-        if (!json.ok) {
-            alertError('No se pudo cambiar el estado', json.error);
-            return;
-        }
-        await CP.recargar();
-    };
-
     // ── Modal ────────────────────────────────────────────────────────────────
 
     CP.abrirModal = function (id) {
@@ -149,8 +142,11 @@
         $('cp-auditoria').textContent = '';
 
         const p = id ? state.perfiles[id] : null;
-        $('cp-modal-titulo').textContent = p ? 'Editar perfil de mapeo' : 'Nuevo perfil de mapeo';
+        $('cp-modal-titulo').innerHTML = p
+            ? '<i class="bi bi-pencil"></i> Editar perfil de mapeo'
+            : '<i class="bi bi-plus-circle"></i> Nuevo perfil de mapeo';
         $('cp-btn-eliminar').style.display = p ? '' : 'none';
+        $('cp-btn-guardar').innerHTML = p ? '<i class="bi bi-check-lg"></i> Guardar' : '<i class="bi bi-check-lg"></i> Crear';
 
         if (p) {
             $('cp-id').value = p.id;
@@ -175,6 +171,7 @@
         }
 
         CP.cambiarTipo();
+        bootstrap.Tab.getOrCreateInstance($('cp-tab-datos')).show();
         bootstrap.Modal.getOrCreateInstance($('cp-modal')).show();
     };
 
@@ -350,7 +347,31 @@
     };
 
     document.addEventListener('DOMContentLoaded', () => {
+        if (window.CP_ORDEN) state.orden = { col: window.CP_ORDEN.col, dir: window.CP_ORDEN.dir };
         CP.setPerfiles(window.CP_PERFILES || []);
         $('cp-buscar').addEventListener('input', CP.render);
+
+        // Clic (o Enter/Espacio) en una fila abre el modal de edición, como en las demás tarjetas de config.
+        const tbody = $('cp-tbody');
+        tbody.addEventListener('click', (e) => {
+            const row = e.target.closest('.perfil-row');
+            if (row) CP.abrirModal(parseInt(row.dataset.id, 10));
+        });
+        tbody.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            const row = e.target.closest('.perfil-row');
+            if (row) {
+                e.preventDefault();
+                CP.abrirModal(parseInt(row.dataset.id, 10));
+            }
+        });
+
+        // El listado entero ya está en el navegador: se ordena aquí, sin recargar (reload: false).
+        if (window.CMG_initSort) {
+            window.CMG_initSort('conciliacion-perfiles', (col, dir) => {
+                state.orden = { col: col || 'nombre_banco', dir: dir || 'ASC' };
+                CP.render();
+            }, { col: state.orden.col, dir: state.orden.dir, reload: false });
+        }
     });
 })();

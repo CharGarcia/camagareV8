@@ -85,7 +85,7 @@
         if (!select) return;
 
         const perfiles = window.CC_PERFILES || [];
-        if (!perfiles.length) return; // la vista ya muestra "Sin formatos configurados"
+        if (!perfiles.length) return; // sin formatos activos: queda solo "— Seleccione —"
 
         const optCuenta = document.getElementById('cc-forma')?.selectedOptions[0];
         const idBanco = optCuenta ? parseInt(optCuenta.dataset.banco || '0', 10) : 0;

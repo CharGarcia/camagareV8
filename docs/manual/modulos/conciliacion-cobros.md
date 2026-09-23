@@ -63,8 +63,8 @@ monto de cada movimiento.
 - Al elegir la **Cuenta Bancaria**, la lista muestra los formatos de ese banco y
   los genéricos; si el banco no tiene ninguno propio, muestra todos. Si solo hay
   uno, se selecciona solo.
-- Si no hay ningún formato activo, la lista dice *Sin formatos configurados* y no
-  se puede subir el extracto: pida al superadministrador que lo configure.
+- Si no hay ningún formato activo, la lista queda vacía y no se puede subir el
+  extracto: el superadministrador debe configurarlo.
 
 ## Errores frecuentes
 

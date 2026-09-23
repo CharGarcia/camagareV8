@@ -79,18 +79,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                 <div class="col-md-3">
                     <label class="form-label small fw-bold text-muted mb-1">Formato del Banco</label>
                     <select id="cc-perfil" class="form-select form-select-sm shadow-none" required>
-                        <option value=""><?= empty($perfiles) ? 'Sin formatos configurados' : '— Seleccione —' ?></option>
+                        <option value="">— Seleccione —</option>
                     </select>
-                    <?php if (empty($perfiles)): ?>
-                        <small class="text-danger d-block mt-1">
-                            No hay formatos de banco activos.
-                            <?php if ((int) ($_SESSION['nivel'] ?? 0) >= 3): ?>
-                                Configúrelos en <a href="<?= $base ?>/config/conciliacion-perfiles">Configuración › Perfiles de mapeo de cobros</a>.
-                            <?php else: ?>
-                                Solicite al superadministrador que los configure.
-                            <?php endif; ?>
-                        </small>
-                    <?php endif; ?>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-bold text-muted mb-1">Archivo del Banco (Excel/CSV o PDF)</label>

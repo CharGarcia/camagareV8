@@ -41,7 +41,7 @@ Solo el **nivel 3 (superadministrador)** entra aquí. Se abre desde
 
 ## Cómo se usa
 
-1. Pulse **Nuevo perfil**.
+1. Pulse **Crear nuevo**.
 2. Escriba el nombre (p. ej. *Banco Pichincha - Excel*) y elija el **Banco**.
 3. Elija el **Tipo de archivo**: *Excel / CSV* o *PDF*.
 4. Seleccione el archivo de muestra y pulse **Ver / Probar**: aparece el contenido
@@ -49,16 +49,17 @@ Solo el **nivel 3 (superadministrador)** entra aquí. Se abre desde
 5. Indique **dónde está cada dato**:
    - **Excel / CSV**: el número de columna de la fecha, la descripción, el monto
      (crédito) y, si existe, la referencia. La primera columna es la **0**. En
-     **Filas a saltar** ponga cuántas filas de encabezado hay antes del primer
+     **Filas de encabezado a saltar** ponga cuántas hay antes del primer
      movimiento.
    - **PDF**: un patrón (regex) que reconozca la línea que cierra cada movimiento,
      con los grupos `(?<fecha>...)` y `(?<monto>...)` obligatorios. El botón
      **Sugerir patrón** analiza el PDF y propone uno; revíselo con **Probar**.
-6. Revise la tabla **Resultado de aplicar el mapeo actual** y pulse **Guardar
-   Perfil**.
+6. Revise la tabla **Resultado de aplicar el mapeo actual** y pulse **Crear**
+   (al editar, **Guardar**).
 
-Para cambiar un perfil, pulse el lápiz de su fila. Para dejar de ofrecerlo sin
-borrarlo, use el botón de pausa (**Desactivar**).
+Para cambiar un perfil, haga clic en su fila. Para dejar de ofrecerlo sin
+borrarlo, cambie su **Estado** a *Inactivo* y guarde. Los encabezados de la tabla
+ordenan el listado con un clic, y el orden elegido se recuerda para su usuario.
 
 ## Campos del formulario
 
@@ -69,7 +70,7 @@ borrarlo, use el botón de pausa (**Desactivar**).
 | Tipo de archivo | Sí | Excel / CSV o PDF |
 | Separador decimal | Sí | Punto (1234.56) o coma (1234,56) en los montos del extracto |
 | Formato de fecha | Sí | Cómo viene escrita la fecha, p. ej. `d/m/Y` para 31/12/2026 |
-| Filas a saltar | No | Solo Excel: filas de encabezado antes del primer movimiento |
+| Filas de encabezado a saltar | No | Solo Excel: filas de encabezado antes del primer movimiento |
 | Estado | Sí | Activo se ofrece en Conciliación de Cobros; Inactivo no |
 | Columnas Fecha / Descripción / Monto | Sí (Excel) | Número de columna de cada dato (0 = primera) |
 | Columna Referencia | No | Número de documento o referencia del banco |
@@ -94,7 +95,7 @@ un perfil activo al subir el extracto en Conciliación de Cobros.
   formato del banco seleccionado no existe o está inactivo*.
 - **Eliminar** es lógico: el perfil deja de listarse, pero las cargas antiguas
   siguen mostrando su nombre en *Cargas anteriores*.
-- Cada creación, cambio, activación/desactivación y eliminación queda en el log
+- Cada creación, cambio (incluido el de estado) y eliminación queda en el log
   del sistema (tabla `conciliacion_perfiles`, sin empresa).
 
 ## Integraciones con otros módulos

@@ -12,12 +12,15 @@ declare(strict_types=1);
 namespace App\controllers;
 
 use App\core\Controller;
+use App\Helpers\PreferenciasHelper;
 use App\models\BancoEcuador;
 use App\Services\ConciliacionPerfilService;
 use App\Services\ErrorLogService;
 
 class ConciliacionPerfilesController extends Controller
 {
+    private const COLUMNAS_ORDEN = ['nombre_banco', 'nombre_perfil', 'tipo_archivo', 'activo'];
+
     private ConciliacionPerfilService $service;
 
     public function __construct()
@@ -39,11 +42,17 @@ class ConciliacionPerfilesController extends Controller
             $this->redirect(BASE_URL . '/config');
         }
 
+        // Orden persistido por CMG_initSort (clave __vista__ del módulo); el orden se aplica en el navegador.
+        $vista = PreferenciasHelper::getPreferenciasVista('conciliacion-perfiles');
+        $ordenCol = in_array($vista['__ordenCol__'] ?? '', self::COLUMNAS_ORDEN, true) ? $vista['__ordenCol__'] : 'nombre_banco';
+        $ordenDir = strtoupper((string) ($vista['__ordenDir__'] ?? '')) === 'DESC' ? 'DESC' : 'ASC';
+
         $this->viewWithLayout('layouts.main', 'conciliacionPerfiles.index', [
             'titulo'    => 'Perfiles de Mapeo de Cobros Bancarios',
-            'fullWidth' => true,
             'perfiles'  => $this->service->listar(),
             'bancos'    => (new BancoEcuador())->getAll(),
+            'ordenCol'  => $ordenCol,
+            'ordenDir'  => $ordenDir,
         ]);
     }
 
@@ -56,15 +65,6 @@ class ConciliacionPerfilesController extends Controller
     {
         $data = json_decode(file_get_contents('php://input') ?: '[]', true) ?: $_POST;
         $this->responderJson(__FUNCTION__, fn () => $this->service->guardar($data, (int) $_SESSION['id_usuario']));
-    }
-
-    public function cambiarEstadoAjax(): void
-    {
-        $data = json_decode(file_get_contents('php://input') ?: '[]', true) ?: $_POST;
-        $this->responderJson(__FUNCTION__, function () use ($data) {
-            $this->service->cambiarActivo((int) ($data['id'] ?? 0), !empty($data['activo']), (int) $_SESSION['id_usuario']);
-            return null;
-        });
     }
 
     public function eliminarAjax(): void
