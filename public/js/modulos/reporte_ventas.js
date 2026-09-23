@@ -391,7 +391,7 @@ function RV_dibujarGrafico(rawData, agrupacion) {
         dataTotales = rawData.map(r => parseFloat(r.total));
     } else if (agrupacion === 'PRODUCTO') {
         labels = rawData.map(r => r.producto_nombre);
-        dataTotales = rawData.map(r => parseFloat(r.total));
+        dataTotales = rawData.map(r => parseFloat(r.total_venta));
         defaultType = 'bar';
     } else if (agrupacion === 'VARIANTE') {
         labels = rawData.map(r => r.producto_nombre + ' (' + r.variante_nombre + ': ' + r.variante_valor + ')');
@@ -433,7 +433,7 @@ function RV_dibujarGrafico(rawData, agrupacion) {
         data: {
             labels: labels,
             datasets: [{
-                label: esUnidades ? 'Unidades vendidas' : 'Gran Total ($)',
+                label: esUnidades ? 'Unidades vendidas' : (agrupacion === 'PRODUCTO' ? 'Total Venta sin IVA ($)' : 'Gran Total ($)'),
                 data: dataTotales,
                 backgroundColor: backgroundColor,
                 borderColor: borderColor,
@@ -481,16 +481,17 @@ const RV_COLUMNAS = {
             ['total',             'Gran Total',       'text-end pe-4'],
         ]
     },
+    // Total Venta es sin impuestos; los % son la participación sobre el total del reporte.
     PRODUCTO: {
         def: ['cantidad_vendida', 'DESC'],
         cols: [
-            ['producto_nombre',   'Producto',         'ps-4'],
-            ['cantidad_vendida',  'Cantidad Vendida', 'text-center'],
-            ['tarifa_iva',        'Tipo IVA',         'text-center'],
-            ['base_0',            'Base 0% / Exento', 'text-end'],
-            ['base_iva',          'Base IVA',         'text-end'],
-            ['valor_iva',         'Total IVA',        'text-end'],
-            ['total',             'Gran Total',       'text-end pe-4'],
+            ['producto_codigo',   'Código',           'ps-4'],
+            ['producto_nombre',   'Producto',         ''],
+            ['unidad_medida',     'Unidad de Medida', ''],
+            ['total_venta',       'Total Venta',      'text-end'],
+            ['cantidad_vendida',  'Cantidad',         'text-end'],
+            ['pct_venta',         '% Venta',          'text-end'],
+            ['pct_unidades',      '% Unidades',       'text-end pe-4'],
         ]
     },
     VARIANTE: {

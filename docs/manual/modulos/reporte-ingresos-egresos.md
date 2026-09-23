@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ingresos y egresos, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, exportar, excel detallado
-version: 1.4
+etiquetas: reporte de ingresos y egresos, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado
+version: 1.5
 orden: 30
 estado: activo
 ---
@@ -21,7 +21,7 @@ salió, de quién y por qué concepto.
 |--------|----------|
 | Fechas | El periodo |
 | Tercero | Un cliente, proveedor o empleado concreto |
-| Vendedor | Los cobros de las facturas y recibos de venta de un vendedor, y los ingresos por otros conceptos de sus clientes |
+| Vendedor | Los cobros de las facturas y recibos de venta de un vendedor, y los cobros de saldos iniciales e ingresos por otros conceptos de sus clientes |
 | Forma de pago | Efectivo, banco, tarjeta… |
 | Operación bancaria | Transferencia, cheque, depósito |
 | Concepto | El motivo del ingreso o egreso |
@@ -45,6 +45,11 @@ cual tomar el vendedor, se usa el **vendedor asignado al cliente** del ingreso. 
 el ingreso no tiene cliente, o el cliente no tiene vendedor, la línea queda sin
 asesor.
 
+Lo mismo pasa con los **cobros de saldos iniciales** (líneas *Saldo inicial*): el
+saldo inicial no guarda vendedor, así que se usa el **vendedor asignado al cliente
+del saldo inicial** (o, si el saldo no quedó enlazado a un cliente, el del cliente
+del ingreso).
+
 Ese vendedor se ve en la columna **Asesor** de la vista Documento, en el PDF y en
 las hojas del Excel.
 
@@ -53,10 +58,10 @@ las hojas del Excel.
 - Un ingreso que cobra facturas de varios vendedores se reparte: cada línea
   aparece con el vendedor de su propia factura.
 - **No entran** los cobros que no cancelan una factura o un recibo con vendedor:
-  saldos iniciales, facturas de reembolso y cobros de facturas sin vendedor
-  asignado. Tampoco los cobros migrados del sistema anterior cuya factura no se
-  migró. Los ingresos por otros conceptos sí entran cuando el cliente tiene ese
-  vendedor asignado.
+  facturas de reembolso y cobros de facturas sin vendedor asignado. Tampoco los
+  cobros migrados del sistema anterior cuya factura no se migró. Los cobros de
+  saldos iniciales y los ingresos por otros conceptos sí entran cuando el cliente
+  tiene ese vendedor asignado.
 - En la vista **Forma de cobro/pago** el valor es el del cobro completo: si un
   mismo ingreso cobra facturas de dos vendedores, su forma de pago aparece entera
   para cada uno.
@@ -115,12 +120,16 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
   tienen vendedor.
 - **Falta un cobro de un vendedor**: revise que la factura cobrada tenga ese
   vendedor asignado. El reporte toma el vendedor de la factura, no el del cliente.
-- **Un ingreso por otros conceptos sale sin asesor**: el ingreso no tiene cliente
-  o el cliente no tiene vendedor asignado. Asigne el vendedor en la ficha del
+- **Un ingreso por otros conceptos o un cobro de saldo inicial sale sin asesor**:
+  el ingreso no tiene cliente o el cliente no tiene vendedor asignado. Asigne el vendedor en la ficha del
   cliente; el reporte lo toma de ahí al instante.
 
 ## Historial de cambios
 
+- **1.5** — Los **cobros de saldos iniciales** toman como asesor el vendedor
+  asignado al cliente del saldo inicial, tanto en el filtro por vendedor como en
+  la columna **Asesor**, el PDF y el Excel. Antes salían sin asesor y no entraban
+  al filtrar por vendedor.
 - **1.4** — Los **ingresos por otros conceptos** (líneas *Otro*) toman como asesor
   el vendedor asignado al cliente, tanto en el filtro por vendedor como en la
   columna **Asesor**, que ahora también se ve en la vista Documento y en el PDF.

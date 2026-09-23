@@ -273,6 +273,25 @@ class ReporteVentasController extends BaseModuloController
         return $html;
     }
 
+    /** Suma de un campo sobre las filas del reporte. */
+    private static function sumarCampo(array $rows, string $campo): float
+    {
+        return array_sum(array_map(static fn (array $r): float => (float) ($r[$campo] ?? 0), $rows));
+    }
+
+    /**
+     * Fila de totales al pie del agrupado por producto (pantalla). El total de venta es sin
+     * impuestos, así que no coincide con el "Gran Total" de la tarjeta de control.
+     */
+    private function renderFilaTotalesProductoHtml(array $rows): string
+    {
+        $n = count($rows);
+        return "<tr class='table-light fw-bold'><td class='ps-4' colspan='3'>TOTAL ({$n} producto" . ($n !== 1 ? 's' : '') . ")</td>"
+             . "<td class='text-end text-success'>" . number_format(self::sumarCampo($rows, 'total_venta'), 2) . "</td>"
+             . "<td class='text-end'>" . self::fmtCantidad(self::sumarCampo($rows, 'cantidad_vendida')) . "</td>"
+             . "<td class='text-end'>100.00%</td><td class='text-end pe-4'>100.00%</td></tr>";
+    }
+
     /** Texto del alcance para el encabezado del PDF ('' si no es consolidado). */
     private function describirAlcance(array $idsEmpresa, bool $consolidado): string
     {
@@ -321,6 +340,8 @@ class ReporteVentasController extends BaseModuloController
                 }
                 if ($filtros['agrupar_por'] === 'PRODUCTO_MES') {
                     echo $this->renderFilaTotalesUnidadesHtml($rows, $meses);
+                } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
+                    echo $this->renderFilaTotalesProductoHtml($rows);
                 }
             }
             $rowsHtml = ob_get_clean();
@@ -402,14 +423,15 @@ class ReporteVentasController extends BaseModuloController
             $html .= "<td class='text-end'>$iva</td>";
             $html .= "<td class='text-end fw-bold text-success'>$total</td>";
         } elseif ($agruparPor === 'PRODUCTO') {
-            $tarifa = (float)($r['tarifa_iva'] ?? 0);
-            $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['producto_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['producto_codigo'] ?? '')."</small></td>";
-            $html .= "<td class='text-center'>".(float)($r['cantidad_vendida'] ?? 0)."</td>";
-            $html .= "<td class='text-center'>{$tarifa}%</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            // Total de venta sin impuestos (subtotal de las líneas) y participación de cada
+            // producto sobre el total del reporte, en importe y en unidades.
+            $html .= "<td class='ps-4'><span class='fw-bold'>".htmlspecialchars($r['producto_codigo'] ?? '')."</span></td>";
+            $html .= "<td>".htmlspecialchars($r['producto_nombre'] ?? '')."</td>";
+            $html .= "<td>".htmlspecialchars($r['unidad_medida'] ?? '')."</td>";
+            $html .= "<td class='text-end fw-bold text-success'>".number_format((float)($r['total_venta'] ?? 0), 2)."</td>";
+            $html .= "<td class='text-end'>".self::fmtCantidad((float)($r['cantidad_vendida'] ?? 0))."</td>";
+            $html .= "<td class='text-end'>".number_format((float)($r['pct_venta'] ?? 0), 2)."%</td>";
+            $html .= "<td class='text-end pe-4'>".number_format((float)($r['pct_unidades'] ?? 0), 2)."%</td>";
         } elseif ($agruparPor === 'VARIANTE') {
             $tarifa = (float)($r['tarifa_iva'] ?? 0);
             $html .= "<td>".htmlspecialchars($r['producto_nombre'] ?? '')."</td>";
@@ -584,19 +606,22 @@ class ReporteVentasController extends BaseModuloController
                     ];
                 }
             } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
-                $headers = ['Código', 'Producto', 'Cant. Vendida', 'Tipo IVA', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                $headers = ['Código', 'Producto', 'Unidad de Medida', 'Total Venta', 'Cantidad', '% Venta', '% Unidades'];
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = [
                         $r['producto_codigo'],
                         $r['producto_nombre'],
+                        $r['unidad_medida'] ?? '',
+                        round((float)$r['total_venta'], 2),
                         (float)$r['cantidad_vendida'],
-                        $r['tarifa_iva'] . '%',
-                        (float)$r['base_0'],
-                        (float)$r['base_iva'],
-                        (float)$r['valor_iva'],
-                        (float)$r['total']
+                        (float)$r['pct_venta'],
+                        (float)$r['pct_unidades'],
                     ];
+                }
+                if ($rows) {
+                    $exportData[] = ['TOTAL', count($rows) . ' producto' . (count($rows) !== 1 ? 's' : ''), '',
+                        round(self::sumarCampo($rows, 'total_venta'), 2), self::sumarCampo($rows, 'cantidad_vendida'), 100, 100];
                 }
             } elseif ($filtros['agrupar_por'] === 'VARIANTE') {
                 $headers = ['Producto', 'Variante', 'Valor', 'Cant. Vendida', 'Tipo IVA', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
@@ -977,15 +1002,26 @@ class ReporteVentasController extends BaseModuloController
         ];
 
         if ($agrupar === 'PRODUCTO') {
-            // 42 % para el nombre del producto: es la columna que el usuario lee.
-            return array_merge([
-                ['lbl' => 'Producto', 'w' => 42, 'cls' => '',
-                 'val' => static fn (array $r): string => $desc((string) ($r['producto_nombre'] ?? ''), (string) ($r['producto_codigo'] ?? ''), $pt(42))],
-                ['lbl' => 'Cantidad', 'w' => 9, 'cls' => 'text-end',
-                 'val' => static fn (array $r): string => $num($r['cantidad_vendida'] ?? 0)],
-                ['lbl' => 'T.IVA', 'w' => 7, 'cls' => 'text-center',
-                 'val' => static fn (array $r): string => (float) ($r['tarifa_iva'] ?? 0) . '%'],
-            ], $importes(10, 10, 12));
+            // Total de venta sin impuestos y participación sobre el total del reporte. El
+            // nombre del producto se lleva lo que sobra: es la columna que el usuario lee.
+            $cant = static fn ($v): string => self::fmtCantidad((float) $v);
+            $pct  = static fn ($v): string => number_format((float) $v, 2) . '%';
+            return [
+                ['lbl' => 'Código', 'w' => 12, 'cls' => '',
+                 'val' => static fn (array $r): string => $wrap((string) ($r['producto_codigo'] ?? ''), $pt(12), $ptFila)],
+                ['lbl' => 'Producto', 'w' => 36, 'cls' => '',
+                 'val' => static fn (array $r): string => $wrap((string) ($r['producto_nombre'] ?? ''), $pt(36), $ptFila)],
+                ['lbl' => 'Unidad', 'w' => 10, 'cls' => '',
+                 'val' => static fn (array $r): string => $wrap((string) ($r['unidad_medida'] ?? ''), $pt(10), $ptFila)],
+                ['lbl' => 'Total Venta', 'w' => 13, 'cls' => 'text-end', 'tot' => $sumar('total_venta'),
+                 'val' => static fn (array $r): string => "<span style='font-weight:bold;'>" . $num($r['total_venta'] ?? 0) . '</span>'],
+                ['lbl' => 'Cantidad', 'w' => 10, 'cls' => 'text-end', 'fmt' => $cant, 'tot' => $sumar('cantidad_vendida'),
+                 'val' => static fn (array $r): string => $cant($r['cantidad_vendida'] ?? 0)],
+                ['lbl' => '% Venta', 'w' => 9, 'cls' => 'text-end', 'fmt' => $pct, 'tot' => static fn (array $rows): float => $rows ? 100.0 : 0.0,
+                 'val' => static fn (array $r): string => $pct($r['pct_venta'] ?? 0)],
+                ['lbl' => '% Unidades', 'w' => 10, 'cls' => 'text-end', 'fmt' => $pct, 'tot' => static fn (array $rows): float => $rows ? 100.0 : 0.0,
+                 'val' => static fn (array $r): string => $pct($r['pct_unidades'] ?? 0)],
+            ];
         }
 
         if ($agrupar === 'PRODUCTO_MES') {

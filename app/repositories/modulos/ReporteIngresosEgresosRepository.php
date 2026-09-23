@@ -53,9 +53,11 @@ class ReporteIngresosEgresosRepository extends BaseRepository
      * en Cuentas por Cobrar, Ventas por Vendedor y la columna "Asesor" del reporte
      * anterior. Las líneas de otros conceptos (tipo OTRO, sin documento) toman el
      * vendedor asignado al cliente del comprobante (alias c = ingresos_cabecera, que
-     * debe estar en el FROM del llamador). Las demás líneas sin documento con vendedor
-     * (saldo inicial, factura de reembolso, cobros migrados cuya factura no se migró)
-     * no cumplen el filtro.
+     * debe estar en el FROM del llamador). Los saldos iniciales tampoco guardan
+     * vendedor (saldos_iniciales_cxc no tiene id_vendedor): toman el asignado al
+     * cliente del saldo y, si el saldo no quedó enlazado a un cliente, el del cliente
+     * del comprobante. Las demás líneas sin documento con vendedor (factura de
+     * reembolso, cobros migrados cuya factura no se migró) no cumplen el filtro.
      */
     private static function condVendedor(string $d): string
     {
@@ -67,17 +69,28 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                             AND vrx.id_vendedor = :id_vendedor)
                  OR ($d.tipo_documento = 'OTRO' AND EXISTS (SELECT 1 FROM clientes cvx
                           WHERE cvx.id = COALESCE(c.id_cliente, c.id_recibo_cliente)
-                            AND cvx.id_vendedor = :id_vendedor)))";
+                            AND cvx.id_vendedor = :id_vendedor))
+                 OR ($d.tipo_documento = 'SALDO_INICIAL' AND EXISTS (SELECT 1 FROM clientes csx
+                          WHERE csx.id = COALESCE((SELECT six.id_cliente FROM saldos_iniciales_cxc six
+                                                    WHERE six.id = $d.id_referencia_documento),
+                                                  c.id_cliente, c.id_recibo_cliente)
+                            AND csx.id_vendedor = :id_vendedor)))";
     }
 
     /**
      * Vendedor de una línea de ingreso: el del documento cobrado (factura $xf o
-     * recibo $xr) y, en las líneas de otros conceptos (tipo OTRO), el asignado al
-     * cliente del comprobante ($cli). Mismo criterio que condVendedor().
+     * recibo $xr); en las líneas de otros conceptos (tipo OTRO), el asignado al
+     * cliente del comprobante ($cli), y en los saldos iniciales el asignado al
+     * cliente del saldo (o, si no tiene, al del comprobante). Mismo criterio que
+     * condVendedor().
      */
     private static function idVendedorLinea(string $d, string $xf, string $xr, string $cli): string
     {
         return "CASE WHEN $d.tipo_documento = 'OTRO' THEN $cli.id_vendedor
+                     WHEN $d.tipo_documento = 'SALDO_INICIAL' THEN
+                          (SELECT csv.id_vendedor FROM clientes csv
+                            WHERE csv.id = COALESCE((SELECT siv.id_cliente FROM saldos_iniciales_cxc siv
+                                                      WHERE siv.id = $d.id_referencia_documento), $cli.id))
                      ELSE COALESCE($xf.id_vendedor, $xr.id_vendedor) END";
     }
 

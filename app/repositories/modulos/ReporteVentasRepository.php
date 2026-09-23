@@ -222,15 +222,16 @@ class ReporteVentasRepository extends BaseRepository
             'valor_iva'      => 'valor_iva {dir}',
             'total'          => 'total {dir}',
         ],
+        // Los % se calculan en PHP (agregarParticipacion): en SQL ordenan igual que su base.
         'PRODUCTO' => [
             '_def'             => ['cantidad_vendida', 'DESC'],
+            'producto_codigo'  => 'producto_codigo {dir}',
             'producto_nombre'  => 'producto_nombre {dir}',
+            'unidad_medida'    => 'unidad_medida {dir}',
+            'total_venta'      => 'total_venta {dir}',
             'cantidad_vendida' => 'cantidad_vendida {dir}',
-            'tarifa_iva'       => 'tarifa_iva {dir}',
-            'base_0'           => 'base_0 {dir}',
-            'base_iva'         => 'base_iva {dir}',
-            'valor_iva'        => 'valor_iva {dir}',
-            'total'            => 'total {dir}',
+            'pct_venta'        => 'total_venta {dir}',
+            'pct_unidades'     => 'cantidad_vendida {dir}',
         ],
         'VARIANTE' => [
             '_def'             => ['cantidad_vendida', 'DESC'],
@@ -822,13 +823,22 @@ class ReporteVentasRepository extends BaseRepository
     }
 
     /**
-     * Reporte agrupado por producto.
+     * Reporte agrupado por producto: una fila por producto con su unidad de medida (la del
+     * catálogo, productos.id_medida), el total vendido SIN impuestos (subtotal de las
+     * líneas), las unidades y la participación de cada uno sobre el total del reporte
+     * (pct_venta, pct_unidades). No se separa por tarifa de IVA ni se cruza con la tabla de
+     * impuestos: una línea con IVA + ICE tiene dos filas de impuesto y duplicaría el subtotal.
+     * La cantidad se suma tal como la registra la línea (sin convertir unidades).
+     * En el neto "Facturas − NC" las unidades devueltas también se restan.
      */
     public function getReporteAgrupadoProducto(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
-            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoProducto', ['id_producto', 'tarifa_iva'],
-                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_vendida']);
+            $rows = $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoProducto', ['id_producto', 'producto_nombre'],
+                ['total_venta', 'cantidad_vendida']);
+            // Los porcentajes de cada consulta (facturas / NC) no sirven para el neto: se
+            // recalculan sobre el resultado combinado y se reordena por si el orden es por %.
+            return $this->ordenarFilas($this->agregarParticipacion($rows), $filtros, 'PRODUCTO');
         }
 
         $f = $this->fuente($filtros);
@@ -838,26 +848,39 @@ class ReporteVentasRepository extends BaseRepository
         $sql = "
             SELECT
                 d.id_producto,
-                COALESCE(p.codigo, '') as producto_codigo,
+                COALESCE(NULLIF(TRIM(p.codigo), ''), MAX(d.codigo_principal), '') as producto_codigo,
                 COALESCE(p.nombre, d.descripcion) as producto_nombre,
-                COALESCE(i.tarifa, 0) as tarifa_iva,
-                SUM(d.cantidad) as cantidad_vendida,
-                SUM(CASE WHEN i.tarifa = 0 THEN i.base_imponible ELSE 0 END) as base_0,
-                SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
-                SUM(COALESCE(i.valor, 0)) as valor_iva,
-                SUM(d.precio_total_sin_impuesto + COALESCE(i.valor, 0)) as total
+                COALESCE(um.nombre, '') as unidad_medida,
+                SUM(d.precio_total_sin_impuesto) as total_venta,
+                SUM(d.cantidad) as cantidad_vendida
             FROM {$f['det']} d
             JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
             LEFT JOIN productos p ON p.id = d.id_producto
-            LEFT JOIN {$f['imp']} i ON i.{$f['fk_imp']} = d.id
+            LEFT JOIN unidades_medida um ON um.id = p.id_medida
             WHERE {$where}
-            GROUP BY d.id_producto, p.codigo, COALESCE(p.nombre, d.descripcion), COALESCE(i.tarifa, 0)
+            GROUP BY d.id_producto, p.codigo, COALESCE(p.nombre, d.descripcion), um.nombre
             ORDER BY {$orden}
         ";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        return $this->agregarParticipacion($st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * % de cada fila sobre el total del reporte: pct_venta (total_venta) y pct_unidades
+     * (cantidad_vendida). Con un total en cero el porcentaje queda en 0.
+     */
+    private function agregarParticipacion(array $rows): array
+    {
+        $totVenta = array_sum(array_map(static fn ($r) => (float) ($r['total_venta'] ?? 0), $rows));
+        $totUnid  = array_sum(array_map(static fn ($r) => (float) ($r['cantidad_vendida'] ?? 0), $rows));
+        foreach ($rows as &$r) {
+            $r['pct_venta']    = abs($totVenta) > 0.000001 ? round((float) $r['total_venta'] / $totVenta * 100, 2) : 0.0;
+            $r['pct_unidades'] = abs($totUnid)  > 0.000001 ? round((float) $r['cantidad_vendida'] / $totUnid * 100, 2) : 0.0;
+        }
+        unset($r);
+        return $rows;
     }
 
     /**

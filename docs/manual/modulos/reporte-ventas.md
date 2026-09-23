@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos
-version: 1.9
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido
+version: 1.10
 orden: 10
 estado: activo
 ---
@@ -168,6 +168,40 @@ fila, se ve cuánto compró el cliente y cuánto de eso sigue sin cobrarse.
 - La columna ordena el reporte como cualquier otra, y sale igual en el PDF y en
   el Excel (con su total al pie, en el PDF).
 
+### Por producto: participación en ventas y en unidades
+
+La agrupación **Por producto** muestra **una fila por producto** con estas
+columnas:
+
+| Columna | Qué muestra |
+|---|---|
+| Código | Código del producto (en una línea sin producto del catálogo, el código escrito en el documento) |
+| Producto | Nombre del producto |
+| Unidad de Medida | La unidad de la ficha del producto (UNIDAD, KILO, CAJA…) |
+| Total Venta | Lo vendido del producto **sin impuestos** (subtotal de las líneas, sin IVA ni ICE) |
+| Cantidad | Unidades vendidas |
+| % Venta | Qué parte del *Total Venta* de todo el reporte corresponde a ese producto |
+| % Unidades | Qué parte de las unidades vendidas de todo el reporte corresponde a ese producto |
+
+- Los porcentajes se calculan sobre **los productos del reporte**, con los
+  filtros aplicados (período, cliente, vendedor, marca…): la suma de cada
+  columna de porcentaje da 100 %.
+- El producto ya **no se divide por tarifa de IVA**: si se vendió con IVA y sin
+  IVA, sale en una sola fila. Las columnas de base 0 %, base IVA e IVA ya no se
+  muestran en esta vista; siguen en las tarjetas de arriba y en las demás
+  agrupaciones.
+- Como el *Total Venta* es sin impuestos, **no coincide con el Gran Total** de
+  las tarjetas, que sí incluye el IVA.
+- La **cantidad se suma tal como está en cada línea**: si un producto se vendió
+  unas veces por unidad y otras por ciento, las cantidades se suman sin
+  convertir, y la unidad que se muestra es la de la ficha del producto.
+- Con **Facturas − NC**, a cada producto se le resta lo devuelto en notas de
+  crédito, tanto en dinero como en unidades.
+- Al pie va la fila **TOTAL** con el total vendido, las unidades y el número de
+  productos. El gráfico muestra el *Total Venta* sin IVA de cada producto.
+- Ordena por cualquiera de las columnas. El PDF y el Excel salen con las mismas
+  columnas, la misma fila TOTAL y el mismo orden.
+
 ### Unidades por producto / mes
 
 La agrupación **Unidades por Producto / Mes** responde a *cuántas unidades de
@@ -295,8 +329,9 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
   letra se reduce un punto para que entren todas las columnas). Un nombre o un
   código más largo que su columna se parte en varias líneas: nunca se pisa con
   la columna vecina ni se sale de la hoja.
-- Cada producto o cliente muestra su **código o RUC** debajo del nombre, igual
-  que en la pantalla, y las filas van sombreadas de forma alterna.
+- Cada cliente muestra su **RUC** debajo del nombre, igual que en la pantalla;
+  en *Por producto* el código va en su propia columna. Las filas van sombreadas
+  de forma alterna.
 - La **cabecera de la tabla se repite en cada página**, abajo a la derecha va
   *Página X/Y*, y la fila **TOTALES GENERALES** aparece una sola vez al final
   (con el número de productos, clientes o documentos que se sumaron).
@@ -344,6 +379,12 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 
 ## Historial de cambios
 
+- **1.10** — La agrupación **Por producto** cambia de columnas: Código, Producto,
+  **Unidad de Medida**, **Total Venta** (sin impuestos), Cantidad, **% Venta** y
+  **% Unidades** (participación de cada producto sobre el total del reporte),
+  con fila TOTAL al pie, en pantalla, PDF y Excel. El producto ya no se separa
+  en una fila por tarifa de IVA, y en *Facturas − NC* las unidades devueltas
+  ahora se restan (antes se sumaban).
 - **1.9** — **Corrección de la columna Retenciones** del detallado: se calculaba
   sumando el total de la retención una vez por cada línea de su detalle (una
   retención con IVA y renta salía **duplicada**), una retención que sustentaba
