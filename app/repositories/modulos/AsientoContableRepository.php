@@ -19,14 +19,11 @@ class AsientoContableRepository
     }
 
     /**
-     * Texto libre del listado: la fecha y el total se formatean por fila, así que solo se miran si
-     * la palabra PUEDE estar dentro de ellos. Más estrictos que FiltrosBusqueda::SI_FECHA /
-     * SI_NUMERO, que sirven para cualquier fecha u hora: `fecha_asiento` como texto son 10
-     * caracteres de dígitos y guiones («2026-07-31», «31-07-2026»), y un total no lleva guion
-     * salvo al inicio. Así un número de documento («001-001-000012345») ya no formatea la fecha
-     * ni el total de cada asiento. `%` y `_` son comodines de LIKE y `\` su escape.
+     * Debe/Haber de la pestaña Detalles: se formatean por línea, así que solo se miran si la
+     * palabra PUEDE estar dentro de un monto (un monto no lleva guion salvo al inicio). Así un
+     * número de documento («001-001-000012345») no convierte a texto cada línea de la empresa.
+     * `%` y `_` son comodines de LIKE y `\` su escape.
      */
-    private const SI_CABE_EN_FECHA = '/^(?=.*\d)(?:[\d\-_]{1,10}|[\d\-_%\\\\]*[%\\\\][\d\-_%\\\\]*)$/';
     private const SI_CABE_EN_MONTO = '/^(?=.*\d)-?[\d.,_%\\\\]+$/';
 
     /** Asientos más recientes que revisa el primer paso de buscarEnDetalles(). */
@@ -40,6 +37,130 @@ class AsientoContableRepository
         return $stmt;
     }
 
+    /**
+     * Texto del asiento que busca el listado: comprobante, concepto, observaciones, fecha
+     * (Y-m-d, como se ve en la tabla, y d-m-Y) y total. Expresión INMUTABLE (sin TO_CHAR ni
+     * casts de fecha a texto) porque es también la del índice idx_trgm_asientos_cabecera.
+     */
+    private static function exprAsiento(string $a = ''): string
+    {
+        $m = \App\Helpers\MotorBusqueda::class;
+        return "COALESCE({$a}numero_comprobante, '')"
+             . " || ' ' || COALESCE({$a}concepto, '')"
+             . " || ' ' || COALESCE({$a}observaciones, '')"
+             . " || ' ' || " . $m::fechaIso("{$a}fecha_asiento")
+             . " || ' ' || " . $m::fechaDmy("{$a}fecha_asiento")
+             . " || ' ' || COALESCE({$a}total_debe::text, '')";
+    }
+
+    /** Referencias de una línea (Egreso 001-..., Factura ...). También es la de idx_trgm_asientos_det_ref. */
+    private static function exprReferenciasLinea(string $d = ''): string
+    {
+        return "COALESCE({$d}documento_referencia, '') || ' ' || COALESCE({$d}referencia_detalle, '')";
+    }
+
+    /**
+     * Fuentes del texto libre del listado. Mismo alcance que antes: columnas del listado,
+     * usuario que registró y referencias de las líneas. Decisión del usuario: Tipo, Origen y
+     * Estado NO entran en el texto libre (se filtran desde el modal), y las cuentas de las
+     * líneas se buscan en la pestaña Detalles (en el texto libre casi todo asiento coincidiría
+     * con cualquier cuenta de uso común).
+     *
+     * Cada fuente es un `conjunto`: una consulta que devuelve ids de asiento de la empresa, con
+     * `{cond}` donde va la comparación de la palabra. `indice` usa el mismo formato que
+     * App\Helpers\MotorBusqueda::sqlIndices(), así que el índice sale de la misma expresión.
+     */
+    private function fuentesBusqueda(): array
+    {
+        return [
+            // Datos propios del asiento
+            [
+                'conjunto' => 'SELECT ax.id FROM asientos_contables_cabecera ax WHERE ax.id_empresa = :id_empresa AND {cond}',
+                'expr'     => self::exprAsiento('ax.'),
+                'indice'   => ['tabla' => 'asientos_contables_cabecera', 'nombre' => 'idx_trgm_asientos_cabecera', 'expr' => self::exprAsiento()],
+            ],
+            // Total escrito con coma decimal ("34,78"): el texto indexado lo guarda con punto.
+            [
+                'conjunto' => 'SELECT ax.id FROM asientos_contables_cabecera ax WHERE ax.id_empresa = :id_empresa AND {cond}',
+                'expr'     => 'ax.total_debe', 'crudo' => true, 'si' => '/^\d+,\d{1,2}$/',
+            ],
+            // Usuario que registró: tabla chica, sin índice.
+            [
+                'conjunto' => 'SELECT ax.id FROM asientos_contables_cabecera ax WHERE ax.id_empresa = :id_empresa
+                                  AND ax.created_by IN (SELECT ux.id FROM usuarios ux WHERE {cond})',
+                'expr'     => "COALESCE(ux.nombre, '')",
+            ],
+            // Documentos y referencias de las líneas (Egreso 001-..., Factura ...)
+            [
+                'conjunto' => 'SELECT dx.id_asiento FROM asientos_contables_detalle dx
+                               WHERE dx.id_empresa = :id_empresa AND dx.eliminado = false AND {cond}',
+                'expr'     => self::exprReferenciasLinea('dx.'),
+                'indice'   => ['tabla' => 'asientos_contables_detalle', 'nombre' => 'idx_trgm_asientos_det_ref', 'expr' => self::exprReferenciasLinea()],
+            ],
+        ];
+    }
+
+    /**
+     * Condición del texto libre: todas las palabras (en cualquier orden) deben aparecer en
+     * alguna fuente; insensible a mayúsculas y tildes. Por palabra, UN solo
+     * `a.id IN (fuente1 UNION fuente2 …)`.
+     *
+     * Rendimiento (23-09-2026, medido con 150.000 asientos por empresa y 4 líneas cada uno):
+     *  - Antes era FiltrosBusqueda::condicionTexto(): unaccent() fila por fila (no indexable),
+     *    y las referencias de las líneas en un EXISTS que PostgreSQL 18 convierte en un
+     *    conjunto de TODA la tabla de líneas —todas las empresas, sin filtrar id_empresa—,
+     *    quitándole las tildes a cada una, una vez por palabra.
+     *  - NO usar MotorBusqueda::condicion() aquí: arma un `a.id IN (…) OR a.id IN (…)` por
+     *    palabra, y dentro de un OR PostgreSQL no puede hacer semi-join. Con una palabra que
+     *    está en casi todos los asientos ("factura") el conjunto no cabe en work_mem, deja de
+     *    hashearse y se recorre por cada fila: la búsqueda "factura 001" pasó de 8 minutos sin
+     *    terminar. Con la UNION, cada palabra es un semi-join por hash, lineal.
+     */
+    private function condicionTextoLibre(string $texto, array &$params): string
+    {
+        $palabras = array_values(array_filter(preg_split('/\s+/u', trim($texto)) ?: [], fn($p) => $p !== ''));
+        $m = \App\Helpers\MotorBusqueda::class;
+
+        $condiciones = [];
+        foreach ($palabras as $i => $palabra) {
+            $ph = ":tl_{$i}";
+            $phNum = ":tl_{$i}_n";
+            $usaPh = $usaPhNum = false;
+
+            $selects = [];
+            foreach ($this->fuentesBusqueda() as $f) {
+                if (!empty($f['si']) && !preg_match((string) $f['si'], $palabra)) {
+                    continue;
+                }
+                if (!empty($f['crudo'])) {
+                    // Solo llega aquí una palabra con coma decimal: se compara con punto.
+                    $cond = "({$f['expr']})::text ILIKE {$phNum}";
+                    $usaPhNum = true;
+                } else {
+                    $cond = $m::sinTildes((string) $f['expr']) . ' ILIKE ' . $m::sinTildes($ph);
+                    $usaPh = true;
+                }
+                $selects[] = str_replace('{cond}', $cond, (string) $f['conjunto']);
+            }
+
+            if ($usaPh) {
+                $params[$ph] = '%' . $palabra . '%';
+            }
+            if ($usaPhNum) {
+                $params[$phNum] = '%' . str_replace(',', '.', $palabra) . '%';
+            }
+            $condiciones[] = $selects === [] ? 'FALSE' : 'a.id IN (' . implode(' UNION ', $selects) . ')';
+        }
+
+        return $condiciones === [] ? '' : '(' . implode(' AND ', $condiciones) . ')';
+    }
+
+    /** SQL de los índices que necesita la búsqueda de este módulo (para database/*.sql). */
+    public function sqlIndicesBusqueda(): array
+    {
+        return \App\Helpers\MotorBusqueda::sqlIndices($this->fuentesBusqueda());
+    }
+
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir): array
     {
         $offset = ($page - 1) * $perPage;
@@ -51,41 +172,10 @@ class AsientoContableRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            // Texto libre: columnas del listado y lo que identifica el asiento aunque no
-            // sea columna. Decisión del usuario: Tipo, Origen y Estado NO entran en el
-            // texto libre; se filtran solo desde el modal. Las cuentas de las líneas se
-            // buscan en la pestaña Detalles (en el texto libre casi todo asiento
-            // coincidiría con cualquier cuenta de uso común).
-            //
-            // Rendimiento (17-09-2026, medido con 200.000 asientos: de 7-33 s a 1,5-3 s): las
-            // referencias de las líneas eran un STRING_AGG por asiento, con la fecha formateada
-            // y el usuario cruzado en cada fila, y todo se evaluaba dos veces (conteo y página).
-            // Ahora conteo y página van en una consulta, el usuario es un conjunto, y la fecha y
-            // el total solo se miran si la palabra cabe en ellos. Las líneas se revisan con un
-            // EXISTS por asiento, a propósito correlacionado: usa idx_asientos_det_asiento y solo
-            // corre para los asientos que pasaron los demás filtros y no coincidieron por sus
-            // columnas. Con un conjunto de todas las líneas de la empresa daba lo mismo sin
-            // filtros, pero con un filtro del modal (fecha, estado…) era 5 veces más lento.
-            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                [
-                    'a.numero_comprobante',                              // Comprobante
-                    'a.concepto',                                        // Concepto
-                    'a.observaciones',
-                    // Fecha (Y-m-d, como se ve en la tabla, y d-m-Y)
-                    ['sql' => 'a.fecha_asiento::text', 'si' => self::SI_CABE_EN_FECHA],
-                    ['sql' => "TO_CHAR(a.fecha_asiento, 'DD-MM-YYYY')", 'si' => self::SI_CABE_EN_FECHA],
-                    ['sql' => 'a.total_debe::text', 'si' => self::SI_CABE_EN_MONTO],  // Total
-                    // Usuario que registró
-                    ['col' => 'u.nombre', 'sql' => 'a.created_by IN (SELECT u.id FROM usuarios u WHERE {cond})'],
-                    // Documentos y referencias de las líneas (Egreso 001-..., Factura ...)
-                    ['col' => "CONCAT_WS(' ', d.documento_referencia, d.referencia_detalle)",
-                     'sql' => 'EXISTS (SELECT 1 FROM asientos_contables_detalle d
-                                        WHERE d.id_asiento = a.id AND d.eliminado = false AND {cond})'],
-                ],
-                $parsed['texto_libre'],
-                $params,
-                'tl'
-            );
+            // Conjuntos indexables (ver condicionTextoLibre()): cada fuente se resuelve una vez
+            // por palabra con su índice trigram, en vez de quitarle las tildes a cada asiento y
+            // a cada línea de la empresa.
+            $condicion = $this->condicionTextoLibre($parsed['texto_libre'], $params);
             if ($condicion !== '') {
                 $where .= " AND {$condicion}";
             }

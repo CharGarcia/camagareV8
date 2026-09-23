@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo
-version: 1.20
+version: 1.22
 orden: 20
 estado: activo
 ---
@@ -349,6 +349,8 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.22** — En el modal del asiento, Retroceso y Supr vuelven a borrar un carácter a la vez; antes vaciaban el campo completo de una sola pulsación. Al editar el texto de la cuenta de una línea, la cuenta elegida se suelta y hay que volver a escogerla de la lista.
+- **1.21** — La búsqueda libre del listado es mucho más rápida: medido con 150.000 asientos, de 1,6 a 4 segundos por búsqueda pasa a entre 0,01 y 0,6 segundos, y las palabras que aparecen en casi todos los asientos (por ejemplo *factura*), a 1 o 2 segundos. Encuentra exactamente lo mismo que antes. Requiere correr `database/20260923_busqueda_trigram_asientos.sql`.
 - **1.20** — En el modal del asiento, las columnas *Centro Costo* y *Proyecto* se ocultan cuando la empresa no tiene centros de costo o proyectos activos.
 - **1.19** — En facturas y recibos de venta guardados que aún no tienen asiento, la vista previa de la pestaña *Asiento contable* se arma con los datos reales del documento: ahora muestra el Costo de Ventas y el Inventario, el IVA por tarifa y el reparto por categoría, igual que el asiento que se registrará. Antes se calculaba con los importes de la pantalla y el costo salía siempre en 0 (o aparecía «El asiento no cuadra»).
 - **1.18** — La búsqueda del listado y la de la pestaña *Detalles* son mucho más rápidas con muchos asientos: medido con 200.000 asientos, la búsqueda libre pasa de 7 a 33 segundos a entre 1,5 y 3 segundos, y en *Detalles* lo que aparece poco (un número de documento, un monto) pasa de hasta 40 segundos a entre 1 y 1,5 segundos. Encuentran lo mismo que antes; además, el total ahora también se encuentra escrito con coma decimal. Mientras se busca, el resto del sistema ya no queda esperando, y una búsqueda nueva cancela la anterior. El selector *Origen* de la ventana de filtros lista todos los orígenes con su nombre, aunque la empresa todavía no tenga asientos de alguno.

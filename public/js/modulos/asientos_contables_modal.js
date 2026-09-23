@@ -331,13 +331,15 @@
         input.addEventListener('input', function () {
             clearTimeout(timeout);
             const q = this.value.trim();
+            // Editar el texto suelta la cuenta elegida: si no, borrar unas letras dejaría
+            // guardada la cuenta anterior aunque el texto ya no la muestre. La cuenta es la que
+            // decide si el asiento tiene su línea de cartera, así que al quedarse sin cuenta hay
+            // que repintar el cuadre contra el documento.
+            const teniaCuenta = hiddenInput.value !== '';
+            hiddenInput.value = '';
+            if (teniaCuenta) calcularTotales();
             if (q.length < 2) {
                 resultsDiv.style.display = 'none';
-                // La cuenta es la que decide si el asiento tiene su línea de cartera, así que
-                // al quedarse sin cuenta hay que repintar el cuadre contra el documento.
-                const teniaCuenta = hiddenInput.value !== '';
-                hiddenInput.value = '';
-                if (teniaCuenta) calcularTotales();
                 return;
             }
 
@@ -366,9 +368,6 @@
                         resultsDiv.style.display = 'block';
                     } else {
                         resultsDiv.style.display = 'none';
-                        const teniaCuenta = hiddenInput.value !== '';
-                        hiddenInput.value = '';
-                        if (teniaCuenta) calcularTotales();
                     }
                 } catch (e) { }
             }, 300);
@@ -645,35 +644,6 @@
             await swalError('Error de red. Verifique su conexión e intente nuevamente.');
         }
     };
-
-    /**
-     * Borrado total: en cualquier input editable del modal, una sola pulsación
-     * de Retroceso (Backspace) o Delete (Supr) vacía por completo el campo.
-     * Listener delegado sobre el modal para cubrir también las filas dinámicas.
-     */
-    (function initBorradoTotalModal() {
-        const modalEl = document.getElementById('modalAsientoContable');
-        if (!modalEl) return;
-
-        const TIPOS_EDITABLES = ['text', 'number', 'search', 'date', 'tel'];
-
-        modalEl.addEventListener('keydown', function (e) {
-            if (e.key !== 'Backspace' && e.key !== 'Delete') return;
-
-            const el = e.target;
-            if (!el || el.tagName !== 'INPUT') return;
-            if (el.readOnly || el.disabled) return;
-
-            const tipo = (el.type || 'text').toLowerCase();
-            if (!TIPOS_EDITABLES.includes(tipo)) return;
-            if (el.value === '') return;
-
-            e.preventDefault();
-            el.value = '';
-            // Notificar a los handlers existentes (totales, autocomplete, etc.)
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-    })();
 
     window.ASIENTO_restablecer = async function() {
         const id = document.getElementById('asiento_id').value;
