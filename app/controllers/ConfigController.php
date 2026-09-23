@@ -200,6 +200,22 @@ class ConfigController extends Controller
         (new TransferenciaFormatoController())->desactivar();
     }
 
+    /** /config/conciliacion-perfiles — perfiles de mapeo de extractos para Conciliación de Cobros (nivel 3). */
+    public function conciliacionPerfiles(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new ConciliacionPerfilesController();
+        match ($sub) {
+            'listar'       => $c->listarAjax(),
+            'guardar'      => $c->guardarAjax(),
+            'estado'       => $c->cambiarEstadoAjax(),
+            'eliminar'     => $c->eliminarAjax(),
+            'previsualizar' => $c->previsualizarArchivoAjax(),
+            'sugerirRegex' => $c->sugerirRegexPdfAjax(),
+            default        => $c->index(),
+        };
+    }
+
     public function iaAgentes(): void
     {
         (new IaAgentesController())->index();

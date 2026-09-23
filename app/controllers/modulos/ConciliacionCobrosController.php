@@ -52,77 +52,11 @@ class ConciliacionCobrosController extends BaseModuloController
             'rutaModulo' => $this->getRutaModulo(),
             'cuentas' => $this->service->getCuentasBancarias($idEmpresa),
             'puntosEmision' => $this->service->getPuntosEmision($idEmpresa),
-            'perfiles' => $this->service->getPerfiles($idEmpresa),
+            'perfiles' => $this->service->getPerfiles(),
             'cargas' => $this->service->listarCargas($idEmpresa),
             'clientes' => $this->service->getClientesConSaldoPendiente($idEmpresa),
             'fullWidth' => true,
         ]);
-    }
-
-    // ── Perfiles de mapeo ────────────────────────────────────────────────────
-
-    public function listarPerfilesAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        echo json_encode(['ok' => true, 'data' => $this->service->getPerfiles($idEmpresa)]);
-        exit;
-    }
-
-    /** Sube un archivo de muestra y devuelve las primeras filas/líneas crudas (sin mapear aún). */
-    public function previsualizarArchivoAjax(): void
-    {
-        $this->requireCrear();
-        header('Content-Type: application/json');
-
-        try {
-            $tipoArchivo = strtoupper(trim($_POST['tipo_archivo'] ?? ''));
-            $filaInicio = (int) ($_POST['fila_inicio'] ?? 0);
-            $regexPrueba = trim($_POST['regex_prueba'] ?? '') ?: null;
-            $tipoCreditoPrueba = trim($_POST['tipo_credito_prueba'] ?? '') ?: null;
-            $resultado = $this->service->previsualizarArchivo($_FILES['archivo'] ?? [], $tipoArchivo, $filaInicio, $regexPrueba, $tipoCreditoPrueba);
-            echo json_encode(['ok' => true, 'data' => $resultado]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-
-    /** Analiza el PDF de muestra y propone un patrón (regex) de línea de datos para el perfil. */
-    public function sugerirRegexPdfAjax(): void
-    {
-        $this->requireCrear();
-        header('Content-Type: application/json');
-
-        try {
-            $sugerencia = $this->service->sugerirRegexPdf($_FILES['archivo'] ?? []);
-            echo json_encode(['ok' => true, 'data' => $sugerencia]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-
-    public function guardarPerfilAjax(): void
-    {
-        $this->requireCrear();
-        header('Content-Type: application/json');
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $data = json_decode(file_get_contents('php://input') ?: '[]', true) ?: $_POST;
-
-        try {
-            $perfil = $this->service->guardarPerfil($idEmpresa, $idUsuario, $data);
-            echo json_encode(['ok' => true, 'data' => $perfil]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
     }
 
     // ── Cargas ───────────────────────────────────────────────────────────────

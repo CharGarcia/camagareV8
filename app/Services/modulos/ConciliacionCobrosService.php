@@ -8,12 +8,14 @@ use App\repositories\modulos\ConciliacionCobrosRepository;
 use App\repositories\modulos\IngresoRepository;
 use App\Rules\modulos\ConciliacionCobrosRules;
 use App\Rules\modulos\IngresoRules;
+use App\Services\ConciliacionPerfilService;
 use App\Services\LogSistemaService;
 use App\Services\SecuencialService;
 
 /**
- * Orquesta el flujo de Conciliación de Cobros Bancarios: perfiles de mapeo,
- * importación de un extracto bancario (Excel/PDF) con sugerencia automática
+ * Orquesta el flujo de Conciliación de Cobros Bancarios: importación de un
+ * extracto bancario (Excel/PDF) leído con un perfil de mapeo del catálogo global
+ * (config/conciliacion-perfiles, ver ConciliacionPerfilService) con sugerencia automática
  * de cliente/factura, confirmación manual del usuario y generación en lote
  * de Ingresos reales (mismo payload/servicio que el "cobro rápido" de
  * Ingresos — ver IngresosController::registrarCobroRapidoAjax).
@@ -23,6 +25,7 @@ class ConciliacionCobrosService
     private const STORAGE_DIR = 'storage/conciliacion_cobros';
 
     private IngresoService $ingresoService;
+    private ConciliacionPerfilService $perfilService;
 
     public function __construct(
         private ConciliacionCobrosRepository $repository,
@@ -33,6 +36,7 @@ class ConciliacionCobrosService
         private LogSistemaService $logService,
     ) {
         $this->ingresoService = new IngresoService($ingresoRepository, new IngresoRules(), $logService);
+        $this->perfilService = new ConciliacionPerfilService();
     }
 
     // ── Catálogos para el paso 1 del wizard ─────────────────────────────────
@@ -47,9 +51,10 @@ class ConciliacionCobrosService
         return $this->repository->getPuntosEmision($idEmpresa);
     }
 
-    public function getPerfiles(int $idEmpresa): array
+    /** Formatos de banco (perfiles de mapeo) activos del catálogo global; no dependen de la empresa. */
+    public function getPerfiles(): array
     {
-        return $this->repository->getPerfiles($idEmpresa);
+        return $this->perfilService->getActivos();
     }
 
     public function getClientesActivos(int $idEmpresa): array
@@ -77,58 +82,15 @@ class ConciliacionCobrosService
         return $this->ingresoRepository->getClientesConDocumentosPendientes($idEmpresa);
     }
 
-    // ── Perfiles de mapeo ────────────────────────────────────────────────────
-
-    public function previsualizarArchivo(array $file, string $tipoArchivo, int $filaInicio = 0, ?string $regexPrueba = null, ?string $tipoCreditoPrueba = null): array
-    {
-        $tipoArchivo = strtoupper($tipoArchivo);
-        $rutaTemporal = $this->validarYObtenerTmp($file, $tipoArchivo);
-        return $this->importService->previsualizar($rutaTemporal, $tipoArchivo, $filaInicio, 60, $regexPrueba, $tipoCreditoPrueba);
-    }
-
-    /** Analiza un PDF de muestra y propone un patrón (regex) de línea de datos (ver ConciliacionImportService::sugerirRegexPdf). */
-    public function sugerirRegexPdf(array $file): array
-    {
-        $rutaTemporal = $this->validarYObtenerTmp($file, 'PDF');
-        return $this->importService->sugerirRegexPdf($rutaTemporal);
-    }
-
-    public function guardarPerfil(int $idEmpresa, int $idUsuario, array $data): array
-    {
-        $data['tipo_archivo'] = strtoupper((string) ($data['tipo_archivo'] ?? ''));
-        $this->rules->validarPerfil($data);
-
-        $data['id_empresa'] = $idEmpresa;
-        $data['usuario_id'] = $idUsuario;
-
-        if (!empty($data['id'])) {
-            $antes = $this->repository->getPerfilPorId((int) $data['id'], $idEmpresa);
-            if (!$antes) {
-                throw new \Exception('El perfil indicado no existe.');
-            }
-            $this->repository->actualizarPerfil((int) $data['id'], $data);
-            $id = (int) $data['id'];
-            $accion = 'actualizar';
-        } else {
-            $id = $this->repository->crearPerfil($data);
-            $accion = 'crear';
-        }
-
-        $perfil = $this->repository->getPerfilPorId($id, $idEmpresa);
-        $this->logService->registrar($idUsuario, $idEmpresa, $accion, 'conciliacion_perfiles', $id, null, $perfil);
-
-        return $perfil ?? [];
-    }
-
     // ── Cargas (subir extracto → importar → sugerir) ────────────────────────
 
     public function crearCarga(int $idEmpresa, int $idUsuario, array $data, array $file): array
     {
         $this->rules->validarCarga($data);
 
-        $perfil = $this->repository->getPerfilPorId((int) $data['id_perfil'], $idEmpresa);
+        $perfil = $this->perfilService->getActivoPorId((int) $data['id_perfil']);
         if (!$perfil) {
-            throw new \Exception('El perfil de mapeo seleccionado no existe.');
+            throw new \Exception('El formato del banco seleccionado no existe o está inactivo.');
         }
 
         $cuenta = $this->repository->getCuentaBancariaPorId((int) $data['id_forma_pago'], $idEmpresa);

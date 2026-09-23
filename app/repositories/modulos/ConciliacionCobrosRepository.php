@@ -8,9 +8,10 @@ use App\repositories\BaseRepository;
 use PDO;
 
 /**
- * Acceso a datos de Conciliación de Cobros Bancarios: perfiles de mapeo de
- * columnas, cargas (archivos de extracto subidos) y líneas extraídas de
- * cada carga con su sugerencia de cliente/factura y resultado de aplicación.
+ * Acceso a datos de Conciliación de Cobros Bancarios: cargas (archivos de
+ * extracto subidos) y líneas extraídas de cada carga con su sugerencia de
+ * cliente/factura y resultado de aplicación. Los perfiles de mapeo son un
+ * catálogo global: ver App\repositories\ConciliacionPerfilRepository.
  */
 class ConciliacionCobrosRepository extends BaseRepository
 {
@@ -23,7 +24,7 @@ class ConciliacionCobrosRepository extends BaseRepository
 
     public function getCuentasBancarias(int $idEmpresa): array
     {
-        $sql = "SELECT fp.id, fp.nombre, fp.tipo_cuenta, fp.numero_cuenta, b.nombre_banco
+        $sql = "SELECT fp.id, fp.nombre, fp.tipo_cuenta, fp.numero_cuenta, fp.id_banco, b.nombre_banco
                 FROM empresa_formas_pago fp
                 LEFT JOIN bancos_ecuador b ON b.id = fp.id_banco
                 WHERE fp.id_empresa = :id_empresa
@@ -35,80 +36,6 @@ class ConciliacionCobrosRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    }
-
-    // ── Perfiles de mapeo ──────────────────────────────────────────────────
-
-    public function getPerfiles(int $idEmpresa): array
-    {
-        $sql = "SELECT p.*, b.nombre_banco
-                FROM conciliacion_perfiles p
-                LEFT JOIN bancos_ecuador b ON b.id = p.id_banco
-                WHERE p.id_empresa = :id_empresa AND p.eliminado = FALSE AND p.activo = TRUE
-                ORDER BY p.nombre_perfil ASC";
-        $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa]);
-        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    }
-
-    public function getPerfilPorId(int $id, int $idEmpresa): ?array
-    {
-        $sql = "SELECT * FROM conciliacion_perfiles WHERE id = :id AND id_empresa = :id_empresa AND eliminado = FALSE";
-        $st = $this->db->prepare($sql);
-        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
-        $row = $st->fetch(PDO::FETCH_ASSOC);
-        if ($row && isset($row['mapeo_columnas'])) {
-            $row['mapeo_columnas'] = json_decode((string) $row['mapeo_columnas'], true) ?: [];
-        }
-        return $row ?: null;
-    }
-
-    public function crearPerfil(array $data): int
-    {
-        $sql = "INSERT INTO conciliacion_perfiles (
-                    id_empresa, id_banco, nombre_perfil, tipo_archivo, fila_inicio,
-                    formato_fecha, separador_decimal, mapeo_columnas, created_by, updated_by
-                ) VALUES (
-                    :id_empresa, :id_banco, :nombre_perfil, :tipo_archivo, :fila_inicio,
-                    :formato_fecha, :separador_decimal, :mapeo_columnas, :usuario, :usuario
-                ) RETURNING id";
-        $st = $this->db->prepare($sql);
-        $st->execute([
-            ':id_empresa' => $data['id_empresa'],
-            ':id_banco' => $data['id_banco'] ?? null,
-            ':nombre_perfil' => $data['nombre_perfil'],
-            ':tipo_archivo' => $data['tipo_archivo'],
-            ':fila_inicio' => $data['fila_inicio'] ?? 0,
-            ':formato_fecha' => $data['formato_fecha'] ?? 'd/m/Y',
-            ':separador_decimal' => $data['separador_decimal'] ?? '.',
-            ':mapeo_columnas' => json_encode($data['mapeo_columnas'], JSON_UNESCAPED_UNICODE),
-            ':usuario' => $data['usuario_id'],
-        ]);
-        return (int) $st->fetchColumn();
-    }
-
-    public function actualizarPerfil(int $id, array $data): bool
-    {
-        $sql = "UPDATE conciliacion_perfiles SET
-                    id_banco = :id_banco, nombre_perfil = :nombre_perfil, tipo_archivo = :tipo_archivo,
-                    fila_inicio = :fila_inicio, formato_fecha = :formato_fecha,
-                    separador_decimal = :separador_decimal, mapeo_columnas = :mapeo_columnas,
-                    updated_by = :usuario, updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = FALSE";
-        $st = $this->db->prepare($sql);
-        $st->execute([
-            ':id' => $id,
-            ':id_empresa' => $data['id_empresa'],
-            ':id_banco' => $data['id_banco'] ?? null,
-            ':nombre_perfil' => $data['nombre_perfil'],
-            ':tipo_archivo' => $data['tipo_archivo'],
-            ':fila_inicio' => $data['fila_inicio'] ?? 0,
-            ':formato_fecha' => $data['formato_fecha'] ?? 'd/m/Y',
-            ':separador_decimal' => $data['separador_decimal'] ?? '.',
-            ':mapeo_columnas' => json_encode($data['mapeo_columnas'], JSON_UNESCAPED_UNICODE),
-            ':usuario' => $data['usuario_id'],
-        ]);
-        return $st->rowCount() > 0;
     }
 
     // ── Cargas (archivos subidos) ──────────────────────────────────────────

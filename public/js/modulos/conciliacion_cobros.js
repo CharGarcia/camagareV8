@@ -4,7 +4,6 @@
     const state = {
         idCargaActual: null,
         lineas: {},       // id_linea -> linea (con selección actual de cliente/documento)
-        perfiles: {},     // id_perfil -> perfil (cache para editar)
     };
 
     function fmtMoney(v) {
@@ -63,6 +62,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         CC.cargarPerfiles();
+        document.getElementById('cc-forma')?.addEventListener('change', CC.cargarPerfiles);
 
         const formCarga = document.getElementById('cc-form-carga');
         if (formCarga) {
@@ -70,220 +70,43 @@
         }
     });
 
-    // ── Perfiles de mapeo ────────────────────────────────────────────────────
+    // ── Formato del banco (perfiles de mapeo) ────────────────────────────────
+    // Los perfiles son un catálogo global que administra el nivel 3 en
+    // config/conciliacion-perfiles; aquí solo se elige uno. Al escoger la cuenta
+    // bancaria se muestran los formatos de ese banco y los genéricos (sin banco);
+    // si el banco no tiene ninguno, se muestran todos para no bloquear la carga.
 
-    CC.cargarPerfiles = async function (seleccionarId) {
-        const json = await getJson(`${CC_URL_BASE}/listarPerfilesAjax`);
-        if (!json.ok) return;
+    function escHtml(v) {
+        return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
 
-        state.perfiles = {};
-        (json.data || []).forEach((p) => { state.perfiles[p.id] = p; });
+    CC.cargarPerfiles = function () {
+        const select = document.getElementById('cc-perfil');
+        if (!select) return;
 
-        const selectPrincipal = document.getElementById('cc-perfil');
-        const selectExistente = document.getElementById('cc-perfil-select-existente');
-        const opciones = (json.data || []).map((p) => `<option value="${p.id}">${p.nombre_perfil} (${p.tipo_archivo})</option>`).join('');
+        const perfiles = window.CC_PERFILES || [];
+        if (!perfiles.length) return; // la vista ya muestra "Sin formatos configurados"
 
-        if (selectPrincipal) {
-            selectPrincipal.innerHTML = '<option value="">— Seleccione —</option>' + opciones;
-            if (seleccionarId) selectPrincipal.value = seleccionarId;
-        }
-        if (selectExistente) {
-            selectExistente.innerHTML = '<option value="">— Nuevo perfil —</option>' + opciones;
-        }
-    };
+        const optCuenta = document.getElementById('cc-forma')?.selectedOptions[0];
+        const idBanco = optCuenta ? parseInt(optCuenta.dataset.banco || '0', 10) : 0;
 
-    CC.abrirModalPerfil = function () {
-        document.getElementById('cc-form-perfil').reset();
-        document.getElementById('cc-perfil-id').value = '';
-        document.getElementById('cc-perfil-select-existente').value = '';
-        document.getElementById('cc-preview-box').textContent = '— Sin previsualización aún —';
-        CC.cambiarTipoPerfil();
-        new bootstrap.Modal(document.getElementById('cc-modal-perfil')).show();
-    };
-
-    CC.cambiarTipoPerfil = function () {
-        const esPdf = document.getElementById('cc-perfil-tipo').value === 'PDF';
-        document.getElementById('cc-mapeo-excel').style.display = esPdf ? 'none' : '';
-        document.getElementById('cc-mapeo-pdf').style.display = esPdf ? '' : 'none';
-        document.getElementById('cc-fila-inicio-wrap').style.display = esPdf ? 'none' : '';
-        document.getElementById('cc-btn-sugerir-regex').style.display = esPdf ? '' : 'none';
-        document.getElementById('cc-preview-resultado').style.display = 'none';
-        document.getElementById('cc-sugerencia-msg').style.display = 'none';
-    };
-
-    CC.cargarPerfilExistente = function (id) {
-        if (!id) {
-            CC.abrirModalPerfil();
-            return;
-        }
-        const p = state.perfiles[id];
-        if (!p) return;
-
-        document.getElementById('cc-perfil-id').value = p.id;
-        document.getElementById('cc-perfil-nombre').value = p.nombre_perfil;
-        document.getElementById('cc-perfil-tipo').value = p.tipo_archivo;
-        document.getElementById('cc-perfil-separador').value = p.separador_decimal || '.';
-        document.getElementById('cc-perfil-fila-inicio').value = p.fila_inicio || 0;
-        document.getElementById('cc-perfil-formato-fecha').value = p.formato_fecha || 'd/m/Y';
-        CC.cambiarTipoPerfil();
-
-        const mapeo = p.mapeo_columnas || {};
-        if (p.tipo_archivo === 'PDF') {
-            document.getElementById('cc-map-regex-linea').value = mapeo.regex_linea || '';
-            document.getElementById('cc-map-tipo-credito').value = mapeo.tipo_credito || '';
-        } else {
-            ['fecha', 'descripcion', 'monto', 'referencia'].forEach((campo) => {
-                document.getElementById(`cc-map-${campo}-col`).value = mapeo[campo] ? (mapeo[campo].col ?? '') : '';
-            });
-        }
-    };
-
-    CC.previsualizarMuestra = async function () {
-        const archivo = document.getElementById('cc-perfil-muestra').files[0];
-        if (!archivo) {
-            alertError('Falta el archivo', 'Selecciona primero un archivo de muestra.');
-            return;
-        }
-        const tipoArchivo = document.getElementById('cc-perfil-tipo').value;
-        const filaInicio = document.getElementById('cc-perfil-fila-inicio').value || 0;
-
-        const fd = new FormData();
-        fd.append('archivo', archivo);
-        fd.append('tipo_archivo', tipoArchivo);
-        fd.append('fila_inicio', filaInicio);
-        if (tipoArchivo === 'PDF') {
-            fd.append('regex_prueba', document.getElementById('cc-map-regex-linea').value.trim());
-            fd.append('tipo_credito_prueba', document.getElementById('cc-map-tipo-credito').value.trim());
+        let lista = perfiles;
+        if (idBanco) {
+            const delBanco = perfiles.filter((p) => p.id_banco === idBanco || p.id_banco === null);
+            if (delBanco.length) lista = delBanco;
         }
 
-        const box = document.getElementById('cc-preview-box');
-        box.textContent = 'Cargando…';
-        document.getElementById('cc-preview-resultado').style.display = 'none';
+        const anterior = select.value;
+        select.innerHTML = '<option value="">— Seleccione —</option>' + lista.map((p) => {
+            const banco = p.nombre_banco ? `${p.nombre_banco} — ` : '';
+            return `<option value="${p.id}">${escHtml(banco + p.nombre_perfil)} (${escHtml(p.tipo_archivo)})</option>`;
+        }).join('');
 
-        const json = await postForm(`${CC_URL_BASE}/previsualizarArchivoAjax`, fd);
-        if (!json.ok) {
-            box.textContent = '— No se pudo leer el archivo —';
-            alertError('No se pudo previsualizar', json.error);
-            return;
+        if (lista.some((p) => String(p.id) === anterior)) {
+            select.value = anterior;
+        } else if (idBanco && lista.length === 1) {
+            select.value = String(lista[0].id);
         }
-
-        if (tipoArchivo === 'PDF') {
-            box.textContent = (json.data.lineas || []).join('\n');
-            CC.mostrarResultadoPrueba(json.data.filas_probadas);
-        } else {
-            box.textContent = (json.data.lineas || [])
-                .map((fila, i) => `Fila ${i}: ` + fila.map((v, c) => `[${c}]${v}`).join('  '))
-                .join('\n');
-        }
-    };
-
-    CC.sugerirRegexPdf = async function () {
-        const archivo = document.getElementById('cc-perfil-muestra').files[0];
-        if (!archivo) {
-            alertError('Falta el archivo', 'Selecciona primero un archivo de muestra (PDF).');
-            return;
-        }
-
-        const btn = document.getElementById('cc-btn-sugerir-regex');
-        const msg = document.getElementById('cc-sugerencia-msg');
-        btn.disabled = true;
-        msg.style.display = '';
-        msg.className = 'alert alert-info small py-2 mb-3';
-        msg.textContent = 'Analizando el PDF…';
-
-        try {
-            const fd = new FormData();
-            fd.append('archivo', archivo);
-
-            const json = await postForm(`${CC_URL_BASE}/sugerirRegexPdfAjax`, fd);
-            if (!json.ok) {
-                msg.className = 'alert alert-danger small py-2 mb-3';
-                msg.textContent = 'No se pudo analizar el archivo: ' + json.error;
-                return;
-            }
-
-            const s = json.data;
-            if (!s.regex_linea) {
-                msg.className = 'alert alert-warning small py-2 mb-3';
-                msg.textContent = s.mensaje;
-                return;
-            }
-
-            document.getElementById('cc-map-regex-linea').value = s.regex_linea;
-            document.getElementById('cc-perfil-formato-fecha').value = s.formato_fecha;
-            document.getElementById('cc-perfil-separador').value = s.separador_decimal;
-
-            msg.className = 'alert alert-success small py-2 mb-3';
-            msg.textContent = s.mensaje;
-
-            // Muestra de una vez el resultado con el patrón propuesto (sin "Valor es crédito" — hay que revisarlo a mano).
-            await CC.previsualizarMuestra();
-        } finally {
-            btn.disabled = false;
-        }
-    };
-
-    CC.mostrarResultadoPrueba = function (resultado) {
-        const wrap = document.getElementById('cc-preview-resultado');
-        const tbody = document.getElementById('cc-preview-resultado-tbody');
-        if (!resultado) {
-            wrap.style.display = 'none';
-            return;
-        }
-        if (resultado.error) {
-            wrap.style.display = '';
-            tbody.innerHTML = `<tr><td colspan="4" class="text-danger">${resultado.error}</td></tr>`;
-            return;
-        }
-        wrap.style.display = '';
-        if (!resultado.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">El patrón no encontró ninguna línea de datos en este archivo.</td></tr>';
-            return;
-        }
-        tbody.innerHTML = resultado.map((f) => `
-            <tr>
-                <td>${fmtDate(f.fecha)}</td>
-                <td>${f.descripcion}</td>
-                <td class="text-end">${fmtMoney(f.monto)}</td>
-                <td>${f.referencia || ''}</td>
-            </tr>
-        `).join('');
-    };
-
-    CC.guardarPerfil = async function () {
-        const tipoArchivo = document.getElementById('cc-perfil-tipo').value;
-        const mapeo = {};
-
-        if (tipoArchivo === 'PDF') {
-            const regex = document.getElementById('cc-map-regex-linea').value.trim();
-            if (regex) mapeo.regex_linea = regex;
-            const tipoCredito = document.getElementById('cc-map-tipo-credito').value.trim();
-            if (tipoCredito) mapeo.tipo_credito = tipoCredito;
-        } else {
-            ['fecha', 'descripcion', 'monto', 'referencia'].forEach((campo) => {
-                const col = document.getElementById(`cc-map-${campo}-col`).value;
-                if (col !== '') mapeo[campo] = { col: parseInt(col, 10) };
-            });
-        }
-
-        const payload = {
-            id: document.getElementById('cc-perfil-id').value || null,
-            nombre_perfil: document.getElementById('cc-perfil-nombre').value.trim(),
-            tipo_archivo: tipoArchivo,
-            fila_inicio: parseInt(document.getElementById('cc-perfil-fila-inicio').value || '0', 10),
-            formato_fecha: document.getElementById('cc-perfil-formato-fecha').value.trim() || 'd/m/Y',
-            separador_decimal: document.getElementById('cc-perfil-separador').value,
-            mapeo_columnas: mapeo,
-        };
-
-        const json = await postJson(`${CC_URL_BASE}/guardarPerfilAjax`, payload);
-        if (!json.ok) {
-            alertError('No se pudo guardar el perfil', json.error);
-            return;
-        }
-        alertOk('Perfil guardado');
-        bootstrap.Modal.getInstance(document.getElementById('cc-modal-perfil')).hide();
-        CC.cargarPerfiles(json.data.id);
     };
 
     // ── Carga del extracto ───────────────────────────────────────────────────
@@ -297,7 +120,7 @@
         const archivo = document.getElementById('cc-archivo').files[0];
 
         if (!idForma || !idPunto || !idPerfil || !archivo) {
-            alertError('Faltan datos', 'Selecciona cuenta, punto de emisión, perfil y archivo.');
+            alertError('Faltan datos', 'Selecciona cuenta, punto de emisión, formato del banco y archivo.');
             return;
         }
 
