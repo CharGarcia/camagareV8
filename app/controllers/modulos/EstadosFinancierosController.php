@@ -303,7 +303,7 @@ class EstadosFinancierosController extends BaseModuloController
             if ($formato === 'pdf') {
                 $this->service->exportarPdfPorPeriodos($tipo, $datos, $empresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
             } else {
-                $this->service->exportarExcelPorPeriodos($tipo, $datos, $empresaNombre, $rangoFechas);
+                $this->service->exportarExcelPorPeriodos($tipo, $datos, $empresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
             }
             return;
         }
@@ -333,7 +333,7 @@ class EstadosFinancierosController extends BaseModuloController
             $ruc = $empresa['ruc'] ?? '';
             $this->service->exportarSri($tipo, $datos, $empresaNombre, $rangoFechas, $ruc);
         } else {
-            $this->service->exportarExcel($tipo, $datos, $empresaNombre, $rangoFechas);
+            $this->service->exportarExcel($tipo, $datos, $empresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
         }
     }
 

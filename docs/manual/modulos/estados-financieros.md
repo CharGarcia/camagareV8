@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
-etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados
-version: 1.10
+etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel
+version: 1.11
 orden: 50
 estado: activo
 ---
@@ -56,6 +56,14 @@ para una consulta rápida, pero no para presentar nada.
   representante*, *Contador* y *RUC del contador*); si están vacíos, la línea
   de firma sale sin nombre para llenarla a mano. El pie muestra la fecha de
   emisión y "Página N de M".
+- **Formato del Excel**: el mismo diseño del PDF (cabecera con logo y datos de
+  la empresa, título, periodo, filtros, secciones, totales resaltados y firmas).
+  En el reporte de un solo periodo el saldo de cada cuenta va en la **columna de
+  su nivel**: *Nivel 5 … Nivel 1*, con el nivel 1 y los totales en la última
+  columna a la derecha. Así se puede sumar o filtrar cada nivel por separado. En
+  el comparativo por meses se mantiene una columna por mes (y *Total* en
+  resultados), con la misma sangría y resaltado por nivel. Al imprimir, la hoja
+  se ajusta al ancho de la página y repite el encabezado de la tabla.
 - **Formato SRI**: archivo XML para el formulario de renta. Agrupa las cuentas
   de nivel 5 por su **Código SRI** y suma sus saldos; el RUC va en el concepto
   80. Las cuentas sin Código SRI no se incluyen.
@@ -335,6 +343,9 @@ Revise en este orden:
 
 ## Historial de cambios
 
+- **1.11** — El **Excel** sale con el formato del PDF (cabecera de la empresa,
+  secciones, totales resaltados y firmas) y, en el reporte de un periodo, con el
+  saldo de cada cuenta en la **columna de su nivel** (Nivel 5 … Nivel 1).
 - **1.10** — El aviso de asientos pendientes ya no muestra la sección **Otros
   avisos**; mientras el aviso no se resuelve (verificación, respuesta del
   usuario o generación en curso), **Generar** y las exportaciones quedan

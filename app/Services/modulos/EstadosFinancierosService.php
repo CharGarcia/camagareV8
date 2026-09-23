@@ -1387,145 +1387,26 @@ class EstadosFinancierosService
         exit;
     }
 
-    public function exportarExcel(string $tipo, array $datos, string $empresaNombre, string $rangoFechas): void
+    /**
+     * Excel de un solo periodo con el formato del PDF: el saldo de cada cuenta va en la
+     * columna de su nivel (nivel 1 a la derecha). Ver EstadosFinancierosExcelService.
+     *
+     * @param array $empresa Fila completa de `empresas` (logo, RUC, representante legal, contador)
+     */
+    public function exportarExcel(string $tipo, array $datos, array $empresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $nivel = 5): void
     {
-        $headers = ['Código', 'Cuenta', 'Saldo'];
-        $dataExport = [];
-
-        if ($tipo === 'resultados') {
-            $dataExport[] = ['INGRESOS', '', ''];
-            foreach ($datos['ingresos'] as $item) {
-                $dataExport[] = [$item['codigo'], $item['nombre'], $item['saldo_final']];
-            }
-            $dataExport[] = ['', 'TOTAL INGRESOS', $datos['totales']['ingresos']];
-            $dataExport[] = ['', '', ''];
-            
-            $dataExport[] = ['COSTOS', '', ''];
-            foreach ($datos['costos'] as $item) {
-                $dataExport[] = [$item['codigo'], $item['nombre'], $item['saldo_final']];
-            }
-            $dataExport[] = ['', 'TOTAL COSTOS', $datos['totales']['costos']];
-            $dataExport[] = ['', '', ''];
-            
-            $lblBruta = $datos['totales']['utilidad_bruta'] >= 0 ? 'UTILIDAD BRUTA' : 'PÉRDIDA BRUTA';
-            $dataExport[] = ['', $lblBruta, $datos['totales']['utilidad_bruta']];
-            $dataExport[] = ['', '', ''];
-
-            $dataExport[] = ['GASTOS', '', ''];
-            foreach ($datos['gastos'] as $item) {
-                $dataExport[] = [$item['codigo'], $item['nombre'], $item['saldo_final']];
-            }
-            $dataExport[] = ['', 'TOTAL GASTOS', $datos['totales']['gastos']];
-            $dataExport[] = ['', '', ''];
-            
-            $lblNeta = $datos['totales']['utilidad_neta'] >= 0 ? 'UTILIDAD DEL EJERCICIO' : 'PÉRDIDA DEL EJERCICIO';
-            $dataExport[] = ['', $lblNeta, $datos['totales']['utilidad_neta']];
-            
-            $this->reportService->exportToExcel('Estado_Resultados_' . $this->sufijoPeriodo($rangoFechas), $headers, $dataExport, 'Estado Resultados', "{$empresaNombre} - Estado de Resultados ({$rangoFechas})");
-        } else {
-            $dataExport[] = ['ACTIVOS', '', ''];
-            foreach ($datos['activos'] as $item) {
-                $dataExport[] = [$item['codigo'], $item['nombre'], $item['saldo_final']];
-            }
-            $dataExport[] = ['', 'TOTAL ACTIVOS', $datos['totales']['activos']];
-            $dataExport[] = ['', '', ''];
-
-            $dataExport[] = ['PASIVOS', '', ''];
-            foreach ($datos['pasivos'] as $item) {
-                $dataExport[] = [$item['codigo'], $item['nombre'], $item['saldo_final']];
-            }
-            $dataExport[] = ['', 'TOTAL PASIVOS', $datos['totales']['pasivos']];
-            $dataExport[] = ['', '', ''];
-
-            $dataExport[] = ['PATRIMONIO', '', ''];
-            foreach ($datos['patrimonio'] as $item) {
-                $dataExport[] = [$item['codigo'], $item['nombre'], $item['saldo_final']];
-            }
-            $dataExport[] = ['', 'TOTAL PATRIMONIO', $datos['totales']['patrimonio']];
-            $dataExport[] = ['', '', ''];
-
-            $dataExport[] = ['', 'TOTAL PASIVO + PATRIMONIO', $datos['totales']['pasivo_patrimonio']];
-
-            $this->reportService->exportToExcel('Estado_Situacion_Financiera_' . $this->sufijoPeriodo($rangoFechas), $headers, $dataExport, 'Situacion Financiera', "{$empresaNombre} - Estado de Situación Financiera ({$rangoFechas})");
-        }
+        $filtros = $this->filtrosParaPdf((int)($empresa['id'] ?? 0), $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+        (new EstadosFinancierosExcelService())->exportar($tipo, $datos, $empresa, $filtros);
     }
 
     /**
-     * Excel horizontal por periodos: una columna por mes (más "Total" en el reporte de
-     * Resultados; en Situación Financiera el último mes ya es el saldo final).
+     * Excel por periodos (una columna por mes, más "Total" en Resultados) con el formato
+     * del PDF. Ver EstadosFinancierosExcelService.
      */
-    public function exportarExcelPorPeriodos(string $tipo, array $datos, string $empresaNombre, string $rangoFechas): void
+    public function exportarExcelPorPeriodos(string $tipo, array $datos, array $empresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $nivel = 5): void
     {
-        $esResultados = $tipo === 'resultados_periodos';
-        $labels = array_values($datos['periodos']);
-        $headers = array_merge(['Código', 'Cuenta'], $labels, $esResultados ? ['Total'] : []);
-
-        $filaItem = function (array $item) use ($datos, $esResultados) {
-            $fila = [$item['codigo'], $item['nombre']];
-            foreach (array_keys($datos['periodos']) as $p) {
-                $fila[] = $item['valores'][$p] ?? 0;
-            }
-            if ($esResultados) {
-                $fila[] = $item['total'] ?? array_sum($item['valores']);
-            }
-            return $fila;
-        };
-
-        $filaTotal = function (string $titulo, array $porPeriodo) use ($datos, $esResultados) {
-            $fila = ['', $titulo];
-            foreach (array_keys($datos['periodos']) as $p) {
-                $fila[] = $porPeriodo[$p] ?? 0;
-            }
-            if ($esResultados) {
-                $fila[] = $porPeriodo['total'] ?? array_sum(array_intersect_key($porPeriodo, $datos['periodos']));
-            }
-            return $fila;
-        };
-
-        $dataExport = [];
-
-        if ($esResultados) {
-            $dataExport[] = array_merge(['INGRESOS'], array_fill(0, count($headers) - 1, ''));
-            foreach ($datos['ingresos'] as $item) $dataExport[] = $filaItem($item);
-            $dataExport[] = $filaTotal('TOTAL INGRESOS', $datos['totales']['ingresos']);
-            $dataExport[] = array_fill(0, count($headers), '');
-
-            $dataExport[] = array_merge(['COSTOS'], array_fill(0, count($headers) - 1, ''));
-            foreach ($datos['costos'] as $item) $dataExport[] = $filaItem($item);
-            $dataExport[] = $filaTotal('TOTAL COSTOS', $datos['totales']['costos']);
-            $dataExport[] = array_fill(0, count($headers), '');
-
-            $dataExport[] = $filaTotal('UTILIDAD/PÉRDIDA BRUTA', $datos['totales']['utilidad_bruta']);
-            $dataExport[] = array_fill(0, count($headers), '');
-
-            $dataExport[] = array_merge(['GASTOS'], array_fill(0, count($headers) - 1, ''));
-            foreach ($datos['gastos'] as $item) $dataExport[] = $filaItem($item);
-            $dataExport[] = $filaTotal('TOTAL GASTOS', $datos['totales']['gastos']);
-            $dataExport[] = array_fill(0, count($headers), '');
-
-            $dataExport[] = $filaTotal('UTILIDAD/PÉRDIDA DEL EJERCICIO', $datos['totales']['utilidad_neta']);
-
-            $this->reportService->exportToExcel('Estado_Resultados_Periodos_' . $this->sufijoPeriodo($rangoFechas), $headers, $dataExport, 'Resultados x Periodo', "{$empresaNombre} - Estado de Resultados por Periodos ({$rangoFechas})");
-        } else {
-            $dataExport[] = array_merge(['ACTIVOS'], array_fill(0, count($headers) - 1, ''));
-            foreach ($datos['activos'] as $item) $dataExport[] = $filaItem($item);
-            $dataExport[] = $filaTotal('TOTAL ACTIVOS', $datos['totales']['activos']);
-            $dataExport[] = array_fill(0, count($headers), '');
-
-            $dataExport[] = array_merge(['PASIVOS'], array_fill(0, count($headers) - 1, ''));
-            foreach ($datos['pasivos'] as $item) $dataExport[] = $filaItem($item);
-            $dataExport[] = $filaTotal('TOTAL PASIVOS', $datos['totales']['pasivos']);
-            $dataExport[] = array_fill(0, count($headers), '');
-
-            $dataExport[] = array_merge(['PATRIMONIO'], array_fill(0, count($headers) - 1, ''));
-            foreach ($datos['patrimonio'] as $item) $dataExport[] = $filaItem($item);
-            $dataExport[] = $filaTotal('TOTAL PATRIMONIO', $datos['totales']['patrimonio']);
-            $dataExport[] = array_fill(0, count($headers), '');
-
-            $dataExport[] = $filaTotal('TOTAL PASIVO + PATRIMONIO', $datos['totales']['pasivo_patrimonio']);
-
-            $this->reportService->exportToExcel('Estado_Situacion_Financiera_Periodos_' . $this->sufijoPeriodo($rangoFechas), $headers, $dataExport, 'Situación x Periodo', "{$empresaNombre} - Estado de Situación Financiera por Periodos ({$rangoFechas})");
-        }
+        $filtros = $this->filtrosParaPdf((int)($empresa['id'] ?? 0), $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+        (new EstadosFinancierosExcelService())->exportar($tipo, $datos, $empresa, $filtros);
     }
 
     /**
