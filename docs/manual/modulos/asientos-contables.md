@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo
-version: 1.22
+version: 1.24
 orden: 20
 estado: activo
 ---
@@ -349,6 +349,8 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.24** — Corregido: al generar asientos pendientes, algunos documentos que ya tenían asiento fallaban con «transacción abortada», un mensaje que no decía el motivo. Pasaba cuando la base de datos no tenía todavía alguna columna opcional (por ejemplo, la marca de asiento editado a mano). Ahora esos documentos se procesan normalmente.
+- **1.23** — Corregido: la generación de asientos pendientes podía quedarse indefinidamente en «Generando asientos… Preparando…» mientras otro usuario trabajaba en Compras, Ingresos, Egresos, Notas de Crédito/Débito, Retenciones, Liquidaciones o Consignaciones (y, mientras esperaba, podía dejar lentos esos módulos para los demás). Ahora arranca de inmediato. Si un paso no responde en 3 minutos, la ventana lo avisa en lugar de quedarse esperando; lo generado hasta ese momento se conserva.
 - **1.22** — En el modal del asiento, Retroceso y Supr vuelven a borrar un carácter a la vez; antes vaciaban el campo completo de una sola pulsación. Al editar el texto de la cuenta de una línea, la cuenta elegida se suelta y hay que volver a escogerla de la lista.
 - **1.21** — La búsqueda libre del listado es mucho más rápida: medido con 150.000 asientos, de 1,6 a 4 segundos por búsqueda pasa a entre 0,01 y 0,6 segundos, y las palabras que aparecen en casi todos los asientos (por ejemplo *factura*), a 1 o 2 segundos. Encuentra exactamente lo mismo que antes. Requiere correr `database/20260923_busqueda_trigram_asientos.sql`.
 - **1.20** — En el modal del asiento, las columnas *Centro Costo* y *Proyecto* se ocultan cuando la empresa no tiene centros de costo o proyectos activos.

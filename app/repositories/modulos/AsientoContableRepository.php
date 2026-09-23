@@ -765,6 +765,45 @@ class AsientoContableRepository
     }
 
     /**
+     * Consulta "tolerante": si falla (tabla o columna que aún no existe en esta instalación), se
+     * devuelve $alFallar($e) y el llamador sigue de largo, como siempre hicieron estos métodos.
+     *
+     * Lo que agrega es el SAVEPOINT. Estos métodos corren casi siempre DENTRO de la transacción de
+     * guardarAsiento(): en PostgreSQL un error aborta la transacción entera, así que el catch de
+     * antes devolvía el valor de respaldo pero la siguiente sentencia reventaba con 25P02
+     * («transacción abortada»), que no dice nada del error real. Pasó el 23-09-2026 al regenerar el
+     * asiento de 3 facturas en una base sin la columna editado_manual. Con el savepoint solo se
+     * revierte esta consulta y la transacción sigue sana. Mismo arreglo que MigracionMysqlService
+     * (resolverOCrear*).
+     *
+     * @template T
+     * @param callable(\PDO): T $consulta
+     * @param callable(\Throwable): T $alFallar
+     * @return T
+     */
+    private function consultaTolerante(callable $consulta, callable $alFallar): mixed
+    {
+        $pdo = \App\core\Database::getConnection();
+        $conSavepoint = $pdo->inTransaction();
+        if ($conSavepoint) {
+            $pdo->exec('SAVEPOINT sp_asiento_tolerante');
+        }
+        try {
+            $resultado = $consulta($pdo);
+            if ($conSavepoint) {
+                $pdo->exec('RELEASE SAVEPOINT sp_asiento_tolerante');
+            }
+            return $resultado;
+        } catch (\Throwable $e) {
+            if ($conSavepoint) {
+                $pdo->exec('ROLLBACK TO SAVEPOINT sp_asiento_tolerante');
+                $pdo->exec('RELEASE SAVEPOINT sp_asiento_tolerante');
+            }
+            return $alFallar($e);
+        }
+    }
+
+    /**
      * Tercero y número del documento que originó un asiento (factura, compra, egreso…), para
      * completar las líneas que no los traen. El mapa de módulos vive en
      * App\Helpers\DocumentoOrigenAsiento; devuelve null si el módulo no tiene documento con
@@ -780,23 +819,26 @@ class AsientoContableRepository
             return null;
         }
 
-        $pdo = \App\core\Database::getConnection();
-        try {
-            // Las expresiones del mapa son constantes del código; los valores van preparados.
-            $sql = "SELECT ({$doc['tipo']})::varchar AS tipo_entidad,
-                           ({$doc['entidad']})::bigint AS id_entidad,
-                           ({$doc['numero']})::varchar AS numero_documento
-                    FROM {$doc['tabla']} t
-                    WHERE t.id = :id AND t.id_empresa = :id_empresa
-                    LIMIT 1";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([':id' => $idReferenciaOrigen, ':id_empresa' => $idEmpresa]);
-            $row = $stmt->fetch(\PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) {
-            // Tabla o columna inexistente en esta instalación: el asiento se guarda igual.
-            error_log('Asientos: no se pudo leer el documento origen (' . $moduloOrigen . '). ' . $e->getMessage());
-            return null;
-        }
+        $row = $this->consultaTolerante(
+            function (\PDO $pdo) use ($doc, $idReferenciaOrigen, $idEmpresa) {
+                // Las expresiones del mapa son constantes del código; los valores van preparados.
+                $stmt = $pdo->prepare(
+                    "SELECT ({$doc['tipo']})::varchar AS tipo_entidad,
+                            ({$doc['entidad']})::bigint AS id_entidad,
+                            ({$doc['numero']})::varchar AS numero_documento
+                     FROM {$doc['tabla']} t
+                     WHERE t.id = :id AND t.id_empresa = :id_empresa
+                     LIMIT 1"
+                );
+                $stmt->execute([':id' => $idReferenciaOrigen, ':id_empresa' => $idEmpresa]);
+                return $stmt->fetch(\PDO::FETCH_ASSOC);
+            },
+            function (\Throwable $e) use ($moduloOrigen) {
+                // Tabla o columna inexistente en esta instalación: el asiento se guarda igual.
+                error_log('Asientos: no se pudo leer el documento origen (' . $moduloOrigen . '). ' . $e->getMessage());
+                return null;
+            }
+        );
 
         if (!$row) {
             return null;
@@ -822,21 +864,24 @@ class AsientoContableRepository
             return null;
         }
 
-        $pdo = \App\core\Database::getConnection();
-        try {
-            // La expresión del total es una constante del código; los valores van preparados.
-            $sql = "SELECT ({$cfg['total']})::numeric AS total_documento
-                    FROM {$cfg['tabla']} t
-                    WHERE t.id = :id AND t.id_empresa = :id_empresa AND t.eliminado = false
-                    LIMIT 1";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([':id' => $idReferenciaOrigen, ':id_empresa' => $idEmpresa]);
-            $total = $stmt->fetchColumn();
-        } catch (\Throwable $e) {
-            // Tabla o columna inexistente en esta instalación: no se comprueba el cuadre.
-            error_log('Asientos: no se pudo leer el total del documento origen (' . $moduloOrigen . '). ' . $e->getMessage());
-            return null;
-        }
+        $total = $this->consultaTolerante(
+            function (\PDO $pdo) use ($cfg, $idReferenciaOrigen, $idEmpresa) {
+                // La expresión del total es una constante del código; los valores van preparados.
+                $stmt = $pdo->prepare(
+                    "SELECT ({$cfg['total']})::numeric AS total_documento
+                     FROM {$cfg['tabla']} t
+                     WHERE t.id = :id AND t.id_empresa = :id_empresa AND t.eliminado = false
+                     LIMIT 1"
+                );
+                $stmt->execute([':id' => $idReferenciaOrigen, ':id_empresa' => $idEmpresa]);
+                return $stmt->fetchColumn();
+            },
+            function (\Throwable $e) use ($moduloOrigen) {
+                // Tabla o columna inexistente en esta instalación: no se comprueba el cuadre.
+                error_log('Asientos: no se pudo leer el total del documento origen (' . $moduloOrigen . '). ' . $e->getMessage());
+                return null;
+            }
+        );
 
         return $total === false || $total === null ? null : round((float) $total, 2);
     }
@@ -859,33 +904,35 @@ class AsientoContableRepository
             return [];
         }
 
-        $pdo = \App\core\Database::getConnection();
-        try {
-            $placeholders = [];
-            $params = [':id_empresa' => $idEmpresa];
-            foreach ($codigosSlot as $i => $codigo) {
-                $placeholders[] = ':codigo' . $i;
-                $params[':codigo' . $i] = $codigo;
-            }
-
-            $stmt = $pdo->prepare(
-                "SELECT DISTINCT ap.id_cuenta
-                   FROM asientos_programados ap
-                   JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
-                  WHERE ap.id_empresa = :id_empresa
-                    AND at.codigo IN (" . implode(', ', $placeholders) . ")
-                    AND ap.eliminado = false
-                    AND ap.id_cuenta IS NOT NULL"
-            );
-            $stmt->execute($params);
-            return array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
-        } catch (\Throwable $e) {
-            // Sin catálogo de configuración contable no se puede identificar la cartera:
-            // el llamador cae al criterio del total Debe.
-            error_log('Asientos: no se pudieron leer las cuentas de los slots '
-                . implode(', ', $codigosSlot) . '. ' . $e->getMessage());
-            return [];
+        $placeholders = [];
+        $params = [':id_empresa' => $idEmpresa];
+        foreach ($codigosSlot as $i => $codigo) {
+            $placeholders[] = ':codigo' . $i;
+            $params[':codigo' . $i] = $codigo;
         }
+
+        return $this->consultaTolerante(
+            function (\PDO $pdo) use ($placeholders, $params) {
+                $stmt = $pdo->prepare(
+                    "SELECT DISTINCT ap.id_cuenta
+                       FROM asientos_programados ap
+                       JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                      WHERE ap.id_empresa = :id_empresa
+                        AND at.codigo IN (" . implode(', ', $placeholders) . ")
+                        AND ap.eliminado = false
+                        AND ap.id_cuenta IS NOT NULL"
+                );
+                $stmt->execute($params);
+                return array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
+            },
+            function (\Throwable $e) use ($codigosSlot) {
+                // Sin catálogo de configuración contable no se puede identificar la cartera:
+                // el llamador cae al criterio del total Debe.
+                error_log('Asientos: no se pudieron leer las cuentas de los slots '
+                    . implode(', ', $codigosSlot) . '. ' . $e->getMessage());
+                return [];
+            }
+        );
     }
 
     /**
@@ -900,21 +947,23 @@ class AsientoContableRepository
             return null;
         }
 
-        $pdo = \App\core\Database::getConnection();
-        try {
-            // La expresión del número es una constante del código; los valores van preparados.
-            $stmt = $pdo->prepare(
-                "SELECT ({$cfg['numero']})::varchar AS numero
-                   FROM {$cfg['tabla']} t
-                  WHERE t.id = :id AND t.id_empresa = :id_empresa
-                  LIMIT 1"
-            );
-            $stmt->execute([':id' => $idReferenciaOrigen, ':id_empresa' => $idEmpresa]);
-            $numero = $stmt->fetchColumn();
-        } catch (\Throwable $e) {
-            error_log('Asientos: no se pudo leer el número del documento origen (' . $moduloOrigen . '). ' . $e->getMessage());
-            return null;
-        }
+        $numero = $this->consultaTolerante(
+            function (\PDO $pdo) use ($cfg, $idReferenciaOrigen, $idEmpresa) {
+                // La expresión del número es una constante del código; los valores van preparados.
+                $stmt = $pdo->prepare(
+                    "SELECT ({$cfg['numero']})::varchar AS numero
+                       FROM {$cfg['tabla']} t
+                      WHERE t.id = :id AND t.id_empresa = :id_empresa
+                      LIMIT 1"
+                );
+                $stmt->execute([':id' => $idReferenciaOrigen, ':id_empresa' => $idEmpresa]);
+                return $stmt->fetchColumn();
+            },
+            function (\Throwable $e) use ($moduloOrigen) {
+                error_log('Asientos: no se pudo leer el número del documento origen (' . $moduloOrigen . '). ' . $e->getMessage());
+                return null;
+            }
+        );
 
         return $numero === false || $numero === null || $numero === '' ? null : (string) $numero;
     }
@@ -932,33 +981,40 @@ class AsientoContableRepository
         $sql = "UPDATE asientos_contables_cabecera
                 SET editado_manual = :valor, updated_by = :updated_by, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
-        try {
-            $stmt = \App\core\Database::getConnection()->prepare($sql);
-            $stmt->execute([
-                ':id' => $idAsiento,
-                ':id_empresa' => $idEmpresa,
-                ':updated_by' => $updatedBy,
-                ':valor' => $valor ? 'true' : 'false',
-            ]);
-        } catch (\Throwable $e) {
-            error_log('[Asientos] editado_manual no disponible (falta la migración): ' . $e->getMessage());
-        }
+        $this->consultaTolerante(
+            function (\PDO $pdo) use ($sql, $idAsiento, $idEmpresa, $updatedBy, $valor) {
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([
+                    ':id' => $idAsiento,
+                    ':id_empresa' => $idEmpresa,
+                    ':updated_by' => $updatedBy,
+                    ':valor' => $valor ? 'true' : 'false',
+                ]);
+                return null;
+            },
+            function (\Throwable $e) {
+                error_log('[Asientos] editado_manual no disponible (falta la migración): ' . $e->getMessage());
+                return null;
+            }
+        );
     }
 
     /** ¿El asiento está marcado como editado a mano? false también si falta la columna. */
     public function esEditadoManual(int $idAsiento): bool
     {
-        try {
-            $stmt = \App\core\Database::getConnection()->prepare(
-                "SELECT editado_manual FROM asientos_contables_cabecera WHERE id = :id"
-            );
-            $stmt->execute([':id' => $idAsiento]);
-            $v = $stmt->fetchColumn();
-            // PostgreSQL devuelve el boolean como 't'/'f' por PDO: false llega como cadena vacía.
-            return $v === true || $v === 't' || $v === '1' || $v === 1;
-        } catch (\Throwable $e) {
-            return false;
-        }
+        return $this->consultaTolerante(
+            function (\PDO $pdo) use ($idAsiento) {
+                $stmt = $pdo->prepare("SELECT editado_manual FROM asientos_contables_cabecera WHERE id = :id");
+                $stmt->execute([':id' => $idAsiento]);
+                $v = $stmt->fetchColumn();
+                // PostgreSQL devuelve el boolean como 't'/'f' por PDO: false llega como cadena vacía.
+                return $v === true || $v === 't' || $v === '1' || $v === 1;
+            },
+            function (\Throwable $e) {
+                error_log('[Asientos] editado_manual no disponible (falta la migración): ' . $e->getMessage());
+                return false;
+            }
+        );
     }
 
     public function updateEstado(int $idAsiento, string $estado, int $updatedBy): void

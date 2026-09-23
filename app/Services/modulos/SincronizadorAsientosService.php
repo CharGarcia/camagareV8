@@ -188,18 +188,55 @@ class SincronizadorAsientosService
      */
     private function prepararEsquema(\PDO $db): void
     {
+        // Antes se lanzaban los 9 ALTER TABLE … ADD COLUMN IF NOT EXISTS SIEMPRE, en cada paso de
+        // la generación (y al contar pendientes). Aunque la columna ya exista, el ALTER pide un
+        // bloqueo exclusivo de la tabla y ESPERA sin límite a que termine cualquier transacción
+        // abierta sobre ella (otro usuario guardando una compra, un reporte largo…); mientras
+        // espera, además, todas las demás consultas a esa tabla quedan en fila detrás de él. Así
+        // la generación se quedaba para siempre en "Preparando…" (reproducido el 23-09-2026 con
+        // una transacción abierta sobre compras_cabecera). Ahora se mira el catálogo —que no
+        // bloquea nada— y solo se altera la tabla a la que de verdad le falta la columna, con un
+        // tope de espera.
+        $tablas = [
+            'compras_cabecera', 'liquidaciones_cabecera', 'notas_credito_cabecera',
+            'nota_debito_cabecera', 'retencion_venta_cabecera', 'retencion_compra_cabecera',
+            'ingresos_cabecera', 'egresos_cabecera', 'consignaciones_ventas',
+        ];
         try {
-            $db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-            $db->exec("ALTER TABLE liquidaciones_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-            $db->exec("ALTER TABLE notas_credito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-            $db->exec("ALTER TABLE nota_debito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-            $db->exec("ALTER TABLE retencion_venta_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-            $db->exec("ALTER TABLE retencion_compra_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-            $db->exec("ALTER TABLE ingresos_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-            $db->exec("ALTER TABLE egresos_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
-            $db->exec("ALTER TABLE consignaciones_ventas ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
+            $st = $db->prepare(
+                "SELECT c.relname
+                 FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = current_schema()
+                 WHERE c.relname = ANY(string_to_array(:tablas, ','))
+                   AND c.relkind = 'r'
+                   AND NOT EXISTS (SELECT 1 FROM pg_attribute a
+                                   WHERE a.attrelid = c.oid AND a.attname = 'id_asiento_contable'
+                                     AND a.attnum > 0 AND NOT a.attisdropped)"
+            );
+            $st->execute([':tablas' => implode(',', $tablas)]);
+            $faltantes = $st->fetchAll(\PDO::FETCH_COLUMN);
         } catch (\Throwable $e) {
-            // Ignorar errores si no tiene permisos o ya existen
+            return;
+        }
+        if (!$faltantes) {
+            return;
+        }
+
+        try {
+            $db->exec("SET lock_timeout = '3s'");
+            foreach ($faltantes as $tabla) {
+                if (!in_array($tabla, $tablas, true)) {
+                    continue;
+                }
+                try {
+                    $db->exec("ALTER TABLE {$tabla} ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER");
+                } catch (\Throwable $e) {
+                    // Sin permisos o tabla ocupada: el SQL de detección de ese módulo fallará y se
+                    // omitirá sin romper; la columna se agrega en el próximo intento.
+                }
+            }
+        } finally {
+            try { $db->exec("SET lock_timeout = 0"); } catch (\Throwable $e) {}
         }
     }
 

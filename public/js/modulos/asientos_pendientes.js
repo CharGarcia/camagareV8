@@ -29,6 +29,9 @@
 (function () {
     'use strict';
 
+    /** Máximo que se espera a un paso (el servidor le da 120 s de ejecución). */
+    const TOPE_PASO_MS = 180000;
+
     const escapeHtml = (s) => String(s).replace(/[&<>"']/g,
         c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -183,12 +186,23 @@
                 if (cancelado) { interrumpido = true; break; }
 
                 let json;
+                // Tope por paso: si el servidor queda esperando (p. ej. un bloqueo en la base), la
+                // ventana no se queda para siempre en "Preparando…" sin decir nada.
+                const ctrl = new AbortController();
+                const tope = setTimeout(() => ctrl.abort(), TOPE_PASO_MS);
                 try {
-                    const res = await fetch(`${urlBase}/sincronizarPasoAjax?paso=${n}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    const res = await fetch(`${urlBase}/sincronizarPasoAjax?paso=${n}`, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        signal: ctrl.signal,
+                    });
                     json = await res.json();
                 } catch (e) {
-                    errorMsg = 'No se pudo completar la generación de asientos (error de red).';
+                    errorMsg = e.name === 'AbortError'
+                        ? 'La generación de asientos no respondió a tiempo. Los asientos generados hasta ahora se conservan; vuelva a intentarlo en unos minutos.'
+                        : 'No se pudo completar la generación de asientos (error de red).';
                     break;
+                } finally {
+                    clearTimeout(tope);
                 }
                 if (!json || json.ok === false) {
                     errorMsg = (json && json.error) ? json.error : 'No se pudieron generar los asientos.';
