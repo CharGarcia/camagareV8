@@ -6,14 +6,40 @@ let TR_huboCambios = false; // se puso true si algo cambió mientras el modal es
 document.getElementById('tr-modal-lote').addEventListener('hidden.bs.modal', function () {
     if (TR_huboCambios) {
         TR_huboCambios = false;
-        window.location.reload();
+        TR_buscar(TR_paginaActual);
     }
 });
 
-function TR_buscar(p = 1) {
-    const b = document.getElementById('tr-buscar').value;
-    const estado = document.getElementById('tr-estado')?.value || 'pendientes';
-    window.location.href = `${TR_URL}/index?b=${encodeURIComponent(b)}&estado=${encodeURIComponent(estado)}&page=${p}&sort=${TR_currentSort}&dir=${TR_currentDir}`;
+let TR_busquedaSeq = 0;
+
+/**
+ * Recarga el listado por AJAX con lo que tenga el buscador (texto libre + chips
+ * de FiltrosModal en #tr-buscar). Devuelve la promesa: FiltrosModal apaga su
+ * indicador de carga cuando termina.
+ */
+async function TR_buscar(p = 1) {
+    const pagina = Math.max(1, p);
+    const b = document.getElementById('tr-buscar')?.value || '';
+    const seq = ++TR_busquedaSeq;
+    const tbody = document.getElementById('tr-tbody');
+    tbody?.classList.add('fm-cargando-target');
+    try {
+        const qs = `b=${encodeURIComponent(b)}&page=${pagina}&sort=${encodeURIComponent(TR_currentSort)}&dir=${encodeURIComponent(TR_currentDir)}`;
+        const res = await fetch(`${TR_URL}/listarAjax?${qs}`);
+        const data = await res.json();
+        if (seq !== TR_busquedaSeq || !data.ok) return; // llegó tarde una búsqueda vieja, o falló
+        TR_paginaActual = data.page;
+        tbody.innerHTML = data.rows;
+        document.getElementById('tr-pag-info').textContent = `${data.total} registros`;
+        document.getElementById('tr-pag-prev').disabled = data.page <= 1;
+        document.getElementById('tr-pag-next').disabled = data.page >= data.totalPages;
+        document.getElementById('tr-btn-pdf').href = data.pdf_url;
+        document.getElementById('tr-btn-excel').href = data.excel_url;
+    } catch (e) {
+        console.error('Error al buscar lotes:', e);
+    } finally {
+        if (seq === TR_busquedaSeq) tbody?.classList.remove('fm-cargando-target');
+    }
 }
 
 function TR_esc(s) {
@@ -444,7 +470,9 @@ async function TR_accion(url, body, recargarDetalle = false) {
                 await TR_cargarLote(TR_loteActual.id);
             } else {
                 await Swal.fire({ icon: 'success', title: 'Listo', text: json.mensaje || 'Operación realizada.', timer: 1800, showConfirmButton: false, target: TR_swalTarget() });
-                window.location.reload();
+                // Cerrar el modal refresca el listado (hidden.bs.modal) sin perder los filtros del buscador.
+                const modal = bootstrap.Modal.getInstance(document.getElementById('tr-modal-lote'));
+                if (modal) modal.hide(); else TR_buscar(TR_paginaActual);
             }
         } else {
             TR_swalError(json.mensaje);

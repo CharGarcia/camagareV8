@@ -6,7 +6,7 @@ ruta_modulo: modulos/transferencias
 tipo: modulo
 visibilidad: admin
 etiquetas: transferencias, archivo bancario, pago masivo, lote de pagos, nomina, proveedores, banco, aprobacion, filtro de estado, lotes pendientes, sin aprobar, no aparece el lote, donde estan los lotes aprobados, pagos pendientes de transferencia, no aparece el egreso, sin cuenta bancaria
-version: 1.4
+version: 1.6
 orden: 90
 estado: activo
 ---
@@ -28,19 +28,43 @@ el banco.
 4. **Genere el archivo** en el formato de su banco.
 5. Súbalo al portal del banco.
 
-## Qué lotes se ven al entrar
+El modal del lote queda fijo mientras trabaja: no se cierra al hacer clic fuera
+de él ni con la tecla Esc, solo con **Cerrar** (o la X), para no perder lo que
+se está armando por un clic accidental.
 
-La pantalla abre mostrando solo los lotes **sin aprobar**: los que están en
-*Borrador* y los *Pendientes de aprobación*, que son los que todavía le piden
-algo. En cuanto un lote se aprueba, deja de aparecer en esa vista.
+### Para qué sirve la fecha de pago
 
-Para ver el resto está el selector de **estado**, junto al buscador: elija
-*Todos los estados* para ver el historial completo, o un estado puntual
-(*Aprobado*, *Generado*, *Confirmado*, *Rechazado*, *Anulado*). El PDF y el
-Excel se descargan con el mismo filtro que tenga la pantalla en ese momento.
+Es la fecha en que se piensa hacer la transferencia en el banco. Es obligatoria
+y **solo es informativa**: aparece en el listado, en el PDF y el Excel del
+listado, se puede buscar con `fecha:` y ordenar por ella, y un formato de banco
+puede escribirla en el archivo si el banco la pide (el de Produbanco no la usa).
+**No** cambia la fecha de los egresos, no genera ningún asiento contable ni
+filtra qué pagos pendientes se muestran.
 
-Si escribe `estado:APROBADO` directamente en el buscador, manda lo que escribió y
-el selector se ignora.
+## Buscar y filtrar el listado
+
+El buscador es el mismo de los demás listados del sistema:
+
+- **Texto libre**: lo que escriba se busca en el número de lote, la cuenta de
+  origen, el usuario que lo creó y las observaciones. El estado y el tipo no
+  entran en el texto libre: se filtran desde el modal.
+- **Botón de filtros** (embudo, a la izquierda del buscador): abre un modal con
+  todos los filtros — número de lote, estado, tipo (proveedores, nómina o
+  ambos), fecha de pago, monto total, cuenta origen, formato del banco, cantidad
+  de pagos, fecha de registro y usuario que lo creó. Se aplican con *Aplicar*.
+- Los filtros activos se ven como **chips** dentro del buscador; la × de cada
+  chip lo quita.
+
+La búsqueda se hace sin recargar la página. El PDF y el Excel se descargan con
+los mismos filtros que tenga la pantalla en ese momento.
+
+### Qué lotes se ven al entrar
+
+La pantalla abre mostrando **todos los lotes**, del más reciente al más antiguo.
+Para ver solo los que todavía le piden algo, elija en el modal de filtros
+*Estado: Sin aprobar* (lotes en *Borrador* y *Pendientes de aprobación*); también
+puede elegir un estado puntual (*Aprobado*, *Generado*, *Confirmado*,
+*Rechazado*, *Anulado*).
 
 ## Aprobación y anti-duplicados
 
@@ -60,10 +84,10 @@ lote se aprueba automáticamente al enviarlo. Antes esta configuración estaba e
 **El sistema no envía ningún correo** cuando un lote queda pendiente. Quien
 aprueba entra al módulo y lo hace desde ahí:
 
-1. Abre **Cargar transferencias**. La pantalla ya viene filtrada en *Sin
-   aprobar*, así que los lotes que esperan su decisión están a la vista —
-   también los que armó otra persona, aunque su permiso sea solo de registros
-   propios.
+1. Abre **Cargar transferencias** y, si quiere ver solo lo que espera su
+   decisión, filtra *Estado: Sin aprobar* o *Pendiente de aprobación* en el
+   modal de filtros. Ve también los lotes que armó otra persona, aunque su
+   permiso sea solo de registros propios.
 2. Abre el lote y usa los botones **Aprobar** o **Rechazar**.
 
 Un aprobador configurado tiene los mismos botones que un superadministrador,
@@ -94,8 +118,8 @@ datos bancarios en la ficha del proveedor o del empleado y vuelva a buscar.
   cuenta no tengan espacios ni guiones.
 - **Un egreso ya está en otro lote**: el control anti-duplicados lo bloqueó;
   revise el lote anterior.
-- **Desapareció un lote que acabo de aprobar**: no se borró. La pantalla abre
-  filtrada en *Sin aprobar*; cámbiela a *Todos los estados* o a *Aprobado*.
+- **No aparece un lote**: revise los chips del buscador; si hay un filtro de
+  estado o de fecha activo, quítelo con la ×.
 - **No me llegó el correo para aprobar**: no existe ese correo. La aprobación se
   hace entrando al módulo.
 - **No veo los botones Aprobar/Rechazar**: no está configurado como aprobador
@@ -108,3 +132,5 @@ datos bancarios en la ficha del proveedor o del empleado y vuelva a buscar.
 - **1.2** — El listado abre mostrando solo los lotes sin aprobar y se agrega un selector de estado para ver el resto.
 - **1.3** — Se elimina el aviso por correo a los aprobadores: la aprobación se hace entrando al módulo. El aprobador ve los lotes pendientes aunque los haya armado otra persona, y aprueba con los mismos botones que un superadministrador, incluidos sus propios lotes.
 - **1.4** — *Mostrar pagos pendientes de transferencia* lista solo los pagos cuyo beneficiario tiene banco y número de cuenta registrados; los que no los tienen ya no aparecen (antes salían en rojo, sin poder seleccionarse).
+- **1.5** — El modal del lote solo se cierra con *Cerrar* (o la X): ya no se cierra al hacer clic fuera ni con Esc. **Generar archivo** pasa al pie del modal, junto a *Cerrar*, y **Anular** al pie a la izquierda. Se documenta para qué sirve la fecha de pago.
+- **1.6** — Se quita el selector de estado: el listado usa el buscador estándar del sistema (texto libre + modal de filtros con chips) y busca sin recargar la página. Al entrar muestra todos los lotes; los sin aprobar se ven eligiendo *Estado: Sin aprobar* en el modal de filtros.

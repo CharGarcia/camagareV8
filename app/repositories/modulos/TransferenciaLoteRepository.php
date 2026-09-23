@@ -25,7 +25,7 @@ class TransferenciaLoteRepository extends BaseRepository
 
     /**
      * Lotes que todavía no pasaron por la aprobación: lo que le queda por
-     * gestionar al usuario. Es el filtro con el que abre el listado.
+     * gestionar al usuario. Es la opción "Sin aprobar" del filtro de estado.
      * RECHAZADO y ANULADO quedan fuera a propósito: tampoco fueron aprobados,
      * pero son lotes cerrados, no trabajo pendiente.
      */
@@ -51,14 +51,13 @@ class TransferenciaLoteRepository extends BaseRepository
     // ─── LISTADO / DETALLE ──────────────────────────────────────────────────────
 
     /**
-     * @param string $filtroEstado 'pendientes' (solo ESTADOS_NO_APROBADOS, por
-     *        defecto), 'todos', o uno de ESTADOS. Se ignora si la búsqueda ya
-     *        trae un filtro `estado:` escrito a mano, que es más específico.
+     * El estado se filtra solo con `estado:` en $buscar (modal de filtros del
+     * buscador estándar); el listado abre sin filtro de estado (todos los lotes).
      * @param bool $esAprobador Si el usuario aprueba lotes de pago bancario, el
      *        filtro de "registros propios" no debe esconderle los lotes que
      *        están esperando su aprobación: son justamente los ajenos.
      */
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, string $filtroEstado = 'pendientes', bool $esAprobador = false): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, bool $esAprobador = false): array
     {
         if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
             $ordenCol = 'numero';
@@ -76,35 +75,31 @@ class TransferenciaLoteRepository extends BaseRepository
         }
 
         $parsed = FiltrosBusqueda::parsear($buscar);
-        if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (CAST(l.numero AS TEXT) ILIKE :b OR l.tipo_lote ILIKE :b OR l.estado ILIKE :b OR fp.nombre ILIKE :b)";
-            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
+        // Texto libre sobre las columnas del listado. Estado y tipo NO entran
+        // (regla del buscador estándar): se filtran desde el modal.
+        $cond = FiltrosBusqueda::condicionTexto([
+            'l.numero::text',   // N°
+            'fp.nombre',        // Cuenta origen
+            'u.nombre',         // Creado por
+            'l.observaciones',
+        ], $parsed['texto_libre'], $params, 'tl_b');
+        if ($cond !== '') {
+            $where .= ' AND ' . $cond;
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'exacto'   => ['estado' => 'l.estado', 'tipo' => 'l.tipo_lote'],
-            'numerico' => ['numero' => 'l.numero', 'monto' => 'l.monto_total'],
-            'fecha'    => ['fecha' => 'l.fecha_pago'],
+            'exacto'   => [
+                'estado'  => 'l.estado',
+                'tipo'    => 'l.tipo_lote',
+                'cuenta'  => 'l.id_forma_pago_origen',
+                'formato' => 'l.id_formato_transferencia',
+                'usuario' => 'l.created_by',
+            ],
+            'numerico' => ['numero' => 'l.numero', 'monto' => 'l.monto_total', 'pagos' => 'l.cantidad_pagos'],
+            'fecha'    => ['fecha' => 'l.fecha_pago', 'registro' => 'l.created_at'],
         ]);
 
-        // Filtro de estado del selector. Si el usuario escribió `estado:…` en el
-        // buscador, ese gana: si no, los dos se sumarían y el listado saldría
-        // vacío sin que se entienda por qué.
-        if (!isset($parsed['filtros']['estado'])) {
-            if ($filtroEstado === 'pendientes') {
-                $marcas = [];
-                foreach (self::ESTADOS_NO_APROBADOS as $i => $e) {
-                    $marcas[] = ":fe$i";
-                    $params[":fe$i"] = $e;
-                }
-                $where .= " AND l.estado IN (" . implode(', ', $marcas) . ")";
-            } elseif (in_array($filtroEstado, self::ESTADOS, true)) {
-                $where .= " AND l.estado = :fe";
-                $params[':fe'] = $filtroEstado;
-            }
-            // 'todos' (o cualquier valor desconocido): sin filtro de estado.
-        }
-
-        $joins = "LEFT JOIN empresa_formas_pago fp ON fp.id = l.id_forma_pago_origen";
+        $joins = "LEFT JOIN empresa_formas_pago fp ON fp.id = l.id_forma_pago_origen
+                  LEFT JOIN usuarios u  ON u.id = l.created_by";
 
         $stCount = $this->db->prepare("SELECT COUNT(*) FROM transferencias_lotes l $joins $where");
         $stCount->execute($params);
@@ -124,7 +119,6 @@ class TransferenciaLoteRepository extends BaseRepository
                 FROM transferencias_lotes l
                 $joins
                 LEFT JOIN transferencia_formatos tf ON tf.id = l.id_formato_transferencia
-                LEFT JOIN usuarios u  ON u.id = l.created_by
                 LEFT JOIN usuarios ua ON ua.id = l.aprobado_por
                 $where
                 ORDER BY l.$ordenCol $dir, l.id DESC
@@ -133,6 +127,20 @@ class TransferenciaLoteRepository extends BaseRepository
         $st->execute($params);
 
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /** Usuarios que armaron algún lote de la empresa (opciones del filtro "Creado por"). */
+    public function getUsuariosConLotes(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+             FROM transferencias_lotes l
+             JOIN usuarios u ON u.id = l.created_by
+             WHERE l.id_empresa = :e AND l.eliminado = false
+             ORDER BY u.nombre"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function getById(int $id, int $idEmpresa): ?array

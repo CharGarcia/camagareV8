@@ -52,9 +52,14 @@ class TransferenciaLoteService
 
     // ─── Listado / detalle ────────────────────────────────────────────────────
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, string $filtroEstado = 'pendientes', bool $esAprobador = false): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, bool $esAprobador = false): array
     {
-        return $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $filtroEstado, $esAprobador);
+        return $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $esAprobador);
+    }
+
+    public function getUsuariosConLotes(int $idEmpresa): array
+    {
+        return $this->repo->getUsuariosConLotes($idEmpresa);
     }
 
     public function getDetalleCompleto(int $idLote, int $idEmpresa): ?array

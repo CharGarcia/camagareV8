@@ -35,37 +35,25 @@ class TransferenciasController extends BaseModuloController
         return empty($this->getPermisos()['todo']) ? (int) ($_SESSION['id_usuario'] ?? 0) : null;
     }
 
-    /**
-     * Estado con el que se filtra el listado. Por defecto 'pendientes' (lotes
-     * que aún no fueron aprobados); el selector de la vista permite ver
-     * 'todos' o un estado puntual.
-     */
-    private function filtroEstado(): string
-    {
-        $estado = trim($_GET['estado'] ?? '');
-        if ($estado === 'todos' || in_array($estado, TransferenciaLoteRepository::ESTADOS, true)) {
-            return $estado;
-        }
-        return 'pendientes';
-    }
+    private const POR_PAGINA = 20;
 
     public function index(): void
     {
         $this->requireLeer();
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
 
-        $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        // Abre mostrando todos los lotes; el estado se filtra desde el modal del buscador.
+        $buscar   = trim((string) ($_GET['b'] ?? ''));
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? 'numero');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? 'DESC'));
-        $perPage  = 20;
-        $filtroEstado = $this->filtroEstado();
+        $perPage  = self::POR_PAGINA;
 
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         $esAprobador = $this->service->esAprobador($idUsuario, $idEmpresa, $nivel);
 
-        $res   = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $filtroEstado, $esAprobador);
+        $res   = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $esAprobador);
         $total = $res['total'];
 
         $formaPagoRepo = new FormaPagoRepository();
@@ -85,8 +73,10 @@ class TransferenciasController extends BaseModuloController
             'perPage'      => $perPage,
             'totalPages'   => $perPage > 0 ? (int) ceil($total / $perPage) : 1,
             'buscar'       => $buscar,
-            'filtroEstado' => $filtroEstado,
+            'filasHtml'    => $this->renderFilasHtml($res['rows']),
             'estadosLote'  => TransferenciaLoteRepository::ESTADOS,
+            'etiquetasEstado' => self::ETIQUETAS_ESTADO,
+            'usuariosLotes'   => $this->service->getUsuariosConLotes($idEmpresa),
             'ordenCol'     => $ordenCol,
             'ordenDir'     => $ordenDir,
             'esAprobador'  => $esAprobador,
@@ -98,6 +88,83 @@ class TransferenciasController extends BaseModuloController
             'rutaModulo'   => self::RUTA_MODULO,
             'fullWidth'    => true,
         ]);
+    }
+
+    /**
+     * AJAX: listado filtrado (buscador estándar FiltrosModal), sin recargar la
+     * página. Devuelve las filas, la paginación y los enlaces de exportación
+     * con la misma búsqueda.
+     */
+    public function listarAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+            $buscar    = trim((string) ($_GET['b'] ?? ''));
+            $page      = max(1, (int) ($_GET['page'] ?? 1));
+            $ordenCol  = trim($_GET['sort'] ?? 'numero');
+            $ordenDir  = strtoupper(trim($_GET['dir'] ?? 'DESC'));
+            $esAprobador = $this->service->esAprobador((int) ($_SESSION['id_usuario'] ?? 0), $idEmpresa, (int) ($_SESSION['nivel'] ?? 1));
+
+            $res = $this->service->getListado($idEmpresa, $buscar, $page, self::POR_PAGINA, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $esAprobador);
+            $total = (int) $res['total'];
+            $qs = 'b=' . urlencode($buscar) . '&sort=' . urlencode($ordenCol) . '&dir=' . urlencode($ordenDir);
+            $base = BASE_URL . '/' . self::RUTA_MODULO;
+
+            echo json_encode([
+                'ok'         => true,
+                'rows'       => $this->renderFilasHtml($res['rows']),
+                'total'      => $total,
+                'page'       => $page,
+                'totalPages' => max(1, (int) ceil($total / self::POR_PAGINA)),
+                'pdf_url'    => $base . '/exportPdf?' . $qs,
+                'excel_url'  => $base . '/exportExcel?' . $qs,
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo cargar el listado.']);
+        }
+    }
+
+    private const ETIQUETAS_ESTADO = [
+        'BORRADOR' => 'Borrador', 'PENDIENTE_APROBACION' => 'Pendiente de aprobación',
+        'APROBADO' => 'Aprobado', 'RECHAZADO' => 'Rechazado', 'GENERADO' => 'Generado',
+        'CONFIRMADO' => 'Confirmado', 'ANULADO' => 'Anulado',
+    ];
+
+    /** Filas <tr> del listado (las usan index() y listarAjax()). */
+    private function renderFilasHtml(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-bank fs-2 d-block mb-2"></i> No se encontraron lotes de pago bancario.</td></tr>';
+        }
+        $e = static fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $html = '';
+        foreach ($rows as $r) {
+            $html .= '<tr style="cursor:pointer;" onclick="TR_abrirExistente(' . (int) $r['id'] . ')">'
+                . '<td class="ps-3 fw-bold" data-col="numero">#' . (int) $r['numero'] . '</td>'
+                . '<td data-col="fecha">' . ($r['fecha_pago'] ? date('d-m-Y', strtotime($r['fecha_pago'])) : '-') . '</td>'
+                . '<td data-col="tipo" class="text-capitalize">' . $e(strtolower((string) $r['tipo_lote'])) . '</td>'
+                . '<td class="small" data-col="banco">' . $e($r['forma_pago_nombre'] ?? '-') . '</td>'
+                . '<td class="text-end" data-col="monto">$ ' . number_format((float) $r['monto_total'], 2) . '</td>'
+                . '<td class="text-center" data-col="pagos">' . (int) $r['cantidad_pagos'] . '</td>'
+                . '<td class="text-center" data-col="estado">' . $this->badgeEstado((string) ($r['estado'] ?? 'BORRADOR')) . '</td>'
+                . '<td class="small text-muted" data-col="creado">' . $e($r['creado_por_nombre'] ?? '-') . '</td>'
+                . '</tr>';
+        }
+        return $html;
+    }
+
+    private function badgeEstado(string $estado): string
+    {
+        $color = [
+            'BORRADOR' => 'secondary', 'PENDIENTE_APROBACION' => 'warning', 'APROBADO' => 'info',
+            'RECHAZADO' => 'danger', 'GENERADO' => 'primary', 'CONFIRMADO' => 'success', 'ANULADO' => 'dark',
+        ][$estado] ?? 'secondary';
+        $texto = $estado === 'PENDIENTE_APROBACION' ? 'Pend. aprobación' : ($this->etiquetaEstado($estado));
+        return '<span class="badge bg-' . $color . ' bg-opacity-10 text-' . $color . ' border border-' . $color . '">'
+            . htmlspecialchars($texto, ENT_QUOTES, 'UTF-8') . '</span>';
     }
 
     /**
@@ -422,17 +489,13 @@ class TransferenciasController extends BaseModuloController
             $idEmpresa,
             (int) ($_SESSION['nivel'] ?? 1)
         );
-        $res = $this->service->getListado($idEmpresa, $buscar, 1, 10000, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $this->filtroEstado(), $esAprobador);
+        $res = $this->service->getListado($idEmpresa, $buscar, 1, 10000, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $esAprobador);
         return $res['rows'];
     }
 
     private function etiquetaEstado(string $estado): string
     {
-        return [
-            'BORRADOR' => 'Borrador', 'PENDIENTE_APROBACION' => 'Pendiente de aprobación',
-            'APROBADO' => 'Aprobado', 'RECHAZADO' => 'Rechazado', 'GENERADO' => 'Generado',
-            'CONFIRMADO' => 'Confirmado', 'ANULADO' => 'Anulado',
-        ][$estado] ?? $estado;
+        return self::ETIQUETAS_ESTADO[$estado] ?? $estado;
     }
 
     public function exportPdf(): void

@@ -12,19 +12,8 @@ $total   = (int) ($total ?? 0);
 $page    = (int) ($page ?? 1);
 $totalPages = (int) ($totalPages ?? 1);
 $vistaConfig = \App\Helpers\PreferenciasHelper::getPreferenciasVista($rutaModulo);
-
-$estadoBadge = function (string $estado): string {
-    return match ($estado) {
-        'BORRADOR'             => '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary">Borrador</span>',
-        'PENDIENTE_APROBACION' => '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning">Pend. aprobación</span>',
-        'APROBADO'             => '<span class="badge bg-info bg-opacity-10 text-info border border-info">Aprobado</span>',
-        'RECHAZADO'            => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger">Rechazado</span>',
-        'GENERADO'             => '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary">Generado</span>',
-        'CONFIRMADO'           => '<span class="badge bg-success bg-opacity-10 text-success border border-success">Confirmado</span>',
-        'ANULADO'              => '<span class="badge bg-dark bg-opacity-10 text-dark border border-dark">Anulado</span>',
-        default                => '<span class="badge bg-secondary">' . htmlspecialchars($estado) . '</span>',
-    };
-};
+$buscar = $buscar ?? '';
+$qsExport = 'b=' . urlencode($buscar) . '&sort=' . urlencode($ordenCol ?? '') . '&dir=' . urlencode($ordenDir ?? '');
 
 echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig);
 ?>
@@ -40,34 +29,65 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3 w-100">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <form class="d-flex align-items-center m-0" onsubmit="event.preventDefault(); TR_buscar(1);">
-                <div class="input-group input-group-sm" style="width: 300px;">
-                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                    <input type="text" id="tr-buscar" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar por número, tipo, estado…" value="<?= htmlspecialchars($buscar ?? '') ?>" autocomplete="off">
-                    <?php if (!empty($buscar)): ?>
-                        <a href="<?= $urlBase ?>/index?estado=<?= urlencode($filtroEstado ?? 'pendientes') ?>" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
-                    <?php endif; ?>
-                </div>
-            </form>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
             <?php
-            // Filtro de estado. El listado abre en "Sin aprobar" (borradores y
-            // pendientes de aprobación); desde aquí se ve el resto.
-            $etiquetasEstado = [
-                'BORRADOR' => 'Borrador', 'PENDIENTE_APROBACION' => 'Pendiente de aprobación',
-                'APROBADO' => 'Aprobado', 'GENERADO' => 'Generado', 'CONFIRMADO' => 'Confirmado',
-                'RECHAZADO' => 'Rechazado', 'ANULADO' => 'Anulado',
+            // Buscador estándar (FiltrosModal): texto libre sobre N°, cuenta origen,
+            // creado por y observaciones (sin estado ni tipo) + botón embudo con el
+            // modal de filtros + chips de los activos. Las claves (key) deben existir
+            // en los mapas de TransferenciaLoteRepository::getListado(). Sin pestaña
+            // Detalles. Al entrar se muestran todos los lotes (sin filtro de estado).
+            $tL = 'Lote';
+            $etqEstado = $etiquetasEstado ?? [];
+            $opcionesEstado = array_merge(
+                [['v' => implode(',', \App\repositories\modulos\TransferenciaLoteRepository::ESTADOS_NO_APROBADOS), 'l' => 'Sin aprobar (borrador y pendiente)']],
+                array_map(fn($e) => ['v' => $e, 'l' => $etqEstado[$e] ?? $e], $estadosLote ?? [])
+            );
+            $opcIdNombre = fn(array $lista) => array_map(fn($x) => ['v' => (string) $x['id'], 'l' => (string) $x['nombre']], $lista);
+            // Filas de 12 columnas:
+            //   Lote:     [N° 4][Estado 4][Tipo 4]
+            //   Pago:     [Fecha de pago 6][Monto total 6]
+            //   Banco:    [Cuenta origen 4][Formato 4][Cantidad de pagos 4]
+            //   Registro: [Fecha de registro 6][Creado por 6]
+            $filtrosTransferencias = [
+                ['tab' => $tL, 'key' => 'numero',   'label' => 'N° de lote',         'icon' => 'bi-hash',            'type' => 'number_range', 'grupo' => 'Lote',     'col' => 4],
+                ['tab' => $tL, 'key' => 'estado',   'label' => 'Estado',             'icon' => 'bi-flag',            'type' => 'select',       'grupo' => 'Lote',     'col' => 4, 'options' => $opcionesEstado],
+                ['tab' => $tL, 'key' => 'tipo',     'label' => 'Tipo',               'icon' => 'bi-people',          'type' => 'select',       'grupo' => 'Lote',     'col' => 4, 'options' => [
+                    ['v' => 'PROVEEDORES', 'l' => 'Proveedores'],
+                    ['v' => 'NOMINA',      'l' => 'Nómina'],
+                    ['v' => 'AMBOS',       'l' => 'Ambos'],
+                ]],
+                ['tab' => $tL, 'key' => 'fecha',    'label' => 'Fecha de pago',      'icon' => 'bi-calendar-event',  'type' => 'date_range',   'grupo' => 'Pago',     'col' => 6, 'atajos' => true],
+                ['tab' => $tL, 'key' => 'monto',    'label' => 'Monto total',        'icon' => 'bi-cash-stack',      'type' => 'number_range', 'grupo' => 'Pago',     'col' => 6],
+                ['tab' => $tL, 'key' => 'cuenta',   'label' => 'Cuenta origen',      'icon' => 'bi-bank',            'type' => 'select',       'grupo' => 'Banco',    'col' => 4, 'options' => $opcIdNombre($formasPagoOrigen ?? [])],
+                ['tab' => $tL, 'key' => 'formato',  'label' => 'Formato del banco',  'icon' => 'bi-file-earmark-text', 'type' => 'select',     'grupo' => 'Banco',    'col' => 4, 'options' => $opcIdNombre($formatosTransferencia ?? [])],
+                ['tab' => $tL, 'key' => 'pagos',    'label' => 'Cantidad de pagos',  'icon' => 'bi-list-ol',         'type' => 'number_range', 'grupo' => 'Banco',    'col' => 4],
+                ['tab' => $tL, 'key' => 'registro', 'label' => 'Fecha de registro',  'icon' => 'bi-calendar-plus',   'type' => 'date_range',   'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tL, 'key' => 'usuario',  'label' => 'Creado por',         'icon' => 'bi-person-gear',     'type' => 'select',       'grupo' => 'Registro', 'col' => 6, 'options' => $opcIdNombre($usuariosLotes ?? [])],
             ];
-            $filtroEstado = $filtroEstado ?? 'pendientes';
             ?>
-            <select id="tr-estado" class="form-select form-select-sm" style="width: 190px;" onchange="TR_buscar(1)" title="Filtrar por estado">
-                <option value="pendientes" <?= $filtroEstado === 'pendientes' ? 'selected' : '' ?>>Sin aprobar</option>
-                <option value="todos" <?= $filtroEstado === 'todos' ? 'selected' : '' ?>>Todos los estados</option>
-                <?php foreach (($estadosLote ?? []) as $e): ?>
-                    <option value="<?= htmlspecialchars($e) ?>" <?= $filtroEstado === $e ? 'selected' : '' ?>><?= htmlspecialchars($etiquetasEstado[$e] ?? $e) ?></option>
-                <?php endforeach; ?>
-            </select>
-            <div class="btn-group btn-group-sm">
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorTR"></div>
+            <input type="hidden" id="tr-buscar" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorTR',
+                        hiddenInputId: 'tr-buscar',
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de lotes de pago bancario',
+                        inputWidth: 420,
+                        extraId: 'fmExtraTR',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosTransferencias, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tr-tbody',
+                        onApply: () => TR_buscar(1),
+                    }).init();
+                });
+            </script>
+
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraTR" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'numero' => 'N°', 'fecha' => 'Fecha pago', 'tipo' => 'Tipo', 'banco' => 'Cuenta origen',
@@ -75,19 +95,19 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                 ];
                 echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig, $rutaModulo);
                 ?>
-                <a href="<?= $urlBase ?>/exportPdf?b=<?= urlencode($buscar ?? '') ?>&estado=<?= urlencode($filtroEstado) ?>&sort=<?= urlencode($ordenCol ?? '') ?>&dir=<?= urlencode($ordenDir ?? '') ?>" target="_blank" class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                <a id="tr-btn-pdf" href="<?= $urlBase ?>/exportPdf?<?= $qsExport ?>" target="_blank" class="btn btn-outline-danger" title="Descargar PDF">
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
-                <a href="<?= $urlBase ?>/exportExcel?b=<?= urlencode($buscar ?? '') ?>&estado=<?= urlencode($filtroEstado) ?>&sort=<?= urlencode($ordenCol ?? '') ?>&dir=<?= urlencode($ordenDir ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                <a id="tr-btn-excel" href="<?= $urlBase ?>/exportExcel?<?= $qsExport ?>" class="btn btn-outline-success" title="Descargar Excel">
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
-        <div class="d-flex align-items-center gap-2">
-            <span class="text-muted small fw-medium"><?= $total ?> registros</span>
+        <div class="d-flex align-items-center gap-3">
+            <span id="tr-pag-info" class="text-muted small fw-medium"><?= $total ?> registros</span>
             <div class="btn-group btn-group-sm">
-                <button class="btn btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="TR_buscar(<?= $page - 1 ?>)"><i class="bi bi-chevron-left"></i></button>
-                <button class="btn btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="TR_buscar(<?= $page + 1 ?>)"><i class="bi bi-chevron-right"></i></button>
+                <button type="button" id="tr-pag-prev" class="btn btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="TR_buscar(TR_paginaActual - 1)"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" id="tr-pag-next" class="btn btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="TR_buscar(TR_paginaActual + 1)"><i class="bi bi-chevron-right"></i></button>
             </div>
         </div>
     </div>
@@ -107,21 +127,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                         <th data-col="creado">Creado por</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php if (empty($rows)): ?>
-                        <tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-bank fs-2 d-block mb-2"></i> No hay lotes de pago bancario registrados.</td></tr>
-                    <?php else: foreach ($rows as $r): ?>
-                        <tr style="cursor:pointer;" onclick="TR_abrirExistente(<?= (int) $r['id'] ?>)">
-                            <td class="ps-3 fw-bold" data-col="numero">#<?= (int) $r['numero'] ?></td>
-                            <td data-col="fecha"><?= $r['fecha_pago'] ? date('d-m-Y', strtotime($r['fecha_pago'])) : '-' ?></td>
-                            <td data-col="tipo" class="text-capitalize"><?= htmlspecialchars(strtolower((string) $r['tipo_lote'])) ?></td>
-                            <td class="small" data-col="banco"><?= htmlspecialchars($r['forma_pago_nombre'] ?? '-') ?></td>
-                            <td class="text-end" data-col="monto">$ <?= number_format((float) $r['monto_total'], 2) ?></td>
-                            <td class="text-center" data-col="pagos"><?= (int) $r['cantidad_pagos'] ?></td>
-                            <td class="text-center" data-col="estado"><?= $estadoBadge($r['estado'] ?? 'BORRADOR') ?></td>
-                            <td class="small text-muted" data-col="creado"><?= htmlspecialchars($r['creado_por_nombre'] ?? '-') ?></td>
-                        </tr>
-                    <?php endforeach; endif; ?>
+                <tbody id="tr-tbody">
+                    <?= $filasHtml ?? '' ?>
                 </tbody>
             </table>
         </div>
@@ -129,7 +136,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
 </div>
 
 <!-- Modal: Lote (nuevo o existente) -->
-<div class="modal fade" id="tr-modal-lote" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="tr-modal-lote" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content">
             <div class="modal-header py-2">
@@ -213,11 +220,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                 <div id="tr-barra-acciones" class="d-none d-flex gap-1 align-items-center flex-wrap border-bottom pb-2 mb-3">
                     <button type="button" id="tr-btn-aprobar" class="btn btn-sm btn-outline-success d-none" onclick="TR_aprobar()" title="Aprobar"><i class="bi bi-check-circle me-1"></i>Aprobar</button>
                     <button type="button" id="tr-btn-rechazar" class="btn btn-sm btn-outline-danger d-none" onclick="TR_rechazar()" title="Rechazar"><i class="bi bi-x-circle me-1"></i>Rechazar</button>
-                    <button type="button" id="tr-btn-generar" class="btn btn-sm btn-outline-primary d-none" onclick="TR_generarArchivo()" title="Generar archivo"><i class="bi bi-file-earmark-arrow-down me-1"></i>Generar archivo</button>
                     <a href="#" id="tr-btn-descargar" class="btn btn-sm btn-outline-success d-none" title="Descargar archivo"><i class="bi bi-download me-1"></i>Descargar</a>
                     <button type="button" id="tr-btn-confirmar" class="btn btn-sm btn-outline-success d-none" onclick="TR_confirmarEnvio()" title="Confirmar envío al banco"><i class="bi bi-shield-check me-1"></i>Confirmar envío</button>
-                    <div class="vr mx-1"></div>
-                    <button type="button" id="tr-btn-anular" class="btn btn-sm btn-outline-dark d-none" onclick="TR_anular()" title="Anular lote"><i class="bi bi-slash-circle me-1"></i>Anular</button>
                 </div>
 
                 <div id="tr-detalle-cuerpo" class="small text-muted"></div>
@@ -227,10 +231,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                     <?php if (!empty($perm['eliminar'])): ?>
                         <button type="button" id="tr-btn-eliminar" class="btn btn-outline-danger btn-sm d-none" onclick="TR_eliminar()"><i class="bi bi-trash me-1"></i>Eliminar</button>
                     <?php endif; ?>
+                    <button type="button" id="tr-btn-anular" class="btn btn-sm btn-outline-dark d-none" onclick="TR_anular()" title="Anular lote"><i class="bi bi-slash-circle me-1"></i>Anular</button>
                 </div>
                 <div>
                     <button type="button" id="tr-btn-enviar-aprobacion" class="btn btn-outline-primary btn-sm d-none" onclick="TR_enviarAprobacion()"><i class="bi bi-send-check me-1"></i>Enviar a aprobación</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" id="tr-btn-generar" class="btn btn-primary btn-sm d-none" onclick="TR_generarArchivo()" title="Generar archivo"><i class="bi bi-file-earmark-arrow-down me-1"></i>Generar archivo</button>
                     <?php if (!empty($perm['crear']) || !empty($perm['actualizar'])): ?>
                         <button type="button" id="tr-btn-guardar" class="btn btn-primary btn-sm px-4 d-none" onclick="TR_guardarCabecera()"><i class="bi bi-check2-circle me-1"></i>Guardar</button>
                     <?php endif; ?>
@@ -250,5 +256,6 @@ const TR_ID_USUARIO    = <?= (int) ($idUsuarioActual ?? 0) ?>;
 let TR_APROBADORES   = <?= json_encode(array_values($aprobadoresNombres ?? []), JSON_UNESCAPED_UNICODE) ?>;
 let TR_currentSort = '<?= $ordenCol ?? 'numero' ?>';
 let TR_currentDir  = '<?= $ordenDir ?? 'DESC' ?>';
+let TR_paginaActual = <?= (int) $page ?>;
 </script>
 <script src="<?= $base ?>/js/modulos/transferencias.js?v=<?= asset_ver('/js/modulos/transferencias.js') ?>"></script>
