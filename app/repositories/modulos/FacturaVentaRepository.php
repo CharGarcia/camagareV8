@@ -574,8 +574,12 @@ class FacturaVentaRepository extends BaseRepository
      * Facturas autorizadas/aprobadas de un cliente, para seleccionarlas como
      * documento a modificar en una Nota de Crédito. Filtro opcional de texto
      * sobre el número de comprobante (establecimiento-punto-secuencial).
+     *
+     * Devuelve también el `saldo` pendiente (total − cobros − notas de crédito −
+     * retenciones), con la misma fórmula del estado de pago del listado de Facturas
+     * de Venta. Con `$soloConSaldo` se excluyen las facturas con saldo <= 0.
      */
-    public function getFacturasPorCliente(int $idEmpresa, int $idCliente, string $buscar = '', int $limit = 30): array
+    public function getFacturasPorCliente(int $idEmpresa, int $idCliente, string $buscar = '', int $limit = 30, bool $soloConSaldo = false): array
     {
         $params = [':id_empresa' => $idEmpresa, ':id_cliente' => $idCliente];
         $where  = "WHERE v.id_empresa = :id_empresa
@@ -590,11 +594,25 @@ class FacturaVentaRepository extends BaseRepository
             $params[':buscar'] = "%$buscar%";
         }
 
+        // Saldo = total − abonos (cobros + NC + retenciones), igual que mapaOrden()/estado_pago.
+        $saldo = "(v.importe_total - ab.abonos)";
+        if ($soloConSaldo) {
+            $where .= " AND $saldo > 0";
+        }
+
         $sql = "SELECT v.id, v.establecimiento, v.punto_emision, v.secuencial,
                        v.fecha_emision, v.importe_total, v.estado,
-                       v.id_cliente, c.nombre AS cliente_nombre, c.identificacion AS cliente_ruc
+                       v.id_cliente, c.nombre AS cliente_nombre, c.identificacion AS cliente_ruc,
+                       $saldo AS saldo
                 FROM ventas_cabecera v
                 INNER JOIN clientes c ON v.id_cliente = c.id
+                LEFT JOIN LATERAL (
+                    SELECT (
+                        (SELECT COALESCE(SUM(ind.monto_cobrado), 0) FROM ingresos_detalle ind INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' AND inc.estado != 'anulado' AND inc.eliminado = false)
+                        + " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . "
+                        + " . AbonosVentaSql::subRetenidoFactura('v') . "
+                    ) AS abonos
+                ) ab ON true
                 $where
                 ORDER BY v.fecha_emision DESC, v.id DESC
                 LIMIT $limit";

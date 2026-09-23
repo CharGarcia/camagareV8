@@ -754,19 +754,20 @@
                         ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.62rem;">SALDO INICIAL</span>'
                         : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:0.62rem;">${(f.estado || '').toUpperCase()}</span>`;
                     const total = parseFloat(f.importe_total || 0).toFixed(2);
+                    const saldo = parseFloat(f.saldo || 0).toFixed(2);
                     return `
                         <a href="#" class="list-group-item list-group-item-action py-2" onclick="window.NC_seleccionarFactura(${json})">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="fw-bold small">${f.num}</span>
                                 ${badge}
                             </div>
-                            <small class="text-muted" style="font-size:0.7rem;"><i class="bi bi-calendar me-1"></i>${NC_fechaSoloDia(f.fecha_emision)} &middot; $${total}</small>
+                            <small class="text-muted" style="font-size:0.7rem;"><i class="bi bi-calendar me-1"></i>${NC_fechaSoloDia(f.fecha_emision)} &middot; Total $${total} &middot; <span class="text-danger fw-semibold">Saldo $${saldo}</span></small>
                         </a>
                     `;
                 }).join('');
                 dropdownFactura.classList.remove('d-none');
             } else {
-                dropdownFactura.innerHTML = '<div class="list-group-item small text-muted py-2"><i class="bi bi-info-circle me-1"></i>Sin documentos para este cliente. Puede escribir el número manualmente.</div>';
+                dropdownFactura.innerHTML = '<div class="list-group-item small text-muted py-2"><i class="bi bi-info-circle me-1"></i>Sin documentos con saldo pendiente para este cliente. Puede escribir el número manualmente.</div>';
                 dropdownFactura.classList.remove('d-none');
             }
         } catch (e) {

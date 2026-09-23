@@ -6,7 +6,7 @@ ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo
-version: 1.16
+version: 1.17
 orden: 30
 estado: activo
 ---
@@ -23,6 +23,12 @@ nota de crédito rebaja una parte (o el total) dejando el rastro de por qué.
 Únicamente se puede emitir una nota de crédito sobre una factura en estado
 **autorizado**. Si la factura todavía está en borrador o fue rechazada por el
 SRI, corrija la factura directamente: no hace falta nota de crédito.
+
+El campo **Factura / Documento a modificar** lista solo las facturas (y saldos
+iniciales) del cliente con **saldo pendiente mayor a cero**: total menos cobros,
+notas de crédito y retenciones ya aplicadas. Cada opción muestra el total y el
+saldo. Una factura ya pagada no aparece en la lista; si igual necesita emitir la
+nota sobre ella, puede escribir el número a mano.
 
 ## No puede superar el total de la factura
 
@@ -233,6 +239,9 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.17** — El buscador **Factura / Documento a modificar** muestra solo documentos con
+  saldo pendiente mayor a cero, e indica el saldo de cada uno.
 
 - **1.16** — El **PDF (RIDE)** de la nota usa el mismo formato de ítems que la factura de
   venta: filas compactas (antes salían demasiado altas), columna *Detalle Adicional* solo

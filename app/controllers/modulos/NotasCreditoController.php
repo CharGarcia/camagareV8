@@ -480,9 +480,9 @@ class NotasCreditoController extends BaseModuloController
 
         $data = [];
 
-        // 1. Facturas de venta del cliente (autorizadas/aprobadas).
+        // 1. Facturas de venta del cliente (autorizadas/aprobadas) con saldo pendiente > 0.
         $facturaRepo = new FacturaVentaRepository();
-        foreach ($facturaRepo->getFacturasPorCliente($idEmpresa, $idCliente, $buscar) as $f) {
+        foreach ($facturaRepo->getFacturasPorCliente($idEmpresa, $idCliente, $buscar, 30, true) as $f) {
             $est = str_pad((string)($f['establecimiento'] ?? ''), 3, '0', STR_PAD_LEFT);
             $pto = str_pad((string)($f['punto_emision'] ?? ''), 3, '0', STR_PAD_LEFT);
             $sec = str_pad((string)($f['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
@@ -494,6 +494,7 @@ class NotasCreditoController extends BaseModuloController
                 'num_doc'        => $num,
                 'fecha_emision'  => $f['fecha_emision'],
                 'importe_total'  => (float) ($f['importe_total'] ?? 0),
+                'saldo'          => round((float) ($f['saldo'] ?? 0), 2),
                 'estado'         => $f['estado'],
                 'id_cliente'     => (int) $f['id_cliente'],
                 'cliente_nombre' => $f['cliente_nombre'] ?? '',
@@ -501,9 +502,9 @@ class NotasCreditoController extends BaseModuloController
             ];
         }
 
-        // 2. Saldos iniciales (cuentas por cobrar) del cliente.
+        // 2. Saldos iniciales (cuentas por cobrar) del cliente con saldo pendiente > 0.
         $siRepo = new \App\repositories\modulos\SaldosInicialesRepository();
-        $cxc = $siRepo->getCxcListado($idEmpresa, ['id_cliente' => $idCliente, 'estado' => 'TODOS']);
+        $cxc = $siRepo->getCxcListado($idEmpresa, ['id_cliente' => $idCliente, 'estado' => 'PENDIENTES']);
         foreach ($cxc as $s) {
             $num = trim((string)($s['nro_documento'] ?? ''));
             if ($buscar !== '' && stripos($num, $buscar) === false) {
@@ -516,6 +517,7 @@ class NotasCreditoController extends BaseModuloController
                 'num_doc'        => $num,
                 'fecha_emision'  => $s['fecha_emision'],
                 'importe_total'  => (float) ($s['saldo_inicial'] ?? 0),
+                'saldo'          => round((float) ($s['saldo_pendiente'] ?? 0), 2),
                 'estado'         => 'saldo_inicial',
                 'id_cliente'     => (int) ($s['id_cliente'] ?? 0),
                 'cliente_nombre' => $s['nombre_cliente'] ?? '',
