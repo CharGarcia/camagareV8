@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota
-version: 1.14
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo
+version: 1.16
 orden: 30
 estado: activo
 ---
@@ -48,6 +48,15 @@ RIDE. El **concepto** admite hasta **300 caracteres** y el **detalle** hasta
 **500**; el campo no deja escribir más. Si un texto más largo llegara por otra
 vía (por ejemplo, copiado desde la factura de origen), se recorta al tope en vez
 de rechazar la nota.
+
+### Columna Código
+
+Cada línea del detalle muestra el **Código** del producto o servicio, igual que en la
+factura de venta. Al cargar la factura de origen se llena solo. También sirve para
+buscar: al escribir un código aparece la lista de productos y, al elegir uno, se
+completan código, descripción, precio e IVA. Si escribe un código a mano sin elegir
+de la lista, la línea queda como ítem libre con ese código. Editar la descripción
+limpia el código, porque deja de corresponder al producto.
 
 ### Cómo leer la columna Subtotal
 
@@ -224,6 +233,13 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.16** — El **PDF (RIDE)** de la nota usa el mismo formato de ítems que la factura de
+  venta: filas compactas (antes salían demasiado altas), columna *Detalle Adicional* solo
+  si algún ítem la trae y ancho del código según su contenido.
+
+- **1.15** — El detalle muestra la columna **Código** (antes no se veía), editable y con
+  búsqueda de productos, igual que en la factura de venta.
 
 - **1.14** — Las filas de **Info. Adicional** tienen tope en pantalla (concepto
   300 caracteres, detalle 500), el largo que admite cada línea del comprobante.

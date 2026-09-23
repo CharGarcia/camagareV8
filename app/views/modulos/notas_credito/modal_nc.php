@@ -182,7 +182,8 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                         <table class="table table-sm table-detalle mb-0">
                                             <thead>
                                                 <tr class="table-light border-bottom">
-                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 40%;">Descripción</th>
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 12%;">Código</th>
+                                                    <th class="py-2 small fw-bold text-muted" style="width: 31%;">Descripción</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 10%;">Cant.</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 12%;">P. Unitario</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 10%;">Desc.</th>
@@ -193,7 +194,7 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                             </thead>
                                             <tbody id="nc_detalles_body">
                                                 <tr>
-                                                    <td colspan="7" class="text-center py-4 text-muted">Seleccione una factura para cargar los detalles.</td>
+                                                    <td colspan="8" class="text-center py-4 text-muted">Seleccione una factura para cargar los detalles.</td>
                                                 </tr>
                                             </tbody>
                                         </table>

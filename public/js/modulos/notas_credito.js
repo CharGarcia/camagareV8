@@ -213,7 +213,7 @@
             document.getElementById('modalNCTitulo').innerHTML = '<i class="bi bi-file-earmark-minus text-primary me-2"></i>Nueva Nota de Crédito';
             
             // Limpiar tabla
-            if (tableBody) tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Seleccione una factura para cargar los detalles.</td></tr>';
+            if (tableBody) tableBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Seleccione una factura para cargar los detalles.</td></tr>';
             
             // Limpiar datos de cliente/factura
             setEl('nc_info_factura_modificada', 'innerHTML', '');
@@ -929,10 +929,12 @@
         const idTarifaIva = data.id_tarifa_iva || 1;
 
         tr.innerHTML = `
-            <td class="ps-3 py-1 position-relative">
+            <td class="ps-3 py-1">
                 <input type="hidden" name="det_id_producto[]" value="${idProducto}">
                 <input type="hidden" name="det_id_venta_detalle[]" value="${idVentaDetalle}">
-                <input type="hidden" name="det_codigo_principal[]" value="${String(codigoPrincipal).replace(/"/g, '&quot;')}">
+                <input type="text" name="det_codigo_principal[]" class="input-detalle" value="${String(codigoPrincipal).replace(/"/g, '&quot;')}" placeholder="Código" autocomplete="off">
+            </td>
+            <td class="py-1 position-relative">
                 <input type="text" name="det_descripcion[]" class="input-detalle" value="${descripcion}" placeholder="Buscar producto/servicio o escribir..." autocomplete="off">
             </td>
             <td class="py-1">
@@ -969,11 +971,12 @@
         tableBody.querySelectorAll('tr').forEach(tr => { if (tr._ncDdProd) tr._ncDdProd.remove(); });
     }
 
-    // Autocomplete de productos/servicios sobre el campo descripción de la fila.
+    // Autocomplete de productos/servicios sobre los campos código y descripción de la fila.
     function NC_attachProductoAutocomplete(tr) {
         const inpDesc = tr.querySelector('input[name="det_descripcion[]"]');
         const inpId   = tr.querySelector('input[name="det_id_producto[]"]');
         if (!inpDesc) return;
+        let inpActivo = inpDesc;   // input bajo el cual se posiciona el dropdown
 
         // El dropdown se cuelga del <body> con position:fixed para escapar el
         // overflow de la tabla/modal.
@@ -985,7 +988,7 @@
         dd._ncTr = tr;       // referencia inversa para la selección
 
         function posicionar() {
-            const r = inpDesc.getBoundingClientRect();
+            const r = inpActivo.getBoundingClientRect();
             dd.style.top   = r.bottom + 'px';
             dd.style.left  = r.left + 'px';
             dd.style.width = Math.max(r.width, 320) + 'px';
@@ -994,15 +997,18 @@
         const inpCod = tr.querySelector('input[name="det_codigo_principal[]"]');
         const inpVd  = tr.querySelector('input[name="det_id_venta_detalle[]"]');
         let timer;
-        inpDesc.addEventListener('input', () => {
+        const buscar = (inp) => {
             clearTimeout(timer);
-            // Al editar manualmente la descripción se rompe el vínculo con el producto
-            // y con la línea de la factura de la que venía el ítem.
+            inpActivo = inp;
+            // Al editar manualmente el código o la descripción se rompe el vínculo con el
+            // producto y con la línea de la factura de la que venía el ítem. Si se edita la
+            // descripción, el código deja de corresponder y se limpia; si se edita el código,
+            // la descripción se conserva (puede ser un ítem libre con código propio).
             if (inpId) inpId.value = '';
-            if (inpCod) inpCod.value = '';
             if (inpVd) inpVd.value = '';
-            const q = inpDesc.value.trim();
-            if (q.length < 2) { dd.classList.add('d-none'); return; }
+            if (inp === inpDesc && inpCod) inpCod.value = '';
+            const q = inp.value.trim();
+            if (q.length < (inp === inpCod ? 1 : 2)) { dd.classList.add('d-none'); return; }
             timer = setTimeout(async () => {
                 try {
                     const res = await (await fetch(`${BASE_URL}/modulos/factura_venta/getProductosAjax?q=${encodeURIComponent(q)}`)).json();
@@ -1021,12 +1027,14 @@
                     dd.classList.remove('d-none');
                 } catch (e) { console.error('Error al buscar productos NC:', e); }
             }, 280);
-        });
+        };
+        inpDesc.addEventListener('input', () => buscar(inpDesc));
+        if (inpCod) inpCod.addEventListener('input', () => buscar(inpCod));
 
         const tabla = tr.closest('.table-responsive');
         if (tabla) tabla.addEventListener('scroll', () => { if (!dd.classList.contains('d-none')) posicionar(); });
         document.addEventListener('click', (e) => {
-            if (!inpDesc.contains(e.target) && !dd.contains(e.target)) dd.classList.add('d-none');
+            if (!inpDesc.contains(e.target) && !(inpCod && inpCod.contains(e.target)) && !dd.contains(e.target)) dd.classList.add('d-none');
         });
     }
 
@@ -1068,7 +1076,7 @@
         if (tr && tr._ncDdProd) tr._ncDdProd.remove();   // limpiar dropdown colgado del body
         tr.remove();
         if (tableBody.children.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No hay items.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No hay items.</td></tr>';
         }
         calcTotales();
     };

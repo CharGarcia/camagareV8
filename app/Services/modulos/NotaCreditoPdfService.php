@@ -24,6 +24,13 @@ class NotaCreditoPdfService
     private int $decCantidad = 2;
     private int $decPrecio   = 2;
 
+    // Tipografía y alto de fila de la tabla de ítems: mismos valores que el RIDE
+    // de la factura de venta (FacturaVentaPdfService), para que ambos se vean iguales.
+    private const FUENTE_CUERPO           = 9.0;
+    private const FUENTE_ENCABEZADO_TABLA = 8.5;
+    private const LINEA_CUERPO            = 4.2;  // mm por línea de texto
+    private const ALTO_MIN_FILA           = 4.8;  // mm, fila de una sola línea
+
     /**
      * @param string $outputDest Destino TCPDF: 'D' descarga, 'I' inline, 'S' string.
      */
@@ -454,41 +461,88 @@ class NotaCreditoPdfService
         $mL  = $this->marginL;
         $cW  = $this->contentW;
 
+        // Mismo diseño que la tabla de ítems de la factura de venta
+        // (FacturaVentaPdfService::dibujarDetalle). Descripción absorbe el sobrante.
         $cols = [
-            ['key' => 'codp', 'titulo' => "Cod.\nPrincipal",    'w' => 22, 'align' => 'L'],
-            ['key' => 'coda', 'titulo' => "Cod.\nAuxiliar",     'w' => 20, 'align' => 'L'],
-            ['key' => 'cant', 'titulo' => "Cantidad",           'w' => 18, 'align' => 'R'],
-            ['key' => 'desc', 'titulo' => "Descripción",        'w' => 44, 'align' => 'L'],
-            ['key' => 'deta', 'titulo' => "Detalle\nAdicional", 'w' => 28, 'align' => 'L'],
-            ['key' => 'pu',   'titulo' => "Precio\nUnitario",   'w' => 22, 'align' => 'R'],
-            ['key' => 'dcto', 'titulo' => "Descuento",          'w' => 18, 'align' => 'R'],
-            ['key' => 'ptot', 'titulo' => "Precio\nTotal",      'w' => 18, 'align' => 'R'],
+            ['key' => 'codp', 'titulo' => "Cod.\nPrincipal",    'w' => 20.0, 'align' => 'L'],
+            ['key' => 'coda', 'titulo' => "Cod.\nAuxiliar",     'w' => 18.0, 'align' => 'L'],
+            ['key' => 'cant', 'titulo' => "Cantidad",           'w' => 16.0, 'align' => 'R'],
+            ['key' => 'desc', 'titulo' => "Descripción",        'w' => 50.0, 'align' => 'L'],
+            ['key' => 'deta', 'titulo' => "Detalle\nAdicional", 'w' => 28.0, 'align' => 'L'],
+            ['key' => 'pu',   'titulo' => "Precio\nUnitario",   'w' => 22.0, 'align' => 'R'],
+            ['key' => 'dcto', 'titulo' => "Descuento",          'w' => 18.0, 'align' => 'R'],
+            ['key' => 'ptot', 'titulo' => "Precio\nTotal",      'w' => 18.0, 'align' => 'R'],
         ];
 
-        // Ocultar la columna "Cód. Auxiliar" si ningún ítem tiene código auxiliar.
+        // Ocultar "Cód. Auxiliar" y "Detalle Adicional" si ningún ítem los trae.
         // Su ancho lo reabsorbe la Descripción en el ajuste de abajo.
-        $hayCodAux = false;
+        $hayCodAux  = false;
+        $hayDetalle = false;
         foreach ($detalles as $d) {
-            if (trim((string)($d['codigo_auxiliar'] ?? '')) !== '') { $hayCodAux = true; break; }
+            if (trim((string)($d['codigo_auxiliar'] ?? '')) !== '') { $hayCodAux = true; }
+            if (trim((string)($d['info_adicional'] ?? ($d['detalle_adicional'] ?? ''))) !== '') { $hayDetalle = true; }
         }
         if (!$hayCodAux) {
             $cols = array_values(array_filter($cols, fn($c) => $c['key'] !== 'coda'));
         }
+        if (!$hayDetalle) {
+            $cols = array_values(array_filter($cols, fn($c) => $c['key'] !== 'deta'));
+        }
+
+        // Ancho de las columnas de código según su contenido real (TCPDF no recorta
+        // el texto de Cell()), acotado entre el ancho base y un máximo.
+        $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+        $campoCod = ['codp' => 'codigo_principal', 'coda' => 'codigo_auxiliar'];
+        $maxCod   = ['codp' => 42.0,               'coda' => 26.0];
+        $minCod   = [];
+        foreach ($cols as &$c) {
+            if (!isset($campoCod[$c['key']])) { continue; }
+            $minCod[$c['key']] = (float)$c['w'];
+            $wTexto = 0.0;
+            foreach ($detalles as $d) {
+                $txt = trim((string)($d[$campoCod[$c['key']]] ?? ''));
+                if ($txt !== '') { $wTexto = max($wTexto, $pdf->GetStringWidth($txt)); }
+            }
+            // +2mm = padding izquierdo/derecho de la celda.
+            $c['w'] = round(max((float)$c['w'], min($maxCod[$c['key']], $wTexto + 2.0)), 1);
+        }
+        unset($c);
+
+        // Piso de la Descripción: si los códigos se llevaron demasiado ancho, se
+        // les devuelve el exceso (primero al auxiliar, que es el prescindible).
+        $minDesc  = 28.0;
+        $wDescRes = $cW - array_sum(array_map(
+            fn($c) => $c['key'] === 'desc' ? 0.0 : (float)$c['w'],
+            $cols
+        ));
+        if ($wDescRes < $minDesc) {
+            $porRecortar = $minDesc - $wDescRes;
+            foreach (['coda', 'codp'] as $k) {
+                if ($porRecortar <= 0.01) { break; }
+                foreach ($cols as &$c) {
+                    if ($c['key'] !== $k) { continue; }
+                    $quita = min($porRecortar, max(0.0, (float)$c['w'] - ($minCod[$k] ?? 0.0)));
+                    $c['w'] -= $quita;
+                    $porRecortar -= $quita;
+                }
+                unset($c);
+            }
+        }
 
         // Ajustar Descripción para que la suma sea exactamente contentW
         $sumaW = array_sum(array_column($cols, 'w'));
-        if ($sumaW !== (int)$cW) {
+        if (abs($sumaW - $cW) > 0.01) {
             foreach ($cols as &$c) {
-                if ($c['key'] === 'desc') { $c['w'] += ((int)$cW - $sumaW); break; }
+                if ($c['key'] === 'desc') { $c['w'] += ($cW - $sumaW); break; }
             }
             unset($c);
         }
 
         // Encabezado (2 líneas). Se encapsula porque hay que repetirlo al inicio
         // de cada página cuando el detalle no cabe en una sola.
-        $hdrH = 7.6;
+        $hdrH = 9.8; // 2 líneas * 4.9
         $dibujarCabeceraTabla = function (float $yEnc) use ($pdf, $cols, $mL, $hdrH): float {
-            $pdf->SetFont('helvetica', 'B', 6.5);
+            $pdf->SetFont('helvetica', 'B', self::FUENTE_ENCABEZADO_TABLA);
             $pdf->SetFillColor(230, 230, 230);
             $pdf->SetXY($mL, $yEnc);
             foreach ($cols as $col) {
@@ -501,8 +555,19 @@ class NotaCreditoPdfService
         $y = $dibujarCabeceraTabla($y);
         $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
 
+        // Anchos reales de las columnas multilínea, por key y no por índice: la
+        // posición de 'desc'/'deta' cambia al ocultar columnas. (Antes se leían
+        // $cols[3]/$cols[4]; sin "Cód. Auxiliar" esos índices apuntaban a columnas
+        // angostas y la fila se calculaba mucho más alta de lo necesario.)
+        $wDesc = 0.0;
+        $wDeta = 0.0;
+        foreach ($cols as $c) {
+            if ($c['key'] === 'desc') $wDesc = (float)$c['w'];
+            if ($c['key'] === 'deta') $wDeta = (float)$c['w'];
+        }
+
         // Filas
-        $pdf->SetFont('helvetica', '', 7);
+        $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
         $altColor = false;
         foreach ($detalles as $d) {
             $bg = $altColor ? [250, 250, 250] : [255, 255, 255];
@@ -524,10 +589,9 @@ class NotaCreditoPdfService
                 'ptot' => number_format($ptot, 2),
             ];
 
-            // Índices de columnas multilinea (desc=3, deta=4)
-            $nDesc = max(1, (int)ceil($pdf->GetStringWidth($vals['desc']) / ($cols[3]['w'] - 2)));
-            $nDeta = max(1, (int)ceil($pdf->GetStringWidth($vals['deta']) / ($cols[4]['w'] - 2)));
-            $ch    = max(5, max($nDesc, $nDeta) * 4.5);
+            $nDesc = $wDesc > 0 ? max(1, $pdf->getNumLines($vals['desc'], $wDesc)) : 1;
+            $nDeta = $wDeta > 0 ? max(1, $pdf->getNumLines($vals['deta'], $wDeta)) : 1;
+            $ch    = max(self::ALTO_MIN_FILA, max($nDesc, $nDeta) * self::LINEA_CUERPO);
 
             $xCur = $mL;
             $yRow = $pdf->GetY();
@@ -539,7 +603,8 @@ class NotaCreditoPdfService
             if ($yRow + $ch > $limiteY) {
                 $pdf->AddPage();
                 $yRow = $dibujarCabeceraTabla($pdf->GetY());
-                $pdf->SetFont('helvetica', '', 7);
+                $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+                $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
             }
 
             foreach ($cols as $col) {
@@ -547,6 +612,10 @@ class NotaCreditoPdfService
                 $pdf->SetXY($xCur, $yRow);
                 if ($col['key'] === 'desc' || $col['key'] === 'deta') {
                     $pdf->MultiCell($col['w'], $ch, $val, 1, $col['align'], true, 0, '', '', true, 0, false, true, 0, 'M');
+                } elseif ($col['key'] === 'codp' || $col['key'] === 'coda') {
+                    // stretch = 1: un código que no quepa ni con el ancho máximo se
+                    // condensa dentro de su celda en vez de desbordarse.
+                    $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true, '', 1);
                 } else {
                     $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true);
                 }
