@@ -34,6 +34,17 @@ class ConciliacionPerfilRules
                     throw new \Exception("Falta indicar en qué columna está el campo \"{$campo}\" del extracto.");
                 }
             }
+            foreach (['referencia', 'descripcion_extra', 'tipo'] as $campo) {
+                if (isset($mapeo[$campo]['col']) && (!is_numeric($mapeo[$campo]['col']) || (int) $mapeo[$campo]['col'] < 0)) {
+                    throw new \Exception("La columna del campo \"{$campo}\" no es válida.");
+                }
+            }
+            // Columna de tipo sin valor de crédito (o al revés) no filtraría nada: se exige el par completo.
+            $tieneTipo = isset($mapeo['tipo']['col']);
+            $tieneCredito = trim((string) ($mapeo['tipo_credito'] ?? '')) !== '';
+            if ($tieneTipo !== $tieneCredito) {
+                throw new \Exception('Para filtrar solo los créditos indique la columna de tipo y el valor que identifica un crédito (p. ej. "+" o "C").');
+            }
             return;
         }
 

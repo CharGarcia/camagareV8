@@ -60,7 +60,7 @@ class ConciliacionImportService
      *
      * @return array{lineas: array, filas_probadas: ?array}
      */
-    public function previsualizar(string $rutaArchivo, string $tipoArchivo, int $filaInicio = 0, int $limite = 60, ?string $regexPrueba = null, ?string $tipoCreditoPrueba = null): array
+    public function previsualizar(string $rutaArchivo, string $tipoArchivo, int $filaInicio = 0, int $limite = 60, ?string $regexPrueba = null, ?string $tipoCreditoPrueba = null, ?array $mapeoExcelPrueba = null, string $formatoFecha = 'd/m/Y', string $separadorDecimal = '.'): array
     {
         if (strtoupper($tipoArchivo) === 'PDF') {
             $lineas = array_slice($this->extraerLineasPdf($rutaArchivo), 0, $limite);
@@ -71,7 +71,7 @@ class ConciliacionImportService
                     $filasProbadas = $this->parsearPdf($rutaArchivo, [
                         'regex_linea' => $regexPrueba,
                         'tipo_credito' => $tipoCreditoPrueba,
-                    ], 'd/m/Y', '.');
+                    ], $formatoFecha, $separadorDecimal);
                 } catch (\Throwable $e) {
                     $filasProbadas = ['error' => $e->getMessage()];
                 }
@@ -80,7 +80,22 @@ class ConciliacionImportService
             return ['lineas' => $lineas, 'filas_probadas' => $filasProbadas];
         }
 
-        return ['lineas' => array_slice($this->extraerFilasExcel($rutaArchivo, $filaInicio), 0, $limite), 'filas_probadas' => null];
+        $filas = $this->extraerFilasExcel($rutaArchivo, $filaInicio);
+
+        // Con las columnas obligatorias indicadas, se aplica el mapeo completo (mismo algoritmo
+        // que parsear()) para que el usuario vea qué movimientos se importarían.
+        $filasProbadas = null;
+        if ($mapeoExcelPrueba !== null && isset($mapeoExcelPrueba['fecha']['col'], $mapeoExcelPrueba['descripcion']['col'], $mapeoExcelPrueba['monto']['col'])) {
+            $filasProbadas = [];
+            foreach ($filas as $fila) {
+                $normalizada = $this->normalizarFilaExcel($fila, $mapeoExcelPrueba, $formatoFecha, $separadorDecimal);
+                if ($normalizada !== null) {
+                    $filasProbadas[] = $normalizada;
+                }
+            }
+        }
+
+        return ['lineas' => array_slice($filas, 0, $limite), 'filas_probadas' => $filasProbadas];
     }
 
     /**
@@ -291,13 +306,35 @@ class ConciliacionImportService
         return $filas;
     }
 
+    /**
+     * Opcionales del mapeo Excel (además de fecha/descripcion/monto/referencia):
+     * - descripcion_extra.col: segunda columna que se concatena a la descripción. Hay bancos
+     *   (p. ej. Produbanco) donde el nombre de quien paga viene en una columna y el tipo de
+     *   transacción en otra; el matching de cliente necesita el nombre, y hay movimientos
+     *   (depósitos) que solo traen el tipo.
+     * - tipo.col + tipo_credito: igual que en PDF, bancos que muestran el monto siempre en
+     *   positivo e indican ingreso/egreso en otra columna ('+'/'-', 'C'/'D'). Si ambos están
+     *   definidos, se descartan las filas cuyo tipo no coincide con tipo_credito.
+     */
     private function normalizarFilaExcel(array $filaCruda, array $mapeo, string $formatoFecha, string $separadorDecimal): ?array
     {
-        $col = fn (string $campo) => isset($mapeo[$campo]['col']) ? ($filaCruda[(int) $mapeo[$campo]['col']] ?? null) : null;
+        $col = fn (string $campo) => isset($mapeo[$campo]['col']) && $mapeo[$campo]['col'] !== ''
+            ? ($filaCruda[(int) $mapeo[$campo]['col']] ?? null)
+            : null;
+
+        $tipoCredito = trim((string) ($mapeo['tipo_credito'] ?? ''));
+        if ($tipoCredito !== '' && isset($mapeo['tipo']['col'])
+            && strcasecmp(trim((string) $col('tipo')), $tipoCredito) !== 0) {
+            return null;
+        }
 
         $fecha = $this->normalizarFecha((string) $col('fecha'), $formatoFecha);
         $monto = $this->normalizarMonto($col('monto'), $separadorDecimal);
-        $descripcion = trim((string) $col('descripcion'));
+        $partesDescripcion = array_filter(
+            [trim((string) $col('descripcion')), trim((string) $col('descripcion_extra'))],
+            fn ($t) => $t !== ''
+        );
+        $descripcion = implode(' - ', $partesDescripcion);
         $referencia = $col('referencia');
 
         if ($fecha === null || $monto === null || $monto <= 0 || $descripcion === '') {

@@ -6,8 +6,8 @@ ruta_modulo: config/conciliacion-perfiles
 requiere_permiso_modulo: no
 tipo: modulo
 visibilidad: superadmin
-etiquetas: perfiles de mapeo, formato del banco, formato de extracto, estado de cuenta, extracto bancario, mapeo de columnas, conciliacion de cobros, cobros bancarios, excel csv pdf, regex, patron de linea, pichincha, produbanco, guayaquil, pacifico
-version: 1.0
+etiquetas: perfiles de mapeo, formato del banco, formato de extracto, estado de cuenta, extracto bancario, mapeo de columnas, conciliacion de cobros, cobros bancarios, excel csv pdf, regex, patron de linea, pichincha, produbanco, guayaquil, pacifico, signo, credito, debito, fecha formato estados unidos
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -50,16 +50,77 @@ Solo el **nivel 3 (superadministrador)** entra aquí. Se abre desde
    - **Excel / CSV**: el número de columna de la fecha, la descripción, el monto
      (crédito) y, si existe, la referencia. La primera columna es la **0**. En
      **Filas de encabezado a saltar** ponga cuántas hay antes del primer
-     movimiento.
+     movimiento. Si el banco trae el monto siempre en positivo y marca en otra
+     columna si es ingreso o egreso, indique esa columna en **Tipo / signo** y el
+     **Valor "es crédito"** (p. ej. `+` o `C`): así solo se importan los cobros y
+     no los pagos, comisiones ni retenciones.
    - **PDF**: un patrón (regex) que reconozca la línea que cierra cada movimiento,
      con los grupos `(?<fecha>...)` y `(?<monto>...)` obligatorios. El botón
      **Sugerir patrón** analiza el PDF y propone uno; revíselo con **Probar**.
-6. Revise la tabla **Resultado de aplicar el mapeo actual** y pulse **Crear**
-   (al editar, **Guardar**).
+6. En la pestaña **Probar con archivo**, pulse **Ver / Probar** otra vez y revise
+   la tabla **Resultado de aplicar el mapeo actual**: son exactamente los
+   movimientos que se importarían. Luego pulse **Crear** (al editar, **Guardar**).
 
 Para cambiar un perfil, haga clic en su fila. Para dejar de ofrecerlo sin
 borrarlo, cambie su **Estado** a *Inactivo* y guarde. Los encabezados de la tabla
 ordenan el listado con un clic, y el orden elegido se recuerda para su usuario.
+
+## Ejemplo: Produbanco (Excel)
+
+El estado de cuenta en Excel de Produbanco trae 9 filas de datos de la cuenta,
+una fila de títulos y luego los movimientos con estas columnas: `FECHA`,
+`REFERENCIA`, `REFERENCIA2`, `DESCRIPCION`, `+/-`, `VALOR`, `SALDO CONTABLE`…
+Tiene tres particularidades:
+
+- La fecha viene en formato de **Estados Unidos** (mes/día/año con hora):
+  `09/01/2026 05:04:00 AM` es el 1 de septiembre.
+- El **VALOR** siempre es positivo; el signo va en la columna `+/-`.
+- El nombre de quien paga viene en **REFERENCIA2**; **DESCRIPCION** solo dice el
+  tipo de transacción (*TRANSF BCE RECIBIDA SPI2*, *PAGO SERVICIOS VARIOS CASH*…).
+
+Perfil a usar:
+
+| Campo | Valor |
+|-------|-------|
+| Tipo de archivo | Excel / CSV |
+| Formato de fecha | `m/d/Y h:i:s A` |
+| Separador decimal | Punto |
+| Filas de encabezado a saltar | 10 |
+| Fecha | 0 |
+| Descripción | 2 (REFERENCIA2, quien paga) |
+| Descripción adicional | 3 (DESCRIPCION, tipo de transacción) |
+| Monto | 5 (VALOR) |
+| Referencia | 1 (REFERENCIA) |
+| Tipo / signo | 4 (`+/-`) |
+| Valor "es crédito" | `+` |
+
+Los intereses *overnight* también son créditos y se importan; como no son cobros
+de clientes quedan sin cliente sugerido y se pueden **ignorar** en la revisión.
+
+## Ejemplo: Banco Pichincha (Excel de movimientos)
+
+El archivo de movimientos en Excel del Banco Pichincha (hoja *Movimientos*) tiene
+una sola fila de títulos y luego las columnas `Concepto`, `Fecha`, `Documento`,
+`Monto`, `Tipo`, `Oficina`, `Codigo`, `Saldo`. La fecha viene como día/mes/año
+(`22/09/2026`) y el nombre de quien paga ya viene en **Concepto** (*DIRECTA DE
+…*, *INTERBANCARIA DE …*). El monto siempre es positivo: la columna **Tipo**
+dice `C` (crédito) o `D` (débito).
+
+| Campo | Valor |
+|-------|-------|
+| Tipo de archivo | Excel / CSV |
+| Formato de fecha | `d/m/Y` |
+| Separador decimal | Punto |
+| Filas de encabezado a saltar | 1 |
+| Fecha | 1 |
+| Descripción | 0 (Concepto) |
+| Monto | 3 |
+| Referencia | 2 (Documento) |
+| Tipo / signo | 4 (Tipo) |
+| Valor "es crédito" | `C` |
+
+Los depósitos en corresponsal (*DEP CNB 1001486511001*) traen la cédula o el RUC
+de quien deposita: el sistema la usa para reconocer al cliente.
 
 ## Campos del formulario
 
@@ -74,8 +135,11 @@ ordenan el listado con un clic, y el orden elegido se recuerda para su usuario.
 | Estado | Sí | Activo se ofrece en Conciliación de Cobros; Inactivo no |
 | Columnas Fecha / Descripción / Monto | Sí (Excel) | Número de columna de cada dato (0 = primera) |
 | Columna Referencia | No | Número de documento o referencia del banco |
+| Descripción adicional | No | Solo Excel: segunda columna que se une a la descripción (`descripción - adicional`) |
+| Tipo / signo | No | Solo Excel: columna que indica si el movimiento es ingreso o egreso |
+| Valor "es crédito" (Excel) | Sí, si hay Tipo / signo | Valor de esa columna que marca un ingreso (p. ej. `+`); las demás filas se descartan |
 | Patrón (regex) de línea de datos | Sí (PDF) | Reconoce la línea con la fecha y el monto de cada movimiento |
-| Valor "es crédito" | No | Solo PDF: si el patrón captura `(?<tipo>...)`, el valor que indica un ingreso (p. ej. `C`) |
+| Valor "es crédito" (PDF) | No | Si el patrón captura `(?<tipo>...)`, el valor que indica un ingreso (p. ej. `C`) |
 
 ## Permisos
 
@@ -119,6 +183,7 @@ un perfil activo al subir el extracto en Conciliación de Cobros.
 
 ## Historial de cambios
 
+- **1.1** — Excel: nuevas columnas opcionales **Tipo / signo** + **Valor "es crédito"** (importa solo los créditos cuando el monto viene siempre en positivo) y **Descripción adicional** (une dos columnas). **Ver / Probar** muestra ahora también en Excel los movimientos que se importarían, y usa el formato de fecha y separador del perfil. Ejemplos de perfil para Produbanco y Banco Pichincha.
 - **1.0** — Versión inicial. Los perfiles de mapeo, que antes creaba cada empresa
   desde Conciliación de Cobros con el botón *Perfiles de Mapeo*, pasan a este
   catálogo global administrado por el nivel 3. Se agregan el banco del perfil, el

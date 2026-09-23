@@ -85,6 +85,9 @@ class ConciliacionPerfilesController extends Controller
             (int) ($_POST['fila_inicio'] ?? 0),
             trim((string) ($_POST['regex_prueba'] ?? '')) ?: null,
             trim((string) ($_POST['tipo_credito_prueba'] ?? '')) ?: null,
+            json_decode((string) ($_POST['mapeo_prueba'] ?? ''), true) ?: null,
+            trim((string) ($_POST['formato_fecha'] ?? '')),
+            (string) ($_POST['separador_decimal'] ?? '.'),
         ));
     }
 

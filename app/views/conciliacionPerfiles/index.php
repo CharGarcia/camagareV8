@@ -155,6 +155,21 @@ unset($_SESSION['config_msg']);
                                     <label for="cp-map-referencia-col" class="form-label">Referencia</label>
                                     <input type="number" id="cp-map-referencia-col" class="form-control form-control-sm" min="0">
                                 </div>
+                                <div class="col-md-4">
+                                    <label for="cp-map-descripcion_extra-col" class="form-label">Descripción adicional</label>
+                                    <input type="number" id="cp-map-descripcion_extra-col" class="form-control form-control-sm" min="0">
+                                    <small class="text-muted">Se une a la descripción (p. ej. nombre de quien paga + tipo de transacción).</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="cp-map-tipo-col" class="form-label">Tipo / signo</label>
+                                    <input type="number" id="cp-map-tipo-col" class="form-control form-control-sm" min="0">
+                                    <small class="text-muted">Columna que indica si es ingreso o egreso.</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="cp-map-tipo-credito-excel" class="form-label">Valor "es crédito"</label>
+                                    <input type="text" id="cp-map-tipo-credito-excel" class="form-control form-control-sm" placeholder="+ o C">
+                                    <small class="text-muted">Solo se importan las filas con este valor.</small>
+                                </div>
                             </div>
                             <div id="cp-mapeo-pdf" class="row g-3" style="display:none;">
                                 <div class="col-12">

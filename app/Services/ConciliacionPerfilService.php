@@ -104,11 +104,14 @@ class ConciliacionPerfilService
 
     // ── Prueba del mapeo con un archivo de muestra (no guarda nada) ──────────
 
-    public function previsualizarArchivo(array $file, string $tipoArchivo, int $filaInicio = 0, ?string $regexPrueba = null, ?string $tipoCreditoPrueba = null): array
+    public function previsualizarArchivo(array $file, string $tipoArchivo, int $filaInicio = 0, ?string $regexPrueba = null, ?string $tipoCreditoPrueba = null, ?array $mapeoExcelPrueba = null, string $formatoFecha = 'd/m/Y', string $separadorDecimal = '.'): array
     {
         $tipoArchivo = strtoupper($tipoArchivo);
         $rutaTemporal = $this->validarYObtenerTmp($file, $tipoArchivo);
-        return $this->importService->previsualizar($rutaTemporal, $tipoArchivo, $filaInicio, 60, $regexPrueba, $tipoCreditoPrueba);
+        return $this->importService->previsualizar(
+            $rutaTemporal, $tipoArchivo, $filaInicio, 60, $regexPrueba, $tipoCreditoPrueba,
+            $mapeoExcelPrueba, $formatoFecha !== '' ? $formatoFecha : 'd/m/Y', $separadorDecimal === ',' ? ',' : '.'
+        );
     }
 
     /** Analiza un PDF de muestra y propone un patrón (regex) de línea de datos (ver ConciliacionImportService::sugerirRegexPdf). */

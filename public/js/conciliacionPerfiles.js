@@ -86,6 +86,21 @@
     const CP = window.CP = {};
     const $ = (id) => document.getElementById(id);
 
+    /** Columnas del mapeo Excel (id del input: cp-map-{campo}-col). */
+    const CAMPOS_EXCEL = ['fecha', 'descripcion', 'monto', 'referencia', 'descripcion_extra', 'tipo'];
+
+    /** Mapeo Excel tal como se guarda en conciliacion_perfiles.mapeo_columnas (ver ConciliacionImportService::normalizarFilaExcel). */
+    function mapeoExcel() {
+        const mapeo = {};
+        CAMPOS_EXCEL.forEach((campo) => {
+            const col = $(`cp-map-${campo}-col`).value;
+            if (col !== '') mapeo[campo] = { col: parseInt(col, 10) };
+        });
+        const tipoCredito = $('cp-map-tipo-credito-excel').value.trim();
+        if (tipoCredito) mapeo.tipo_credito = tipoCredito;
+        return mapeo;
+    }
+
     // ── Listado ──────────────────────────────────────────────────────────────
 
     CP.render = function () {
@@ -163,9 +178,10 @@
                 $('cp-map-regex-linea').value = mapeo.regex_linea || '';
                 $('cp-map-tipo-credito').value = mapeo.tipo_credito || '';
             } else {
-                ['fecha', 'descripcion', 'monto', 'referencia'].forEach((campo) => {
+                CAMPOS_EXCEL.forEach((campo) => {
                     $(`cp-map-${campo}-col`).value = mapeo[campo] ? (mapeo[campo].col ?? '') : '';
                 });
+                $('cp-map-tipo-credito-excel').value = mapeo.tipo_credito || '';
             }
             $('cp-auditoria').textContent = `Creado: ${fmtDateTime(p.created_at)} · Última modificación: ${fmtDateTime(p.updated_at)}`;
         }
@@ -197,9 +213,13 @@
         fd.append('archivo', archivo);
         fd.append('tipo_archivo', tipoArchivo);
         fd.append('fila_inicio', $('cp-fila-inicio').value || 0);
+        fd.append('formato_fecha', $('cp-formato-fecha').value.trim());
+        fd.append('separador_decimal', $('cp-separador').value);
         if (tipoArchivo === 'PDF') {
             fd.append('regex_prueba', $('cp-map-regex-linea').value.trim());
             fd.append('tipo_credito_prueba', $('cp-map-tipo-credito').value.trim());
+        } else {
+            fd.append('mapeo_prueba', JSON.stringify(mapeoExcel()));
         }
 
         const box = $('cp-preview-box');
@@ -218,8 +238,10 @@
             CP.mostrarResultadoPrueba(json.data.filas_probadas);
         } else {
             box.textContent = (json.data.lineas || [])
-                .map((fila, i) => `Fila ${i}: ` + fila.map((v, c) => `[${c}]${v}`).join('  '))
+                .map((fila, i) => `Fila ${i}: ` + fila.map((v, c) => `[${c}]${v ?? ''}`).join('  '))
                 .join('\n');
+            // Sin fecha/descripción/monto indicados el servidor no aplica el mapeo (null).
+            CP.mostrarResultadoPrueba(json.data.filas_probadas);
         }
     };
 
@@ -282,7 +304,7 @@
             return;
         }
         if (!resultado.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">El patrón no encontró ninguna línea de datos en este archivo.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">El mapeo actual no encontró ningún movimiento (crédito) en este archivo.</td></tr>';
             return;
         }
         tbody.innerHTML = resultado.map((f) => `
@@ -305,10 +327,7 @@
             const tipoCredito = $('cp-map-tipo-credito').value.trim();
             if (tipoCredito) mapeo.tipo_credito = tipoCredito;
         } else {
-            ['fecha', 'descripcion', 'monto', 'referencia'].forEach((campo) => {
-                const col = $(`cp-map-${campo}-col`).value;
-                if (col !== '') mapeo[campo] = { col: parseInt(col, 10) };
-            });
+            Object.assign(mapeo, mapeoExcel());
         }
 
         const json = await postJson('guardar', {
