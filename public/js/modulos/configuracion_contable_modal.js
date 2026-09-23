@@ -1321,10 +1321,16 @@
                                 <span class="small text-muted">
                                     ${heredados ? `<i class="bi bi-info-circle me-1"></i>Otros ${heredados} concepto(s) usan la cuenta de la configuración General.` : ''}
                                 </span>
-                                <button type="button" class="btn btn-outline-secondary btn-sm py-0" style="font-size:.75rem;"
-                                        onclick="ASIENTOPROG_copiarDeGeneral('${tipo}', ${idx})">
-                                    <i class="bi bi-clipboard-check me-1"></i>Copiar cuentas de General
-                                </button>
+                                <span class="d-flex gap-1 flex-wrap">
+                                    ${tipo === 'proveedor' ? `<button type="button" class="btn btn-outline-primary btn-sm py-0" style="font-size:.75rem;"
+                                            onclick="ASIENTOPROG_abrirModalItemsTarjeta('${tipo}', ${idx})">
+                                        <i class="bi bi-box-seam me-1"></i>Informaci&oacute;n de adquisiciones
+                                    </button>` : ''}
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-0" style="font-size:.75rem;"
+                                            onclick="ASIENTOPROG_copiarDeGeneral('${tipo}', ${idx})">
+                                        <i class="bi bi-clipboard-check me-1"></i>Copiar cuentas de General
+                                    </button>
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -1590,6 +1596,8 @@
                 const r = await fetch(`${API_PROG}/getItemsComprasAjax${anio ? `?anio=${encodeURIComponent(anio)}` : ''}`);
                 const res = await r.json();
                 items = (res.ok && res.data) ? res.data : [];
+                // Primero los ítems que aún no tienen cuentas asignadas (sort estable).
+                items.sort((a, b) => (a.configurado == 1 ? 1 : 0) - (b.configurado == 1 ? 1 : 0));
                 pintarItems(items);
             } catch (e) {
                 lista.innerHTML = '<div class="text-danger small py-3 text-center">Error al cargar ítems.</div>';
@@ -1636,6 +1644,9 @@
             const r = await fetch(url);
             const res = await r.json();
             datos = (res.ok && res.data) ? res.data : [];
+            // Primero las entidades que aún no tienen cuentas asignadas (lo pendiente arriba).
+            // sort es estable, así que dentro de cada grupo se conserva el orden del servidor.
+            datos.sort((a, b) => (a.configurado == 1 ? 1 : 0) - (b.configurado == 1 ? 1 : 0));
             pintar(datos);
         } catch (e) {
             lista.innerHTML = '<div class="text-danger small py-3 text-center">Error al cargar.</div>';
@@ -1654,7 +1665,7 @@
      * Abre un modal con las descripciones ÚNICAS de los ítems transados con la entidad seleccionada
      * (proveedor → compras; cliente → ventas), filtradas por el año elegido. Solo para cliente/proveedor.
      */
-    window.ASIENTOPROG_abrirModalItems = async function (tipo) {
+    window.ASIENTOPROG_abrirModalItems = async function (tipo, entidad = null) {
         const idEl     = document.getElementById(`dim_id_${tipo}`);
         const nombreEl = document.getElementById(`dim_search_${tipo}`);
         const anioSel  = document.getElementById(`dim_anio_${tipo}`);
@@ -1663,14 +1674,16 @@
         const titProv  = document.getElementById('modalItemsProvNombre');
         if (!modalEl || !body) return;
 
-        const idEnt = idEl ? idEl.value : '';
+        // La entidad llega explícita desde una ficha ya agregada; si no, se toma del buscador.
+        const idEnt  = entidad ? entidad.id : (idEl ? idEl.value : '');
+        const nombre = entidad ? entidad.nombre : (nombreEl ? nombreEl.value : '');
         if (!idEnt) {
             if (window.Swal) Swal.fire('Atención', 'Seleccione primero una entidad.', 'warning');
             else alert('Seleccione primero una entidad.');
             return;
         }
         const anio = anioSel ? anioSel.value : '';
-        if (titProv) titProv.textContent = (nombreEl && nombreEl.value) ? `· ${nombreEl.value}` : '';
+        if (titProv) titProv.textContent = nombre ? `· ${nombre}` : '';
         bootstrap.Modal.getOrCreateInstance(modalEl).show();
         body.innerHTML = '<div class="text-muted small py-3 text-center"><span class="spinner-border spinner-border-sm me-1"></span> Cargando ítems...</div>';
 
@@ -1689,6 +1702,18 @@
         } catch (e) {
             body.innerHTML = '<div class="text-danger small">Error al cargar ítems.</div>';
         }
+    };
+
+    /**
+     * Abre "Información de adquisiciones" para la entidad de una ficha ya agregada, para ver
+     * qué se le ha comprado mientras se le asignan las cuentas.
+     */
+    window.ASIENTOPROG_abrirModalItemsTarjeta = function (tipo, idx) {
+        const ref  = ASIENTOPROG_refDeTarjeta(tipo, idx);
+        const card = document.querySelector(`#dimCards_${tipo} [data-dim-card="${idx}"]`);
+        const nombreEl = card ? card.querySelector('.card-header .fw-bold') : null;
+        if (!ref) return;
+        ASIENTOPROG_abrirModalItems(tipo, { id: ref.id, nombre: nombreEl ? nombreEl.textContent.trim() : '' });
     };
 
     /**

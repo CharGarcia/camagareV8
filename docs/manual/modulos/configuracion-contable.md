@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance
-version: 1.14
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar
+version: 1.15
 orden: 5
 estado: activo
 ---
@@ -118,6 +118,11 @@ Dentro de cada tarjeta, el botón **Copiar cuentas de General** rellena de una v
 los conceptos que aún no tienen cuenta propia con las de la configuración
 General, para partir de esa base y ajustar solo lo que cambie. No pisa lo que ya
 esté asignado en la ficha.
+
+En las fichas de **Proveedor**, junto a ese botón está **Información de
+adquisiciones**: muestra los ítems que se le han comprado a ese proveedor (según
+el año elegido en el selector de la regla), para decidir las cuentas sin tener
+que volver a buscarlo arriba.
 
 El botón de la papelera de la cabecera elimina **toda la configuración de esa
 entidad** de una vez: pide confirmación y, al aceptar, esa entidad vuelve a
@@ -248,6 +253,12 @@ Con **Todos los años** el listado se comporta como siempre: todas las entidades
 con movimiento (y, en el caso de categorías y marcas, todas las registradas, para
 poder configurarlas por adelantado).
 
+En todos estos listados (*Proveedores con compras*, *Clientes con ventas*,
+productos, *Ítems de compras*, *Categorías* y *Marcas*), las entidades que
+todavía **no tienen cuentas asignadas** aparecen primero; las que ya las tienen
+(marcadas con *con cuentas*) quedan al final. Así lo pendiente de configurar
+queda siempre arriba.
+
 El módulo del que salen los movimientos depende del tipo de asiento: en
 *Adquisiciones de Compras/Servicios* se miran las compras; en *Ventas con
 Factura* y *Recibos de Venta*, las ventas.
@@ -350,6 +361,10 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.15** — En los listados de entidades de las reglas por Proveedor, Cliente,
+  Producto, Categoría y Marca, las que no tienen cuentas asignadas se muestran
+  primero. En cada ficha de Proveedor se agregó el botón *Información de
+  adquisiciones* para ver lo comprado mientras se asignan las cuentas.
 - **1.14** — **Módulos que contabilizan**: un interruptor por módulo para que la
   empresa deje de generar asientos automáticos (por ejemplo, de consignaciones).
   Los módulos apagados no figuran como pendientes en Balance, Mayores ni Estados

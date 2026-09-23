@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/plan-cuentas
 tipo: modulo
 visibilidad: todos
-etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa, cambiar codigo de cuenta, codigo sri, supercias, entidades de control
-version: 1.4
+etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa, cambiar codigo de cuenta, codigo sri, supercias, entidades de control, eliminar cuenta, cuenta eliminada, balance no cuadra, descuadre
+version: 1.5
 orden: 10
 estado: activo
 ---
@@ -173,8 +173,26 @@ Vale la pena dedicar tiempo a esto al inicio. Cambiar el plan de cuentas cuando
 ya hay asientos registrados obliga a revisar la configuración contable de cada
 módulo y, en el peor caso, a reclasificar movimientos.
 
+## Eliminar cuentas
+
+Una cuenta **no se puede eliminar** si tiene movimientos contables o si está
+configurada en **Configuración Contable** (por ejemplo, como cuenta de una
+retención, de una forma de pago o de nómina). El botón **Eliminar plan** borra
+solo las cuentas sin movimientos y sin configuración; las demás, y sus cuentas
+padre, se conservan.
+
+Esto protege el balance: los Estados Financieros solo suman cuentas activas. Si
+una cuenta eliminada siguiera configurada, cada documento nuevo se asentaría en
+ella y el balance dejaría de cuadrar sin aviso. Por eso, además, ningún asiento
+se registra en una cuenta eliminada: el documento se guarda, su asiento queda
+pendiente y el aviso de asientos pendientes indica qué cuenta revisar.
+
 ## Errores frecuentes
 
+- **"No se puede registrar el asiento: la cuenta … está eliminada del plan de
+  cuentas"**: la Configuración Contable apunta a una cuenta eliminada. Cambie la
+  cuenta en Configuración Contable (o reactive la cuenta) y vuelva a generar los
+  asientos pendientes.
 - **"Las cuentas de nivel 1 al 4 deben estar en MAYÚSCULAS"**: escriba el nombre
   en mayúsculas o baje el nivel de la cuenta.
 - **La cuenta no aparece al configurar un asiento**: revise su nivel; en las
@@ -189,6 +207,10 @@ módulo y, en el peor caso, a reclasificar movimientos.
 
 ## Historial de cambios
 
+- **1.5** — **Eliminar plan** ya no borra cuentas configuradas en Configuración
+  Contable (antes solo miraba los movimientos). Ningún asiento se registra en una
+  cuenta eliminada, de otra empresa o inexistente: el asiento queda pendiente con
+  un aviso que nombra la cuenta, en vez de descuadrar el balance en silencio.
 - **1.4** — La columna ECP de las cuentas de patrimonio se deduce sola del
   casillero ESF al crear, editar, importar o cargar el modelo. *Reparar
   Jerarquía* completa los códigos SRI/Supercías vacíos desde el plan modelo.

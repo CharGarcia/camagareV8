@@ -326,7 +326,8 @@ class PlanCuentaRepository extends BaseRepository
     /**
      * Elimina lógicamente solo las cuentas que NO han sido usadas.
      * Una cuenta se conserva si tiene movimientos contables (detalle de asiento activo)
-     * o si es ancestro (cuenta padre) de una cuenta usada — para no romper la jerarquía.
+     * o está configurada en Programación Contable (asientos_programados), o si es ancestro
+     * (cuenta padre) de una cuenta usada o configurada — para no romper la jerarquía.
      * Todo lo demás (cuentas sin uso ni descendientes usados) se elimina.
      * Devuelve el número de cuentas eliminadas.
      */
@@ -348,6 +349,22 @@ class PlanCuentaRepository extends BaseRepository
                         WHERE usada.id_empresa = pc.id_empresa
                           AND usada.eliminado = false
                           AND (usada.codigo = pc.codigo OR usada.codigo LIKE pc.codigo || '.%')
+                  )
+                  -- Configurada en Programación Contable (asientos_programados), ella o una hija:
+                  -- mismo criterio que la eliminación individual (estaEnProgramacionContable()).
+                  -- Sin esto se borraban cuentas aún sin movimientos pero ya configuradas (p. ej.
+                  -- las de retenciones), y cada documento posterior seguía asentando en una
+                  -- cuenta eliminada que el balance no suma: descuadre silencioso.
+                  AND NOT EXISTS (
+                        SELECT 1
+                        FROM {$this->table} conf
+                        INNER JOIN asientos_programados ap
+                                ON ap.id_cuenta = conf.id
+                               AND ap.id_empresa = conf.id_empresa
+                               AND ap.eliminado = false
+                        WHERE conf.id_empresa = pc.id_empresa
+                          AND conf.eliminado = false
+                          AND (conf.codigo = pc.codigo OR conf.codigo LIKE pc.codigo || '.%')
                   )";
         $st = $this->db->prepare($sql);
         $st->execute([':id_e' => $idEmpresa, ':id_u' => $idUsuario]);

@@ -737,6 +737,52 @@ class AsientoContableRepository
         $stmt->execute([':id' => $idAsiento]);
     }
 
+    /**
+     * De las cuentas indicadas, devuelve las que NO se pueden usar en un asiento de la
+     * empresa: eliminadas del plan de cuentas, de otra empresa o inexistentes. Cada fila:
+     * id, codigo, nombre, motivo ('eliminada' | 'otra_empresa' | 'no_existe').
+     *
+     * El balance solo suma cuentas activas de la empresa: una línea en cualquiera de estas
+     * queda fuera de los Estados Financieros y el balance deja de cuadrar sin aviso.
+     *
+     * @param int[] $idsCuenta
+     */
+    public function getCuentasNoUtilizables(array $idsCuenta, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsCuenta), fn($id) => $id > 0)));
+        if ($ids === []) {
+            return [];
+        }
+
+        $params = [':id_empresa' => $idEmpresa];
+        $ph = [];
+        foreach ($ids as $i => $id) {
+            $ph[] = ":c{$i}";
+            $params[":c{$i}"] = $id;
+        }
+        $in = implode(',', $ph);
+
+        $sql = "SELECT pc.id, pc.codigo, pc.nombre,
+                       CASE WHEN pc.id_empresa <> :id_empresa THEN 'otra_empresa' ELSE 'eliminada' END AS motivo
+                FROM plan_cuentas pc
+                WHERE pc.id IN ({$in})
+                  AND (pc.eliminado = true OR pc.id_empresa <> :id_empresa)";
+        $pdo  = \App\core\Database::getConnection();
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $malas = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        // Ids que ni siquiera existen en plan_cuentas
+        $stE = $pdo->prepare("SELECT pc.id FROM plan_cuentas pc WHERE pc.id IN ({$in})");
+        $stE->execute(array_diff_key($params, [':id_empresa' => true]));
+        $existentes = array_map('intval', $stE->fetchAll(\PDO::FETCH_COLUMN));
+        foreach (array_diff($ids, $existentes) as $id) {
+            $malas[] = ['id' => $id, 'codigo' => '', 'nombre' => '', 'motivo' => 'no_existe'];
+        }
+
+        return $malas;
+    }
+
     public function insertDetalle(array $data): void
     {
         $sql = "INSERT INTO asientos_contables_detalle (

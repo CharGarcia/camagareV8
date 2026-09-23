@@ -518,7 +518,7 @@ class PlanCuentasController extends BaseModuloController
             $r = $this->service->eliminarCuentasNoUsadas($idEmpresa, $idUsuario);
             $msg = "Se eliminaron {$r['eliminadas']} cuentas sin movimientos.";
             if ($r['conservadas'] > 0) {
-                $msg .= " Se conservaron {$r['conservadas']} (usadas o necesarias para la jerarquía).";
+                $msg .= " Se conservaron {$r['conservadas']} (usadas, configuradas en la Configuración Contable o necesarias para la jerarquía).";
             }
             echo json_encode(['ok' => true, 'msg' => $msg]);
         } catch (\Throwable $e) {

@@ -282,6 +282,40 @@ class AsientoContableService
      *     con `false`) respetan esa marca y no lo vuelven a armar desde el builder.
      *   Sin esto, reguardar el documento pisaría en silencio la corrección del usuario.
      */
+    /**
+     * Ninguna línea puede ir a una cuenta eliminada, de otra empresa o inexistente: los
+     * Estados Financieros solo suman cuentas activas de la empresa, así que esa línea
+     * quedaría fuera y el balance dejaría de cuadrar sin ningún aviso. Pasó con cuentas
+     * borradas que seguían configuradas en Configuración Contable (asientos_programados):
+     * cada documento nuevo seguía cayendo en ellas.
+     *
+     * Se valida aquí porque es el único punto que graba líneas de asiento (manuales,
+     * builders, sincronizador, regeneración). Los módulos generan el asiento fuera de la
+     * transacción del documento, así que el documento se guarda igual y su asiento queda
+     * pendiente, con este mensaje en el aviso de asientos pendientes.
+     */
+    private function validarCuentasUtilizables(array $detallesData, int $idEmpresa): void
+    {
+        $ids   = array_map(fn($d) => (int) ($d['id_cuenta_contable'] ?? 0), $detallesData);
+        $malas = $this->repository->getCuentasNoUtilizables($ids, $idEmpresa);
+        if ($malas === []) {
+            return;
+        }
+
+        $partes = [];
+        foreach ($malas as $c) {
+            $nombre = trim(($c['codigo'] ?? '') . ' - ' . ($c['nombre'] ?? ''), ' -');
+            $partes[] = match ($c['motivo']) {
+                'eliminada'    => "la cuenta {$nombre} está eliminada del plan de cuentas",
+                'otra_empresa' => "la cuenta {$nombre} pertenece a otra empresa",
+                default        => "la cuenta #{$c['id']} no existe en el plan de cuentas",
+            };
+        }
+
+        throw new \Exception('No se puede registrar el asiento: ' . implode('; ', $partes)
+            . '. Reactive la cuenta o cambie la cuenta configurada en Configuración Contable.');
+    }
+
     public function guardarAsiento(array $cabeceraData, array $detallesData, int $idEmpresa, int $idUsuario, bool $edicionManual = false): int
     {
         // Ordenar detalles: cuentas con 'debe' > 0 primero
@@ -307,6 +341,7 @@ class AsientoContableService
         // 2. Validaciones
         $this->rules->validarCabecera($cabeceraData);
         $this->rules->validarDetalles($detallesData, ($cabeceraData['estado'] ?? '') === 'borrador');
+        $this->validarCuentasUtilizables($detallesData, $idEmpresa);
 
         // 2b. Período contable: ni se crea ni se modifica un asiento dentro de un período
         // cerrado. En una edición se validan AMBAS fechas —la nueva y la que tiene hoy el

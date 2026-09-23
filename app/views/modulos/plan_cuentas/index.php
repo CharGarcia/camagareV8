@@ -523,7 +523,7 @@ $proyectos  = $proyectos ?? [];
         window.eliminarPlanCompleto = async function() {
             const result = await Swal.fire({
                 title: '¿Eliminar cuentas del plan?',
-                html: 'Se eliminarán las cuentas <b>sin movimientos</b>.<br>Las cuentas que ya tengan movimientos contables (y sus cuentas padre) se conservarán.',
+                html: 'Se eliminarán las cuentas <b>sin movimientos</b>.<br>Se conservan las cuentas con movimientos contables, las configuradas en la Configuración Contable y sus cuentas padre.',
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonText: 'Sí, eliminar no usadas',
