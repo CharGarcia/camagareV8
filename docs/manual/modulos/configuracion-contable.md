@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente
-version: 1.12
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance
+version: 1.14
 orden: 5
 estado: activo
 ---
@@ -123,6 +123,27 @@ El botón de la papelera de la cabecera elimina **toda la configuración de esa
 entidad** de una vez: pide confirmación y, al aceptar, esa entidad vuelve a
 contabilizarse con la configuración General. Solo afecta al tipo de asiento que
 se esté viendo — si el mismo producto tiene reglas en Compras, esas se conservan.
+
+## Buscar entre las fichas ya agregadas
+
+Cuando una pestaña tiene muchas fichas (cientos de proveedores o clientes), no
+hace falta bajar con el mouse hasta encontrar la que se busca. Encima de la
+lista de tarjetas hay un campo **Buscar en las fichas ya agregadas**:
+
+- Filtra al instante mientras se escribe, por el nombre de la entidad.
+- No distingue mayúsculas ni tildes, y admite varias palabras en cualquier
+  orden: `comercial ferreteria` encuentra "FERRETERÍA COMERCIAL S.A.".
+- La casilla **Solo con cuentas faltantes** deja a la vista únicamente las fichas
+  con el aviso rojo *faltan N*, para completarlas sin revisar una por una.
+- A la derecha se ve cuántas fichas coinciden sobre el total.
+
+El filtro se mantiene al guardar una cuenta (la lista se recarga pero sigue
+filtrada). La ficha recién agregada con **Agregar** se muestra siempre, aunque
+no coincida con la búsqueda.
+
+Este buscador es distinto del de la parte superior de la pestaña: aquel sirve
+para **agregar** una entidad nueva; este, para **encontrar** las que ya tienen
+reglas.
 
 ## Cada concepto admite un solo tipo de cuenta
 
@@ -254,6 +275,46 @@ Los tres son **opcionales**: si se dejan vacíos, la cuota se contabiliza en
 configuran en General y también en las **Reglas por Empleado**, donde la cuenta
 del empleado manda sobre la General.
 
+## Módulos que contabilizan: apagar los asientos de un módulo
+
+El botón **Módulos que contabilizan** (arriba, junto a *Configurar Asientos*)
+abre la lista de módulos que generan asientos automáticos, agrupados en Ventas,
+Compras, Tesorería, Consignaciones y Nómina. Cada uno tiene un interruptor. Por
+defecto todos están **encendidos**.
+
+Se apaga un módulo cuando la empresa **no quiere asientos automáticos** de sus
+documentos. El caso típico son las **consignaciones**: muchas empresas no
+reclasifican la mercadería entregada a *Mercadería en consignación*. La dejan en
+*Inventario* y solo la factura mueve cuentas.
+
+Con un módulo apagado:
+
+- Sus documentos **nuevos no generan asiento**, ni al guardar, ni al abrir el
+  módulo, ni al sincronizar Estados Financieros.
+- **No aparecen como pendientes** en el aviso que sale al entrar a Balance de
+  comprobación, Mayores, Asientos contables o Estados Financieros. Tampoco se
+  avisan las cuentas que les falten (por ejemplo, conceptos de Ingresos/Egresos
+  sin cuenta cuando ambos módulos están apagados).
+- Los documentos que **ya tenían asiento lo conservan** y se siguen actualizando
+  si se editan, para que asiento y documento no queden descuadrados.
+
+**Retornos** y **Facturación de consignaciones** no tienen interruptor propio:
+aparecen con la etiqueta *Sigue a Consignaciones en Ventas*. Su asiento es el
+inverso del de la consignación, así que solo se genera cuando la consignación de
+origen tiene asiento.
+
+Al **apagar Consignaciones**, si la cuenta *Mercadería en consignación* tiene
+saldo, el sistema lo muestra: corresponde a consignaciones ya contabilizadas y se
+descargará con sus retornos y facturaciones, o con un asiento manual.
+
+Al **volver a encender** un módulo, los documentos que quedaron sin asiento se
+contabilizan solos al abrir el módulo o al sincronizar Estados Financieros,
+salvo los de períodos cerrados.
+
+Cada cambio queda registrado en el historial del sistema (`log_sistema`) con el
+usuario, la fecha y el valor anterior. Para usar el interruptor hace falta el
+permiso **Actualizar** de este módulo.
+
 ## Cuándo tocar esta pantalla
 
 - Al poner en marcha la empresa.
@@ -289,6 +350,14 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.14** — **Módulos que contabilizan**: un interruptor por módulo para que la
+  empresa deje de generar asientos automáticos (por ejemplo, de consignaciones).
+  Los módulos apagados no figuran como pendientes en Balance, Mayores ni Estados
+  Financieros; retornos y facturaciones de consignación siguen a su consignación
+  de origen.
+- **1.13** — Buscador sobre las fichas ya agregadas en las reglas por Cliente,
+  Proveedor, Empleado, Producto, Categoría y Marca, con opción de ver solo las
+  fichas con cuentas faltantes.
 - **1.12** — Costo de Ventas e Inventario se resuelven siempre por producto,
   categoría, marca y tipo de producción, salvo que el cliente los tenga
   configurados. Antes el costo no se contabilizaba en tres casos aunque estuviera

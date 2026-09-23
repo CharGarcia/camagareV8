@@ -1059,6 +1059,11 @@
                 const html = ASIENTOPROG_tarjetasDim(tipo, res.data);
                 cards.innerHTML = html || `<div class="col-12 text-center py-3 text-muted small">No se han registrado asociaciones para ${tipo}s.</div>`;
 
+                // Buscador sobre las fichas ya agregadas (con cientos de proveedores/clientes no
+                // hay que bajar con el mouse): se conserva el texto escrito entre recargas.
+                ASIENTOPROG_barraFiltroDim(tipo);
+                ASIENTOPROG_filtrarDim(tipo);
+
                 // Inicializar autocompletados: el del buscador de entidad y los de las cuentas de
                 // cada tarjeta (que además guardan al vuelo).
                 ASIENTOPROG_vincularDimAutocomplete(tipo);
@@ -1101,6 +1106,87 @@
      * recuerda aquí para poder mostrar su tarjeta vacía y que el usuario la llene.
      */
     const ASIENTOPROG_dimNueva = {};
+
+    /** Texto para comparar en el buscador de fichas: minúsculas y sin tildes. */
+    function ASIENTOPROG_normBuscar(s) {
+        return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+    }
+
+    /**
+     * Barra de búsqueda sobre las fichas ya agregadas de una dimensión (proveedores, clientes,
+     * productos…). Se crea una sola vez, justo encima del contenedor de tarjetas; filtra en el
+     * navegador porque las fichas ya están todas cargadas.
+     */
+    function ASIENTOPROG_barraFiltroDim(tipo) {
+        const cards = document.getElementById(`dimCards_${tipo}`);
+        if (!cards || tipo === 'tipo_produccion') return;   // solo Bien/Servicio: no hace falta
+        let barra = document.getElementById(`dim_filtro_bar_${tipo}`);
+        if (!barra) {
+            barra = document.createElement('div');
+            barra.id = `dim_filtro_bar_${tipo}`;
+            barra.className = 'd-flex flex-wrap align-items-center gap-2 mb-2';
+            barra.innerHTML = `
+                <div class="input-group input-group-sm" style="max-width:420px;">
+                    <span class="input-group-text bg-white"><i class="bi bi-funnel"></i></span>
+                    <input type="search" class="form-control" id="dim_filtro_${tipo}" autocomplete="off"
+                           placeholder="Buscar en las fichas ya agregadas...">
+                </div>
+                <div class="form-check form-check-inline small mb-0">
+                    <input class="form-check-input" type="checkbox" id="dim_filtro_faltan_${tipo}">
+                    <label class="form-check-label" for="dim_filtro_faltan_${tipo}">Solo con cuentas faltantes</label>
+                </div>
+                <span class="small text-muted ms-auto" id="dim_filtro_cont_${tipo}"></span>`;
+            cards.parentNode.insertBefore(barra, cards);
+            const input = barra.querySelector(`#dim_filtro_${tipo}`);
+            input.addEventListener('input', () => ASIENTOPROG_filtrarDim(tipo));
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+            barra.querySelector(`#dim_filtro_faltan_${tipo}`).addEventListener('change', () => ASIENTOPROG_filtrarDim(tipo));
+        }
+        // Sin fichas no hay nada que buscar.
+        barra.style.display = cards.querySelector('[data-dim-card]') ? '' : 'none';
+    }
+
+    /**
+     * Muestra solo las fichas cuyo nombre contiene TODAS las palabras escritas (sin importar
+     * tildes ni mayúsculas). La ficha recién agregada con "Agregar" se muestra siempre: es la que
+     * el usuario está por llenar.
+     */
+    function ASIENTOPROG_filtrarDim(tipo) {
+        const cards = document.getElementById(`dimCards_${tipo}`);
+        const input = document.getElementById(`dim_filtro_${tipo}`);
+        if (!cards || !input) return;
+        const palabras = ASIENTOPROG_normBuscar(input.value).split(/\s+/).filter(Boolean);
+        const soloFaltan = !!document.getElementById(`dim_filtro_faltan_${tipo}`)?.checked;
+
+        const fichas = cards.querySelectorAll('[data-dim-card]');
+        let visibles = 0;
+        fichas.forEach(el => {
+            const texto = el.dataset.buscar || '';
+            const ok = el.dataset.nueva === '1'
+                || ((!soloFaltan || el.dataset.faltan === '1') && palabras.every(p => texto.includes(p)));
+            el.classList.toggle('d-none', !ok);
+            if (ok) visibles++;
+        });
+
+        let vacio = cards.querySelector('[data-dim-filtro-vacio]');
+        if (fichas.length && !visibles) {
+            if (!vacio) {
+                vacio = document.createElement('div');
+                vacio.className = 'col-12 text-center py-3 text-muted small';
+                vacio.dataset.dimFiltroVacio = '1';
+                vacio.textContent = 'Ninguna ficha coincide con la búsqueda.';
+                cards.appendChild(vacio);
+            }
+        } else if (vacio) {
+            vacio.remove();
+        }
+
+        const cont = document.getElementById(`dim_filtro_cont_${tipo}`);
+        if (cont) {
+            const filtrando = palabras.length || soloFaltan;
+            cont.textContent = filtrando ? `${visibles} de ${fichas.length} ficha(s)` : `${fichas.length} ficha(s)`;
+        }
+    }
 
     function ASIENTOPROG_tarjetasDim(tipo, filas) {
         const conceptos = (window.CONCEPTOS_CONFIGURADOS || []);
@@ -1205,7 +1291,8 @@
             const refTexto = ASIENTOPROG_esItemCompra(tipo) ? g.nombre : '';
 
             html += `
-            <div class="col-12" data-dim-card="${idx}" data-ref-id="${ASIENTOPROG_esc(String(refId ?? ''))}" data-ref-texto="${ASIENTOPROG_esc(refTexto)}">
+            <div class="col-12" data-dim-card="${idx}" data-ref-id="${ASIENTOPROG_esc(String(refId ?? ''))}" data-ref-texto="${ASIENTOPROG_esc(refTexto)}"
+                 data-buscar="${ASIENTOPROG_esc(ASIENTOPROG_normBuscar(g.nombre))}" data-faltan="${faltantes.length ? '1' : '0'}"${g.esNueva ? ' data-nueva="1"' : ''}>
                 <div class="card border">
                     <div class="card-header bg-white p-0 d-flex align-items-center">
                         <button class="btn btn-link flex-grow-1 d-flex justify-content-between align-items-center gap-2 py-2 px-3 text-decoration-none shadow-none collapsed"

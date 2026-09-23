@@ -125,6 +125,40 @@ $base = BASE_URL;
                 </button>
             </div>
             <?php endif; ?>
+            <div class="col-md-6 col-lg-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm px-3 shadow-sm w-100 py-2 fw-medium" onclick="CONTAB_INT_abrir()"
+                        title="Elegir qué módulos generan asientos contables automáticos en esta empresa">
+                    <i class="bi bi-toggles me-1"></i> Módulos que contabilizan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Módulos que contabilizan (interruptor por empresa, ver ContabilidadInterruptorService) -->
+<div class="modal fade" id="modalInterruptoresContables" tabindex="-1" aria-labelledby="modalInterruptoresContablesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold" id="modalInterruptoresContablesLabel">
+                    <i class="bi bi-toggles me-2 text-primary"></i>Módulos que contabilizan
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-muted small mb-3" style="line-height:1.5;">
+                    Apaga un módulo si esta empresa <b>no quiere asientos automáticos</b> de sus documentos.
+                    Los documentos que ya tienen asiento lo conservan y se siguen actualizando; los nuevos quedan sin asiento
+                    y no aparecen como pendientes en Balance, Mayores ni Estados Financieros. Al volver a encenderlo, los
+                    pendientes se contabilizan solos.
+                </div>
+                <div id="contabIntLista">
+                    <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>Cargando…</div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
         </div>
     </div>
 </div>
@@ -888,3 +922,4 @@ $base = BASE_URL;
 </script>
 
 <script src="<?= $base ?>/js/modulos/configuracion_contable_modal.js?v=<?= asset_ver('/js/modulos/configuracion_contable_modal.js') ?>"></script>
+<script src="<?= $base ?>/js/modulos/configuracion_contable_interruptores.js?v=<?= asset_ver('/js/modulos/configuracion_contable_interruptores.js') ?>"></script>

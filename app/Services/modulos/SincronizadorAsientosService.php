@@ -304,6 +304,14 @@ class SincronizadorAsientosService
         // cambiar la firma en los cinco llamadores; la conexión es la misma instancia compartida.
         $excMigConsig = $this->construirExclusionConsignacionMigrada(Database::getConnection());
 
+        // Herencia de la madre: Retornos y Facturación CV solo tienen asiento inverso si al menos
+        // una de sus líneas viene de una consignación con asiento. Debe decir lo mismo que el
+        // builder (misma condición), o el documento se vería pendiente y fallaría en cada pasada.
+        $conMadreContab = static fn(string $tablaDetalle, string $colDoc, string $idExpr): string =>
+            " AND EXISTS (SELECT 1 FROM {$tablaDetalle} dh
+                           WHERE dh.{$colDoc} = {$idExpr} AND dh.eliminado = false
+                             AND " . \App\repositories\modulos\ConsignacionVentaRepository::sqlContabilizada('dh.id_consignacion') . ") ";
+
         // 1. Facturas de Venta
         //    Se (re)generan tres grupos:
         //    (a) las que no tienen ningún asiento todavía,
@@ -631,7 +639,8 @@ class SincronizadorAsientosService
             // $excMigConsig, que mira la consignación de origen.
             'sql'    => "SELECT id FROM retornos_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'"
                         . $excMig('retornos_cv', 'retornos_cv.id')
-                        . $excMigConsig('retornos_cv_detalles', 'id_retorno', 'retornos_cv.id'),
+                        . $excMigConsig('retornos_cv_detalles', 'id_retorno', 'retornos_cv.id')
+                        . $conMadreContab('retornos_cv_detalles', 'id_retorno', 'retornos_cv.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\RetornoCvService(
@@ -678,7 +687,8 @@ class SincronizadorAsientosService
             // Los registros que genera un cambio de productos no tienen reingreso: su asiento es el del cambio.
             'sql'    => "SELECT id FROM consignaciones_facturas WHERE id_empresa = ? AND eliminado = false AND id_asiento_reingreso IS NULL AND estado = 'facturada'"
                         . \App\repositories\modulos\CambioProductoCvRepository::sqlNoEsRegistroDeCambio('consignaciones_facturas')
-                        . $excMigConsig('consignaciones_facturas_detalles', 'id_consignacion_factura', 'consignaciones_facturas.id'),
+                        . $excMigConsig('consignaciones_facturas_detalles', 'id_consignacion_factura', 'consignaciones_facturas.id')
+                        . $conMadreContab('consignaciones_facturas_detalles', 'id_consignacion_factura', 'consignaciones_facturas.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\ConsignacionFacturaService(
@@ -739,7 +749,15 @@ class SincronizadorAsientosService
             'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
         ];
 
-        return $trabajos;
+        // Módulos que la empresa apagó en «Módulos que contabilizan»: no se generan ni se cuentan
+        // como pendientes (el aviso de Estados Financieros / Balance no debe reclamarlos). Filtrar
+        // aquí cubre de una vez sincronizar(), ejecutarPaso(), contarPasos(), contarPendientes()
+        // y getTrabajoPorClave(), que comparten esta lista.
+        $interruptor = ContabilidadInterruptorService::crear();
+        return array_values(array_filter(
+            $trabajos,
+            static fn(array $t): bool => $interruptor->contabiliza($idEmpresa, (string) ($t['clave'] ?? ''))
+        ));
     }
 
     /**
@@ -749,6 +767,11 @@ class SincronizadorAsientosService
     private function verificarConfiguracionCuentas(\PDO $db, int $idEmpresa): void
     {
         $programadoRepo = new \App\repositories\modulos\AsientoProgramadoRepository();
+
+        // Conceptos y formas de cobro/pago solo los usan Ingresos y Egresos: si la empresa apagó
+        // ambos módulos, que les falte la cuenta no impide nada y no se avisa.
+        $interruptor = ContabilidadInterruptorService::crear();
+        $tesoreria   = $interruptor->contabiliza($idEmpresa, 'ingresos') || $interruptor->contabiliza($idEmpresa, 'egresos');
 
         // Conceptos (opciones de Ingreso/Egreso) activos realmente sin cuenta contable.
         // Dos precisiones, ambas necesarias para no dar un aviso falso:
@@ -786,7 +809,7 @@ class SincronizadorAsientosService
                 }
                 $pendientes[] = (string) $opcion['nombre'];
             }
-            if (!empty($pendientes)) {
+            if ($tesoreria && !empty($pendientes)) {
                 $n = count($pendientes);
                 $this->warnings[] = "Hay {$n} concepto(s) de Ingresos/Egresos sin cuenta contable asignada ("
                     . implode(', ', array_slice($pendientes, 0, 5))
@@ -857,7 +880,7 @@ class SincronizadorAsientosService
             );
             $st->execute([$idEmpresa]);
             $formas = array_map('strval', $st->fetchAll(\PDO::FETCH_COLUMN));
-            if (!empty($formas)) {
+            if ($tesoreria && !empty($formas)) {
                 $n = count($formas);
                 $this->warnings[] = "Hay {$n} forma(s) de Cobro/Pago sin cuenta contable asignada ("
                     . implode(', ', array_slice($formas, 0, 5))
@@ -895,8 +918,21 @@ class SincronizadorAsientosService
                 'recibo_venta'       => 'recibo(s) de venta',
                 'nota_credito_venta' => 'nota(s) de crédito',
             ];
+            // Documentos de un módulo que la empresa no contabiliza: su costo pendiente no se avisa.
+            $interruptor = ContabilidadInterruptorService::crear();
+            $clavePorTipo = [
+                'factura_venta'      => 'facturas_venta',
+                'recibo_venta'       => 'recibos_venta',
+                'nota_credito_venta' => 'notas_credito',
+            ];
+            $rows = array_filter(
+                $rows,
+                static fn(array $r): bool => !isset($clavePorTipo[$r['tipo_documento']])
+                    || $interruptor->contabiliza($idEmpresa, $clavePorTipo[$r['tipo_documento']])
+            );
+
             $motivos = [
-                'cuenta_no_configurada'         => 'falta configurar la cuenta de Costo de Ventas y/o Inventario (a nivel General, o por Cliente/Producto/Categoría/Marca)',
+                'cuenta_no_configurada'         =>'falta configurar la cuenta de Costo de Ventas y/o Inventario (a nivel General, o por Cliente/Producto/Categoría/Marca)',
                 'bloque_incompleto_descuadrado' => 'el bloque de costo quedó descuadrado (revise que la cuenta de Costo y la de Inventario resuelvan el mismo monto)',
             ];
 
@@ -941,6 +977,10 @@ class SincronizadorAsientosService
      */
     private function verificarConsignacionesPendientes(\PDO $db, int $idEmpresa): void
     {
+        // La empresa decidió no contabilizar consignaciones: que no tengan asiento es lo esperado.
+        if (!ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, 'consignaciones')) {
+            return;
+        }
         try {
             $subMercaderia = $this->sqlCuentaConsignacionPorPalabra('CONSIGNACION');
 

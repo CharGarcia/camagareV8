@@ -104,6 +104,11 @@ class ContabilidadAutoService
         }
 
         try {
+            // 0. Interruptor por empresa: el módulo está apagado en «Módulos que contabilizan».
+            if (!ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, $clave)) {
+                return ['omitido' => 'la empresa no contabiliza este módulo'];
+            }
+
             // 1. Compuerta: ¿hay configuración contable para este módulo?
             $hashConfig = $this->repo->firmaConfiguracion($idEmpresa, $definicion);
             if ($hashConfig === null) {

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long
-version: 1.20
+etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long, asiento de reingreso, no contabilizar consignaciones, sin reingreso, modulos que contabilizan
+version: 1.21
 orden: 47
 estado: activo
 ---
@@ -237,7 +237,12 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 - **Contabilidad**: se registra el asiento de reversa de la consignación (Debe
   *Inventario* / Haber *Mercadería en consignación*, a costo). La pestaña
   **Asiento contable** del modal lo muestra a quien tenga acceso a
-  Contabilidad → Asientos Contables.
+  Contabilidad → Asientos Contables. Ese asiento **sigue a la consignación de
+  origen**: solo se genera por las líneas cuya consignación tiene asiento. Si la
+  empresa no contabiliza las consignaciones (Configuración contable → *Módulos que
+  contabilizan*), la mercadería nunca salió de *Inventario*, así que no hay
+  reingreso que registrar: la factura de venta descarga el costo directo de
+  *Inventario*. La pestaña lo explica y el documento no figura como pendiente.
 - **Facturas de Venta**: el documento genera una factura de venta normal, con su
   propia numeración, que sigue el circuito habitual de firma y envío al SRI.
 - **Consignaciones de venta**: la pestaña *Facturación* del modal de la
@@ -286,6 +291,9 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.21** — El asiento de reingreso **sigue a la consignación de origen**:
+  si la empresa no contabiliza las consignaciones (*Módulos que contabilizan*),
+  no se genera y la factura descarga el costo directo de Inventario.
 - **1.20** — La pestaña **Info. Adicional** arranca con una fila cuyo concepto es
   **Observaciones** y el detalle en blanco, para escribir a mano lo que debe salir
   en la factura bajo ese concepto. Ya no se copia ahí el campo *Observaciones*

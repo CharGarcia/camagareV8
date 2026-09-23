@@ -180,6 +180,11 @@ class RolAsientoService
         if (!in_array($cab['estado'], ['generado', 'pagado', 'contabilizado'], true)) {
             throw new Exception('Genere el rol antes de contabilizarlo.');
         }
+        // Interruptor por empresa: apagado, un rol sin asiento no se contabiliza (el que ya lo
+        // tiene se sigue regenerando para no dejarlo desfasado del rol recalculado).
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'roles_pago', 'nomina', $idRol)) {
+            throw new Exception('Esta empresa no contabiliza Roles de Pago. Se activa en Configuración Contable → Módulos que contabilizan.');
+        }
 
         $detalle = $this->repo->getDetalleCompleto($idRol, $idEmpresa);
         if (empty($detalle)) throw new Exception('El rol no tiene empleados.');

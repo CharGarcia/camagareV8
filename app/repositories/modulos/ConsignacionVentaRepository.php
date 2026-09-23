@@ -8,6 +8,35 @@ use PDO;
 
 class ConsignacionVentaRepository extends BaseRepository
 {
+    /**
+     * Condición SQL: "la consignación {$exprIdConsignacion} tiene su asiento de reclasificación vivo".
+     *
+     * Es la herencia de la madre (ContabilidadInterruptorService, regla 4) en un solo lugar, para
+     * que el builder (que calcula el costo del asiento inverso) y el sincronizador (que detecta
+     * pendientes) digan lo mismo: si no coincidieran, el sincronizador vería pendiente un documento
+     * que el builder nunca puede contabilizar y lo anotaría como fallo en cada pasada.
+     *
+     * Se mira el enlace del documento (consignaciones_ventas.id_asiento_contable) y que ese
+     * asiento sea de consignación: un asiento MIGRADO enlazado no es una reclasificación
+     * (el sistema anterior no contabilizaba consignaciones).
+     *
+     * $exprIdConsignacion es siempre una expresión del código ("rcd.id_consignacion"), nunca
+     * entrada de usuario.
+     */
+    public static function sqlContabilizada(string $exprIdConsignacion): string
+    {
+        return "EXISTS (
+                    SELECT 1
+                      FROM consignaciones_ventas cvm
+                      JOIN asientos_contables_cabecera acm ON acm.id = cvm.id_asiento_contable
+                     WHERE cvm.id = {$exprIdConsignacion}
+                       AND acm.modulo_origen = 'consignacion_venta'
+                       AND acm.eliminado = false
+                       AND acm.estado <> 'anulado'
+                )";
+    }
+
+
     public function __construct()
     {
         parent::__construct('consignaciones_ventas');

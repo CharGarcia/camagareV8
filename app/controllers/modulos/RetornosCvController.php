@@ -538,7 +538,14 @@ class RetornosCvController extends BaseModuloController
             }
 
             $detalles = $this->service->obtenerAsientoSugerido($idEmpresa, $idRet);
-            echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
+            $respuesta = ['ok' => true, 'detalles' => $detalles, 'es_guardado' => false];
+            if (empty($detalles) && ($cab['estado'] ?? '') === 'Emitida') {
+                // El asiento del retorno es el inverso del de la consignación: sin asiento en la
+                // madre (empresa que no contabiliza consignaciones) no hay nada que revertir.
+                $respuesta['aviso'] = 'Este retorno no genera asiento contable: sus consignaciones de origen no tienen '
+                    . 'asiento (o no tienen costo de inventario), así que la mercadería nunca salió de Inventario.';
+            }
+            echo json_encode($respuesta);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

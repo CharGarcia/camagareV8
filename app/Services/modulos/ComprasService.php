@@ -1017,6 +1017,12 @@ class ComprasService
     {
         $idEmpresa = (int)($data['id_empresa'] ?? 0);
         $idUsuario = (int)($data['id_usuario'] ?? $data['created_by'] ?? $_SESSION['id_usuario'] ?? 0);
+
+        // Interruptor por empresa (Configuración Contable → Módulos que contabilizan): apagado,
+        // no se crea asiento a un documento que aún no lo tiene; el que ya lo tiene se mantiene al día.
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'compras', 'compra', $idCompra)) {
+            return;
+        }
         $fechaEmision = $data['fecha_emision'] ?? date('Y-m-d');
         $proveedorNombre = $data['proveedor_nombre'] ?? 'Proveedor';
 

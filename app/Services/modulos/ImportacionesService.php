@@ -943,6 +943,11 @@ class ImportacionesService
 
     public function procesarAsientoContable(int $idImportacion, int $idEmpresa, int $idUsuario): void
     {
+        // Interruptor por empresa (Configuración Contable → Módulos que contabilizan): apagado,
+        // no se crea asiento a un documento que aún no lo tiene; el que ya lo tiene se mantiene al día.
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'importaciones', 'importacion', $idImportacion)) {
+            return;
+        }
         $builder  = new AsientoBuilderService();
         $detalles = $builder->generarAsientoImportacion($idEmpresa, $idImportacion);
         if (empty($detalles)) {

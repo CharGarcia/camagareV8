@@ -188,6 +188,12 @@ class NotaCreditoService
     {
         $idEmpresa = (int)($data['id_empresa'] ?? 0);
         $idUsuario = (int)($data['id_usuario'] ?? $data['created_by'] ?? $_SESSION['id_usuario'] ?? 0);
+
+        // Interruptor por empresa (Configuración Contable → Módulos que contabilizan): apagado,
+        // no se crea asiento a un documento que aún no lo tiene; el que ya lo tiene se mantiene al día.
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'notas_credito', 'nota_credito', $idNotaCredito)) {
+            return;
+        }
         $fecha = $data['fecha_emision'] ?? date('Y-m-d');
         $numNC = ($data['establecimiento'] ?? '') . '-' . ($data['punto_emision'] ?? '') . '-' . ($data['secuencial'] ?? '');
         $clienteNombre = $data['cliente_nombre'] ?? 'Cliente';

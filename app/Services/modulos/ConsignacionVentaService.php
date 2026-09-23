@@ -1049,6 +1049,10 @@ class ConsignacionVentaService
      */
     public function motivoSinAsiento(int $idConsignacion, int $idEmpresa, ?string $errorGeneracion = null): string
     {
+        if (!ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, 'consignaciones')) {
+            return 'Esta empresa no contabiliza las consignaciones: la mercadería entregada sigue en Inventario '
+                . 'y solo la factura genera asiento. Se cambia en Configuración contable → Módulos que contabilizan.';
+        }
         $sugerido = $this->obtenerAsientoSugerido($idEmpresa, $idConsignacion);
         if (empty($sugerido)) {
             return 'Esta consignación no tiene costo de inventario registrado, así que no genera asiento contable.';
@@ -1089,6 +1093,12 @@ class ConsignacionVentaService
     {
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
+
+        // Interruptor por empresa (Configuración Contable → Módulos que contabilizan): apagado,
+        // no se crea asiento a un documento que aún no lo tiene; el que ya lo tiene se mantiene al día.
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'consignaciones', 'consignacion_venta', $idConsignacion)) {
+            return;
+        }
 
         $cab = $this->repository->find($idConsignacion, $idEmpresa);
         if (!$cab) return;

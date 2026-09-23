@@ -857,6 +857,12 @@ class EgresoService
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) ($data['usuario_id'] ?? $data['id_usuario'] ?? 0);
 
+        // Interruptor por empresa (Configuración Contable → Módulos que contabilizan): apagado,
+        // no se crea asiento a un documento que aún no lo tiene; el que ya lo tiene se mantiene al día.
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'egresos', 'egreso', $idEgreso)) {
+            return;
+        }
+
         $egreso = $this->repository->getPorId($idEgreso, $idEmpresa);
         if (!$egreso) {
             return;

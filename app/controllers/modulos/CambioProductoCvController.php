@@ -653,6 +653,12 @@ class CambioProductoCvController extends BaseModuloController
                 exit;
             }
 
+            if (!\App\Services\modulos\ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, 'cambios_producto_cv')) {
+                echo json_encode(['ok' => true, 'detalles' => [], 'es_guardado' => false,
+                                  'aviso' => 'Esta empresa no contabiliza los cambios de productos. Se cambia en Configuración contable → Módulos que contabilizan.']);
+                exit;
+            }
+
             $detalles = $this->service->obtenerAsientoSugerido($idEmpresa, $idCambio);
             echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
         } catch (\Throwable $e) {

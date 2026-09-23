@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir
-version: 1.27
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes
+version: 1.28
 orden: 45
 estado: activo
 ---
@@ -143,6 +143,39 @@ inventario, o que falte configurar la cuenta de *Mercadería en consignación* o
 *Inventario* en **Configuración contable**, sección *Consignaciones en Ventas*.
 Apenas la configuración está completa, el asiento se genera solo al guardar la
 consignación o al abrir esa pestaña.
+
+## Empresas que no contabilizan las consignaciones
+
+Algunas empresas prefieren **no reclasificar** la mercadería entregada en
+consignación: la dejan dentro de *Inventario* y solo la factura mueve cuentas
+(ingreso, IVA, cuenta por cobrar y costo de ventas). Es tan válido como el
+tratamiento anterior: en ambos casos la mercadería sigue siendo de la empresa hasta
+que el cliente la vende.
+
+Se elige en **Configuración contable → Módulos que contabilizan**, apagando
+*Consignaciones en Ventas*. Con el interruptor apagado:
+
+- Las consignaciones **nuevas no generan asiento**. La pestaña *Asiento contable*
+  lo explica en lugar de pedir cuentas.
+- **No aparecen como pendientes** en el aviso de Balance de comprobación, Mayores,
+  Asientos ni Estados Financieros.
+- Las consignaciones que **ya tenían asiento lo conservan** y se siguen
+  actualizando si se editan.
+- **Retornos** y **Facturación de consignaciones** no tienen interruptor propio:
+  siguen a su consignación de origen. Si esa consignación tiene asiento, generan el
+  asiento inverso (Debe *Inventario* / Haber *Mercadería en consignación*). Si no lo
+  tiene, no generan nada, porque la mercadería nunca salió de *Inventario*.
+- En **Cambios de productos**, lo entregado desde una consignación sin asiento sale
+  de *Inventario* en vez de *Mercadería en consignación*.
+
+Al apagarlo, si la cuenta *Mercadería en consignación* tiene saldo, el sistema lo
+muestra. Ese saldo corresponde a consignaciones ya contabilizadas y se irá
+descargando con sus retornos y facturaciones. Si se prefiere pasarlo a *Inventario*
+de una vez, se registra un asiento manual.
+
+Si se vuelve a encender, las consignaciones que quedaron sin asiento se
+contabilizan solas al abrir el módulo o al sincronizar Estados Financieros (salvo
+las de períodos cerrados).
 
 ## Exportar
 
@@ -416,6 +449,10 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.28** — Interruptor **Módulos que contabilizan** (Configuración contable): la
+  empresa puede dejar de contabilizar las consignaciones. Apagado, las nuevas no
+  generan asiento ni figuran como pendientes; retornos y facturaciones siguen a su
+  consignación de origen.
 - **1.27** — Al guardar, el **modal ya no se cierra**: se queda abierto con la
   consignación recargada desde la base (número definitivo, estado y botones de PDF,
   correo y WhatsApp), en modo lectura como al abrirla desde el listado. El documento

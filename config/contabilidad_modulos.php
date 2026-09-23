@@ -49,6 +49,18 @@
  *                a empresas que sí tienen sus cuentas puestas desde el módulo.
  *                Cada entrada: ['tabla', 'col_cuenta', 'filtro' (SQL opcional)].
  *
+ *   grupo        Encabezado bajo el que se lista el módulo en la ventana
+ *                «Módulos que contabilizan» de Configuración Contable.
+ *   ayuda        (Opcional) Texto que explica qué deja de pasar al apagarlo.
+ *   sigue_a      (Opcional) El módulo NO tiene interruptor propio: su asiento
+ *                depende del documento de origen que pertenece a otro módulo
+ *                (Retornos y Facturación CV siguen a su consignación madre).
+ *
+ * INTERRUPTOR POR EMPRESA: cada módulo con interruptor puede apagarse por
+ * empresa (tabla contabilidad_modulos_empresa, ContabilidadInterruptorService).
+ * Apagado, no se contabilizan los documentos que aún no tienen asiento; los que
+ * ya lo tienen lo conservan y lo siguen actualizando.
+ *
  * La misma definición se usa para dos cosas: decidir si se genera algo (¿hay al
  * menos una cuenta?) y calcular la FIRMA de la configuración — un hash de esas
  * filas. Cuando el usuario corrige una cuenta, la firma cambia y los documentos
@@ -62,12 +74,14 @@ return [
     // ─── Ventas ─────────────────────────────────────────────────────────────
     'facturas_venta' => [
         'nombre'    => 'Facturas de Venta',
+        'grupo'     => 'Ventas',
         'rutas'     => ['modulos/factura-venta'],
         'conceptos' => ['ventas_factura'],
     ],
 
     'recibos_venta' => [
         'nombre'    => 'Recibos de Venta',
+        'grupo'     => 'Ventas',
         'rutas'     => ['modulos/recibo-venta'],
         'conceptos' => ['recibos_venta'],
     ],
@@ -76,12 +90,14 @@ return [
     // (AsientoBuilderService::generarAsientoNotaCreditoVenta usa 'ventas_factura').
     'notas_credito' => [
         'nombre'    => 'Notas de Crédito',
+        'grupo'     => 'Ventas',
         'rutas'     => ['modulos/notas_credito'],
         'conceptos' => ['ventas_factura'],
     ],
 
     'retenciones_venta' => [
         'nombre'      => 'Retenciones en Ventas',
+        'grupo'       => 'Ventas',
         'rutas'       => ['modulos/retenciones_ventas'],
         // Se configura por CÓDIGO de retención, no por concepto.
         'referencias' => ['retenciones_venta_debe', 'retenciones_venta'],
@@ -90,24 +106,28 @@ return [
     // ─── Compras ────────────────────────────────────────────────────────────
     'compras' => [
         'nombre'    => 'Facturas de Compra',
+        'grupo'     => 'Compras',
         'rutas'     => ['modulos/compras'],
         'conceptos' => ['adquisiciones_compras'],
     ],
 
     'liquidaciones_compra' => [
         'nombre'    => 'Liquidaciones de Compra',
+        'grupo'     => 'Compras',
         'rutas'     => ['modulos/liquidacion-compra'],
         'conceptos' => ['adquisiciones_compras'],
     ],
 
     'retenciones_compra' => [
         'nombre'      => 'Retenciones en Compras',
+        'grupo'       => 'Compras',
         'rutas'       => ['modulos/retenciones_compras'],
         'referencias' => ['retenciones_compra_haber'],
     ],
 
     'importaciones' => [
         'nombre'    => 'Importaciones',
+        'grupo'     => 'Compras',
         'rutas'     => ['modulos/importaciones'],
         'conceptos' => ['adquisiciones_importacion'],
     ],
@@ -118,6 +138,7 @@ return [
     // o en su propio módulo, de ahí las tres fuentes.
     'ingresos' => [
         'nombre'      => 'Ingresos',
+        'grupo'       => 'Tesorería',
         'rutas'       => ['modulos/ingresos'],
         'referencias' => ['opcion_ingreso', 'forma_cobro'],
         'tablas'      => [
@@ -136,6 +157,7 @@ return [
 
     'egresos' => [
         'nombre'      => 'Egresos',
+        'grupo'       => 'Tesorería',
         'rutas'       => ['modulos/egresos'],
         'referencias' => ['opcion_egreso', 'forma_pago'],
         'tablas'      => [
@@ -163,16 +185,25 @@ return [
     // documentos que habían fallado se reintentan.
     'consignaciones' => [
         'nombre'          => 'Consignaciones en Ventas',
+        'grupo'           => 'Consignaciones',
         'rutas'           => ['modulos/consignaciones-ventas'],
         'conceptos'       => ['consignacion_venta'],
         'conceptos_firma' => ['ventas_factura'],
+        'ayuda'           => 'Reclasifica la mercadería entregada a «Mercadería en Consignación». '
+                           . 'Apagado, la mercadería sigue en Inventario y solo la factura mueve cuentas; '
+                           . 'retornos y facturaciones siguen a su consignación de origen.',
     ],
 
+    // Retornos y Facturación CV no tienen interruptor propio: su asiento es el
+    // INVERSO del de la consignación madre, así que solo se genera si la madre
+    // tiene asiento (ver ConsignacionVentaRepository::sqlContabilizada).
     'retornos_cv' => [
         'nombre'          => 'Retornos de Consignaciones',
+        'grupo'           => 'Consignaciones',
         'rutas'           => ['modulos/retornos-cv'],
         'conceptos'       => ['consignacion_venta'],
         'conceptos_firma' => ['ventas_factura'],
+        'sigue_a'         => 'consignaciones',
     ],
 
     // Excepción entre los cuatro: el cambio de productos NO toca la cuenta de
@@ -182,20 +213,26 @@ return [
     // llevan ventas configuradas pero no consignaciones.
     'cambios_producto_cv' => [
         'nombre'    => 'Cambios de Productos',
+        'grupo'     => 'Consignaciones',
         'rutas'     => ['modulos/cambio-producto-cv'],
         'conceptos' => ['ventas_factura'],
+        'ayuda'     => 'Asiento a costo del intercambio (Inventario ↔ Costo de Ventas). Lo entregado desde una '
+                     . 'consignación sale de «Mercadería en Consignación» solo si esa consignación tiene asiento.',
     ],
 
     'facturacion_cv' => [
         'nombre'          => 'Facturación de Consignaciones',
+        'grupo'           => 'Consignaciones',
         'rutas'           => ['modulos/facturacion-cv'],
         'conceptos'       => ['consignacion_venta'],
         'conceptos_firma' => ['ventas_factura'],
+        'sigue_a'         => 'consignaciones',
     ],
 
     // ─── Nómina ─────────────────────────────────────────────────────────────
     'roles_pago' => [
         'nombre'    => 'Roles de Pago',
+        'grupo'     => 'Nómina',
         'rutas'     => ['modulos/roles-pago'],
         'conceptos' => ['nomina'],
     ],

@@ -624,7 +624,14 @@ class FacturacionCvController extends BaseModuloController
             }
 
             $detalles = $this->service->obtenerAsientoReingresoSugerido($idEmpresa, $idDoc);
-            echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
+            $respuesta = ['ok' => true, 'detalles' => $detalles, 'es_guardado' => false];
+            if (empty($detalles) && ($doc['estado'] ?? '') === 'facturada') {
+                // El reingreso es el inverso del asiento de la consignación: sin asiento en la madre
+                // la mercadería nunca salió de Inventario y la factura de venta la descarga directo.
+                $respuesta['aviso'] = 'Sin asiento de reingreso: las consignaciones de origen no tienen asiento (o no tienen '
+                    . 'costo de inventario). La factura de venta registra el costo directamente contra Inventario.';
+            }
+            echo json_encode($respuesta);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

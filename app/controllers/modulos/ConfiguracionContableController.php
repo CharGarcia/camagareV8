@@ -1193,6 +1193,48 @@ class ConfiguracionContableController extends BaseModuloController
     /**
      * Guarda la preferencia del método de contabilización preferido de la empresa.
      */
+    /**
+     * Estado de los interruptores «Módulos que contabilizan» de la empresa activa, agrupados.
+     * Ver ContabilidadInterruptorService.
+     */
+    public function getInterruptoresAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $grupos = \App\Services\modulos\ContabilidadInterruptorService::crear()->listar((int) $_SESSION['id_empresa']);
+            echo json_encode(['ok' => true, 'grupos' => $grupos, 'puede_editar' => !empty($this->getPermisos()['actualizar'])]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Enciende o apaga la contabilización automática de un módulo para la empresa activa. */
+    public function guardarInterruptorAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $clave       = trim((string) ($_POST['clave'] ?? ''));
+        $contabiliza = filter_var($_POST['contabiliza'] ?? null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($clave === '' || $contabiliza === null) {
+            echo json_encode(['ok' => false, 'error' => 'Datos incompletos.']);
+            exit;
+        }
+
+        try {
+            $res = \App\Services\modulos\ContabilidadInterruptorService::crear()
+                ->cambiar((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $clave, $contabiliza);
+            echo json_encode(['ok' => true] + $res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function guardarMetodoPreferenciaAjax(): void
     {
         $this->requireActualizar();

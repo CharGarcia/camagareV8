@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion
-version: 1.19
+etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion, no contabilizar cambios, modulos que contabilizan, consignacion sin asiento
+version: 1.20
 orden: 47
 estado: activo
 ---
@@ -319,7 +319,11 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 - **Contabilidad**: asiento **a costo** (costo promedio del producto en su
   bodega): *Inventario* contra *Costo de ventas* por el neto entre lo devuelto
   y lo entregado desde bodega; lo entregado desde consignación sale de
-  *Mercadería en consignación* contra *Costo de ventas*. Se puede revisar y
+  *Mercadería en consignación* contra *Costo de ventas*, siempre que esa
+  consignación tenga asiento. Si no lo tiene (empresa que no contabiliza las
+  consignaciones), sale de *Inventario*. La empresa puede además apagar el asiento
+  de los cambios en Configuración contable → *Módulos que contabilizan*; la
+  pestaña lo indica. Se puede revisar y
   completar en la pestaña **Asiento contable** antes de guardar. Los cambios
   **migrados** del sistema anterior no llevan asiento por ninguna vía (ese
   sistema no contabilizaba los cambios): la pestaña lo indica y no deja armar
@@ -398,6 +402,9 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.20** — Lo entregado desde una consignación sin asiento sale de
+  *Inventario*; los cambios pueden dejar de contabilizarse en *Módulos que
+  contabilizan*.
 - **1.19** — Se muestra la **fecha de vencimiento** de cada unidad: en las dos
   tablas del formulario, en el buscador de lo que se devuelve, en el listado
   (*Entra: vencimiento* y *Sale: vencimiento*, ordenables y ocultables como

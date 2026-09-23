@@ -473,6 +473,9 @@ class AsientoBuilderService
      *   DEBE  : Inventario
      *   HABER : Mercadería en Consignación
      * El costo se valora al mismo costo que la consignación de origen (kardex de la salida).
+     * Solo cuentan las líneas cuya consignación de origen tiene asiento (herencia de la madre):
+     * sin esa reclasificación la mercadería siempre estuvo en Inventario y la factura la descarga
+     * directamente.
      *
      * @return array<int,array> Líneas del asiento o [] si no hay costo.
      */
@@ -494,7 +497,8 @@ class AsientoBuilderService
                 )
              ), 0)
              FROM consignaciones_facturas_detalles cfd
-             WHERE cfd.id_consignacion_factura = ? AND cfd.eliminado = false"
+             WHERE cfd.id_consignacion_factura = ? AND cfd.eliminado = false
+               AND " . \App\repositories\modulos\ConsignacionVentaRepository::sqlContabilizada('cfd.id_consignacion')
         );
         $stCosto->execute([$idConsignacionFactura]);
         $costo = round((float) $stCosto->fetchColumn(), 2);
@@ -564,6 +568,8 @@ class AsientoBuilderService
      *   DEBE  : Inventario
      *   HABER : Mercadería en Consignación
      * El costo se valora al mismo costo que la consignación de origen (kardex de la salida).
+     * Solo cuentan las líneas cuya consignación de origen tiene asiento (herencia de la madre):
+     * si la madre no reclasificó a Mercadería en consignación, no hay nada que devolver.
      *
      * @return array<int,array> Líneas del asiento o [] si no hay costo.
      */
@@ -585,7 +591,8 @@ class AsientoBuilderService
                 )
              ), 0)
              FROM retornos_cv_detalles rcd
-             WHERE rcd.id_retorno = ? AND rcd.eliminado = false"
+             WHERE rcd.id_retorno = ? AND rcd.eliminado = false
+               AND " . \App\repositories\modulos\ConsignacionVentaRepository::sqlContabilizada('rcd.id_consignacion')
         );
         $stCosto->execute([$idRetorno]);
         $costo = round((float) $stCosto->fetchColumn(), 2);
@@ -662,7 +669,9 @@ class AsientoBuilderService
      * Las entregas tomadas de una CONSIGNACIÓN (origen_tipo 'CONSIGNACION') no salen de
      * Inventario sino de Mercadería en consignación —la mercadería ya estaba en poder del
      * cliente—: Debe Costo de Ventas / Haber Mercadería en consignación (cuenta del
-     * concepto 'consignacion_venta', la misma que usan Consignaciones y Retornos CV).
+     * concepto 'consignacion_venta', la misma que usan Consignaciones y Retornos CV). Solo si esa
+     * consignación tiene asiento; si no (empresa que no contabiliza consignaciones), la entrega sale
+     * de Inventario como cualquier otra.
      *
      * @return array<int,array> Líneas del asiento o [] si el neto es ~0 o faltan cuentas.
      */
@@ -672,11 +681,19 @@ class AsientoBuilderService
 
         // 1. Costo de cada lado, al costo promedio del producto/bodega (sin este cambio).
         //    Las entregas se separan según salgan de bodega o de una consignación.
+        //    Una entrega "desde consignación" solo sale de Mercadería en consignación si esa
+        //    consignación tiene asiento (herencia de la madre): si la empresa no contabiliza
+        //    consignaciones, la mercadería nunca salió de Inventario y sale de ahí.
+        $madreContab = \App\repositories\modulos\ConsignacionVentaRepository::sqlContabilizada('cd.id_origen');
         $st = $db->prepare(
             "SELECT
                 COALESCE(SUM(CASE WHEN cd.tipo_linea = 'devolucion' THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_dev,
-                COALESCE(SUM(CASE WHEN cd.tipo_linea = 'entrega' AND COALESCE(cd.origen_tipo, '') <> 'CONSIGNACION' THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_ent,
-                COALESCE(SUM(CASE WHEN cd.tipo_linea = 'entrega' AND COALESCE(cd.origen_tipo, '') =  'CONSIGNACION' THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_ent_consig
+                COALESCE(SUM(CASE WHEN cd.tipo_linea = 'entrega'
+                                   AND (COALESCE(cd.origen_tipo, '') <> 'CONSIGNACION' OR NOT {$madreContab})
+                                  THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_ent,
+                COALESCE(SUM(CASE WHEN cd.tipo_linea = 'entrega'
+                                   AND COALESCE(cd.origen_tipo, '') = 'CONSIGNACION' AND {$madreContab}
+                                  THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_ent_consig
              FROM cambios_producto_cv_detalles cd
              LEFT JOIN LATERAL (
                 SELECT CASE WHEN SUM(k.cantidad) > 0
