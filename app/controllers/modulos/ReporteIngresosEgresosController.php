@@ -555,69 +555,215 @@ class ReporteIngresosEgresosController extends BaseModuloController
         }
     }
 
+    /**
+     * PDF con el formato de los demás reportes (App\Helpers\ReportePdf): encabezado con el
+     * logo, caja de filtros, indicadores, listado con anchos por columna y fila de totales.
+     * Las columnas cuyo valor queda fijado por un filtro no se repiten en cada fila (el
+     * asesor al filtrar por vendedor, el tercero al elegir uno, etc.): ese dato ya va en el
+     * encabezado y en la caja de filtros. Con ingresos y egresos juntos, los montos van en
+     * dos columnas (Ingreso / Egreso) para que el total de cada una se pueda sumar.
+     */
     public function exportPdf(): void
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $f = $this->getFiltros();
-        $exp     = $this->datosExport($idEmpresa, $f);
-        $stats   = $this->repository->getEstadisticas($idEmpresa, $f);
-        $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
-        $filtros = $this->describirFiltros($idEmpresa, $f);
 
-        $autoload = \MVC_ROOT . '/vendor/autoload.php';
-        if (file_exists($autoload)) require_once $autoload;
-
-        $money  = fn($v) => number_format((float)$v, 2);
-        $right  = array_flip($exp['right']);
-        $money2 = array_flip($exp['money'] ?? []);
-
-        ob_start(); ?>
-        <style>
-            table { width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:8pt; }
-            th { background:#f2f2f2; border:1px solid #ccc; padding:4px; }
-            td { border:1px solid #ccc; padding:4px; }
-            .r { text-align:right; } .c { text-align:center; }
-            .head { text-align:center; margin-bottom:10px; }
-            .kpi td { border:1px solid #ccc; padding:6px; font-size:9pt; }
-        </style>
-        <?php $subtitulos = ['TERCERO' => ' — por tercero', 'FORMA' => ' — por forma de cobro/pago', 'FECHA' => ' — total por día', 'MES' => ' — por mes']; ?>
-        <div class="head">
-            <h3><?= htmlspecialchars($empresa['nombre'] ?? '') ?></h3>
-            <h4>Reporte de Ingresos y Egresos<?= $subtitulos[$f['ver_por']] ?? '' ?></h4>
-            <p style="font-size:8pt"><?= htmlspecialchars(implode('  |  ', array_map(fn($k, $v) => "$k: $v", array_keys($filtros), $filtros))) ?></p>
-            <p style="font-size:8pt">Generado: <?= date('d-m-Y H:i:s') ?></p>
-        </div>
-        <table class="kpi" style="margin-bottom:10px">
-            <tr>
-                <td class="c"><strong>Ingresos</strong><br>$<?= $money($stats['total_ingresos'] ?? 0) ?> (<?= (int)($stats['n_ingresos'] ?? 0) ?>)</td>
-                <td class="c"><strong>Egresos</strong><br>$<?= $money($stats['total_egresos'] ?? 0) ?> (<?= (int)($stats['n_egresos'] ?? 0) ?>)</td>
-                <td class="c"><strong>Neto</strong><br>$<?= $money($stats['neto'] ?? 0) ?></td>
-            </tr>
-        </table>
-        <table>
-            <thead>
-                <tr><?php foreach ($exp['headers'] as $i => $h): ?><th class="<?= isset($right[$i]) ? 'r' : '' ?>"><?= htmlspecialchars($h) ?></th><?php endforeach; ?></tr>
-            </thead>
-            <tbody>
-                <?php foreach ($exp['data'] as $fila): ?>
-                    <tr>
-                        <?php foreach ($fila as $i => $val): ?>
-                            <td class="<?= isset($right[$i]) ? 'r' : '' ?>"><?= isset($money2[$i]) ? '$' . $money($val) : htmlspecialchars((string)$val) ?></td>
-                        <?php endforeach; ?>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-        <?php
-        $html = ob_get_clean();
         try {
-            $pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $modo  = in_array($f['ver_por'], ['TERCERO', 'FORMA', 'FECHA', 'MES'], true) ? $f['ver_por'] : 'DETALLE';
+            $filas = match ($modo) {
+                'TERCERO' => $this->repository->getReporteAgrupadoTercero($idEmpresa, $f),
+                'FORMA'   => $this->repository->getReporteAgrupadoForma($idEmpresa, $f),
+                'FECHA'   => $this->repository->getReporteAgrupadoFecha($idEmpresa, $f),
+                'MES'     => $this->repository->getReporteAgrupadoMes($idEmpresa, $f),
+                default   => $this->repository->getReporteDetallado($idEmpresa, $f, 0),
+            };
+            $stats   = $this->repository->getEstadisticas($idEmpresa, $f);
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+
+            $horizontal = $modo === 'DETALLE';
+            $pt         = $horizontal ? 7.0 : 8.0;
+            $cols       = \App\Helpers\ReportePdf::completarAnchos($this->columnasPdf($modo, $f, $horizontal, $pt));
+
+            [$titulo, $subtitulo] = $this->tituloPdf($idEmpresa, $modo, $f);
+            $sustantivo = match ($modo) {
+                'TERCERO' => ['tercero', 'terceros'], 'FORMA' => ['forma de cobro/pago', 'formas de cobro/pago'],
+                'FECHA'   => ['día', 'días'], 'MES' => ['mes', 'meses'], default => ['línea', 'líneas'],
+            };
+            $n = count($filas);
+            $etiquetaTotal = "TOTALES ({$n} " . ($n === 1 ? $sustantivo[0] : $sustantivo[1]) . ')';
+
+            $html = \App\Helpers\ReportePdf::pagina($pt,
+                \App\Helpers\ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), $titulo, $subtitulo)
+                . \App\Helpers\ReportePdf::filtros($this->describirFiltros($idEmpresa, $f))
+                . \App\Helpers\ReportePdf::indicadores($this->indicadoresPdf($stats, $f['tipo_flujo']))
+                . \App\Helpers\ReportePdf::listado($cols, $filas, $etiquetaTotal)
+            );
+
+            $autoload = \MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) require_once $autoload;
+            $pdf = new \Spipu\Html2Pdf\Html2Pdf($horizontal ? 'L' : 'P', 'A4', 'es');
             $pdf->writeHTML($html);
             $pdf->output('ReporteIngresosEgresos_' . date('Ymd_His') . '.pdf', 'D');
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo 'Error al generar PDF: ' . $e->getMessage();
         }
         exit;
+    }
+
+    /**
+     * Título del PDF según lo que se muestra ("Reporte de Ingresos", "… de Egresos" o
+     * "… de Ingresos y Egresos") y la vista; el subtítulo nombra al vendedor o al tercero
+     * cuando el reporte es de uno solo.
+     */
+    private function tituloPdf(int $idEmpresa, string $modo, array $f): array
+    {
+        $titulo = match ($f['tipo_flujo']) {
+            'INGRESO' => 'Reporte de Ingresos', 'EGRESO' => 'Reporte de Egresos', default => 'Reporte de Ingresos y Egresos',
+        };
+        $titulo .= match ($modo) {
+            'TERCERO' => ' · Por tercero', 'FORMA' => ' · Por forma de cobro/pago',
+            'FECHA'   => ' · Por día', 'MES' => ' · Por mes', default => '',
+        };
+        $sub = [];
+        if ($f['id_vendedor'] > 0) {
+            $v = (new VendedorRepository())->getDetalleCompleto($f['id_vendedor'], $idEmpresa);
+            $sub[] = 'Vendedor: ' . ($v['nombre'] ?? '#' . $f['id_vendedor']);
+        }
+        if ($f['tercero_id'] > 0 && $f['tercero_tipo'] !== '') {
+            $sub[] = ucfirst(strtolower($f['tercero_tipo'])) . ': '
+                   . ($this->repository->getNombreTercero($idEmpresa, $f['tercero_tipo'], $f['tercero_id']) ?? '#' . $f['tercero_id']);
+        }
+        return [$titulo, implode(' · ', $sub)];
+    }
+
+    /** Banda de indicadores: solo los del flujo que se muestra. */
+    private function indicadoresPdf(array $stats, string $flujo): array
+    {
+        $d    = static fn ($v): string => ((float) $v < 0 ? '-$' : '$') . number_format(abs((float) $v), 2);
+        $nIng = (int) ($stats['n_ingresos'] ?? 0);
+        $nEgr = (int) ($stats['n_egresos'] ?? 0);
+        $ing  = ['INGRESOS (' . $nIng . ' comprob.)', $d($stats['total_ingresos'] ?? 0), false, '#146c43'];
+        $egr  = ['EGRESOS (' . $nEgr . ' comprob.)',  $d($stats['total_egresos'] ?? 0),  false, '#b02a37'];
+        return match ($flujo) {
+            'INGRESO' => [['COMPROBANTES', (string) $nIng], ['LÍNEAS', (string) (int) ($stats['n_documentos'] ?? 0)], $ing],
+            'EGRESO'  => [['COMPROBANTES', (string) $nEgr], ['LÍNEAS', (string) (int) ($stats['n_documentos'] ?? 0)], $egr],
+            default   => [['COMPROBANTES', (string) ($nIng + $nEgr)], $ing, $egr, ['NETO', $d($stats['neto'] ?? 0), true]],
+        };
+    }
+
+    /**
+     * Columnas del PDF por vista (ver App\Helpers\ReportePdf). `w` es el ancho base en %;
+     * las columnas `flex` (las descriptivas) se quedan con lo que liberan las que se ocultan.
+     */
+    private function columnasPdf(string $modo, array $f, bool $horizontal, float $pt): array
+    {
+        $txt   = static fn (string $campo, float $w) => static fn (array $r): string
+            => \App\Helpers\ReportePdf::texto((string) ($r[$campo] ?? ''), \App\Helpers\ReportePdf::anchoPt($w, $horizontal), $pt);
+        $num   = static fn ($v): string => number_format((float) $v, 2);
+        $ent   = static fn ($v): string => number_format((float) $v, 0);
+        $sumar = static fn (callable $valor): callable => static fn (array $rows): float => array_sum(array_map($valor, $rows));
+        $ambos = !in_array($f['tipo_flujo'], ['INGRESO', 'EGRESO'], true);
+
+        // Monto de la fila en la columna de su flujo (con ambos flujos) o en una sola columna.
+        $montos = static function (string $campo, float $w) use ($ambos, $f, $num, $sumar): array {
+            if (!$ambos) {
+                return [['lbl' => $f['tipo_flujo'] === 'INGRESO' ? 'Ingreso' : 'Egreso', 'w' => $w * 2, 'cls' => 'text-end',
+                         'tot' => $sumar(static fn ($r) => (float) ($r[$campo] ?? 0)),
+                         'val' => static fn (array $r): string => '<b>' . $num($r[$campo] ?? 0) . '</b>']];
+            }
+            $col = static fn (string $flujo, string $lbl) => ['lbl' => $lbl, 'w' => $w, 'cls' => 'text-end',
+                'tot' => $sumar(static fn ($r) => ($r['tipo_flujo'] ?? '') === $flujo ? (float) ($r[$campo] ?? 0) : 0.0),
+                'val' => static fn (array $r): string => ($r['tipo_flujo'] ?? '') === $flujo ? '<b>' . $num($r[$campo] ?? 0) . '</b>' : ''];
+            return [$col('INGRESO', 'Ingreso'), $col('EGRESO', 'Egreso')];
+        };
+
+        if ($modo === 'TERCERO') {
+            return array_merge([
+                ['lbl' => 'Tipo', 'w' => 11, 'cls' => '',
+                 'val' => static fn (array $r): string => htmlspecialchars(ucfirst(strtolower((string) ($r['tercero_tipo'] ?? ''))))],
+                ['lbl' => 'Tercero', 'w' => 35, 'cls' => '', 'flex' => true, 'val' => $txt('tercero_nombre', 35)],
+                ['lbl' => 'Identificación', 'w' => 14, 'cls' => '', 'val' => $txt('tercero_ident', 14)],
+                ['lbl' => 'Comprobantes', 'w' => 10, 'cls' => 'text-center', 'fmt' => $ent,
+                 'tot' => $sumar(static fn ($r) => (float) ($r['comprobantes'] ?? 0)),
+                 'val' => static fn (array $r): string => (string) (int) ($r['comprobantes'] ?? 0)],
+                ['lbl' => 'Documentos', 'w' => 10, 'cls' => 'text-center', 'fmt' => $ent,
+                 'tot' => $sumar(static fn ($r) => (float) ($r['documentos'] ?? 0)),
+                 'val' => static fn (array $r): string => (string) (int) ($r['documentos'] ?? 0)],
+            ], $montos('total', 10));
+        }
+
+        if ($modo === 'FORMA') {
+            // Un comprobante puede cobrarse con varias formas: la suma de "Comprobantes" lo
+            // contaría varias veces, así que esa columna no totaliza (los pagos sí).
+            return array_merge([
+                ['lbl' => 'Forma de cobro/pago', 'w' => 38, 'cls' => '', 'flex' => true, 'val' => $txt('forma_nombre', 38)],
+                ['lbl' => 'Tipo', 'w' => 16, 'cls' => '', 'val' => $txt('forma_tipo', 16)],
+                ['lbl' => 'Comprobantes', 'w' => 12, 'cls' => 'text-center',
+                 'val' => static fn (array $r): string => (string) (int) ($r['comprobantes'] ?? 0)],
+                ['lbl' => 'Pagos', 'w' => 10, 'cls' => 'text-center', 'fmt' => $ent,
+                 'tot' => $sumar(static fn ($r) => (float) ($r['pagos_n'] ?? 0)),
+                 'val' => static fn (array $r): string => (string) (int) ($r['pagos_n'] ?? 0)],
+            ], $montos('total', 12));
+        }
+
+        if ($modo === 'FECHA' || $modo === 'MES') {
+            $meses = ['01'=>'Enero','02'=>'Febrero','03'=>'Marzo','04'=>'Abril','05'=>'Mayo','06'=>'Junio','07'=>'Julio','08'=>'Agosto','09'=>'Septiembre','10'=>'Octubre','11'=>'Noviembre','12'=>'Diciembre'];
+            $cols = [['lbl' => $modo === 'MES' ? 'Mes' : 'Fecha', 'w' => 22, 'cls' => $modo === 'MES' ? '' : 'text-center', 'flex' => true,
+                'val' => static function (array $r) use ($modo, $meses): string {
+                    $p = (string) ($r['periodo'] ?? '');
+                    if ($modo === 'MES') {
+                        [$a, $m] = array_pad(explode('-', $p), 2, '');
+                        return '<b>' . htmlspecialchars(($meses[$m] ?? $m) . ' ' . $a) . '</b>';
+                    }
+                    return '<b>' . ($p !== '' ? date('d-m-Y', strtotime($p)) : '—') . '</b>';
+                }]];
+            $flujo = static fn (string $campo, string $campoN, string $lbl, string $lblN) => [
+                ['lbl' => $lbl, 'w' => 18, 'cls' => 'text-end', 'tot' => $sumar(static fn ($r) => (float) ($r[$campo] ?? 0)),
+                 'val' => static fn (array $r): string => $num($r[$campo] ?? 0)],
+                ['lbl' => $lblN, 'w' => 12, 'cls' => 'text-center', 'fmt' => $ent, 'tot' => $sumar(static fn ($r) => (float) ($r[$campoN] ?? 0)),
+                 'val' => static fn (array $r): string => (string) (int) ($r[$campoN] ?? 0)],
+            ];
+            if ($f['tipo_flujo'] !== 'EGRESO') {
+                $cols = array_merge($cols, $flujo('ingresos', 'n_ing', 'Ingresos', 'N° Ing.'));
+            }
+            if ($f['tipo_flujo'] !== 'INGRESO') {
+                $cols = array_merge($cols, $flujo('egresos', 'n_egr', 'Egresos', 'N° Egr.'));
+            }
+            if ($ambos) {
+                $neto = static fn (array $r): float => (float) ($r['ingresos'] ?? 0) - (float) ($r['egresos'] ?? 0);
+                $cols[] = ['lbl' => 'Neto', 'w' => 18, 'cls' => 'text-end', 'tot' => $sumar($neto),
+                           'val' => static fn (array $r): string => '<b>' . $num($neto($r)) . '</b>'];
+            }
+            return $cols;
+        }
+
+        // DETALLE (A4 horizontal): una fila por línea del comprobante. Se omiten las
+        // columnas que un filtro deja con un único valor.
+        $cols = [
+            ['lbl' => 'Número', 'w' => 9, 'cls' => '', 'val' => $txt('numero', 9)],
+            ['lbl' => 'Fecha', 'w' => 6, 'cls' => 'text-center',
+             'val' => static fn (array $r): string => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '—'],
+        ];
+        if ($f['tercero_id'] <= 0) {
+            $cols[] = ['lbl' => 'Cliente / Proveedor / Empleado', 'w' => 17, 'cls' => '', 'flex' => true, 'val' => $txt('tercero_nombre', 17)];
+        }
+        if ($f['id_vendedor'] <= 0) {
+            $cols[] = ['lbl' => 'Asesor', 'w' => 10, 'cls' => '', 'val' => $txt('vendedor', 10)];
+        }
+        if ($f['tipo_documento'] === '') {
+            $cols[] = ['lbl' => 'Tipo doc.', 'w' => 6, 'cls' => 'text-center', 'val' => $txt('tipo_documento', 6)];
+        }
+        $cols[] = ['lbl' => 'N° Documento', 'w' => 10, 'cls' => '', 'val' => $txt('numero_documento', 10)];
+        $cols[] = ['lbl' => 'Descripción', 'w' => 16, 'cls' => '', 'flex' => true, 'val' => $txt('descripcion', 16)];
+        if ($f['id_concepto'] <= 0) {
+            $cols[] = ['lbl' => 'Concepto', 'w' => 8, 'cls' => '', 'val' => $txt('concepto', 8)];
+        }
+        if ($f['estado'] === '' || $f['estado'] === 'TODOS') {
+            $cols[] = ['lbl' => 'Estado', 'w' => 6, 'cls' => 'text-center',
+                       'val' => static fn (array $r): string => htmlspecialchars(ucfirst(strtolower((string) ($r['estado'] ?? ''))))];
+        }
+        return array_merge($cols, $montos('monto', 6));
     }
 }

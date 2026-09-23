@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ingresos y egresos, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado
-version: 1.5
+etiquetas: reporte de ingresos y egresos, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor
+version: 1.6
 orden: 30
 estado: activo
 ---
@@ -102,7 +102,33 @@ El **Excel** sale en varias hojas:
 Las fechas del Excel son fechas reales (se pueden ordenar y filtrar como fechas) y
 los valores salen con dos decimales. El Excel no tiene tope de filas.
 
-El **PDF** muestra la vista en pantalla, con los filtros aplicados en el encabezado.
+### Qué trae el PDF
+
+El **PDF** es la vista de la pantalla en hoja, con el mismo formato que el
+Reporte de Ventas:
+
+- **Encabezado con el logo** del establecimiento, el nombre de la empresa y el
+  título según lo que se muestra: *Reporte de Ingresos*, *Reporte de Egresos* o
+  *Reporte de Ingresos y Egresos*, más la vista (*Por tercero*, *Por mes*…).
+  Si se filtró por **vendedor** o por un **tercero**, su nombre va debajo del
+  título (*Vendedor: Juan Pérez*).
+- **Caja "Filtros aplicados"** con el periodo y todos los filtros usados.
+- **Banda de indicadores**: comprobantes, total de ingresos, total de egresos y
+  neto (con un solo flujo, solo los de ese flujo).
+- **Las columnas que un filtro deja con un único valor no se repiten en cada
+  fila**: al filtrar por vendedor desaparece la columna *Asesor*; al elegir un
+  tercero, la de *Cliente / Proveedor / Empleado*; al elegir un concepto, un
+  estado o un tipo de documento, esa columna. Ese dato ya está en el encabezado.
+- Con ingresos y egresos juntos, los valores van en **dos columnas, Ingreso y
+  Egreso**, para poder sumar cada una; con *Solo ingresos* o *Solo egresos* va
+  una sola. En *Por día* / *Por mes* se muestran solo las columnas del flujo
+  elegido (y el neto cuando son los dos).
+- Al final, la fila **TOTALES** con la suma de cada columna de valores y de
+  conteos (en *Forma de cobro/pago* no se suman los comprobantes, porque uno
+  cobrado con dos formas se contaría dos veces; sí los pagos).
+- La vista Documento sale en hoja **horizontal**; las vistas resumidas, en
+  vertical. La cabecera de la tabla se repite en cada página y abajo va
+  *Página X/Y*.
 
 ## Para qué se usa
 
@@ -126,6 +152,12 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
 
 ## Historial de cambios
 
+- **1.6** — **PDF rediseñado** con el formato del Reporte de Ventas: logo del
+  establecimiento, título según el flujo y la vista (con el vendedor o tercero
+  filtrado debajo), caja de filtros aplicados, indicadores, columnas Ingreso y
+  Egreso separadas, fila de **TOTALES** al final y sin repetir en cada fila las
+  columnas que un filtro deja fijas (p. ej. *Asesor* al filtrar por vendedor).
+  Las vistas resumidas salen en hoja vertical.
 - **1.5** — Los **cobros de saldos iniciales** toman como asesor el vendedor
   asignado al cliente del saldo inicial, tanto en el filtro por vendedor como en
   la columna **Asesor**, el PDF y el Excel. Antes salían sin asesor y no entraban
