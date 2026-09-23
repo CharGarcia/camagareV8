@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
-etiquetas: conciliar tarjetas, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas
-version: 1.1
+etiquetas: conciliar tarjetas, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito
+version: 1.2
 orden: 66
 estado: activo
 ---
@@ -52,9 +52,11 @@ solo avisa que no generará el asiento.
 
 ## Cómo se usa
 
-1. Elija la procesadora en los filtros. La pestaña **Pendientes por depositar**
-   muestra los cobros que todavía no aparecen en ningún estado de cuenta, con un
-   semáforo de días de atraso.
+1. La vista **Pendientes por depositar** muestra los cobros que todavía no
+   aparecen en ningún estado de cuenta, de todas las procesadoras (o de la que
+   elija en los filtros), con la procesadora de cada cobro y un semáforo de días
+   de atraso. Con los botones de la barra del listado cambia a la vista
+   **Conciliaciones**.
 2. Pulse **Nueva conciliación**, escoja la procesadora y la fecha del depósito, y
    guarde.
 3. Pulse **Cargar estado de cuenta** y suba el archivo con el perfil que
@@ -66,6 +68,35 @@ solo avisa que no generará el asiento.
    aviso: quedan reportadas como *sin documento*.
 6. Indique **Depositado en** (el banco) y el **Neto depositado**, revise que la
    diferencia sea cero y pulse **Conciliar y cerrar**.
+7. Si la conciliación generó asiento, puede revisarlo en la pestaña **Asiento
+   contable** del mismo modal. Una conciliación cerrada se anula con el botón
+   **Anular** de la barra de acciones superior.
+
+## Listado: orden, columnas y páginas
+
+- **Ordenar**: clic en el encabezado de una columna; otro clic invierte el
+  sentido. Con **Shift + clic** en otra columna se ordena por varias a la vez
+  (hasta tres). El orden se recuerda para su usuario y es el mismo que sale en
+  el PDF y el Excel.
+- **Mostrar u ocultar columnas**: botón de columnas, a la izquierda de PDF.
+  Cada vista (pendientes y conciliaciones) guarda sus propias columnas.
+- **Ancho de columnas**: arrastre el borde del encabezado; se recuerda para su
+  usuario.
+- **Páginas**: el listado muestra 50 filas por página; use las flechas de la
+  derecha. El contador indica qué filas está viendo y el total (en pendientes,
+  también el monto total del filtro).
+- **Indicadores** (por depositar, cobros, días del más antiguo, conciliado y
+  comisiones): se calculan sobre **todo** lo que cumple los filtros, no solo
+  sobre la página a la vista. El filtro **Estado** solo aplica a la vista
+  Conciliaciones.
+
+## Pestaña Asiento contable
+
+Aparece solo si usted tiene acceso a **Contabilidad → Asientos Contables**, y
+puede ocultarla con el engranaje de las pestañas. Muestra el asiento del
+depósito que se generó al cerrar la conciliación; si no hay asiento, explica por
+qué (conciliación en borrador, anulada o cerrada sin cuentas contables). Quien
+además puede modificar asientos contables puede corregirlo ahí mismo.
 
 ## Campos del formulario
 
@@ -151,6 +182,13 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.2** — Listado con **paginación** (antes mostraba solo las primeras 100
+  conciliaciones), **orden por columnas** (también por varias), columnas que se
+  pueden ocultar y ancho recordado. **Pendientes por depositar** ya no exige
+  elegir una procesadora: muestra todas y agrega la columna Procesadora. Los
+  indicadores ahora suman todo el filtro (antes solo las 100 primeras filas).
+  Nueva pestaña **Asiento contable** en el modal, y **Anular** pasa a la barra
+  de acciones superior.
 - **1.1** — El módulo respeta ahora el **cierre contable**: no se puede operar
   sobre una conciliación cuyo período esté cerrado. Antes no se comprobaba.
 - **1.0** — Versión inicial.

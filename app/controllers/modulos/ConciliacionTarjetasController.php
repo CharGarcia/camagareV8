@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\Helpers\OrdenListado;
+use App\Helpers\PreferenciasHelper;
 use App\repositories\modulos\ConciliacionTarjetasRepository;
 use App\Rules\modulos\ConciliacionTarjetasRules;
 use App\Services\ErrorLogService;
@@ -41,19 +43,35 @@ class ConciliacionTarjetasController extends BaseModuloController
         );
     }
 
+    /**
+     * Preferencias de la tabla de pendientes: van en su propio módulo de preferencias
+     * para que su orden, columnas ocultas y anchos no pisen los de la tabla de
+     * conciliaciones (guardarVistaAjax reemplaza cada clave entera).
+     */
+    public const RUTA_PREFS_PENDIENTES = 'modulos/conciliacion-tarjetas-pendientes';
+
+    /** Filas por página de ambos listados. */
+    private const POR_PAGINA = 50;
+
     public function index(): void
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
+        $vista     = PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
+        $vistaPend = PreferenciasHelper::getPreferenciasVista(self::RUTA_PREFS_PENDIENTES);
+
         $this->viewWithLayout('layouts.main', 'modulos.conciliacion_tarjetas.index', [
-            'titulo'       => 'Conciliación de Tarjetas',
-            'perm'         => $this->getPermisos(),
-            'rutaModulo'   => $this->getRutaModulo(),
-            'procesadoras' => $this->service->getProcesadoras($idEmpresa),
-            'destinos'     => $this->service->getFormasDestino($idEmpresa),
-            'perfiles'     => $this->service->getPerfiles($idEmpresa),
-            'resumen'      => $this->service->getResumenPendientes($idEmpresa, $this->idUsuarioFiltro()),
+            'titulo'        => 'Conciliación de Tarjetas',
+            'perm'          => $this->getPermisos(),
+            'rutaModulo'    => $this->getRutaModulo(),
+            'rutaPrefsPend' => self::RUTA_PREFS_PENDIENTES,
+            'procesadoras'  => $this->service->getProcesadoras($idEmpresa),
+            'destinos'      => $this->service->getFormasDestino($idEmpresa),
+            'vistaConfig'   => $vista,
+            'vistaPend'     => $vistaPend,
+            'ordenJson'     => OrdenListado::aJson($this->ordenConciliaciones($vista)),
+            'ordenPendJson' => OrdenListado::aJson($this->ordenPendientes($vistaPend)),
         ]);
     }
 
@@ -63,47 +81,73 @@ class ConciliacionTarjetasController extends BaseModuloController
     {
         $this->requireLeer();
         $this->responder(function () {
-            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $page  = max(1, (int) ($_GET['page'] ?? 1));
+            $orden = $this->ordenConciliaciones(PreferenciasHelper::getPreferenciasVista($this->getRutaModulo()));
 
             $resultado = $this->service->getListado(
-                $idEmpresa,
+                (int) $_SESSION['id_empresa'],
                 trim((string) ($_GET['buscar'] ?? '')),
-                max(1, (int) ($_GET['page'] ?? 1)),
-                min(200, max(5, (int) ($_GET['per_page'] ?? 30))),
-                (string) ($_GET['orden'] ?? 'numero'),
-                (string) ($_GET['dir'] ?? 'DESC'),
+                $page,
+                self::POR_PAGINA,
+                $orden,
                 $this->idUsuarioFiltro(),
-                [
-                    'id_forma_cobro' => (int) ($_GET['id_forma_cobro'] ?? 0),
-                    'estado'         => trim((string) ($_GET['estado'] ?? '')),
-                    'fecha_desde'    => trim((string) ($_GET['fecha_desde'] ?? '')),
-                    'fecha_hasta'    => trim((string) ($_GET['fecha_hasta'] ?? '')),
-                ]
+                $this->filtrosListado()
             );
 
-            return [
-                'data'    => $resultado['data'],
-                'total'   => $resultado['total'],
-                'resumen' => $this->service->getResumenPendientes($idEmpresa, $this->idUsuarioFiltro()),
-            ];
+            return $resultado + ['page' => $page, 'per_page' => self::POR_PAGINA, 'orden' => OrdenListado::aCadena($orden)];
         });
     }
 
-    /** Cobros con tarjeta que aún no aparecen en ningún estado de cuenta. */
+    /** Cobros con tarjeta que aún no aparecen en ningún estado de cuenta (paginado). */
     public function pendientesAjax(): void
     {
         $this->requireLeer();
         $this->responder(function () {
-            $repo = new ConciliacionTarjetasRepository();
-            return $repo->getCobrosPendientes(
+            $page  = max(1, (int) ($_GET['page'] ?? 1));
+            $orden = $this->ordenPendientes(PreferenciasHelper::getPreferenciasVista(self::RUTA_PREFS_PENDIENTES));
+
+            $resultado = $this->service->getListadoPendientes(
                 (int) $_SESSION['id_empresa'],
-                (int) ($_GET['id_forma_cobro'] ?? 0),
-                trim((string) ($_GET['fecha_desde'] ?? '')) ?: null,
-                trim((string) ($_GET['fecha_hasta'] ?? '')) ?: null,
+                $this->filtrosListado(),
                 trim((string) ($_GET['buscar'] ?? '')),
+                $page,
+                self::POR_PAGINA,
+                $orden,
                 $this->idUsuarioFiltro()
             );
+
+            return $resultado + ['page' => $page, 'per_page' => self::POR_PAGINA, 'orden' => OrdenListado::aCadena($orden)];
         });
+    }
+
+    /** Indicadores de la tarjeta de control, calculados sobre todo el filtro. */
+    public function indicadoresAjax(): void
+    {
+        $this->requireLeer();
+        $this->responder(fn() => $this->service->getIndicadores(
+            (int) $_SESSION['id_empresa'],
+            trim((string) ($_GET['buscar'] ?? '')),
+            $this->idUsuarioFiltro(),
+            $this->filtrosListado()
+        ));
+    }
+
+    /**
+     * Pestaña «Asiento contable» del modal: dice si el asiento ya existe (entonces el
+     * componente lo lee de Asientos Contables) o por qué no hay. Responde en el formato
+     * plano que espera asiento_contable_tab.js, no en el de responder().
+     */
+    public function estadoAsientoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            echo json_encode($this->service->getEstadoAsiento((int) ($_GET['id'] ?? 0), (int) $_SESSION['id_empresa']));
+        } catch (\Throwable $e) {
+            ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
     }
 
     public function detalleAjax(): void
@@ -505,20 +549,25 @@ class ConciliacionTarjetasController extends BaseModuloController
     {
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $vista     = (string) ($_GET['vista'] ?? 'pendientes');
+        $buscar    = trim((string) ($_GET['buscar'] ?? ''));
 
+        // Mismo filtro y mismo orden que en pantalla (el orden viaja en ?orden=col:DIR,…).
         if ($vista === 'pendientes') {
-            $repo = new ConciliacionTarjetasRepository();
-            $filas = [];
-            foreach ($repo->getCobrosPendientes(
+            $resultado = $this->service->getListadoPendientes(
                 $idEmpresa,
-                (int) ($_GET['id_forma_cobro'] ?? 0),
-                trim((string) ($_GET['fecha_desde'] ?? '')) ?: null,
-                trim((string) ($_GET['fecha_hasta'] ?? '')) ?: null,
-                trim((string) ($_GET['buscar'] ?? '')),
+                $this->filtrosListado(),
+                $buscar,
+                1,
+                null,
+                $this->ordenPendientes(PreferenciasHelper::getPreferenciasVista(self::RUTA_PREFS_PENDIENTES)),
                 $this->idUsuarioFiltro()
-            ) as $c) {
+            );
+
+            $filas = [];
+            foreach ($resultado['data'] as $c) {
                 $filas[] = [
                     $this->fecha($c['fecha_emision']),
+                    (string) ($c['procesadora_nombre'] ?? ''),
                     (string) ($c['documentos'] ?? ''),
                     (string) ($c['cliente_nombre'] ?? ''),
                     (string) ($c['numero_ingreso'] ?? ''),
@@ -530,25 +579,19 @@ class ConciliacionTarjetasController extends BaseModuloController
 
             return [
                 'Cobros con tarjeta pendientes de depósito',
-                ['Fecha cobro', 'Documento', 'Cliente', 'Ingreso', 'Autorización', 'Monto', 'Días'],
+                ['Fecha cobro', 'Procesadora', 'Documento', 'Cliente', 'Ingreso', 'Autorización', 'Monto', 'Días'],
                 $filas,
             ];
         }
 
         $resultado = $this->service->getListado(
             $idEmpresa,
-            trim((string) ($_GET['buscar'] ?? '')),
+            $buscar,
             1,
-            5000,
-            'numero',
-            'DESC',
+            null,
+            $this->ordenConciliaciones(PreferenciasHelper::getPreferenciasVista($this->getRutaModulo())),
             $this->idUsuarioFiltro(),
-            [
-                'id_forma_cobro' => (int) ($_GET['id_forma_cobro'] ?? 0),
-                'estado'         => trim((string) ($_GET['estado'] ?? '')),
-                'fecha_desde'    => trim((string) ($_GET['fecha_desde'] ?? '')),
-                'fecha_hasta'    => trim((string) ($_GET['fecha_hasta'] ?? '')),
-            ]
+            $this->filtrosListado()
         );
 
         $filas = [];
@@ -563,7 +606,7 @@ class ConciliacionTarjetasController extends BaseModuloController
                 number_format((float) $c['total_comision'] + (float) $c['total_iva_comision'], 2, '.', ''),
                 number_format((float) $c['total_retencion_ir'] + (float) $c['total_retencion_iva'], 2, '.', ''),
                 number_format((float) $c['total_neto'], 2, '.', ''),
-                (string) $c['estado'],
+                ucfirst((string) $c['estado']),
                 !empty($c['id_asiento_contable']) ? 'Sí' : 'No',
             ];
         }
@@ -707,6 +750,29 @@ class ConciliacionTarjetasController extends BaseModuloController
     }
 
     // ─── Utilidades ──────────────────────────────────────────────────────────
+
+    /** Filtros de la tarjeta de control, comunes a listados, indicadores y exportación. */
+    private function filtrosListado(): array
+    {
+        return [
+            'id_forma_cobro' => (int) ($_GET['id_forma_cobro'] ?? 0),
+            'estado'         => trim((string) ($_GET['estado'] ?? '')),
+            'fecha_desde'    => trim((string) ($_GET['fecha_desde'] ?? '')),
+            'fecha_hasta'    => trim((string) ($_GET['fecha_hasta'] ?? '')),
+        ];
+    }
+
+    /** Orden vigente del listado de conciliaciones (petición → preferencia → defecto). */
+    private function ordenConciliaciones(array $prefsVista): array
+    {
+        return OrdenListado::leer($prefsVista, 'numero', 'DESC');
+    }
+
+    /** Orden vigente de pendientes: por defecto, el cobro más antiguo primero. */
+    private function ordenPendientes(array $prefsVista): array
+    {
+        return OrdenListado::leer($prefsVista, 'fecha', 'ASC');
+    }
 
     /**
      * Registros propios (§6): sin permiso de acceso total, el usuario solo ve los

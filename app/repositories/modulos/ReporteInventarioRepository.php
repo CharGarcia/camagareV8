@@ -903,7 +903,7 @@ class ReporteInventarioRepository extends BaseRepository
                        p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                        b.nombre AS bodega_nombre
                 " . $this->fromMovimientos($whereFuera) . "
-                ORDER BY p.nombre ASC, b.nombre ASC, k.fecha_movimiento ASC, k.id ASC"
+                ORDER BY k.fecha_movimiento ASC, k.id ASC"
                 . ($limite !== null ? ' LIMIT ' . ((int) $limite + 1) : '');
 
         $st = $this->db->prepare($sql);

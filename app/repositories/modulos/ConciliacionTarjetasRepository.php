@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\repositories\modulos;
 
 use App\Helpers\FiltrosBusqueda;
+use App\Helpers\OrdenListado;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -27,9 +28,35 @@ class ConciliacionTarjetasRepository extends BaseRepository
     /** Tipos de empresa_formas_pago cuyo dinero llega días después y neto de comisión. */
     public const TIPOS_LIQUIDACION_DIFERIDA = ['PAYPHONE', 'NUVEI', 'TARJETA'];
 
-    public const COLUMNAS_ORDEN = [
-        'numero', 'fecha_conciliacion', 'procesadora', 'destino',
-        'total_bruto_estado', 'total_neto', 'neto_depositado', 'diferencia', 'estado',
+    /**
+     * Ordenamiento del listado de conciliaciones (§9, OrdenListado): whitelist y mapa
+     * a la vez. La clave es el `data-sort` del encabezado; lo único que llega al SQL
+     * es la expresión de la derecha.
+     */
+    public const MAPA_ORDEN = [
+        'numero'      => 'c.numero',
+        'fecha'       => 'c.fecha_conciliacion',
+        'procesadora' => 'fp.nombre',
+        'destino'     => 'fd.nombre',
+        'cobros'      => 'cobros_cruzados',
+        'bruto'       => 'c.total_bruto_cruzado',
+        'comision'    => '(COALESCE(c.total_comision, 0) + COALESCE(c.total_iva_comision, 0))',
+        'retenciones' => '(COALESCE(c.total_retencion_ir, 0) + COALESCE(c.total_retencion_iva, 0))',
+        'neto'        => 'c.total_neto',
+        'estado'      => 'c.estado',
+        'asiento'     => 'c.id_asiento_contable',
+    ];
+
+    /** Ordenamiento de la pestaña «Pendientes por depositar». */
+    public const MAPA_ORDEN_PENDIENTES = [
+        'fecha'        => 'ic.fecha_emision',
+        'procesadora'  => 'fp.nombre',
+        'documento'    => 'documentos',
+        'cliente'      => 'cl.nombre',
+        'ingreso'      => 'ic.numero_ingreso',
+        'autorizacion' => 'autorizacion',
+        'monto'        => 'ip.monto',
+        'dias'         => 'dias_transcurridos',
     ];
 
     public function __construct()
@@ -204,9 +231,116 @@ class ConciliacionTarjetasRepository extends BaseRepository
         ?int $idUsuarioFiltro = null,
         ?int $idCabeceraActual = null
     ): array {
+        [$from, $where, $params] = $this->armarConsultaPendientes(
+            $idEmpresa, $idFormaCobro, $fechaDesde, $fechaHasta, $buscar, $idUsuarioFiltro, $idCabeceraActual
+        );
+
+        $st = $this->db->prepare("SELECT {$this->columnasPendientes()} {$from} {$where}
+                                  ORDER BY ic.fecha_emision ASC, ip.id ASC");
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * Listado paginado de la pestaña «Pendientes por depositar».
+     *
+     * A diferencia de getCobrosPendientes() (que sirve al modal de cruce y siempre
+     * trabaja sobre UNA procesadora), aquí `id_forma_cobro = 0` significa «todas las
+     * procesadoras de liquidación diferida», para que la pantalla no arranque vacía.
+     *
+     * @param array    $orden   Criterios de OrdenListado (claves de MAPA_ORDEN_PENDIENTES).
+     * @param int|null $perPage null = sin límite (exportaciones).
+     * @return array{data: array, total: int, total_monto: float}
+     */
+    public function getListadoPendientes(
+        int $idEmpresa,
+        array $filtros,
+        string $buscar,
+        int $page,
+        ?int $perPage,
+        array $orden,
+        ?int $idUsuarioFiltro = null
+    ): array {
+        [$from, $where, $params] = $this->armarConsultaPendientes(
+            $idEmpresa,
+            (int) ($filtros['id_forma_cobro'] ?? 0) ?: null,
+            ($filtros['fecha_desde'] ?? '') ?: null,
+            ($filtros['fecha_hasta'] ?? '') ?: null,
+            $buscar,
+            $idUsuarioFiltro
+        );
+
+        $stTot = $this->db->prepare("SELECT COUNT(*) AS total, COALESCE(SUM(ip.monto), 0) AS monto {$from} {$where}");
+        $stTot->execute($params);
+        $tot = $stTot->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'monto' => 0];
+
+        $orderBy = OrdenListado::clausula($orden, self::MAPA_ORDEN_PENDIENTES, 'ic.fecha_emision', 'ip.id ASC');
+        $limite  = '';
+        if ($perPage !== null) {
+            $limite = 'LIMIT ' . max(1, $perPage) . ' OFFSET ' . max(0, ($page - 1) * $perPage);
+        }
+
+        $st = $this->db->prepare("SELECT {$this->columnasPendientes()} {$from} {$where} {$orderBy} {$limite}");
+        $st->execute($params);
+
+        return [
+            'data'        => $st->fetchAll(PDO::FETCH_ASSOC) ?: [],
+            'total'       => (int) $tot['total'],
+            'total_monto' => (float) $tot['monto'],
+        ];
+    }
+
+    /** Columnas de un cobro pendiente (comunes al modal de cruce y al listado). */
+    private function columnasPendientes(): string
+    {
+        return "ip.id                AS id_ingreso_pago,
+                ic.id                AS id_ingreso,
+                ic.numero_ingreso,
+                ic.fecha_emision,
+                ip.monto,
+                ip.referencia,
+                ip.id_forma_cobro,
+                fp.nombre            AS procesadora_nombre,
+                cl.nombre            AS cliente_nombre,
+                cl.identificacion    AS cliente_identificacion,
+                (CURRENT_DATE - ic.fecha_emision) AS dias_transcurridos,
+                -- Documentos que cubrió el cobro (una factura, o varias)
+                (SELECT string_agg(idet.numero_documento, ', ' ORDER BY idet.id)
+                   FROM ingresos_detalle idet
+                  WHERE idet.id_ingreso = ic.id) AS documentos,
+                -- Código de autorización, si el cobro vino de una pasarela
+                COALESCE(
+                    (SELECT pt.authorization_code FROM payphone_transacciones pt
+                      WHERE pt.id_ingreso = ic.id AND pt.eliminado = FALSE
+                      ORDER BY pt.id DESC LIMIT 1),
+                    (SELECT nt.authorization_code FROM nuvei_transacciones nt
+                      WHERE nt.id_ingreso = ic.id AND nt.eliminado = FALSE
+                      ORDER BY nt.id DESC LIMIT 1)
+                ) AS autorizacion,
+                -- Cruce vigente en la conciliación que se está editando
+                (SELECT cr.id FROM conciliacion_tarjetas_cruces cr
+                  WHERE cr.id_ingreso_pago = ip.id AND cr.eliminado = FALSE
+                  LIMIT 1) AS id_cruce";
+    }
+
+    /**
+     * FROM + WHERE + parámetros de los cobros pendientes.
+     *
+     * @param int|null $idFormaCobro null = todas las procesadoras de liquidación
+     *                               diferida (solo el listado lo usa así).
+     * @return array{0: string, 1: string, 2: array}
+     */
+    private function armarConsultaPendientes(
+        int $idEmpresa,
+        ?int $idFormaCobro,
+        ?string $fechaDesde,
+        ?string $fechaHasta,
+        string $buscar,
+        ?int $idUsuarioFiltro,
+        ?int $idCabeceraActual = null
+    ): array {
         $params = [
             ':e'   => $idEmpresa,
-            ':f'   => $idFormaCobro,
             ':amb' => $this->getTipoAmbiente($idEmpresa),
         ];
 
@@ -214,8 +348,16 @@ class ConciliacionTarjetasRepository extends BaseRepository
                     AND ic.eliminado  = FALSE
                     AND ic.estado    <> 'anulado'
                     AND ic.tipo_ambiente = :amb
-                    AND ip.id_forma_cobro = :f
                     AND ip.monto > 0";
+
+        if ($idFormaCobro !== null) {
+            $params[':f'] = $idFormaCobro;
+            $where .= " AND ip.id_forma_cobro = :f";
+        } else {
+            $tipos = "'" . implode("','", self::TIPOS_LIQUIDACION_DIFERIDA) . "'";
+            $params[':efp'] = $idEmpresa;
+            $where .= " AND fp.id_empresa = :efp AND UPPER(fp.tipo) IN ({$tipos})";
+        }
 
         // Solo los no cruzados (o los cruzados en la conciliación que se edita).
         if ($idCabeceraActual !== null) {
@@ -259,47 +401,18 @@ class ConciliacionTarjetasRepository extends BaseRepository
             }
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'texto'    => ['cliente' => 'cl.nombre', 'ingreso' => 'ic.numero_ingreso'],
+            'texto'    => ['cliente' => 'cl.nombre', 'ingreso' => 'ic.numero_ingreso', 'procesadora' => 'fp.nombre'],
             'exacto'   => ['identificacion' => 'cl.identificacion'],
             'fecha'    => ['fecha' => 'ic.fecha_emision'],
             'numerico' => ['monto' => 'ip.monto'],
         ]);
 
-        $sql = "SELECT ip.id                AS id_ingreso_pago,
-                       ic.id                AS id_ingreso,
-                       ic.numero_ingreso,
-                       ic.fecha_emision,
-                       ip.monto,
-                       ip.referencia,
-                       cl.nombre            AS cliente_nombre,
-                       cl.identificacion    AS cliente_identificacion,
-                       (CURRENT_DATE - ic.fecha_emision) AS dias_transcurridos,
-                       -- Documentos que cubrió el cobro (una factura, o varias)
-                       (SELECT string_agg(idet.numero_documento, ', ' ORDER BY idet.id)
-                          FROM ingresos_detalle idet
-                         WHERE idet.id_ingreso = ic.id) AS documentos,
-                       -- Código de autorización, si el cobro vino de una pasarela
-                       COALESCE(
-                           (SELECT pt.authorization_code FROM payphone_transacciones pt
-                             WHERE pt.id_ingreso = ic.id AND pt.eliminado = FALSE
-                             ORDER BY pt.id DESC LIMIT 1),
-                           (SELECT nt.authorization_code FROM nuvei_transacciones nt
-                             WHERE nt.id_ingreso = ic.id AND nt.eliminado = FALSE
-                             ORDER BY nt.id DESC LIMIT 1)
-                       ) AS autorizacion,
-                       -- Cruce vigente en la conciliación que se está editando
-                       (SELECT cr.id FROM conciliacion_tarjetas_cruces cr
-                         WHERE cr.id_ingreso_pago = ip.id AND cr.eliminado = FALSE
-                         LIMIT 1) AS id_cruce
-                  FROM ingresos_pagos ip
-                  INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
-                  LEFT  JOIN clientes cl          ON cl.id = ic.id_cliente
-                  {$where}
-                 ORDER BY ic.fecha_emision ASC, ip.id ASC";
+        $from = "FROM ingresos_pagos ip
+                 INNER JOIN ingresos_cabecera ic   ON ic.id = ip.id_ingreso
+                 INNER JOIN empresa_formas_pago fp ON fp.id = ip.id_forma_cobro
+                 LEFT  JOIN clientes cl            ON cl.id = ic.id_cliente";
 
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        return [$from, $where, $params];
     }
 
     /**
@@ -531,22 +644,79 @@ class ConciliacionTarjetasRepository extends BaseRepository
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
-    /** Listado paginado de conciliaciones. */
+    /**
+     * Listado paginado de conciliaciones.
+     *
+     * @param array    $orden   Criterios de OrdenListado (claves de MAPA_ORDEN).
+     * @param int|null $perPage null = sin límite (exportaciones).
+     * @return array{data: array, total: int}
+     */
     public function getListado(
         int $idEmpresa,
         string $buscar,
         int $page,
-        int $perPage,
-        string $ordenCol,
-        string $ordenDir,
+        ?int $perPage,
+        array $orden,
         ?int $idUsuarioFiltro = null,
         array $filtros = []
     ): array {
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'numero';
-        }
-        $dir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
+        [$from, $where, $params] = $this->armarConsultaListado($idEmpresa, $buscar, $idUsuarioFiltro, $filtros);
 
+        $stCount = $this->db->prepare("SELECT COUNT(*) {$from} {$where}");
+        $stCount->execute($params);
+        $total = (int) $stCount->fetchColumn();
+
+        $orderBy = OrdenListado::clausula($orden, self::MAPA_ORDEN, 'c.numero', 'c.id DESC');
+        $limite  = '';
+        if ($perPage !== null) {
+            $limite = 'LIMIT ' . max(1, $perPage) . ' OFFSET ' . max(0, ($page - 1) * $perPage);
+        }
+
+        $sql = "SELECT c.*, fp.nombre AS procesadora_nombre, fp.tipo AS procesadora_tipo,
+                       fd.nombre AS destino_nombre,
+                       (SELECT COUNT(*) FROM conciliacion_tarjetas_cruces cr
+                         WHERE cr.id_cabecera = c.id AND cr.eliminado = FALSE) AS cobros_cruzados
+                {$from} {$where}
+                {$orderBy}
+                {$limite}";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        return ['data' => $st->fetchAll(PDO::FETCH_ASSOC) ?: [], 'total' => $total];
+    }
+
+    /**
+     * Totales de las conciliaciones CERRADAS que cumplen los filtros, para las
+     * tarjetas de indicadores. Se suman en SQL sobre todo el filtro, no sobre la
+     * página en pantalla.
+     *
+     * @return array{conciliado: float, comisiones: float}
+     */
+    public function getTotalesListado(int $idEmpresa, string $buscar, ?int $idUsuarioFiltro, array $filtros): array
+    {
+        [$from, $where, $params] = $this->armarConsultaListado($idEmpresa, $buscar, $idUsuarioFiltro, $filtros);
+
+        $st = $this->db->prepare(
+            "SELECT COALESCE(SUM(c.total_neto), 0) AS conciliado,
+                    COALESCE(SUM(COALESCE(c.total_comision, 0) + COALESCE(c.total_iva_comision, 0)), 0) AS comisiones
+             {$from} {$where} AND c.estado = 'cerrada'"
+        );
+        $st->execute($params);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'conciliado' => (float) ($r['conciliado'] ?? 0),
+            'comisiones' => (float) ($r['comisiones'] ?? 0),
+        ];
+    }
+
+    /**
+     * FROM + WHERE + parámetros del listado de conciliaciones.
+     *
+     * @return array{0: string, 1: string, 2: array}
+     */
+    private function armarConsultaListado(int $idEmpresa, string $buscar, ?int $idUsuarioFiltro, array $filtros): array
+    {
         // getBaseWhere() nombra el placeholder :id_empresa (y :id_usuario_filtro).
         $params = [':id_empresa' => $idEmpresa, ':amb' => $this->getTipoAmbiente($idEmpresa)];
         $where  = $this->getBaseWhere($idEmpresa, 'c', $idUsuarioFiltro) . " AND c.tipo_ambiente = :amb";
@@ -594,28 +764,7 @@ class ConciliacionTarjetasRepository extends BaseRepository
                  LEFT JOIN empresa_formas_pago fp ON fp.id = c.id_forma_cobro
                  LEFT JOIN empresa_formas_pago fd ON fd.id = c.id_forma_cobro_destino";
 
-        $stCount = $this->db->prepare("SELECT COUNT(*) {$from} {$where}");
-        $stCount->execute($params);
-        $total = (int) $stCount->fetchColumn();
-
-        $orderExpr = match ($ordenCol) {
-            'procesadora' => 'fp.nombre',
-            'destino'     => 'fd.nombre',
-            default       => "c.{$ordenCol}",
-        };
-
-        $offset = max(0, ($page - 1) * $perPage);
-        $sql = "SELECT c.*, fp.nombre AS procesadora_nombre, fp.tipo AS procesadora_tipo,
-                       fd.nombre AS destino_nombre,
-                       (SELECT COUNT(*) FROM conciliacion_tarjetas_cruces cr
-                         WHERE cr.id_cabecera = c.id AND cr.eliminado = FALSE) AS cobros_cruzados
-                {$from} {$where}
-                ORDER BY {$orderExpr} {$dir}, c.id DESC
-                LIMIT {$perPage} OFFSET {$offset}";
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-
-        return ['data' => $st->fetchAll(PDO::FETCH_ASSOC) ?: [], 'total' => $total];
+        return [$from, $where, $params];
     }
 
     /** Marca la conciliación como cerrada (o anulada) y guarda sus totales. */

@@ -12,9 +12,9 @@
 <div class="modal fade" id="modalConfigTarjetas" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg">
-            <div class="modal-header bg-secondary text-white py-2 px-3">
-                <h6 class="modal-title fw-bold"><i class="bi bi-gear me-2"></i>Configuración de Conciliación de Tarjetas</h6>
-                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            <div class="modal-header">
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-gear me-2"></i>Configuración de Conciliación de Tarjetas</h5>
+                <button type="button" class="btn-close" aria-label="Cerrar" data-bs-dismiss="modal"></button>
             </div>
 
             <div class="modal-body p-0">
@@ -41,7 +41,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">Procesadora</label>
+                            <label class="form-label small fw-bold text-muted mb-1">Procesadora</label>
                             <select id="ctar-cfg-procesadora" class="form-select form-select-sm shadow-none border"
                                     onchange="CTAR_cargarConfig()"></select>
                         </div>
@@ -54,7 +54,7 @@
 
                         <div class="row g-2">
                             <div class="col-md-6">
-                                <label class="form-label small fw-bold mb-1">Cuenta de comisión (gasto)</label>
+                                <label class="form-label small fw-bold text-muted mb-1">Cuenta de comisión (gasto)</label>
                                 <div class="position-relative">
                                     <input type="text" class="form-control form-control-sm shadow-none border ctar-cuenta-input"
                                            id="ctar-cfg-comision-txt" data-target="ctar-cfg-comision" placeholder="Buscar cuenta..." autocomplete="off">
@@ -64,7 +64,7 @@
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label small fw-bold mb-1">Cuenta de IVA de la comisión</label>
+                                <label class="form-label small fw-bold text-muted mb-1">Cuenta de IVA de la comisión</label>
                                 <div class="position-relative">
                                     <input type="text" class="form-control form-control-sm shadow-none border ctar-cuenta-input"
                                            id="ctar-cfg-iva-txt" data-target="ctar-cfg-iva" placeholder="Buscar cuenta..." autocomplete="off">
@@ -74,7 +74,7 @@
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label small fw-bold mb-1">Cuenta de retención de renta</label>
+                                <label class="form-label small fw-bold text-muted mb-1">Cuenta de retención de renta</label>
                                 <div class="position-relative">
                                     <input type="text" class="form-control form-control-sm shadow-none border ctar-cuenta-input"
                                            id="ctar-cfg-retir-txt" data-target="ctar-cfg-retir" placeholder="Buscar cuenta..." autocomplete="off">
@@ -84,7 +84,7 @@
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label small fw-bold mb-1">Cuenta de retención de IVA</label>
+                                <label class="form-label small fw-bold text-muted mb-1">Cuenta de retención de IVA</label>
                                 <div class="position-relative">
                                     <input type="text" class="form-control form-control-sm shadow-none border ctar-cuenta-input"
                                            id="ctar-cfg-retiva-txt" data-target="ctar-cfg-retiva" placeholder="Buscar cuenta..." autocomplete="off">
@@ -95,21 +95,21 @@
                             </div>
 
                             <div class="col-6 col-md-3">
-                                <label class="form-label small fw-bold mb-1">% comisión</label>
+                                <label class="form-label small fw-bold text-muted mb-1">% comisión</label>
                                 <input type="number" step="0.0001" id="ctar-cfg-pc" class="form-control form-control-sm shadow-none border text-end">
                                 <div class="form-text" style="font-size:.68rem;">Solo para precalcular; siempre editable.</div>
                             </div>
                             <div class="col-6 col-md-3">
-                                <label class="form-label small fw-bold mb-1">% IVA</label>
+                                <label class="form-label small fw-bold text-muted mb-1">% IVA</label>
                                 <input type="number" step="0.0001" id="ctar-cfg-pi" class="form-control form-control-sm shadow-none border text-end">
                             </div>
                             <div class="col-6 col-md-3">
-                                <label class="form-label small fw-bold mb-1">Días de liquidación</label>
+                                <label class="form-label small fw-bold text-muted mb-1">Días de liquidación</label>
                                 <input type="number" id="ctar-cfg-dias" class="form-control form-control-sm shadow-none border text-end" value="2">
                                 <div class="form-text" style="font-size:.68rem;">Pasados estos días, el cobro se marca atrasado.</div>
                             </div>
                             <div class="col-6 col-md-3">
-                                <label class="form-label small fw-bold mb-1">Tolerancia</label>
+                                <label class="form-label small fw-bold text-muted mb-1">Tolerancia</label>
                                 <input type="number" step="0.01" id="ctar-cfg-tol" class="form-control form-control-sm shadow-none border text-end" value="0.05">
                                 <div class="form-text" style="font-size:.68rem;">Descuadre aceptado al cerrar.</div>
                             </div>
@@ -155,16 +155,16 @@
                             <input type="hidden" id="ctar-perfil-id">
                             <div class="row g-2">
                                 <div class="col-md-4">
-                                    <label class="form-label small fw-bold mb-1">Nombre del perfil</label>
+                                    <label class="form-label small fw-bold text-muted mb-1">Nombre del perfil</label>
                                     <input type="text" id="ctar-perfil-nombre" class="form-control form-control-sm shadow-none border"
                                            placeholder="Ej: Payphone — reporte mensual" maxlength="100">
                                 </div>
                                 <div class="col-md-3">
-                                    <label class="form-label small fw-bold mb-1">Procesadora</label>
+                                    <label class="form-label small fw-bold text-muted mb-1">Procesadora</label>
                                     <select id="ctar-perfil-forma" class="form-select form-select-sm shadow-none border"></select>
                                 </div>
                                 <div class="col-md-2">
-                                    <label class="form-label small fw-bold mb-1">Archivo</label>
+                                    <label class="form-label small fw-bold text-muted mb-1">Archivo</label>
                                     <select id="ctar-perfil-tipo" class="form-select form-select-sm shadow-none border" onchange="CTAR_perfilTipoCambio()">
                                         <option value="EXCEL">Excel</option>
                                         <option value="CSV">CSV</option>
@@ -172,7 +172,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-3">
-                                    <label class="form-label small fw-bold mb-1">Contenido</label>
+                                    <label class="form-label small fw-bold text-muted mb-1">Contenido</label>
                                     <select id="ctar-perfil-nivel" class="form-select form-select-sm shadow-none border">
                                         <option value="transaccion">Una línea por transacción</option>
                                         <option value="deposito">Depósitos consolidados</option>
@@ -180,22 +180,22 @@
                                 </div>
 
                                 <div class="col-6 col-md-2">
-                                    <label class="form-label small fw-bold mb-1">Fila de inicio</label>
+                                    <label class="form-label small fw-bold text-muted mb-1">Fila de inicio</label>
                                     <input type="number" id="ctar-perfil-fila" class="form-control form-control-sm shadow-none border" value="1">
                                 </div>
                                 <div class="col-6 col-md-2">
-                                    <label class="form-label small fw-bold mb-1">Formato fecha</label>
+                                    <label class="form-label small fw-bold text-muted mb-1">Formato fecha</label>
                                     <input type="text" id="ctar-perfil-fecha" class="form-control form-control-sm shadow-none border" value="d/m/Y">
                                 </div>
                                 <div class="col-6 col-md-2">
-                                    <label class="form-label small fw-bold mb-1">Separador decimal</label>
+                                    <label class="form-label small fw-bold text-muted mb-1">Separador decimal</label>
                                     <select id="ctar-perfil-separador" class="form-select form-select-sm shadow-none border">
                                         <option value=".">Punto (1234.56)</option>
                                         <option value=",">Coma (1234,56)</option>
                                     </select>
                                 </div>
                                 <div class="col-6 col-md-6">
-                                    <label class="form-label small fw-bold mb-1">Archivo de muestra</label>
+                                    <label class="form-label small fw-bold text-muted mb-1">Archivo de muestra</label>
                                     <input type="file" id="ctar-perfil-muestra" class="form-control form-control-sm shadow-none border"
                                            accept=".xls,.xlsx,.csv,.pdf" onchange="CTAR_previsualizarMuestra()">
                                 </div>
@@ -211,7 +211,7 @@
 
                             <!-- Mapeo PDF -->
                             <div id="ctar-perfil-mapeo-pdf" class="mt-3 d-none">
-                                <label class="form-label small fw-bold mb-1">Patrón de línea (regex con grupos nombrados)</label>
+                                <label class="form-label small fw-bold text-muted mb-1">Patrón de línea (regex con grupos nombrados)</label>
                                 <input type="text" id="ctar-perfil-regex" class="form-control form-control-sm shadow-none border font-monospace"
                                        placeholder="/(?<fecha>\d{2}\/\d{2}\/\d{4}).+?(?<autorizacion>\d+).+?(?<monto_bruto>[\d.,]+)/">
                                 <div class="form-text" style="font-size:.7rem;">
@@ -255,7 +255,7 @@
                 </div>
             </div>
 
-            <div class="modal-footer bg-light py-2 px-3">
+            <div class="modal-footer bg-light border-top p-2">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>

@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote
-version: 1.25
+version: 1.26
 orden: 40
 estado: activo
 ---
@@ -49,7 +49,10 @@ ordena: un clic en su encabezado ordena el listado por código.
   por lote, por caducidad o por ambos.
 - Qué lote salió con qué cliente y en qué consignación (*Lote + consignación*).
 - Movimientos del periodo: qué entró, qué salió y de dónde vino cada movimiento
-  (columnas Entradas, Salidas y Saldo, en orden cronológico).
+  (columnas Entradas, Salidas y Saldo). En la vista **Detallado** los
+  movimientos salen ordenados por **fecha, del más antiguo al más reciente**,
+  mezclando productos y bodegas; el saldo de cada fila sigue siendo el saldo
+  corrido de su propio producto y bodega. Lo mismo en el PDF y el Excel.
 - Valor del inventario según el costo registrado.
 - Consignaciones vigentes/entregadas, a nivel de cabecera con detalle por línea.
 - Auditoría: diferencias entre el stock guardado y el saldo real del kardex.
@@ -450,6 +453,9 @@ ahí.
 
 ## Historial de cambios
 
+- **1.26** — **Movimientos (Detallado)**: el listado, el PDF y el Excel se
+  ordenan por **fecha del movimiento, del más antiguo al más reciente**. Antes
+  se agrupaban por producto y bodega y solo dentro de cada uno iban por fecha.
 - **1.25** — **Existencias**: el stock negativo de una fila ahora se puede
   pulsar y abre el **Seguimiento del stock negativo**: los movimientos de
   kardex que componen esa fila, en orden y con saldo corrido, con la fila donde

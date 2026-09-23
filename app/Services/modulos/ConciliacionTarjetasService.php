@@ -130,9 +130,70 @@ class ConciliacionTarjetasService
 
     // ─── Conciliaciones ──────────────────────────────────────────────────────
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro, array $filtros): array
+    /**
+     * @param array    $orden   Criterios de OrdenListado.
+     * @param int|null $perPage null = sin límite (exportaciones).
+     */
+    public function getListado(int $idEmpresa, string $buscar, int $page, ?int $perPage, array $orden, ?int $idUsuarioFiltro, array $filtros): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $filtros);
+        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $idUsuarioFiltro, $filtros);
+    }
+
+    /** Pestaña «Pendientes por depositar»: cobros aún no cruzados, paginados. */
+    public function getListadoPendientes(int $idEmpresa, array $filtros, string $buscar, int $page, ?int $perPage, array $orden, ?int $idUsuarioFiltro): array
+    {
+        return $this->repository->getListadoPendientes($idEmpresa, $filtros, $buscar, $page, $perPage, $orden, $idUsuarioFiltro);
+    }
+
+    /**
+     * Tarjetas de indicadores de la tarjeta de control: lo pendiente por procesadora
+     * (global, sin filtros de fecha) y lo conciliado/comisiones de las conciliaciones
+     * cerradas que cumplen los filtros. Todo se calcula en SQL, no sobre la página.
+     */
+    public function getIndicadores(int $idEmpresa, string $buscar, ?int $idUsuarioFiltro, array $filtros): array
+    {
+        $resumen = $this->repository->getResumenPendientes($idEmpresa, $idUsuarioFiltro);
+        $idForma = (int) ($filtros['id_forma_cobro'] ?? 0);
+        if ($idForma > 0) {
+            $resumen = array_values(array_filter($resumen, static fn($r) => (int) $r['id_forma_cobro'] === $idForma));
+        }
+
+        $totales = $this->repository->getTotalesListado($idEmpresa, $buscar, $idUsuarioFiltro, $filtros);
+
+        return [
+            'por_depositar' => round(array_sum(array_map(static fn($r) => (float) $r['monto'], $resumen)), 2),
+            'cobros'        => array_sum(array_map(static fn($r) => (int) $r['cobros'], $resumen)),
+            'dias_max'      => $resumen ? max(array_map(static fn($r) => (int) $r['dias_max'], $resumen)) : 0,
+            'conciliado'    => round($totales['conciliado'], 2),
+            'comisiones'    => round($totales['comisiones'], 2),
+        ];
+    }
+
+    /**
+     * Estado del asiento de una conciliación para la pestaña «Asiento contable»
+     * (formato que espera `previewUrl` de asiento_contable_tab.js con soloRegistrado):
+     * si ya existe, el componente lo lee de Asientos Contables; si no, se explica por qué.
+     */
+    public function getEstadoAsiento(int $id, int $idEmpresa): array
+    {
+        $cabecera = $this->repository->getCabecera($id, $idEmpresa);
+        if ($cabecera === null) {
+            return ['ok' => false, 'error' => 'La conciliación no existe.'];
+        }
+
+        if (!empty($cabecera['id_asiento_contable']) && $cabecera['estado'] === 'cerrada') {
+            return ['ok' => true, 'es_guardado' => true];
+        }
+
+        $aviso = match ($cabecera['estado']) {
+            'borrador' => 'El asiento del depósito se genera al pulsar «Conciliar y cerrar».',
+            'anulada'  => 'Conciliación anulada: su asiento contable fue revertido.',
+            default    => !empty($cabecera['asiento_omitido_motivo'])
+                ? 'No se generó asiento: ' . $cabecera['asiento_omitido_motivo']
+                : 'Esta conciliación se cerró sin asiento contable.',
+        };
+
+        return ['ok' => true, 'es_guardado' => false, 'aviso' => $aviso];
     }
 
     /**

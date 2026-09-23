@@ -99,13 +99,20 @@ function CTAR_diasEsperados(idFormaCobro) {
 
 // ─── Listado ────────────────────────────────────────────────────────────────
 
+/** Página actual y criterios de orden de cada vista (el orden lo pinta CMG_initSort). */
+const CTAR_pagina = { pendientes: 1, conciliaciones: 1 };
+const CTAR_sorters = {};
+
+const CTAR_ESTADOS = { borrador: 'Borrador', cerrada: 'Cerrada', anulada: 'Anulada' };
+const CTAR_etiquetaEstado = (e) => CTAR_ESTADOS[e] || e || '';
+
 function CTAR_setVista(vista) {
     CTAR_vista = vista;
     document.getElementById('ctar-vista-pendientes').classList.toggle('d-none', vista !== 'pendientes');
     document.getElementById('ctar-vista-conciliaciones').classList.toggle('d-none', vista !== 'conciliaciones');
-    document.getElementById('ctar-tab-pendientes').classList.toggle('active', vista === 'pendientes');
-    document.getElementById('ctar-tab-conciliaciones').classList.toggle('active', vista === 'conciliaciones');
-    CTAR_cargar();
+    // El estado es de la conciliación: en la vista de cobros pendientes no filtra nada.
+    document.getElementById('ctar-estado').disabled = vista === 'pendientes';
+    CTAR_cargar(CTAR_pagina[vista]);
 }
 
 function CTAR_limpiarFiltros() {
@@ -124,68 +131,83 @@ function CTAR_filtrosActuales() {
     };
 }
 
-async function CTAR_cargar() {
-    return CTAR_vista === 'pendientes' ? CTAR_cargarPendientes() : CTAR_cargarConciliaciones();
+/** Criterios de orden de una vista en el formato de OrdenListado (`col:DIR,col:DIR`). */
+function CTAR_ordenParam(vista) {
+    const s = CTAR_sorters[vista];
+    return s ? s.getOrdenParam() : '';
 }
 
-async function CTAR_cargarPendientes() {
-    const f = CTAR_filtrosActuales();
+/** Recarga la vista activa (por defecto desde la página 1) y los indicadores. */
+async function CTAR_cargar(page = 1) {
+    CTAR_cargarIndicadores();
+    return CTAR_vista === 'pendientes' ? CTAR_cargarPendientes(page) : CTAR_cargarConciliaciones(page);
+}
+
+/** Texto «desde-hasta/total» y botones anterior/siguiente de una vista. */
+function CTAR_pintarPaginacion(vista, datos, sufijo = '') {
+    const total   = parseInt(datos.total, 10) || 0;
+    const page    = parseInt(datos.page, 10) || 1;
+    const porPag  = parseInt(datos.per_page, 10) || 50;
+    const paginas = Math.max(1, Math.ceil(total / porPag));
+    const desde   = total ? (page - 1) * porPag + 1 : 0;
+    const hasta   = Math.min(page * porPag, total);
+
+    document.getElementById(`ctar-info-${vista}`).textContent = `${desde}-${hasta}/${total}${sufijo}`;
+
+    const cont = document.getElementById(`ctar-pag-${vista}`);
+    const prev = cont.querySelector('[data-pag="prev"]');
+    const next = cont.querySelector('[data-pag="next"]');
+    prev.disabled = page <= 1;
+    next.disabled = page >= paginas;
+    prev.onclick = () => (vista === 'pendientes' ? CTAR_cargarPendientes(page - 1) : CTAR_cargarConciliaciones(page - 1));
+    next.onclick = () => (vista === 'pendientes' ? CTAR_cargarPendientes(page + 1) : CTAR_cargarConciliaciones(page + 1));
+}
+
+async function CTAR_cargarPendientes(page = 1) {
     const tbody = document.getElementById('ctar-tbody-pendientes');
-
-    if (!f.id_forma_cobro) {
-        // Sin procesadora elegida solo se muestran los indicadores globales.
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">
-            <i class="bi bi-credit-card-2-front fs-3 d-block mb-2 text-primary opacity-50"></i>
-            Elija una procesadora en los filtros para ver sus cobros pendientes de depósito.
-        </td></tr>`;
-        document.getElementById('ctar-count-label').textContent = '';
-        CTAR_actualizarKpisGlobales();
-        return;
-    }
-
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Cargando…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Cargando…</td></tr>';
 
     try {
-        const datos = await CTAR_api(`pendientesAjax?${new URLSearchParams(f)}`);
-        const limite = CTAR_diasEsperados(f.id_forma_cobro);
+        const params = new URLSearchParams({ ...CTAR_filtrosActuales(), page, orden: CTAR_ordenParam('pendientes') });
+        const datos = await CTAR_api(`pendientesAjax?${params}`);
+        const filas = datos.data || [];
+        CTAR_pagina.pendientes = datos.page;
 
-        if (!datos.length) {
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">
+        if (!filas.length) {
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted">
                 <i class="bi bi-check2-circle fs-3 d-block mb-2 text-success opacity-50"></i>
-                No hay cobros pendientes de depósito para esta procesadora.
+                No hay cobros con tarjeta pendientes de depósito con esos filtros.
             </td></tr>`;
         } else {
-            tbody.innerHTML = datos.map((c) => `
+            tbody.innerHTML = filas.map((c) => `
                 <tr>
-                    <td class="ps-3">${CTAR_fecha(c.fecha_emision)}</td>
-                    <td class="fw-medium">${CTAR_esc(c.documentos || '—')}</td>
-                    <td>${CTAR_esc(c.cliente_nombre || '—')}</td>
-                    <td class="text-muted small">${CTAR_esc(c.numero_ingreso || '')}</td>
-                    <td class="small">${CTAR_esc(c.autorizacion || c.referencia || '—')}</td>
-                    <td class="text-end fw-bold">$${CTAR_num(c.monto)}</td>
-                    <td class="text-center">${CTAR_badgeDias(c.dias_transcurridos, limite)}</td>
+                    <td class="ps-3" data-col="ct_fecha">${CTAR_fecha(c.fecha_emision)}</td>
+                    <td data-col="ct_procesadora">${CTAR_esc(c.procesadora_nombre || '')}</td>
+                    <td class="fw-medium" data-col="ct_documento">${CTAR_esc(c.documentos || '—')}</td>
+                    <td data-col="ct_cliente">${CTAR_esc(c.cliente_nombre || '—')}</td>
+                    <td class="text-muted small" data-col="ct_ingreso">${CTAR_esc(c.numero_ingreso || '')}</td>
+                    <td class="small" data-col="ct_autorizacion">${CTAR_esc(c.autorizacion || c.referencia || '—')}</td>
+                    <td class="text-end fw-bold" data-col="ct_monto">$${CTAR_num(c.monto)}</td>
+                    <td class="text-center pe-3" data-col="ct_dias">${CTAR_badgeDias(c.dias_transcurridos, CTAR_diasEsperados(c.id_forma_cobro))}</td>
                 </tr>`).join('');
         }
 
-        const total = datos.reduce((s, c) => s + (parseFloat(c.monto) || 0), 0);
-        document.getElementById('ctar-count-label').textContent =
-            `${datos.length} cobros · $${CTAR_num(total)}`;
-        document.getElementById('ctar-badge-pendientes').textContent = datos.length;
-
-        CTAR_actualizarKpisGlobales();
+        CTAR_pintarPaginacion('pendientes', datos, ` · $${CTAR_num(datos.total_monto)}`);
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger">${CTAR_esc(e.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">${CTAR_esc(e.message)}</td></tr>`;
     }
+    if (CTAR_sorters.pendientes) CTAR_sorters.pendientes.refreshIcons();
 }
 
-async function CTAR_cargarConciliaciones() {
-    const f = CTAR_filtrosActuales();
+async function CTAR_cargarConciliaciones(page = 1) {
     const tbody = document.getElementById('ctar-tbody');
     tbody.innerHTML = '<tr><td colspan="12" class="text-center py-4 text-muted">Cargando…</td></tr>';
 
     try {
-        const datos = await CTAR_api(`listarAjax?${new URLSearchParams({ ...f, per_page: 100 })}`);
+        const params = new URLSearchParams({ ...CTAR_filtrosActuales(), page, orden: CTAR_ordenParam('conciliaciones') });
+        const datos = await CTAR_api(`listarAjax?${params}`);
         const filas = datos.data || [];
+        CTAR_pagina.conciliaciones = datos.page;
 
         if (!filas.length) {
             tbody.innerHTML = `<tr><td colspan="12" class="text-center py-5 text-muted">
@@ -200,20 +222,20 @@ async function CTAR_cargarConciliaciones() {
                     ? '<i class="bi bi-check-circle-fill text-success" title="Asiento generado"></i>'
                     : `<i class="bi bi-dash-circle text-muted" title="${CTAR_esc(c.asiento_omitido_motivo || 'Sin asiento')}"></i>`;
 
-                return `<tr>
-                    <td class="ps-3 fw-bold">${CTAR_esc(c.numero)}</td>
-                    <td>${CTAR_fecha(c.fecha_conciliacion)}</td>
-                    <td>${CTAR_esc(c.procesadora_nombre || '')}</td>
-                    <td>${CTAR_esc(c.destino_nombre || '—')}</td>
-                    <td class="text-center">${c.cobros_cruzados || 0}</td>
-                    <td class="text-end">$${CTAR_num(c.total_bruto_cruzado)}</td>
-                    <td class="text-end text-secondary">$${CTAR_num(comision)}</td>
-                    <td class="text-end text-secondary">$${CTAR_num(retenciones)}</td>
-                    <td class="text-end fw-bold text-primary">$${CTAR_num(c.total_neto)}</td>
-                    <td class="text-center"><span class="badge ctar-estado-${CTAR_esc(c.estado)}">${CTAR_esc(c.estado)}</span></td>
-                    <td class="text-center">${asiento}</td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-outline-primary py-0 px-1" onclick="CTAR_abrir(${c.id})" title="Abrir">
+                return `<tr role="button" onclick="CTAR_abrir(${c.id})">
+                    <td class="ps-3 fw-bold" data-col="c_numero">${CTAR_esc(c.numero)}</td>
+                    <td data-col="c_fecha">${CTAR_fecha(c.fecha_conciliacion)}</td>
+                    <td data-col="c_procesadora">${CTAR_esc(c.procesadora_nombre || '')}</td>
+                    <td data-col="c_destino">${CTAR_esc(c.destino_nombre || '—')}</td>
+                    <td class="text-center" data-col="c_cobros">${c.cobros_cruzados || 0}</td>
+                    <td class="text-end" data-col="c_bruto">$${CTAR_num(c.total_bruto_cruzado)}</td>
+                    <td class="text-end text-secondary" data-col="c_comision">$${CTAR_num(comision)}</td>
+                    <td class="text-end text-secondary" data-col="c_retenciones">$${CTAR_num(retenciones)}</td>
+                    <td class="text-end fw-bold text-primary" data-col="c_neto">$${CTAR_num(c.total_neto)}</td>
+                    <td class="text-center" data-col="c_estado"><span class="badge ctar-estado-${CTAR_esc(c.estado)}">${CTAR_esc(CTAR_etiquetaEstado(c.estado))}</span></td>
+                    <td class="text-center" data-col="c_asiento">${asiento}</td>
+                    <td class="text-center pe-3" data-col="c_acciones">
+                        <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="event.stopPropagation(); CTAR_abrir(${c.id})" title="Abrir">
                             <i class="bi bi-box-arrow-in-right"></i>
                         </button>
                     </td>
@@ -221,43 +243,58 @@ async function CTAR_cargarConciliaciones() {
             }).join('');
         }
 
-        document.getElementById('ctar-count-label').textContent = `${datos.total} conciliaciones`;
-        CTAR_pintarKpis(datos.resumen || [], filas);
+        CTAR_pintarPaginacion('conciliaciones', datos);
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-danger">${CTAR_esc(e.message)}</td></tr>`;
     }
+    if (CTAR_sorters.conciliaciones) CTAR_sorters.conciliaciones.refreshIcons();
 }
 
-async function CTAR_actualizarKpisGlobales() {
+/** Indicadores de la tarjeta de control: los calcula el servidor sobre todo el filtro. */
+async function CTAR_cargarIndicadores() {
     try {
-        const datos = await CTAR_api(`listarAjax?${new URLSearchParams({ ...CTAR_filtrosActuales(), per_page: 100 })}`);
-        CTAR_pintarKpis(datos.resumen || [], datos.data || []);
-    } catch (e) { /* los KPI son informativos: si fallan, la tabla ya mostró el error */ }
+        const k = await CTAR_api(`indicadoresAjax?${new URLSearchParams(CTAR_filtrosActuales())}`);
+        document.getElementById('ctar-stat-pendiente').textContent  = CTAR_num(k.por_depositar);
+        document.getElementById('ctar-stat-cobros').textContent     = k.cobros;
+        document.getElementById('ctar-stat-dias').textContent       = k.dias_max;
+        document.getElementById('ctar-stat-conciliado').textContent = CTAR_num(k.conciliado);
+        document.getElementById('ctar-stat-comision').textContent   = CTAR_num(k.comisiones);
+        document.querySelectorAll('.ctar-badge-pendientes').forEach((b) => { b.textContent = k.cobros; });
+    } catch (e) { /* los indicadores son informativos: si fallan, la tabla ya muestra su propio error */ }
 }
 
-function CTAR_pintarKpis(resumen, conciliaciones) {
-    const idForma = document.getElementById('ctar-procesadora').value;
-    const filtrado = idForma
-        ? resumen.filter((r) => String(r.id_forma_cobro) === String(idForma))
-        : resumen;
+/** Orden por columnas (§9): clic ordena, Shift+clic encadena hasta 3 columnas. */
+function CTAR_initOrden() {
+    if (typeof window.CMG_initSort !== 'function') return;
+    [['pendientes', '#tabla-ctar-pendientes', CTAR_cargarPendientes],
+     ['conciliaciones', '#tabla-ctar', CTAR_cargarConciliaciones]].forEach(([vista, tabla, cargar]) => {
+        CTAR_sorters[vista] = window.CMG_initSort(CTAR_ORDEN[vista].modulo, () => cargar(1), {
+            sorts: CTAR_ORDEN[vista].sorts,
+            multi: true,
+            container: tabla,
+        });
+    });
+}
 
-    const monto  = filtrado.reduce((s, r) => s + (parseFloat(r.monto) || 0), 0);
-    const cobros = filtrado.reduce((s, r) => s + (parseInt(r.cobros, 10) || 0), 0);
-    const dias   = filtrado.reduce((m, r) => Math.max(m, parseInt(r.dias_max, 10) || 0), 0);
-
-    const conciliado = conciliaciones
-        .filter((c) => c.estado === 'cerrada')
-        .reduce((s, c) => s + (parseFloat(c.total_neto) || 0), 0);
-    const comisiones = conciliaciones
-        .filter((c) => c.estado === 'cerrada')
-        .reduce((s, c) => s + (parseFloat(c.total_comision) || 0) + (parseFloat(c.total_iva_comision) || 0), 0);
-
-    document.getElementById('ctar-stat-pendiente').textContent  = CTAR_num(monto);
-    document.getElementById('ctar-stat-cobros').textContent     = cobros;
-    document.getElementById('ctar-stat-dias').textContent       = dias;
-    document.getElementById('ctar-stat-conciliado').textContent = CTAR_num(conciliado);
-    document.getElementById('ctar-stat-comision').textContent   = CTAR_num(comisiones);
-    document.getElementById('ctar-badge-pendientes').textContent = cobros;
+/**
+ * Columnas visibles: cada tabla tiene su propio menú (y su propio módulo de
+ * preferencias), pero favoritos.js reescribe la hoja #estiloVistaColumnas solo con
+ * las columnas del menú que se tocó; sin esto, ocultar una columna de una tabla
+ * volvía a mostrar las ocultas de la otra hasta recargar.
+ */
+function CTAR_initColumnas() {
+    document.querySelectorAll('#modulo-conciliacion-tarjetas .toggle-columna-vista').forEach((chk) => {
+        chk.addEventListener('change', () => {
+            const ocultas = Array.from(document.querySelectorAll('#modulo-conciliacion-tarjetas .toggle-columna-vista:not(:checked)'))
+                .map((c) => c.value);
+            const style = document.getElementById('estiloVistaColumnas');
+            if (style) {
+                style.innerHTML = ocultas
+                    .map((oc) => `th[data-col="${oc}"], td[data-col="${oc}"] { display: none !important; }`)
+                    .join('\n');
+            }
+        });
+    });
 }
 
 // ─── Modal de conciliación ──────────────────────────────────────────────────
@@ -304,7 +341,7 @@ function CTAR_nueva() {
         '<tr><td colspan="4" class="text-center py-4 text-muted small">—</td></tr>';
 
     CTAR_habilitarAcciones(false, true);
-    new bootstrap.Modal(document.getElementById('modalConciliacion')).show();
+    CTAR_mostrarModal();
 }
 
 async function CTAR_abrir(id) {
@@ -312,11 +349,48 @@ async function CTAR_abrir(id) {
         CTAR_detalle = await CTAR_api(`detalleAjax?id=${id}`);
         CTAR_lineaSel = null;
         CTAR_pintarModal();
-        new bootstrap.Modal(document.getElementById('modalConciliacion')).show();
+        CTAR_mostrarModal();
     } catch (e) {
         CTAR_aviso('error', 'No se pudo abrir', e.message);
     }
 }
+
+/** Abre el modal siempre en la pestaña «Conciliación» (una sola instancia de Bootstrap). */
+function CTAR_mostrarModal() {
+    const btnCruce = document.getElementById('ctar-tab-cruce-btn');
+    if (btnCruce) bootstrap.Tab.getOrCreateInstance(btnCruce).show();
+    if (CTAR_asientoTab) CTAR_asientoTab.limpiar();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConciliacion')).show();
+}
+
+// ─── Pestaña «Asiento contable» ─────────────────────────────────────────────
+// Componente compartido (public/js/modulos/asiento_contable_tab.js). Solo muestra el
+// asiento YA generado al cerrar la conciliación; si no hay, estadoAsientoAjax explica
+// por qué. La pestaña existe solo con acceso a Contabilidad → Asientos Contables.
+let CTAR_asientoTab = null;
+
+function CTAR_getAsientoTab() {
+    if (!document.getElementById('ctar-asiento-tbody')) return null;
+    if (!CTAR_asientoTab && typeof window.crearAsientoTab === 'function') {
+        CTAR_asientoTab = window.crearAsientoTab({
+            prefijo: 'ctar',
+            moduloOrigen: 'conciliacion_tarjetas',
+            soloRegistrado: true,
+            previewUrl: `${CTAR_URL}/estadoAsientoAjax`,
+            cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+            asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`,
+        });
+    }
+    return CTAR_asientoTab;
+}
+
+function CTAR_cargarAsiento() {
+    const tab = CTAR_getAsientoTab();
+    if (tab) tab.cargar(document.getElementById('ctar-m-id').value || 0);
+}
+
+/** ¿Está visible la pestaña del asiento? (para refrescarla tras cerrar o anular). */
+const CTAR_asientoVisible = () => !!document.querySelector('#ctar-pane-asiento.active');
 
 async function CTAR_refrescarDetalle() {
     const id = document.getElementById('ctar-m-id').value;
@@ -334,9 +408,8 @@ function CTAR_pintarModal() {
     document.getElementById('ctar-m-titulo').textContent = `Conciliación ${cab.numero}`;
 
     const badge = document.getElementById('ctar-m-estado');
-    badge.className = `badge ctar-estado-${cab.estado}`;
-    badge.textContent = cab.estado;
-    badge.classList.remove('d-none');
+    badge.className = `badge ms-2 ctar-estado-${cab.estado}`;
+    badge.textContent = CTAR_etiquetaEstado(cab.estado);
 
     document.getElementById('ctar-m-procesadora').innerHTML = CTAR_opcionesProcesadoras(cab.id_forma_cobro);
     document.getElementById('ctar-m-procesadora').disabled = true;   // no se cambia una vez creada
@@ -354,10 +427,14 @@ function CTAR_pintarModal() {
     CTAR_pintarTotales();
     CTAR_pintarAvisoContable();
     CTAR_habilitarAcciones(editable, false);
+
+    // Tras cerrar o anular con la pestaña del asiento a la vista, mostrar el asiento nuevo.
+    if (CTAR_asientoVisible()) CTAR_cargarAsiento();
 }
 
 function CTAR_habilitarAcciones(editable, esNueva) {
-    const mostrar = (id, visible) => document.getElementById(id).classList.toggle('d-none', !visible);
+    // Eliminar solo existe en el DOM con permiso de eliminar (lo decide la vista).
+    const mostrar = (id, visible) => document.getElementById(id)?.classList.toggle('d-none', !visible);
 
     ['ctar-btn-cargar', 'ctar-btn-linea', 'ctar-btn-sugerir'].forEach((id) => {
         document.getElementById(id).disabled = esNueva || !editable;
@@ -689,7 +766,7 @@ async function CTAR_abrirCargaArchivo() {
         : '<option value="">— No hay perfiles configurados —</option>';
 
     document.getElementById('ctar-carga-archivo').value = '';
-    new bootstrap.Modal(document.getElementById('modalCargaEstado')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCargaEstado')).show();
 }
 
 async function CTAR_importar() {
@@ -740,7 +817,7 @@ function CTAR_limpiarFormLinea() {
 function CTAR_agregarLineaManual() {
     CTAR_limpiarFormLinea();
     document.getElementById('ctar-linea-titulo').textContent = 'Nueva línea del estado de cuenta';
-    new bootstrap.Modal(document.getElementById('modalLineaTarjeta')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLineaTarjeta')).show();
 }
 
 function CTAR_editarLinea(id) {
@@ -763,7 +840,7 @@ function CTAR_editarLinea(id) {
     document.getElementById('ctar-linea-otros').value = l.otros_descuentos;
     CTAR_recalcularNetoLinea();
 
-    new bootstrap.Modal(document.getElementById('modalLineaTarjeta')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLineaTarjeta')).show();
 }
 
 function CTAR_recalcularNetoLinea() {
@@ -837,7 +914,7 @@ function CTAR_abrirConfig() {
     CTAR_cargarPerfiles();
     CTAR_cancelarPerfil();
 
-    new bootstrap.Modal(document.getElementById('modalConfigTarjetas')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfigTarjetas')).show();
 }
 
 async function CTAR_cargarConfig() {
@@ -1150,14 +1227,17 @@ document.addEventListener('keydown', (ev) => {
 
 // ─── Exportación ────────────────────────────────────────────────────────────
 
+/** Mismos filtros y mismo orden que la vista en pantalla. */
+function CTAR_paramsExportacion() {
+    return new URLSearchParams({ ...CTAR_filtrosActuales(), vista: CTAR_vista, orden: CTAR_ordenParam(CTAR_vista) });
+}
+
 function CTAR_exportarPDF() {
-    const params = new URLSearchParams({ ...CTAR_filtrosActuales(), vista: CTAR_vista });
-    window.open(`${CTAR_URL}/exportarPdf?${params}`, '_blank');
+    window.open(`${CTAR_URL}/exportarPdf?${CTAR_paramsExportacion()}`, '_blank');
 }
 
 function CTAR_exportarExcel() {
-    const params = new URLSearchParams({ ...CTAR_filtrosActuales(), vista: CTAR_vista });
-    window.open(`${CTAR_URL}/exportarExcel?${params}`, '_blank');
+    window.open(`${CTAR_URL}/exportarExcel?${CTAR_paramsExportacion()}`, '_blank');
 }
 
 function CTAR_pdfConciliacion() {
@@ -1175,5 +1255,9 @@ function CTAR_excelConciliacion() {
 // ─── Arranque ───────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+    CTAR_initOrden();
+    CTAR_initColumnas();
+    document.getElementById('ctar-estado').disabled = CTAR_vista === 'pendientes';
+    document.getElementById('ctar-tab-asiento-btn')?.addEventListener('shown.bs.tab', CTAR_cargarAsiento);
     CTAR_cargar();
 });
