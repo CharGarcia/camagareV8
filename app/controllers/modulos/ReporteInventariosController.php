@@ -260,6 +260,7 @@ class ReporteInventariosController extends BaseModuloController
             'id_categoria' => $filtros['id_categoria'] ?? '',
             'id_marca'     => $filtros['id_marca']     ?? '',
             'id_producto'  => $filtros['id_producto']  ?? '',
+            'buscar'       => $filtros['buscar']       ?? '',
             'numero_lote'  => $filtros['numero_lote']  ?? '',
             'nup'          => $filtros['nup']          ?? '',
             'fecha_caducidad_desde' => $filtros['fecha_caducidad_desde'] ?? '',

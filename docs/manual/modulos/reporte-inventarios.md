@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote
-version: 1.26
+etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte
+version: 1.27
 orden: 40
 estado: activo
 ---
@@ -71,8 +71,11 @@ siempre el mismo total; lo que cambia es en cuántas filas se reparte:
 | **Lote + caducidad** | cada combinación de lote, NUP y caducidad | El máximo detalle, para cuadrar un lote concreto. |
 | **Lote + consignación** | cada lote/NUP **entregado en consignación** | Con qué cliente y con qué documento salió cada lote. Ver abajo. |
 
-Mientras el Detalle no esté en *En general*, el selector **Agrupar por** queda
-desactivado: el desglose ya define las filas por sí solo.
+Mientras el Detalle no esté en *En general*, los selectores **Agrupar por** y
+**Estado** quedan desactivados: el desglose ya define las filas por sí solo, y
+el estado (quiebre, bajo mínimo, sobre máximo) se mide contra el mínimo y el
+máximo del producto en la bodega, que no existen por lote ni por caducidad. El
+selector **Consignado** sí aplica en los desgloses.
 
 La columna **Consignación** acompaña al desglose elegido: si la fila no
 distingue caducidad, lo consignado tampoco, de modo que el stock propio y lo
@@ -94,6 +97,28 @@ ya agotado, está la pestaña **Movimientos**, filtrando por ese lote.
 > bodega y "sin stock" (estado **QUIEBRE**) es justamente lo que se quiere ver.
 > Y si una fila del desglose muestra un total **negativo**, se sigue mostrando:
 > es una inconsistencia que hay que revisar en la pestaña *Auditoría*.
+
+## Qué filtros aplican en Existencias
+
+| Filtro | En general (detallado o agrupado) | Por lotes / caducidad / lote + caducidad | Lote + consignación |
+|---|---|---|---|
+| Bodega, Categoría, Marca, Producto | Sí | Sí | Sí |
+| Lote, NUP, Caducidad desde/hasta | Sí | Sí | Sí |
+| Estado | Sí | No (desactivado) | No (desactivado) |
+| Consignado | Sí | Sí | Sí (por saldo) |
+| Saldo a fecha | Sí | Sí | Sí (consignaciones emitidas hasta ese día) |
+
+En los agrupados (*Por Producto*, *Por Categoría*, *Por Bodega*), **Estado** y
+**Consignado** se evalúan en cada producto y bodega **antes** de sumar: el grupo
+suma solo los que cumplen.
+
+**Producto**: lo normal es elegirlo de la lista que aparece al escribir. Si se
+escribe y se pulsa **Mostrar** sin elegirlo, el texto igual filtra, por nombre
+o código que lo contenga. Al volver a escribir en el campo se descarta el
+producto elegido antes.
+
+**Saldo a fecha** incluye **todo el día** elegido: los movimientos de esa fecha
+cuentan, sea cual sea su hora.
 
 ## Lote + consignación: qué lote tiene cada cliente
 
@@ -453,6 +478,15 @@ ahí.
 
 ## Historial de cambios
 
+- **1.27** — **Existencias: filtros que no se aplicaban**. *Estado* no filtraba
+  en los agrupados (Por Producto / Categoría / Bodega). *Consignado* no filtraba
+  en *Por lotes*, *Por caducidad* ni *Lote + caducidad*, y *Estado* seguía
+  activo en esos desgloses sin hacer nada; ahora queda desactivado. El producto
+  escrito sin elegirlo de la lista se descartaba; ahora filtra por nombre o
+  código, también en el PDF y el Excel. Al reescribir el producto ya no se
+  queda puesto el elegido antes. *Saldo a fecha* dejaba fuera los movimientos
+  del mismo día; ahora cuenta el día completo. Se añadió la sección *Qué
+  filtros aplican en Existencias*.
 - **1.26** — **Movimientos (Detallado)**: el listado, el PDF y el Excel se
   ordenan por **fecha del movimiento, del más antiguo al más reciente**. Antes
   se agrupaban por producto y bodega y solo dentro de cada uno iban por fecha.

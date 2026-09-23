@@ -28,6 +28,14 @@ function RI_setupAutocomplete(searchId, dropdownId, hiddenId, selectedLabelId, a
 
     search.addEventListener('input', function () {
         clearTimeout(timer);
+        // Escribir invalida la selección anterior: si no, el hidden seguía con el id del
+        // producto elegido antes y Mostrar filtraba por ese aunque el texto dijera otro.
+        const hidden = document.getElementById(hiddenId);
+        if (hidden) hidden.value = '';
+        if (selectedLabelId) {
+            const lbl = document.getElementById(selectedLabelId);
+            if (lbl) lbl.textContent = '';
+        }
         const q = this.value.trim();
         if (q.length < 2) { dropdown.classList.add('d-none'); return; }
 
@@ -422,14 +430,15 @@ window.RI_Existencias = {
         agrupar.disabled = desglose !== 'GENERAL';
         if (agrupar.disabled) agrupar.value = 'NINGUNO';
 
-        // En "Lote + consignación" la fila es una línea de consignación, no un par
-        // producto×bodega: el estado de stock (quiebre, bajo mínimo…) no significa nada ahí.
+        // El estado de stock (quiebre, bajo mínimo…) se mide contra el mínimo/máximo del
+        // producto en la bodega: solo tiene sentido en "En general". En los desgloses la
+        // fila es un lote/caducidad o una entrega, y el filtro no se aplicaba.
         const estado = document.getElementById('ri-ex-estado');
         if (estado) {
-            estado.disabled = desglose === RI_DESGLOSE_CONSIGNACION;
+            estado.disabled = desglose !== 'GENERAL';
             if (estado.disabled) estado.value = '';
             estado.title = estado.disabled
-                ? 'No aplica en "Lote + consignación": cada fila es una entrega, no el stock de un producto.'
+                ? 'Solo aplica con Detalle "En general": el mínimo y el máximo son del producto en la bodega, no de un lote.'
                 : '';
         }
     },
@@ -646,10 +655,12 @@ window.RI_Existencias = {
         }
     },
 
-    generar() {
-        const modo = this.modoActual();
-        this.dibujarCabecera(modo);
-
+    /**
+     * Filtros del formulario, iguales para Mostrar, PDF y Excel. Si el usuario escribió un
+     * producto pero no lo eligió de la lista, el texto viaja como "buscar" (nombre o código):
+     * antes se descartaba y la tabla salía sin filtrar por producto.
+     */
+    _filtros() {
         const params = RI_paramsFromIds({
             id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
             id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', consignado: 'ri-ex-consignado', agrupar_por: 'ri-ex-agrupar',
@@ -658,6 +669,16 @@ window.RI_Existencias = {
             numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
             fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
         });
+        const texto = (document.getElementById('ri-ex-search-producto')?.value || '').trim();
+        if (!params.get('id_producto') && texto !== '') params.set('buscar', texto);
+        return params;
+    },
+
+    generar() {
+        const modo = this.modoActual();
+        this.dibujarCabecera(modo);
+
+        const params = this._filtros();
         if (modo === 'NINGUNO' && this.orden) {
             params.set('orden', this.orden);
             params.set('dir', this.dir);
@@ -676,26 +697,12 @@ window.RI_Existencias = {
     },
 
     exportarExcel() {
-        const params = RI_paramsFromIds({
-            id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
-            id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', consignado: 'ri-ex-consignado', agrupar_por: 'ri-ex-agrupar',
-            desglose: 'ri-ex-desglose',
-            fecha_corte: 'ri-ex-fecha-corte',
-            numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
-            fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
-        });
+        const params = this._filtros();
         params.set('tab', 'existencias');
         window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params.toString(), '_blank');
     },
     exportarPDF() {
-        const params = RI_paramsFromIds({
-            id_bodega: 'ri-ex-bodega', id_categoria: 'ri-ex-categoria', id_marca: 'ri-ex-marca',
-            id_producto: 'ri-ex-id-producto', estado_stock: 'ri-ex-estado', consignado: 'ri-ex-consignado', agrupar_por: 'ri-ex-agrupar',
-            desglose: 'ri-ex-desglose',
-            fecha_corte: 'ri-ex-fecha-corte',
-            numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
-            fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
-        });
+        const params = this._filtros();
         params.set('tab', 'existencias');
         window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params.toString(), '_blank');
     },

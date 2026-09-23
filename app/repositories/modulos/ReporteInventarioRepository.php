@@ -234,8 +234,8 @@ class ReporteInventarioRepository extends BaseRepository
      */
     private function baseExistencias(string $where, array $filtros, bool $conFechaCorte = false): string
     {
-        $condCorteKardex = $conFechaCorte ? " AND fecha_movimiento <= :fecha_corte" : "";
-        $condCorteCv     = $conFechaCorte ? " AND cv.fecha_emision <= :fecha_corte" : "";
+        $condCorteKardex = $conFechaCorte ? " AND fecha_movimiento < CAST(:fecha_corte AS date) + 1" : "";
+        $condCorteCv     = $conFechaCorte ? " AND cv.fecha_emision < CAST(:fecha_corte AS date) + 1" : "";
         [$condPrevias, $condPreviasCvd] = $this->condicionesExistenciasAntesDeAgregar($filtros);
 
         return "
@@ -348,12 +348,19 @@ class ReporteInventarioRepository extends BaseRepository
         }
         $base = $this->wrapValorYEstado($this->baseExistencias($where, $filtros, $conFechaCorte));
 
-        $whereConsignado = '';
-        if (($filtros['consignado'] ?? '') === 'CON') {
-            $whereConsignado = ' WHERE consignado > 0';
-        } elseif (($filtros['consignado'] ?? '') === 'SIN') {
-            $whereConsignado = ' WHERE consignado = 0';
+        // Estado y Consignado se evalúan por producto×bodega ANTES de agrupar, igual que en
+        // el detallado: el grupo suma solo los pares que cumplen.
+        $condiciones = [];
+        if (!empty($filtros['estado_stock'])) {
+            $condiciones[] = 'estado_stock = :estado_stock';
+            $params[':estado_stock'] = $filtros['estado_stock'];
         }
+        if (($filtros['consignado'] ?? '') === 'CON') {
+            $condiciones[] = 'consignado > 0';
+        } elseif (($filtros['consignado'] ?? '') === 'SIN') {
+            $condiciones[] = 'consignado = 0';
+        }
+        $whereConsignado = $condiciones ? ' WHERE ' . implode(' AND ', $condiciones) : '';
 
         $selCodigo = $campoCodigo !== null ? "MAX({$campoCodigo}) AS codigo_grupo," : '';
 
@@ -442,7 +449,7 @@ class ReporteInventarioRepository extends BaseRepository
             $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
         }
         if (!empty($filtros['fecha_corte'])) {
-            $where .= " AND k.fecha_movimiento <= :fecha_corte";
+            $where .= " AND k.fecha_movimiento < CAST(:fecha_corte AS date) + 1";
             $params[':fecha_corte'] = $filtros['fecha_corte'];
         }
 
@@ -482,6 +489,16 @@ class ReporteInventarioRepository extends BaseRepository
      * @param string   $desglose LOTE | CADUCIDAD | LOTE_CADUCIDAD
      * @param int|null $limite   tope de filas para pantalla; null = sin tope (exportaciones).
      */
+    /** Filtro "Consignado" (CON / SIN) sobre las filas del desglose por lote/caducidad. */
+    private static function condConsignadoDesglose(array $filtros): string
+    {
+        return match ($filtros['consignado'] ?? '') {
+            'CON'   => ' AND t.consignado > 0',
+            'SIN'   => ' AND t.consignado = 0',
+            default => '',
+        };
+    }
+
     public function getExistenciasPorDesglose(int $idEmpresa, array $filtros, string $desglose, ?int $limite = null): array
     {
         $conLote = in_array($desglose, ['LOTE', 'LOTE_CADUCIDAD'], true);
@@ -489,7 +506,7 @@ class ReporteInventarioRepository extends BaseRepository
         $conNup  = $desglose === 'LOTE_CADUCIDAD';
 
         list($where, $params) = $this->buildWhereExistenciasKardex($idEmpresa, $filtros);
-        $condCorteCv = !empty($filtros['fecha_corte']) ? " AND cv.fecha_emision <= :fecha_corte" : "";
+        $condCorteCv = !empty($filtros['fecha_corte']) ? " AND cv.fecha_emision < CAST(:fecha_corte AS date) + 1" : "";
 
         // Las columnas que no forman parte del grupo viajan en NULL: la fila no puede
         // afirmar un lote/NUP/caducidad concretos cuando está sumando varios.
@@ -560,7 +577,7 @@ class ReporteInventarioRepository extends BaseRepository
                     GROUP BY k.id_empresa, k.id_producto, k.id_bodega{$groupExtra},
                              p.codigo, p.nombre, cat.nombre, mar.nombre, b.nombre
                 ) t
-                WHERE (t.stock_actual + t.consignado) <> 0
+                WHERE (t.stock_actual + t.consignado) <> 0" . self::condConsignadoDesglose($filtros) . "
                 ORDER BY {$orden}";
         if ($limite !== null) {
             $sql .= ' LIMIT ' . ((int) $limite + 1);
@@ -683,7 +700,7 @@ class ReporteInventarioRepository extends BaseRepository
         // periodo, sus saldos no se pueden comparar y la comparación es justo lo que sirve.
         $condCorte = '';
         if ($fechaCorte !== '') {
-            $condCorte = ' AND k.fecha_movimiento <= :fecha_corte';
+            $condCorte = ' AND k.fecha_movimiento < CAST(:fecha_corte AS date) + 1';
             $params[':fecha_corte'] = $fechaCorte;
         }
 
@@ -1314,6 +1331,15 @@ class ReporteInventarioRepository extends BaseRepository
             $where .= " AND cvd.id_producto IN (SELECT id FROM productos WHERE id_empresa = :id_empresa_mar AND id_marca = :id_marca)";
             $params[':id_empresa_mar'] = $idEmpresa;
             $params[':id_marca']       = (int) $filtros['id_marca'];
+        }
+        // Texto de producto escrito sin elegirlo de la lista: solo llega desde el desglose
+        // "Lote + consignación" de Existencias. Subconsulta, por lo mismo que categoría/marca.
+        if (!empty($filtros['buscar'])) {
+            $where .= " AND cvd.id_producto IN (SELECT id FROM productos WHERE id_empresa = :id_empresa_bus
+                            AND (nombre ILIKE :buscar_nombre OR codigo ILIKE :buscar_codigo))";
+            $params[':id_empresa_bus'] = $idEmpresa;
+            $params[':buscar_nombre']  = '%' . $filtros['buscar'] . '%';
+            $params[':buscar_codigo']  = '%' . $filtros['buscar'] . '%';
         }
         if (!empty($filtros['secuencial'])) {
             // Acepta buscar solo por el secuencial ("000000113") o por el número completo
