@@ -54,15 +54,15 @@ ese largo en lugar de rechazar el registro.
 Al terminar de escribir una cédula (10 dígitos) o un RUC (13 dígitos), el
 sistema comprueba su **dígito verificador**, el cálculo que tienen todas las
 cédulas y RUC ecuatorianos. Si no cuadra, aparece debajo de *Identificación* un
-**aviso en color ámbar**: «La cédula no supera el dígito verificador. Revise que
-esté bien digitada».
+**aviso en color ámbar**: «Cédula incorrecta, revisar.» (en un RUC: «RUC
+incorrecto, revisar.»).
 
 - Es **solo un aviso**: **no impide guardar**. Existen cédulas y RUC reales que
   no cumplen ese cálculo, así que la decisión es suya.
 - Si el SRI **encuentra** el número, el aviso **desaparece solo**: el número
   existe aunque no cumpla el cálculo.
-- Si el SRI responde **No encontrado**, el aviso se refuerza («el SRI no encontró
-  este número: es probable que esté mal»). Casi siempre es un dígito cambiado:
+- Si el SRI responde **No encontrado**, se añade «El SRI no encontró este
+  número.». Casi siempre es un dígito cambiado:
   corríjalo antes de guardar el proveedor.
 - Pasaporte, consumidor final e identificación del exterior no tienen este
   cálculo y no muestran aviso.
@@ -406,7 +406,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Errores frecuentes
 
-- **Aviso ámbar «no supera el dígito verificador»**: revise el número, lo más
+- **Aviso ámbar «Cédula incorrecta, revisar.»**: revise el número, lo más
   probable es un dígito mal digitado. Si está seguro de que es correcto (el SRI lo
   encuentra, o el documento físico lo confirma), puede guardar igual: el aviso no
   bloquea.

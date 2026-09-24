@@ -32,12 +32,12 @@ class DigitoVerificador
         if ($tipo === 'C' || $tipo === 'CEDULA') {
             return self::cedulaValida($numero)
                 ? null
-                : 'La cédula ' . $numero . ' no supera el dígito verificador. Revise que esté bien digitada.';
+                : 'Cédula incorrecta, revisar.';
         }
         if ($tipo === 'R' || $tipo === 'RUC') {
             return self::rucValido($numero)
                 ? null
-                : 'El RUC ' . $numero . ' no supera el dígito verificador. Revise que esté bien digitado.';
+                : 'RUC incorrecto, revisar.';
         }
 
         return null;

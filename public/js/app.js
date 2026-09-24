@@ -51,10 +51,10 @@ window.CMG_Identificacion = (function () {
         tipo = String(tipo || '').toUpperCase();
         valor = String(valor || '').trim();
         if (tipo === 'CEDULA' && valor.length === 10 && !cedulaValida(valor)) {
-            return 'La cédula no supera el dígito verificador. Revise que esté bien digitada.';
+            return 'Cédula incorrecta, revisar.';
         }
         if (tipo === 'RUC' && valor.length === 13 && !rucValido(valor)) {
-            return 'El RUC no supera el dígito verificador. Revise que esté bien digitado.';
+            return 'RUC incorrecto, revisar.';
         }
         return null;
     }
@@ -89,7 +89,7 @@ window.CMG_Identificacion = (function () {
         if (!base) { pintarAviso(input, null); return; }
         if (respuesta && respuesta.ok && !respuesta.source) { pintarAviso(input, null); return; }
         if (respuesta && !respuesta.ok && /no encontrado/i.test(respuesta.error || '')) {
-            base += ' Además, el SRI no encontró este número: es probable que esté mal.';
+            base += ' El SRI no encontró este número.';
         }
         pintarAviso(input, base);
     }
