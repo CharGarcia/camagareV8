@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de compras, compras, cuanto compre, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar
-version: 1.3
+version: 1.4
 orden: 20
 estado: activo
 ---
@@ -88,7 +88,8 @@ proveedor y no se agrupan con las demás.
 
 ## Exportar
 
-Disponible en **PDF** y **Excel**.
+Disponible en **PDF** y **Excel**. Cada hoja del PDF lleva al pie, a la derecha,
+su **número de página** sobre el total (*Página 2/5*).
 
 ## Errores frecuentes
 
@@ -101,6 +102,8 @@ Disponible en **PDF** y **Excel**.
 
 ## Historial de cambios
 
+- **1.4** — El **PDF** muestra el **número de página al pie** de cada hoja
+  (*Página 2/5*), en todas las agrupaciones.
 - **1.3** — Los filtros **ya no consultan al cambiarlos**: el reporte se genera
   solo al pulsar **Buscar** (o Enter). Mientras haya filtros sin aplicar, el
   botón se muestra en ámbar. Antes cada cambio de selector, fecha, proveedor o

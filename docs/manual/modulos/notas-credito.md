@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo
-version: 1.17
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0
+version: 1.18
 orden: 30
 estado: activo
 ---
@@ -63,6 +63,18 @@ buscar: al escribir un código aparece la lista de productos y, al elegir uno, s
 completan código, descripción, precio e IVA. Si escribe un código a mano sin elegir
 de la lista, la línea queda como ítem libre con ese código. Editar la descripción
 limpia el código, porque deja de corresponder al producto.
+
+### El IVA de cada línea viene de la factura
+
+Al cargar la factura de origen, cada línea toma la **tarifa de IVA con la que se
+facturó**, no la tarifa actual del producto. Una factura de un año anterior con IVA
+**12%** genera la nota con **12%**, aunque esa tarifa ya esté inactiva en el sistema;
+en esa línea el selector de IVA muestra *12%* además de las tarifas vigentes. En una
+línea nueva agregada a mano solo aparecen las tarifas vigentes.
+
+La tarifa se reconoce por el **código del SRI**, no solo por el porcentaje: así una
+línea **Exenta de IVA** o **No objeto de impuesto** conserva su código aunque las tres
+tarifas de 0% tengan el mismo porcentaje.
 
 ### Cómo leer la columna Subtotal
 
@@ -239,6 +251,11 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.18** — Al cargar la factura de origen, el IVA de cada línea se reconoce por el
+  código del SRI de esa línea: las líneas en **0%**, **Exento** o **No objeto** ya no
+  se confunden entre sí (antes podían salir todas como *No objeto*). Las facturas con
+  IVA de años anteriores (12%) mantienen su tarifa.
 
 - **1.17** — El buscador **Factura / Documento a modificar** muestra solo documentos con
   saldo pendiente mayor a cero, e indica el saldo de cada uno.

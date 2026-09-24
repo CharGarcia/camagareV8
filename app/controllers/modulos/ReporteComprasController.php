@@ -505,6 +505,9 @@ class ReporteComprasController extends BaseModuloController
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 20px; }
             </style>
+            <?php // footer="page" dibuja "Página x/y" al pie; backbottom reserva ese espacio
+                  // para que la última fila de cada hoja no quede debajo del número. ?>
+            <page backbottom="7mm" footer="page">
             <div class="header">
                 <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
                 <h3>Reporte de Compras</h3>
@@ -598,6 +601,7 @@ class ReporteComprasController extends BaseModuloController
                     </tr>
                 </tfoot>
             </table>
+            </page>
             <?php
             $html = ob_get_clean();
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');

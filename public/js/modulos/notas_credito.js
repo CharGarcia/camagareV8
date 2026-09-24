@@ -852,31 +852,36 @@
 
     /**
      * Resuelve el id de la tarifa IVA a partir de los impuestos del detalle.
-     * Busca primero por id_tarifa_iva, luego por porcentaje (campo tarifa), luego por codigo_porcentaje.
+     * Orden: id_tarifa_iva directo → código SRI + porcentaje → solo código → solo porcentaje.
+     * El código va antes que el porcentaje porque varias tarifas comparten 0%
+     * (0%, Exento, No objeto): por porcentaje la NC salía con el código equivocado.
+     * El catálogo incluye inactivas, así que una factura con 12% (cód. 2) conserva su 12%.
      * Si no encuentra nada, retorna el id de la primera tarifa activa.
      */
     function resolverIdTarifa(impuestos, id_tarifa_iva_directo) {
         // 1. Si viene directo el id
         if (id_tarifa_iva_directo && id_tarifa_iva_directo > 0) return id_tarifa_iva_directo;
-        
+
         if (impuestos && impuestos.length > 0) {
-            const imp = impuestos[0];
-            // 2. Si el impuesto ya trae id_tarifa_iva
-            if (imp.id_tarifa_iva) return imp.id_tarifa_iva;
-            // 3. Buscar por porcentaje numérico (campo 'tarifa' en ventas_detalle_impuestos)
-            const pct = parseFloat(imp.tarifa);
-            if (!isNaN(pct)) {
-                const found = listadoTarifasIva.find(t => parseFloat(t.porcentaje_iva) === pct);
-                if (found) return found.id;
-            }
-            // 4. Buscar por codigo_porcentaje
-            if (imp.codigo_porcentaje) {
-                const found = listadoTarifasIva.find(t => String(t.codigo) === String(imp.codigo_porcentaje));
+            // Solo el IVA (codigo_impuesto 2): la línea puede traer también ICE u otros.
+            const imp = impuestos.find(i => String(i.codigo_impuesto ?? '2') === '2');
+            if (imp) {
+                // 2. Si el impuesto ya trae id_tarifa_iva
+                if (imp.id_tarifa_iva) return imp.id_tarifa_iva;
+                const cod = (imp.codigo_porcentaje ?? '') !== '' ? String(imp.codigo_porcentaje).trim() : null;
+                const pct = parseFloat(imp.tarifa);
+                const mismoPct = t => !isNaN(pct) && Math.abs(parseFloat(t.porcentaje_iva) - pct) < 0.001;
+                // 3. Código SRI y porcentaje a la vez
+                let found = cod !== null ? listadoTarifasIva.find(t => String(t.codigo).trim() === cod && mismoPct(t)) : null;
+                // 4. Solo código SRI
+                if (!found && cod !== null) found = listadoTarifasIva.find(t => String(t.codigo).trim() === cod);
+                // 5. Solo porcentaje (impuesto sin código)
+                if (!found && !isNaN(pct)) found = listadoTarifasIva.find(mismoPct);
                 if (found) return found.id;
             }
         }
-        
-        // 5. Fallback: primera tarifa ACTIVA (el catálogo ahora incluye inactivas)
+
+        // 6. Fallback: primera tarifa ACTIVA (el catálogo ahora incluye inactivas)
         const act = listadoTarifasIva.find(t => t.status == 1 || t.status === '1');
         return act ? act.id : (listadoTarifasIva.length > 0 ? listadoTarifasIva[0].id : 0);
     }

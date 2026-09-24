@@ -307,7 +307,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; } .header h3 { margin: 0 0 2px 0; font-size: 10pt; } .header p { margin: 0; font-size: 7.5pt; }
                 <?= self::CSS_FILTROS_PDF ?>
             </style>
-            <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
+            <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar por Producto') ?>
             <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
             <table>
@@ -662,7 +662,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 .stat-val  { font-size: 11pt; font-weight: bold; }
                 <?= self::CSS_FILTROS_PDF ?>
             </style>
-            <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
+            <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar por Cliente') ?>
             <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
             <table class="stats">
@@ -2164,7 +2164,7 @@ $plantillasFiltradas = [];
                 .stat-val  { font-size: 11pt; font-weight: bold; }
                 <?= self::CSS_FILTROS_PDF ?>
             </style>
-            <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
+            <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar') ?>
             <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
             <table class="stats">

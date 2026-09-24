@@ -621,7 +621,7 @@ class CuentasPorPagarController extends BaseModuloController
                 .stats-box { text-align: center; padding: 5px; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
             </style>
-            <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
+            <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
             <div class="header">
                 <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
                 <h3>Cuentas por Pagar</h3>
@@ -988,7 +988,7 @@ class CuentasPorPagarController extends BaseModuloController
                 .stats-box { text-align: center; padding: 5px; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
             </style>
-            <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
+            <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
             <div class="header">
                 <h2><?= $e($nombreEmpresa) ?></h2>
                 <h3>Cuentas por Pagar por Proveedor</h3>
