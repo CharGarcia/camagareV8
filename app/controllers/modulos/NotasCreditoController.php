@@ -68,6 +68,7 @@ class NotasCreditoController extends BaseModuloController
 
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
         $usuariosFiltro = $this->repository->getUsuariosConNotas($idEmpresa);
+        $vendedoresFiltro = $this->repository->getVendedoresConNotas($idEmpresa);
 
         $bodegaRepo = new BodegaRepository();
         $bodegas = $bodegaRepo->getBodegasPermitidas((int)$_SESSION['id_usuario'], $idEmpresa, (int)$_SESSION['nivel']);
@@ -96,6 +97,7 @@ class NotasCreditoController extends BaseModuloController
             'puntos'      => $puntos,
             'seriesFiltro' => $seriesFiltro,
             'usuariosFiltro' => $usuariosFiltro,
+            'vendedoresFiltro' => $vendedoresFiltro,
             'bodegas'     => $bodegas,
             'vendedores'  => $vendedores,
             'fullWidth'   => true,
@@ -174,7 +176,7 @@ class NotasCreditoController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-minus fs-3 d-block mb-2"></i>No se encontraron notas de crédito.</td></tr>';
+            echo '<tr><td colspan="13" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-minus fs-3 d-block mb-2"></i>No se encontraron notas de crédito.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $rowData      = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
@@ -205,6 +207,7 @@ class NotasCreditoController extends BaseModuloController
                         <td class="text-end text-danger" data-col="total_descuento">$' . number_format((float)($r['total_descuento'] ?? 0), 2) . '</td>
                         <td class="text-end fw-bold" data-col="importe_total">$' . number_format((float)($r['importe_total'] ?? 0), 2) . '</td>
                         <td class="text-truncate" data-col="motivo" style="max-width:180px">' . htmlspecialchars($r['motivo'] ?? '') . '</td>
+                        <td class="text-truncate" data-col="vendedor_nombre" style="max-width:160px">' . htmlspecialchars($r['vendedor_nombre'] ?? '') . '</td>
                         <td data-col="usuario_nombre">' . htmlspecialchars($r['usuario_nombre'] ?? '�€”') . '</td>
                         <td class="text-center" data-col="estado_correo">' . $correoBadge . '</td>
                         <td class="text-center pe-3" data-col="estado">' . $estadoBadge . '</td>
@@ -260,7 +263,7 @@ class NotasCreditoController extends BaseModuloController
         $empresa       = $empresaModel->getPorId($idEmpresa);
         $nombreEmpresa = $empresa['nombre'] ?? '';
 
-        $headers    = ['Número', 'Fecha Emisión', 'Cliente', 'Identificación', 'Doc. Modificado', 'Subtotal', 'Descuento', 'Total', 'Motivo', 'Estado'];
+        $headers    = ['Número', 'Fecha Emisión', 'Cliente', 'Identificación', 'Doc. Modificado', 'Subtotal', 'Descuento', 'Total', 'Motivo', 'Vendedor', 'Estado'];
         $exportData = [];
         foreach ($rows as $r) {
             $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
@@ -274,6 +277,7 @@ class NotasCreditoController extends BaseModuloController
                 (float)($r['total_descuento'] ?? 0),
                 (float)($r['importe_total'] ?? 0),
                 (string)($r['motivo'] ?? ''),
+                (string)($r['vendedor_nombre'] ?? ''),
                 ucfirst((string)($r['estado'] ?? '')),
             ];
         }
@@ -329,11 +333,12 @@ class NotasCreditoController extends BaseModuloController
                         <tr>
                             <th style="width: 10%">Número</th>
                             <th style="width: 8%">Fecha</th>
-                            <th style="width: 22%">Cliente</th>
+                            <th style="width: 19%">Cliente</th>
                             <th style="width: 10%">Identificación</th>
-                            <th style="width: 12%">Doc. Modificado</th>
-                            <th style="width: 12%" class="text-end">Total</th>
-                            <th style="width: 18%">Motivo</th>
+                            <th style="width: 11%">Doc. Modificado</th>
+                            <th style="width: 9%" class="text-end">Total</th>
+                            <th style="width: 15%">Motivo</th>
+                            <th style="width: 10%">Vendedor</th>
                             <th style="width: 8%">Estado</th>
                         </tr>
                     </thead>
@@ -348,6 +353,7 @@ class NotasCreditoController extends BaseModuloController
                                 <td><?= htmlspecialchars((string)($r['num_doc_modificado'] ?? '')) ?></td>
                                 <td class="text-end"><?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
                                 <td><?= htmlspecialchars((string)($r['motivo'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['vendedor_nombre'] ?? '')) ?></td>
                                 <td><?= ucfirst((string)($r['estado'] ?? '')) ?></td>
                             </tr>
                         <?php endforeach; ?>

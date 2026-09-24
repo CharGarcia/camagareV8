@@ -117,6 +117,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // Las claves (key) deben existir en los mapas de NotaCreditoRepository::getListado().
             $opcionesSerie   = array_map(fn($s) => ['v' => $s['establecimiento'] . '-' . $s['punto_emision'], 'l' => $s['establecimiento'] . '-' . $s['punto_emision']], $seriesFiltro ?? []);
             $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $opcionesVendedor = array_map(fn($v) => ['v' => (string) $v['id'], 'l' => $v['nombre']], $vendedoresFiltro ?? []);
             // Dos pestañas: "Nota de crédito" (filtros por campo de la cabecera) y "Detalles"
             // (solo la búsqueda libre dentro de las notas, ver `busquedaDetalle` abajo).
             $tN = 'Nota de crédito';
@@ -128,6 +129,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             //   Valores:            [Total 4][Subtotal 4][Descuento 4]
             //   Cliente:            [Cliente 4][RUC 4][Observaciones 4]
             //                       [Nº autorización 6][Clave de acceso 6]
+            //                       [Vendedor 6]
             $filtrosNotasCredito = [
                 // ── Documento ──
                 ['tab' => $tN, 'key' => 'fecha',      'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
@@ -163,6 +165,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ['tab' => $tN, 'key' => 'obs',          'label' => 'Observaciones',   'icon' => 'bi-chat-left-text', 'type' => 'text', 'grupo' => 'Cliente', 'col' => 4],
                 ['tab' => $tN, 'key' => 'autorizacion', 'label' => 'Nº autorización', 'icon' => 'bi-shield-check',   'type' => 'text', 'grupo' => 'Cliente', 'col' => 6],
                 ['tab' => $tN, 'key' => 'clave',        'label' => 'Clave de acceso', 'icon' => 'bi-key',            'type' => 'text', 'grupo' => 'Cliente', 'col' => 6],
+                ['tab' => $tN, 'key' => 'id_vendedor',  'label' => 'Vendedor',        'icon' => 'bi-person-badge',   'type' => 'select', 'grupo' => 'Cliente', 'col' => 6, 'options' => $opcionesVendedor],
             ];
             ?>
             <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
@@ -224,6 +227,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'total_descuento'     => 'Descuento',
                     'importe_total'       => 'Total',
                     'motivo'              => 'Motivo',
+                    'vendedor_nombre'     => 'Vendedor',
                     'usuario_nombre'      => 'Usuario',
                     'estado_correo'       => 'Correo',
                     'estado'              => 'Estado',
@@ -279,6 +283,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             Total <i class="bi <?= $ordenCol === 'importe_total' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                         <th data-col="motivo">Motivo</th>
+                        <th class="sortable-header" role="button" onclick="window.NC_ordenar('vendedor_nombre')" data-col="vendedor_nombre">
+                            Vendedor <i class="bi <?= $ordenCol === 'vendedor_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        </th>
                         <th class="sortable-header" role="button" onclick="window.NC_ordenar('usuario_nombre')" data-col="usuario_nombre">
                             Usuario <i class="bi <?= $ordenCol === 'usuario_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
@@ -293,7 +300,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="nc-table-body">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-minus fs-3 d-block mb-2"></i>No se encontraron notas de crédito.</td>
+                            <td colspan="13" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-minus fs-3 d-block mb-2"></i>No se encontraron notas de crédito.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
@@ -320,6 +327,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="text-end text-danger" data-col="total_descuento">$<?= number_format((float)($r['total_descuento'] ?? 0), 2) ?></td>
                                 <td class="text-end fw-bold" data-col="importe_total">$<?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
                                 <td data-col="motivo" class="text-truncate" style="max-width:180px"><?= htmlspecialchars($r['motivo'] ?? '') ?></td>
+                                <td data-col="vendedor_nombre" class="text-truncate" style="max-width:160px"><?= htmlspecialchars($r['vendedor_nombre'] ?? '') ?></td>
                                 <td data-col="usuario_nombre"><?= htmlspecialchars($r['usuario_nombre'] ?? '-') ?></td>
                                 <td class="text-center" data-col="estado_correo">
                                     <span class="badge <?= $correoClass ?> border border-opacity-25"><?= ucfirst($estadoCorreo) ?></span>

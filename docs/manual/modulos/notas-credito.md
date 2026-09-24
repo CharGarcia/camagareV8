@@ -232,7 +232,7 @@ búsqueda y los botones de columnas, PDF y Excel.
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas de la nota: N° nota,
 secuencial, fecha, cliente, identificación, documento modificado, subtotal,
-descuento, total, motivo y usuario; además, en las observaciones. Puede escribir
+descuento, total, motivo, vendedor y usuario; además, en las observaciones. Puede escribir
 varias palabras en cualquier orden y no importan mayúsculas ni tildes. Para
 limpiar, borre el texto o pulse Escape en el cuadro. Mientras busca, aparece un
 **círculo girando** al final del cuadro y la tabla se ve atenuada.
@@ -265,10 +265,11 @@ Limpiar filtros.
 | Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado (borrador, autorizado, anulado), correo (enviado o pendiente), serie, N° nota, secuencial, con o sin asiento contable, fecha de autorización, usuario que registró |
 | Documento modificado | N° de la factura modificada, fecha de esa factura, motivo |
 | Valores | Total, subtotal y descuento (cada uno con mínimo y máximo) |
-| Cliente | Cliente, RUC / cédula, observaciones, N° autorización, clave de acceso |
+| Cliente | Cliente, RUC / cédula, observaciones, N° autorización, clave de acceso, vendedor |
 
 El selector *Usuario que registró* lista solo a quienes ya registraron notas
-de crédito en la empresa, y *Serie* solo las series con notas guardadas.
+de crédito en la empresa, *Vendedor* solo a los vendedores que tienen notas, y
+*Serie* solo las series con notas guardadas.
 
 **Pestaña Detalles** (lo que hay dentro de la nota). Es un único cuadro,
 **Buscar libremente dentro de las notas de crédito**: escriba un producto, un
@@ -286,7 +287,7 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 Los botones **Excel** y **PDF** de la parte superior del listado exportan las
 notas de crédito que coinciden con el buscador y el orden aplicados en ese
-momento (no solo la página visible).
+momento (no solo la página visible). Ambos incluyen la columna **Vendedor**.
 
 ## Errores frecuentes
 
@@ -340,7 +341,9 @@ la operación de inmediato.
 
 - **1.22** — En una nota ya **autorizada o anulada** se puede cambiar el **Vendedor** y
   guardar (antes el campo quedaba bloqueado). Solo se actualiza el vendedor; el resto del
-  documento sigue sin poder editarse. Mismo comportamiento que Factura de Venta.
+  documento sigue sin poder editarse. Mismo comportamiento que Factura de Venta. El
+  listado suma la columna **Vendedor** (ordenable, en PDF y Excel), el filtro **Vendedor**
+  en la ventana de filtros y el vendedor entra en la búsqueda libre.
 
 - **1.21** — Nuevo campo **Vendedor** en la nota, junto a *Bodega Reintegro*: se propone
   el vendedor del cliente (o el de la factura/recibo cuando la nota se genera desde ahí) y

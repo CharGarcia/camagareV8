@@ -38,6 +38,10 @@ class NotaCreditoRepository extends BaseRepository
         $params = [':id_empresa' => $idEmpresa];
         $where = "WHERE nc.id_empresa = :id_empresa AND nc.eliminado = false AND nc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
+        // Vendedor de la NC (database/20260924_nc_cabecera_id_vendedor.sql). Sin la columna,
+        // la columna del listado sale vacía y el filtro por vendedor no se ofrece.
+        $conVendedor = $this->columnaExiste('notas_credito_cabecera', 'id_vendedor');
+
         // Parser de filtros
         $parsed     = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         $textoLibre = $parsed['texto_libre'];
@@ -72,6 +76,7 @@ class NotaCreditoRepository extends BaseRepository
                     'nc.num_doc_modificado',                                              // Doc. Modificado
                     'nc.motivo',                                                          // Motivo
                     'u.nombre',                                                           // Usuario
+                    ...($conVendedor ? ['vend.nombre'] : []),                             // Vendedor
                     // Fuera del listado, pero identifican la nota:
                     'nc.observaciones',
                     ['sql' => 'nc.fecha_emision', 'si' => $digitos],                      // Fecha
@@ -88,8 +93,12 @@ class NotaCreditoRepository extends BaseRepository
             }
         }
 
+        // vendedor:texto (por nombre) e id_vendedor:N (select del modal de filtros).
+        $mapaVendedorTexto  = $conVendedor ? ['vendedor' => 'vend.nombre'] : [];
+        $mapaVendedorExacto = $conVendedor ? ['id_vendedor' => 'nc.id_vendedor'] : [];
+
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
-            'texto' => [
+            'texto' => $mapaVendedorTexto + [
                 'cliente'        => 'c.nombre',
                 'ruc'            => 'c.identificacion',
                 'ci'             => 'c.identificacion',
@@ -107,7 +116,7 @@ class NotaCreditoRepository extends BaseRepository
                 'clave'          => 'nc.clave_acceso',
                 'clave_acceso'   => 'nc.clave_acceso',
             ],
-            'exacto' => [
+            'exacto' => $mapaVendedorExacto + [
                 'estado' => 'nc.estado',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del modal de nota de crédito.
@@ -150,6 +159,7 @@ class NotaCreditoRepository extends BaseRepository
             'cliente_nombre'  => 'c.nombre',
             'cliente_ruc'     => 'c.identificacion',
             'usuario_nombre'  => 'u.nombre',
+            'vendedor_nombre' => $conVendedor ? 'vend.nombre' : 'nc.fecha_emision',
             'numero'          => 'nc.secuencial',
             'secuencial', 'fecha_emision', 'total_sin_impuestos', 'total_descuento',
             'importe_total', 'estado', 'estado_correo', 'num_doc_modificado', 'motivo'
@@ -161,7 +171,10 @@ class NotaCreditoRepository extends BaseRepository
         // Rendimiento (2026-09-16): conteo + página en UNA consulta (el WHERE con texto
         // libre se evalúa una sola vez). Ver App\Helpers\ListadoPaginado.
         $joinsFiltro = "LEFT JOIN clientes c ON nc.id_cliente = c.id
-                LEFT JOIN usuarios u ON nc.id_usuario = u.id";
+                LEFT JOIN usuarios u ON nc.id_usuario = u.id"
+            . ($conVendedor ? "
+                LEFT JOIN vendedores vend ON vend.id = nc.id_vendedor" : "");
+        $selVendedor = $conVendedor ? "vend.nombre as vendedor_nombre," : "NULL as vendedor_nombre,";
 
         return \App\Helpers\ListadoPaginado::consultar(
             function (string $sql, array $p): array {
@@ -183,10 +196,28 @@ class NotaCreditoRepository extends BaseRepository
                 'select'      => "nc.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,
                        c.email as cliente_email,
                        u.nombre as usuario_nombre,
+                       {$selVendedor}
                        e.tipo_ambiente, e.tipo_emision",
             ],
             $params
         );
+    }
+
+    /** Vendedores con alguna nota de crédito en la empresa (select "Vendedor" del modal de filtros). */
+    public function getVendedoresConNotas(int $idEmpresa): array
+    {
+        if (!$this->columnaExiste('notas_credito_cabecera', 'id_vendedor')) {
+            return [];
+        }
+        $st = $this->db->prepare(
+            "SELECT DISTINCT v.id, v.nombre
+               FROM notas_credito_cabecera nc
+               JOIN vendedores v ON v.id = nc.id_vendedor
+              WHERE nc.id_empresa = :id_empresa AND nc.eliminado = false
+              ORDER BY v.nombre"
+        );
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** Usuarios que han registrado alguna nota de crédito en la empresa (select "Usuario" del modal de filtros). */
