@@ -438,6 +438,41 @@ class UnidadesMedidaRepository extends BaseRepository
     }
 
     /**
+     * Factor y tipo de medida de varias unidades, para convertir la cantidad de una línea de
+     * venta a la unidad en que se lleva el stock del producto.
+     *
+     * No filtra por eliminado: la conversión se repite al editar o devolver documentos ya
+     * emitidos, y una unidad dada de baja después debe seguir convirtiendo con el mismo factor
+     * con el que salió la mercadería (si no, la edición descontaría otra cantidad).
+     *
+     * @return array<int,array{factor_base:float,id_tipo:int,nombre:string}>
+     */
+    public function getFactoresCantidad(array $idsUnidad, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsUnidad))));
+        if (!$ids) {
+            return [];
+        }
+        $marcas = implode(',', array_fill(0, count($ids), '?'));
+        $st = $this->db->prepare(
+            "SELECT id, factor_base, id_tipo, nombre
+             FROM unidades_medida
+             WHERE id_empresa = ? AND id IN ($marcas)"
+        );
+        $st->execute(array_merge([$idEmpresa], $ids));
+
+        $factores = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $factores[(int) $r['id']] = [
+                'factor_base' => (float) $r['factor_base'],
+                'id_tipo'     => (int) $r['id_tipo'],
+                'nombre'      => (string) $r['nombre'],
+            ];
+        }
+        return $factores;
+    }
+
+    /**
      * Verifica si dos unidades pertenecen al mismo tipo de medida dentro de la empresa.
      */
     public function mismoTipo(int $idUnidadA, int $idUnidadB, int $idEmpresa): bool
@@ -456,7 +491,7 @@ class UnidadesMedidaRepository extends BaseRepository
 
     public function getActive(int $idEmpresa): array
     {
-        $sql = "SELECT id, id_tipo, nombre, abreviatura
+        $sql = "SELECT id, id_tipo, nombre, abreviatura, factor_base
                 FROM unidades_medida
                 WHERE id_empresa = :e AND eliminado = false AND status = true
                 ORDER BY nombre ASC";

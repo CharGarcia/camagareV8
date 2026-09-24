@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra
-version: 2.18
+version: 2.19
 orden: 20
 estado: activo
 ---
@@ -225,6 +225,27 @@ esas reglas aplican a la **facturación** (la salida de la mercadería), no al
 ingreso desde una compra. El documento del proveedor muchas veces no trae ese
 dato, así que la entrada al inventario no lo exige: llénelos solo si los conoce
 y los necesita para la trazabilidad.
+
+### Compras por cajas u otra presentación
+
+El stock de un producto se lleva siempre en **su** unidad (la de su ficha, p. ej.
+UNIDAD). Si el proveedor factura por cajas, en la tabla de envío a inventario
+elija en **Medida** la unidad de la caja (p. ej. **CAJA X100**, creada en
+[Unidades de medida](modulos/unidades-medida) con factor 100) y deje la cantidad y
+el costo **tal como vienen en la factura**:
+
+| Factura del proveedor | Medida elegida | Entra al inventario |
+|---|---|---|
+| 10 cajas a $15,00 | CAJA X100 | **1.000 unidades a $0,15** |
+
+- Bajo la cantidad aparece en azul lo que realmente entrará, p. ej.
+  *= 1000 UNIDAD a 0.1500*. El **total no cambia** ($150,00).
+- El kardex anota la conversión en la observación: *… (10 CAJA X100 = 1000)*.
+- Solo se ofrecen medidas del mismo tipo que el producto. Con la medida del
+  propio producto no se convierte nada (como siempre).
+- El aviso de **saldo por enviar** y la marca **Enviado** se calculan con la
+  medida elegida en la fila. Si envió una parte por cajas y vuelve a abrir la
+  compra, elija de nuevo la medida de la caja para ver el saldo correcto.
 
 ## Retenciones
 
@@ -527,6 +548,12 @@ tampoco la incluye. Si dos aprobadores la aprueban a la vez, solo una de las
 aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
+
+- **2.19** — **Compras por cajas**: al pasar la compra al inventario, si se elige
+  una medida distinta a la del producto (p. ej. CAJA X100 en un producto por
+  UNIDAD), la cantidad y el costo se convierten solos: 10 cajas de $15,00 entran
+  como 1.000 unidades a $0,15. Bajo la cantidad se ve lo que realmente entrará.
+  Nueva sección *Compras por cajas u otra presentación*.
 
 - **2.18** — El **nombre** de cada campo de *Info Adicional* tiene un tope de
   **255 caracteres** en pantalla, y si un XML trae uno más largo se recorta a 255

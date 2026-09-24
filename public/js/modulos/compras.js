@@ -2649,7 +2649,10 @@ window.mcActualizarUIInventario = function() {
 
     document.querySelectorAll('#mc-tbody-inventario .row-inv').forEach(tr => {
         const idDet = tr.dataset.idDetalle; // Usar ID del detalle, no del producto
-        const cantCompra = parseFloat(tr.querySelector('.input-inv-cantidad').dataset.cantOriginal || tr.querySelector('.input-inv-cantidad').value || 0);
+        // Lo procesado (kardex) está en la unidad del producto: la cantidad comprada se lleva
+        // a esa unidad según la medida elegida en la fila (10 CAJA X100 → 1000).
+        const ratio = mcRatioUnidadInv(tr.querySelector('.input-inv-medida')?.value || '', tr.dataset.idMedidaProd || '');
+        const cantCompra = parseFloat(tr.querySelector('.input-inv-cantidad').dataset.cantOriginal || tr.querySelector('.input-inv-cantidad').value || 0) * ratio;
 
         let procesadoEnFila = 0;
         if (idDet && procesadosRestantes[idDet] > 0) {
@@ -2660,7 +2663,7 @@ window.mcActualizarUIInventario = function() {
         const check = tr.querySelector('.input-inv-check');
         const sinVincular = !(tr.dataset.idProducto || '').trim();
 
-        if (procesadoEnFila >= cantCompra) {
+        if (procesadoEnFila >= cantCompra - 1e-6) {
             tr.classList.add('table-success', 'bg-opacity-10');
             if (check) {
                 check.disabled = true;
@@ -2806,21 +2809,8 @@ window.mcSincronizarInventario = function(forceReset = false) {
     tbody.innerHTML = itemsCompra.map(item => {
         const prev = valoresPrevios[item.index] || {};
         
-        // Calcular cuánto de este item ya fue procesado "consumiendo" del mapa por ID de detalle
-        const idDet = item.id_detalle;
-        let procesadoEnFila = 0;
-        if (idDet && procesadosRestantes[idDet] > 0) {
-            procesadoEnFila = Math.min(item.cantidad, procesadosRestantes[idDet]);
-            procesadosRestantes[idDet] -= procesadoEnFila;
-        }
-        
-        const pendiente = Math.max(0, item.cantidad - procesadoEnFila);
-        
-        // Si ya está procesado en esta fila, por defecto no marcar check
-        const isChecked = prev.procesar !== undefined ? prev.procesar : false;
-        const isDisabled = pendiente <= 0;
-
         let opcMedidaLocal = '<option value="">—</option>';
+        let targetId = item.id_medida || '0';
         if (item.id_producto) {
             // Filtrar medidas por el tipo del producto
             let filteredMedidas = window.CMG_unidadesMedida || [];
@@ -2830,8 +2820,7 @@ window.mcSincronizarInventario = function(forceReset = false) {
             
             // Lógica de selección de medida:
             // Si el producto en esta fila cambió o es nuevo, usamos la medida que viene del catálogo (item.id_medida)
-            let targetId = item.id_medida || '0';
-            
+
             // Solo respetamos la selección previa si el producto es el mismo
             if (prev.id_producto && String(prev.id_producto) === String(item.id_producto) && prev.id_medida && prev.id_medida != '0') {
                 targetId = prev.id_medida;
@@ -2843,21 +2832,40 @@ window.mcSincronizarInventario = function(forceReset = false) {
             }).join('');
         }
 
+        // Cuánto de este item ya fue procesado, "consumiendo" del mapa por ID de detalle.
+        // El kardex está en la unidad del producto; la cantidad de la compra, en la medida
+        // elegida en la fila (10 CAJA X100 = 1000): se compara con la misma vara.
+        const ratio = mcRatioUnidadInv(targetId, item.id_medida);
+        const idDet = item.id_detalle;
+        let procesadoEnFila = 0;
+        if (idDet && procesadosRestantes[idDet] > 0) {
+            const procProd = Math.min(item.cantidad * ratio, procesadosRestantes[idDet]);
+            procesadosRestantes[idDet] -= procProd;
+            procesadoEnFila = procProd / ratio;
+        }
+
+        const restaFila = item.cantidad - procesadoEnFila;
+        const pendiente = restaFila > 1e-6 ? +restaFila.toFixed(6) : 0;
+
+        // Si ya está procesado en esta fila, por defecto no marcar check
+        const isChecked = prev.procesar !== undefined ? prev.procesar : false;
+        const isDisabled = pendiente <= 0;
+
         const targetBodegaId = prev.id_bodega || (window.CMG_bodegas || []).find(b => b.es_default)?.id || '';
         const opcBodegaLocal = (window.CMG_bodegas || []).map(b => `<option value="${b.id}" ${b.id == targetBodegaId ? 'selected' : ''}>${b.nombre}</option>`).join('');
         
         return `
-            <tr class="row-inv ${isDisabled ? 'table-success bg-opacity-10' : ''}" data-index="${item.index}" data-id-producto="${item.id_producto || ''}" data-id-detalle="${item.id_detalle || ''}" data-codigo="${_esc(item.codigo || '')}">
+            <tr class="row-inv ${isDisabled ? 'table-success bg-opacity-10' : ''}" data-index="${item.index}" data-id-producto="${item.id_producto || ''}" data-id-detalle="${item.id_detalle || ''}" data-codigo="${_esc(item.codigo || '')}" data-id-medida-prod="${item.id_medida || ''}">
                 <input type="hidden" class="input-inv-id-producto" value="${item.id_producto || ''}">
                 <td class="ps-3 py-2">
                     <div class="fw-medium small">
                         <div class="d-flex align-items-start">
                             ${(item.id_producto && item.id_producto != '0') ? '<i class="bi bi-tag-fill me-1 mt-1"></i>' : ''}
                             <textarea class="form-control form-control-sm border-0 bg-transparent p-0 mc-nombre-inv ${(item.id_producto && item.id_producto != '0') ? 'text-primary fw-bold' : ''}" readonly rows="1" style="resize:none; overflow:hidden; flex:1 1 auto; min-width:0; font-size:.8rem; line-height:1.25;">${(item.id_producto && item.id_producto != '0') ? _esc(item.producto_nombre || item.descripcion) : _esc(item.descripcion)}</textarea>
-                            ${procesadoEnFila >= item.cantidad ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 mt-1"><i class="bi bi-check-all me-1"></i>Enviado</span>' : ''}
+                            ${pendiente <= 0 ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 mt-1"><i class="bi bi-check-all me-1"></i>Enviado</span>' : ''}
                             ${(item.id_producto && item.id_producto != '0' && procesadoEnFila === 0) ? `<button type="button" class="btn btn-xs btn-link text-danger p-0 ms-1 mt-1" style="font-size:0.8rem; line-height:1;" title="Quitar vinculación (producto equivocado)" onclick="mcQuitarVinculacionInv(${item.index})"><i class="bi bi-x-circle"></i></button>` : ''}
                         </div>
-                        ${(procesadoEnFila > 0 && procesadoEnFila < item.cantidad) ? `<div class="text-warning x-small mt-1 fw-bold" style="font-size:0.7rem;"><i class="bi bi-info-circle me-1"></i>Saldo por enviar a inventario: ${(item.cantidad - procesadoEnFila).toFixed(2)}</div>` : ''}
+                        ${(procesadoEnFila > 0 && pendiente > 0) ? `<div class="text-warning x-small mt-1 fw-bold" style="font-size:0.7rem;"><i class="bi bi-info-circle me-1"></i>Saldo por enviar a inventario: ${pendiente.toFixed(2)}</div>` : ''}
                         ${(item.id_producto && item.id_producto != '0') && item.producto_nombre && item.producto_nombre !== item.descripcion_original ? 
                             `<small class="text-muted d-block" style="font-size: 0.65rem; font-style: italic;">Documento: ${_esc(item.descripcion_original)}</small>` : ''}
                     </div>
@@ -2880,7 +2888,7 @@ window.mcSincronizarInventario = function(forceReset = false) {
                 </td>
                 <td><select class="form-select form-select-sm border-0 bg-light input-inv-medida" style="font-size: 0.75rem;">${opcMedidaLocal}</select></td>
                 <td><select class="form-select form-select-sm border-0 bg-light input-inv-bodega" style="font-size: 0.75rem;">${opcBodegaLocal}</select></td>
-                <td><input type="number" class="form-control form-control-sm border-0 bg-light text-center fw-bold input-inv-cantidad" value="${(forceReset || prev.cantidad === undefined) ? pendiente : prev.cantidad}" data-cant-original="${item.cantidad}" min="0.0001" step="any" ${isDisabled ? 'readonly' : ''} style="font-size: 0.75rem;" title="Sugerido según lo comprado: ${pendiente}. Puedes ajustarlo si la unidad de conteo es distinta."></td>
+                <td><input type="number" class="form-control form-control-sm border-0 bg-light text-center fw-bold input-inv-cantidad" value="${(forceReset || prev.cantidad === undefined) ? pendiente : prev.cantidad}" data-cant-original="${item.cantidad}" min="0.0001" step="any" ${isDisabled ? 'readonly' : ''} style="font-size: 0.75rem;" title="Sugerido según lo comprado: ${pendiente}. Si la compra viene por cajas, elija la medida de la caja (p. ej. CAJA X100) y el sistema la convierte a la unidad del producto."><div class="mc-inv-conv text-primary text-center d-none" style="font-size:0.65rem; line-height:1.1;"></div></td>
                 <td><input type="number" class="form-control form-control-sm border-0 bg-light text-end input-inv-costo" value="${(prev.costo === undefined || prev.costo === '') ? item.costo.toFixed(4) : prev.costo}" min="0.0001" step="any" ${isDisabled ? 'readonly' : ''} style="font-size: 0.75rem;"></td>
                 <td><input type="text" class="form-control form-control-sm border-0 bg-light text-center input-inv-lote" value="${_esc(prev.lote||'')}" placeholder="Lote..." style="font-size: 0.75rem;"></td>
                 <td><input type="text" class="form-control form-control-sm border-0 bg-light text-center input-inv-nup" value="${_esc(prev.nup||'')}" placeholder="NUP/Serial..." style="font-size: 0.75rem;"></td>
@@ -2901,12 +2909,62 @@ window.mcSincronizarInventario = function(forceReset = false) {
             if (prev.id_medida) tr.querySelector('.input-inv-medida').value = prev.id_medida;
             if (prev.id_bodega) tr.querySelector('.input-inv-bodega').value = prev.id_bodega;
         }
+        // Conversión por medida (10 CAJA X100 → 1000 unidades): aviso bajo la cantidad y
+        // recálculo del estado "Enviado"/pendiente al cambiar la medida.
+        tr.querySelector('.input-inv-medida')?.addEventListener('change', () => {
+            mcActualizarConversionInv(tr);
+            mcActualizarUIInventario();
+        });
+        tr.querySelector('.input-inv-cantidad')?.addEventListener('input', () => mcActualizarConversionInv(tr));
+        tr.querySelector('.input-inv-costo')?.addEventListener('input', () => mcActualizarConversionInv(tr));
+        mcActualizarConversionInv(tr);
     });
 
     tbody.querySelectorAll('.mc-nombre-inv').forEach(mcAutosizeTextareaInv);
 
     mcActualizarContadorInventario();
     window._mcSincronizando = false;
+}
+
+/** Factor de una unidad de medida de la empresa (1 si no se conoce). */
+function mcFactorUnidadInv(idUnidad) {
+    const u = (window.CMG_unidadesMedida || []).find(m => String(m.id) === String(idUnidad));
+    const f = parseFloat(u?.factor_base);
+    return f > 0 ? f : 1;
+}
+
+/**
+ * Cuántas unidades del producto equivale 1 de la medida elegida en la fila
+ * (CAJA X100 sobre un producto por UNIDAD → 100). Misma fórmula que el backend
+ * (InventarioService::cantidadEnUnidadProducto): 1 si falta alguna o son de distinto tipo.
+ */
+function mcRatioUnidadInv(idUnidadFila, idUnidadProducto) {
+    if (!idUnidadFila || !idUnidadProducto || idUnidadFila == '0' || String(idUnidadFila) === String(idUnidadProducto)) return 1;
+    const lista = window.CMG_unidadesMedida || [];
+    const uf = lista.find(m => String(m.id) === String(idUnidadFila));
+    const up = lista.find(m => String(m.id) === String(idUnidadProducto));
+    if (!uf || !up || String(uf.id_tipo) !== String(up.id_tipo)) return 1;
+    return mcFactorUnidadInv(idUnidadFila) / mcFactorUnidadInv(idUnidadProducto);
+}
+
+/** Muestra bajo la cantidad lo que realmente entrará al inventario: "= 1000 UNIDAD a 0.1500". */
+function mcActualizarConversionInv(tr) {
+    const cont = tr.querySelector('.mc-inv-conv');
+    if (!cont) return;
+    const idProd = tr.dataset.idMedidaProd || '';
+    const ratio  = mcRatioUnidadInv(tr.querySelector('.input-inv-medida')?.value || '', idProd);
+    if (ratio === 1) {
+        cont.classList.add('d-none');
+        cont.textContent = '';
+        return;
+    }
+    const cant  = parseFloat(tr.querySelector('.input-inv-cantidad')?.value || 0);
+    const costo = parseFloat(tr.querySelector('.input-inv-costo')?.value || 0);
+    const nombreProd = (window.CMG_unidadesMedida || []).find(m => String(m.id) === String(idProd))?.nombre || '';
+    const cantProd = +(cant * ratio).toFixed(6);
+    cont.textContent = `= ${cantProd} ${nombreProd} a ${(costo / ratio).toFixed(4)}`;
+    cont.title = 'Así entra al inventario: en la unidad del producto, con el costo repartido (el total no cambia).';
+    cont.classList.remove('d-none');
 }
 
 window.mcActualizarContadorInventario = function() {

@@ -3842,7 +3842,11 @@ $totalPages = $totalPagesOriginal;
 
             if (json.ok) {
                 const selMedida = row.querySelector('.input-medida');
-                const factor = parseFloat(selMedida?.options[selMedida.selectedIndex]?.dataset.factor || 1) || 1;
+                // El stock viene en la unidad del producto; se muestra en la unidad elegida
+                // en la línea (1 CAJA X100 = 100 UNIDAD), igual que lo descuenta el inventario.
+                const factorLinea = parseFloat(selMedida?.options[selMedida.selectedIndex]?.dataset.factor || 1) || 1;
+                const factorProd  = parseFloat(row.querySelector('.input-factor-original')?.value || 1) || 1;
+                const factor = factorLinea / factorProd;
 
                 row.dataset.stockTotalBase = json.stock_total || 0;
                 const totalConvertido = parseFloat(json.stock_total || 0) / factor;

@@ -670,6 +670,70 @@ class CambioProductoCvRepository extends BaseRepository
     }
 
     /**
+     * CTE (sin "WITH RECURSIVE", para anteponerlo) cam_ent_factura(id): líneas de ENTREGA de cambios
+     * cuya factura de venta de origen coincide con lo buscado (:q ILIKE; con $conSecuencial, también
+     * el secuencial desnudo = :qnum). Es el mismo camino que CambioProductoCvService::
+     * resolverFacturaDeVenta, pero hacia adelante:
+     *   - entrega registrada en Facturación de consignaciones con esa factura;
+     *   - entrega emparejada (n-ésima entrega ↔ n-ésima devolución, las sobrantes con la última) con
+     *     una devolución de esa factura;
+     *   - y, en cadena, entrega emparejada con una devolución que vino de una entrega ya encontrada
+     *     (cambio de un cambio). UNION (no ALL) corta cualquier ciclo.
+     * Usa los parámetros :e, :q y :qnum de getLineasDisponiblesCliente.
+     */
+    private static function sqlEntregasPorFacturaVenta(bool $conSecuencial): string
+    {
+        $coincide = static function (string $numero) use ($conSecuencial): string {
+            $sql = "$numero ILIKE :q";
+            if ($conSecuencial) {
+                $sql .= " OR regexp_replace(regexp_replace(TRIM(COALESCE($numero, '')), '^.*-', ''), '^0+', '') = :qnum";
+            }
+            return "($sql)";
+        };
+        $numLinea    = self::sqlNumeroFacturaDeJoins('s');
+        $numRegistro = self::sqlNumeroFacturaVenta('rf', 'rfv');
+
+        $registradas = '';
+        if (self::registroFacturacionDisponible()) {
+            $registradas = "
+                UNION
+                SELECT rfd.id_cambio_detalle
+                FROM consignaciones_facturas_detalles rfd
+                INNER JOIN consignaciones_facturas rf ON rf.id = rfd.id_consignacion_factura
+                LEFT JOIN ventas_cabecera rfv ON rfv.id = rf.id_factura
+                WHERE rfd.id_cambio_detalle IS NOT NULL AND rf.id_empresa = :e
+                  AND rfd.eliminado = false AND rf.eliminado = false AND rf.estado = 'facturada'
+                  AND " . $coincide($numRegistro);
+        }
+
+        // El emparejamiento se calcula sobre las líneas vigentes de cada cambio (como getDetalles).
+        return "
+            cam_lin AS (
+                SELECT d.id, d.id_cambio, d.tipo_linea, d.origen_tipo, d.id_origen, d.id_origen_detalle, d.id_producto,
+                       ROW_NUMBER() OVER (PARTITION BY d.id_cambio, d.tipo_linea ORDER BY d.id) AS pos,
+                       COUNT(*)     OVER (PARTITION BY d.id_cambio, d.tipo_linea)             AS total
+                FROM cambios_producto_cv_detalles d
+                WHERE d.id_empresa = :e AND (d.eliminado = false OR d.eliminado IS NULL)
+            ),
+            cam_ent_factura(id) AS (
+                SELECT e.id
+                FROM cam_lin dv
+                " . self::sqlJoinsFacturaDeLinea('dv', 's') . "
+                INNER JOIN cam_lin e ON e.id_cambio = dv.id_cambio AND e.tipo_linea = 'entrega'
+                       AND (e.pos = dv.pos OR (dv.pos = dv.total AND e.pos > dv.total))
+                WHERE dv.tipo_linea = 'devolucion' AND dv.origen_tipo = 'FACTURA'
+                  AND " . $coincide($numLinea) . "
+                {$registradas}
+                UNION
+                SELECT e.id
+                FROM cam_ent_factura f
+                INNER JOIN cam_lin dv ON dv.tipo_linea = 'devolucion' AND dv.origen_tipo = 'CAMBIO' AND dv.id_origen_detalle = f.id
+                INNER JOIN cam_lin e ON e.id_cambio = dv.id_cambio AND e.tipo_linea = 'entrega'
+                       AND (e.pos = dv.pos OR (dv.pos = dv.total AND e.pos > dv.total))
+            )";
+    }
+
+    /**
      * Líneas que pueden devolverse, con saldo pendiente (> 0):
      *   (a) líneas de facturas de consignación 'facturada' (consignaciones_facturas_detalles)
      *       → origen_tipo 'FACTURA' (no facturas de venta directas). Su doc_numero es el de
@@ -714,7 +778,7 @@ class CambioProductoCvRepository extends BaseRepository
         // Filtro de texto, aplicado DENTRO de cada rama (antes de calcular el saldo por fila):
         // NUP, lote, número(s) del documento, código o nombre del producto. Una rama puede
         // traer varios números (la factura de consignación: el de su factura de venta y el suyo).
-        $filtroQ = function (string $nombre, string $codigo, array $numeros, array $secuenciales, string $nup, string $lote) use ($q, &$params): string {
+        $filtroQ = function (string $nombre, string $codigo, array $numeros, array $secuenciales, string $nup, string $lote, array $extras = []) use ($q, &$params): string {
             if ($q === '') {
                 return '';
             }
@@ -722,6 +786,9 @@ class CambioProductoCvRepository extends BaseRepository
             $sql = " AND ($nombre ILIKE :q OR $codigo ILIKE :q OR $nup ILIKE :q OR $lote ILIKE :q";
             foreach ($numeros as $numero) {
                 $sql .= " OR $numero ILIKE :q";
+            }
+            foreach ($extras as $extra) {
+                $sql .= " OR $extra";
             }
             $qnum = self::numeroDesnudo($q);
             if ($qnum !== '') {
@@ -753,7 +820,17 @@ class CambioProductoCvRepository extends BaseRepository
         $numVenta   = self::sqlNumeroFacturaVenta('vc', 'fv');
         $numCambio  = "(COALESCE(cx.serie,'') || '-' || COALESCE(cx.secuencial,''))";
 
+        // Una entrega de un cambio anterior también se encuentra por el número de la factura de
+        // venta de la que viene la unidad (ver sqlEntregasPorFacturaVenta).
+        $cteFactura = '';
+        $extrasCambio = [];
+        if ($q !== '') {
+            $cteFactura = 'WITH RECURSIVE ' . self::sqlEntregasPorFacturaVenta(self::numeroDesnudo($q) !== '');
+            $extrasCambio[] = 'e.id IN (SELECT id FROM cam_ent_factura)';
+        }
+
         $sql = "
+            {$cteFactura}
             SELECT * FROM (
                 -- (a) Líneas de FACTURAS DE CONSIGNACIÓN (módulo Facturación de consignaciones,
                 --     consignaciones_facturas en estado 'facturada'). NO se ofrecen facturas de
@@ -843,7 +920,7 @@ class CambioProductoCvRepository extends BaseRepository
                   AND cx.eliminado = false AND cx.estado = 'Emitida'
                   {$filtroCliCam}
                   AND COALESCE(p.tipo_produccion,'01') = '01'   -- solo bienes/productos, no servicios
-                  " . $filtroQ('p.nombre', 'p.codigo', [$numCambio], ['cx.secuencial'], 'e.nup', 'e.lote') . "
+                  " . $filtroQ('p.nombre', 'p.codigo', [$numCambio], ['cx.secuencial'], 'e.nup', 'e.lote', $extrasCambio) . "
             ) t
             WHERE (t.cantidad_origen - t.cantidad_devuelta) > 0
             ORDER BY t.doc_fecha DESC, t.id_origen DESC, t.id_origen_detalle ASC

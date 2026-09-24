@@ -632,9 +632,17 @@
             const head = document.createElement('div');
             head.className = 'list-group-item py-1 bg-light d-flex align-items-center gap-2 flex-wrap';
             // Factura de consignación sin factura de venta enlazada: se identifica por su número propio.
-            const numero = g.numero
+            let numero = g.numero
                 ? `<span class="small fw-semibold">${esc(g.numero)}</span>`
                 : (g.numeroConsig ? `<span class="small text-muted" title="Esta factura de consignación no tiene factura de venta enlazada">Sin factura · F. consig. ${esc(g.numeroConsig)}</span>` : '');
+            // Cambio de un cambio anterior: además del número del cambio, la(s) factura(s) de venta de
+            // las unidades que ese cambio entregó (factura_afectada, resuelta en el servidor).
+            if (g.tipo === 'CAMBIO') {
+                const facturas = [...new Set(g.items.map(l => l.factura_afectada).filter(Boolean))];
+                numero += facturas.length
+                    ? ` <span class="small fw-semibold">· Factura ${esc(facturas.join(', '))}</span>`
+                    : ' <span class="small text-muted">· Sin factura enlazada</span>';
+            }
             head.innerHTML = `${camBadgeOrigen(g.tipo)}
                 ${numero}
                 <span class="small text-muted">${camFechaCorta(g.fecha)}</span>
@@ -658,6 +666,7 @@
                 a.innerHTML = `<i class="bi bi-plus-circle text-primary me-1"></i>
                     <span class="small fw-semibold">${esc(l.producto_codigo ? l.producto_codigo + ' · ' : '')}${esc(l.producto_nombre)}</span>
                     <span class="small text-muted ms-1">Lote/NUP: ${esc(camLoteNup(l))}</span>
+                    ${l.origen_tipo === 'CAMBIO' && l.factura_afectada ? `<span class="small text-muted ms-1">· Factura ${esc(l.factura_afectada)}</span>` : ''}
                     ${l.fecha_caducidad ? `<span class="small text-muted ms-1">· Vence: ${camFechaCad(l.fecha_caducidad)}</span>` : ''}
                     <span class="small text-success ms-1">Saldo: ${fmt(l.saldo_pendiente, DEC_C)}</span>
                     ${l.bodega_nombre ? `<span class="small text-muted ms-1">· ${esc(l.bodega_nombre)}</span>` : ''}

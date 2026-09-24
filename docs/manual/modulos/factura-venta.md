@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura
-version: 2.20
+version: 2.21
 orden: 20
 estado: activo
 ---
@@ -104,6 +104,26 @@ queda **sin vencimiento**: ya no se guarda la fecha del día, que después apare
 ítem del PDF, en el selector de lotes y en el reporte por caducidad como un vencimiento
 que en realidad nadie había puesto. Si el establecimiento exige lote o vencimiento, no
 cambia nada: se siguen eligiendo a mano.
+
+### Vender en otra unidad (por caja, por docena)
+
+Junto a la cantidad, la línea tiene un selector de **unidad**. Ofrece las
+unidades del mismo tipo de medida que el producto: si el producto se lleva por
+**UNIDAD**, se puede vender por **DOCENA**, **CIENTO** o por una unidad propia
+como **CAJA X100** (creada en [Unidades de medida](modulos/unidades-medida)).
+
+Al cambiar la unidad:
+
+- El **precio** se convierte solo: un guante a $0,25 pasa a $25,00 la caja de 100.
+- El **saldo** de la línea (y el de cada lote) se muestra en la unidad elegida:
+  1.000 guantes en bodega aparecen como 10 cajas.
+- Al guardar, el **inventario descuenta en la unidad del producto**: 1 CAJA X100
+  saca **100 unidades** del stock. El kardex anota la conversión en la
+  observación, p. ej. *Salida por Factura # … (1 CAJA X100 = 100)*.
+
+Lo mismo aplica en **Recibos de venta** y en el **POS**. Si la factura se
+devuelve con una **nota de crédito** cargada desde la factura, reingresa también
+en la unidad del producto (1 caja devuelta = 100 unidades).
 
 ### Información Adicional
 
@@ -419,6 +439,13 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.21** — **Venta en otra unidad** (caja, docena, ciento): al vender una línea
+  en una unidad distinta a la del producto, el inventario descuenta la cantidad
+  convertida por el factor (1 CAJA X100 = 100 unidades), no la cantidad tal cual
+  como antes. También en Recibos de venta, POS y en la devolución por nota de
+  crédito. Corregido además el saldo mostrado en la línea cuando el producto no
+  se lleva en la unidad base de su tipo.
 
 - **2.20** — Las filas de **Info. Adicional** (concepto y detalle) tienen un tope
   de **300 caracteres**, el largo que admite cada línea del comprobante. Además, la

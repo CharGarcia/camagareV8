@@ -15,8 +15,11 @@ class InventarioService
     private ?BodegaService $bodegaService = null;
     private ?\App\repositories\modulos\ProductoRepository $prodRepo = null;
     private ?\App\repositories\modulos\EmpresaRepository $empRepo = null;
+    private ?\App\repositories\modulos\UnidadesMedidaRepository $umRepo = null;
     /** Facturas ya resueltas por número: una nota de crédito la busca en cada una de sus líneas. */
     private array $ventaPorNumero = [];
+    /** Factor y tipo por id de unidad (ver cantidadEnUnidadProducto()). */
+    private array $factoresUnidad = [];
 
     public function __construct(InventarioRepository $repo, LogSistemaService $log)
     {
@@ -55,6 +58,51 @@ class InventarioService
             $this->empRepo = new \App\repositories\modulos\EmpresaRepository();
         }
         return $this->empRepo;
+    }
+
+    /**
+     * Pasa la cantidad de una línea de venta a la unidad en que se lleva el stock del producto.
+     *
+     * El stock y el kardex siempre están en la unidad del producto (p. ej. UNIDAD), pero la línea
+     * puede venderse en otra del mismo tipo de medida (p. ej. CAJA X100, factor 100): 1 caja debe
+     * descontar 100. Fórmula: cantidad × factor_línea / factor_producto.
+     *
+     * Si falta alguna unidad, son de distinto tipo o un factor no es válido, devuelve la cantidad
+     * tal cual (el comportamiento de siempre): la pantalla solo ofrece unidades compatibles, así
+     * que esos casos son datos antiguos y no deben bloquear la venta.
+     *
+     * @return array{cantidad:float,convertida:bool,unidad_linea:string}
+     */
+    public function cantidadEnUnidadProducto(float $cantidad, ?int $idUnidadLinea, ?int $idUnidadProducto, int $idEmpresa): array
+    {
+        $sinCambio = ['cantidad' => $cantidad, 'convertida' => false, 'unidad_linea' => ''];
+        if (!$idUnidadLinea || !$idUnidadProducto || $idUnidadLinea === $idUnidadProducto) {
+            return $sinCambio;
+        }
+
+        $faltan = array_diff([$idUnidadLinea, $idUnidadProducto], array_keys($this->factoresUnidad));
+        if ($faltan) {
+            if ($this->umRepo === null) {
+                $this->umRepo = new \App\repositories\modulos\UnidadesMedidaRepository();
+            }
+            $this->factoresUnidad += $this->umRepo->getFactoresCantidad($faltan, $idEmpresa);
+        }
+
+        $linea    = $this->factoresUnidad[$idUnidadLinea]    ?? null;
+        $producto = $this->factoresUnidad[$idUnidadProducto] ?? null;
+        if (!$linea || !$producto || $linea['id_tipo'] !== $producto['id_tipo']
+            || $linea['factor_base'] <= 0 || $producto['factor_base'] <= 0) {
+            return $sinCambio;
+        }
+        if ($linea['factor_base'] == $producto['factor_base']) {
+            return $sinCambio;
+        }
+
+        return [
+            'cantidad'     => round($cantidad * $linea['factor_base'] / $producto['factor_base'], 6),
+            'convertida'   => true,
+            'unidad_linea' => $linea['nombre'],
+        ];
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -124,7 +172,22 @@ class InventarioService
 
             // 1. Registrar salida del producto principal si es inventariable
             $prodData = $this->getProductoRepository()->getDatosMovimientoInventario($idProducto, $idEmpresa);
-            $isInventariable = $prodData && 
+
+            // Línea vendida en otra unidad (p. ej. CAJA X100 de un producto que se lleva por
+            // UNIDAD): el stock sale en la unidad del producto. También multiplica los
+            // componentes de abajo, que salen por cada unidad del producto padre.
+            $idUnidadProducto = !empty($prodData['id_medida']) ? (int) $prodData['id_medida'] : null;
+            $idUnidadLinea    = (int) ($d['id_unidad_medida'] ?? 0) ?: ((int) ($d['id_medida'] ?? 0) ?: null);
+            $conv = $this->cantidadEnUnidadProducto($cantidad, $idUnidadLinea, $idUnidadProducto, $idEmpresa);
+            $obsLinea = "Salida por $obsText";
+            $idMedidaKardex = !empty($d['id_medida']) ? (int) $d['id_medida'] : $idUnidadProducto;
+            if ($conv['convertida']) {
+                $obsLinea .= " ({$this->fmtCantidad($cantidad)} {$conv['unidad_linea']} = {$this->fmtCantidad($conv['cantidad'])})";
+                $cantidad = $conv['cantidad'];
+                $idMedidaKardex = $idUnidadProducto;
+            }
+
+            $isInventariable = $prodData &&
                                ($prodData['inventariable'] === true || $prodData['inventariable'] === 'true' || $prodData['inventariable'] == 1) &&
                                ($prodData['tipo_produccion'] !== '02');
 
@@ -175,8 +238,8 @@ class InventarioService
                         'validar_por_lote' => $obliLotes,
                         'caducidad' => $cadParaKardex,
                         'nup'       => !empty($d['nup']) ? $d['nup'] : null,
-                        'id_medida' => !empty($d['id_medida']) ? (int)$d['id_medida'] : (!empty($prodData['id_medida']) ? (int)$prodData['id_medida'] : null),
-                        'obs'       => "Salida por $obsText",
+                        'id_medida' => $idMedidaKardex,
+                        'obs'       => $obsLinea,
                         'referencia_tipo' => $refTipo,
                         'exclude_id'   => $esEdicion ? $idVenta : null,
                         'exclude_tipo' => $esEdicion ? $refTipo : null
@@ -543,6 +606,21 @@ class InventarioService
         $isInventariable = ($prodData['inventariable'] === true || $prodData['inventariable'] === 'true' || $prodData['inventariable'] == 1);
         if (!$isInventariable) return;
 
+        // Ítem enlazado a una línea de factura vendida en otra unidad (p. ej. CAJA X100): la
+        // devolución entra en la unidad del producto, igual que salió (ver procesarSalidaPorVenta).
+        // Sin enlace no se sabe en qué unidad se vendió y la cantidad entra tal cual.
+        $idUnidadLinea = (int) ($data['linea_origen']['id_unidad_medida'] ?? 0) ?: null;
+        $conv = $this->cantidadEnUnidadProducto(
+            $cantidad,
+            $idUnidadLinea,
+            !empty($prodData['id_medida']) ? (int) $prodData['id_medida'] : null,
+            $idEmpresa
+        );
+        if ($conv['convertida']) {
+            $descripcion .= " ({$this->fmtCantidad($cantidad)} {$conv['unidad_linea']} = {$this->fmtCantidad($conv['cantidad'])})";
+            $cantidad = $conv['cantidad'];
+        }
+
         $this->repo->lockStock($idProducto, $idBodega, $idEmpresa);
         $stockActual  = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $costoUnit    = $this->repo->getCostoPromedio($idProducto, $idBodega, $idEmpresa);
@@ -609,9 +687,17 @@ class InventarioService
                 // el lote lo eligió el sistema al descontar y no quedó en la línea.
                 'lote'        => ($lote !== '' && $lote !== 'sin_lote') ? $lote : null,
                 'nup'         => $nup !== '' ? $nup : null,
+                // Unidad en que se vendió la línea: registrarEntradaPorNC() convierte con ella.
+                'id_unidad_medida' => !empty($l['id_unidad_medida']) ? (int) $l['id_unidad_medida'] : null,
             ];
         }
         return $lineas;
+    }
+
+    /** Cantidad para las observaciones del kardex: sin ceros sobrantes (1, 2.5, 0.453592). */
+    private function fmtCantidad(float $cantidad): string
+    {
+        return rtrim(rtrim(number_format($cantidad, 6, '.', ''), '0'), '.');
     }
 
     private function idVentaPorNumero(int $idEmpresa, string $numDoc): ?int

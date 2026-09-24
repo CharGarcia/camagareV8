@@ -204,7 +204,7 @@ class InventarioRepository extends BaseRepository
         }
         $marcas = implode(',', array_fill(0, count($ids), '?'));
         $st = $this->db->prepare(
-            "SELECT id, id_producto, numero_lote, nup
+            "SELECT id, id_producto, numero_lote, nup, id_unidad_medida
              FROM ventas_detalle
              WHERE id_venta = ? AND id IN ($marcas)"
         );

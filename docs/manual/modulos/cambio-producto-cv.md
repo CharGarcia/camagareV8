@@ -6,7 +6,7 @@ ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion, no contabilizar cambios, modulos que contabilizan, consignacion sin asiento
-version: 1.20
+version: 1.21
 orden: 47
 estado: activo
 ---
@@ -69,6 +69,12 @@ producto X" sino cuál unidad exacta vuelve y cuál unidad exacta se entrega.
    nombre del producto. El resultado se agrupa por documento y muestra **cada
    ítem por separado**; pulse el ítem que se devuelve (o **Agregar todos**).
    El cliente del cambio queda fijado con el de ese documento.
+   Si lo que se devuelve llegó en un **cambio anterior** (un cambio de otro
+   cambio), el resultado muestra el número de ese cambio y, al lado, el
+   **número de la factura de venta** de la que viene la unidad; al agregarla,
+   la columna *Origen* también muestra esa factura. Esas unidades también se
+   encuentran escribiendo el **número de la factura de venta** original, aunque
+   hayan pasado por varios cambios.
    Si prefiere empezar por el cliente, elíjalo en el campo **Cliente**: desde
    ese momento el buscador solo muestra los documentos de ese cliente, y con
    el campo vacío lista todo lo que tiene pendiente.
@@ -402,6 +408,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.21** — En el buscador de lo que se devuelve, las unidades que vienen de
+  un cambio anterior muestran el número de la factura de venta de origen,
+  además del número del cambio, y se encuentran buscando por ese número de
+  factura (también en cambios encadenados).
 - **1.20** — Lo entregado desde una consignación sin asiento sale de
   *Inventario*; los cambios pueden dejar de contabilizarse en *Módulos que
   contabilizan*.

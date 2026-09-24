@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/unidades-medida
 tipo: modulo
 visibilidad: todos
-etiquetas: unidades, unidad de medida, medidas, kilo, litro, caja, unidad, peso, volumen, longitud, area, tiempo, empaque, quintal, arroba, libra, galon, caneca, factor, conversion, unidad base, importar medidas
-version: 1.2
+etiquetas: unidades, unidad de medida, medidas, kilo, litro, caja, unidad, peso, volumen, longitud, area, tiempo, empaque, quintal, arroba, libra, galon, caneca, factor, conversion, unidad base, importar medidas, vender por caja, caja x100, presentacion, comprar por unidad, contenido de la caja
+version: 1.3
 orden: 60
 estado: activo
 ---
@@ -47,7 +47,7 @@ guarde su ficha en Configuración → Empresas.
 
 | Tipo | Unidades | Base |
 |------|----------|------|
-| CANTIDAD | unidad, par, docena, ciento, millar | unidad |
+| UNIDAD | unidad, par, docena, ciento, millar | unidad |
 | PESO | miligramo, gramo, onza, libra, kilogramo, arroba, quintal, tonelada | kilogramo |
 | VOLUMEN | mililitro, litro, galón, caneca, metro cúbico | litro |
 | LONGITUD | milímetro, centímetro, pulgada, pie, yarda, metro, kilómetro | metro |
@@ -60,6 +60,9 @@ La **arroba** son 25 libras (11.3398 kg) y el **quintal** 100 libras
 litros (equivalente a 5 galones), medida usual para combustibles, aceites y
 químicos.
 
+En empresas más antiguas el tipo **UNIDAD** puede aparecer con el nombre
+**CANTIDAD**: es el mismo tipo y funciona igual.
+
 El tipo **TIEMPO** sirve para cobrar mano de obra y servicios por duración
 (taller, car-wash, alquileres).
 
@@ -67,7 +70,40 @@ Nada de esto es obligatorio: lo que no use, desactívelo o elimínelo.
 
 > Las unidades de **EMPAQUE** son presentaciones comerciales, no magnitudes: una
 > caja no equivale a un saco. Van todas con factor 1 y el sistema no las
-> convierte entre sí. Sirven para indicar cómo se entrega el producto.
+> convierte entre sí. Sirven para indicar cómo se entrega el producto. Para
+> vender por cajas con un contenido fijo, vea la sección siguiente.
+
+## Comprar y vender por cajas
+
+Caso típico: el proveedor factura por cajas de un contenido fijo (p. ej. guantes
+en cajas de 100), el stock se cuenta por unidades y se vende tanto por caja como
+suelto.
+
+**1. Configuración (una sola vez)**
+
+- En el **producto**: tipo de medida **UNIDAD** y unidad **UNIDAD**. El stock
+  siempre se lleva en unidades sueltas.
+- En este módulo, dentro del tipo **UNIDAD**, cree la unidad **CAJA X100** con
+  **factor 100** (sin marcar como base). Si otro producto viene en cajas de 50,
+  cree **CAJA X50** con factor 50: el factor es el contenido de la caja.
+
+No use la **caja** del tipo EMPAQUE para esto: está en otro tipo de medida, así
+que no aparece para un producto por UNIDAD y no convierte.
+
+**2. Compra**
+
+Al pasar la compra al inventario, elija la medida **CAJA X100** en la fila y
+deje la cantidad y el costo como vienen en la factura (10 cajas a $15,00). El
+sistema los convierte solo: entran **1.000 unidades a $0,15** y el total sigue
+siendo $150,00. Bajo la cantidad se ve lo que realmente entrará. Detalle en
+[Compras](modulos/compras).
+
+**3. Venta**
+
+En la factura, recibo o POS elija la unidad **CAJA X100** en la línea: el precio
+se multiplica por 100 y, al guardar, el inventario descuenta **100 unidades** por
+cada caja. También se puede vender suelto (unidad UNIDAD) desde el mismo stock.
+Detalle en [Factura de venta](modulos/factura-venta).
 
 ## Cómo se registra
 
@@ -107,8 +143,12 @@ creó el propio usuario.
 - **Productos**: cada producto elige un tipo de medida y una unidad.
 - **Facturación**: la unidad se muestra junto a la cantidad cuando el
   establecimiento tiene activada la opción *mostrar unidad de medida*.
-- **Inventario, compras y ventas**: la conversión por factor permite comprar en
-  una unidad y vender en otra dentro del mismo tipo.
+- **Ventas** (factura, recibo, POS y nota de crédito): una línea vendida en otra
+  unidad del mismo tipo convierte el precio y descuenta el stock en la unidad del
+  producto (cantidad × factor de la línea ÷ factor del producto).
+- **Compras**: al pasar la compra al inventario con una medida distinta a la del
+  producto, la cantidad se multiplica y el costo se reparte por el mismo factor
+  (el total no cambia).
 
 ## Errores frecuentes
 
@@ -120,9 +160,19 @@ creó el propio usuario.
   elegido en el producto; solo se muestran las unidades de ese tipo.
 - **Los precios convertidos salen mal**: revise el factor. Debe indicar cuántas
   unidades base equivale una de esa unidad, no al revés.
+- **Vendí una caja y el stock bajó 1 en lugar de 100**: la unidad de la caja no es
+  del mismo tipo que la del producto (p. ej. se usó la *caja* de EMPAQUE) o tiene
+  factor 1. Use una unidad del tipo UNIDAD con el contenido de la caja como factor.
+- **Cambiar el factor de una unidad ya usada** afecta a las ventas que se editen
+  después: se vuelven a descontar con el factor nuevo. Si el contenido de la caja
+  cambia, cree una unidad nueva (CAJA X120) en lugar de modificar la existente.
 
 ## Historial de cambios
 
+- **1.3** — Las ventas en otra unidad (caja, docena, ciento) descuentan el stock
+  convertido por el factor, y la entrada de una compra en otra unidad también se
+  convierte (cantidad × factor, costo ÷ factor). Nueva sección *Comprar y vender
+  por cajas*. El tipo base del catálogo figura como **UNIDAD** (antes CANTIDAD).
 - **1.2** — Se agregó la **caneca** (18.9271 litros) al catálogo por defecto
   de volumen.
 - **1.1** — Catálogo por defecto en cada empresa (7 tipos, 39 unidades),

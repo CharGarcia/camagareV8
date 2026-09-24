@@ -1636,10 +1636,11 @@ class ComprasController extends BaseModuloController
                 }
 
                 // Obtener nombre para mensajes
-                $sqlProd = "SELECT nombre FROM productos WHERE id = ? AND id_empresa = ?";
+                $sqlProd = "SELECT nombre, id_medida FROM productos WHERE id = ? AND id_empresa = ?";
                 $stProd = $db->prepare($sqlProd);
                 $stProd->execute([$idProducto, $idEmpresa]);
-                $nombreAMostrar = $stProd->fetchColumn() ?: $det['descripcion_original'];
+                $prodRow = $stProd->fetch(\PDO::FETCH_ASSOC) ?: [];
+                $nombreAMostrar = ($prodRow['nombre'] ?? '') ?: $det['descripcion_original'];
 
                 // 2. Validaciones básicas y de configuración
                 $cantEnviar = (float)$item['cantidad'];
@@ -1660,6 +1661,28 @@ class ComprasController extends BaseModuloController
                 // procesa en unidades del producto daba falsos positivos. Queda a criterio del
                 // usuario la cantidad que ingresa al procesar el inventario.
 
+                // 3.1 Medida distinta a la del producto (p. ej. 10 CAJA X100 de un producto que
+                // se lleva por UNIDAD): entra en la unidad del producto — 1000 unidades — y el
+                // costo se reparte para que el total no cambie (15,00 la caja → 0,15 c/u).
+                // Misma conversión que la salida por venta (InventarioService).
+                $medVal     = !empty($item['id_medida']) ? (int)$item['id_medida'] : null;
+                $costoUnit  = (float)$item['costo'];
+                $costoTotal = round($cantEnviar * $costoUnit, 2);
+                $obsItem    = $obsBase . " (Item: " . $idDetalle . ")";
+                $conv = $invSrv->cantidadEnUnidadProducto(
+                    $cantEnviar,
+                    $medVal,
+                    !empty($prodRow['id_medida']) ? (int)$prodRow['id_medida'] : null,
+                    $idEmpresa
+                );
+                if ($conv['convertida']) {
+                    $fmt = static fn(float $n): string => rtrim(rtrim(number_format($n, 6, '.', ''), '0'), '.');
+                    $obsItem  .= " ({$fmt($cantEnviar)} {$conv['unidad_linea']} = {$fmt($conv['cantidad'])})";
+                    $costoUnit = round($costoUnit * $cantEnviar / $conv['cantidad'], 6);
+                    $cantEnviar = $conv['cantidad'];
+                    $medVal    = (int)$prodRow['id_medida'];
+                }
+
                 // 4. Bloquear producto/bodega y calcular stock actual (en vivo, desde el Kardex)
                 // para trazabilidad. El lock evita que dos compras procesándose a la vez
                 // (o una compra + otro movimiento) del mismo producto/bodega lean el mismo
@@ -1676,7 +1699,6 @@ class ComprasController extends BaseModuloController
                 $loteVal = !empty($item['lote']) ? $item['lote'] : null;
                 $cadVal  = !empty($item['caducidad']) ? $item['caducidad'] : null;
                 $nupVal  = !empty($item['nup']) ? $item['nup'] : null;
-                $medVal  = !empty($item['id_medida']) ? (int)$item['id_medida'] : null;
 
                 $idKardex = $invRepo->registrarMovimiento([
                     'id_empresa'      => $idEmpresa,
@@ -1686,15 +1708,15 @@ class ComprasController extends BaseModuloController
                     'referencia_tipo' => 'compra',
                     'referencia_id'   => $idDetalle,
                     'cantidad'        => $cantEnviar,
-                    'costo_unitario'  => (float)$item['costo'],
-                    'costo_total'     => round($cantEnviar * (float)$item['costo'], 2),
+                    'costo_unitario'  => $costoUnit,
+                    'costo_total'     => $costoTotal,
                     'stock_anterior'  => $stockAnt,
                     'stock_posterior' => $stockPost,
                     'numero_lote'     => $loteVal,
                     'fecha_caducidad' => $cadVal,
                     'nup'             => $nupVal,
                     'id_medida'       => $medVal,
-                    'observaciones'   => $obsBase . " (Item: " . $idDetalle . ")",
+                    'observaciones'   => $obsItem,
                     'id_usuario'      => $idUsuario,
                 ]);
                 error_log("KARDEX INSERTADO: ID $idKardex, Producto $idProducto, Cantidad $cantEnviar");
