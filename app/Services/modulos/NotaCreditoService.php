@@ -27,9 +27,55 @@ class NotaCreditoService
         $this->logService = $logService;
     }
 
+    /**
+     * El usuario no puede emitir notas de crédito: la empresa tiene bodegas, pero a él se le
+     * denegaron todas (Bodegas → Accesos). Sin bodega de reintegro la NC no devuelve stock.
+     * Una empresa sin ninguna bodega (solo servicios) no se bloquea.
+     */
+    public function usuarioSinBodegas(int $idUsuario, int $idEmpresa, int $nivel): bool
+    {
+        return $this->bodegasReintegro($idUsuario, $idEmpresa, $nivel)['sin_bodegas'];
+    }
+
+    /**
+     * Bodegas donde el usuario puede reintegrar la mercadería de una NC.
+     * 'aplica' = la empresa tiene bodegas; si no tiene ninguna, no hay nada que exigir.
+     */
+    private function bodegasReintegro(int $idUsuario, int $idEmpresa, int $nivel): array
+    {
+        $bodegaRepo = new \App\repositories\modulos\BodegaRepository();
+        $aplica     = !empty($bodegaRepo->getBodegasPermitidas($idUsuario, $idEmpresa, 3));
+        $permitidas = $aplica ? $bodegaRepo->getBodegasPermitidas($idUsuario, $idEmpresa, $nivel) : [];
+
+        return [
+            'aplica'      => $aplica,
+            'sin_bodegas' => $aplica && empty($permitidas),
+            'ids'         => array_map('intval', array_column($permitidas, 'id')),
+        ];
+    }
+
+    private function validarBodegaReintegro(array $data): void
+    {
+        $bodegas = $this->bodegasReintegro(
+            (int) ($data['id_usuario'] ?? 0),
+            (int) ($data['id_empresa'] ?? 0),
+            (int) ($data['nivel'] ?? 1)
+        );
+        if (!$bodegas['aplica']) {
+            return;
+        }
+
+        $this->rules->validarBodegaReintegro(
+            $data,
+            $bodegas['sin_bodegas'],
+            in_array((int) ($data['id_bodega'] ?? 0), $bodegas['ids'], true)
+        );
+    }
+
     public function crear(array $data): int
     {
         $this->rules->validar($data);
+        $this->validarBodegaReintegro($data);
 
         $this->validarPeriodoContable(
             $data['fecha_emision'] ?? null,
@@ -244,6 +290,7 @@ class NotaCreditoService
     public function actualizar(int $id, array $data): int
     {
         $this->rules->validar($data);
+        $this->validarBodegaReintegro($data);
 
         $ncActual = $this->repository->getPorId($id);
         $this->validarPeriodoContableAlModificar(

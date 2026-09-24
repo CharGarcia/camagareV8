@@ -95,6 +95,7 @@ class NotasCreditoController extends BaseModuloController
             'seriesFiltro' => $seriesFiltro,
             'usuariosFiltro' => $usuariosFiltro,
             'bodegas'     => $bodegas,
+            'sinBodegas'  => $this->service->usuarioSinBodegas((int)$_SESSION['id_usuario'], $idEmpresa, (int)$_SESSION['nivel']),
             'fullWidth'   => true,
         ]);
     }
@@ -574,6 +575,7 @@ class NotasCreditoController extends BaseModuloController
 
             $data['id_empresa'] = (int) $_SESSION['id_empresa'];
             $data['id_usuario'] = (int) $_SESSION['id_usuario'];
+            $data['nivel']      = (int) ($_SESSION['nivel'] ?? 1);
 
             $empresaModel = new Empresa();
             $empresaData  = $empresaModel->getPorId($data['id_empresa']) ?? [];

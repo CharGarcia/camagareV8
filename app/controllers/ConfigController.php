@@ -215,6 +215,20 @@ class ConfigController extends Controller
         };
     }
 
+    /** /config/conciliacion-tarjetas-perfiles — perfiles de lectura del estado de cuenta para Conciliación de Tarjetas (nivel 3). */
+    public function conciliacionTarjetasPerfiles(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new ConciliacionTarjetasPerfilesController();
+        match ($sub) {
+            'listar'        => $c->listarAjax(),
+            'guardar'       => $c->guardarAjax(),
+            'eliminar'      => $c->eliminarAjax(),
+            'previsualizar' => $c->previsualizarArchivoAjax(),
+            default         => $c->index(),
+        };
+    }
+
     public function iaAgentes(): void
     {
         (new IaAgentesController())->index();

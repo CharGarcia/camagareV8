@@ -297,11 +297,18 @@ class NotaCreditoRepository extends BaseRepository
 
     public function getPorId(int $id): ?array
     {
+        // Nombre de la bodega de reintegro: la vista lo necesita cuando esa bodega ya no
+        // está en el combo del usuario (acceso revocado o bodega inactiva).
+        $conBodega = $this->columnaExiste('notas_credito_cabecera', 'id_bodega');
+        $selBodega = $conBodega ? ", b.nombre as bodega_nombre" : "";
+        $joinBodega = $conBodega ? "LEFT JOIN bodegas b ON b.id = nc.id_bodega" : "";
+
         $sql = "SELECT nc.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,
                        c.direccion as cliente_direccion, c.telefono as cliente_telefono,
-                       c.email as cliente_email, c.tipo_id as cliente_tipo_id
+                       c.email as cliente_email, c.tipo_id as cliente_tipo_id{$selBodega}
                 FROM notas_credito_cabecera nc
                 LEFT JOIN clientes c ON nc.id_cliente = c.id
+                {$joinBodega}
                 WHERE nc.id = ? AND nc.eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([$id]);
@@ -404,18 +411,12 @@ class NotaCreditoRepository extends BaseRepository
 
     public function insertCabecera(array $data): int
     {
-        $sql = "INSERT INTO notas_credito_cabecera (
-                    id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario,
+        $cols = "id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario,
                     fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso,
                     cod_doc_modificado, num_doc_modificado, fecha_emision_docs_sustento, motivo,
                     total_sin_impuestos, total_descuento, importe_total, estado, observaciones,
-                    created_by, updated_by, tipo_ambiente
-                ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                ) RETURNING id";
-        
-        $st = $this->db->prepare($sql);
-        $st->execute([
+                    created_by, updated_by, tipo_ambiente";
+        $params = [
             $data['id_empresa'],
             $data['id_establecimiento'],
             $data['id_punto_emision'],
@@ -438,7 +439,18 @@ class NotaCreditoRepository extends BaseRepository
             $data['id_usuario'],
             $data['id_usuario'],
             $data['tipo_ambiente'] ?? '1'
-        ]);
+        ];
+
+        // Bodega de reintegro (database/20260924_nc_cabecera_id_bodega.sql). Mientras ese SQL
+        // no esté aplicado, la NC se guarda sin ella (el stock igual se reintegra).
+        if ($this->columnaExiste('notas_credito_cabecera', 'id_bodega')) {
+            $cols    .= ", id_bodega";
+            $params[] = !empty($data['id_bodega']) ? (int) $data['id_bodega'] : null;
+        }
+
+        $marcas = implode(', ', array_fill(0, count($params), '?'));
+        $st = $this->db->prepare("INSERT INTO notas_credito_cabecera ({$cols}) VALUES ({$marcas}) RETURNING id");
+        $st->execute($params);
 
         return (int) $st->fetchColumn();
     }
@@ -450,11 +462,8 @@ class NotaCreditoRepository extends BaseRepository
                     fecha_emision = ?, establecimiento = ?, punto_emision = ?, secuencial = ?,
                     cod_doc_modificado = ?, num_doc_modificado = ?, fecha_emision_docs_sustento = ?, motivo = ?,
                     total_sin_impuestos = ?, total_descuento = ?, importe_total = ?,
-                    observaciones = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ?
-                WHERE id = ?";
-        
-        $st = $this->db->prepare($sql);
-        $st->execute([
+                    observaciones = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ?";
+        $params = [
             $data['id_establecimiento'],
             $data['id_punto_emision'],
             $data['id_cliente'],
@@ -471,8 +480,16 @@ class NotaCreditoRepository extends BaseRepository
             $data['importe_total'],
             $data['observaciones'] ?? null,
             $data['id_usuario'],
-            $id
-        ]);
+        ];
+
+        if ($this->columnaExiste('notas_credito_cabecera', 'id_bodega')) {
+            $sql     .= ", id_bodega = ?";
+            $params[] = !empty($data['id_bodega']) ? (int) $data['id_bodega'] : null;
+        }
+
+        $params[] = $id;
+        $st = $this->db->prepare($sql . " WHERE id = ?");
+        $st->execute($params);
     }
 
     public function insertDetalle(array $data): int

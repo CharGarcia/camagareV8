@@ -17,53 +17,6 @@ use App\repositories\modulos\ConciliacionTarjetasRepository;
  */
 class ConciliacionTarjetasRules
 {
-    /** Campos que el mapeo de un archivo Excel/CSV debe traer sí o sí. */
-    private const CAMPOS_MAPEO_OBLIGATORIOS = ['fecha', 'monto_bruto'];
-
-    public function validarPerfil(array $data): void
-    {
-        if (trim((string) ($data['nombre_perfil'] ?? '')) === '') {
-            throw new \Exception('Debe indicar un nombre para el perfil.');
-        }
-
-        $tipo = strtoupper((string) ($data['tipo_archivo'] ?? ''));
-        if (!in_array($tipo, ['EXCEL', 'CSV', 'PDF'], true)) {
-            throw new \Exception('El tipo de archivo del perfil debe ser EXCEL, CSV o PDF.');
-        }
-
-        $nivel = (string) ($data['nivel'] ?? '');
-        if (!in_array($nivel, ['transaccion', 'deposito'], true)) {
-            throw new \Exception('Indique si el archivo trae una línea por transacción o los depósitos consolidados.');
-        }
-
-        $mapeo = $data['mapeo_columnas'] ?? null;
-        if (!is_array($mapeo) || empty($mapeo)) {
-            throw new \Exception('Debe configurar el mapeo de columnas del perfil.');
-        }
-
-        if ($tipo === 'PDF') {
-            $regex = trim((string) ($mapeo['regex_linea'] ?? ''));
-            if ($regex === '') {
-                throw new \Exception('Debe indicar el patrón (regex) de línea de datos del PDF.');
-            }
-            if (@preg_match($regex, '') === false) {
-                throw new \Exception('El patrón (regex) de línea de datos no es válido.');
-            }
-            foreach (self::CAMPOS_MAPEO_OBLIGATORIOS as $campo) {
-                if (!str_contains($regex, "?<{$campo}>") && !str_contains($regex, "?P<{$campo}>")) {
-                    throw new \Exception("El patrón debe incluir el grupo nombrado (?<{$campo}>...).");
-                }
-            }
-            return;
-        }
-
-        foreach (self::CAMPOS_MAPEO_OBLIGATORIOS as $campo) {
-            if (!isset($mapeo[$campo]['col']) || !is_numeric($mapeo[$campo]['col'])) {
-                throw new \Exception("Falta indicar en qué columna está el campo \"{$campo}\" del estado de cuenta.");
-            }
-        }
-    }
-
     /** Alta o edición de la conciliación. $procesadora es la fila de empresa_formas_pago. */
     public function validarCabecera(array $data, ?array $procesadora): void
     {

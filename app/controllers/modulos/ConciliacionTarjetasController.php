@@ -363,60 +363,16 @@ class ConciliacionTarjetasController extends BaseModuloController
     }
 
     // ─── Perfiles de lectura del estado de cuenta ────────────────────────────
+    // Se administran en /config/conciliacion-tarjetas-perfiles (nivel 3); aquí solo se listan
+    // los que sirven para la procesadora de la conciliación.
 
     public function listarPerfilesAjax(): void
     {
         $this->requireLeer();
         $this->responder(fn() => $this->service->getPerfiles(
             (int) $_SESSION['id_empresa'],
-            (int) ($_GET['id_forma_cobro'] ?? 0) ?: null
+            (int) ($_GET['id_forma_cobro'] ?? 0)
         ));
-    }
-
-    public function guardarPerfilAjax(): void
-    {
-        $this->requireCrear();
-        $data = $this->payload();
-        $this->responder(fn() => ['id' => $this->service->guardarPerfil(
-            (int) $_SESSION['id_empresa'],
-            (int) $_SESSION['id_usuario'],
-            $data
-        )]);
-    }
-
-    public function eliminarPerfilAjax(): void
-    {
-        $this->requireEliminar();
-        $data = $this->payload();
-        $this->responder(function () use ($data) {
-            $this->service->eliminarPerfil(
-                (int) ($data['id'] ?? 0),
-                (int) $_SESSION['id_empresa'],
-                (int) $_SESSION['id_usuario']
-            );
-            return ['eliminado' => true];
-        });
-    }
-
-    /** Asistente de perfil: muestra el archivo como se lee, antes de mapear. */
-    public function previsualizarArchivoAjax(): void
-    {
-        $this->requireCrear();
-        $this->responder(function () {
-            $mapeo = $_POST['mapeo_prueba'] ?? null;
-            if (is_string($mapeo)) {
-                $mapeo = json_decode($mapeo, true);
-            }
-
-            return $this->service->previsualizarArchivo(
-                $_FILES['archivo'] ?? [],
-                strtoupper(trim((string) ($_POST['tipo_archivo'] ?? 'EXCEL'))),
-                (int) ($_POST['fila_inicio'] ?? 0),
-                is_array($mapeo) ? $mapeo : null,
-                (string) ($_POST['formato_fecha'] ?? 'd/m/Y'),
-                (string) ($_POST['separador_decimal'] ?? '.')
-            );
-        });
     }
 
     // ─── Exportación ─────────────────────────────────────────────────────────

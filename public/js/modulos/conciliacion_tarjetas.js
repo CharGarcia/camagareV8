@@ -17,20 +17,6 @@ let CTAR_lineaSel     = null;   // id de la línea seleccionada para cruzar
 let CTAR_cobrosCache  = [];
 let CTAR_perfilesCache = [];
 
-const CTAR_CAMPOS_MAPEO = [
-    ['fecha', 'Fecha', true],
-    ['autorizacion', 'Autorización', false],
-    ['referencia', 'Referencia', false],
-    ['descripcion', 'Descripción', false],
-    ['monto_bruto', 'Bruto', true],
-    ['comision', 'Comisión', false],
-    ['iva_comision', 'IVA comisión', false],
-    ['retencion_ir', 'Retención renta', false],
-    ['retencion_iva', 'Retención IVA', false],
-    ['otros_descuentos', 'Otros descuentos', false],
-    ['monto_neto', 'Neto', false],
-];
-
 // ─── Utilidades ─────────────────────────────────────────────────────────────
 
 const CTAR_num = (v) => (parseFloat(v) || 0).toFixed(2);
@@ -763,7 +749,7 @@ async function CTAR_abrirCargaArchivo() {
         ? CTAR_perfilesCache.map((p) =>
             `<option value="${p.id}">${CTAR_esc(p.nombre_perfil)} (${CTAR_esc(p.tipo_archivo)}, ${p.nivel === 'deposito' ? 'depósitos' : 'transacciones'})</option>`
         ).join('')
-        : '<option value="">— No hay perfiles configurados —</option>';
+        : '<option value="">— No hay perfiles para esta procesadora —</option>';
 
     document.getElementById('ctar-carga-archivo').value = '';
     bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCargaEstado')).show();
@@ -774,7 +760,7 @@ async function CTAR_importar() {
     const archivo  = document.getElementById('ctar-carga-archivo').files[0];
 
     if (!idPerfil) {
-        CTAR_aviso('warning', 'Falta el perfil', 'Cree un perfil de lectura en Configuración → Perfiles.');
+        CTAR_aviso('warning', 'Falta el perfil', 'No hay un perfil de lectura para esta procesadora. Pida al superadministrador que lo cree en Configuración → Perfiles de lectura de tarjetas.');
         return;
     }
     if (!archivo) {
@@ -906,13 +892,8 @@ async function CTAR_marcarSinCobro(id, sinCobro) {
 function CTAR_abrirConfig() {
     const sel = document.getElementById('ctar-cfg-procesadora');
     sel.innerHTML = CTAR_opcionesProcesadoras('');
-    document.getElementById('ctar-perfil-forma').innerHTML =
-        '<option value="">Cualquiera</option>' + CTAR_opcionesProcesadoras('');
 
-    CTAR_pintarCamposMapeo();
     CTAR_cargarConfig();
-    CTAR_cargarPerfiles();
-    CTAR_cancelarPerfil();
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfigTarjetas')).show();
 }
@@ -981,186 +962,6 @@ async function CTAR_guardarConfig() {
         CTAR_aviso('success', 'Configuración guardada', '');
     } catch (e) {
         CTAR_aviso('error', 'No se pudo guardar', e.message);
-    }
-}
-
-// ─── Perfiles de lectura ────────────────────────────────────────────────────
-
-function CTAR_pintarCamposMapeo() {
-    document.getElementById('ctar-perfil-campos').innerHTML = CTAR_CAMPOS_MAPEO.map(([campo, etiqueta, obligatorio]) => `
-        <div class="col-6 col-md-3">
-            <label class="form-label small mb-1">
-                ${CTAR_esc(etiqueta)}${obligatorio ? ' <span class="text-danger">*</span>' : ''}
-            </label>
-            <input type="number" min="0" class="form-control form-control-sm shadow-none border ctar-mapeo-campo"
-                   data-campo="${campo}" placeholder="col.">
-        </div>`).join('');
-}
-
-async function CTAR_cargarPerfiles() {
-    try {
-        CTAR_perfilesCache = await CTAR_api('listarPerfilesAjax');
-    } catch (e) {
-        CTAR_perfilesCache = [];
-    }
-
-    const tbody = document.getElementById('ctar-tbody-perfiles');
-    if (!CTAR_perfilesCache.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted small">Sin perfiles todavía.</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = CTAR_perfilesCache.map((p) => `
-        <tr>
-            <td class="fw-medium">${CTAR_esc(p.nombre_perfil)}</td>
-            <td>${CTAR_esc(p.forma_nombre || 'Cualquiera')}</td>
-            <td class="text-center"><span class="badge bg-secondary bg-opacity-25 text-secondary">${CTAR_esc(p.tipo_archivo)}</span></td>
-            <td class="text-center small">${p.nivel === 'deposito' ? 'Depósitos' : 'Transacciones'}</td>
-            <td class="text-center">
-                <button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="CTAR_editarPerfil(${p.id})" title="Editar">
-                    <i class="bi bi-pencil"></i></button>
-                <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="CTAR_eliminarPerfil(${p.id})" title="Eliminar">
-                    <i class="bi bi-trash"></i></button>
-            </td>
-        </tr>`).join('');
-}
-
-function CTAR_nuevoPerfil() {
-    document.getElementById('ctar-perfil-editor').classList.remove('d-none');
-    document.getElementById('ctar-perfil-id').value = '';
-    document.getElementById('ctar-perfil-nombre').value = '';
-    document.getElementById('ctar-perfil-forma').value = '';
-    document.getElementById('ctar-perfil-tipo').value = 'EXCEL';
-    document.getElementById('ctar-perfil-nivel').value = 'transaccion';
-    document.getElementById('ctar-perfil-fila').value = 1;
-    document.getElementById('ctar-perfil-fecha').value = 'd/m/Y';
-    document.getElementById('ctar-perfil-separador').value = '.';
-    document.getElementById('ctar-perfil-regex').value = '';
-    document.querySelectorAll('.ctar-mapeo-campo').forEach((i) => { i.value = ''; });
-    document.getElementById('ctar-perfil-preview-wrap').classList.add('d-none');
-    CTAR_perfilTipoCambio();
-}
-
-function CTAR_editarPerfil(id) {
-    const p = CTAR_perfilesCache.find((x) => String(x.id) === String(id));
-    if (!p) return;
-
-    CTAR_nuevoPerfil();
-    document.getElementById('ctar-perfil-id').value = p.id;
-    document.getElementById('ctar-perfil-nombre').value = p.nombre_perfil;
-    document.getElementById('ctar-perfil-forma').value = p.id_forma_cobro || '';
-    document.getElementById('ctar-perfil-tipo').value = p.tipo_archivo;
-    document.getElementById('ctar-perfil-nivel').value = p.nivel;
-    document.getElementById('ctar-perfil-fila').value = p.fila_inicio;
-    document.getElementById('ctar-perfil-fecha').value = p.formato_fecha;
-    document.getElementById('ctar-perfil-separador').value = p.separador_decimal;
-
-    const mapeo = typeof p.mapeo_columnas === 'string' ? JSON.parse(p.mapeo_columnas || '{}') : (p.mapeo_columnas || {});
-    document.getElementById('ctar-perfil-regex').value = mapeo.regex_linea || '';
-    document.querySelectorAll('.ctar-mapeo-campo').forEach((i) => {
-        const def = mapeo[i.dataset.campo];
-        i.value = (def && def.col !== undefined) ? def.col : '';
-    });
-
-    CTAR_perfilTipoCambio();
-}
-
-function CTAR_perfilTipoCambio() {
-    const esPdf = document.getElementById('ctar-perfil-tipo').value === 'PDF';
-    document.getElementById('ctar-perfil-mapeo-excel').classList.toggle('d-none', esPdf);
-    document.getElementById('ctar-perfil-mapeo-pdf').classList.toggle('d-none', !esPdf);
-}
-
-function CTAR_mapeoActual() {
-    if (document.getElementById('ctar-perfil-tipo').value === 'PDF') {
-        return { regex_linea: document.getElementById('ctar-perfil-regex').value };
-    }
-
-    const mapeo = {};
-    document.querySelectorAll('.ctar-mapeo-campo').forEach((i) => {
-        if (i.value !== '') mapeo[i.dataset.campo] = { col: parseInt(i.value, 10) };
-    });
-    return mapeo;
-}
-
-function CTAR_cancelarPerfil() {
-    document.getElementById('ctar-perfil-editor').classList.add('d-none');
-}
-
-async function CTAR_guardarPerfil() {
-    try {
-        await CTAR_post('guardarPerfilAjax', {
-            id: document.getElementById('ctar-perfil-id').value || 0,
-            id_forma_cobro: document.getElementById('ctar-perfil-forma').value || null,
-            nombre_perfil: document.getElementById('ctar-perfil-nombre').value,
-            tipo_archivo: document.getElementById('ctar-perfil-tipo').value,
-            nivel: document.getElementById('ctar-perfil-nivel').value,
-            fila_inicio: document.getElementById('ctar-perfil-fila').value || 0,
-            formato_fecha: document.getElementById('ctar-perfil-fecha').value,
-            separador_decimal: document.getElementById('ctar-perfil-separador').value,
-            mapeo_columnas: CTAR_mapeoActual(),
-            activo: true,
-        });
-        CTAR_cancelarPerfil();
-        CTAR_cargarPerfiles();
-        CTAR_aviso('success', 'Perfil guardado', '');
-    } catch (e) {
-        CTAR_aviso('error', 'No se pudo guardar el perfil', e.message);
-    }
-}
-
-async function CTAR_eliminarPerfil(id) {
-    if (!await CTAR_confirmar('¿Eliminar el perfil?', 'Las conciliaciones ya cargadas no se ven afectadas.')) return;
-    try {
-        await CTAR_post('eliminarPerfilAjax', { id });
-        CTAR_cargarPerfiles();
-    } catch (e) {
-        CTAR_aviso('error', 'No se pudo eliminar', e.message);
-    }
-}
-
-/** Muestra el archivo de muestra tal como lo lee el sistema, y prueba el mapeo. */
-async function CTAR_previsualizarMuestra() {
-    const archivo = document.getElementById('ctar-perfil-muestra').files[0];
-    if (!archivo) return;
-
-    const fd = new FormData();
-    fd.append('archivo', archivo);
-    fd.append('tipo_archivo', document.getElementById('ctar-perfil-tipo').value);
-    fd.append('fila_inicio', document.getElementById('ctar-perfil-fila').value || 0);
-    fd.append('formato_fecha', document.getElementById('ctar-perfil-fecha').value);
-    fd.append('separador_decimal', document.getElementById('ctar-perfil-separador').value);
-    fd.append('mapeo_prueba', JSON.stringify(CTAR_mapeoActual()));
-
-    try {
-        const r = await CTAR_api('previsualizarArchivoAjax', { method: 'POST', body: fd });
-        const esPdf = document.getElementById('ctar-perfil-tipo').value === 'PDF';
-
-        document.getElementById('ctar-perfil-preview').innerHTML = (r.lineas || []).map((fila, i) => {
-            if (esPdf) return `<tr><td class="text-muted">${i}</td><td class="font-monospace">${CTAR_esc(fila)}</td></tr>`;
-            const celdas = (fila || []).map((c, idx) =>
-                `<td><span class="badge bg-light text-muted me-1">${idx}</span>${CTAR_esc(c)}</td>`).join('');
-            return `<tr>${celdas}</tr>`;
-        }).join('');
-        document.getElementById('ctar-perfil-preview-wrap').classList.remove('d-none');
-
-        const probadas = r.filas_probadas;
-        const wrap = document.getElementById('ctar-perfil-probado-wrap');
-        if (Array.isArray(probadas) && probadas.length) {
-            document.getElementById('ctar-perfil-probado').innerHTML = probadas.slice(0, 20).map((l) => `
-                <tr>
-                    <td>${CTAR_fecha(l.fecha)}</td>
-                    <td>${CTAR_esc(l.autorizacion || '')}</td>
-                    <td class="text-end">$${CTAR_num(l.monto_bruto)}</td>
-                    <td class="text-end">$${CTAR_num(l.comision)}</td>
-                    <td class="text-end">$${CTAR_num(l.monto_neto)}</td>
-                </tr>`).join('');
-            wrap.classList.remove('d-none');
-        } else {
-            wrap.classList.add('d-none');
-        }
-    } catch (e) {
-        CTAR_aviso('error', 'No se pudo leer el archivo', e.message);
     }
 }
 

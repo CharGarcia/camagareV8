@@ -9,6 +9,7 @@ use App\repositories\modulos\AsientoContableRepository;
 use App\repositories\modulos\ConciliacionTarjetasRepository;
 use App\Rules\modulos\AsientoContableRules;
 use App\Rules\modulos\ConciliacionTarjetasRules;
+use App\Services\ConciliacionTarjetasPerfilService;
 use App\Services\LogSistemaService;
 
 /**
@@ -75,57 +76,20 @@ class ConciliacionTarjetasService
     }
 
     // ─── Perfiles de estado de cuenta ────────────────────────────────────────
+    // Catálogo global administrado en config/conciliacion-tarjetas-perfiles (nivel 3):
+    // aquí solo se eligen, según el tipo y el banco de la procesadora.
 
-    public function getPerfiles(int $idEmpresa, ?int $idFormaCobro = null): array
+    /** Perfiles activos que sirven para la procesadora (forma de cobro) indicada. */
+    public function getPerfiles(int $idEmpresa, int $idFormaCobro): array
     {
-        return $this->repository->getPerfiles($idEmpresa, $idFormaCobro);
-    }
-
-    public function guardarPerfil(int $idEmpresa, int $idUsuario, array $data): int
-    {
-        if (is_string($data['mapeo_columnas'] ?? null)) {
-            $data['mapeo_columnas'] = json_decode($data['mapeo_columnas'], true) ?: [];
+        $procesadora = $this->buscarProcesadora($idEmpresa, $idFormaCobro);
+        if ($procesadora === null) {
+            return [];
         }
-        $this->rules->validarPerfil($data);
-
-        $antes = !empty($data['id']) ? $this->repository->getPerfil((int) $data['id'], $idEmpresa) : null;
-        $id    = $this->repository->guardarPerfil($idEmpresa, $idUsuario, $data);
-
-        $this->logService->registrar(
-            $idUsuario,
-            $idEmpresa,
-            $antes ? 'ACTUALIZAR_PERFIL_CONCILIACION_TARJETAS' : 'CREAR_PERFIL_CONCILIACION_TARJETAS',
-            'conciliacion_tarjetas_perfiles',
-            $id,
-            $antes,
-            $this->repository->getPerfil($id, $idEmpresa)
+        return (new ConciliacionTarjetasPerfilService())->getActivosPara(
+            (string) $procesadora['tipo'],
+            !empty($procesadora['id_banco']) ? (int) $procesadora['id_banco'] : null
         );
-
-        return $id;
-    }
-
-    public function eliminarPerfil(int $id, int $idEmpresa, int $idUsuario): void
-    {
-        $antes = $this->repository->getPerfil($id, $idEmpresa);
-        if ($antes === null) {
-            throw new \Exception('El perfil no existe.');
-        }
-        $this->repository->eliminarPerfil($id, $idEmpresa, $idUsuario);
-        $this->logService->registrar(
-            $idUsuario, $idEmpresa, 'ELIMINAR_PERFIL_CONCILIACION_TARJETAS',
-            'conciliacion_tarjetas_perfiles', $id, $antes, null
-        );
-    }
-
-    /** Asistente de perfil: muestra el archivo tal cual se lee. */
-    public function previsualizarArchivo(array $archivo, string $tipoArchivo, int $filaInicio, ?array $mapeoPrueba, string $formatoFecha, string $separador): array
-    {
-        $ruta = $this->recibirArchivo($archivo, false);
-        try {
-            return $this->importService->previsualizar($ruta, $tipoArchivo, $filaInicio, 60, $mapeoPrueba, $formatoFecha, $separador);
-        } finally {
-            @unlink($ruta);
-        }
     }
 
     // ─── Conciliaciones ──────────────────────────────────────────────────────
@@ -305,10 +269,11 @@ class ConciliacionTarjetasService
             throw new \Exception('Solo se puede cargar el estado de cuenta en una conciliación en borrador.');
         }
 
-        $perfil = $this->repository->getPerfil($idPerfil, $idEmpresa);
-        if ($perfil === null) {
-            throw new \Exception('El perfil de lectura seleccionado no existe.');
-        }
+        $perfil = (new ConciliacionTarjetasPerfilService())->getActivoPara(
+            $idPerfil,
+            (string) $cabecera['procesadora_tipo'],
+            !empty($cabecera['procesadora_id_banco']) ? (int) $cabecera['procesadora_id_banco'] : null
+        );
 
         $ruta      = $this->recibirArchivo($archivo, true);
         $resultado = $this->importService->parsear($perfil, $ruta);

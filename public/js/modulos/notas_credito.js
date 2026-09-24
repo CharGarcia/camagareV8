@@ -146,6 +146,10 @@
 
     window.NC_abrirModalNuevo = () => {
         try {
+            if (window.NC_SIN_BODEGAS) {
+                Swal.fire('Sin bodegas asignadas', 'No puede emitir notas de crédito porque no tiene bodegas asignadas para reintegrar la mercadería. Solicite al administrador que le asigne al menos una bodega (Bodegas → Accesos).', 'warning');
+                return;
+            }
             if (!initModal()) return;
             NC_idActual = null;
             
@@ -196,6 +200,26 @@
         }
     };
 
+    // Muestra en «Bodega Reintegro» la bodega guardada en la NC. Si el usuario ya no la tiene
+    // en su combo (acceso revocado o bodega inactiva) se agrega como opción temporal, para que
+    // la NC no aparente otra bodega. Con id null solo quita esas opciones temporales.
+    function NC_setBodega(idBodega, nombre = '') {
+        const sel = document.getElementById('nc_id_bodega');
+        if (!sel) return;
+        sel.querySelectorAll('option[data-temporal]').forEach(o => o.remove());
+        if (idBodega == null || idBodega === '') return;
+
+        const id = String(idBodega);
+        if (!Array.from(sel.options).some(o => o.value === id)) {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.dataset.temporal = '1';
+            opt.textContent = `${nombre || 'Bodega #' + id} (sin acceso)`;
+            sel.appendChild(opt);
+        }
+        sel.value = id;
+    }
+
     function NC_resetearYMostrar(borrador = null) {
         try {
             // Estado interno: una NC nueva arranca siempre como borrador sin id.
@@ -206,6 +230,7 @@
             window.NC_ID_ACTIVO = null;
 
             NC_limpiarDropdownsProducto();
+            NC_setBodega(null);
             if (formNC) formNC.reset();
             const idInput = document.getElementById('nc_id');
             if (idInput) idInput.value = '';
@@ -366,6 +391,9 @@
                     }
                     if (cab.fecha_emision_docs_sustento) document.getElementById('nc_fecha_emision_docs_sustento').value = soloDia(cab.fecha_emision_docs_sustento);
                     if (cab.motivo != null)            document.getElementById('nc_motivo').value = cab.motivo;
+                    // Bodega donde reintegró la NC (NC anteriores al campo id_bodega: sin dato,
+                    // solo se quitan las opciones temporales de la NC abierta antes).
+                    NC_setBodega(cab.id_bodega ?? null, cab.bodega_nombre);
 
                     // Tarjeta de info del cliente
                     setEl('nc_lbl_cliente_ruc', 'textContent', cab.cliente_ruc || '');
@@ -1334,6 +1362,10 @@
 
         const serie = document.getElementById('nc_id_punto_emision');
         if (!serie || !serie.value) { NC_focusYError(serie, 'Debe seleccionar la serie (punto de emisión).'); return false; }
+
+        // Sin bodega la NC no devuelve el stock. Un combo sin opciones = empresa sin bodegas.
+        const bodega = document.getElementById('nc_id_bodega');
+        if (bodega && bodega.options.length > 0 && !bodega.value) { NC_focusYError(bodega, 'Seleccione la bodega de reintegro.'); return false; }
 
         const factura = document.getElementById('nc_factura_search');
         if (!factura || !factura.value.trim()) { NC_focusYError(factura, 'Debe indicar la factura o documento a modificar.'); return false; }

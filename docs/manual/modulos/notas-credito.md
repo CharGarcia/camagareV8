@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0
-version: 1.18
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0
+version: 1.19
 orden: 30
 estado: activo
 ---
@@ -121,6 +121,22 @@ nada que devolver.
 La mercadería vuelve **con el mismo lote, NUP / serial y fecha de caducidad** con que
 salió en la factura que la nota modifica; no hay que digitarlos.
 
+### La bodega de reintegro es obligatoria
+
+La mercadería vuelve a la bodega elegida en **Bodega Reintegro**. Ese campo es
+obligatorio: sin bodega, la nota no deja guardar.
+
+El combo solo muestra las bodegas a las que el usuario tiene acceso (**Bodegas →
+Accesos**). Si al usuario le denegaron **todas** las bodegas, el botón **Nueva Nota
+de Crédito** muestra el aviso *"Sin bodegas asignadas"* y no abre la nota: un
+administrador debe asignarle al menos la bodega a la que regresa la mercadería.
+Una empresa que no tiene ninguna bodega (solo servicios) no se ve afectada.
+
+La nota **guarda la bodega** a la que devolvió la mercadería: al abrirla de nuevo, el
+combo muestra esa bodega, y al editar un borrador el reingreso vuelve a ella salvo
+que se cambie a propósito. Si el usuario ya no tiene acceso a esa bodega, aparece con
+la marca *(sin acceso)*; en un borrador hay que elegir otra para poder guardar.
+
 ### Cada ítem recuerda su línea de la factura
 
 Al cargar la factura en la nota de crédito, cada ítem queda enlazado —sin que se vea en
@@ -225,6 +241,14 @@ momento (no solo la página visible).
   notas anteriores sobre esa factura; revise cuánto queda por rebajar.
 - **"Solo se pueden editar Notas de Crédito en estado borrador"**: ya fue
   enviada.
+- **"Sin bodegas asignadas"** / **"No tiene bodegas asignadas"**: el usuario tiene
+  denegadas todas las bodegas. Pida al administrador que le asigne al menos una en
+  **Bodegas → Accesos**.
+- **"Seleccione la bodega de reintegro"**: el campo **Bodega Reintegro** está vacío.
+- **La nota se emitió pero la mercadería no aparece en Inventarios**: revise que el
+  establecimiento tenga activada *"La facturación afecta al inventario"* y que el
+  producto sea inventariable. Las notas guardadas sin bodega antes de la versión 1.19
+  no devolvieron stock y deben corregirse con una entrada manual en Inventarios.
 
 ## La fecha de emisión y el envío al SRI
 
@@ -251,6 +275,16 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.19** — La **bodega de reintegro** pasa a ser obligatoria. Antes, un usuario con todas
+  las bodegas denegadas veía el combo vacío y la nota se guardaba y autorizaba sin devolver
+  la mercadería al inventario, sin ningún aviso. Ahora el botón **Nueva Nota de Crédito**
+  avisa *"Sin bodegas asignadas"* y el guardado se rechaza si no hay bodega o si el usuario
+  no tiene acceso a la elegida. Además la nota **guarda la bodega de reintegro** y la
+  muestra al reabrirla (antes no se guardaba: al editar un borrador el reingreso iba a la
+  bodega que tuviera el combo en ese momento). Requiere el script
+  `database/20260924_nc_cabecera_id_bodega.sql`, que completa la bodega de las notas ya
+  emitidas a partir del kardex.
 
 - **1.18** — Al cargar la factura de origen, el IVA de cada línea se reconoce por el
   código del SRI de esa línea: las líneas en **0%**, **Exento** o **No objeto** ya no

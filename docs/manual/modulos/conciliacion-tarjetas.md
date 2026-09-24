@@ -6,7 +6,7 @@ ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
 etiquetas: conciliar tarjetas, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito
-version: 1.2
+version: 1.3
 orden: 66
 estado: activo
 ---
@@ -40,8 +40,11 @@ ingresos ya existen y lo que se determina es cuáles se depositaron de verdad.
 - Tener al menos una forma de cobro de tipo **Payphone**, **Nuvei** o
   **Tarjeta** en *Formas de Cobro/Pago*. El módulo trabaja con esas y solo con
   esas: son las que cobran hoy y depositan después.
-- Un **perfil de lectura** por cada archivo que reciba, si va a cargar el estado
-  de cuenta. Se crea en *Configuración → Perfiles*.
+- Un **perfil de lectura** para el archivo de su procesadora, si va a cargar el
+  estado de cuenta. Los perfiles son un catálogo del sistema que administra el
+  **superadministrador** en *Configuración → Perfiles de lectura de tarjetas*
+  (ver `config/conciliacion-tarjetas-perfiles`). Si el suyo no está, pídale que
+  lo cree.
 - **Solo si lleva contabilidad**: la forma de cobro de la tarjeta debe apuntar a
   una **cuenta puente** (por ejemplo "Tarjetas de crédito por liquidar"), no a
   la cuenta del banco. El saldo de esa cuenta es justamente lo que la
@@ -60,7 +63,9 @@ solo avisa que no generará el asiento.
 2. Pulse **Nueva conciliación**, escoja la procesadora y la fecha del depósito, y
    guarde.
 3. Pulse **Cargar estado de cuenta** y suba el archivo con el perfil que
-   corresponda. También puede agregar líneas a mano con **Línea manual**.
+   corresponda. La lista muestra solo los perfiles de esa procesadora (Payphone,
+   Nuvei o Tarjeta) y del banco de la forma de cobro, más los genéricos. También
+   puede agregar líneas a mano con **Línea manual**.
 4. Pulse **Cruzar automáticamente**: el sistema empareja lo evidente. Lo que
    quede suelto se cruza a mano — clic en la línea de la izquierda y luego en el
    cobro de la derecha.
@@ -115,9 +120,9 @@ además puede modificar asientos contables puede corregirlo ahí mismo.
 ## Permisos
 
 - **Ver**: consultar pendientes y conciliaciones.
-- **Crear**: crear conciliaciones, cargar el estado de cuenta y crear perfiles.
+- **Crear**: crear conciliaciones y cargar el estado de cuenta.
 - **Modificar**: cruzar, descruzar, cerrar y anular.
-- **Eliminar**: eliminar conciliaciones en borrador, líneas y perfiles.
+- **Eliminar**: eliminar conciliaciones en borrador y líneas.
 - **Acceso total**: sin él, el usuario solo ve los cobros que él mismo registró.
   Con él, ve los de toda la empresa.
 
@@ -161,10 +166,14 @@ además puede modificar asientos contables puede corregirlo ahí mismo.
   debitó esa cuenta; contabilizar el depósito la duplicaría. La tarjeta necesita
   una cuenta puente propia, distinta de la del banco.
 - **"No se pudo leer ninguna línea del archivo"**: casi siempre es la fila de
-  inicio o el mapeo de columnas del perfil. Suba el archivo como muestra en el
-  editor de perfiles y use **Probar mapeo** para ver qué está leyendo.
-- **Las cifras no cuadran por centavos**: revise el separador decimal del perfil
-  (punto o coma) y suba la tolerancia si su procesadora redondea distinto.
+  inicio o el mapeo de columnas del perfil. El superadministrador puede subir el
+  archivo como muestra en *Configuración → Perfiles de lectura de tarjetas* y
+  usar **Ver / Probar** para ver qué está leyendo.
+- **"No hay perfiles para esta procesadora"** o **"El perfil es para otra
+  procesadora"**: no hay un perfil activo del tipo (o del banco) de la forma de
+  cobro. Pida al superadministrador que lo cree o que lo deje como genérico.
+- **Las cifras no cuadran por centavos**: pida revisar el separador decimal del
+  perfil (punto o coma) y suba la tolerancia si su procesadora redondea distinto.
 - **Un cobro no aparece para cruzar**: puede estar fuera del período de la
   conciliación, ya conciliado en otra, o pertenecer a otro usuario si usted no
   tiene acceso total.
@@ -182,6 +191,12 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.3** — Los **perfiles de lectura** ya no se crean por empresa en la
+  configuración del módulo: pasan a un catálogo global en *Configuración →
+  Perfiles de lectura de tarjetas*, que administra el nivel 3. Cada perfil se
+  asocia a un tipo de procesadora (y, si hace falta, a un banco) en lugar de a
+  una forma de cobro de la empresa. La configuración del módulo queda solo con
+  la parte contable.
 - **1.2** — Listado con **paginación** (antes mostraba solo las primeras 100
   conciliaciones), **orden por columnas** (también por varias), columnas que se
   pueden ocultar y ancho recordado. **Pendientes por depositar** ya no exige

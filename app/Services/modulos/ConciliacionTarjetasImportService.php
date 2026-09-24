@@ -13,7 +13,7 @@ use Smalot\PdfParser\Parser as PdfParser;
  * el banco del datáfono…) y lo devuelve como líneas normalizadas.
  *
  * El formato cambia de un proveedor a otro —y de un banco a otro— así que nada
- * viene fijo: cada empresa arma un PERFIL con el asistente y ese perfil dice en
+ * viene fijo: un PERFIL (catálogo global en config/conciliacion-tarjetas-perfiles) dice en
  * qué columna está cada dato. Mismo enfoque que ConciliacionImportService usa
  * para los estados de cuenta bancarios; se mantiene aparte porque los campos que
  * interesan son otros (autorización, comisión, retenciones).

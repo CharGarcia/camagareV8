@@ -272,7 +272,7 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
                     <select id="ctar-carga-perfil" class="form-select form-select-sm shadow-none border"></select>
                     <div class="form-text" style="font-size:.7rem;">
                         El formato del archivo cambia según la procesadora y el banco. Si el suyo no está,
-                        cree un perfil en <strong>Configuración → Perfiles</strong>.
+                        pida al superadministrador que lo cree en <strong>Configuración → Perfiles de lectura de tarjetas</strong>.
                     </div>
                 </div>
                 <div class="mb-2">
