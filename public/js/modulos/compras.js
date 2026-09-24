@@ -1316,7 +1316,9 @@ window.CMG_seleccionarProducto = function(p) {
             tr.querySelector('.input-id-tipo-medida').value = p.id_tipo_medida || '';
             tr.dataset.idProducto = p.id;
             tr.dataset.productoNombre = p.nombre;
-            
+            tr.dataset.productoCodigo = p.codigo_principal || p.codigo || '';
+            mcPintarProductoDetalle(tr);
+
             const descInput = tr.querySelector('.input-descripcion');
             if (descInput && !descInput.value.trim()) {
                 descInput.value = p.nombre;
@@ -1372,6 +1374,7 @@ window.CMG_seleccionarProducto = function(p) {
     CMG_agregarFilaDetalle({
         id_producto: p.id,
         producto_nombre: p.nombre,
+        producto_codigo: p.codigo_principal || p.codigo || '',
         codigo: p.codigo_principal || p.codigo,
         descripcion: p.nombre,
         cantidad: 1,
@@ -1561,6 +1564,8 @@ window.mcQuitarVinculacionInv = async function(idx) {
         const inputIdTipoMedida = trDet.querySelector('.input-id-tipo-medida');
         if (inputIdTipoMedida) inputIdTipoMedida.value = '';
         trDet.dataset.productoNombre = '';
+        trDet.dataset.productoCodigo = '';
+        mcPintarProductoDetalle(trDet);
     }
 
     // Misma secuencia que al cambiar a la pestaña Inventario (ver listener de
@@ -1632,11 +1637,13 @@ function CMG_agregarFilaDetalle(det) {
     tr.className = 'row-detalle';
     tr.dataset.idx = idx;
     tr.dataset.productoNombre = det.producto_nombre || '';
+    tr.dataset.productoCodigo = det.producto_codigo || '';
     tr.dataset.descripcionOriginal = det.descripcion || '';
     tr.dataset.subtotalOriginal = esLineaExistente ? String(det.precio_total_sin_impuesto) : '';
     tr.innerHTML = `
         <td class="ps-3">
             <input type="text" class="form-control form-control-sm input-detalle input-descripcion" value="${_esc(det.descripcion||'')}" placeholder="Descripción del producto..." oninput="CMG_recalcularTotales()">
+            <div class="mc-det-producto text-primary text-truncate d-none" style="font-size:0.7rem; line-height:1.2; padding:1px 4px 0;"></div>
             <input type="hidden" class="input-id-detalle" value="${det.id || ''}">
             <input type="hidden" class="input-id-producto" value="${det.id_producto || det.id_producto_vinculado || ''}">
             <input type="hidden" class="input-codigo" value="${det.codigo_principal || ''}">
@@ -1657,6 +1664,7 @@ function CMG_agregarFilaDetalle(det) {
             </button>
         </td>`;
     tbody.appendChild(tr);
+    mcPintarProductoDetalle(tr);
 
     // Si viene código de proveedor pero no id_producto, intentamos buscar homologación
     if ((!det.id_producto || det.id_producto == '0') && det.codigo_principal) {
@@ -1670,6 +1678,27 @@ function CMG_agregarFilaDetalle(det) {
     } else {
         CMG_recalcularFila(tr.querySelector('.input-cantidad'));
     }
+}
+
+/**
+ * Bajo la descripción del comprobante (que es la del proveedor y se guarda tal cual), muestra el
+ * producto del catálogo vinculado a la línea: "GUA-001 - Guantes de nitrilo". Sin vínculo, nada.
+ */
+function mcPintarProductoDetalle(tr) {
+    const cont = tr?.querySelector('.mc-det-producto');
+    if (!cont) return;
+    const idProd = tr.querySelector('.input-id-producto')?.value || '';
+    const nombre = tr.dataset.productoNombre || '';
+    const codigo = tr.dataset.productoCodigo || '';
+    if (!idProd || idProd === '0' || (!nombre && !codigo)) {
+        cont.classList.add('d-none');
+        cont.innerHTML = '';
+        return;
+    }
+    const texto = (codigo ? codigo + ' - ' : '') + nombre;
+    cont.innerHTML = `<i class="bi bi-tag-fill me-1"></i>${_esc(texto)}`;
+    cont.title = 'Producto del catálogo vinculado: ' + texto;
+    cont.classList.remove('d-none');
 }
 
 function CMG_recalcularFila(input) {
@@ -2483,7 +2512,9 @@ async function mcConsultarHomologacion(idProv, codigoProv, tr) {
                 tr.querySelector('.input-id-medida').value = prod.id_medida || '';
                 tr.querySelector('.input-id-tipo-medida').value = prod.id_tipo_medida || '';
                 tr.dataset.productoNombre = prod.nombre;
-                
+                tr.dataset.productoCodigo = prod.codigo || '';
+                mcPintarProductoDetalle(tr);
+
                 // Si la descripción está vacía o es igual al código, poner el nombre del producto
                 const inputDesc = tr.querySelector('.input-descripcion');
                 if (inputDesc && (!inputDesc.value || inputDesc.value.trim() === codigoProv.trim())) {
@@ -2767,6 +2798,7 @@ window.mcSincronizarInventario = function(forceReset = false) {
                 descripcion: desc, 
                 descripcion_original: tr.dataset.descripcionOriginal || desc,
                 producto_nombre: idProd ? (prodName || desc) : desc,
+                producto_codigo: idProd ? (tr.dataset.productoCodigo || '') : '',
                 cantidad: cant, 
                 costo: precio, 
                 id_medida: idMed,
@@ -2861,7 +2893,7 @@ window.mcSincronizarInventario = function(forceReset = false) {
                     <div class="fw-medium small">
                         <div class="d-flex align-items-start">
                             ${(item.id_producto && item.id_producto != '0') ? '<i class="bi bi-tag-fill me-1 mt-1"></i>' : ''}
-                            <textarea class="form-control form-control-sm border-0 bg-transparent p-0 mc-nombre-inv ${(item.id_producto && item.id_producto != '0') ? 'text-primary fw-bold' : ''}" readonly rows="1" style="resize:none; overflow:hidden; flex:1 1 auto; min-width:0; font-size:.8rem; line-height:1.25;">${(item.id_producto && item.id_producto != '0') ? _esc(item.producto_nombre || item.descripcion) : _esc(item.descripcion)}</textarea>
+                            <textarea class="form-control form-control-sm border-0 bg-transparent p-0 mc-nombre-inv ${(item.id_producto && item.id_producto != '0') ? 'text-primary fw-bold' : ''}" readonly rows="1" style="resize:none; overflow:hidden; flex:1 1 auto; min-width:0; font-size:.8rem; line-height:1.25;">${(item.id_producto && item.id_producto != '0') ? _esc((item.producto_codigo ? item.producto_codigo + ' - ' : '') + (item.producto_nombre || item.descripcion)) : _esc(item.descripcion)}</textarea>
                             ${pendiente <= 0 ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 mt-1"><i class="bi bi-check-all me-1"></i>Enviado</span>' : ''}
                             ${(item.id_producto && item.id_producto != '0' && procesadoEnFila === 0) ? `<button type="button" class="btn btn-xs btn-link text-danger p-0 ms-1 mt-1" style="font-size:0.8rem; line-height:1;" title="Quitar vinculación (producto equivocado)" onclick="mcQuitarVinculacionInv(${item.index})"><i class="bi bi-x-circle"></i></button>` : ''}
                         </div>
