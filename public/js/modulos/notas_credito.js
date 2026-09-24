@@ -534,7 +534,9 @@
         document.getElementById('nc-btn-xml').disabled = !habilitar;
         document.getElementById('nc-btn-excel').disabled = !habilitar;
         document.getElementById('nc-btn-correo').disabled = !habilitar || !esAutorizado;
-        document.getElementById('btnGuardarNC').disabled = esAutorizado || esAnulado;
+        // Guardar sigue activo en una NC emitida: ahí solo actualiza el vendedor (el servidor
+        // descarta el resto), igual que en Factura de Venta.
+        document.getElementById('btnGuardarNC').disabled = false;
 
         // Botones footer (Eliminar/Anular). Eliminar también aparece fuera de
         // borrador para el superadmin (nivel 3) — ver NotaCreditoService::eliminar().
@@ -566,7 +568,7 @@
 
         modal.classList.toggle('nc-lectura', !!lock);
 
-        const campos = ['nc_fecha_emision', 'nc_id_punto_emision', 'nc_id_bodega', 'nc_id_vendedor',
+        const campos = ['nc_fecha_emision', 'nc_id_punto_emision', 'nc_id_bodega',
             'nc_motivo', 'nc_cliente_search', 'nc_factura_search', 'nc_fecha_emision_docs_sustento'];
         campos.forEach(id => {
             const el = document.getElementById(id);
@@ -582,9 +584,12 @@
                 else el.readOnly = !!lock;
             });
 
-        // Botón Guardar: sin sentido en modo lectura
+        // Vendedor y Guardar quedan disponibles en modo lectura: en una NC ya emitida lo
+        // único que se puede cambiar es el vendedor (ver NotasCreditoController::guardarAjax).
+        const selVend = document.getElementById('nc_id_vendedor');
+        if (selVend) selVend.disabled = false;
         const btnGuardar = document.getElementById('btnGuardarNC');
-        if (btnGuardar) btnGuardar.classList.toggle('d-none', !!lock);
+        if (btnGuardar) btnGuardar.classList.remove('d-none');
     }
 
     function setEl(id, prop, val) {
@@ -1416,7 +1421,38 @@
         return true;
     }
 
+    // NC ya emitida: solo se envía el vendedor, sin validar el resto del formulario (que
+    // está bloqueado y el servidor ignora). Mismo criterio que Factura de Venta.
+    async function NC_guardarSoloVendedor(id) {
+        const btn = document.getElementById('btnGuardarNC');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
+        try {
+            const payload = { id, id_vendedor: document.getElementById('nc_id_vendedor')?.value || '' };
+            const resp = await fetch(`${BASE_URL}/modulos/notas_credito/guardarAjax`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `data=${encodeURIComponent(JSON.stringify(payload))}`
+            });
+            const data = await resp.json();
+            if (!data.ok) { Swal.fire('Error', data.mensaje, 'error'); return; }
+            window.NC_fetchSearch();
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: data.mensaje || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
+        } catch (e) {
+            console.error('Error al actualizar el vendedor de la NC:', e);
+            Swal.fire('Error', 'No se pudo actualizar el vendedor.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
+        }
+    }
+
     window.NC_guardar = async () => {
+        const idActual = document.getElementById('nc_id').value;
+        if (idActual && NC_estadoActual && !['borrador', 'edicion'].includes(NC_estadoActual)) {
+            return NC_guardarSoloVendedor(idActual);
+        }
+
         if (!NC_validarObligatorios()) return;
 
         const formData = new FormData(formNC);

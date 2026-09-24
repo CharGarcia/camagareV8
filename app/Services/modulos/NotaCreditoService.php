@@ -93,6 +93,44 @@ class NotaCreditoService
         return $data;
     }
 
+    /**
+     * NC ya emitida (autorizada, anulada…): solo se permite cambiar el vendedor, igual que
+     * en Factura de Venta (FacturaVentaService::actualizarVendedor). No toca el XML ni el
+     * asiento: el vendedor no viaja al SRI, solo sirve a los reportes.
+     */
+    public function actualizarVendedor(int $id, ?int $idVendedor, int $idEmpresa, int $idUsuario): void
+    {
+        $nc = $this->repository->getPorId($id);
+        if (!$nc || (int) ($nc['id_empresa'] ?? 0) !== $idEmpresa) {
+            throw new Exception('Nota de crédito no encontrada.');
+        }
+
+        $data = $this->validarVendedor(['id_vendedor' => $idVendedor, 'id_empresa' => $idEmpresa]);
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $this->repository->actualizarVendedor($id, $data['id_vendedor'], $idUsuario);
+
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'ACTUALIZAR_VENDEDOR',
+                'notas_credito_cabecera',
+                $id,
+                ['id_vendedor' => $nc['id_vendedor'] ?? null],
+                ['id_vendedor' => $data['id_vendedor']]
+            );
+
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
     public function crear(array $data): int
     {
         $this->rules->validar($data);

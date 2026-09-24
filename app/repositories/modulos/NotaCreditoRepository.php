@@ -319,6 +319,19 @@ class NotaCreditoRepository extends BaseRepository
         return (bool) $st->fetchColumn();
     }
 
+    /** Solo cambia el vendedor (NC ya emitida: el resto del documento no se toca). */
+    public function actualizarVendedor(int $id, ?int $idVendedor, int $idUsuario): void
+    {
+        if (!$this->columnaExiste('notas_credito_cabecera', 'id_vendedor')) {
+            throw new \Exception('Falta aplicar el script database/20260924_nc_cabecera_id_vendedor.sql: las notas de crédito aún no tienen el campo vendedor.');
+        }
+
+        $st = $this->db->prepare(
+            "UPDATE notas_credito_cabecera SET id_vendedor = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        );
+        $st->execute([$idVendedor, $idUsuario, $id]);
+    }
+
     /** El vendedor existe, es de la empresa y no está eliminado. */
     public function vendedorEsDeEmpresa(int $idVendedor, int $idEmpresa): bool
     {

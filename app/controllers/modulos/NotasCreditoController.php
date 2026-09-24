@@ -620,6 +620,16 @@ class NotasCreditoController extends BaseModuloController
 
             if ($idExistente > 0) {
                 $this->requireActualizar();
+
+                // NC ya emitida: solo se actualiza el vendedor (mismo criterio que Factura de Venta).
+                $ncDb = $this->repository->getPorId($idExistente);
+                if ($ncDb && ($ncDb['estado'] ?? '') !== 'borrador') {
+                    $idVendedor = !empty($data['id_vendedor']) ? (int) $data['id_vendedor'] : null;
+                    $this->service->actualizarVendedor($idExistente, $idVendedor, $data['id_empresa'], $data['id_usuario']);
+                    echo json_encode(['ok' => true, 'mensaje' => 'Vendedor actualizado.', 'id' => $idExistente]);
+                    exit;
+                }
+
                 $id = $this->service->actualizar($idExistente, $data);
                 $mensaje = 'Nota de crédito actualizada exitosamente.';
             } else {

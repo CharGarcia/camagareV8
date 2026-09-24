@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo
-version: 1.21
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor
+version: 1.22
 orden: 30
 estado: activo
 ---
@@ -125,6 +125,12 @@ o al elegir "Nueva nota".
 Solo se pueden **editar** o **eliminar** notas de crédito en estado **borrador**.
 Una vez enviada y autorizada, el documento es definitivo ante el SRI: si está
 mal, hay que gestionarlo como cualquier comprobante autorizado erróneo.
+
+**Excepción: el vendedor.** En una nota ya autorizada (o anulada) el campo
+**Vendedor** sigue habilitado: se elige el nuevo y se pulsa **Guardar**. Solo se
+cambia el vendedor (el vendedor no va en el XML del SRI, solo se usa en los
+reportes), y el cambio queda en el historial del registro. Requiere el permiso de
+modificar. Funciona igual que en **Factura de Venta**.
 
 ## Efecto en el inventario y la cartera
 
@@ -331,6 +337,10 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.22** — En una nota ya **autorizada o anulada** se puede cambiar el **Vendedor** y
+  guardar (antes el campo quedaba bloqueado). Solo se actualiza el vendedor; el resto del
+  documento sigue sin poder editarse. Mismo comportamiento que Factura de Venta.
 
 - **1.21** — Nuevo campo **Vendedor** en la nota, junto a *Bodega Reintegro*: se propone
   el vendedor del cliente (o el de la factura/recibo cuando la nota se genera desde ahí) y
