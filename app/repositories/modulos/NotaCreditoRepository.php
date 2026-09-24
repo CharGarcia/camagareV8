@@ -295,6 +295,30 @@ class NotaCreditoRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * ¿Alguno de estos productos es inventariable? Solo esos devuelven stock al emitir la NC;
+     * una nota con líneas libres o de servicios (p. ej. descuento por pronto pago) no mueve
+     * inventario y no necesita bodega de reintegro.
+     */
+    public function hayProductosInventariables(int $idEmpresa, array $idsProducto): bool
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsProducto))));
+        if (!$ids) {
+            return false;
+        }
+
+        $marcas = implode(', ', array_fill(0, count($ids), '?'));
+        $st = $this->db->prepare(
+            "SELECT 1 FROM productos
+              WHERE id_empresa = ? AND eliminado = false AND inventariable = true
+                AND id IN ({$marcas})
+              LIMIT 1"
+        );
+        $st->execute(array_merge([$idEmpresa], $ids));
+
+        return (bool) $st->fetchColumn();
+    }
+
     public function getPorId(int $id): ?array
     {
         // Nombre de la bodega de reintegro: la vista lo necesita cuando esa bodega ya no
@@ -498,7 +522,8 @@ class NotaCreditoRepository extends BaseRepository
                  descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto";
         $params = [
             $data['id_nota_credito'],
-            $data['id_producto'] ?? null,
+            // Línea sin producto (concepto libre): el formulario manda '' y Postgres no lo acepta como integer.
+            !empty($data['id_producto']) ? (int) $data['id_producto'] : null,
             $data['codigo_principal'] ?? null,
             $data['codigo_auxiliar'] ?? null,
             $data['descripcion'],

@@ -28,16 +28,6 @@ class NotaCreditoService
     }
 
     /**
-     * El usuario no puede emitir notas de crédito: la empresa tiene bodegas, pero a él se le
-     * denegaron todas (Bodegas → Accesos). Sin bodega de reintegro la NC no devuelve stock.
-     * Una empresa sin ninguna bodega (solo servicios) no se bloquea.
-     */
-    public function usuarioSinBodegas(int $idUsuario, int $idEmpresa, int $nivel): bool
-    {
-        return $this->bodegasReintegro($idUsuario, $idEmpresa, $nivel)['sin_bodegas'];
-    }
-
-    /**
      * Bodegas donde el usuario puede reintegrar la mercadería de una NC.
      * 'aplica' = la empresa tiene bodegas; si no tiene ninguna, no hay nada que exigir.
      */
@@ -54,7 +44,12 @@ class NotaCreditoService
         ];
     }
 
-    private function validarBodegaReintegro(array $data): void
+    /**
+     * La bodega de reintegro solo se exige si la nota devuelve mercadería: alguna línea con
+     * producto inventariable. Una NC de descuento (líneas libres o servicios) no mueve stock;
+     * en ella la bodega es opcional y, si no es una a la que el usuario tenga acceso, se descarta.
+     */
+    private function validarBodegaReintegro(array $data): array
     {
         $bodegas = $this->bodegasReintegro(
             (int) ($data['id_usuario'] ?? 0),
@@ -62,20 +57,30 @@ class NotaCreditoService
             (int) ($data['nivel'] ?? 1)
         );
         if (!$bodegas['aplica']) {
-            return;
+            return $data;
         }
 
-        $this->rules->validarBodegaReintegro(
-            $data,
-            $bodegas['sin_bodegas'],
-            in_array((int) ($data['id_bodega'] ?? 0), $bodegas['ids'], true)
+        $bodegaPermitida = in_array((int) ($data['id_bodega'] ?? 0), $bodegas['ids'], true);
+        $requiereBodega  = $this->repository->hayProductosInventariables(
+            (int) ($data['id_empresa'] ?? 0),
+            array_column($data['detalles'] ?? [], 'id_producto')
         );
+
+        if (!$requiereBodega) {
+            if (!$bodegaPermitida) {
+                $data['id_bodega'] = null;
+            }
+            return $data;
+        }
+
+        $this->rules->validarBodegaReintegro($data, $bodegas['sin_bodegas'], $bodegaPermitida);
+        return $data;
     }
 
     public function crear(array $data): int
     {
         $this->rules->validar($data);
-        $this->validarBodegaReintegro($data);
+        $data = $this->validarBodegaReintegro($data);
 
         $this->validarPeriodoContable(
             $data['fecha_emision'] ?? null,
@@ -290,7 +295,7 @@ class NotaCreditoService
     public function actualizar(int $id, array $data): int
     {
         $this->rules->validar($data);
-        $this->validarBodegaReintegro($data);
+        $data = $this->validarBodegaReintegro($data);
 
         $ncActual = $this->repository->getPorId($id);
         $this->validarPeriodoContableAlModificar(

@@ -345,9 +345,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     // Nivel 3 (superadmin) puede eliminar una NC fuera de borrador — ver
     // NotaCreditoService::eliminar(), que hace la verificación real.
     window.NC_ES_SUPERADMIN = <?= ((int) ($_SESSION['nivel'] ?? 1) === 3) ? 'true' : 'false' ?>;
-    // Usuario con todas las bodegas denegadas: no puede emitir NC (no hay dónde reintegrar
-    // el stock). El servidor lo vuelve a validar al guardar — ver NotaCreditoService.
-    window.NC_SIN_BODEGAS = <?= !empty($sinBodegas) ? 'true' : 'false' ?>;
     // Ordenamiento aplicado por el servidor (preferencia del usuario).
     window.NC_ORDEN_COL = <?= json_encode($ordenCol ?? 'fecha_emision') ?>;
     window.NC_ORDEN_DIR = <?= json_encode($ordenDir ?? 'DESC') ?>;

@@ -7,7 +7,8 @@ namespace App\Services\modulos;
 /**
  * Propone qué cobro del sistema corresponde a cada línea del estado de cuenta.
  *
- * Es solo una SUGERENCIA: nada se guarda hasta que el usuario confirma. Cada
+ * Es solo una SUGERENCIA: nada se guarda hasta que el usuario confirma (la pantalla
+ * muestra la lista en «Cruces sugeridos» y cruza solo las que se marquen). Cada
  * sugerencia viaja con su score y el criterio con el que se encontró, para que
  * en pantalla se vea por qué se propuso.
  *

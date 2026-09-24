@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0
-version: 1.19
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, sin bodega, invalid input syntax for type integer
+version: 1.20
 orden: 30
 estado: activo
 ---
@@ -121,16 +121,20 @@ nada que devolver.
 La mercadería vuelve **con el mismo lote, NUP / serial y fecha de caducidad** con que
 salió en la factura que la nota modifica; no hay que digitarlos.
 
-### La bodega de reintegro es obligatoria
+### La bodega de reintegro, cuando la nota devuelve productos
 
 La mercadería vuelve a la bodega elegida en **Bodega Reintegro**. Ese campo es
-obligatorio: sin bodega, la nota no deja guardar.
+obligatorio **cuando la nota lleva al menos una línea con un producto inventariable**:
+sin bodega, la nota no deja guardar. Si todas las líneas son libres (sin producto) o
+de servicios, la bodega no hace falta, porque la nota no mueve inventario (ver la
+sección siguiente).
 
 El combo solo muestra las bodegas a las que el usuario tiene acceso (**Bodegas →
-Accesos**). Si al usuario le denegaron **todas** las bodegas, el botón **Nueva Nota
-de Crédito** muestra el aviso *"Sin bodegas asignadas"* y no abre la nota: un
-administrador debe asignarle al menos la bodega a la que regresa la mercadería.
-Una empresa que no tiene ninguna bodega (solo servicios) no se ve afectada.
+Accesos**). Si al usuario le denegaron **todas** las bodegas, puede emitir notas por
+descuento, pero no notas que devuelvan productos: al guardar aparece el aviso *"Esta
+nota de crédito devuelve productos al inventario y usted no tiene bodegas
+asignadas"*, y un administrador debe asignarle al menos la bodega a la que regresa la
+mercadería. Una empresa que no tiene ninguna bodega (solo servicios) no se ve afectada.
 
 La nota **guarda la bodega** a la que devolvió la mercadería: al abrirla de nuevo, el
 combo muestra esa bodega, y al editar un borrador el reingreso vuelve a ella salvo
@@ -161,6 +165,35 @@ otras notas de crédito de la misma factura ya devolvieron:
 Si un ítem devuelve más de lo que salió de su lote, el excedente sigue ese mismo reparto.
 Lo que no se pueda atribuir a ningún lote (nota sobre un saldo inicial, factura sin lote,
 o unidades de más sobre lo vendido) entra al inventario sin lote.
+
+## Nota de crédito por descuento, sin afectar el inventario
+
+Para rebajar el valor de una factura **sin que regrese mercadería** (descuento por
+pronto pago, descuento comercial posterior, rebaja de precio acordada con el cliente,
+bonificación), la nota **no debe llevar los productos de la factura**: si los lleva,
+el sistema entiende que el cliente los devolvió y los vuelve a sumar al stock.
+
+Cómo hacerla:
+
+1. Cree la nota de crédito y elija la factura a modificar, igual que siempre.
+2. Si al cargar la factura aparecen sus líneas, **bórrelas todas**.
+3. Pulse **Agregar línea manual** y llene una sola línea:
+   - **Descripción**: el motivo, por ejemplo *"Descuento por pronto pago factura
+     001-001-000000123"*. Escríbala sin elegir nada de la lista de productos.
+   - **Código**: vacío o uno propio (por ejemplo `DPP`), escrito a mano.
+   - **Cantidad**: 1.
+   - **Precio**: el valor del descuento **sin IVA**.
+   - **IVA**: la misma tarifa con la que se facturó (si la factura tenía varias
+     tarifas, una línea por tarifa con su parte del descuento).
+4. **Bodega Reintegro** puede quedar vacía: una nota sin productos no la necesita.
+5. Guarde y envíe al SRI como cualquier otra nota.
+
+Una línea **sin producto** nunca mueve inventario. Tampoco lo mueve un producto marcado
+como **no inventariable** (un servicio): si hace este tipo de notas a menudo, puede crear
+un servicio llamado *"Descuento por pronto pago"* en Productos y elegirlo en la línea.
+
+Lo demás funciona igual que en una nota por devolución: se autoriza en el SRI, rebaja el
+saldo por cobrar de la factura, genera su asiento contable y entra en la declaración de IVA.
 
 ## Exportar el documento
 
@@ -241,10 +274,17 @@ momento (no solo la página visible).
   notas anteriores sobre esa factura; revise cuánto queda por rebajar.
 - **"Solo se pueden editar Notas de Crédito en estado borrador"**: ya fue
   enviada.
-- **"Sin bodegas asignadas"** / **"No tiene bodegas asignadas"**: el usuario tiene
-  denegadas todas las bodegas. Pida al administrador que le asigne al menos una en
-  **Bodegas → Accesos**.
-- **"Seleccione la bodega de reintegro"**: el campo **Bodega Reintegro** está vacío.
+- **"Esta nota de crédito devuelve productos al inventario y usted no tiene bodegas
+  asignadas"**: el usuario tiene denegadas todas las bodegas y la nota lleva productos.
+  Pida al administrador que le asigne al menos una en **Bodegas → Accesos**. Si la nota
+  es solo un descuento, quite los productos y use líneas libres.
+- **"Seleccione la bodega de reintegro"**: la nota lleva productos inventariables y el
+  campo **Bodega Reintegro** está vacío.
+- **"invalid input syntax for type integer"** al guardar una nota con líneas sin
+  producto: error corregido en la versión 1.20.
+- **El descuento sumó stock al inventario**: la nota se hizo con los productos de la
+  factura. Para un descuento use líneas sin producto (ver *Nota de crédito por
+  descuento, sin afectar el inventario*).
 - **La nota se emitió pero la mercadería no aparece en Inventarios**: revise que el
   establecimiento tenga activada *"La facturación afecta al inventario"* y que el
   producto sea inventariable. Las notas guardadas sin bodega antes de la versión 1.19
@@ -275,6 +315,13 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.20** — **Notas de crédito por descuento** (pronto pago, rebajas posteriores) sin
+  afectar el inventario: una nota cuyas líneas son todas libres o de servicios ya no exige
+  **Bodega Reintegro**, y un usuario sin bodegas asignadas puede emitirla (antes el botón
+  **Nueva Nota de Crédito** lo bloqueaba). La bodega sigue siendo obligatoria cuando la nota
+  lleva algún producto inventariable. Se corrige además el error *"invalid input syntax for
+  type integer"* al guardar una nota con líneas sin producto.
 
 - **1.19** — La **bodega de reintegro** pasa a ser obligatoria. Antes, un usuario con todas
   las bodegas denegadas veía el combo vacío y la nota se guardaba y autorizaba sin devolver

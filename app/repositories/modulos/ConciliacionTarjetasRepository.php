@@ -44,20 +44,8 @@ class ConciliacionTarjetasRepository extends BaseRepository
         'retenciones' => '(COALESCE(c.total_retencion_ir, 0) + COALESCE(c.total_retencion_iva, 0))',
         'neto'        => 'c.total_neto',
         'estado'      => 'c.estado',
-        'asiento'     => 'c.id_asiento_contable',
     ];
 
-    /** Ordenamiento de la pestaña «Pendientes por depositar». */
-    public const MAPA_ORDEN_PENDIENTES = [
-        'fecha'        => 'ic.fecha_emision',
-        'procesadora'  => 'fp.nombre',
-        'documento'    => 'documentos',
-        'cliente'      => 'cl.nombre',
-        'ingreso'      => 'ic.numero_ingreso',
-        'autorizacion' => 'autorizacion',
-        'monto'        => 'ip.monto',
-        'dias'         => 'dias_transcurridos',
-    ];
 
     public function __construct()
     {
@@ -75,16 +63,46 @@ class ConciliacionTarjetasRepository extends BaseRepository
     // ─── Catálogos ───────────────────────────────────────────────────────────
 
     /**
+     * JOIN con la cuenta que Configuración Contable / Formas de Cobros y Pagos le asignó a
+     * la forma como FORMA DE COBRO (asientos_programados, tipo_referencia 'forma_cobro').
+     * Esa regla manda sobre empresa_formas_pago.id_cuenta_contable: la cuenta efectiva es
+     * COALESCE({$aliasAp}.id_cuenta, {$aliasForma}.id_cuenta_contable), la misma que usa el
+     * asiento del cobro (AsientoBuilderService) — si aquí se leyera solo la columna, el
+     * módulo diría "sin cuenta" a una forma que sí la tiene configurada.
+     * LATERAL + LIMIT 1: una regla duplicada no puede duplicar filas del listado.
+     */
+    private function joinCuentaFormaCobro(string $aliasForma, string $aliasAp): string
+    {
+        return "LEFT JOIN LATERAL (
+                    SELECT apx.id_cuenta
+                      FROM asientos_programados apx
+                     WHERE apx.id_referencia   = {$aliasForma}.id
+                       AND apx.tipo_referencia = 'forma_cobro'
+                       AND apx.id_empresa      = {$aliasForma}.id_empresa
+                       AND apx.eliminado       = FALSE
+                       AND apx.id_cuenta IS NOT NULL
+                     ORDER BY apx.id DESC
+                     LIMIT 1
+                ) {$aliasAp} ON TRUE";
+    }
+
+    /**
      * Formas de cobro que este módulo concilia: las de tipo diferido.
      * Devuelve también su cuenta contable y si esa cuenta es bancaria, porque de
      * eso depende si se puede generar el asiento (ver ConciliacionTarjetasService).
+     *
+     * @param bool $soloActivas true = solo las activas en Formas de Cobros y Pagos (lo que
+     *                          se ofrece en los selectores y al crear); false = también las
+     *                          inactivas, para seguir trabajando una conciliación ya creada
+     *                          con una forma que después se desactivó.
      */
-    public function getProcesadoras(int $idEmpresa): array
+    public function getProcesadoras(int $idEmpresa, bool $soloActivas = true): array
     {
+        $filtroActivas = $soloActivas ? ' AND fp.activo = TRUE' : '';
         $tipos = "'" . implode("','", self::TIPOS_LIQUIDACION_DIFERIDA) . "'";
 
         $sql = "SELECT fp.id, fp.nombre, fp.tipo, fp.modalidad_tarjeta, fp.activo,
-                       fp.id_cuenta_contable, fp.id_banco,
+                       COALESCE(ap.id_cuenta, fp.id_cuenta_contable) AS id_cuenta_contable, fp.id_banco,
                        pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
                        cfg.id                    AS id_config,
                        cfg.dias_liquidacion,
@@ -96,12 +114,13 @@ class ConciliacionTarjetasRepository extends BaseRepository
                        cfg.id_cuenta_retencion_ir,
                        cfg.id_cuenta_retencion_iva
                   FROM empresa_formas_pago fp
-                  LEFT JOIN plan_cuentas pc ON pc.id = fp.id_cuenta_contable
+                  {$this->joinCuentaFormaCobro('fp', 'ap')}
+                  LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap.id_cuenta, fp.id_cuenta_contable)
                   LEFT JOIN conciliacion_tarjetas_config cfg
                          ON cfg.id_forma_cobro = fp.id AND cfg.eliminado = FALSE
                  WHERE fp.id_empresa = :e
                    AND fp.eliminado  = FALSE
-                   AND UPPER(fp.tipo) IN ({$tipos})
+                   AND UPPER(fp.tipo) IN ({$tipos}){$filtroActivas}
                  ORDER BY fp.activo DESC, fp.nombre ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':e' => $idEmpresa]);
@@ -118,11 +137,12 @@ class ConciliacionTarjetasRepository extends BaseRepository
         $tipos = "'" . implode("','", self::TIPOS_LIQUIDACION_DIFERIDA) . "'";
 
         $sql = "SELECT fp.id, fp.nombre, fp.tipo, fp.numero_cuenta,
-                       fp.id_cuenta_contable,
+                       COALESCE(ap.id_cuenta, fp.id_cuenta_contable) AS id_cuenta_contable,
                        pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
                        b.nombre_banco
                   FROM empresa_formas_pago fp
-                  LEFT JOIN plan_cuentas pc     ON pc.id = fp.id_cuenta_contable
+                  {$this->joinCuentaFormaCobro('fp', 'ap')}
+                  LEFT JOIN plan_cuentas pc     ON pc.id = COALESCE(ap.id_cuenta, fp.id_cuenta_contable)
                   LEFT JOIN bancos_ecuador b    ON b.id  = fp.id_banco
                  WHERE fp.id_empresa = :e
                    AND fp.eliminado  = FALSE
@@ -241,56 +261,7 @@ class ConciliacionTarjetasRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
-    /**
-     * Listado paginado de la pestaña «Pendientes por depositar».
-     *
-     * A diferencia de getCobrosPendientes() (que sirve al modal de cruce y siempre
-     * trabaja sobre UNA procesadora), aquí `id_forma_cobro = 0` significa «todas las
-     * procesadoras de liquidación diferida», para que la pantalla no arranque vacía.
-     *
-     * @param array    $orden   Criterios de OrdenListado (claves de MAPA_ORDEN_PENDIENTES).
-     * @param int|null $perPage null = sin límite (exportaciones).
-     * @return array{data: array, total: int, total_monto: float}
-     */
-    public function getListadoPendientes(
-        int $idEmpresa,
-        array $filtros,
-        string $buscar,
-        int $page,
-        ?int $perPage,
-        array $orden,
-        ?int $idUsuarioFiltro = null
-    ): array {
-        [$from, $where, $params] = $this->armarConsultaPendientes(
-            $idEmpresa,
-            (int) ($filtros['id_forma_cobro'] ?? 0) ?: null,
-            ($filtros['fecha_desde'] ?? '') ?: null,
-            ($filtros['fecha_hasta'] ?? '') ?: null,
-            $buscar,
-            $idUsuarioFiltro
-        );
-
-        $stTot = $this->db->prepare("SELECT COUNT(*) AS total, COALESCE(SUM(ip.monto), 0) AS monto {$from} {$where}");
-        $stTot->execute($params);
-        $tot = $stTot->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'monto' => 0];
-
-        $orderBy = OrdenListado::clausula($orden, self::MAPA_ORDEN_PENDIENTES, 'ic.fecha_emision', 'ip.id ASC');
-        $limite  = '';
-        if ($perPage !== null) {
-            $limite = 'LIMIT ' . max(1, $perPage) . ' OFFSET ' . max(0, ($page - 1) * $perPage);
-        }
-
-        $st = $this->db->prepare("SELECT {$this->columnasPendientes()} {$from} {$where} {$orderBy} {$limite}");
-        $st->execute($params);
-
-        return [
-            'data'        => $st->fetchAll(PDO::FETCH_ASSOC) ?: [],
-            'total'       => (int) $tot['total'],
-            'total_monto' => (float) $tot['monto'],
-        ];
-    }
-
-    /** Columnas de un cobro pendiente (comunes al modal de cruce y al listado). */
+    /** Columnas de un cobro pendiente (lista «Cobros del sistema» del modal de cruce). */
     private function columnasPendientes(): string
     {
         return "ip.id                AS id_ingreso_pago,
@@ -415,47 +386,6 @@ class ConciliacionTarjetasRepository extends BaseRepository
         return [$from, $where, $params];
     }
 
-    /**
-     * Resumen de lo pendiente por procesadora, para las tarjetas de indicadores:
-     * cuántos cobros y cuánto dinero sigue sin aparecer en un estado de cuenta, y
-     * cuál es el más antiguo.
-     */
-    public function getResumenPendientes(int $idEmpresa, ?int $idUsuarioFiltro = null): array
-    {
-        $tipos = "'" . implode("','", self::TIPOS_LIQUIDACION_DIFERIDA) . "'";
-        $params = [':e' => $idEmpresa, ':amb' => $this->getTipoAmbiente($idEmpresa)];
-
-        $filtroUsuario = '';
-        if ($idUsuarioFiltro !== null) {
-            $params[':iuf'] = $idUsuarioFiltro;
-            $filtroUsuario = " AND ic.created_by = :iuf";
-        }
-
-        $sql = "SELECT fp.id   AS id_forma_cobro,
-                       fp.nombre,
-                       fp.tipo,
-                       COUNT(*)            AS cobros,
-                       COALESCE(SUM(ip.monto), 0) AS monto,
-                       MAX(CURRENT_DATE - ic.fecha_emision) AS dias_max
-                  FROM ingresos_pagos ip
-                  INNER JOIN ingresos_cabecera ic   ON ic.id = ip.id_ingreso
-                  INNER JOIN empresa_formas_pago fp ON fp.id = ip.id_forma_cobro
-                 WHERE ic.id_empresa = :e
-                   AND ic.eliminado  = FALSE
-                   AND ic.estado    <> 'anulado'
-                   AND ic.tipo_ambiente = :amb
-                   AND UPPER(fp.tipo) IN ({$tipos})
-                   AND ip.monto > 0
-                   AND NOT EXISTS (SELECT 1 FROM conciliacion_tarjetas_cruces cr
-                                    WHERE cr.id_ingreso_pago = ip.id AND cr.eliminado = FALSE)
-                   {$filtroUsuario}
-                 GROUP BY fp.id, fp.nombre, fp.tipo
-                 ORDER BY fp.nombre";
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    }
-
     // ─── Cabecera de la conciliación ─────────────────────────────────────────
 
     /**
@@ -542,20 +472,22 @@ class ConciliacionTarjetasRepository extends BaseRepository
         $sql = "SELECT c.*,
                        fp.nombre  AS procesadora_nombre,
                        fp.tipo    AS procesadora_tipo,
-                       fp.id_cuenta_contable AS procesadora_id_cuenta,
+                       COALESCE(app.id_cuenta, fp.id_cuenta_contable) AS procesadora_id_cuenta,
                        fp.id_banco           AS procesadora_id_banco,
                        pcp.codigo AS procesadora_cuenta_codigo,
                        pcp.nombre AS procesadora_cuenta_nombre,
                        fd.nombre  AS destino_nombre,
-                       fd.id_cuenta_contable AS destino_id_cuenta,
+                       COALESCE(apd.id_cuenta, fd.id_cuenta_contable) AS destino_id_cuenta,
                        pcd.codigo AS destino_cuenta_codigo,
                        pcd.nombre AS destino_cuenta_nombre,
                        pf.nombre_perfil
                   FROM {$this->table} c
                   LEFT JOIN empresa_formas_pago fp ON fp.id = c.id_forma_cobro
                   LEFT JOIN empresa_formas_pago fd ON fd.id = c.id_forma_cobro_destino
-                  LEFT JOIN plan_cuentas pcp       ON pcp.id = fp.id_cuenta_contable
-                  LEFT JOIN plan_cuentas pcd       ON pcd.id = fd.id_cuenta_contable
+                  {$this->joinCuentaFormaCobro('fp', 'app')}
+                  {$this->joinCuentaFormaCobro('fd', 'apd')}
+                  LEFT JOIN plan_cuentas pcp       ON pcp.id = COALESCE(app.id_cuenta, fp.id_cuenta_contable)
+                  LEFT JOIN plan_cuentas pcd       ON pcd.id = COALESCE(apd.id_cuenta, fd.id_cuenta_contable)
                   LEFT JOIN conciliacion_tarjetas_perfiles pf ON pf.id = c.id_perfil
                  WHERE c.id = :id AND c.id_empresa = :e AND c.eliminado = FALSE";
         $st = $this->db->prepare($sql);
@@ -602,31 +534,6 @@ class ConciliacionTarjetasRepository extends BaseRepository
         $st->execute($params);
 
         return ['data' => $st->fetchAll(PDO::FETCH_ASSOC) ?: [], 'total' => $total];
-    }
-
-    /**
-     * Totales de las conciliaciones CERRADAS que cumplen los filtros, para las
-     * tarjetas de indicadores. Se suman en SQL sobre todo el filtro, no sobre la
-     * página en pantalla.
-     *
-     * @return array{conciliado: float, comisiones: float}
-     */
-    public function getTotalesListado(int $idEmpresa, string $buscar, ?int $idUsuarioFiltro, array $filtros): array
-    {
-        [$from, $where, $params] = $this->armarConsultaListado($idEmpresa, $buscar, $idUsuarioFiltro, $filtros);
-
-        $st = $this->db->prepare(
-            "SELECT COALESCE(SUM(c.total_neto), 0) AS conciliado,
-                    COALESCE(SUM(COALESCE(c.total_comision, 0) + COALESCE(c.total_iva_comision, 0)), 0) AS comisiones
-             {$from} {$where} AND c.estado = 'cerrada'"
-        );
-        $st->execute($params);
-        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
-
-        return [
-            'conciliado' => (float) ($r['conciliado'] ?? 0),
-            'comisiones' => (float) ($r['comisiones'] ?? 0),
-        ];
     }
 
     /**

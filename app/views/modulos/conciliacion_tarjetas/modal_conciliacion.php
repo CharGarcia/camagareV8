@@ -9,12 +9,66 @@
  *   a qué forma de cobro (banco) entró el dinero.
  * Pestaña «Asiento contable» (solo con acceso a Contabilidad → Asientos Contables):
  *   el asiento del depósito, con el componente compartido asiento_tab.php.
+ * Pestaña «Configuración» (permiso de actualizar): cuentas y valores por defecto de
+ *   la procesadora elegida; se guardan por procesadora y valen para las siguientes.
  *
  * Estructura estándar de modal de documento (§9): barra de acciones al inicio del
  * cuerpo, pestañas configurables por usuario y Eliminar a la izquierda del pie.
  */
 $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
+// La configuración contable de la procesadora se edita con permiso de actualizar.
+$ctarVerConfig  = !empty($perm['actualizar']);
+$ctarPestanasOcultables = array_filter([
+    'ctar-pane-asiento' => $ctarVerAsiento ? 'Asiento contable' : null,
+    'ctar-pane-config'  => $ctarVerConfig ? 'Configuración' : null,
+]);
 ?>
+<style>
+/*
+ * Modal a alto fijo, sin scroll en el cuerpo: cabecera, barra de acciones, datos,
+ * totales y pie quedan quietos; solo se desplazan las dos listas del cruce (y la
+ * pestaña del asiento, dentro de sí misma). Antes el cuerpo entero hacía scroll
+ * además de las listas y todo se movía al recorrerlas.
+ * Solo desde lg: por debajo el modal es pantalla completa con las columnas
+ * apiladas y necesita el scroll normal del cuerpo.
+ * Las clases de las listas NO llevan "-scroll": app.css las estiraría (app-shell).
+ *
+ * Pestaña Conciliación en dos pasos, en tarjetas separadas:
+ *   1. Encabezado + perfil + archivo (siempre).
+ *   2. Estado de cuenta | Cobros del sistema, y totales — solo con la conciliación
+ *      ya guardada (#ctar-m-paso2, lo muestra CTAR_habilitarAcciones).
+ */
+@media (min-width: 992px) {
+    /* Más ancho que modal-xl (1140px): las dos listas del cruce van lado a lado. */
+    #modalConciliacion .modal-dialog { max-width: min(1600px, 96vw); }
+    #modalConciliacion .modal-content { height: 100%; }
+    #modalConciliacion .modal-body { display: flex; flex-direction: column; overflow: hidden; }
+    #modalConciliacion .modal-body > .tab-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    /* Conciliación nueva (sin paso 2 todavía): el modal se ajusta a su contenido. */
+    #modalConciliacion.ctar-m-sin-cruce .modal-content { height: auto; }
+    #modalConciliacion #ctar-pane-cruce.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    #modalConciliacion #ctar-pane-asiento.active,
+    #modalConciliacion #ctar-pane-config.active { flex: 1 1 auto; min-height: 0; overflow: auto; }
+    #modalConciliacion .ctar-m-card { flex-shrink: 0; }
+    #modalConciliacion .ctar-m-paso2:not(.d-none) { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    #modalConciliacion .ctar-m-paso2 > .card { flex-shrink: 0; }
+    #modalConciliacion .ctar-m-cruce { flex: 1 1 auto; min-height: 0; flex-wrap: nowrap; }
+    #modalConciliacion .ctar-m-cruce > [class*="col-"] { display: flex; flex-direction: column; min-height: 0; }
+    #modalConciliacion .ctar-m-card-lista { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    #modalConciliacion .ctar-m-card-lista > * { flex-shrink: 0; }
+    #modalConciliacion .ctar-m-card-lista > .ctar-m-lista { flex: 1 1 auto; min-height: 0; max-height: none; }
+}
+/* Fila única del encabezado: mismo alto explícito en todos los controles (§9) —
+   select, fecha, número, archivo y botón no rinden igual con los -sm de Bootstrap. */
+#ctar-m-encabezado .form-select,
+#ctar-m-encabezado .form-control,
+#ctar-m-encabezado .btn { height: 28px; font-size: .75rem; }
+#ctar-m-encabezado .form-control { padding-top: .2rem; padding-bottom: .2rem; }
+#ctar-m-encabezado .form-label { font-size: .7rem; }
+#ctar-m-archivo-info:empty { display: none; }
+#modalConciliacion .ctar-m-lista { max-height: 46vh; overflow: auto; }
+#modalConciliacion .ctar-m-lista thead th { position: sticky; top: 0; z-index: 1; }
+</style>
 <div class="modal fade" id="modalConciliacion" tabindex="-1" aria-labelledby="modalConciliacionLabel" aria-hidden="true"
      data-bs-backdrop="static">
     <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-scrollable">
@@ -32,19 +86,8 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
 
                 <!-- ── Barra de acciones de documento (§9: al inicio del cuerpo) ── -->
                 <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap" id="ctar-m-acciones">
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="CTAR_abrirCargaArchivo()"
-                            id="ctar-btn-cargar" title="Cargar el estado de cuenta de la procesadora">
-                        <i class="bi bi-upload me-1"></i>Cargar estado de cuenta
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="CTAR_agregarLineaManual()"
-                            id="ctar-btn-linea" title="Agregar una línea a mano">
-                        <i class="bi bi-plus-lg me-1"></i>Línea manual
-                    </button>
-                    <button type="button" class="btn btn-outline-info btn-sm" onclick="CTAR_sugerir()"
-                            id="ctar-btn-sugerir" title="Proponer emparejamientos automáticos">
-                        <i class="bi bi-magic me-1"></i>Cruzar automáticamente
-                    </button>
-                    <div class="vr mx-1"></div>
+                    <!-- Línea manual y Cruzar automáticamente viven en el encabezado de la tarjeta
+                         «Estado de cuenta de la procesadora», junto a la lista sobre la que actúan. -->
                     <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="CTAR_pdfConciliacion()"
                             title="Comprobante en PDF"><i class="bi bi-file-earmark-pdf"></i></button>
                     <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="CTAR_excelConciliacion()"
@@ -72,11 +115,19 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
                             </button>
                         </li>
                         <?php endif; ?>
+                        <?php if ($ctarVerConfig): // cuentas y valores por defecto de la procesadora ?>
+                        <li class="nav-item" role="presentation">
+                            <button type="button" class="nav-link py-2 small" id="ctar-tab-config-btn"
+                                    data-bs-toggle="tab" data-bs-target="#ctar-pane-config" role="tab">
+                                <i class="bi bi-gear me-1"></i>Configuración
+                            </button>
+                        </li>
+                        <?php endif; ?>
                     </ul>
-                    <?php if ($ctarVerAsiento): ?>
+                    <?php if ($ctarPestanasOcultables): ?>
                     <div class="ms-auto pb-1">
                         <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(
-                            ['ctar-pane-asiento' => 'Asiento contable'],
+                            $ctarPestanasOcultables,
                             $vistaConfig ?? [],
                             $rutaModulo
                         ) ?>
@@ -86,36 +137,68 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
 
                 <div class="tab-content border-top">
                 <!-- ═══ Pestaña: Conciliación ═══ -->
-                <div class="tab-pane fade show active" id="ctar-pane-cruce" role="tabpanel">
+                <div class="tab-pane fade show active p-2 bg-light" id="ctar-pane-cruce" role="tabpanel">
 
-                <!-- ── Datos de la conciliación ── -->
-                <div class="px-3 py-2 border-bottom">
+                <!-- ── Paso 1: encabezado + archivo (tarjeta propia, siempre visible) ── -->
+                <div class="card border-0 shadow-sm rounded-3 mb-2 ctar-m-card">
+                <div class="card-header bg-white border-bottom py-2 px-3">
+                    <span class="fw-bold small"><i class="bi bi-1-circle-fill me-1 text-primary"></i>Encabezado y estado de cuenta</span>
+                </div>
+                <div class="card-body px-3 py-2">
                     <input type="hidden" id="ctar-m-id">
-                    <div class="row g-2">
-                        <div class="col-6 col-md-2">
-                            <label class="form-label small fw-bold text-muted mb-1">Procesadora</label>
+                    <!-- Encabezado + estado de cuenta en UNA fila (§9, tarjeta de control): flexbox con
+                         ancho fijo por campo, no el grid .row/.col. Si no cabe, salta de línea de forma
+                         predecible; perfil + archivo + Cargar van agrupados para no separarse. -->
+                    <div class="d-flex flex-wrap align-items-start gap-2" id="ctar-m-encabezado">
+                        <div style="width:150px;">
+                            <label class="form-label small fw-bold text-muted mb-1 d-block">Procesadora</label>
                             <select id="ctar-m-procesadora" class="form-select form-select-sm shadow-none border"></select>
                         </div>
-                        <div class="col-6 col-md-2">
-                            <label class="form-label small fw-bold text-muted mb-1">Fecha depósito</label>
+                        <div style="width:125px;">
+                            <label class="form-label small fw-bold text-muted mb-1 d-block">Fecha depósito</label>
                             <input type="date" id="ctar-m-fecha" class="form-control form-control-sm shadow-none border">
                         </div>
-                        <div class="col-6 col-md-2">
-                            <label class="form-label small fw-bold text-muted mb-1">Período desde</label>
+                        <div style="width:125px;">
+                            <label class="form-label small fw-bold text-muted mb-1 d-block">Período desde</label>
                             <input type="date" id="ctar-m-desde" class="form-control form-control-sm shadow-none border">
                         </div>
-                        <div class="col-6 col-md-2">
-                            <label class="form-label small fw-bold text-muted mb-1">Período hasta</label>
+                        <div style="width:125px;">
+                            <label class="form-label small fw-bold text-muted mb-1 d-block">Período hasta</label>
                             <input type="date" id="ctar-m-hasta" class="form-control form-control-sm shadow-none border">
                         </div>
-                        <div class="col-6 col-md-2">
-                            <label class="form-label small fw-bold text-muted mb-1">Depositado en</label>
+                        <div style="width:170px;">
+                            <label class="form-label small fw-bold text-muted mb-1 d-block">Depositado en</label>
                             <select id="ctar-m-destino" class="form-select form-select-sm shadow-none border"></select>
                         </div>
-                        <div class="col-6 col-md-2">
-                            <label class="form-label small fw-bold text-muted mb-1">Neto depositado</label>
+                        <div style="width:110px;">
+                            <label class="form-label small fw-bold text-muted mb-1 d-block">Neto depositado</label>
                             <input type="number" step="0.01" id="ctar-m-neto" class="form-control form-control-sm shadow-none border text-end"
                                    placeholder="0.00" oninput="CTAR_recalcularDiferencia()">
+                        </div>
+
+                        <!-- Estado de cuenta: se lee con el botón Cargar (una conciliación nueva se crea
+                             y carga el archivo en el mismo paso). -->
+                        <!-- El grupo ocupa el resto de la fila y el perfil crece hasta llenarlo
+                             (mínimo 210px); archivo y botón mantienen su ancho. -->
+                        <div class="d-flex flex-wrap align-items-start gap-2" id="ctar-m-carga" style="flex:1 1 auto;">
+                            <div style="flex:1 1 210px;min-width:210px;">
+                                <label class="form-label small fw-bold text-muted mb-1 d-block">Perfil de lectura</label>
+                                <select id="ctar-m-perfil" class="form-select form-select-sm shadow-none border"
+                                        title="Formato del archivo de la procesadora"></select>
+                            </div>
+                            <div style="width:230px;">
+                                <label class="form-label small fw-bold text-muted mb-1 d-block">Estado de cuenta (Excel, CSV o PDF)</label>
+                                <input type="file" id="ctar-m-archivo" class="form-control form-control-sm shadow-none border"
+                                       accept=".xlsx,.xls,.csv,.pdf">
+                                <div class="small text-muted lh-sm text-truncate mt-1" id="ctar-m-archivo-info" style="font-size:.7rem;"></div>
+                            </div>
+                            <div>
+                                <label class="form-label small fw-bold text-muted mb-1 d-block">&nbsp;</label>
+                                <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" id="ctar-btn-cargar"
+                                        onclick="CTAR_cargarArchivo()" title="Guardar el encabezado y leer el estado de cuenta">
+                                    <i class="bi bi-upload me-1"></i>Cargar
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -124,16 +207,32 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
                         <i class="bi bi-info-circle me-1"></i><span id="ctar-m-aviso-conta-texto"></span>
                     </div>
                 </div>
+                </div><!-- /paso 1 -->
 
-                <!-- ── El cruce: estado de cuenta ↔ cobros del sistema ── -->
-                <div class="row g-0">
+                <!-- ── Paso 2: el cruce. Aparece cuando la conciliación ya está guardada
+                     (tras Guardar con el archivo). Cada lista y los totales en su tarjeta. ── -->
+                <div class="ctar-m-paso2 d-none" id="ctar-m-paso2">
+                <div class="row g-2 ctar-m-cruce mb-2">
                     <!-- Izquierda: estado de cuenta -->
-                    <div class="col-lg-7 border-end">
-                        <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between align-items-center">
-                            <span class="fw-bold small"><i class="bi bi-filetype-csv me-1 text-primary"></i>Estado de cuenta de la procesadora</span>
+                    <div class="col-lg-7">
+                      <div class="card border-0 shadow-sm rounded-3 overflow-hidden ctar-m-card-lista">
+                        <div class="card-header bg-white px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-bold small"><i class="bi bi-filetype-csv me-1 text-primary"></i>Estado de cuenta de la procesadora</span>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary px-2" onclick="CTAR_agregarLineaManual()"
+                                            id="ctar-btn-linea" title="Línea manual: agregar a mano una línea del estado de cuenta">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-info px-2" onclick="CTAR_sugerir()"
+                                            id="ctar-btn-sugerir" title="Cruzar automáticamente: emparejar líneas y cobros por autorización, referencia o monto">
+                                        <i class="bi bi-magic"></i>
+                                    </button>
+                                </div>
+                            </div>
                             <span class="small text-muted" id="ctar-m-resumen-lineas">0 líneas</span>
                         </div>
-                        <div style="max-height:46vh; overflow:auto;">
+                        <div class="ctar-m-lista">
                             <table class="table table-sm table-hover mb-0 align-middle" style="min-width:720px;">
                                 <thead class="table-light">
                                     <tr>
@@ -154,11 +253,13 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
                                 </tbody>
                             </table>
                         </div>
+                      </div>
                     </div>
 
                     <!-- Derecha: cobros del sistema -->
                     <div class="col-lg-5">
-                        <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between align-items-center">
+                      <div class="card border-0 shadow-sm rounded-3 overflow-hidden ctar-m-card-lista">
+                        <div class="card-header bg-white px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
                             <span class="fw-bold small"><i class="bi bi-receipt me-1 text-success"></i>Cobros del sistema</span>
                             <span class="small text-muted" id="ctar-m-resumen-cobros">0 disponibles</span>
                         </div>
@@ -166,7 +267,7 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
                             <input type="search" class="form-control form-control-sm shadow-none border" id="ctar-m-buscar-cobro"
                                    placeholder="Filtrar por cliente, documento o valor..." oninput="CTAR_filtrarCobros(this.value)">
                         </div>
-                        <div style="max-height:40vh; overflow:auto;">
+                        <div class="ctar-m-lista">
                             <table class="table table-sm table-hover mb-0 align-middle" style="min-width:420px;">
                                 <thead class="table-light">
                                     <tr>
@@ -185,38 +286,24 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
                             <i class="bi bi-lightbulb me-1"></i>
                             Seleccione una línea de la izquierda y luego el cobro que le corresponde.
                         </div>
+                      </div>
                     </div>
                 </div>
 
-                <!-- ── Totales ── -->
-                <div class="border-top px-3 py-2 bg-white">
-                    <div class="row g-2 text-center small">
-                        <div class="col-6 col-md">
-                            <div class="text-muted small fw-bold">Bruto conciliado</div>
-                            <div class="fw-bold">$<span id="ctar-m-t-bruto">0.00</span></div>
-                        </div>
-                        <div class="col-6 col-md">
-                            <div class="text-muted small fw-bold">Comisión</div>
-                            <div class="fw-bold text-secondary">$<span id="ctar-m-t-comision">0.00</span></div>
-                        </div>
-                        <div class="col-6 col-md">
-                            <div class="text-muted small fw-bold">IVA comisión</div>
-                            <div class="fw-bold text-secondary">$<span id="ctar-m-t-iva">0.00</span></div>
-                        </div>
-                        <div class="col-6 col-md">
-                            <div class="text-muted small fw-bold">Retenciones</div>
-                            <div class="fw-bold text-secondary">$<span id="ctar-m-t-retenciones">0.00</span></div>
-                        </div>
-                        <div class="col-6 col-md">
-                            <div class="text-muted small fw-bold">Neto calculado</div>
-                            <div class="fw-bold text-primary">$<span id="ctar-m-t-neto">0.00</span></div>
-                        </div>
-                        <div class="col-6 col-md">
-                            <div class="text-muted small fw-bold">Diferencia</div>
-                            <div class="fw-bold" id="ctar-m-t-diferencia-wrap">$<span id="ctar-m-t-diferencia">0.00</span></div>
-                        </div>
+                <!-- ── Totales: una sola línea compacta «etiqueta valor» ── -->
+                <div class="card border-0 shadow-sm rounded-3 px-3 py-1">
+                    <div class="d-flex flex-wrap align-items-center justify-content-end column-gap-3 row-gap-1 small ctar-m-totales">
+                        <span><span class="text-muted">Bruto conciliado</span> <strong>$<span id="ctar-m-t-bruto">0.00</span></strong></span>
+                        <div class="vr"></div>
+                        <span><span class="text-muted">Comisión</span> <strong class="text-secondary">$<span id="ctar-m-t-comision">0.00</span></strong></span>
+                        <span><span class="text-muted">IVA comisión</span> <strong class="text-secondary">$<span id="ctar-m-t-iva">0.00</span></strong></span>
+                        <span><span class="text-muted">Retenciones</span> <strong class="text-secondary">$<span id="ctar-m-t-retenciones">0.00</span></strong></span>
+                        <div class="vr"></div>
+                        <span><span class="text-muted">Neto calculado</span> <strong class="text-primary">$<span id="ctar-m-t-neto">0.00</span></strong></span>
+                        <span><span class="text-muted">Diferencia</span> <strong id="ctar-m-t-diferencia-wrap">$<span id="ctar-m-t-diferencia">0.00</span></strong></span>
                     </div>
                 </div>
+                </div><!-- /paso 2 -->
                 </div><!-- /ctar-pane-cruce -->
 
                 <?php if ($ctarVerAsiento): ?>
@@ -229,6 +316,73 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
                     </div>
                     <?php $prefijo = 'ctar'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
                 </div><!-- /ctar-pane-asiento -->
+                <?php endif; ?>
+
+                <?php if ($ctarVerConfig): ?>
+                <!-- ═══ Pestaña: Configuración de la procesadora ═══
+                     Se guarda por procesadora (conciliacion_tarjetas_config) y vale para todas
+                     sus conciliaciones, no solo para la que está abierta. La cuenta puente NO
+                     se configura aquí: es la cuenta de la propia forma de cobro. -->
+                <div class="tab-pane fade p-3" id="ctar-pane-config" role="tabpanel">
+                    <div class="alert alert-info py-2 px-3 small">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Esta configuración es de la procesadora <strong id="ctar-cfg-procesadora-nombre">—</strong>: al guardarla
+                        se aplica a esta y a todas sus conciliaciones siguientes. La contabilidad es opcional: sin cuentas,
+                        el módulo concilia igual pero no genera el asiento del depósito.
+                    </div>
+
+                    <!-- Estado de la cuenta puente de esta procesadora -->
+                    <div class="p-2 border rounded-3 mb-3" id="ctar-cfg-puente">
+                        <div class="small fw-bold text-muted text-uppercase mb-1" style="font-size:.65rem;">Cuenta puente (viene de Formas de Cobro/Pago)</div>
+                        <div id="ctar-cfg-puente-texto" class="small">—</div>
+                    </div>
+
+                    <div class="row g-2">
+                        <?php foreach ([
+                            'comision' => 'Cuenta de comisión (gasto)',
+                            'iva'      => 'Cuenta de IVA de la comisión',
+                            'retir'    => 'Cuenta de retención de renta',
+                            'retiva'   => 'Cuenta de retención de IVA',
+                        ] as $ctarCfgCampo => $ctarCfgEtiqueta): ?>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-muted mb-1"><?= $ctarCfgEtiqueta ?></label>
+                            <div class="position-relative">
+                                <input type="text" class="form-control form-control-sm shadow-none border ctar-cuenta-input"
+                                       id="ctar-cfg-<?= $ctarCfgCampo ?>-txt" data-target="ctar-cfg-<?= $ctarCfgCampo ?>" placeholder="Buscar cuenta..." autocomplete="off">
+                                <input type="hidden" id="ctar-cfg-<?= $ctarCfgCampo ?>">
+                                <div class="list-group shadow position-absolute d-none w-100 ctar-cuenta-drop"
+                                     style="z-index:5090;max-height:180px;overflow-y:auto;"></div>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-bold text-muted mb-1">% comisión</label>
+                            <input type="number" step="0.0001" id="ctar-cfg-pc" class="form-control form-control-sm shadow-none border text-end">
+                            <div class="form-text" style="font-size:.68rem;">Solo para precalcular; siempre editable.</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-bold text-muted mb-1">% IVA</label>
+                            <input type="number" step="0.0001" id="ctar-cfg-pi" class="form-control form-control-sm shadow-none border text-end">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-bold text-muted mb-1">Días de liquidación</label>
+                            <input type="number" id="ctar-cfg-dias" class="form-control form-control-sm shadow-none border text-end" value="2">
+                            <div class="form-text" style="font-size:.68rem;">Pasados estos días, el cobro se marca atrasado.</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-bold text-muted mb-1">Tolerancia</label>
+                            <input type="number" step="0.01" id="ctar-cfg-tol" class="form-control form-control-sm shadow-none border text-end" value="0.05">
+                            <div class="form-text" style="font-size:.68rem;">Descuadre aceptado al cerrar.</div>
+                        </div>
+                    </div>
+
+                    <div class="text-end mt-3">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="CTAR_guardarConfig()">
+                            <i class="bi bi-save me-1"></i>Guardar configuración
+                        </button>
+                    </div>
+                </div><!-- /ctar-pane-config -->
                 <?php endif; ?>
                 </div><!-- /tab-content -->
             </div>
@@ -258,38 +412,47 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
 </div>
 
 
-<!-- ═══ Sub-modal: cargar el estado de cuenta ═══ -->
-<div class="modal fade" id="modalCargaEstado" tabindex="-1" aria-hidden="true" style="z-index:5080;">
-    <div class="modal-dialog modal-dialog-centered" style="max-width:520px;">
+<!-- ═══ Sub-modal: sugerencias de «Cruzar automáticamente» ═══
+     Nada se cruza hasta que el usuario confirma. Las de solo-monto (menos confiables)
+     llegan sin marcar. -->
+<div class="modal fade" id="modalSugerenciasTarjeta" tabindex="-1" aria-hidden="true" style="z-index:5080;">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
         <div class="modal-content border-0 shadow-lg">
             <div class="modal-header">
-                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-upload me-2"></i>Cargar estado de cuenta</h5>
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-magic me-2 text-info"></i>Cruces sugeridos</h5>
                 <button type="button" class="btn-close" aria-label="Cerrar" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-3">
-                <div class="mb-2">
-                    <label class="form-label small fw-bold text-muted mb-1">Perfil de lectura</label>
-                    <select id="ctar-carga-perfil" class="form-select form-select-sm shadow-none border"></select>
-                    <div class="form-text" style="font-size:.7rem;">
-                        El formato del archivo cambia según la procesadora y el banco. Si el suyo no está,
-                        pida al superadministrador que lo cree en <strong>Configuración → Perfiles de lectura de tarjetas</strong>.
-                    </div>
+            <div class="modal-body p-0">
+                <div class="px-3 py-2 small text-muted border-bottom bg-light">
+                    Revise cada emparejamiento y desmarque los que no correspondan. Los encontrados
+                    <strong>solo por monto</strong> son los menos seguros: llegan sin marcar.
                 </div>
-                <div class="mb-2">
-                    <label class="form-label small fw-bold text-muted mb-1">Archivo (Excel, CSV o PDF)</label>
-                    <input type="file" id="ctar-carga-archivo" class="form-control form-control-sm shadow-none border"
-                           accept=".xls,.xlsx,.csv,.pdf">
-                </div>
-                <div class="alert alert-warning py-1 px-2 small mb-0">
-                    <i class="bi bi-exclamation-triangle me-1"></i>
-                    Cargar un archivo reemplaza las líneas y los cruces que ya tenga esta conciliación.
+                <div class="ctar-sug-lista" style="max-height:60vh;overflow:auto;">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+                            <tr>
+                                <th class="ps-3" style="width:36px;">
+                                    <input type="checkbox" class="form-check-input" id="ctar-sug-todas" title="Marcar / desmarcar todas">
+                                </th>
+                                <th>Línea del estado de cuenta</th>
+                                <th class="text-end">Bruto</th>
+                                <th>Cobro(s) del sistema</th>
+                                <th class="text-end">Monto</th>
+                                <th>Criterio</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ctar-sug-tbody"></tbody>
+                    </table>
                 </div>
             </div>
-            <div class="modal-footer bg-light border-top p-2">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="CTAR_importar()">
-                    <i class="bi bi-upload me-1"></i>Cargar
-                </button>
+            <div class="modal-footer bg-light border-top p-2 justify-content-between">
+                <span class="small text-muted" id="ctar-sug-resumen"></span>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-info btn-sm text-white" id="ctar-sug-aplicar" onclick="CTAR_aplicarSugerencias()">
+                        <i class="bi bi-check2-all me-1"></i>Cruzar seleccionadas
+                    </button>
+                </div>
             </div>
         </div>
     </div>

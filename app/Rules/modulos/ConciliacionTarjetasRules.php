@@ -40,6 +40,25 @@ class ConciliacionTarjetasRules
         }
     }
 
+    /**
+     * «Depositado en»: opcional hasta el cierre, pero si se indica debe ser una forma de
+     * cobro ACTIVA de esta empresa de las que se ofrecen como destino ($destinos, de
+     * ConciliacionTarjetasRepository::getFormasDestino). Se admite conservar el destino
+     * que la conciliación ya tenía guardado aunque después se haya desactivado.
+     */
+    public function validarDestino(?int $idDestino, array $destinos, ?int $idDestinoActual = null): void
+    {
+        if (empty($idDestino) || $idDestino === $idDestinoActual) {
+            return;
+        }
+        foreach ($destinos as $d) {
+            if ((int) $d['id'] === $idDestino) {
+                return;
+            }
+        }
+        throw new \Exception('La forma de cobro elegida en «Depositado en» no existe o está inactiva en Formas de Cobros y Pagos.');
+    }
+
     /** Una línea del estado de cuenta digitada o editada a mano. */
     public function validarLinea(array $data): void
     {

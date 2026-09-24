@@ -95,7 +95,6 @@ class NotasCreditoController extends BaseModuloController
             'seriesFiltro' => $seriesFiltro,
             'usuariosFiltro' => $usuariosFiltro,
             'bodegas'     => $bodegas,
-            'sinBodegas'  => $this->service->usuarioSinBodegas((int)$_SESSION['id_usuario'], $idEmpresa, (int)$_SESSION['nivel']),
             'fullWidth'   => true,
         ]);
     }

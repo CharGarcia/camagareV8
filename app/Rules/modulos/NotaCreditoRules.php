@@ -58,9 +58,9 @@ class NotaCreditoRules
     }
 
     /**
-     * La bodega de reintegro es obligatoria: sin ella la nota de crédito se guardaba y
-     * autorizaba sin devolver nada al inventario (un usuario con todas las bodegas
-     * denegadas veía el combo vacío y no recibía ningún aviso).
+     * La bodega de reintegro es obligatoria cuando la nota devuelve mercadería (alguna línea
+     * con producto inventariable): sin ella la nota se guardaba y autorizaba sin devolver nada
+     * al inventario. Una NC de descuento (líneas libres o servicios) no pasa por aquí.
      *
      * @param bool $sinBodegasPermitidas el usuario no tiene ninguna bodega asignada
      * @param bool $bodegaPermitida      la bodega enviada es de la empresa y el usuario tiene acceso
@@ -68,7 +68,7 @@ class NotaCreditoRules
     public function validarBodegaReintegro(array $data, bool $sinBodegasPermitidas, bool $bodegaPermitida): void
     {
         if ($sinBodegasPermitidas) {
-            throw new Exception("No tiene bodegas asignadas. Para emitir una nota de crédito necesita al menos una bodega donde reintegrar la mercadería; solicítela al administrador (Bodegas → Accesos).");
+            throw new Exception("Esta nota de crédito devuelve productos al inventario y usted no tiene bodegas asignadas donde reintegrarlos; solicite una al administrador (Bodegas → Accesos). Una nota solo por descuento, con líneas sin producto, no necesita bodega.");
         }
 
         if (empty($data['id_bodega'])) {

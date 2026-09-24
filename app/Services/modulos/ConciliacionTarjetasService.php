@@ -48,11 +48,6 @@ class ConciliacionTarjetasService
         return $this->repository->getFormasDestino($idEmpresa);
     }
 
-    public function getResumenPendientes(int $idEmpresa, ?int $idUsuarioFiltro = null): array
-    {
-        return $this->repository->getResumenPendientes($idEmpresa, $idUsuarioFiltro);
-    }
-
     public function guardarConfig(int $idEmpresa, int $idUsuario, array $data): int
     {
         if (empty($data['id_forma_cobro'])) {
@@ -82,7 +77,7 @@ class ConciliacionTarjetasService
     /** Perfiles activos que sirven para la procesadora (forma de cobro) indicada. */
     public function getPerfiles(int $idEmpresa, int $idFormaCobro): array
     {
-        $procesadora = $this->buscarProcesadora($idEmpresa, $idFormaCobro);
+        $procesadora = $this->buscarProcesadora($idEmpresa, $idFormaCobro, false);
         if ($procesadora === null) {
             return [];
         }
@@ -98,39 +93,9 @@ class ConciliacionTarjetasService
      * @param array    $orden   Criterios de OrdenListado.
      * @param int|null $perPage null = sin límite (exportaciones).
      */
-    public function getListado(int $idEmpresa, string $buscar, int $page, ?int $perPage, array $orden, ?int $idUsuarioFiltro, array $filtros): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, ?int $perPage, array $orden, ?int $idUsuarioFiltro, array $filtros = []): array
     {
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $idUsuarioFiltro, $filtros);
-    }
-
-    /** Pestaña «Pendientes por depositar»: cobros aún no cruzados, paginados. */
-    public function getListadoPendientes(int $idEmpresa, array $filtros, string $buscar, int $page, ?int $perPage, array $orden, ?int $idUsuarioFiltro): array
-    {
-        return $this->repository->getListadoPendientes($idEmpresa, $filtros, $buscar, $page, $perPage, $orden, $idUsuarioFiltro);
-    }
-
-    /**
-     * Tarjetas de indicadores de la tarjeta de control: lo pendiente por procesadora
-     * (global, sin filtros de fecha) y lo conciliado/comisiones de las conciliaciones
-     * cerradas que cumplen los filtros. Todo se calcula en SQL, no sobre la página.
-     */
-    public function getIndicadores(int $idEmpresa, string $buscar, ?int $idUsuarioFiltro, array $filtros): array
-    {
-        $resumen = $this->repository->getResumenPendientes($idEmpresa, $idUsuarioFiltro);
-        $idForma = (int) ($filtros['id_forma_cobro'] ?? 0);
-        if ($idForma > 0) {
-            $resumen = array_values(array_filter($resumen, static fn($r) => (int) $r['id_forma_cobro'] === $idForma));
-        }
-
-        $totales = $this->repository->getTotalesListado($idEmpresa, $buscar, $idUsuarioFiltro, $filtros);
-
-        return [
-            'por_depositar' => round(array_sum(array_map(static fn($r) => (float) $r['monto'], $resumen)), 2),
-            'cobros'        => array_sum(array_map(static fn($r) => (int) $r['cobros'], $resumen)),
-            'dias_max'      => $resumen ? max(array_map(static fn($r) => (int) $r['dias_max'], $resumen)) : 0,
-            'conciliado'    => round($totales['conciliado'], 2),
-            'comisiones'    => round($totales['comisiones'], 2),
-        ];
     }
 
     /**
@@ -212,6 +177,10 @@ class ConciliacionTarjetasService
     {
         $procesadora = $this->buscarProcesadora($idEmpresa, (int) ($data['id_forma_cobro'] ?? 0));
         $this->rules->validarCabecera($data, $procesadora);
+        $this->rules->validarDestino(
+            (int) ($data['id_forma_cobro_destino'] ?? 0) ?: null,
+            $this->repository->getFormasDestino($idEmpresa)
+        );
 
         $db = Database::getConnection();
         $txPropia = $this->abrirTx($db);
@@ -243,8 +212,13 @@ class ConciliacionTarjetasService
             throw new \Exception('Solo se puede modificar una conciliación en borrador.');
         }
 
-        $procesadora = $this->buscarProcesadora($idEmpresa, (int) $antes['id_forma_cobro']);
+        $procesadora = $this->buscarProcesadora($idEmpresa, (int) $antes['id_forma_cobro'], false);
         $this->rules->validarCabecera($data + ['id_forma_cobro' => $antes['id_forma_cobro']], $procesadora);
+        $this->rules->validarDestino(
+            (int) ($data['id_forma_cobro_destino'] ?? 0) ?: null,
+            $this->repository->getFormasDestino($idEmpresa),
+            (int) ($antes['id_forma_cobro_destino'] ?? 0) ?: null
+        );
 
         $this->repository->actualizarCabecera($id, $idEmpresa, $idUsuario, $data);
 
@@ -929,9 +903,14 @@ class ConciliacionTarjetasService
 
     // ─── Utilidades ──────────────────────────────────────────────────────────
 
-    private function buscarProcesadora(int $idEmpresa, int $idFormaCobro): ?array
+    /**
+     * @param bool $soloActivas true al crear (solo formas activas en Formas de Cobros y Pagos);
+     *                          false para una conciliación ya existente, que sigue siendo
+     *                          editable aunque su forma de cobro se haya desactivado después.
+     */
+    private function buscarProcesadora(int $idEmpresa, int $idFormaCobro, bool $soloActivas = true): ?array
     {
-        foreach ($this->repository->getProcesadoras($idEmpresa) as $p) {
+        foreach ($this->repository->getProcesadoras($idEmpresa, $soloActivas) as $p) {
             if ((int) $p['id'] === $idFormaCobro) {
                 return $p;
             }

@@ -146,10 +146,6 @@
 
     window.NC_abrirModalNuevo = () => {
         try {
-            if (window.NC_SIN_BODEGAS) {
-                Swal.fire('Sin bodegas asignadas', 'No puede emitir notas de crédito porque no tiene bodegas asignadas para reintegrar la mercadería. Solicite al administrador que le asigne al menos una bodega (Bodegas → Accesos).', 'warning');
-                return;
-            }
             if (!initModal()) return;
             NC_idActual = null;
             
@@ -1363,9 +1359,13 @@
         const serie = document.getElementById('nc_id_punto_emision');
         if (!serie || !serie.value) { NC_focusYError(serie, 'Debe seleccionar la serie (punto de emisión).'); return false; }
 
-        // Sin bodega la NC no devuelve el stock. Un combo sin opciones = empresa sin bodegas.
+        // Sin bodega la NC no devuelve el stock: se exige solo si alguna línea lleva producto
+        // (una NC de descuento con líneas libres no mueve inventario). Con el combo vacío
+        // (empresa sin bodegas o usuario sin acceso) decide el servidor, que sabe si el
+        // producto es inventariable.
         const bodega = document.getElementById('nc_id_bodega');
-        if (bodega && bodega.options.length > 0 && !bodega.value) { NC_focusYError(bodega, 'Seleccione la bodega de reintegro.'); return false; }
+        const conProducto = [...document.querySelectorAll('input[name="det_id_producto[]"]')].some(i => i.value !== '');
+        if (conProducto && bodega && bodega.options.length > 0 && !bodega.value) { NC_focusYError(bodega, 'Seleccione la bodega de reintegro: la nota devuelve productos al inventario.'); return false; }
 
         const factura = document.getElementById('nc_factura_search');
         if (!factura || !factura.value.trim()) { NC_focusYError(factura, 'Debe indicar la factura o documento a modificar.'); return false; }

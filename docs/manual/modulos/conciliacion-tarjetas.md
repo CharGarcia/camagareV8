@@ -6,7 +6,7 @@ ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
 etiquetas: conciliar tarjetas, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito
-version: 1.3
+version: 1.4
 orden: 66
 estado: activo
 ---
@@ -39,7 +39,10 @@ ingresos ya existen y lo que se determina es cuáles se depositaron de verdad.
 
 - Tener al menos una forma de cobro de tipo **Payphone**, **Nuvei** o
   **Tarjeta** en *Formas de Cobro/Pago*. El módulo trabaja con esas y solo con
-  esas: son las que cobran hoy y depositan después.
+  esas: son las que cobran hoy y depositan después. Los selectores
+  **Procesadora** y **Depositado en** solo muestran las formas **activas** allí;
+  una conciliación ya creada con una forma que después se desactivó se sigue
+  pudiendo abrir y trabajar (la forma aparece marcada como *inactiva*).
 - Un **perfil de lectura** para el archivo de su procesadora, si va a cargar el
   estado de cuenta. Los perfiles son un catálogo del sistema que administra el
   **superadministrador** en *Configuración → Perfiles de lectura de tarjetas*
@@ -53,22 +56,48 @@ ingresos ya existen y lo que se determina es cuáles se depositaron de verdad.
 La contabilidad es opcional. Sin cuentas configuradas el módulo concilia igual;
 solo avisa que no generará el asiento.
 
+## Configuración de la procesadora (cuentas y valores por defecto)
+
+Las cuentas de comisión, IVA de la comisión y retenciones, los porcentajes, los
+**días de liquidación** y la **tolerancia** se configuran en la pestaña
+**Configuración** del modal de la conciliación (se abre con **Nueva
+conciliación** o al abrir una existente). La pestaña muestra la configuración de
+la procesadora elegida en ese modal.
+
+Lo que se guarda ahí queda **para la procesadora**, no solo para esa
+conciliación: se aplica a la que tiene abierta y a todas las siguientes. Se
+necesita permiso de **Modificar** para ver la pestaña, y cada usuario puede
+ocultarla con el engranaje de las pestañas.
+
 ## Cómo se usa
 
-1. La vista **Pendientes por depositar** muestra los cobros que todavía no
-   aparecen en ningún estado de cuenta, de todas las procesadoras (o de la que
-   elija en los filtros), con la procesadora de cada cobro y un semáforo de días
-   de atraso. Con los botones de la barra del listado cambia a la vista
-   **Conciliaciones**.
-2. Pulse **Nueva conciliación**, escoja la procesadora y la fecha del depósito, y
-   guarde.
-3. Pulse **Cargar estado de cuenta** y suba el archivo con el perfil que
-   corresponda. La lista muestra solo los perfiles de esa procesadora (Payphone,
-   Nuvei o Tarjeta) y del banco de la forma de cobro, más los genéricos. También
-   puede agregar líneas a mano con **Línea manual**.
-4. Pulse **Cruzar automáticamente**: el sistema empareja lo evidente. Lo que
-   quede suelto se cruza a mano — clic en la línea de la izquierda y luego en el
-   cobro de la derecha.
+1. La pantalla muestra el listado de **conciliaciones** registradas. Para ver los
+   cobros con tarjeta que siguen pendientes de depósito, abra una conciliación:
+   la lista **Cobros del sistema** muestra los de esa procesadora, con un semáforo
+   de días de atraso.
+2. Pulse **Nueva** (arriba a la derecha) y llene el encabezado: procesadora,
+   fecha del depósito y, si quiere, el período.
+3. En el mismo encabezado elija el **Perfil de lectura** (el formato del archivo)
+   y el **Estado de cuenta** (el archivo), y pulse **Cargar**: la conciliación se
+   crea, el archivo se lee en ese mismo paso y debajo aparecen, cada una en su
+   tarjeta, las listas **Estado de cuenta de la procesadora** y **Cobros del
+   sistema** con los totales. La lista de perfiles muestra solo
+   los de esa procesadora (Payphone, Nuvei o Tarjeta) y del banco de la forma de
+   cobro, más los genéricos. Si el archivo no se puede leer, la conciliación queda
+   guardada igual: corrija el perfil o el archivo y vuelva a pulsar **Cargar**.
+   Elegir otro archivo en una conciliación que ya tiene líneas las reemplaza
+   (el sistema lo pregunta antes). También puede agregar líneas a mano con
+   **Línea manual** (ícono **+** en el encabezado de la tarjeta *Estado de cuenta de la procesadora*). Una vez cargado, el botón **Guardar** del pie guarda los
+   cambios del encabezado mientras hace el cruce.
+4. Pulse **Cruzar automáticamente** (ícono de varita, junto al anterior): se abre
+   **Cruces sugeridos** con cada línea del estado de cuenta, el cobro o cobros que
+   le corresponderían y el **criterio** con que se encontró (autorización,
+   referencia, monto y fecha, suma del depósito o *solo monto*). Nada se cruza
+   todavía: desmarque lo que no corresponda y pulse **Cruzar seleccionadas**. Las
+   sugerencias de *solo monto* son las menos seguras y llegan sin marcar; si la
+   suma de los cobros no coincide con el bruto de la línea, el monto sale en rojo.
+   Lo que quede suelto se cruza a mano — clic en la línea de la izquierda y luego
+   en el cobro de la derecha.
 5. Las líneas que no correspondan a ningún cobro márquelas con el triángulo de
    aviso: quedan reportadas como *sin documento*.
 6. Indique **Depositado en** (el banco) y el **Neto depositado**, revise que la
@@ -77,23 +106,26 @@ solo avisa que no generará el asiento.
    contable** del mismo modal. Una conciliación cerrada se anula con el botón
    **Anular** de la barra de acciones superior.
 
-## Listado: orden, columnas y páginas
+## Listado: buscar, filtrar, ordenar y páginas
 
+- **Buscar**: escriba en el buscador; busca en número, observaciones,
+  procesadora, banco destino y nombre del archivo.
+- **Filtrar**: el botón del embudo, a la izquierda del buscador, abre todos los
+  filtros —número, estado, fecha de depósito (con atajos: hoy, este mes…),
+  procesadora, depositado en, neto depositado y diferencia—. Se aplican con
+  **Aplicar** y quedan como etiquetas junto al buscador; cada etiqueta se quita
+  con su ×.
 - **Ordenar**: clic en el encabezado de una columna; otro clic invierte el
   sentido. Con **Shift + clic** en otra columna se ordena por varias a la vez
   (hasta tres). El orden se recuerda para su usuario y es el mismo que sale en
   el PDF y el Excel.
 - **Mostrar u ocultar columnas**: botón de columnas, a la izquierda de PDF.
-  Cada vista (pendientes y conciliaciones) guarda sus propias columnas.
 - **Ancho de columnas**: arrastre el borde del encabezado; se recuerda para su
   usuario.
 - **Páginas**: el listado muestra 50 filas por página; use las flechas de la
-  derecha. El contador indica qué filas está viendo y el total (en pendientes,
-  también el monto total del filtro).
-- **Indicadores** (por depositar, cobros, días del más antiguo, conciliado y
-  comisiones): se calculan sobre **todo** lo que cumple los filtros, no solo
-  sobre la página a la vista. El filtro **Estado** solo aplica a la vista
-  Conciliaciones.
+  derecha. El contador indica qué filas está viendo y el total.
+- **PDF / Excel**: exportan lo que cumple la búsqueda y los filtros, en el mismo
+  orden de la pantalla.
 
 ## Pestaña Asiento contable
 
@@ -119,7 +151,7 @@ además puede modificar asientos contables puede corregirlo ahí mismo.
 
 ## Permisos
 
-- **Ver**: consultar pendientes y conciliaciones.
+- **Ver**: consultar las conciliaciones y los cobros pendientes de cada una.
 - **Crear**: crear conciliaciones y cargar el estado de cuenta.
 - **Modificar**: cruzar, descruzar, cerrar y anular.
 - **Eliminar**: eliminar conciliaciones en borrador y líneas.
@@ -191,12 +223,30 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.4** — La pantalla pasa al diseño estándar de listados (como Proveedores):
+  botón **Nueva** arriba, buscador con embudo de filtros y etiquetas, columnas,
+  PDF, Excel y paginación. Se retiran la tarjeta de filtros con indicadores y
+  la vista **Pendientes por depositar** con sus botones de cambio de vista: los
+  cobros pendientes de cada procesadora se ven dentro del modal de la
+  conciliación (lista *Cobros del sistema*).
 - **1.3** — Los **perfiles de lectura** ya no se crean por empresa en la
   configuración del módulo: pasan a un catálogo global en *Configuración →
   Perfiles de lectura de tarjetas*, que administra el nivel 3. Cada perfil se
   asocia a un tipo de procesadora (y, si hace falta, a un banco) en lugar de a
-  una forma de cobro de la empresa. La configuración del módulo queda solo con
-  la parte contable.
+  una forma de cobro de la empresa. La configuración contable (cuentas, días de
+  liquidación, tolerancia) deja de tener botón propio en el listado y pasa a la
+  pestaña **Configuración** del modal de la conciliación; se sigue guardando por
+  procesadora, para las siguientes conciliaciones. En pantallas grandes, el modal de la conciliación ya no se
+  desplaza entero: datos, totales y botones quedan fijos y solo se recorren las
+  listas del estado de cuenta y de los cobros. El perfil y el archivo del estado
+  de cuenta se eligen en el encabezado del modal y se leen con el botón **Cargar**
+  (desaparecen el botón *Cargar estado de cuenta* y su ventana aparte): una
+  conciliación nueva se crea y carga el archivo en un solo paso. La vista ocupa
+  todo el ancho de la pantalla, como Reporte de Ventas. Corrección: la cuenta
+  puente de la tarjeta y la del banco destino se toman igual que en el asiento
+  del cobro —primero la regla de *Configuración Contable / Formas de Cobros y
+  Pagos*, luego la cuenta de la forma—; antes se leía solo la segunda y el módulo
+  decía «no tiene cuenta contable asignada» a formas que sí la tenían.
 - **1.2** — Listado con **paginación** (antes mostraba solo las primeras 100
   conciliaciones), **orden por columnas** (también por varias), columnas que se
   pueden ocultar y ancho recordado. **Pendientes por depositar** ya no exige
