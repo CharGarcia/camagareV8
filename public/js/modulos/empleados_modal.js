@@ -770,6 +770,7 @@
     function limpiarBadgeSriEmp() {
         if (badgeSriEmp) badgeSriEmp.className = 'badge d-none';
         if (spinnerSriEmp) spinnerSriEmp.classList.add('d-none');
+        window.CMG_Identificacion?.pintarAviso(campoIdEmp, null);
     }
 
     async function consultarSriEmp(identificacion) {
@@ -781,6 +782,8 @@
             const resp = await fetch(`${urlModuloEmp}/consultarSri`, { method: 'POST', body: fd });
             const json = await resp.json();
             if (spinnerSriEmp) spinnerSriEmp.classList.add('d-none');
+            // Aviso de dígito verificador (no bloquea): se retira si el SRI confirma el número.
+            window.CMG_Identificacion?.avisoTrasSri(campoIdEmp, 'CEDULA', json);
 
             if (!json.ok || !json.data) {
                 mostrarBadgeSriEmp('No encontrado', 'bg-warning text-dark');
@@ -813,6 +816,7 @@
         const valor = (campoIdEmp?.value || '').replace(/\D/g, '');
         if (tipo !== 'cedula') return;           // solo cédulas
         if (valor.length === 10) {
+            window.CMG_Identificacion?.pintarAviso(campoIdEmp, window.CMG_Identificacion.aviso('CEDULA', valor));
             sriDebounceEmp = setTimeout(() => consultarSriEmp(valor), 700);
         }
     }

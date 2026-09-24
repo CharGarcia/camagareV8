@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
-etiquetas: proveedores, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
-version: 2.4
+etiquetas: proveedores, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula
+version: 2.5
 orden: 10
 estado: activo
 ---
@@ -48,6 +48,24 @@ Razón social, nombre comercial y dirección admiten hasta **300 caracteres**, e
 máximo que el SRI permite en un comprobante electrónico. Si un texto llega más
 largo —por ejemplo desde una factura descargada del SRI— se guarda recortado a
 ese largo en lugar de rechazar el registro.
+
+## Aviso de cédula o RUC mal digitados (dígito verificador)
+
+Al terminar de escribir una cédula (10 dígitos) o un RUC (13 dígitos), el
+sistema comprueba su **dígito verificador**, el cálculo que tienen todas las
+cédulas y RUC ecuatorianos. Si no cuadra, aparece debajo de *Identificación* un
+**aviso en color ámbar**: «La cédula no supera el dígito verificador. Revise que
+esté bien digitada».
+
+- Es **solo un aviso**: **no impide guardar**. Existen cédulas y RUC reales que
+  no cumplen ese cálculo, así que la decisión es suya.
+- Si el SRI **encuentra** el número, el aviso **desaparece solo**: el número
+  existe aunque no cumpla el cálculo.
+- Si el SRI responde **No encontrado**, el aviso se refuerza («el SRI no encontró
+  este número: es probable que esté mal»). Casi siempre es un dígito cambiado:
+  corríjalo antes de guardar el proveedor.
+- Pasaporte, consumidor final e identificación del exterior no tienen este
+  cálculo y no muestran aviso.
 
 ## Datos de pago
 
@@ -388,6 +406,10 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Errores frecuentes
 
+- **Aviso ámbar «no supera el dígito verificador»**: revise el número, lo más
+  probable es un dígito mal digitado. Si está seguro de que es correcto (el SRI lo
+  encuentra, o el documento físico lo confirma), puede guardar igual: el aviso no
+  bloquea.
 - **No aparece al registrar una compra**: está inactivo o pertenece a otra empresa.
 - **La retención sale con el porcentaje equivocado**: revise las retenciones
   predeterminadas de su ficha; se aplican a cada compra nueva.
@@ -421,6 +443,9 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.5** — Aviso (sin bloquear) cuando la cédula o el RUC no supera el
+  dígito verificador; se retira solo si el SRI encuentra el número y se refuerza
+  si el SRI no lo encuentra.
 - **2.4** — El **pago automático** se genera también al **aprobar** una factura
   del SRI que quedó pendiente de aprobación, por su saldo en ese momento.
   *Generar pagos pendientes* ya no incluye facturas pendientes de aprobación.

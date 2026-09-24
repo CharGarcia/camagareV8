@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Helpers\DigitoVerificador;
 use App\models\Provincia;
 use App\models\Ciudad;
 
@@ -38,7 +39,8 @@ class SriIdentificationService
      *   que la búsqueda local (clientes/proveedores) no cruce datos entre empresas
      *   (regla multiempresa, CLAUDE.md §4/§6). Si se omite, la búsqueda local se
      *   salta por completo y se va directo al SRI — nunca se busca sin filtrar.
-     * @return array{ok: bool, data?: array, error?: string, source?: string}
+     * @return array{ok: bool, data?: array, error?: string, source?: string, advertencia?: string}
+     *   `advertencia`: el número no supera el dígito verificador (solo aviso, no bloquea).
      */
     public function consultar(string $identificacion, ?int $idEmpresa = null): array
     {
@@ -52,11 +54,12 @@ class SriIdentificationService
         // 1. BUSCAR LOCALMENTE PRIMERO (clientes/proveedores de la MISMA empresa)
         $local = $this->buscarLocalmente($identificacion, $idEmpresa);
         if ($local !== null) {
-            return [
+            return array_filter([
                 'ok' => true,
                 'data' => $local['data'],
                 'source' => $local['source'],
-            ];
+                'advertencia' => $this->avisoDigito(preg_replace('/\D/', '', $identificacion)),
+            ], static fn ($v) => $v !== null);
         }
 
         $identificacion = preg_replace('/\D/', '', $identificacion);
@@ -65,6 +68,19 @@ class SriIdentificationService
         if ($longitud !== 10 && $longitud !== 13) {
             return ['ok' => false, 'error' => 'La identificación debe tener 10 (cédula) o 13 (RUC) dígitos.'];
         }
+
+        // Aviso (no bloqueo) de dígito verificador. Solo acompaña a las respuestas
+        // en que el SRI NO confirmó el número (no lo encontró o no respondió): si
+        // lo encuentra, el número es real aunque no supere el algoritmo, y el
+        // aviso sería un falso positivo. Ver App\Helpers\DigitoVerificador.
+        $advertencia = $this->avisoDigito($identificacion);
+        $sinConfirmar = static function (string $error) use ($advertencia): array {
+            $r = ['ok' => false, 'error' => $error];
+            if ($advertencia !== null) {
+                $r['advertencia'] = $advertencia;
+            }
+            return $r;
+        };
 
         if (!function_exists('curl_init')) {
             return ['ok' => false, 'error' => 'PHP no tiene la extensión cURL habilitada en el servidor.'];
@@ -88,25 +104,23 @@ class SriIdentificationService
         curl_close($ch);
 
         if ($curlError !== '') {
-            return [
-                'ok' => false,
-                'error' => 'No se pudo contactar el servicio de consulta (' . $this->apiUrl . '). ' . $curlError
-                    . ' Compruebe firewall/salida HTTPS, que el API esté en marcha, o ingrese los datos a mano.',
-            ];
+            return $sinConfirmar(
+                'No se pudo contactar el servicio de consulta (' . $this->apiUrl . '). ' . $curlError
+                . ' Compruebe firewall/salida HTTPS, que el API esté en marcha, o ingrese los datos a mano.'
+            );
         }
 
         if ($httpCode < 200 || $httpCode >= 300) {
             $snippet = is_string($response) ? mb_substr(trim($response), 0, 200) : '';
-            return [
-                'ok' => false,
-                'error' => 'El servicio de consulta respondió HTTP ' . $httpCode . '. '
-                    . ($snippet !== '' ? $snippet : 'Revise sri_identification_url en config/app.php.'),
-            ];
+            return $sinConfirmar(
+                'El servicio de consulta respondió HTTP ' . $httpCode . '. '
+                . ($snippet !== '' ? $snippet : 'Revise sri_identification_url en config/app.php.')
+            );
         }
 
         $responseData = json_decode($response ?? '', true);
         if (!is_array($responseData) || empty($responseData['data'])) {
-            return ['ok' => false, 'error' => 'No encontrado.'];
+            return $sinConfirmar('No encontrado.');
         }
 
         $data = $responseData['data'];
@@ -116,6 +130,16 @@ class SriIdentificationService
         }
 
         return ['ok' => true, 'data' => $this->parsearRuc($data, $identificacion)];
+    }
+
+    /** Aviso de dígito verificador según la longitud (10 = cédula, 13 = RUC), o null. */
+    private function avisoDigito(string $digitos): ?string
+    {
+        return match (strlen($digitos)) {
+            10 => DigitoVerificador::aviso('CEDULA', $digitos),
+            13 => DigitoVerificador::aviso('RUC', $digitos),
+            default => null,
+        };
     }
 
     private function parsearCedula(array $data, string $cedula): array

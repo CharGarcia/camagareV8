@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
-etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf
-version: 1.9
+etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula
+version: 1.10
 orden: 10
 estado: activo
 ---
@@ -34,6 +34,24 @@ la ficha, el empleado no existe para ninguno de esos procesos.
 | Correo electrónico | Si se llena, debe tener formato válido |
 | Sexo | Debe ser uno de los valores admitidos |
 | Cargas familiares | Número entero, 0 o más. Vacío equivale a 0 |
+
+## Aviso de cédula o RUC mal digitados (dígito verificador)
+
+Al terminar de escribir una cédula (10 dígitos) o un RUC (13 dígitos), el
+sistema comprueba su **dígito verificador**, el cálculo que tienen todas las
+cédulas y RUC ecuatorianos. Si no cuadra, aparece debajo de *Identificación* un
+**aviso en color ámbar**: «La cédula no supera el dígito verificador. Revise que
+esté bien digitada».
+
+- Es **solo un aviso**: **no impide guardar**. Existen cédulas y RUC reales que
+  no cumplen ese cálculo, así que la decisión es suya.
+- Si el SRI **encuentra** el número, el aviso **desaparece solo**: el número
+  existe aunque no cumpla el cálculo.
+- Si el SRI responde **No encontrado**, el aviso se refuerza («el SRI no encontró
+  este número: es probable que esté mal»). Casi siempre es un dígito cambiado:
+  corríjalo antes de guardar el empleado.
+- Pasaporte, consumidor final e identificación del exterior no tienen este
+  cálculo y no muestran aviso.
 
 ## Cargas familiares
 
@@ -208,6 +226,10 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Errores frecuentes
 
+- **Aviso ámbar «no supera el dígito verificador»**: revise el número, lo más
+  probable es un dígito mal digitado. Si está seguro de que es correcto (el SRI lo
+  encuentra, o el documento físico lo confirma), puede guardar igual: el aviso no
+  bloquea.
 - **"La cédula debe tener exactamente 10 dígitos"**: revise el número o cambie el
   tipo de identificación si es un extranjero con pasaporte.
 - **No aparece al generar el rol de pago**: compruebe que esté activo y en la
@@ -223,6 +245,9 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Historial de cambios
 
+- **1.10** — Aviso (sin bloquear) cuando la cédula o el RUC no supera el
+  dígito verificador; se retira solo si el SRI encuentra el número y se refuerza
+  si el SRI no lo encuentra.
 - **1.9** — Corregido: en la pestaña *Vacaciones*, sección **Solicitudes**, los cuadros para
   escribir —el correo al enviar la solicitud, el comentario al aprobar y el motivo al
   rechazar— no aceptaban texto: se veían, pero al escribir no pasaba nada. Ya se puede

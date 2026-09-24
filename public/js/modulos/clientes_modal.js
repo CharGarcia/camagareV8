@@ -164,6 +164,7 @@
         const sw = document.getElementById('sriSpinnerWrap');
         if (b) { b.className = 'badge d-none'; b.textContent = ''; }
         if (sw) sw.classList.add('d-none');
+        window.CMG_Identificacion?.pintarAviso(document.getElementById('cliente_identificacion'), null);
     }
 
     async function consultarSri(identificacion) {
@@ -176,6 +177,8 @@
             const resp = await fetch(urlBaseClientes + '/consultarSri', { method: 'POST', body: fd });
             const json = await resp.json();
             if (sw) sw.classList.add('d-none');
+            // Aviso de dígito verificador (no bloquea): se retira si el SRI confirma el número.
+            window.CMG_Identificacion?.avisoTrasSri(document.getElementById('cliente_identificacion'), getTipoNormalizado(), json);
 
             if (!json.ok) {
                 mostrarBadgeSri('No encontrado', 'bg-warning text-dark');
@@ -218,6 +221,10 @@
         if (!longEsperada) return;
 
         if (valor.length === longEsperada) {
+            window.CMG_Identificacion?.pintarAviso(
+                document.getElementById('cliente_identificacion'),
+                window.CMG_Identificacion.aviso(tipo, valor)
+            );
             sriDebounceTimer = setTimeout(() => {
                 if (validarIdentificacion()) consultarSri(valor);
             }, 700);

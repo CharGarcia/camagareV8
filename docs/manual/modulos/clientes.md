@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
-etiquetas: clientes, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido
-version: 2.2
+etiquetas: clientes, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula
+version: 2.3
 orden: 10
 estado: activo
 ---
@@ -43,6 +43,24 @@ Al guardar, la ficha **no se cierra**: se queda abierta y se refresca con lo que
 quedó realmente grabado, para que siga completando pestañas sin volver a buscar
 el cliente. Si lo creó desde una factura, pedido u orden de lavado, el documento
 de fondo ya lo tiene seleccionado; cierre la ficha cuando termine.
+
+## Aviso de cédula o RUC mal digitados (dígito verificador)
+
+Al terminar de escribir una cédula (10 dígitos) o un RUC (13 dígitos), el
+sistema comprueba su **dígito verificador**, el cálculo que tienen todas las
+cédulas y RUC ecuatorianos. Si no cuadra, aparece debajo de *Identificación* un
+**aviso en color ámbar**: «La cédula no supera el dígito verificador. Revise que
+esté bien digitada».
+
+- Es **solo un aviso**: **no impide guardar**. Existen cédulas y RUC reales que
+  no cumplen ese cálculo, así que la decisión es suya.
+- Si el SRI **encuentra** el número, el aviso **desaparece solo**: el número
+  existe aunque no cumpla el cálculo.
+- Si el SRI responde **No encontrado**, el aviso se refuerza («el SRI no encontró
+  este número: es probable que esté mal»). Casi siempre es un dígito cambiado:
+  corríjalo antes de guardar el cliente.
+- Pasaporte, consumidor final e identificación del exterior no tienen este
+  cálculo y no muestran aviso.
 
 ## Buscar y filtrar el listado
 
@@ -369,6 +387,10 @@ usuario y la fecha.
 
 ## Errores frecuentes
 
+- **Aviso ámbar «no supera el dígito verificador»**: revise el número, lo más
+  probable es un dígito mal digitado. Si está seguro de que es correcto (el SRI lo
+  encuentra, o el documento físico lo confirma), puede guardar igual: el aviso no
+  bloquea.
 - **No aparece en la factura**: verifique que el cliente esté en la misma empresa
   en la que está facturando.
 - **No puedo editarlo**: le falta el permiso de modificar, o el cliente lo creó
@@ -392,6 +414,9 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **2.3** — Aviso (sin bloquear) cuando la cédula o el RUC no supera el
+  dígito verificador; se retira solo si el SRI encuentra el número y se refuerza
+  si el SRI no lo encuentra.
 - **2.2** — Estrella de favoritos en *Plazo de Crédito (Días)* y *Vendedor
   asignado*: los valores marcados se precargan al crear un cliente nuevo.
 - **2.1** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;

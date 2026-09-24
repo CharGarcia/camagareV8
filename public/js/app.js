@@ -10,6 +10,93 @@ window.CMG_fechaLocal = function(d) {
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 };
 
+// Dígito verificador de cédula y RUC ecuatorianos. Espejo de
+// App\Helpers\DigitoVerificador (si cambia el algoritmo, cambiarlo en los dos).
+// Es SOLO un aviso: hay números reales que no superan el algoritmo, así que nunca
+// se usa para impedir guardar. Si el SRI encuentra el número, el aviso se retira.
+window.CMG_Identificacion = (function () {
+    function provinciaValida(n) {
+        var p = parseInt(n.substr(0, 2), 10);
+        return p >= 1 && (p <= 24 || p === 30);
+    }
+
+    function cedulaValida(c) {
+        if (!/^\d{10}$/.test(c) || !provinciaValida(c) || +c[2] > 5) return false;
+        var suma = 0;
+        for (var i = 0; i < 9; i++) {
+            var v = +c[i] * (i % 2 === 0 ? 2 : 1);
+            suma += v > 9 ? v - 9 : v;
+        }
+        return (10 - (suma % 10)) % 10 === +c[9];
+    }
+
+    function modulo11(n, coef, pos) {
+        var suma = 0;
+        for (var i = 0; i < coef.length; i++) suma += +n[i] * coef[i];
+        var r = suma % 11;
+        return (r === 0 ? 0 : 11 - r) === +n[pos];
+    }
+
+    function rucValido(r) {
+        if (!/^\d{13}$/.test(r) || !provinciaValida(r)) return false;
+        var t = +r[2];
+        if (t < 6) return cedulaValida(r.substr(0, 10));
+        if (t === 6) return modulo11(r, [3, 2, 7, 6, 5, 4, 3, 2], 8);
+        if (t === 9) return modulo11(r, [4, 3, 2, 7, 6, 5, 4, 3, 2], 9);
+        return false;
+    }
+
+    // tipo: 'CEDULA' | 'RUC' (cualquier otro no tiene algoritmo). Devuelve el mensaje o null.
+    function aviso(tipo, valor) {
+        tipo = String(tipo || '').toUpperCase();
+        valor = String(valor || '').trim();
+        if (tipo === 'CEDULA' && valor.length === 10 && !cedulaValida(valor)) {
+            return 'La cédula no supera el dígito verificador. Revise que esté bien digitada.';
+        }
+        if (tipo === 'RUC' && valor.length === 13 && !rucValido(valor)) {
+            return 'El RUC no supera el dígito verificador. Revise que esté bien digitado.';
+        }
+        return null;
+    }
+
+    // Muestra (o retira, con mensaje null) el aviso ámbar debajo del campo.
+    // Crea el contenedor la primera vez: `{id del input}_aviso`.
+    function pintarAviso(input, mensaje) {
+        if (!input) return;
+        var id = input.id + '_aviso';
+        var el = document.getElementById(id);
+        if (!mensaje) {
+            if (el) el.classList.add('d-none');
+            return;
+        }
+        if (!el) {
+            el = document.createElement('div');
+            el.id = id;
+            el.className = 'small text-warning-emphasis mt-1';
+            var ancla = input.closest('.input-group') || input;
+            ancla.insertAdjacentElement('afterend', el);
+        }
+        el.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i>';
+        el.appendChild(document.createTextNode(mensaje));
+        el.classList.remove('d-none');
+    }
+
+    // Aplica el aviso tras la respuesta de consultarSri: si el SRI confirmó el
+    // número (ok y sin `source` local) se retira; si respondió "No encontrado", se
+    // refuerza. Si el servicio falló (sin conexión, HTTP de error) queda el aviso simple.
+    function avisoTrasSri(input, tipo, respuesta) {
+        var base = aviso(tipo, input ? input.value : '');
+        if (!base) { pintarAviso(input, null); return; }
+        if (respuesta && respuesta.ok && !respuesta.source) { pintarAviso(input, null); return; }
+        if (respuesta && !respuesta.ok && /no encontrado/i.test(respuesta.error || '')) {
+            base += ' Además, el SRI no encontró este número: es probable que esté mal.';
+        }
+        pintarAviso(input, base);
+    }
+
+    return { cedulaValida: cedulaValida, rucValido: rucValido, aviso: aviso, pintarAviso: pintarAviso, avisoTrasSri: avisoTrasSri };
+})();
+
 (function() {
     'use strict';
     document.addEventListener('DOMContentLoaded', function() {

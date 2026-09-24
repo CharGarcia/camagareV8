@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Rules\modulos;
 
 use App\Helpers\CatalogoAdi;
+use App\Helpers\DigitoVerificador;
 use InvalidArgumentException;
 
 /**
@@ -446,74 +447,16 @@ class AnexoDividendosRules
         return null; // pasaporte e identificación del exterior no tienen algoritmo
     }
 
-    /** Módulo 10 sobre los 9 primeros dígitos (cédula de identidad). */
+    /** Módulo 10 sobre los 9 primeros dígitos (cédula de identidad). Ver App\Helpers\DigitoVerificador. */
     public function cedulaValida(string $cedula): bool
     {
-        if (!preg_match('/^\d{10}$/', $cedula)) {
-            return false;
-        }
-        $provincia = (int) substr($cedula, 0, 2);
-        if ($provincia < 1 || ($provincia > 24 && $provincia !== 30)) {
-            return false;
-        }
-        if ((int) $cedula[2] > 5) {
-            return false; // el tercer dígito de una cédula siempre es menor a 6
-        }
-
-        $suma = 0;
-        for ($i = 0; $i < 9; $i++) {
-            $valor = (int) $cedula[$i] * ($i % 2 === 0 ? 2 : 1);
-            $suma += $valor > 9 ? $valor - 9 : $valor;
-        }
-        $verificador = (10 - ($suma % 10)) % 10;
-
-        return $verificador === (int) $cedula[9];
+        return DigitoVerificador::cedulaValida($cedula);
     }
 
-    /**
-     * RUC ecuatoriano. Según el tercer dígito:
-     *   0-5 persona natural  → cédula válida + 001
-     *   6   sector público   → módulo 11 sobre 8 dígitos, verificador en la 9.ª posición
-     *   9   sociedad privada → módulo 11 sobre 9 dígitos, verificador en la 10.ª posición
-     */
+    /** RUC ecuatoriano (módulo 10 u 11 según el tercer dígito). Ver App\Helpers\DigitoVerificador. */
     public function rucValido(string $ruc): bool
     {
-        if (!preg_match('/^\d{13}$/', $ruc)) {
-            return false;
-        }
-        $provincia = (int) substr($ruc, 0, 2);
-        if ($provincia < 1 || ($provincia > 24 && $provincia !== 30)) {
-            return false;
-        }
-
-        $tercer = (int) $ruc[2];
-
-        if ($tercer < 6) {
-            return $this->cedulaValida(substr($ruc, 0, 10));
-        }
-
-        if ($tercer === 6) {
-            return $this->modulo11($ruc, [3, 2, 7, 6, 5, 4, 3, 2], 8);
-        }
-
-        if ($tercer === 9) {
-            return $this->modulo11($ruc, [4, 3, 2, 7, 6, 5, 4, 3, 2], 9);
-        }
-
-        return false;
-    }
-
-    /** @param int[] $coeficientes */
-    private function modulo11(string $numero, array $coeficientes, int $posicionVerificador): bool
-    {
-        $suma = 0;
-        foreach ($coeficientes as $i => $coef) {
-            $suma += (int) $numero[$i] * $coef;
-        }
-        $residuo     = $suma % 11;
-        $verificador = $residuo === 0 ? 0 : 11 - $residuo;
-
-        return $verificador === (int) $numero[$posicionVerificador];
+        return DigitoVerificador::rucValido($ruc);
     }
 
     /**

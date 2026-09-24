@@ -527,6 +527,7 @@
         const sw = document.getElementById('prov_sriSpinnerWrap');
         if (b) { b.className = 'badge d-none'; b.textContent = ''; }
         if (sw) sw.classList.add('d-none');
+        window.CMG_Identificacion?.pintarAviso(document.getElementById('prov_identificacion'), null);
     };
 
     window.mostrarBadgeSri = function (texto, cls) {
@@ -739,6 +740,7 @@
                 const longEsperada = (tipo === 'RUC') ? 13 : ((tipo === 'CEDULA') ? 10 : 0);
 
                 if (valor.length === longEsperada && longEsperada > 0) {
+                    window.CMG_Identificacion?.pintarAviso(this, window.CMG_Identificacion.aviso(tipo, valor));
                     sriDebounceTimer = setTimeout(() => {
                         ejecutarConsultaSriProv(valor);
                     }, 500);
@@ -786,6 +788,8 @@
             const resp = await fetch(`${urlBaseProv}/consultarSri`, { method: 'POST', body: fd });
             const data = await resp.json();
             if (sw) sw.classList.add('d-none');
+            // Aviso de dígito verificador (no bloquea): se retira si el SRI confirma el número.
+            window.CMG_Identificacion?.avisoTrasSri(document.getElementById('prov_identificacion'), getTipoNormalizadoProv(), data);
             if (data.ok) {
                 window.mostrarBadgeSri('✓ SRI', 'bg-success');
                 if (data.data) {
