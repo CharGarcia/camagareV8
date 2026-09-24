@@ -67,6 +67,12 @@ pedido, con su cantidad y su precio ya cargados. De cada línea se elige la
 cantidad a despachar y, en los productos que manejan lote, el **lote**, la **fecha
 de vencimiento** y el **NUP**.
 
+En una consignación **nueva**, además del cliente, el asesor y el punto de llegada,
+se toman del pedido la **Fecha Entrega** y el horario (**Hora Desde** / **Hora
+Hasta**), reemplazando la fecha y hora actuales con las que se abre el formulario.
+Si el pedido no tiene alguno de esos datos, se conserva el valor que ya estaba. En
+una consignación ya guardada no se modifican.
+
 **El vencimiento depende del lote**, igual que al cargar una línea a mano en el
 detalle de la consignación. Mientras no se elija lote, la lista muestra todas las
 fechas disponibles del producto en esa bodega. Al elegir un lote, la lista de
@@ -449,6 +455,9 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.29** — Al **cargar desde un pedido** en una consignación nueva, la **Fecha
+  Entrega** y el horario de entrega (**Hora Desde** / **Hora Hasta**) se toman del
+  pedido. Antes quedaban la fecha y la hora del momento en que se abrió el formulario.
 - **1.28** — Interruptor **Módulos que contabilizan** (Configuración contable): la
   empresa puede dejar de contabilizar las consignaciones. Apagado, las nuevas no
   generan asiento ni figuran como pendientes; retornos y facturaciones siguen a su

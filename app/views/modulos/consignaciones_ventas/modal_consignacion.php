@@ -2358,6 +2358,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (isNewCons && obsField && !obsField.value.trim() && c.numero_pedido) {
             obsField.value = 'Pedido ' + c.numero_pedido + (c.observaciones ? ' — ' + c.observaciones : '');
         }
+        // Fecha y horario de entrega: en una consignación nueva vienen del pedido (reemplazan
+        // la fecha/hora actual con la que se inicializa el modal). Solo lo que el pedido trae.
+        if (isNewCons) {
+            if (c.fecha_entrega) document.getElementById('cons_fecha_entrega').value = String(c.fecha_entrega).substring(0, 10);
+            if (c.hora_inicial_entrega) document.getElementById('cons_hora_entrega_desde').value = String(c.hora_inicial_entrega).substring(0, 5);
+            if (c.hora_maxima_entrega) document.getElementById('cons_hora_entrega_hasta').value = String(c.hora_maxima_entrega).substring(0, 5);
+        }
 
         const selectedBodegaId = document.getElementById('buscar_pedido_bodega').value || document.getElementById('cons_id_bodega').value || '';
 
