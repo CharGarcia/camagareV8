@@ -843,13 +843,14 @@ class CuentasPorCobrarController extends BaseModuloController
         }
 
         // Saldos iniciales (todos; se filtran en PHP por el mismo estado del listado).
-        // No tienen vendedor: al filtrar por vendedor quedan fuera (ver repo->incluyeSaldosIniciales).
+        // No guardan vendedor: el filtro Vendedor se aplica por el vendedor asignado al cliente.
         if (!$this->repo->incluyeSaldosIniciales($filtros)) {
             $saldos = [];
         } else {
             $saldos = $this->repo->getSaldosInicialesCxc($idEmpresa, [
                 'estado'      => 'TODOS',
                 'id_cliente'  => $filtros['id_cliente'] ?? '',
+                'id_vendedor' => $filtros['id_vendedor'] ?? '',
                 'fecha_desde' => $filtros['fecha_desde'] ?? '',
                 'fecha_hasta' => $filtros['fecha_hasta'] ?? '',
                 // Alcance del usuario (§6): el mismo que aplican facturas y recibos
@@ -884,7 +885,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 'cliente_ruc'       => $s['ruc_cliente'],
                 'cliente_email'     => '',
                 'cliente_telefono'  => '',
-                'vendedor_nombre'   => '', // los saldos iniciales no tienen vendedor
+                'vendedor_nombre'   => $s['vendedor_nombre'] ?? '', // el vendedor asignado al cliente
                 'fecha_emision'     => $s['fecha_emision'],
                 'fecha_vencimiento' => $s['fecha_vencimiento'],
                 'total'             => $s['saldo_inicial'],

@@ -280,6 +280,21 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
+     * Filtro Vendedor de la pantalla sobre los saldos iniciales CxC. La tabla no
+     * guarda `id_vendedor`: su vendedor es el asignado al cliente (`clientes.id_vendedor`).
+     */
+    private function condVendedorSaldoInicial(array $filtros, string $ph, array &$params): string
+    {
+        $idVendedor = (int) ($filtros['id_vendedor'] ?? 0);
+        if ($idVendedor <= 0) {
+            return '';
+        }
+        $params[":{$ph}"] = $idVendedor;
+        return " AND EXISTS (SELECT 1 FROM clientes {$ph}_c
+                             WHERE {$ph}_c.id = s.id_cliente AND {$ph}_c.id_vendedor = :{$ph})";
+    }
+
+    /**
      * Vendedor asignado a un cliente (`clientes.id_vendedor`), o null. Para las
      * acciones por id sobre saldos iniciales, cuya consulta no trae al cliente.
      */
@@ -413,16 +428,14 @@ class CuentasPorCobrarRepository extends BaseRepository
 
     /**
      * Indica si los saldos iniciales entran en el cálculo con los filtros dados.
-     * Los saldos iniciales no tienen vendedor (saldos_iniciales_cxc no guarda
-     * id_vendedor), así que cuando se filtra por un vendedor concreto se excluyen
-     * en lugar de mostrarse como si pertenecieran a todos. La misma regla la
-     * aplica el controller al armar el listado unificado.
+     * Con el filtro Vendedor sí entran: saldos_iniciales_cxc no guarda id_vendedor,
+     * así que se toma el vendedor asignado al cliente (ver condVendedorSaldoInicial).
+     * La misma regla la aplica el controller al armar el listado unificado.
      */
     public function incluyeSaldosIniciales(array $filtros): bool
     {
-        // Tampoco aplican con el filtro Producto: un saldo inicial no tiene líneas de detalle.
+        // No aplican con el filtro Producto: un saldo inicial no tiene líneas de detalle.
         return in_array($this->getTipoDoc($filtros), ['TODOS', 'SALDO_INICIAL'], true)
-            && empty($filtros['id_vendedor'])
             && !$this->tieneFiltroProducto($filtros);
     }
 
@@ -481,7 +494,7 @@ class CuentasPorCobrarRepository extends BaseRepository
             ? $this->getStatsRecibos($ids, $filtros)
             : ['cnt' => 0, 'total_saldo' => 0, 'total_vencido' => 0, 'total_al_dia' => 0, 'vencidas' => 0];
 
-        // Sumar los saldos iniciales CXC (mismo filtro de cliente; sin vendedor no aplican)
+        // Sumar los saldos iniciales CXC (mismo filtro de cliente; vendedor = el del cliente)
         $si = $this->incluyeSaldosIniciales($filtros)
             ? $this->getStatsSaldosInicialesCxc($ids, $filtros)
             : ['cnt' => 0, 'total_saldo' => 0, 'total_vencido' => 0, 'total_al_dia' => 0, 'vencidas' => 0];
@@ -505,6 +518,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
         $where .= $this->condAlcanceUsuario($filtros, "s", "created_by", "prop_si_stats", $params, false);
+        $where .= $this->condVendedorSaldoInicial($filtros, 'ven_si_stats', $params);
 
         if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
@@ -604,7 +618,7 @@ class CuentasPorCobrarRepository extends BaseRepository
             ? $this->getAntiguedadRecibos($ids, $filtros)
             : ['vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'mas_90' => 0];
 
-        // Sumar los tramos de los saldos iniciales CXC (mismo filtro de cliente; sin vendedor no aplican)
+        // Sumar los tramos de los saldos iniciales CXC (mismo filtro de cliente; vendedor = el del cliente)
         $si = $this->incluyeSaldosIniciales($filtros)
             ? $this->getAntiguedadSaldosInicialesCxc($ids, $filtros)
             : ['vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'mas_90' => 0];
@@ -627,6 +641,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
         $where .= $this->condAlcanceUsuario($filtros, 's', 'created_by', 'prop_si_ant', $params, false);
+        $where .= $this->condVendedorSaldoInicial($filtros, 'ven_si_ant', $params);
 
         if (!empty($filtros['id_cliente'])) {
             $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
@@ -1456,6 +1471,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($this->idsEmpresa($idsEmpresa), 'si_emp', $params)}) AND s.eliminado = false";
         $where .= $this->condAlcanceUsuario($filtros, 's', 'created_by', 'prop_si', $params, false);
+        $where .= $this->condVendedorSaldoInicial($filtros, 'ven_si', $params);
         [$fCob, $fRet, $fNc] = $this->corteSaldoInicialCxc($filtros, $params);
 
         if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
@@ -1486,6 +1502,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $sql = "SELECT
                     s.id, s.id_cliente, s.nro_documento, s.fecha_emision, s.fecha_vencimiento,
                     s.ruc_cliente, s.nombre_cliente,
+                    COALESCE(ven.nombre,'') AS vendedor_nombre, -- el vendedor asignado al cliente
                     {$this->colsEstablecimiento('s')},
                     CAST(s.saldo_inicial          AS NUMERIC(16,2)) AS saldo_inicial,
                     CAST(cob.cobrado              AS NUMERIC(16,2)) AS monto_cobrado,
@@ -1502,7 +1519,9 @@ class CuentasPorCobrarRepository extends BaseRepository
                          THEN CURRENT_DATE - s.fecha_vencimiento ELSE 0 END AS dias_vencido,
                     " . $this->sqlDiasTranscurridos($filtros, 's.fecha_emision', ':dias_corte_si', $params) . " AS dias_transcurridos
                 FROM saldos_iniciales_cxc s
-                LEFT JOIN empresas emp ON emp.id = s.id_empresa"
+                LEFT JOIN empresas emp ON emp.id = s.id_empresa
+                LEFT JOIN clientes cli ON cli.id = s.id_cliente
+                LEFT JOIN vendedores ven ON ven.id = cli.id_vendedor"
                 . $this->lateralCobradoSaldoInicial($fCob)
                 . $this->lateralRetSaldoInicial($fRet)
                 . $this->lateralNcSaldoInicial($fNc) . "

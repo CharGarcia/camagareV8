@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, encabezado por cada cliente, encabezado por cliente, no se ve a que columna corresponde, rotulo de columnas
-version: 2.23
+version: 2.24
 orden: 40
 estado: activo
 ---
@@ -222,8 +222,8 @@ en su propio vendedor (ver *Quién ve qué*).
 Las tarjetas superiores, el gráfico de antigüedad y las exportaciones a PDF y
 Excel respetan el filtro, igual que el de tipo de documento y el de cliente.
 Con el filtro en **Todos**, el **Excel** incluye la columna **Vendedor** con el
-nombre del vendedor asignado a cada factura o recibo (vacía en los saldos
-iniciales), y la vista *Por cliente* muestra la columna **Asesor** en pantalla,
+nombre del vendedor asignado a cada factura o recibo (en los saldos iniciales,
+el vendedor asignado al cliente), y la vista *Por cliente* muestra la columna **Asesor** en pantalla,
 en el PDF y en el Excel.
 
 **Al elegir un vendedor, esa columna desaparece** —en pantalla, en el PDF y en el
@@ -234,8 +234,11 @@ tiene el filtro fijo en su propio vendedor (ver *Quién ve qué*). En cambio, el
 usuario de nivel 1 **sin vendedor vinculado**, que ve solo lo que él registró,
 sí conserva la columna: sus documentos pueden ser de varios asesores.
 
-> Los **saldos iniciales** no tienen vendedor, así que al elegir un vendedor
-> quedan fuera del listado y de los totales. Con **Todos** vuelven a aparecer.
+> Los **saldos iniciales** no guardan vendedor propio: toman el **vendedor asignado
+> al cliente** (campo *Vendedor* de la ficha del cliente). Al elegir un vendedor
+> aparecen los saldos iniciales de sus clientes, en el listado, las tarjetas, el
+> gráfico y las exportaciones. Si el cliente no tiene vendedor asignado, su saldo
+> inicial solo aparece con **Todos**.
 
 ## Filtrar por producto
 
@@ -330,7 +333,7 @@ siguiente.
 | Retenciones | Retenciones que practicó el cliente. |
 | Saldo | Lo que falta cobrar: total + ND − NC − abonos − retenciones. En rojo si hay saldo. |
 | Días | Días transcurridos desde la emisión hasta la *Fecha Hasta* del filtro (hasta hoy si está vacía). Sale **en rojo** cuando el documento está vencido. Al pasar el mouse se ven la fecha de emisión y la de vencimiento. Ver *La columna Días y el estado de vencimiento*. |
-| Asesor | Vendedor asignado al documento. |
+| Asesor | Vendedor asignado al documento. En los saldos iniciales, el vendedor asignado al cliente. |
 
 - Un cliente cargado dos veces —con la cédula y con el RUC— forma **una sola
   sección** (ver *Un mismo cliente registrado con cédula y con RUC*).
@@ -674,6 +677,11 @@ Y dos casos que el reporte **no** descuenta a propósito:
   (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
+
+- **2.24** — Los **saldos iniciales** ya entran en la **cartera por vendedor**:
+  toman el vendedor asignado al cliente. Antes, al elegir un vendedor quedaban
+  fuera del listado, las tarjetas, el gráfico y las exportaciones, y la columna
+  del asesor salía vacía. Actualizadas *Filtrar por vendedor* y *Columnas*.
 
 - **2.23** — Los **PDF del listado** (vistas *Detallado*, *Por cliente* y *Por
   producto*) muestran el **número de página al pie** de cada hoja (*Página 2/5*).
