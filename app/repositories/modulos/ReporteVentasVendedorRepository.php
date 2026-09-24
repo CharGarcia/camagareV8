@@ -30,6 +30,23 @@ class ReporteVentasVendedorRepository extends BaseRepository
         $tipo = $filtros['tipo_documento'] ?? 'FACTURA_MENOS_NC';
 
         if ($tipo === 'NOTA_CREDITO') {
+            // La NC ya guarda su propio vendedor (database/20260924_nc_cabecera_id_vendedor.sql):
+            // se trata igual que una factura (vendedor directo; sin vendedor, el del cliente
+            // en el alcance del usuario). Sin la columna, se resuelve por la factura original.
+            if ($this->columnaExiste('notas_credito_cabecera', 'id_vendedor')) {
+                return [
+                    'cab'           => 'notas_credito_cabecera',
+                    'det'           => 'notas_credito_detalle',
+                    'imp'           => 'notas_credito_detalle_impuestos',
+                    'fk_det'        => 'id_nota_credito',
+                    'fk_imp'        => 'id_nota_credito_detalle',
+                    'estado_ok'     => "{alias}.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')",
+                    'vendedor'      => true,
+                    'vendedor_join' => "LEFT JOIN vendedores vend ON vend.id = {alias}.id_vendedor",
+                    'vendedor_col'  => '{alias}.id_vendedor',
+                    'es_factura'    => false,
+                ];
+            }
             return [
                 'cab'           => 'notas_credito_cabecera',
                 'det'           => 'notas_credito_detalle',
@@ -320,9 +337,10 @@ class ReporteVentasVendedorRepository extends BaseRepository
      *  - Modo VENDEDOR (`id_vendedor_filtro`): solo lo de su vendedor. Manda el
      *    vendedor del documento; si no tiene (NULL o 0), el asignado a su cliente
      *    (`clientes.id_vendedor`). Un documento a nombre de otro vendedor queda
-     *    fuera aunque el cliente sea suyo. La nota de crédito no tiene vendedor
-     *    propio (ver fuente()): manda el de la factura que modifica y, si esa
-     *    factura no tiene o no se encuentra, el del cliente de la nota.
+     *    fuera aunque el cliente sea suyo. La nota de crédito sigue la misma regla
+     *    con su propio vendedor; solo si la BD aún no tiene esa columna (ver
+     *    fuente()) manda el de la factura que modifica y, si esa factura no tiene
+     *    o no se encuentra, el del cliente de la nota.
      *  - Modo REGISTROS PROPIOS (`id_usuario_filtro`): `id_usuario` del documento.
      *
      * Los placeholders del IN se repiten dentro del mismo SQL (cliente y documento);

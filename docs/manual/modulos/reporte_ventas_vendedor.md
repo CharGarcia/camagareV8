@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ventas_vendedor
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, subtotal sin impuestos, subtotal nc, total documentos por asesor, cuantas facturas hizo cada vendedor, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor, solo mis ventas, cada asesor ve lo suyo, el vendedor no debe ver las ventas de otros, mis comisiones, acceso total, permiso de ver todos, registros propios, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, filtro vendedor fijo, no ver ventas de otros vendedores
-version: 1.8
+version: 1.9
 orden: 0
 estado: activo
 ---
@@ -161,9 +161,9 @@ misma regla que **Reporte de Ventas** y **Cuentas por Cobrar**:
 - La regla se aplica en todo el módulo: la tabla, las tarjetas de totales, el
   resumen de estados, todas las agrupaciones, el detalle al hacer clic en una
   fila, el PDF, el Excel y el envío por correo.
-- Las notas de crédito no llevan vendedor: cuentan para el vendedor de la
-  factura que modifican y, si esa factura no tiene vendedor o no se encuentra,
-  para el vendedor asignado al cliente de la nota.
+- Las notas de crédito cuentan para el **vendedor de la propia nota** (campo
+  *Vendedor* del modal de la NC) y, si la nota no tiene vendedor, para el
+  vendedor asignado a su cliente.
 - **El filtro *Vendedor* queda fijo** para estos usuarios: el vendedor muestra
   su propio nombre y quien no es vendedor ve *Sin vendedor vinculado*. No
   pueden elegir otro, y el sistema ignora cualquier otro vendedor que se le
@@ -261,6 +261,12 @@ corrió la migración, así que solo él (o alguien con acceso total) los verá.
   Permisos por módulo*).
 
 ## Historial de cambios
+
+- **1.9** — Las **notas de crédito** se agrupan y filtran por **su propio vendedor** (nuevo
+  campo *Vendedor* de la nota), ya no por el de la factura que modifican: si en la nota se
+  eligió otro asesor, la rebaja se descuenta a ese asesor. Las notas ya emitidas reciben el
+  vendedor de su factura (o el del cliente) con el script
+  `database/20260924_nc_cabecera_id_vendedor.sql`.
 
 - **1.8** — **Corrección del Saldo**: las retenciones se descontaban con el
   total de la retención a **cada** factura que sustentaba (una retención

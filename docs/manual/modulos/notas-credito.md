@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, sin bodega, invalid input syntax for type integer
-version: 1.20
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo
+version: 1.21
 orden: 30
 estado: activo
 ---
@@ -41,11 +41,27 @@ llevarse por delante lo que ya rebajaron las dos anteriores.
 
 ## Cómo se emite
 
-1. Desde la factura, genere la nota de crédito.
-2. Indique el **motivo** de la devolución o el ajuste.
-3. Deje solo las líneas y cantidades que se devuelven o rebajan.
-4. Revise el total.
-5. Guarde y envíe al SRI.
+1. Desde la factura, genere la nota de crédito (o, desde **Nueva Nota de Crédito**,
+   elija el cliente y luego la factura).
+2. Revise el **Vendedor** (junto a *Bodega Reintegro*): se llena solo y puede cambiarlo.
+3. Indique el **motivo** de la devolución o el ajuste (campo *Motivo SRI*, a la derecha de
+   la *Fecha del documento*).
+4. Deje solo las líneas y cantidades que se devuelven o rebajan.
+5. Revise el total.
+6. Guarde y envíe al SRI.
+
+### El vendedor de la nota
+
+El campo **Vendedor** indica a qué asesor se le descuenta la nota en los reportes.
+
+- Al elegir el cliente se propone el **vendedor asignado a ese cliente** (ficha del
+  cliente). Si la nota se genera desde la factura o el recibo, se propone el **vendedor
+  de ese documento**.
+- Se puede cambiar por otro o dejar en *Seleccione...* (sin vendedor).
+- Solo se listan vendedores activos. Si una nota ya guardada tiene un vendedor que
+  luego se desactivó, se sigue mostrando con la marca *(inactivo)*.
+- El **Reporte de Ventas** (filtro *Vendedor*) y el **Reporte de Ventas por Asesor**
+  toman este vendedor, no el de la factura que modifica la nota.
 
 ### Información adicional
 
@@ -315,6 +331,15 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.21** — Nuevo campo **Vendedor** en la nota, junto a *Bodega Reintegro*: se propone
+  el vendedor del cliente (o el de la factura/recibo cuando la nota se genera desde ahí) y
+  se puede cambiar. El Reporte de Ventas y el Reporte de Ventas por Asesor usan ahora este
+  vendedor. El **Motivo SRI** pasa a la fila del documento modificado, a la derecha de la
+  *Fecha del documento*; el cursor arranca en *Cliente* y con Enter recorre factura →
+  fecha → motivo → detalle. Requiere el script `database/20260924_nc_cabecera_id_vendedor.sql`,
+  que completa el vendedor de las notas ya emitidas (el de su factura o, si no tiene, el
+  del cliente).
 
 - **1.20** — **Notas de crédito por descuento** (pronto pago, rebajas posteriores) sin
   afectar el inventario: una nota cuyas líneas son todas libres o de servicios ya no exige

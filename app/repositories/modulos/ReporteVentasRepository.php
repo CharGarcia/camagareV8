@@ -133,7 +133,10 @@ class ReporteVentasRepository extends BaseRepository
                 'estado_ok'   => $this->condEstado("{alias}.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')", $filtros),
                 'retenciones' => false,
                 'clave'       => true,
-                'vendedor'    => false,   // notas_credito_cabecera no tiene id_vendedor
+                // La NC guarda su propio vendedor (database/20260924_nc_cabecera_id_vendedor.sql)
+                // y se filtra/muestra por él, igual que una factura. Sin esa columna se toma
+                // el de la factura que modifica.
+                'vendedor'    => $this->columnaExiste('notas_credito_cabecera', 'id_vendedor'),
             ];
         }
 
@@ -526,9 +529,10 @@ class ReporteVentasRepository extends BaseRepository
      *  - Modo VENDEDOR (`id_vendedor_filtro`): solo lo de su vendedor. Manda el
      *    vendedor del documento; si no tiene (NULL o 0), el asignado a su cliente
      *    (`clientes.id_vendedor`). Un documento a nombre de otro vendedor queda
-     *    fuera aunque el cliente sea suyo. Las notas de crédito no registran
-     *    vendedor (ver fuente()): manda el de la factura que modifican y, si esa
-     *    factura no tiene o no se encuentra, el del cliente de la nota.
+     *    fuera aunque el cliente sea suyo. Las notas de crédito siguen la misma
+     *    regla con su propio vendedor; solo si la BD aún no tiene esa columna (ver
+     *    fuente()) manda el de la factura que modifican y, si esa factura no tiene
+     *    o no se encuentra, el del cliente de la nota.
      *  - Modo REGISTROS PROPIOS (`id_usuario_filtro`): `id_usuario` del documento
      *    (la misma columna que filtran Factura de Venta, Recibo de Venta y NC).
      *
@@ -607,8 +611,8 @@ class ReporteVentasRepository extends BaseRepository
             $where .= " AND {$aliasVenta}.id_cliente IN (" . implode(',', $inNames) . ")";
         }
 
-        // Filtro por Vendedor. Las notas de crédito no registran vendedor
-        // (ver fuente()): se toma el de la factura de venta que modifican.
+        // Filtro por Vendedor. Las notas de crédito usan su propio vendedor; solo si la BD
+        // aún no tiene esa columna (ver fuente()) se toma el de la factura que modifican.
         if (!empty($filtros['id_vendedor'])) {
             if ($f['vendedor']) {
                 $where .= " AND {$aliasVenta}.id_vendedor = :id_vendedor";
@@ -733,7 +737,7 @@ class ReporteVentasRepository extends BaseRepository
             $retenJoin = "";
             $reten = "0";
         }
-        // Las notas de crédito no tienen id_vendedor: se muestra el de la factura modificada.
+        // NC sin columna id_vendedor (SQL no aplicado): se muestra el de la factura modificada.
         $vendedorSel  = "COALESCE(vend.nombre, '')";
         if ($f['vendedor']) {
             $vendedorJoin = "LEFT JOIN vendedores vend ON vend.id = v.id_vendedor";

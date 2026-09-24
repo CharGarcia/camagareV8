@@ -81,6 +81,16 @@ class NotaCreditoRules
     }
 
     /**
+     * El vendedor es opcional; si viene, debe ser un vendedor vigente de la empresa activa.
+     */
+    public function validarVendedor(array $data, bool $vendedorDeEmpresa): void
+    {
+        if (!empty($data['id_vendedor']) && !$vendedorDeEmpresa) {
+            throw new Exception("El vendedor seleccionado no existe o no pertenece a la empresa.");
+        }
+    }
+
+    /**
      * Formato exigido por la Ficha Técnica del SRI (longitudes y decimales).
      *
      * El generador de XML no comprueba nada: escribe lo que recibe. Sin esto, un

@@ -319,6 +319,17 @@ class NotaCreditoRepository extends BaseRepository
         return (bool) $st->fetchColumn();
     }
 
+    /** El vendedor existe, es de la empresa y no está eliminado. */
+    public function vendedorEsDeEmpresa(int $idVendedor, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT 1 FROM vendedores WHERE id = ? AND id_empresa = ? AND eliminado = false LIMIT 1"
+        );
+        $st->execute([$idVendedor, $idEmpresa]);
+
+        return (bool) $st->fetchColumn();
+    }
+
     public function getPorId(int $id): ?array
     {
         // Nombre de la bodega de reintegro: la vista lo necesita cuando esa bodega ya no
@@ -326,13 +337,18 @@ class NotaCreditoRepository extends BaseRepository
         $conBodega = $this->columnaExiste('notas_credito_cabecera', 'id_bodega');
         $selBodega = $conBodega ? ", b.nombre as bodega_nombre" : "";
         $joinBodega = $conBodega ? "LEFT JOIN bodegas b ON b.id = nc.id_bodega" : "";
+        // Ídem con el vendedor: si quedó inactivo no sale en el combo, pero la NC lo conserva.
+        $conVendedor = $this->columnaExiste('notas_credito_cabecera', 'id_vendedor');
+        $selVendedor = $conVendedor ? ", vend.nombre as vendedor_nombre" : "";
+        $joinVendedor = $conVendedor ? "LEFT JOIN vendedores vend ON vend.id = nc.id_vendedor" : "";
 
         $sql = "SELECT nc.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,
                        c.direccion as cliente_direccion, c.telefono as cliente_telefono,
-                       c.email as cliente_email, c.tipo_id as cliente_tipo_id{$selBodega}
+                       c.email as cliente_email, c.tipo_id as cliente_tipo_id{$selBodega}{$selVendedor}
                 FROM notas_credito_cabecera nc
                 LEFT JOIN clientes c ON nc.id_cliente = c.id
                 {$joinBodega}
+                {$joinVendedor}
                 WHERE nc.id = ? AND nc.eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([$id]);
@@ -472,6 +488,12 @@ class NotaCreditoRepository extends BaseRepository
             $params[] = !empty($data['id_bodega']) ? (int) $data['id_bodega'] : null;
         }
 
+        // Vendedor (database/20260924_nc_cabecera_id_vendedor.sql): mismo criterio que la bodega.
+        if ($this->columnaExiste('notas_credito_cabecera', 'id_vendedor')) {
+            $cols    .= ", id_vendedor";
+            $params[] = !empty($data['id_vendedor']) ? (int) $data['id_vendedor'] : null;
+        }
+
         $marcas = implode(', ', array_fill(0, count($params), '?'));
         $st = $this->db->prepare("INSERT INTO notas_credito_cabecera ({$cols}) VALUES ({$marcas}) RETURNING id");
         $st->execute($params);
@@ -509,6 +531,11 @@ class NotaCreditoRepository extends BaseRepository
         if ($this->columnaExiste('notas_credito_cabecera', 'id_bodega')) {
             $sql     .= ", id_bodega = ?";
             $params[] = !empty($data['id_bodega']) ? (int) $data['id_bodega'] : null;
+        }
+
+        if ($this->columnaExiste('notas_credito_cabecera', 'id_vendedor')) {
+            $sql     .= ", id_vendedor = ?";
+            $params[] = !empty($data['id_vendedor']) ? (int) $data['id_vendedor'] : null;
         }
 
         $params[] = $id;

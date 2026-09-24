@@ -72,6 +72,8 @@ class NotasCreditoController extends BaseModuloController
         $bodegaRepo = new BodegaRepository();
         $bodegas = $bodegaRepo->getBodegasPermitidas((int)$_SESSION['id_usuario'], $idEmpresa, (int)$_SESSION['nivel']);
 
+        $vendedores = (new \App\repositories\modulos\VendedorRepository())->getVendedoresActivos($idEmpresa);
+
         $total = $result['total'];
         $this->viewWithLayout('layouts.main', 'modulos/notas_credito/index', [
             'titulo'      => 'Notas de Crédito',
@@ -95,6 +97,7 @@ class NotasCreditoController extends BaseModuloController
             'seriesFiltro' => $seriesFiltro,
             'usuariosFiltro' => $usuariosFiltro,
             'bodegas'     => $bodegas,
+            'vendedores'  => $vendedores,
             'fullWidth'   => true,
         ]);
     }

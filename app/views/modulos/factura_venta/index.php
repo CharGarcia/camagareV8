@@ -6856,7 +6856,8 @@ $totalPages = $totalPagesOriginal;
             
             // Pre-seleccionar factura y cliente en el modal de NC
             setTimeout(() => {
-                window.NC_seleccionarCliente({ id: idCliente, nombre: nombreCliente, identificacion: rucCliente, email: emailCliente });
+                // Vendedor de la factura (no el que tenga hoy el cliente).
+                window.NC_seleccionarCliente({ id: idCliente, nombre: nombreCliente, identificacion: rucCliente, email: emailCliente, id_vendedor: document.getElementById('m-select-vendedor')?.value || '' });
                 window.NC_seleccionarFactura({
                     id: FV_ID_ACTIVO,
                     establecimiento: establecimiento,

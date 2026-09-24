@@ -77,10 +77,27 @@ class NotaCreditoService
         return $data;
     }
 
+    /**
+     * Vendedor de la NC: por defecto el del cliente, editable. Opcional; si viene debe ser
+     * de la empresa activa (el id llega del navegador).
+     */
+    private function validarVendedor(array $data): array
+    {
+        $idVendedor = !empty($data['id_vendedor']) ? (int) $data['id_vendedor'] : 0;
+        $data['id_vendedor'] = $idVendedor > 0 ? $idVendedor : null;
+
+        $esDeEmpresa = $idVendedor > 0
+            && $this->repository->vendedorEsDeEmpresa($idVendedor, (int) ($data['id_empresa'] ?? 0));
+        $this->rules->validarVendedor($data, $esDeEmpresa);
+
+        return $data;
+    }
+
     public function crear(array $data): int
     {
         $this->rules->validar($data);
         $data = $this->validarBodegaReintegro($data);
+        $data = $this->validarVendedor($data);
 
         $this->validarPeriodoContable(
             $data['fecha_emision'] ?? null,
@@ -296,6 +313,7 @@ class NotaCreditoService
     {
         $this->rules->validar($data);
         $data = $this->validarBodegaReintegro($data);
+        $data = $this->validarVendedor($data);
 
         $ncActual = $this->repository->getPorId($id);
         $this->validarPeriodoContableAlModificar(

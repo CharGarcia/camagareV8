@@ -120,14 +120,15 @@
             modalNC = new bootstrap.Modal(modalEl);
             console.log('Modal NC inicializado con éxito');
 
-            // Enter en Motivo → pasar el cursor a Cliente.
+            // Enter en Motivo → pasar el cursor a la descripción del primer detalle.
             const inpMotivo = document.getElementById('nc_motivo');
             if (inpMotivo) {
                 inpMotivo.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
-                        const inpCli = document.getElementById('nc_cliente_search');
-                        if (inpCli) inpCli.focus();
+                        const body = document.getElementById('nc_detalles_body');
+                        const primeraDesc = body && body.querySelector('input[name="det_descripcion[]"]');
+                        if (primeraDesc) primeraDesc.focus();
                     }
                 });
                 // Colapsar espacios dobles y recortar extremos al salir del campo.
@@ -216,6 +217,25 @@
         sel.value = id;
     }
 
+    // Muestra el vendedor guardado en la NC. Si ya no está en el combo (vendedor inactivo)
+    // se agrega como opción temporal, igual que la bodega. Con id vacío deja «Seleccione...».
+    function NC_setVendedor(idVendedor, nombre = '') {
+        const sel = document.getElementById('nc_id_vendedor');
+        if (!sel) return;
+        sel.querySelectorAll('option[data-temporal]').forEach(o => o.remove());
+        if (idVendedor == null || idVendedor === '' || Number(idVendedor) === 0) { sel.value = ''; return; }
+
+        const id = String(idVendedor);
+        if (!Array.from(sel.options).some(o => o.value === id)) {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.dataset.temporal = '1';
+            opt.textContent = `${nombre || 'Vendedor #' + id} (inactivo)`;
+            sel.appendChild(opt);
+        }
+        sel.value = id;
+    }
+
     function NC_resetearYMostrar(borrador = null) {
         try {
             // Estado interno: una NC nueva arranca siempre como borrador sin id.
@@ -227,6 +247,7 @@
 
             NC_limpiarDropdownsProducto();
             NC_setBodega(null);
+            NC_setVendedor(null);
             if (formNC) formNC.reset();
             const idInput = document.getElementById('nc_id');
             if (idInput) idInput.value = '';
@@ -299,9 +320,9 @@
 
             document.getElementById('modalNC').addEventListener('shown.bs.modal', function onShown() {
                 if (borrador) window.NC_restaurarRespaldo(borrador);
-                // NC nueva: el cursor inicia en Motivo (luego pasa a Cliente con Enter).
-                const inpMotivo = document.getElementById('nc_motivo');
-                if (inpMotivo) inpMotivo.focus();
+                // NC nueva: el cursor inicia en Cliente (Motivo va después de la fecha del documento).
+                const inpCli = document.getElementById('nc_cliente_search');
+                if (inpCli) inpCli.focus();
                 this.removeEventListener('shown.bs.modal', onShown);
             });
 
@@ -345,6 +366,8 @@
             document.getElementById('nc_factura_search').value = data.num_doc_modificado || '';
             document.getElementById('nc_fecha_emision_docs_sustento').value = fechaSustento;
             document.getElementById('nc_motivo').value = data.motivo || '';
+            // Se repuebla luego desde getNcAjax (que trae además el nombre si está inactivo).
+            NC_setVendedor(data.id_vendedor ?? null);
 
             document.getElementById('nc_info_factura_modificada').innerHTML = `
                 <div class="d-flex gap-3 flex-wrap">
@@ -390,6 +413,7 @@
                     // Bodega donde reintegró la NC (NC anteriores al campo id_bodega: sin dato,
                     // solo se quitan las opciones temporales de la NC abierta antes).
                     NC_setBodega(cab.id_bodega ?? null, cab.bodega_nombre);
+                    NC_setVendedor(cab.id_vendedor ?? null, cab.vendedor_nombre);
 
                     // Tarjeta de info del cliente
                     setEl('nc_lbl_cliente_ruc', 'textContent', cab.cliente_ruc || '');
@@ -542,7 +566,7 @@
 
         modal.classList.toggle('nc-lectura', !!lock);
 
-        const campos = ['nc_fecha_emision', 'nc_id_punto_emision', 'nc_id_bodega',
+        const campos = ['nc_fecha_emision', 'nc_id_punto_emision', 'nc_id_bodega', 'nc_id_vendedor',
             'nc_motivo', 'nc_cliente_search', 'nc_factura_search', 'nc_fecha_emision_docs_sustento'];
         campos.forEach(id => {
             const el = document.getElementById(id);
@@ -636,15 +660,14 @@
         }, 300));
     }
 
-    // Enter en la fecha del documento → saltar a la descripción del primer detalle.
+    // Enter en la fecha del documento → saltar a Motivo (que ahora va a su derecha).
     const inpFechaDoc = document.getElementById('nc_fecha_emision_docs_sustento');
     if (inpFechaDoc) {
         inpFechaDoc.addEventListener('keydown', (e) => {
             if (e.key !== 'Enter') return;
             e.preventDefault();
-            const body = document.getElementById('nc_detalles_body');
-            const primeraDesc = body && body.querySelector('input[name="det_descripcion[]"]');
-            if (primeraDesc) primeraDesc.focus();
+            const inpMotivo = document.getElementById('nc_motivo');
+            if (inpMotivo) inpMotivo.focus();
         });
     }
 
@@ -671,6 +694,15 @@
         document.getElementById('nc_id_cliente').value = c.id;
         searchCliente.value = c.nombre;
         if (dropdownCliente) dropdownCliente.classList.add('d-none');
+
+        // Vendedor asignado al cliente (el usuario puede cambiarlo después). Si el cliente
+        // no tiene o su vendedor no está activo, queda en «Seleccione...».
+        const selVend = document.getElementById('nc_id_vendedor');
+        if (selVend) {
+            NC_setVendedor(null);
+            const idVend = c.id_vendedor ? String(c.id_vendedor) : '';
+            if (idVend && Array.from(selVend.options).some(o => o.value === idVend)) selVend.value = idVend;
+        }
 
         // Info detallada del cliente
         setEl('nc_lbl_cliente_ruc', 'textContent', c.identificacion || '');
@@ -1350,9 +1382,6 @@
 
     // Valida los campos obligatorios en orden y enfoca el primero que falte.
     function NC_validarObligatorios() {
-        const motivo = document.getElementById('nc_motivo');
-        if (!motivo || !motivo.value.trim()) { NC_focusYError(motivo, 'El motivo de la nota de crédito es obligatorio.'); return false; }
-
         const idCliente = document.getElementById('nc_id_cliente').value;
         if (!idCliente) { NC_focusYError(document.getElementById('nc_cliente_search'), 'Debe seleccionar el cliente.'); return false; }
 
@@ -1372,6 +1401,9 @@
 
         const fechaDoc = document.getElementById('nc_fecha_emision_docs_sustento');
         if (!fechaDoc || !fechaDoc.value) { NC_focusYError(fechaDoc, 'Debe indicar la fecha del documento a modificar.'); return false; }
+
+        const motivo = document.getElementById('nc_motivo');
+        if (!motivo || !motivo.value.trim()) { NC_focusYError(motivo, 'El motivo de la nota de crédito es obligatorio.'); return false; }
 
         const rows = Array.from(tableBody.querySelectorAll('tr.row-det'));
         if (rows.length === 0) { NC_focusYError(null, 'Debe agregar al menos un ítem a la nota de crédito.'); return false; }
@@ -1433,6 +1465,7 @@
             fecha_emision_docs_sustento: document.getElementById('nc_fecha_emision_docs_sustento').value,
             motivo: document.getElementById('nc_motivo').value,
             id_bodega: document.getElementById('nc_id_bodega').value,
+            id_vendedor: document.getElementById('nc_id_vendedor')?.value || '',
             total_sin_impuestos: document.getElementById('nc_total_sin_impuestos').value,
             total_descuento: document.getElementById('nc_total_descuento').value,
             importe_total: document.getElementById('nc_importe_total').value,
@@ -1516,6 +1549,7 @@
             fecha_emision_docs_sustento: document.getElementById('nc_fecha_emision_docs_sustento').value,
             motivo: document.getElementById('nc_motivo').value,
             id_bodega: document.getElementById('nc_id_bodega').value,
+            id_vendedor: document.getElementById('nc_id_vendedor')?.value || '',
             detalles: detalles,
             info_adicional: NC_capturarInfoAdicional()
         };
@@ -1593,6 +1627,7 @@
         document.getElementById('nc_fecha_emision_docs_sustento').value = (data.fecha_emision_docs_sustento || '').split(' ')[0].split('T')[0];
         document.getElementById('nc_motivo').value = data.motivo || '';
         document.getElementById('nc_id_bodega').value = data.id_bodega || '';
+        NC_setVendedor(data.id_vendedor || null);
 
         if (tableBody) {
             NC_limpiarDropdownsProducto();

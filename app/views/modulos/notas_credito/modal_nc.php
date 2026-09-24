@@ -93,10 +93,15 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                                     <?php endforeach; ?>
                                                 </select>
                                             </div>
-                                            <!-- 5. Motivo -->
+                                            <!-- 5. Vendedor (se sugiere el del cliente; editable) -->
                                             <div class="col-md-3">
-                                                <label class="x-small fw-bold text-muted mb-1">Motivo SRI</label>
-                                                <input type="text" name="motivo" id="nc_motivo" class="form-control form-control-sm" placeholder="Motivo de la NC" style="height: 31px;">
+                                                <label class="x-small fw-bold text-muted mb-1">Vendedor</label>
+                                                <select name="id_vendedor" id="nc_id_vendedor" class="form-select form-select-sm border-primary border-opacity-10" style="height: 31px;">
+                                                    <option value="">Seleccione...</option>
+                                                    <?php foreach ($vendedores ?? [] as $v): ?>
+                                                        <option value="<?= (int) $v['id'] ?>"><?= htmlspecialchars($v['nombre']) ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
                                             </div>
                                         </div>
                                     </div>
@@ -122,7 +127,7 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                     <div class="col-12 mt-2">
                                         <div class="p-2 border rounded-3 bg-white shadow-sm border-primary border-opacity-10">
                                             <div class="row g-2 align-items-end">
-                                                <div class="col-md-5 position-relative">
+                                                <div class="col-md-4 position-relative">
                                                     <label class="x-small fw-bold text-muted mb-1">2. Factura / Documento a modificar</label>
                                                     <div class="input-group input-group-sm rounded-pill overflow-hidden border border-primary border-opacity-25">
                                                         <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-file-earmark-text"></i></span>
@@ -130,11 +135,15 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                                     </div>
                                                     <div id="nc_factura_dropdown" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: 100%; max-height: 250px; overflow-y: auto; right: 0px; top: 55px;"></div>
                                                 </div>
-                                                <div class="col-md-3">
+                                                <div class="col-md-2">
                                                     <label class="x-small fw-bold text-muted mb-1">Fecha del documento</label>
                                                     <input type="date" name="fecha_emision_docs_sustento" id="nc_fecha_emision_docs_sustento" class="form-control form-control-sm border-primary border-opacity-25 py-0" style="height: 31px;" disabled>
                                                 </div>
                                                 <div class="col-md-4">
+                                                    <label class="x-small fw-bold text-muted mb-1">Motivo SRI</label>
+                                                    <input type="text" name="motivo" id="nc_motivo" class="form-control form-control-sm border-primary border-opacity-25" placeholder="Motivo de la NC" style="height: 31px;">
+                                                </div>
+                                                <div class="col-md-2">
                                                     <div id="nc_info_factura_modificada" class="small text-muted">
                                                         <!-- Se llena vía JS -->
                                                     </div>

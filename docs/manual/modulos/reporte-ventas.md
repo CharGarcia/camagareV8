@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido
-version: 1.10
+version: 1.11
 orden: 10
 estado: activo
 ---
@@ -20,7 +20,7 @@ qué, en el periodo que se indique.
 |--------|----------|
 | Fecha desde / hasta | El periodo a consultar |
 | Cliente | Ventas de un cliente concreto |
-| Vendedor | Ventas de un vendedor concreto. Las notas de crédito no llevan vendedor propio: se les atribuye el vendedor de la factura que modifican, así que sí entran en el filtro (también en *Facturas − NC*) |
+| Vendedor | Ventas de un vendedor concreto. Las notas de crédito entran por **su propio vendedor** (el campo *Vendedor* de la nota), también en *Facturas − NC* |
 | Producto | Ventas de un producto concreto |
 | Marca / Categoría | Solo los productos de esa marca o categoría (las de la ficha del producto). Están en la primera fila, a continuación de *Agrupar por*. Ver la sección *Filtrar por marca o categoría* |
 | Borradores | *Sin borradores* (por defecto), *Con borradores* o *Solo borradores*. Ver la sección *Documentos en borrador* |
@@ -272,9 +272,9 @@ Cobrar y el Reporte de Ventas por Vendedor:
   vendedor**, es decir las ventas que llevan **su nombre** en el campo *Vendedor*
   y, si una venta no tiene vendedor, las de los **clientes que tiene asignados**
   (campo *Vendedor* de la ficha del cliente). Nunca ve las que llevan el nombre de
-  otro vendedor, aunque el cliente sea suyo. Las notas de crédito, que no llevan
-  vendedor, cuentan para el de la factura que modifican y, si esa factura no tiene
-  vendedor o no se encuentra, para el vendedor asignado al cliente de la nota.
+  otro vendedor, aunque el cliente sea suyo. Las notas de crédito siguen la misma
+  regla con el vendedor de la propia nota: si la nota no tiene vendedor, cuentan
+  para el vendedor asignado a su cliente.
 - **Nivel 1 sin acceso total y el usuario no es vendedor** (un cajero, un
   digitador): ve solo los documentos que **él registró** — las facturas, los
   recibos de venta y las notas de crédito que emitió.
@@ -378,6 +378,11 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
   que el número de sustento de la retención apunte a esa factura.
 
 ## Historial de cambios
+
+- **1.11** — Las **notas de crédito** se filtran por **su propio vendedor** (nuevo campo
+  *Vendedor* de la nota), ya no por el de la factura que modifican. Las notas ya emitidas
+  reciben el vendedor de su factura (o el del cliente) con el script
+  `database/20260924_nc_cabecera_id_vendedor.sql`.
 
 - **1.10** — La agrupación **Por producto** cambia de columnas: Código, Producto,
   **Unidad de Medida**, **Total Venta** (sin impuestos), Cantidad, **% Venta** y

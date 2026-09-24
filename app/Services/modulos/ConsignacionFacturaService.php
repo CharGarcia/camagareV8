@@ -828,10 +828,6 @@ class ConsignacionFacturaService
             'detalles'            => $detFactura,
             'pagos'               => $pagosFactura,
             'info_adicional'      => $infoFactura,
-            // El stock ya fue reingresado a la bodega en el paso anterior; la validación
-            // "solo stock positivo" de la factura es redundante (y bloquearía si el saldo
-            // global quedó negativo por la consignación).
-            'omitir_validacion_stock' => true,
         ];
 
         $facturaService = new FacturaVentaService(
@@ -839,6 +835,14 @@ class ConsignacionFacturaService
             new FacturaVentaRules(),
             $this->logService
         );
+        // La bodega no la elige quien factura: es la de la consignación de origen (y el reingreso
+        // + la salida de la factura se compensan en esa misma bodega). Exigir acceso a ella
+        // impedía a un usuario sin esa bodega asignada facturar consignaciones de otra bodega.
+        $facturaService->sinValidarAccesoBodega();
+        // El stock ya fue reingresado a la bodega en el paso anterior; la validación
+        // "solo stock positivo" de la factura es redundante (y bloquearía si el saldo
+        // global quedó negativo por la consignación).
+        $facturaService->sinValidarStock();
 
         try {
             $idFactura = $facturaService->crear($payload);

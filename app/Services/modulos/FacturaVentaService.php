@@ -27,10 +27,40 @@ class FacturaVentaService
     private ?InventarioService $inventarioService = null;
     private ?EmpresaRepository $empresaRepository = null;
     private ?string $lastAsientoWarning = null;
+    private bool $validarAccesoBodega = true;
+    private bool $validarStock = true;
 
     public function getLastAsientoWarning(): ?string
     {
         return $this->lastAsientoWarning;
+    }
+
+    /**
+     * Desactiva la validación "el usuario tiene acceso a la bodega" en crear()/actualizar().
+     *
+     * Solo para facturas generadas por otro módulo cuya bodega NO la elige quien factura, sino
+     * que viene heredada de un documento previo (p. ej. Facturación de consignaciones: la bodega
+     * es la de la consignación de origen, y el reingreso + salida en esa bodega se compensan).
+     * Es un método y no una clave de $data a propósito: guardarAjax pasa $_POST directo al
+     * Service, así que una clave en $data la podría enviar cualquier cliente.
+     */
+    public function sinValidarAccesoBodega(): static
+    {
+        $this->validarAccesoBodega = false;
+        return $this;
+    }
+
+    /**
+     * Desactiva «solo stock positivo» en crear()/actualizar() y permite que la salida de
+     * inventario deje el saldo en negativo. Solo para facturas cuyo stock ya lo resolvió otro
+     * módulo (p. ej. Facturación de consignaciones, que reingresa la mercadería justo antes).
+     * Antes era la clave `omitir_validacion_stock` de $data, que cualquier cliente podía
+     * mandar por POST a guardarAjax (mismo motivo que sinValidarAccesoBodega()).
+     */
+    public function sinValidarStock(): static
+    {
+        $this->validarStock = false;
+        return $this;
     }
 
     public function __construct(FacturaVentaRepository $repository, FacturaVentaRules $rules, LogSistemaService $logService)
@@ -708,10 +738,10 @@ class FacturaVentaService
             unset($det);
 
             // Segundo, validar stock acumulado si se requiere saldo positivo.
-            // Se puede OMITIR (p. ej. facturas generadas desde una consignación, donde el
+            // Se puede OMITIR con sinValidarStock() (p. ej. facturas generadas desde una consignación, donde el
             // stock ya fue reingresado a la bodega y la validación estándar es redundante).
             $toBool = fn($v) => ($v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1');
-            $soloStockPos = $toBool($estConfig['factura_solo_stock_positivo'] ?? false) && empty($data['omitir_validacion_stock']);
+            $soloStockPos = $toBool($estConfig['factura_solo_stock_positivo'] ?? false) && $this->validarStock;
 
             if ($soloStockPos) {
                 $validados = [];
@@ -752,7 +782,7 @@ class FacturaVentaService
 
             // Validar acceso a bodega
             $idBodega = (int) ($data['id_bodega'] ?? 0);
-            if ($idBodega > 0 && !$this->getBodegaService()->validarAccesoUsuario($idUsuario, $idBodega, $idEmpresa, $nivel)) {
+            if ($this->validarAccesoBodega && $idBodega > 0 && !$this->getBodegaService()->validarAccesoUsuario($idUsuario, $idBodega, $idEmpresa, $nivel)) {
                 throw new \Exception('Acceso denegado a la bodega seleccionada.');
             }
 
@@ -982,10 +1012,10 @@ class FacturaVentaService
             unset($det);
 
             // Segundo, validar stock acumulado si se requiere saldo positivo.
-            // Se puede OMITIR (p. ej. facturas generadas desde una consignación, donde el
+            // Se puede OMITIR con sinValidarStock() (p. ej. facturas generadas desde una consignación, donde el
             // stock ya fue reingresado a la bodega y la validación estándar es redundante).
             $toBool = fn($v) => ($v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1');
-            $soloStockPos = $toBool($estConfig['factura_solo_stock_positivo'] ?? false) && empty($data['omitir_validacion_stock']);
+            $soloStockPos = $toBool($estConfig['factura_solo_stock_positivo'] ?? false) && $this->validarStock;
 
             if ($soloStockPos) {
                 $validados = [];
@@ -1026,7 +1056,7 @@ class FacturaVentaService
 
             // Validar acceso a bodega
             $idBodega = (int) ($data['id_bodega'] ?? 0);
-            if ($idBodega > 0 && !$this->getBodegaService()->validarAccesoUsuario($idUsuario, $idBodega, $idEmpresa, $nivel)) {
+            if ($this->validarAccesoBodega && $idBodega > 0 && !$this->getBodegaService()->validarAccesoUsuario($idUsuario, $idBodega, $idEmpresa, $nivel)) {
                 throw new \Exception('Acceso denegado a la bodega seleccionada.');
             }
 
@@ -1117,7 +1147,7 @@ class FacturaVentaService
                 "Factura # $numFactura",
                 false,
                 'factura_venta',
-                !empty($data['omitir_validacion_stock'])
+                !$this->validarStock
             );
 
             if ($managedTransaction) $db->commit();
