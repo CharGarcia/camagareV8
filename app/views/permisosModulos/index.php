@@ -103,9 +103,9 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                     <div class="col-md-9">
                         <label class="form-label small" for="select-usuario"><i class="bi bi-search"></i> Buscar usuario</label>
                         <select id="select-usuario" class="form-select">
-                            <option value="">Buscar usuario por nombre o cédula...</option>
+                            <option value="">Buscar usuario por nombre, cédula, identificación o correo...</option>
                             <?php foreach ($opcionesUsuarios as $opt): ?>
-                                <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idUsuarioSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
+                                <option value="<?= (int)$opt['value'] ?>" data-mail="<?= htmlspecialchars($opt['mail'] ?? '') ?>" <?= ($opt['value'] ?? 0) == $idUsuarioSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -165,6 +165,27 @@ window.cmgEmpresaTomSelect = function() {
                 var html = '<div>' + esc(data.text);
                 if (data.razon_social && data.razon_social !== data.text.replace(/\s*\([^)]*\)\s*$/, '')) {
                     html += '<div class="small text-muted">' + esc(data.razon_social) + '</div>';
+                }
+                return html + '</div>';
+            }
+        }
+    };
+};
+
+// Selectores de usuario: se busca por nombre, cédula/identificación (van en
+// "text") y correo, que se muestra bajo el nombre en el desplegable.
+window.cmgUsuarioTomSelect = function() {
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    return {
+        searchField: ['text', 'mail'],
+        render: {
+            option: function(data) {
+                var html = '<div>' + esc(data.text);
+                if (data.mail) {
+                    html += '<div class="small text-muted"><i class="bi bi-envelope me-1"></i>' + esc(data.mail) + '</div>';
                 }
                 return html + '</div>';
             }
@@ -615,7 +636,7 @@ window.cmgEmpresaTomSelect = function() {
                                 if ($nivelOpt >= 3) continue;                          // nunca a superadmin
                                 if ($nivelOpt > $nivelOrigen) continue;                // usuario(1) no puede a admin(2)
                                 ?>
-                                <option value="<?= $valOpt ?>"><?= htmlspecialchars($opt['text'] ?? '') ?></option>
+                                <option value="<?= $valOpt ?>" data-mail="<?= htmlspecialchars($opt['mail'] ?? '') ?>"><?= htmlspecialchars($opt['text'] ?? '') ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -650,7 +671,7 @@ window.cmgEmpresaTomSelect = function() {
 
             var tsUsu = null, tsEmp = null;
             if (typeof TomSelect !== 'undefined') {
-                tsUsu = new TomSelect('#copia-usuario', { create: false, placeholder: 'Buscar usuario...', maxOptions: 500 });
+                tsUsu = new TomSelect('#copia-usuario', Object.assign(window.cmgUsuarioTomSelect(), { create: false, placeholder: 'Buscar usuario por nombre, cédula o correo...', maxOptions: 500 }));
 
                 var configEmpDestino = Object.assign({ create: false, placeholder: 'Buscar empresa por nombre, razón social o RUC...', maxOptions: 500 }, window.cmgEmpresaTomSelect());
                 <?php if ($esSuper): ?>
@@ -1115,9 +1136,9 @@ window.cmgEmpresaTomSelect = function() {
         if (!selectUsuario || typeof TomSelect === 'undefined') return;
         if (!btnSiguiente) return;
 
-        var tsUsuario = new TomSelect('#select-usuario', {
+        var tsUsuario = new TomSelect('#select-usuario', Object.assign(window.cmgUsuarioTomSelect(), {
             create: false,
-            placeholder: 'Escriba el nombre o la cédula del usuario...',
+            placeholder: 'Escriba el nombre, la cédula/identificación o el correo del usuario...',
             maxOptions: 500,
             loadThrottle: 300,
             // Además de los usuarios precargados, se consulta al servidor para
@@ -1131,7 +1152,7 @@ window.cmgEmpresaTomSelect = function() {
                     .then(function(data) { callback(Array.isArray(data) ? data : []); })
                     .catch(function() { callback(); });
             }
-        });
+        }));
 
         var esSuper = <?= $esSuper ? 'true' : 'false' ?>;
         var avisoNoAsignada = document.getElementById('empresa-no-asignada-aviso');

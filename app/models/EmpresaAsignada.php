@@ -194,12 +194,22 @@ class EmpresaAsignada extends BaseModel
                 INNER JOIN empresas emp ON emp.id = ea_admin.id_empresa AND emp.estado = '1' AND emp.eliminado = false";
             $where .= " AND ea_admin.id_usuario = {$idA}";
         }
-        if ($buscar !== '') {
-            $b = $this->escape($buscar);
-            $where .= " AND (u.nombre ILIKE '%{$b}%' OR u.cedula LIKE '%{$b}%')";
+        // Cada palabra escrita debe aparecer en el nombre, la cédula/identificación
+        // (cédula, RUC o pasaporte) o el correo. Placeholders distintos por campo:
+        // repetir el mismo nombre en PDO da HY093.
+        $params = [];
+        $palabras = preg_split('/\s+/u', trim($buscar), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        foreach (array_slice($palabras, 0, 5) as $i => $palabra) {
+            $like = '%' . addcslashes($palabra, '%_\\') . '%';
+            $where .= " AND (u.nombre ILIKE :bn{$i} OR u.cedula ILIKE :bc{$i} OR u.mail ILIKE :bm{$i})";
+            $params["bn{$i}"] = $like;
+            $params["bc{$i}"] = $like;
+            $params["bm{$i}"] = $like;
         }
-        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel FROM {$from} {$where} ORDER BY u.nombre LIMIT " . (int) $limit;
-        return $this->query($sql);
+        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.mail, u.nivel FROM {$from} {$where} ORDER BY u.nombre LIMIT " . (int) $limit;
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     /**
@@ -355,7 +365,7 @@ class EmpresaAsignada extends BaseModel
     {
         $id = (int) $id;
         if ($id <= 0) return null;
-        $r = $this->query("SELECT id AS id_usuario, nombre, cedula, nivel FROM usuarios WHERE id = {$id} AND estado = 1 AND eliminado = false");
+        $r = $this->query("SELECT id AS id_usuario, nombre, cedula, mail, nivel FROM usuarios WHERE id = {$id} AND estado = 1 AND eliminado = false");
         return $r[0] ?? null;
     }
 

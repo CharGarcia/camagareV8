@@ -6,8 +6,8 @@ ruta_modulo: config/permisos-modulos
 tipo: modulo
 visibilidad: superadmin
 requiere_permiso_modulo: no
-etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente, pdf, imprimir, imprimir permisos, reporte de permisos, descargar permisos, acta de permisos
-version: 1.6
+etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscar por correo, buscar por cedula, identificacion, email, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente, pdf, imprimir, imprimir permisos, reporte de permisos, descargar permisos, acta de permisos
+version: 1.7
 orden: 10
 estado: activo
 ---
@@ -46,8 +46,12 @@ ha creado nada y no tiene acceso total.
 ## Cómo asignar permisos
 
 1. **Busque el usuario.** El primer campo es un buscador: escriba parte del
-   nombre o de la cédula y elija de la lista. Arranca vacío (antes mostraba su
-   propio nombre, lo que hacía pensar que no se podía cambiar). Si el usuario no
+   **nombre**, de la **cédula / identificación** (cédula, RUC o pasaporte) o del
+   **correo** y elija de la lista. Puede combinar varias palabras (por ejemplo
+   `maria gmail`): se muestran los usuarios que contengan todas ellas en
+   cualquiera de esos datos. Cada opción muestra el correo debajo del nombre.
+   Arranca vacío (antes mostraba su propio nombre, lo que hacía pensar que no se
+   podía cambiar). Si el usuario no
    aparece entre los primeros de la lista, siga escribiendo: al teclear dos o más
    letras se consulta el resto de usuarios.
 2. Pulse **Seleccionar empresa** y elija la empresa (también es un buscador).
@@ -161,6 +165,10 @@ cambio se aplica en la siguiente página que abra.
 
 ## Historial de cambios
 
+- **1.7** — El buscador de usuario (selección principal y *Copiar permisos a
+  otro usuario*) busca también por **correo**, además de nombre y cédula /
+  identificación, y acepta varias palabras combinadas. Cada opción muestra el
+  correo del usuario debajo del nombre.
 - **1.6** — Nuevo botón **PDF**: descarga los módulos y submódulos asignados al
   usuario en la empresa seleccionada, agrupados por módulo y con el detalle de
   cada permiso. Incluye los datos del usuario y de la empresa para poder

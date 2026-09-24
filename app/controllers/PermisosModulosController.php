@@ -97,11 +97,11 @@ class PermisosModulosController extends Controller
 
         $rowsUsuarios = $this->modelEmpresa->getUsuariosParaSelect($idActual, $nivel, '', 500);
         $opcionesUsuarios = array_map(function ($r) {
-            return ['value' => (int)$r['id'], 'text' => ($r['nombre'] ?? '') . ' (' . ($r['cedula'] ?? '') . ')', 'nivel' => (int)($r['nivel'] ?? 0)];
+            return $this->opcionUsuario($r) + ['nivel' => (int)($r['nivel'] ?? 0)];
         }, $rowsUsuarios);
         $usuarioActual = $this->modelEmpresa->getUsuarioPorId($idActual);
         if ($usuarioActual) {
-            $optActual = ['value' => (int)$idActual, 'text' => ($usuarioActual['nombre'] ?? '') . ' (' . ($usuarioActual['cedula'] ?? '') . ')', 'nivel' => (int)($usuarioActual['nivel'] ?? 0)];
+            $optActual = $this->opcionUsuario(['id' => $idActual] + $usuarioActual) + ['nivel' => (int)($usuarioActual['nivel'] ?? 0)];
             $existe = false;
             foreach ($opcionesUsuarios as $o) {
                 if (($o['value'] ?? 0) === $idActual) { $existe = true; break; }
@@ -160,7 +160,7 @@ class PermisosModulosController extends Controller
         $buscar = trim($_GET['q'] ?? $_GET['b'] ?? '');
         $rows = $this->modelEmpresa->getUsuariosParaSelect($idActual, $nivel, $buscar, 200);
         $out = array_map(function ($r) {
-            return ['value' => (int)$r['id'], 'text' => ($r['nombre'] ?? '') . ' (' . ($r['cedula'] ?? '') . ')'];
+            return $this->opcionUsuario($r);
         }, $rows);
         $this->json($out);
     }
@@ -708,6 +708,20 @@ class PermisosModulosController extends Controller
             echo 'Error al generar PDF: ' . htmlspecialchars($ex->getMessage(), ENT_QUOTES, 'UTF-8');
             exit;
         }
+    }
+
+    /**
+     * Opcion para los selectores de usuario. El correo viaja como campo propio
+     * para que TomSelect también busque por él (searchField) y lo muestre bajo
+     * el nombre, sin alargar el texto del usuario ya seleccionado.
+     */
+    private function opcionUsuario(array $r): array
+    {
+        return [
+            'value' => (int) ($r['id'] ?? 0),
+            'text'  => ($r['nombre'] ?? '') . ' (' . ($r['cedula'] ?? '') . ')',
+            'mail'  => trim((string) ($r['mail'] ?? '')),
+        ];
     }
 
     /**
