@@ -174,13 +174,15 @@ Si intenta procesar la entrada sin vincular, el sistema avisa:
 
 > El ítem '…' debe estar vinculado a un producto del catálogo.
 
-Una vez vinculada, la línea muestra el **código del producto** delante de su
-nombre (p. ej. *GUA-001 - Guantes de nitrilo*), para confirmar de un vistazo que
-se eligió el producto correcto:
+Una vez vinculada, se ve el **código del producto**, para confirmar de un vistazo
+que se eligió el producto correcto:
 
-- En la pestaña **Inventario**, en lugar de la descripción del proveedor.
-- En la pestaña **Detalle**, en una línea azul bajo la descripción. La
-  descripción no cambia: es la del comprobante y se guarda tal cual.
+- En la pestaña **Detalle**, en la columna **Código** (antes de la descripción),
+  en azul. Mientras la línea no esté vinculada, esa columna muestra en gris el
+  código del proveedor que trae el comprobante. La descripción no cambia: es la
+  del comprobante y se guarda tal cual.
+- En la pestaña **Inventario**, delante del nombre del producto (p. ej.
+  *GUA-001 - Guantes de nitrilo*).
 
 La vinculación se guarda: la próxima compra de ese proveedor con el mismo código
 se relaciona sola. Es un trabajo que se hace una vez por producto y proveedor.
@@ -561,9 +563,10 @@ aprobaciones pasa, así que no se paga dos veces.
   una medida distinta a la del producto (p. ej. CAJA X100 en un producto por
   UNIDAD), la cantidad y el costo se convierten solos: 10 cajas de $15,00 entran
   como 1.000 unidades a $0,15. Bajo la cantidad se ve lo que realmente entrará.
-  Nueva sección *Compras por cajas u otra presentación*. En las pestañas
-  Detalle e Inventario, el producto vinculado se muestra con su **código**
-  delante del nombre (*GUA-001 - Guantes de nitrilo*).
+  Nueva sección *Compras por cajas u otra presentación*. Nueva columna
+  **Código** en la pestaña Detalle (código del producto vinculado, o el del
+  proveedor en gris si falta vincular) y el código delante del nombre en la
+  pestaña Inventario (*GUA-001 - Guantes de nitrilo*).
 
 - **2.18** — El **nombre** de cada campo de *Info Adicional* tiene un tope de
   **255 caracteres** en pantalla, y si un XML trae uno más largo se recorta a 255

@@ -1641,9 +1641,9 @@ function CMG_agregarFilaDetalle(det) {
     tr.dataset.descripcionOriginal = det.descripcion || '';
     tr.dataset.subtotalOriginal = esLineaExistente ? String(det.precio_total_sin_impuesto) : '';
     tr.innerHTML = `
-        <td class="ps-3">
+        <td class="ps-3"><input type="text" class="form-control form-control-sm input-detalle mc-det-codigo" readonly tabindex="-1"></td>
+        <td>
             <input type="text" class="form-control form-control-sm input-detalle input-descripcion" value="${_esc(det.descripcion||'')}" placeholder="Descripción del producto..." oninput="CMG_recalcularTotales()">
-            <div class="mc-det-producto text-primary text-truncate d-none" style="font-size:0.7rem; line-height:1.2; padding:1px 4px 0;"></div>
             <input type="hidden" class="input-id-detalle" value="${det.id || ''}">
             <input type="hidden" class="input-id-producto" value="${det.id_producto || det.id_producto_vinculado || ''}">
             <input type="hidden" class="input-codigo" value="${det.codigo_principal || ''}">
@@ -1681,24 +1681,24 @@ function CMG_agregarFilaDetalle(det) {
 }
 
 /**
- * Bajo la descripción del comprobante (que es la del proveedor y se guarda tal cual), muestra el
- * producto del catálogo vinculado a la línea: "GUA-001 - Guantes de nitrilo". Sin vínculo, nada.
+ * Columna Código del detalle: el código del producto del catálogo vinculado a la línea. Si aún
+ * no se vincula, el código del proveedor en gris (el que trae el comprobante). Solo lectura: no
+ * se guarda, se deriva del vínculo.
  */
 function mcPintarProductoDetalle(tr) {
-    const cont = tr?.querySelector('.mc-det-producto');
-    if (!cont) return;
-    const idProd = tr.querySelector('.input-id-producto')?.value || '';
-    const nombre = tr.dataset.productoNombre || '';
-    const codigo = tr.dataset.productoCodigo || '';
-    if (!idProd || idProd === '0' || (!nombre && !codigo)) {
-        cont.classList.add('d-none');
-        cont.innerHTML = '';
-        return;
-    }
-    const texto = (codigo ? codigo + ' - ' : '') + nombre;
-    cont.innerHTML = `<i class="bi bi-tag-fill me-1"></i>${_esc(texto)}`;
-    cont.title = 'Producto del catálogo vinculado: ' + texto;
-    cont.classList.remove('d-none');
+    const input = tr?.querySelector('.mc-det-codigo');
+    if (!input) return;
+    const idProd  = tr.querySelector('.input-id-producto')?.value || '';
+    const codProd = tr.dataset.productoCodigo || '';
+    const vinculado = !!idProd && idProd !== '0' && codProd !== '';
+    const codigo = vinculado ? codProd : (tr.querySelector('.input-codigo')?.value || '');
+    input.value = codigo;
+    input.classList.toggle('text-primary', vinculado);
+    input.classList.toggle('fw-semibold', vinculado);
+    input.classList.toggle('text-muted', !vinculado);
+    input.title = !codigo ? '' : (vinculado
+        ? 'Código del producto vinculado: ' + codigo + (tr.dataset.productoNombre ? ' - ' + tr.dataset.productoNombre : '')
+        : 'Código del proveedor (línea sin vincular a un producto)');
 }
 
 function CMG_recalcularFila(input) {

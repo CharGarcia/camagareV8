@@ -253,11 +253,12 @@
                   <table class="table table-sm table-detalle mb-0">
                     <thead>
                       <tr class="table-light border-bottom">
-                        <th class="ps-3 py-2 small fw-bold text-muted" style="width: 35%;">Descripción / Producto</th>
+                        <th class="ps-3 py-2 small fw-bold text-muted" style="width: 12%;" title="Código del producto vinculado; en gris, el del proveedor si aún no se vincula">Código</th>
+                        <th class="py-2 small fw-bold text-muted" style="width: 28%;">Descripción / Producto</th>
                         <th class="py-2 small fw-bold text-muted text-center" style="width: 10%;">Cant.</th>
-                        <th class="py-2 small fw-bold text-muted text-end" style="width: 15%;">P. Unitario</th>
+                        <th class="py-2 small fw-bold text-muted text-end" style="width: 13%;">P. Unitario</th>
                         <th class="py-2 small fw-bold text-muted text-end" style="width: 10%;">Desc.</th>
-                        <th class="py-2 small fw-bold text-muted text-center" style="width: 15%;">IVA</th>
+                        <th class="py-2 small fw-bold text-muted text-center" style="width: 12%;">IVA</th>
                         <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 15%;">Subtotal</th>
                         <th style="width: 40px;"></th>
                       </tr>
