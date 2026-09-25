@@ -557,8 +557,7 @@
         return t === 'CAMBIO' ? 'Cambio' : (t === 'CONSIGNACION' ? 'Consignación' : (t === 'FACTURA' ? 'Factura' : 'Bodega'));
     }
     function camBadgeOrigen(t, texto, titulo) {
-        const cls = t === 'CAMBIO' ? 'bg-info' : (t === 'CONSIGNACION' ? 'bg-warning' : (t === 'FACTURA' ? 'bg-secondary' : 'bg-primary'));
-        return `<span class="badge ${cls} bg-opacity-25 text-dark"${titulo ? ` title="${esc(titulo)}"` : ''}>${esc(texto != null ? texto : camLabelOrigen(t))}</span>`;
+        return `<span class="badge bg-transparent text-body border fw-bold" style="font-size:.85rem;"${titulo ? ` title="${esc(titulo)}"` : ''}>${esc(texto != null ? texto : camLabelOrigen(t))}</span>`;
     }
     /**
      * Origen de lo que ENTRA: el número de la factura de venta afectada. Si la unidad llegó en un

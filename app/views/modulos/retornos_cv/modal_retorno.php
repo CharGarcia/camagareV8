@@ -582,7 +582,7 @@
         const cont = document.getElementById('ret_consig_chips');
         if (!cont) return;
         cont.innerHTML = retConsignaciones.map(c => `
-            <span class="badge bg-transparent text-body border d-inline-flex align-items-center gap-1 fw-normal">
+            <span class="badge bg-transparent text-body border d-inline-flex align-items-center gap-1 fw-bold" style="font-size:.85rem;">
                 <i class="bi bi-upc"></i> ${c.numero}
                 ${retEditable ? `<a href="#" class="text-danger text-decoration-none ms-1 fw-bold" title="Quitar esta consignación del retorno" onclick="retQuitarConsignacion(event, ${c.id})">&times;</a>` : ''}
             </span>`).join('');
