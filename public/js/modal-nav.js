@@ -7,9 +7,11 @@
  *      (<tbody><tr> fuera de modales/offcanvas) y en qué elemento de la fila fue.
  *   2. Si a continuación se abre un modal, queda asociado a esa fila y en su
  *      encabezado (junto a la X) aparecen las flechas ‹ ›.
- *   3. Navegar = cerrar el modal sin animación y repetir el MISMO clic en la
- *      fila vecina. Así se reutiliza el código de apertura de cada módulo tal
- *      cual (fetch, hidratación, permisos, solo lectura...), sin conocerlo.
+ *   3. Navegar = repetir el MISMO clic en la fila vecina con el modal abierto.
+ *      Así se reutiliza el código de apertura de cada módulo tal cual (fetch,
+ *      hidratación, permisos, solo lectura...), sin conocerlo. El show() que ese
+ *      código hace sobre el modal ya visible se intercepta: no re-anima ni
+ *      duplica el fondo, solo cambian los datos (ver parche de Modal.show).
  *      Al llegar al borde de la página se pulsa la flecha de paginación del
  *      listado y se abre la primera/última fila de la página nueva.
  *   4. Cambios sin guardar: si el usuario escribió o cambió algo en el modal
@@ -100,6 +102,15 @@
         return Array.prototype.filter.call(tb.rows, function (tr) {
             return esFilaListado(tr) && visible(tr) && !!resolverEn(tr, ctx.firma);
         });
+    }
+
+    function contextoDe(tr, firma) {
+        var tbody = tr.parentElement;
+        var filas = filasDe({ tbody: tbody, firma: firma });
+        return {
+            tr: tr, tbody: tbody, tbodyId: tbody.id || '', firma: firma,
+            id: tr.dataset.id || '', indice: Math.max(0, filas.indexOf(tr))
+        };
     }
 
     // La fila del registro abierto: la misma si sigue en el DOM; si el listado se
@@ -269,34 +280,76 @@
         }).then(function (r) { return !!r.isConfirmed; });
     }
 
-    // ── Navegar ──────────────────────────────────────────────────────────────
-    function restaurarFade(modal) {
-        if (modal._cmgSinFade) { modal.classList.add('fade'); modal._cmgSinFade = false; }
+    // ── Navegar sin cerrar el modal ──────────────────────────────────────────
+    // Se repite el clic en la fila vecina con el modal ABIERTO. El código de apertura
+    // del módulo repuebla los campos y llama a show(); esa llamada se intercepta (ver
+    // parche de bootstrap.Modal.prototype.show) para que no vuelva a animar ni duplique
+    // el fondo oscuro: solo cambian los datos, como en Egresos.
+    var navActual = null;   // { modal, hasta }: navegación en curso, a la espera del show()
+
+    function emitir(el, tipo, relatedTarget) {
+        var ev = new Event(tipo, { bubbles: true, cancelable: true });
+        if (relatedTarget) Object.defineProperty(ev, 'relatedTarget', { value: relatedTarget });
+        el.dispatchEvent(ev);
     }
 
-    function ocultar(modal) {
-        return new Promise(function (resolve) {
-            var inst = window.bootstrap && bootstrap.Modal.getInstance(modal);
-            if (!inst || !modal.classList.contains('show')) { resolve(true); return; }
-            var hecho = false;
-            function listo() {
-                if (hecho) return;
-                hecho = true;
-                resolve(!modal.classList.contains('show'));
+    function ocultarInstantaneo(modal) {
+        var inst = window.bootstrap && bootstrap.Modal.getInstance(modal);
+        if (!inst) return;
+        var conFade = modal.classList.contains('fade');
+        if (conFade) modal.classList.remove('fade');
+        modal.addEventListener('hidden.bs.modal', function () { if (conFade) modal.classList.add('fade'); }, { once: true });
+        inst.hide();
+    }
+
+    if (window.bootstrap && bootstrap.Modal && bootstrap.Modal.prototype.show) {
+        var showOriginal = bootstrap.Modal.prototype.show;
+        bootstrap.Modal.prototype.show = function (relatedTarget) {
+            var el = this._element;
+            var nav = navActual;
+            if (nav && Date.now() < nav.hasta) {
+                if (el === nav.modal && el.classList.contains('show')) {
+                    navActual = null;
+                    var previa = el._cmgInst;
+                    if (previa && previa !== this && previa._isShown) {
+                        // El módulo creó otra instancia (new bootstrap.Modal) sobre el modal
+                        // ya visible: hereda el fondo y el foco de la anterior, que queda
+                        // inerte. Sin esto, show() pondría un segundo fondo oscuro que nadie
+                        // retira al cerrar.
+                        this._isShown = true;
+                        this._isTransitioning = false;
+                        this._backdrop = previa._backdrop;
+                        this._focustrap = previa._focustrap;
+                        previa._isShown = false;
+                    }
+                    el._cmgInst = this;
+                    // Los módulos que cargan datos o ajustan pestañas en show/shown siguen
+                    // recibiendo sus eventos, igual que en una apertura normal.
+                    emitir(el, 'show.bs.modal', relatedTarget);
+                    emitir(el, 'shown.bs.modal', relatedTarget);
+                    return;
+                }
+                // La fila vecina abre OTRO modal (otro tipo de documento): se cierra el
+                // actual sin animación y se deja abrir el nuevo con normalidad.
+                if (el !== nav.modal && nav.modal.classList.contains('show') && !el.classList.contains('show')) {
+                    navActual = null;
+                    ocultarInstantaneo(nav.modal);
+                }
             }
-            modal.addEventListener('hidden.bs.modal', listo, { once: true });
-            // Sin animación: el cierre y la reapertura son inmediatos.
-            if (modal.classList.contains('fade')) { modal.classList.remove('fade'); modal._cmgSinFade = true; }
-            inst.hide();
-            // Un módulo puede impedir el cierre (hide.bs.modal + preventDefault).
-            setTimeout(function () {
-                if (!hecho) { modal.removeEventListener('hidden.bs.modal', listo); restaurarFade(modal); listo(); }
-            }, 1500);
-        });
+            return showOriginal.apply(this, arguments);
+        };
     }
 
-    function abrirFila(tr, firma) {
+    function abrirFila(tr, firma, modal) {
         ultimoClic = { tr: tr, tbody: tr.parentElement, firma: firma, t: Date.now() };
+        if (modal && modal.classList.contains('show')) {
+            navActual = { modal: modal, hasta: Date.now() + 15000 };
+            // Por si el módulo no llama a show() con el modal ya abierto (lo comprueba
+            // antes): el contexto pasa ya a la fila nueva.
+            modal._cmgNav = contextoDe(tr, firma);
+            modal._cmgSucio = false;
+            actualizar(modal);
+        }
         var el = resolverEn(tr, firma) || tr.cells[0] || tr;
         el.click();
     }
@@ -314,32 +367,28 @@
 
             navegando = true;
             actualizar(modal);
-            ocultar(modal).then(function (cerrado) {
-                if (!cerrado) return null;
-                if (destino) return destino;
-                // Borde de la página: pasar de página y abrir la primera/última fila.
-                // Si la paginación recarga la página entera, el intento queda guardado
-                // y se completa al cargar (ver más abajo).
+            var paso;
+            if (destino) {
+                paso = Promise.resolve(destino);
+            } else {
+                // Borde de la página: se pagina el listado (detrás del modal abierto) y se
+                // abre la primera/última fila. Si la paginación recarga la página entera,
+                // el intento queda guardado y se completa al cargar (ver más abajo).
                 guardarIntento(ctx, dir);
                 var tb = tbodyDe(ctx);
                 var antes = tb ? tb.innerHTML : '';
                 pagina.click();
-                return esperarCambioListado(ctx, antes).then(function (cambio) {
+                paso = esperarCambioListado(ctx, antes).then(function (cambio) {
                     borrarIntento();
                     if (!cambio) return null;
                     var nuevas = filasDe(ctx);
                     return dir > 0 ? nuevas[0] : nuevas[nuevas.length - 1];
                 });
-            }).then(function (fila) {
+            }
+            paso.then(function (fila) {
                 navegando = false;
-                restaurarFade(modal);
-                if (fila) {
-                    // La reapertura también sin animación.
-                    if (modal.classList.contains('fade')) { modal.classList.remove('fade'); modal._cmgSinFade = true; }
-                    setTimeout(function () { restaurarFade(modal); }, 15000);
-                    abrirFila(fila, ctx.firma);
-                }
-            }, function () { navegando = false; restaurarFade(modal); });
+                if (fila) abrirFila(fila, ctx.firma, modal); else actualizar(modal);
+            }, function () { navegando = false; actualizar(modal); });
         });
     }
 
@@ -383,15 +432,12 @@
     document.addEventListener('shown.bs.modal', function (e) {
         var modal = e.target;
         if (!modal.classList || !modal.classList.contains('modal')) return;
-        restaurarFade(modal);
         if (modal.getAttribute('data-cmg-nav') === 'off') return;
+        // Instancia que muestra el modal: la hereda la que cree el módulo al navegar.
+        modal._cmgInst = window.bootstrap ? bootstrap.Modal.getInstance(modal) : null;
         var c = ultimoClic;
         if (c && Date.now() - c.t < 15000 && c.tr.isConnected) {
-            var filas = filasDe({ tbody: c.tbody, firma: c.firma });
-            modal._cmgNav = {
-                tr: c.tr, tbody: c.tbody, tbodyId: c.tbody.id || '', firma: c.firma,
-                id: c.tr.dataset.id || '', indice: Math.max(0, filas.indexOf(c.tr))
-            };
+            modal._cmgNav = contextoDe(c.tr, c.firma);
             ultimoClic = null;
         } else {
             modal._cmgNav = null;

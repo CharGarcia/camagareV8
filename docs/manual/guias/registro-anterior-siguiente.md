@@ -21,7 +21,8 @@ encabezado, junto a la **X** de cerrar:
 
 Atajo de teclado: **Alt + ←** y **Alt + →**.
 
-Funciona en todos los módulos con listado, sin configurar nada.
+Funciona en todos los módulos con listado, sin configurar nada. La ventana no
+se cierra: solo cambian los datos del registro.
 
 ## Qué orden sigue
 
@@ -53,9 +54,8 @@ Solo mirar las pestañas o descargar el PDF no cuenta.
   que no es una fila del listado. Ábrala haciendo clic en la fila.
 - **La flecha está gris.** Es el primer (o último) registro del listado con los
   filtros actuales.
-- **La ventana parpadea al cambiar de registro.** Es normal: se cierra y se
-  vuelve a abrir con el registro nuevo. En **Egresos** el cambio es sin
-  parpadeo.
+- **La ventana cambia de tipo.** Si la fila vecina es otro tipo de documento
+  que se abre en otra ventana, la actual se cierra y se abre la que corresponde.
 
 ## Historial de cambios
 
