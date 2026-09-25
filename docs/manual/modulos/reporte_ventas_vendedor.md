@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/reporte_ventas_vendedor
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, subtotal sin impuestos, subtotal nc, total documentos por asesor, cuantas facturas hizo cada vendedor, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor, solo mis ventas, cada asesor ve lo suyo, el vendedor no debe ver las ventas de otros, mis comisiones, acceso total, permiso de ver todos, registros propios, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, filtro vendedor fijo, no ver ventas de otros vendedores
-version: 1.9
+etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, subtotal sin impuestos, subtotal nc, total documentos por asesor, cuantas facturas hizo cada vendedor, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor, solo mis ventas, cada asesor ve lo suyo, el vendedor no debe ver las ventas de otros, mis comisiones, acceso total, permiso de ver todos, registros propios, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, filtro vendedor fijo, no ver ventas de otros vendedores, vendedores que puede ver, supervisor de ventas, jefe de ventas, ver ventas de su equipo, ver ventas de otros asesores, boton configurar, configurar vendedores visibles
+version: 2.0
 orden: 0
 estado: activo
 ---
@@ -140,7 +140,7 @@ en Facturas de Venta y en Cuentas por Cobrar:
 |-------|-------------|---------------|
 | Tipo de Documento | No (por defecto Ventas Netas) | Si se resta la nota de crédito del subtotal de la factura, o se ve cada documento por separado |
 | Agrupar Por | No (por defecto Vendedor) | El nivel de detalle de las filas del reporte |
-| Vendedor | No | Un asesor específico o todos. A un usuario de nivel 1 sin *Acceso total* no le deja elegir: muestra fijo su propio vendedor (o *Sin vendedor vinculado*) |
+| Vendedor | No | Un asesor específico o todos. A un usuario de nivel 1 sin *Acceso total* solo le ofrece los vendedores que puede ver (el suyo y los que le habilitó el administrador); si es uno solo, queda fijo (o *Sin vendedor vinculado*) |
 | Marca / Categoría / Producto | No | Acotan el reporte a lo vendido de ese producto/marca/categoría |
 | Fecha Desde / Hasta | No | Rango de fechas de emisión a incluir |
 
@@ -157,6 +157,7 @@ misma regla que **Reporte de Ventas** y **Cuentas por Cobrar**:
 | **Nivel 1 con Acceso total** | Todas las ventas de la empresa |
 | **Nivel 1 sin Acceso total, que es vendedor** | **Solo lo de su vendedor**: las ventas que llevan **su nombre** en el campo *Vendedor* y, si una venta no tiene vendedor, las de los **clientes que tiene asignados** (campo *Vendedor* de la ficha del cliente). Nunca las que llevan el nombre de otro vendedor, aunque el cliente sea suyo |
 | **Nivel 1 sin Acceso total, que no es vendedor** (un cajero, un digitador) | Solo los documentos que **él registró** |
+| **Nivel 1 sin Acceso total, con *Vendedores que puede ver*** | Lo de su vendedor **más** lo de los vendedores que el administrador le habilitó (ver abajo) |
 
 - La regla se aplica en todo el módulo: la tabla, las tarjetas de totales, el
   resumen de estados, todas las agrupaciones, el detalle al hacer clic en una
@@ -164,10 +165,10 @@ misma regla que **Reporte de Ventas** y **Cuentas por Cobrar**:
 - Las notas de crédito cuentan para el **vendedor de la propia nota** (campo
   *Vendedor* del modal de la NC) y, si la nota no tiene vendedor, para el
   vendedor asignado a su cliente.
-- **El filtro *Vendedor* queda fijo** para estos usuarios: el vendedor muestra
-  su propio nombre y quien no es vendedor ve *Sin vendedor vinculado*. No
-  pueden elegir otro, y el sistema ignora cualquier otro vendedor que se le
-  envíe.
+- **El filtro *Vendedor* solo ofrece los vendedores que el usuario puede ver.**
+  Si es uno solo queda fijo: el vendedor muestra su propio nombre y quien no es
+  vendedor ve *Sin vendedor vinculado*. El sistema ignora cualquier otro
+  vendedor que se le envíe.
 - En la vista **Por Vendedor**, un asesor ve su propia fila y, si tiene ventas
   sin vendedor de sus clientes, la fila *Sin vendedor asignado*. Nunca ve filas
   de otros vendedores.
@@ -199,6 +200,32 @@ corregirle la identificación para que sea su cédula).
 Para usuarios sin vendedor, una advertencia sobre documentos antiguos: los que
 se **migraron** desde el sistema anterior quedaron a nombre del usuario que
 corrió la migración, así que solo él (o alguien con acceso total) los verá.
+
+## Ver las ventas de otros vendedores (supervisores)
+
+*Acceso total* le abre al usuario las ventas de **todos** los vendedores. Cuando
+se necesita algo intermedio —un supervisor o jefe de ventas que revisa solo a
+los asesores de su equipo— el administrador le habilita **vendedores concretos**:
+
+1. Entrar a *Configuración → Permisos de módulos* (solo niveles 2 y 3).
+2. Elegir el usuario (de nivel 1) y la empresa, y pulsar **Mostrar módulos**.
+3. Debajo de la tabla de permisos aparece la tarjeta **Vendedores que puede
+   ver**. Marcar los vendedores cuyas ventas podrá consultar. Cada casilla se
+   guarda al marcarla. Su propio vendedor aparece marcado y bloqueado: ese lo
+   ve siempre.
+
+Con esa lista el usuario ve lo de su vendedor más lo de los vendedores marcados
+(con la misma regla: la venta sin vendedor cuenta para el vendedor del
+cliente), en la tabla, las tarjetas, el detalle, el PDF, el Excel y el correo.
+En el filtro *Vendedor* puede elegir uno de ellos o *Todos* (todos los suyos).
+
+- Si el usuario **no es vendedor**, al habilitarle vendedores pasa a ver lo de
+  esos vendedores en lugar de *lo que él registró*.
+- Si además tiene **Ver Todo** en este submódulo, ve a todos sin importar la
+  lista.
+- La lista **solo afecta a este reporte**: Reporte de Ventas y Cuentas por
+  Cobrar siguen con su propia regla.
+- Cada cambio queda registrado en el historial del sistema (`log_sistema`).
 
 ## Reglas de negocio
 
@@ -262,6 +289,11 @@ corrió la migración, así que solo él (o alguien con acceso total) los verá.
 
 ## Historial de cambios
 
+- **2.0** — **Vendedores que puede ver**: el administrador puede habilitar a un
+  usuario de nivel 1 las ventas de vendedores concretos (además del suyo), sin
+  darle *Acceso total*. Se configura en *Permisos de módulos*. Se quitó el
+  texto *Resultados Generados* del encabezado de la tabla. El filtro *Vendedor* ofrece esos
+  vendedores. Requiere `database/usuarios_vendedores_visibles.sql`.
 - **1.9** — Las **notas de crédito** se agrupan y filtran por **su propio vendedor** (nuevo
   campo *Vendedor* de la nota), ya no por el de la factura que modifican: si en la nota se
   eligió otro asesor, la rebaja se descuenta a ese asesor. Las notas ya emitidas reciben el

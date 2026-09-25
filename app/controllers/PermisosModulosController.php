@@ -884,6 +884,118 @@ class PermisosModulosController extends Controller
         return null;
     }
 
+    /**
+     * Tarjeta "Vendedores que puede ver" (Reporte de Ventas por Vendedor): los
+     * vendedores de la empresa, marcando los que el usuario ya tiene habilitados,
+     * y el vendedor que es el propio usuario (ese lo ve siempre). AJAX/JSON.
+     */
+    public function vendedoresVisiblesJson(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $idUsuario = (int) ($_GET['u'] ?? 0);
+        $idEmpresa = (int) ($_GET['e'] ?? 0);
+        $error = $this->validarGestionVendedoresVisibles($idUsuario, $idEmpresa);
+        if ($error !== null) {
+            echo json_encode(['ok' => false, 'error' => $error]);
+            exit;
+        }
+
+        try {
+            $propio = (new \App\repositories\modulos\VendedorRepository())->getPorUsuario($idEmpresa, $idUsuario);
+            $vendedores = $this->vendedorVisibleService()->getVendedoresConMarca($idEmpresa, $idUsuario);
+            echo json_encode([
+                'ok'           => true,
+                'id_propio'    => $propio ? (int) $propio['id'] : 0,
+                'vendedores'   => $vendedores,
+                'tabla_existe' => (new \App\repositories\modulos\VendedorVisibleRepository())->disponible(),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudieron cargar los vendedores.']);
+        }
+        exit;
+    }
+
+    /** Marca o quita un vendedor de la lista "Vendedores que puede ver". AJAX/JSON. */
+    public function guardarVendedorVisible(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            exit;
+        }
+
+        $idUsuario  = (int) ($_POST['id_usuario'] ?? 0);
+        $idEmpresa  = (int) ($_POST['id_empresa'] ?? 0);
+        $idVendedor = (int) ($_POST['id_vendedor'] ?? 0);
+        $visible    = !empty($_POST['visible']) && $_POST['visible'] !== '0';
+
+        if ($idVendedor <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Datos incompletos.']);
+            exit;
+        }
+        $error = $this->validarGestionVendedoresVisibles($idUsuario, $idEmpresa);
+        if ($error !== null) {
+            echo json_encode(['ok' => false, 'error' => $error]);
+            exit;
+        }
+
+        try {
+            $this->vendedorVisibleService()->establecer(
+                (int) ($_SESSION['id_usuario'] ?? 0),
+                (int) ($_SESSION['nivel'] ?? 1),
+                $idEmpresa,
+                $this->modelEmpresa->getUsuarioPorId($idUsuario),
+                $idUsuario,
+                $idVendedor,
+                $visible
+            );
+            echo json_encode(['ok' => true]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Quien configura debe poder gestionar al usuario y la empresa debe ser
+     * accesible: el superadministrador, cualquier empresa activa; el
+     * administrador, solo las que comparte con ese usuario. Null = válido.
+     */
+    private function validarGestionVendedoresVisibles(int $idUsuario, int $idEmpresa): ?string
+    {
+        $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+
+        if ($idUsuario <= 0 || $idEmpresa <= 0) {
+            return 'Datos incompletos.';
+        }
+        if (!$this->puedeGestionarUsuario($idActual, $nivel, $idUsuario)) {
+            return 'Sin permiso para gestionar este usuario.';
+        }
+        if ($nivel >= 3) {
+            return $this->modelEmpresa->getEmpresaActivaPorId($idEmpresa) ? null : 'La empresa no existe o no está activa.';
+        }
+        $empresas = $this->modelEmpresa->getEmpresasParaPermisos($idUsuario, $idActual, $nivel);
+        return $this->buscarEmpresaEnLista($empresas, $idEmpresa) ? null : 'La empresa no está asignada al usuario.';
+    }
+
+    private function vendedorVisibleService(): \App\Services\modulos\VendedorVisibleService
+    {
+        return new \App\Services\modulos\VendedorVisibleService(
+            new \App\repositories\modulos\VendedorVisibleRepository(),
+            new \App\Rules\modulos\VendedorVisibleRules(),
+            new \App\Services\LogSistemaService()
+        );
+    }
+
     private function puedeGestionarUsuario(int $idActual, int $nivel, int $idUsuarioDestino): bool
     {
         if ($idActual === $idUsuarioDestino) return true;

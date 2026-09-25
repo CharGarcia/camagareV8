@@ -63,8 +63,21 @@ class DashboardController extends BaseModuloController
             $desde     = trim((string) ($_POST['desde'] ?? '')) ?: null;
             $hasta     = trim((string) ($_POST['hasta'] ?? '')) ?: null;
 
+            // Alcance del usuario (§6) en la cartera, con los permisos de cada módulo: el
+            // tablero muestra el mismo saldo que Cuentas por Cobrar / por Pagar le muestran
+            // a ESE usuario (vendedor o registros propios si no tiene acceso total).
+            $alcanceCartera = [
+                'cxc' => \App\Helpers\AlcanceRegistros::resolver(
+                    \App\Helpers\Permisos::porRuta('modulos/cuentas_por_cobrar'), $idUsuario, [$idEmpresa]
+                ),
+                'cxp' => [
+                    'id_usuario_filtro' => empty(\App\Helpers\Permisos::porRuta('modulos/cuentas_por_pagar')['todo'])
+                        ? $idUsuario : null,
+                ],
+            ];
+
             $service = new DashboardService();
-            $data = $service->getDashboardData($idEmpresa, $tipoAmbiente, $anio, $mes, $cantMeses, $desde, $hasta, $idUsuario);
+            $data = $service->getDashboardData($idEmpresa, $tipoAmbiente, $anio, $mes, $cantMeses, $desde, $hasta, $idUsuario, $alcanceCartera);
             $data['tipo_ambiente']       = $tipoAmbiente;
             $data['tipo_ambiente_label'] = $tipoAmbiente === '2' ? 'Producción' : 'Pruebas';
             echo json_encode(['ok' => true, 'data' => $data]);

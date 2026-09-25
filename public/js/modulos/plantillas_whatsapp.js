@@ -282,6 +282,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 { id: '{{2}}', label: 'Total por Cobrar' }
             ]
         },
+        'estado_cuenta_cliente': {
+            nombre: 'estado_cuenta_cliente',
+            categoria: 'UTILITY',
+            cabecera: 'NONE',
+            descripcion: 'Sirve para enviar a un cliente el resumen de su deuda (vencida o total) desde Cuentas por Cobrar, en la vista agrupada por cliente: número de facturas pendientes, valor adeudado y la empresa que emite el mensaje.',
+            texto: 'Estimado(a) {{1}}, le recordamos que estamos pendientes del pago de {{2}} factura(s) por un valor de {{3}}. Atentamente, {{4}}. Agradecemos su puntual pago.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Número de Facturas Pendientes' },
+                { id: '{{3}}', label: 'Valor Pendiente' },
+                { id: '{{4}}', label: 'Empresa que Emite' }
+            ]
+        },
         'renovacion_suscripcion': {
             nombre: 'renovacion_suscripcion',
             categoria: 'UTILITY',

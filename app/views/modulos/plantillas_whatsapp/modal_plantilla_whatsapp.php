@@ -46,6 +46,7 @@
                                 <option value="link_pago_payphone">Enviar Link de Pago (Payphone)</option>
                                 <option value="link_pago_nuvei">Enviar Link de Pago (Nuvei)</option>
                                 <option value="cuenta_por_cobrar">Cuenta por Cobrar</option>
+                                <option value="estado_cuenta_cliente">Estado de Cuenta del Cliente</option>
                                 <option value="renovacion_suscripcion">Renovación de Suscripción</option>
                                 <option value="renovacion_firma_electronica">Renovación Firma Electrónica</option>
                                 <option value="retencion_compra">Retención en Compras</option>

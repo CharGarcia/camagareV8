@@ -101,6 +101,55 @@ final class AlcanceRegistros
     }
 
     /**
+     * Suma al alcance de un usuario restringido los vendedores adicionales que el
+     * administrador le habilitó en /config/permisos-modulos ("Vendedores que puede
+     * ver", tabla `usuarios_vendedores_visibles`). Hoy solo lo usa el Reporte de
+     * Ventas por Vendedor. Sin restricción, o sin vendedores habilitados, devuelve
+     * el alcance tal cual. Un usuario que no es vendedor pasa del modo "registros
+     * propios" a ver lo de esos vendedores.
+     *
+     * @param int[] $idsEmpresa
+     */
+    public static function ampliarConVendedoresVisibles(array $alcance, int $idUsuario, array $idsEmpresa): array
+    {
+        if (!self::restringe($alcance)) {
+            return $alcance;
+        }
+        $repo = new \App\repositories\modulos\VendedorVisibleRepository();
+        $extra = [];
+        foreach ($idsEmpresa as $idEmpresa) {
+            $extra = array_merge($extra, $repo->getIdsVendedores((int) $idEmpresa, $idUsuario));
+        }
+        if (!$extra) {
+            return $alcance;
+        }
+        return [
+            'id_usuario_filtro'  => null,
+            'id_vendedor_filtro' => array_values(array_unique(array_merge(self::idsVendedor($alcance), $extra))),
+        ];
+    }
+
+    /**
+     * Filtro Vendedor de la pantalla para un usuario restringido que ve VARIOS
+     * vendedores: si eligió uno de su alcance, el alcance se acota a ese
+     * vendedor (conserva la regla "sin vendedor → vendedor del cliente"); si no,
+     * se ignora. En ambos casos `id_vendedor` queda vacío, como en
+     * limpiarFiltroVendedor(). Llamar después de agregar el alcance a los filtros.
+     */
+    public static function acotarAVendedorElegido(array $filtros): array
+    {
+        if (!self::restringe($filtros)) {
+            return $filtros;
+        }
+        $elegido = (int) ($filtros['id_vendedor'] ?? 0);
+        if ($elegido > 0 && in_array($elegido, self::idsVendedor($filtros), true)) {
+            $filtros['id_vendedor_filtro'] = [$elegido];
+        }
+        $filtros['id_vendedor'] = '';
+        return $filtros;
+    }
+
+    /**
      * Opciones del filtro Vendedor para un usuario restringido: solo su propio
      * vendedor en la empresa activa (0 o 1 fila con `id` y `nombre`). Quien no es
      * vendedor no tiene opciones. Sin restricción no se usa: ahí va el catálogo.

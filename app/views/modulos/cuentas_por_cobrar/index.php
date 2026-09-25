@@ -615,6 +615,63 @@
     </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: Estado de cuenta del cliente por WhatsApp (vista por cliente)
+═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalWAEstado" tabindex="-1" aria-labelledby="modalWAEstadoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:540px;">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header py-2 px-3" style="background:#25d366;">
+                <h6 class="modal-title fw-bold text-white" id="modalWAEstadoLabel"><i class="bi bi-whatsapp me-2"></i>Estado de cuenta por WhatsApp</h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <input type="hidden" id="wae-gkey">
+                <p class="text-muted small mb-2" id="wae-subtitulo"></p>
+                <div id="wae-aviso-plantilla" class="alert alert-warning py-2 px-3 small d-none">
+                    <i class="bi bi-exclamation-triangle me-1"></i>Falta la plantilla <strong>estado_cuenta_cliente</strong> aprobada por Meta.
+                    Créela en <em>Plantillas de WhatsApp</em> → plantilla rápida <em>Estado de Cuenta del Cliente</em>.
+                </div>
+                <div class="row g-2">
+                    <div class="col-12">
+                        <label class="form-label small fw-bold mb-1 d-block">Resumen a enviar <span class="text-danger">*</span></label>
+                        <div class="d-flex flex-column gap-1">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="wae-tipo" id="wae-tipo-vencido" value="vencido" onchange="CXC_previewWAEstado()">
+                                <label class="form-check-label small" for="wae-tipo-vencido">Resumen vencido: <span id="wae-lbl-vencido"></span></label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="wae-tipo" id="wae-tipo-total" value="total" onchange="CXC_previewWAEstado()">
+                                <label class="form-check-label small" for="wae-tipo-total">Resumen total de la deuda: <span id="wae-lbl-total"></span></label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold mb-1">Número de WhatsApp <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">+</span>
+                            <input type="text" id="wae-telefono" class="form-control shadow-none"
+                                   placeholder="593987654321 (sin + ni espacios)">
+                        </div>
+                        <div class="form-text">Incluya el código de país. Ej: 593 para Ecuador.</div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold mb-1">Mensaje</label>
+                        <div id="wae-preview" class="p-2 rounded border small" style="background:#e7f8ee;white-space:pre-wrap;"></div>
+                        <div class="form-text" id="wae-nota"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="wae-btn-enviar" class="btn btn-sm px-4 fw-bold" style="background:#25d366;color:#fff;" onclick="CXC_enviarWAEstado()">
+                    <i class="bi bi-whatsapp me-1"></i>Enviar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php // Panel lateral con el detalle del documento (clic sobre una fila)
 require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 
@@ -624,6 +681,7 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
     // acceso al Reporte de cartera; cobro con permiso de crear aquí y en Ingresos (en cada
     // fila lo confirma `puede_operar`, que en el consolidado mira la empresa del documento).
     const CXC_TIENE_WA        = <?php echo $tieneWA ? 'true' : 'false'; ?>;
+    const CXC_EMPRESA_NOMBRE  = <?php echo json_encode((string) ($nombreEmpresa ?? ''), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG); ?>;
     const CXC_PUEDE_HISTORIAL = <?php echo !empty($puedeHistorial) ? 'true' : 'false'; ?>;
     const CXC_PUEDE_COBRAR    = <?php echo !empty($puedeCobrar) ? 'true' : 'false'; ?>;
     // Usuario restringido a SU propio vendedor (§6): todo lo que ve es de ese asesor, así que

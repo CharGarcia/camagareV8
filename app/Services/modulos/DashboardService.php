@@ -4,6 +4,9 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\core\Database;
+use App\Helpers\TiposComprobanteCompra;
+use App\repositories\modulos\CuentasPorCobrarRepository;
+use App\repositories\modulos\CuentasPorPagarRepository;
 use App\repositories\modulos\EmpresaRepository;
 use PDO;
 
@@ -23,6 +26,10 @@ class DashboardService
      * @param int    $anio      0 = año actual
      * @param int    $mes       1-12 = mes específico | -1 = todo el año | 0 = mes actual
      * @param int    $cantMeses 3, 6 o 12 — meses para el gráfico de tendencia
+     * @param array  $alcanceCartera Alcance del usuario (§6) en la cartera, resuelto por
+     *               el controller con los permisos de cada módulo: ['cxc' => filtros de
+     *               AlcanceRegistros, 'cxp' => ['id_usuario_filtro' => ?int]]. Vacío = toda
+     *               la empresa (la API móvil).
      */
     public function getDashboardData(
         int     $idEmpresa,
@@ -32,7 +39,8 @@ class DashboardService
         int     $cantMeses    = 6,
         ?string $rangoDesde   = null,
         ?string $rangoHasta   = null,
-        int     $idUsuario    = 0
+        int     $idUsuario    = 0,
+        array   $alcanceCartera = []
     ): array {
         $cantMeses = in_array($cantMeses, [3, 6, 12, 24]) ? $cantMeses : 6;
 
@@ -53,6 +61,10 @@ class DashboardService
             $label = $mes === -1 ? "Año {$anio}" : $this->nombreMes($mes) . " {$anio}";
         }
 
+        $corte      = $this->fechaCorteCartera($hasta);
+        $alcanceCxc = $alcanceCartera['cxc'] ?? [];
+        $alcanceCxp = $alcanceCartera['cxp'] ?? [];
+
         return [
             // Ventas
             'ventas_mes_actual'     => $this->sumVentas($idEmpresa, $tipoAmbiente, $desde, $hasta),
@@ -69,9 +81,10 @@ class DashboardService
             // Nómina (roles de pago del período)
             'nomina_mes_actual'     => $this->sumNomina($idEmpresa, $tipoAmbiente, $desde, $hasta),
             'nomina_mes_anterior'   => $this->sumNomina($idEmpresa, $tipoAmbiente, $antDes, $antHas),
-            // CxC / CxP filtradas por período seleccionado
-            'cxc_total'             => $this->getCxcTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
-            'cxp_total'             => $this->getCxpTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
+            // CxC / CxP: saldo de cartera al corte, el mismo que muestran los módulos
+            'cxc_total'             => $this->getCxcTotal($idEmpresa, $corte, $alcanceCxc),
+            'cxp_total'             => $this->getCxpTotal($idEmpresa, $corte, $alcanceCxp),
+            'cartera_corte'         => $corte,
             // Saldos de caja: bancos/efectivo (saldo real actual) y anticipos globales.
             // Estado puntual, NO filtrado por período. Las cuentas BANCO/CHEQUE que comparten
             // banco+número con otro establecimiento del mismo RUC (accesible al usuario) se
@@ -83,8 +96,8 @@ class DashboardService
             'ingresos_recientes'    => $this->getIngresosRecientes($idEmpresa, 5, $tipoAmbiente),
             'egresos_recientes'     => $this->getEgresosRecientes($idEmpresa, 5, $tipoAmbiente),
             // Vencidos
-            'cxc_vencidas'          => $this->getCxcVencidas($idEmpresa, $tipoAmbiente, 5),
-            'cxp_vencidas'          => $this->getCxpVencidas($idEmpresa, $tipoAmbiente, 5),
+            'cxc_vencidas'          => $this->getCxcVencidas($idEmpresa, 5, $alcanceCxc),
+            'cxp_vencidas'          => $this->getCxpVencidas($idEmpresa, 5, $alcanceCxp),
             // Gráficos
             'tendencia'             => $this->getTendenciaMensual($idEmpresa, $cantMeses, $tipoAmbiente),
             'top_productos'         => $this->getTopProductos($idEmpresa, $tipoAmbiente, $desde, $hasta, 5),
@@ -171,6 +184,36 @@ class DashboardService
         return ctype_digit($ta) ? "{$col} = '{$ta}'" : 'FALSE';
     }
 
+    /**
+     * La factura cuenta como venta: solo AUTORIZADA, igual que el Reporte de Ventas y
+     * Cuentas por Cobrar. Antes bastaba con no estar anulada, y el tablero sumaba
+     * borradores, facturas pendientes de envío y rechazadas por el SRI.
+     */
+    private function condVentaValida(string $alias = ''): string
+    {
+        $p = $alias !== '' ? "{$alias}." : '';
+        return "LOWER({$p}estado) IN ('autorizado', 'autorizada')";
+    }
+
+    /**
+     * Valor neto de un comprobante de compra: las notas de crédito (04 y afines) RESTAN,
+     * como en el Reporte de Compras. Antes se sumaban como una compra más y
+     * la nota de crédito inflaba las compras en vez de reducirlas.
+     */
+    private function exprCompraNeta(string $alias = ''): string
+    {
+        $p  = $alias !== '' ? "{$alias}." : '';
+        $nc = "'" . implode("','", TiposComprobanteCompra::NOTAS_CREDITO) . "'";
+        return "CASE WHEN {$p}tipo_comprobante IN ({$nc}) THEN -{$p}importe_total ELSE {$p}importe_total END";
+    }
+
+    /** Compra vigente: fuera las anuladas y rechazadas (mismo criterio que Cuentas por Pagar). */
+    private function condCompraVigente(string $alias = ''): string
+    {
+        $p = $alias !== '' ? "{$alias}." : '';
+        return TiposComprobanteCompra::sqlCompraVigente("{$p}estado");
+    }
+
     // ── Sumas de período ──────────────────────────────────────────────────────
 
     private function sumVentas(int $e, string $ta, string $d, string $h): float
@@ -178,7 +221,7 @@ class DashboardService
         $st = $this->db->prepare(
             "SELECT COALESCE(SUM(importe_total), 0)
              FROM ventas_cabecera
-             WHERE id_empresa = ? AND eliminado = false AND estado != 'anulado'
+             WHERE id_empresa = ? AND eliminado = false AND {$this->condVentaValida()}
                AND {$this->condAmbiente('tipo_ambiente', $ta)}
                AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?"
         );
@@ -189,9 +232,9 @@ class DashboardService
     private function sumCompras(int $e, string $ta, string $d, string $h): float
     {
         $st = $this->db->prepare(
-            "SELECT COALESCE(SUM(importe_total), 0)
+            "SELECT COALESCE(SUM({$this->exprCompraNeta()}), 0)
              FROM compras_cabecera
-             WHERE id_empresa = ? AND eliminado = false
+             WHERE id_empresa = ? AND eliminado = false AND {$this->condCompraVigente()}
                AND {$this->condAmbiente('tipo_ambiente', $ta)}
                AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?"
         );
@@ -247,198 +290,63 @@ class DashboardService
 
     // ── CxC / CxP ────────────────────────────────────────────────────────────
     //
-    // Los abonos (cobros, pagos, retenciones, NC) se agrupan SOLO de la empresa.
-    // Antes cada subconsulta agrupaba la tabla entera —la de todas las empresas
-    // del sistema— y eso se repetía cuatro veces por carga del tablero (total y
-    // vencidos, de CxC y de CxP). Mismo arreglo que ya tienen
-    // CuentasPorCobrarRepository y CuentasPorPagarRepository. $e es int validado
-    // → interpolación segura.
+    // El saldo de cartera y los vencidos NO se calculan aquí: se piden a los
+    // repositorios de los módulos Cuentas por Cobrar y Cuentas por Pagar con los
+    // mismos filtros que esas pantallas usan al abrirse (estado PENDIENTES, todos
+    // los tipos de documento, sin Fecha Desde y Fecha Hasta = corte). Así el
+    // tablero y los módulos muestran exactamente el mismo saldo.
+    //
+    // Antes el tablero tenía su propia fórmula y se descuadraba: solo sumaba las
+    // facturas EMITIDAS en el período (no la cartera acumulada), contaba facturas
+    // en borrador o rechazadas, no sumaba las notas de débito ni los recibos de
+    // venta, y en CxP dejaba fuera liquidaciones, importaciones, notas de venta y
+    // demás comprobantes que generan deuda, además de los valores de terceros.
 
     /**
-     * Cobros de FACTURAS, por documento. `id_referencia_documento` apunta a una tabla
-     * distinta según `tipo_documento` (RECIBO → recibos, SALDO_INICIAL → saldos
-     * iniciales, FACTURA_REEMBOLSO…): sin este filtro, un cobro de otro tipo cuyo id
-     * coincidiera con el de una factura se restaba de esa factura. Mismo criterio que
-     * CuentasPorCobrarRepository::getCteCobrado() y el estado de pago de Facturas.
+     * Fecha de corte de la cartera: el último día del período elegido o hoy, lo
+     * que ocurra primero. En el mes en curso es hoy, igual que la Fecha Hasta con
+     * la que abren Cuentas por Cobrar y Cuentas por Pagar.
      */
-    private function sqlCobradoVentas(int $e): string
+    private function fechaCorteCartera(string $hasta): string
     {
-        return "SELECT d.id_referencia_documento, SUM(d.monto_cobrado) AS tc
-                FROM ingresos_detalle d
-                INNER JOIN ingresos_cabecera ic ON ic.id = d.id_ingreso
-                WHERE ic.id_empresa = {$e} AND ic.eliminado = false AND ic.estado != 'anulado'
-                  AND d.tipo_documento = 'FACTURA'
-                GROUP BY d.id_referencia_documento";
+        $hoy = date('Y-m-d');
+        return $hasta < $hoy ? $hasta : $hoy;
     }
 
-    private function sqlRetenidoVentas(int $e): string
+    /** Filtros de Cuentas por Cobrar con los que abre la pantalla, más el alcance del usuario. */
+    private function filtrosCxc(string $estado, string $corte, array $alcance): array
     {
-        return "SELECT r.id_venta, SUM(r.total_renta + r.total_iva + r.total_isd) AS tr
-                FROM retencion_venta_cabecera r
-                WHERE r.id_empresa = {$e} AND r.eliminado = false AND r.id_venta IS NOT NULL
-                GROUP BY r.id_venta";
+        return array_merge([
+            'estado'      => $estado,
+            'tipo_doc'    => 'TODOS',
+            'fecha_desde' => '',
+            'fecha_hasta' => $corte,
+        ], $alcance);
     }
 
-    private function sqlNcVentas(int $e): string
+    /** Filtros de Cuentas por Pagar con los que abre la pantalla, más registros propios. */
+    private function filtrosCxp(string $estado, string $corte, array $alcance): array
     {
-        return "SELECT nc.num_doc_modificado, SUM(nc.importe_total) AS tnc
-                FROM notas_credito_cabecera nc
-                WHERE nc.id_empresa = {$e} AND nc.eliminado = false AND nc.estado != 'anulado'
-                GROUP BY nc.num_doc_modificado";
+        return [
+            'estado'            => $estado,
+            'fecha_desde'       => '',
+            'fecha_hasta'       => $corte,
+            'id_usuario_filtro' => $alcance['id_usuario_filtro'] ?? null,
+        ];
     }
 
-    /**
-     * Pagos de COMPRAS, por documento. Mismo motivo que sqlCobradoVentas(): los pagos
-     * ROL, MANUAL, LIQUIDACION, IMPORTACION… apuntan a otras tablas. Mismo criterio
-     * que CuentasPorPagarRepository::getCtePagado().
-     */
-    private function sqlPagadoCompras(int $e): string
+    /** Saldo por cobrar al corte: la tarjeta «Saldo» de Cuentas por Cobrar. */
+    private function getCxcTotal(int $e, string $corte, array $alcance): float
     {
-        return "SELECT ed.id_referencia_documento, SUM(ed.monto_pagado) AS tp
-                FROM egresos_detalle ed
-                INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
-                WHERE ec.id_empresa = {$e} AND ed.eliminado = false AND ec.eliminado = false AND ec.estado != 'anulado'
-                  AND ed.tipo_documento = 'COMPRA'
-                GROUP BY ed.id_referencia_documento";
+        $stats = (new CuentasPorCobrarRepository())->getEstadisticas($e, $this->filtrosCxc('PENDIENTES', $corte, $alcance));
+        return round((float) ($stats['total_saldo'] ?? 0), 2);
     }
 
-    private function sqlRetenidoCompras(int $e): string
+    /** Saldo por pagar al corte: la tarjeta «Saldo» de Cuentas por Pagar. */
+    private function getCxpTotal(int $e, string $corte, array $alcance): float
     {
-        return "SELECT rc.id_compra, SUM(rc.total_retenido) AS tr
-                FROM retencion_compra_cabecera rc
-                WHERE rc.id_empresa = {$e} AND rc.eliminado = false
-                  AND UPPER(rc.estado) NOT IN ('ANULADO', 'BORRADOR', 'PENDIENTE')
-                  AND rc.id_compra IS NOT NULL
-                GROUP BY rc.id_compra";
-    }
-
-    /** NC (04) y ND (05) de compra, por proveedor y documento modificado. */
-    private function sqlNcNdCompras(int $e): string
-    {
-        return "SELECT nc.id_empresa, nc.id_proveedor, nc.documento_modificado,
-                       SUM(CASE WHEN nc.tipo_comprobante = '04' THEN nc.importe_total ELSE 0 END) AS tnc,
-                       SUM(CASE WHEN nc.tipo_comprobante = '05' THEN nc.importe_total ELSE 0 END) AS tnd
-                FROM compras_cabecera nc
-                WHERE nc.id_empresa = {$e} AND nc.tipo_comprobante IN ('04', '05') AND nc.eliminado = false
-                GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado";
-    }
-
-    /**
-     * CTEs (para anteponer con WITH) que dejan en `si_pend` los saldos iniciales
-     * CxC de la empresa con su pendiente real: saldo − cobrado − retenido − NC,
-     * igual que el módulo CxC. Las retenciones y NC enlazadas por número solo se
-     * descuentan si ese número NO es el de una factura real (esa ya la descuenta
-     * el cálculo de facturas).
-     *
-     * Antes esa regla era un NOT EXISTS dentro de dos LATERAL: por cada saldo
-     * inicial se recorrían TODAS las facturas de la empresa aplicando
-     * regexp_replace a cada una (saldos × facturas × 2). Aquí los números de
-     * facturas, retenciones y NC se normalizan una sola vez y se cruzan por hash.
-     *
-     * @param string $filtroS Condiciones extra sobre `s` (empiezan con AND).
-     */
-    private function ctesSaldosInicialesCxc(int $e, string $filtroS): string
-    {
-        return "si AS (
-                SELECT s.id_cliente, s.nombre_cliente, s.nro_documento, s.fecha_emision,
-                       s.fecha_vencimiento, s.saldo_inicial, s.monto_cobrado,
-                       regexp_replace(s.nro_documento, '[^0-9]', '', 'g') AS num
-                FROM saldos_iniciales_cxc s
-                WHERE s.id_empresa = {$e} AND s.eliminado = false {$filtroS}
-            ),
-            num_facturas AS (
-                SELECT DISTINCT regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g') AS num
-                FROM ventas_cabecera vc
-                WHERE vc.id_empresa = {$e} AND vc.eliminado = false
-            ),
-            ret AS (
-                SELECT r.id_cliente, regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g') AS num,
-                       SUM(rd.valor_retenido) AS retenido
-                FROM retencion_venta_detalle rd
-                INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
-                WHERE r.id_empresa = {$e} AND r.eliminado = false AND r.id_venta IS NULL
-                  AND rd.num_doc_sustento IS NOT NULL AND rd.num_doc_sustento <> ''
-                GROUP BY 1, 2
-            ),
-            nc AS (
-                SELECT regexp_replace(ncc.num_doc_modificado, '[^0-9]', '', 'g') AS num,
-                       SUM(ncc.importe_total) AS nc_total
-                FROM notas_credito_cabecera ncc
-                WHERE ncc.id_empresa = {$e} AND ncc.eliminado = false AND ncc.estado != 'anulado'
-                GROUP BY 1
-            ),
-            si_pend AS (
-                SELECT si.*, si.saldo_inicial - si.monto_cobrado
-                             - COALESCE(ret.retenido, 0) - COALESCE(nc.nc_total, 0) AS pend
-                FROM si
-                LEFT JOIN num_facturas nf ON nf.num = si.num
-                LEFT JOIN ret ON nf.num IS NULL AND ret.id_cliente = si.id_cliente AND ret.num = si.num
-                LEFT JOIN nc  ON nf.num IS NULL AND nc.num = si.num
-            )";
-    }
-
-    private function getCxcTotal(int $e, string $ta, string $d, string $h): float
-    {
-        // Saldo neto = importe − cobrado − retenido − NC (igual que el módulo CxC).
-        $st = $this->db->prepare(
-            "SELECT COALESCE(SUM(v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)), 0)
-             FROM ventas_cabecera v
-             LEFT JOIN ({$this->sqlCobradoVentas($e)}) c ON c.id_referencia_documento = v.id
-             LEFT JOIN ({$this->sqlRetenidoVentas($e)}) rt ON rt.id_venta = v.id
-             LEFT JOIN ({$this->sqlNcVentas($e)}) ncv
-                    ON ncv.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
-             WHERE v.id_empresa = ? AND v.eliminado = false
-               AND v.estado NOT IN ('anulado', 'pagado')
-               AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
-               AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
-               AND (v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)) > 0"
-        );
-        $st->execute([$e, $d, $h]);
-        $total = (float) $st->fetchColumn();
-
-        // Sumar los saldos iniciales CxC pendientes del período (pendiente
-        // descuenta lo retenido, igual que el módulo).
-        $si = $this->db->prepare(
-            "WITH {$this->ctesSaldosInicialesCxc($e, 'AND s.fecha_emision BETWEEN ? AND ?')}
-             SELECT COALESCE(SUM(pend), 0) FROM si_pend WHERE pend > 0"
-        );
-        $si->execute([$d, $h]);
-        return $total + (float) $si->fetchColumn();
-    }
-
-    private function getCxpTotal(int $e, string $ta, string $d, string $h): float
-    {
-        // Saldo neto = importe − pagado − retenido − NC(04) + ND(05), solo sobre
-        // facturas de compra (tipo_comprobante '01'). Antes se sumaban las propias
-        // NC/ND (04/05) como documentos por pagar y no se restaban de la factura.
-        $st = $this->db->prepare(
-            "SELECT COALESCE(SUM(c.importe_total - COALESCE(p.tp, 0) - COALESCE(r.tr, 0)
-                                 - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)), 0)
-             FROM compras_cabecera c
-             LEFT JOIN ({$this->sqlPagadoCompras($e)}) p ON p.id_referencia_documento = c.id
-             LEFT JOIN ({$this->sqlRetenidoCompras($e)}) r ON r.id_compra = c.id
-             LEFT JOIN ({$this->sqlNcNdCompras($e)}) nn ON nn.id_empresa = c.id_empresa AND nn.id_proveedor = c.id_proveedor
-                 AND nn.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov)
-             WHERE c.id_empresa = ? AND c.eliminado = false
-               AND c.tipo_comprobante = '01'
-               AND {$this->condAmbiente('c.tipo_ambiente', $ta)}
-               AND CAST(c.fecha_emision AS DATE) BETWEEN ? AND ?
-               AND (c.importe_total - COALESCE(p.tp, 0) - COALESCE(r.tr, 0)
-                    - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)) > 0"
-        );
-        $st->execute([$e, $d, $h]);
-        $total = (float) $st->fetchColumn();
-
-        // Sumar los saldos iniciales CxP pendientes del período.
-        $si = $this->db->prepare(
-            "SELECT COALESCE(SUM(saldo_pendiente), 0)
-             FROM saldos_iniciales_cxp
-             WHERE id_empresa = ? AND eliminado = false
-               AND saldo_pendiente > 0
-               AND fecha_emision BETWEEN ? AND ?"
-        );
-        $si->execute([$e, $d, $h]);
-        return $total + (float) $si->fetchColumn();
+        $stats = (new CuentasPorPagarRepository())->getEstadisticas($e, $this->filtrosCxp('PENDIENTES', $corte, $alcance));
+        return round((float) ($stats['total_saldo'] ?? 0), 2);
     }
 
     // ── Saldos de caja: bancos/efectivo y anticipos ───────────────────────────
@@ -754,93 +662,82 @@ class DashboardService
     }
 
     // ── Vencidos ─────────────────────────────────────────────────────────────
+    //
+    // Mismas filas que Cuentas por Cobrar / por Pagar con el estado «Vencidas»
+    // (a hoy): el vencimiento es emisión + días de crédito y los días cuentan
+    // desde el vencimiento, igual que la columna «Días vencido» de esos módulos.
 
-    private function getCxcVencidas(int $e, string $ta, int $lim): array
+    private function getCxcVencidas(int $e, int $lim, array $alcance): array
     {
-        // Une las facturas de venta vencidas con los saldos iniciales CxC
-        // vencidos (que tienen su propia fecha_vencimiento). En los saldos
-        // iniciales el pendiente descuenta lo retenido, igual que el módulo.
-        // Desempate por saldo y comprobante: con varios documentos del mismo día,
-        // el LIMIT mostraba unos u otros según el plan de ejecución.
-        $st = $this->db->prepare(
-            "WITH {$this->ctesSaldosInicialesCxc($e, 'AND s.fecha_vencimiento IS NOT NULL AND s.fecha_vencimiento < CURRENT_DATE')}
-             SELECT cliente, comprobante, fecha, saldo, dias_vencido FROM (
-                SELECT cl.nombre AS cliente,
-                       CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AS comprobante,
-                       v.fecha_emision AS fecha,
-                       (v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)) AS saldo,
-                       (CURRENT_DATE - CAST(v.fecha_emision AS DATE)) AS dias_vencido
-                FROM ventas_cabecera v
-                INNER JOIN clientes cl ON cl.id = v.id_cliente
-                LEFT JOIN ({$this->sqlCobradoVentas($e)}) c ON c.id_referencia_documento = v.id
-                LEFT JOIN ({$this->sqlRetenidoVentas($e)}) rt ON rt.id_venta = v.id
-                LEFT JOIN ({$this->sqlNcVentas($e)}) ncv
-                       ON ncv.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
-                WHERE v.id_empresa = :e AND v.eliminado = false
-                  AND v.estado NOT IN ('anulado', 'pagado')
-                  AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
-                  AND (v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)) > 0
-                  AND (CURRENT_DATE - CAST(v.fecha_emision AS DATE)) > COALESCE(cl.plazo, 0)
+        $repo    = new CuentasPorCobrarRepository();
+        $filtros = $this->filtrosCxc('VENCIDAS', date('Y-m-d'), $alcance);
 
-                UNION ALL
-
-                SELECT nombre_cliente, nro_documento, fecha_emision, pend,
-                       (CURRENT_DATE - fecha_vencimiento)::int
-                FROM si_pend
-                WHERE pend > 0
-            ) u
-            ORDER BY dias_vencido DESC, saldo DESC, comprobante
-            LIMIT :lim"
-        );
-        $st->bindValue(':e',   $e,   PDO::PARAM_INT);
-        $st->bindValue(':lim', $lim, PDO::PARAM_INT);
-        $st->execute();
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        $filas = [];
+        foreach (array_merge($repo->getListado($e, $filtros), $repo->getListadoRecibos($e, $filtros)) as $r) {
+            $filas[] = [
+                'cliente'      => $r['cliente_nombre'],
+                'comprobante'  => $r['numero_factura'],
+                'fecha'        => $r['fecha_emision'],
+                'saldo'        => (float) $r['saldo'],
+                'dias_vencido' => (int) $r['dias_vencido'],
+            ];
+        }
+        // Saldos iniciales: el módulo los trae todos y filtra el estado en PHP.
+        if ($repo->incluyeSaldosIniciales($filtros)) {
+            $saldos = $repo->getSaldosInicialesCxc($e, array_merge($filtros, ['estado' => 'TODOS']));
+            foreach ($saldos as $s) {
+                if ((float) $s['saldo_pendiente'] > 0 && (int) $s['dias_vencido'] > 0) {
+                    $filas[] = [
+                        'cliente'      => $s['nombre_cliente'],
+                        'comprobante'  => $s['nro_documento'],
+                        'fecha'        => $s['fecha_emision'],
+                        'saldo'        => (float) $s['saldo_pendiente'],
+                        'dias_vencido' => (int) $s['dias_vencido'],
+                    ];
+                }
+            }
+        }
+        return $this->masVencidos($filas, $lim);
     }
 
-    private function getCxpVencidas(int $e, string $ta, int $lim): array
+    private function getCxpVencidas(int $e, int $lim, array $alcance): array
     {
-        // Une las compras vencidas con los saldos iniciales CxP vencidos.
-        $st = $this->db->prepare(
-            "SELECT proveedor, comprobante, fecha, saldo, dias_vencido FROM (
-                SELECT p.razon_social AS proveedor,
-                       CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AS comprobante,
-                       c.fecha_emision AS fecha,
-                       (c.importe_total - COALESCE(pg.tp, 0) - COALESCE(r.tr, 0) - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)) AS saldo,
-                       (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) AS dias_vencido
-                FROM compras_cabecera c
-                INNER JOIN proveedores p ON p.id = c.id_proveedor
-                LEFT JOIN ({$this->sqlPagadoCompras($e)}) pg ON pg.id_referencia_documento = c.id
-                LEFT JOIN ({$this->sqlRetenidoCompras($e)}) r ON r.id_compra = c.id
-                LEFT JOIN ({$this->sqlNcNdCompras($e)}) nn ON nn.id_empresa = c.id_empresa AND nn.id_proveedor = c.id_proveedor
-                    AND nn.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov)
-                WHERE c.id_empresa = :e AND c.eliminado = false
-                  AND c.tipo_comprobante = '01'
-                  AND {$this->condAmbiente('c.tipo_ambiente', $ta)}
-                  AND (c.importe_total - COALESCE(pg.tp, 0) - COALESCE(r.tr, 0) - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)) > 0
-                  AND (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) > COALESCE(p.plazo, 0)
+        $repo    = new CuentasPorPagarRepository();
+        $filtros = $this->filtrosCxp('VENCIDAS', date('Y-m-d'), $alcance);
 
-                UNION ALL
+        $filas = [];
+        foreach ($repo->getListado($e, $filtros) as $r) {
+            $filas[] = [
+                'proveedor'    => $r['proveedor_nombre'],
+                'comprobante'  => $r['numero_documento'],
+                'fecha'        => $r['fecha_emision'],
+                'saldo'        => (float) $r['saldo'],
+                'dias_vencido' => (int) $r['dias_vencido'],
+            ];
+        }
+        foreach ($repo->getSaldosInicialesCxp($e, array_merge($filtros, ['estado' => 'TODOS'])) as $s) {
+            if ((float) $s['saldo_pendiente'] > 0 && (int) $s['dias_vencido'] > 0) {
+                $filas[] = [
+                    'proveedor'    => $s['nombre_proveedor'],
+                    'comprobante'  => $s['nro_documento'],
+                    'fecha'        => $s['fecha_emision'],
+                    'saldo'        => (float) $s['saldo_pendiente'],
+                    'dias_vencido' => (int) $s['dias_vencido'],
+                ];
+            }
+        }
+        return $this->masVencidos($filas, $lim);
+    }
 
-                SELECT s.nombre_proveedor AS proveedor,
-                       s.nro_documento AS comprobante,
-                       s.fecha_emision AS fecha,
-                       s.saldo_pendiente AS saldo,
-                       (CURRENT_DATE - s.fecha_vencimiento)::int AS dias_vencido
-                FROM saldos_iniciales_cxp s
-                WHERE s.id_empresa = :e2 AND s.eliminado = false
-                  AND s.fecha_vencimiento IS NOT NULL
-                  AND s.fecha_vencimiento < CURRENT_DATE
-                  AND s.saldo_pendiente > 0
-            ) u
-            ORDER BY dias_vencido DESC, saldo DESC, comprobante
-            LIMIT :lim"
-        );
-        $st->bindValue(':e',   $e,   PDO::PARAM_INT);
-        $st->bindValue(':e2',  $e,   PDO::PARAM_INT);
-        $st->bindValue(':lim', $lim, PDO::PARAM_INT);
-        $st->execute();
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+    /**
+     * Los $lim documentos más vencidos. Desempate por saldo y comprobante: con
+     * varios documentos del mismo día, sin él se mostraban unos u otros.
+     */
+    private function masVencidos(array $filas, int $lim): array
+    {
+        usort($filas, static fn (array $a, array $b): int =>
+            [$b['dias_vencido'], $b['saldo'], $a['comprobante']] <=> [$a['dias_vencido'], $a['saldo'], $b['comprobante']]);
+        return array_slice($filas, 0, $lim);
     }
 
     // ── Gráficos ─────────────────────────────────────────────────────────────
@@ -849,15 +746,18 @@ class DashboardService
     {
         $data = [];
         for ($i = $meses - 1; $i >= 0; $i--) {
-            $key        = date('Y-m', strtotime("-{$i} months"));
+            // «first day of»: restar meses a un día 29-31 salta al mes siguiente
+            // (31-oct − 1 mes = 1-oct) y dejaba un mes repetido y otro sin barra.
+            $ts         = strtotime("first day of -{$i} months");
+            $key        = date('Y-m', $ts);
             $data[$key] = [
-                'mes'      => date('M Y', strtotime("-{$i} months")),
+                'mes'      => date('M Y', $ts),
                 'ventas'   => 0, 'compras'  => 0,
                 'ingresos' => 0, 'egresos'  => 0,
                 'nomina'   => 0,
             ];
         }
-        $desde = date('Y-m-01', strtotime('-' . ($meses - 1) . ' months'));
+        $desde = date('Y-m-01', strtotime('first day of -' . ($meses - 1) . ' months'));
 
         // Nómina mensual (rol_cabecera por período; filtra por ambiente)
         $stN = $this->db->prepare(
@@ -873,13 +773,13 @@ class DashboardService
             if (isset($data[$r['k']])) $data[$r['k']]['nomina'] = (float) $r['t'];
         }
 
-        // Ventas y Compras (filtran por tipoAmbiente)
+        // Ventas y Compras: mismo criterio que las tarjetas (sumVentas / sumCompras)
         foreach ([
             'ventas'  => "SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k, SUM(importe_total) t
-                          FROM ventas_cabecera WHERE id_empresa=? AND eliminado=false AND estado!='anulado'
+                          FROM ventas_cabecera WHERE id_empresa=? AND eliminado=false AND {$this->condVentaValida()}
                             AND {$this->condAmbiente('tipo_ambiente', $ta)} AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
-            'compras' => "SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k, SUM(importe_total) t
-                          FROM compras_cabecera WHERE id_empresa=? AND eliminado=false
+            'compras' => "SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k, SUM({$this->exprCompraNeta()}) t
+                          FROM compras_cabecera WHERE id_empresa=? AND eliminado=false AND {$this->condCompraVigente()}
                             AND {$this->condAmbiente('tipo_ambiente', $ta)} AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
         ] as $campo => $sql) {
             $st = $this->db->prepare($sql);
@@ -889,17 +789,19 @@ class DashboardService
             }
         }
 
-        // Ingresos y Egresos (sin filtro de ambiente)
+        // Ingresos y Egresos: filtran por ambiente igual que las tarjetas (sumIngresos /
+        // sumEgresos). Antes el gráfico no lo filtraba y sumaba también los de pruebas,
+        // así que la barra del mes no cuadraba con la tarjeta.
         foreach ([
             'ingresos' => "SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k, SUM(monto_total) t
                            FROM ingresos_cabecera WHERE id_empresa=? AND eliminado=false AND estado!='anulado'
-                             AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
+                             AND tipo_ambiente=? AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
             'egresos'  => "SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k, SUM(monto_total) t
                            FROM egresos_cabecera WHERE id_empresa=? AND eliminado=false AND estado!='anulado'
-                             AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
+                             AND tipo_ambiente=? AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
         ] as $campo => $sql) {
             $st = $this->db->prepare($sql);
-            $st->execute([$e, $desde]);
+            $st->execute([$e, $ta, $desde]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 if (isset($data[$r['k']])) $data[$r['k']][$campo] = (float) $r['t'];
             }
@@ -917,7 +819,7 @@ class DashboardService
              FROM ventas_detalle det
              INNER JOIN ventas_cabecera v ON v.id = det.id_venta
              LEFT JOIN productos p ON p.id = det.id_producto
-             WHERE v.id_empresa = ? AND v.eliminado = false AND v.estado != 'anulado'
+             WHERE v.id_empresa = ? AND v.eliminado = false AND {$this->condVentaValida('v')}
                AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
                AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
              GROUP BY COALESCE(p.nombre, det.descripcion)
@@ -934,7 +836,7 @@ class DashboardService
             "SELECT cl.nombre, SUM(v.importe_total) AS total, COUNT(v.id) AS facturas
              FROM ventas_cabecera v
              INNER JOIN clientes cl ON cl.id = v.id_cliente
-             WHERE v.id_empresa = ? AND v.eliminado = false AND v.estado != 'anulado'
+             WHERE v.id_empresa = ? AND v.eliminado = false AND {$this->condVentaValida('v')}
                AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
                AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
              GROUP BY cl.nombre
@@ -949,10 +851,10 @@ class DashboardService
     private function getTopProveedores(int $e, string $ta, string $d, string $h, int $lim): array
     {
         $st = $this->db->prepare(
-            "SELECT p.razon_social AS nombre, SUM(c.importe_total) AS total, COUNT(c.id) AS compras
+            "SELECT p.razon_social AS nombre, SUM({$this->exprCompraNeta('c')}) AS total, COUNT(c.id) AS compras
              FROM compras_cabecera c
              INNER JOIN proveedores p ON p.id = c.id_proveedor
-             WHERE c.id_empresa = ? AND c.eliminado = false
+             WHERE c.id_empresa = ? AND c.eliminado = false AND {$this->condCompraVigente('c')}
                AND {$this->condAmbiente('c.tipo_ambiente', $ta)}
                AND CAST(c.fecha_emision AS DATE) BETWEEN ? AND ?
              GROUP BY p.razon_social

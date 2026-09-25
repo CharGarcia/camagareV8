@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, encabezado por cada cliente, encabezado por cliente, no se ve a que columna corresponde, rotulo de columnas
-version: 2.24
+etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, encabezado por cada cliente, encabezado por cliente, no se ve a que columna corresponde, rotulo de columnas, estado de cuenta por whatsapp, whatsapp por cliente, resumen vencido, resumen total, deuda total por whatsapp, cuantas facturas debe, cobranza por whatsapp, correo por cliente, estado de cuenta por correo, enviar correo al cliente
+version: 2.26
 orden: 40
 estado: activo
 ---
@@ -307,6 +307,40 @@ listado va la fila **TOTAL GENERAL** con la suma de todos.
   de emisión; los clientes se ordenan **alfabéticamente (A-Z)**.
 - Cada documento conserva sus acciones normales (PDF, cobrar, historial,
   correo, WhatsApp), con las mismas reglas de *Acciones de cada documento*.
+- La línea de cada cliente con saldo lleva sus propios botones de **correo** y
+  de **WhatsApp** para enviarle su **estado de cuenta**. El de correo abre la
+  misma ventana de revisión del envío masivo, ya cargada con las facturas y
+  recibos con saldo de ese cliente (ver *Envío masivo de recordatorios por
+  correo*); el de WhatsApp se explica en *Estado de cuenta del cliente por
+  WhatsApp*.
+
+### Estado de cuenta del cliente por WhatsApp
+
+Con la empresa con WhatsApp configurado, el botón verde de la línea del cliente
+abre una ventana donde se elige qué enviar:
+
+- **Resumen vencido**: solo los documentos ya vencidos (días de mora mayor a
+  cero) con saldo.
+- **Resumen total de la deuda**: todos los documentos con saldo.
+
+Cada opción muestra cuántos documentos y qué valor abarca; el vencido se
+desactiva si el cliente no tiene nada vencido. El teléfono sale de la ficha del
+cliente (se puede corregir) y abajo se ve el mensaje tal como llegará, por
+ejemplo: *Estimado(a) CLIENTE, le recordamos que estamos pendientes del pago de
+3 factura(s) por un valor de $1,250.00. Atentamente, MI EMPRESA. Agradecemos su
+puntual pago.* La firma es el nombre comercial de la empresa activa (o su razón
+social si no tiene).
+
+- Entran facturas, recibos y saldos iniciales del cliente que estén en el
+  listado filtrado. El número y el valor se **recalculan al enviar** con el
+  saldo real, así que el mensaje nunca lleva un monto desactualizado.
+- En el **consolidado** entran también los documentos de **los otros
+  establecimientos** del mismo RUC (la ventana lo avisa); el mensaje sale con
+  el WhatsApp y la plantilla de la empresa activa.
+- Requiere la plantilla rápida **Estado de Cuenta del Cliente**
+  (`estado_cuenta_cliente`) creada y **aprobada por Meta** en Plantillas de
+  WhatsApp. Si falta, la ventana lo avisa y no deja enviar.
+- Cada envío queda en la bandeja de WhatsApp y en el registro de auditoría.
 
 **El detalle de cada cliente** no repite las columnas del listado general (el
 cliente ya es la cabecera de la sección): muestra **fecha, n. de documento,
@@ -401,9 +435,13 @@ Reglas:
 - El historial de cobros (con acceso al Reporte de cartera), el **PDF** del
   documento y el **detalle** que se abre al hacer clic en la fila sí se consultan
   desde la matriz; el PDF sale con los datos y el logo de la sucursal dueña. El
-  correo y el WhatsApp de recordatorio **no**: usan la configuración de correo y
-  las plantillas de la empresa activa, así que para esos documentos se envían
-  desde la sucursal; tampoco entran en el envío masivo.
+  correo y el WhatsApp de recordatorio **por documento no**: usan la
+  configuración de correo y las plantillas de la empresa activa, así que para
+  esos documentos se envían desde la sucursal. El **envío masivo por correo**
+  y el **estado de cuenta por correo o por WhatsApp** de la vista *Por cliente*
+  sí los incluyen, con la configuración de la empresa activa (ver *Estado de
+  cuenta del cliente por WhatsApp* y *Envío masivo de recordatorios por
+  correo*).
 - El buscador de **Cliente** busca en todos los establecimientos y muestra al
   cliente una sola vez por identificación; al elegirlo, el filtro alcanza sus
   documentos en todas las sucursales (el cruce es por RUC/cédula, porque cada
@@ -613,6 +651,11 @@ Detalles del envío:
   resumen automáticamente.
 - Los saldos iniciales no participan del envío masivo (no tienen ficha de
   contacto); para ellos use el cobro directo.
+- En el **consolidado** también entran los documentos de los otros
+  establecimientos del mismo RUC; el correo sale con la configuración de la
+  empresa activa.
+- Para enviar el estado de cuenta de **un solo cliente** sin marcar casilleros,
+  use el botón de correo de su línea en la vista **Por cliente**.
 - Cada envío queda registrado en la auditoría del sistema con los correos
   usados.
 
@@ -677,6 +720,18 @@ Y dos casos que el reporte **no** descuenta a propósito:
   (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
+
+- **2.26** — En la vista **Por cliente**, cada cliente con saldo tiene también
+  un botón de **correo** que abre la revisión del envío masivo con sus facturas
+  y recibos pendientes. El envío por correo (masivo o por cliente) incluye ahora,
+  en el consolidado, los documentos de los otros establecimientos.
+
+- **2.25** — En la vista **Por cliente**, cada cliente con saldo tiene un botón
+  de **WhatsApp** para enviarle su **estado de cuenta**: resumen vencido o total
+  de la deuda, con el número de documentos, el valor y la firma de la empresa.
+  En el consolidado incluye los documentos de todos los establecimientos.
+  Requiere la plantilla rápida `estado_cuenta_cliente` aprobada por Meta.
+  Nueva sección *Estado de cuenta del cliente por WhatsApp*.
 
 - **2.24** — Los **saldos iniciales** ya entran en la **cartera por vendedor**:
   toman el vendedor asignado al cliente. Antes, al elegir un vendedor quedaban

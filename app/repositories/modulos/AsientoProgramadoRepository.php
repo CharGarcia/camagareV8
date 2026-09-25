@@ -1163,21 +1163,15 @@ class AsientoProgramadoRepository extends BaseRepository
             'cuenta_nombre' => 'No Configurada'
         ];
 
-        // 2. Obtener los conceptos de retenciones sri que han sido usados en retenciones en venta de esta empresa en su ambiente actual (únicos por código de retención)
-        $sqlConceptos = "SELECT DISTINCT ON (rs.codigo_ret) rs.id, rs.codigo_ret, rs.concepto_ret, rs.impuesto_ret
-                         FROM retencion_venta_detalle d
-                         INNER JOIN retencion_venta_cabecera c ON c.id = d.id_retencion
-                         INNER JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
-                         WHERE c.id_empresa = :id_empresa 
-                           AND c.eliminado = false
-                           AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                         ORDER BY rs.codigo_ret ASC, rs.id DESC";
-        $stConceptos = $this->db->prepare($sqlConceptos);
-        $stConceptos->execute([':id_empresa' => $idEmpresa]);
-        $conceptos = $stConceptos->fetchAll(PDO::FETCH_ASSOC);
+        // 2. Códigos de retención usados en ventas de esta empresa (o ya configurados)
+        $conceptos = $this->getConceptosRetencion($idEmpresa, 'venta');
 
         $reglas = [];
         foreach ($conceptos as $c) {
+            if (empty($c['id'])) {
+                $reglas[] = $this->reglaRetencionSinCatalogo($c, 'retenciones_venta');
+                continue;
+            }
             // Buscar la cuenta Debe configurada en asientos_programados para esta retención
             // Buscamos 'retenciones_venta_debe' o 'retenciones_venta' (por retrocompatibilidad)
             $sqlDebe = "SELECT ap.id AS id_programado, ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
@@ -1277,21 +1271,15 @@ class AsientoProgramadoRepository extends BaseRepository
             'cuenta_nombre' => 'No Configurada'
         ];
 
-        // 2. Conceptos de retención usados en compras de esta empresa (ambiente actual, únicos por código).
-        $sqlConceptos = "SELECT DISTINCT ON (rs.codigo_ret) rs.id, rs.codigo_ret, rs.concepto_ret, rs.impuesto_ret
-                         FROM retencion_compra_detalle d
-                         INNER JOIN retencion_compra_cabecera c ON c.id = d.id_retencion
-                         INNER JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
-                         WHERE c.id_empresa = :id_empresa
-                           AND c.eliminado = false
-                           AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                         ORDER BY rs.codigo_ret ASC, rs.id DESC";
-        $stConceptos = $this->db->prepare($sqlConceptos);
-        $stConceptos->execute([':id_empresa' => $idEmpresa]);
-        $conceptos = $stConceptos->fetchAll(PDO::FETCH_ASSOC);
+        // 2. Códigos de retención usados en compras de esta empresa (o ya configurados)
+        $conceptos = $this->getConceptosRetencion($idEmpresa, 'compra');
 
         $reglas = [];
         foreach ($conceptos as $c) {
+            if (empty($c['id'])) {
+                $reglas[] = $this->reglaRetencionSinCatalogo($c, 'retenciones_compra');
+                continue;
+            }
             // HABER: cuenta de la retención por pagar (específica por concepto).
             $sqlHaberEsp = "SELECT ap.id AS id_programado, ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
                             FROM asientos_programados ap
@@ -1356,5 +1344,70 @@ class AsientoProgramadoRepository extends BaseRepository
         }
 
         return $reglas;
+    }
+
+    /**
+     * Códigos de retención a configurar para ventas o compras: los usados en las retenciones
+     * de la empresa (cualquier ambiente: la cuenta contable no depende del ambiente y el
+     * generador de asientos tampoco lo filtra) más los que ya tienen cuenta configurada.
+     *
+     * Cada código se cruza con retenciones_sri igual que el generador de asientos
+     * (AsientoBuilderService: mismo código exacto, id más reciente). Si el código no existe
+     * en el catálogo se devuelve con id = null, para mostrarlo como aviso en lugar de
+     * ocultarlo en silencio.
+     */
+    private function getConceptosRetencion(int $idEmpresa, string $lado): array
+    {
+        $esVenta  = $lado === 'venta';
+        $tablaDet = $esVenta ? 'retencion_venta_detalle' : 'retencion_compra_detalle';
+        $tablaCab = $esVenta ? 'retencion_venta_cabecera' : 'retencion_compra_cabecera';
+        $tiposRef = $esVenta
+            ? "'retenciones_venta', 'retenciones_venta_debe', 'retenciones_venta_haber'"
+            : "'retenciones_compra_debe', 'retenciones_compra_haber'";
+
+        $sql = "SELECT u.codigo_usado, rs.id, rs.codigo_ret, rs.concepto_ret, rs.impuesto_ret
+                FROM (
+                    SELECT DISTINCT d.codigo_retencion AS codigo_usado
+                    FROM {$tablaDet} d
+                    INNER JOIN {$tablaCab} c ON c.id = d.id_retencion
+                    WHERE c.id_empresa = :id_empresa
+                      AND c.eliminado = false
+                      AND COALESCE(TRIM(d.codigo_retencion), '') <> ''
+                    UNION
+                    SELECT rsc.codigo_ret
+                    FROM asientos_programados ap
+                    INNER JOIN retenciones_sri rsc ON rsc.id = ap.id_referencia
+                    WHERE ap.id_empresa = :id_empresa_conf
+                      AND ap.eliminado = false
+                      AND ap.tipo_referencia IN ({$tiposRef})
+                ) u
+                LEFT JOIN LATERAL (
+                    SELECT r.id, r.codigo_ret, r.concepto_ret, r.impuesto_ret
+                    FROM retenciones_sri r
+                    WHERE r.codigo_ret = u.codigo_usado
+                    ORDER BY r.id DESC LIMIT 1
+                ) rs ON true
+                ORDER BY (rs.id IS NULL) DESC, rs.impuesto_ret DESC, u.codigo_usado ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':id_empresa_conf' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Fila de aviso para un código de retención usado en documentos que no existe en el
+     * catálogo retenciones_sri: no se puede configurar (la cuenta se guarda por id del catálogo)
+     * y el asiento de esas retenciones saldrá sin esa línea.
+     */
+    private function reglaRetencionSinCatalogo(array $c, string $tipoAsiento): array
+    {
+        return [
+            'id_asiento_tipo' => 0,
+            'tipo_asiento'    => $tipoAsiento,
+            'concepto'        => 'Código ' . $c['codigo_usado'],
+            'detalle'         => 'No existe en el catálogo de retenciones SRI',
+            'codigo'          => $c['codigo_usado'],
+            'sin_catalogo'    => true,
+            'id_referencia'   => null,
+        ];
     }
 }

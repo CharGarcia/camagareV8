@@ -6,8 +6,8 @@ ruta_modulo: config/permisos-modulos
 tipo: modulo
 visibilidad: superadmin
 requiere_permiso_modulo: no
-etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscar por correo, buscar por cedula, identificacion, email, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente, pdf, imprimir, imprimir permisos, reporte de permisos, descargar permisos, acta de permisos
-version: 1.7
+etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscar por correo, buscar por cedula, identificacion, email, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente, pdf, imprimir, imprimir permisos, reporte de permisos, descargar permisos, acta de permisos, vendedores que puede ver, reporte de ventas por vendedor, supervisor de ventas, ver ventas de otros vendedores, jefe de ventas
+version: 1.8
 orden: 10
 estado: activo
 ---
@@ -61,6 +61,24 @@ ha creado nada y no tiene acceso total.
    selecciona sola.
 3. Marque los permisos submódulo por submódulo.
 4. Guarde. El cambio se aplica en la siguiente pantalla que abra el usuario.
+
+## Vendedores que puede ver (Reporte de Ventas por Vendedor)
+
+Al mostrar los módulos de un usuario de **nivel 1**, debajo de la tabla de
+permisos aparece la tarjeta **Vendedores que puede ver**. Sirve para que un
+asesor (por ejemplo, un supervisor) consulte en el *Reporte de Ventas por
+Vendedor* las ventas de otros vendedores concretos, sin darle *Ver Todo*, que le
+abriría las de todos.
+
+- Lista los vendedores de la empresa elegida. Marque los que podrá ver; cada
+  casilla se guarda al instante.
+- Su propio vendedor aparece marcado y bloqueado: ese lo ve siempre.
+- Si tiene *Ver Todo* en el submódulo *Reporte de Ventas por Vendedor*, ve a
+  todos sin importar esta lista.
+- No aparece para usuarios de nivel 2 o 3: ya ven a todos los vendedores.
+- Solo afecta a ese reporte. Cada cambio queda en `log_sistema`.
+- Requiere haber ejecutado `database/usuarios_vendedores_visibles.sql`; si no,
+  la tarjeta lo avisa.
 
 ## Qué alcance tiene cada quien al buscar
 
@@ -165,6 +183,9 @@ cambio se aplica en la siguiente página que abra.
 
 ## Historial de cambios
 
+- **1.8** — Nueva tarjeta **Vendedores que puede ver** (usuarios de nivel 1): el
+  administrador elige qué vendedores, además del suyo, puede consultar el usuario
+  en el *Reporte de Ventas por Vendedor*.
 - **1.7** — El buscador de usuario (selección principal y *Copiar permisos a
   otro usuario*) busca también por **correo**, además de nombre y cédula /
   identificación, y acepta varias palabras combinadas. Cada opción muestra el

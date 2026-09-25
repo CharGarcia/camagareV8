@@ -12,6 +12,7 @@ let CXC_datos         = [];   // filas completas recibidas del servidor
 let CXC_filtradoLocal = [];   // filas mostradas tras filtro de texto
 let CXC_formasCobro   = [];
 let CXC_plantillasWA  = [];
+let CXC_plantillaEstado = null;  // plantilla 'estado_cuenta_cliente' (null = no creada/aprobada)
 let CXC_seleccionados = new Set(); // ids de facturas seleccionadas
 // Catálogos del modal cobro
 let CXC_catalogos = { puntos: [], conceptos: [], formas: [] };
@@ -540,6 +541,8 @@ function CXC_filaMayorHtml(r) {
 /* Secciones DESPLEGADAS de la vista por cliente: el listado arranca plegado —una línea
    por cliente con sus totales— y el set recuerda las que el usuario abre. */
 const CXC_clientesAbiertos = new Set();
+/* Grupos de la última vista por cliente (clave → grupo), para el envío del estado de cuenta. */
+let CXC_gruposCliente = new Map();
 
 /* Agrupa las filas por cliente. La clave es la identificación BASE, no el texto del RUC: así
    el cliente registrado dos veces —con la cédula y con el RUC, que es esa cédula + '001'—
@@ -578,6 +581,7 @@ function CXC_renderAgrupado(filas) {
     const tbody  = document.getElementById('cxc-tbody');
     const label  = document.getElementById('cxc-count-label');
     const grupos = CXC_agruparPorCliente(filas);
+    CXC_gruposCliente = new Map(grupos.map(g => [g.key, g]));
 
     label.textContent = `${filas.length} docs · ${grupos.length} cliente${grupos.length !== 1 ? 's' : ''}`;
 
@@ -625,7 +629,23 @@ function CXC_renderAgrupado(filas) {
             <td class="text-center" style="font-size:.72rem;">
                 <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-normal" title="${g.items.length} documento${g.items.length !== 1 ? 's' : ''}">${g.items.length}</span>
             </td>
-            <td colspan="${1 + colAse}"></td>
+            ${colAse ? '<td></td>' : ''}
+            <td class="text-center">
+                <div class="d-flex justify-content-center gap-1">
+                ${g.saldo > 0.001 ? `
+                <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;"
+                        title="Enviar estado de cuenta por correo (resumen de sus documentos pendientes)"
+                        onclick="event.stopPropagation(); CXC_abrirEmailCliente(this.closest('tr').dataset.gkey)">
+                    <i class="bi bi-envelope"></i>
+                </button>` : ''}
+                ${(CXC_TIENE_WA && g.saldo > 0.001) ? `
+                <button class="btn btn-sm py-0 px-2" style="font-size:.72rem;background:#25d366;color:#fff;"
+                        title="Enviar estado de cuenta por WhatsApp (resumen vencido o total)"
+                        onclick="event.stopPropagation(); CXC_abrirWAEstado(this.closest('tr').dataset.gkey)">
+                    <i class="bi bi-whatsapp"></i>
+                </button>` : ''}
+                </div>
+            </td>
         </tr>`;
 
         if (abierto) {
@@ -1194,6 +1214,26 @@ function CXC_envioMasivoEmail() {
         CXC_toast('Seleccione al menos un documento.', 'warning');
         return;
     }
+    CXC_abrirModalEmailMasivo(filas);
+}
+
+/* Correo del estado de cuenta de UN cliente (botón de su línea en la vista por cliente):
+   el mismo modal y el mismo envío que el masivo, con los documentos con saldo de ese
+   cliente. En el consolidado incluye los de otros establecimientos (viajan con su
+   id_empresa y el servidor valida que la hermana sea del grupo). Los saldos iniciales
+   no entran: el correo resume facturas y recibos. */
+function CXC_abrirEmailCliente(gkey) {
+    const g = CXC_gruposCliente.get(gkey);
+    if (!g) return;
+    const filas = g.items.filter(r => (parseFloat(r.saldo) || 0) > 0.001 && r.origen !== 'SALDO_INICIAL');
+    if (!filas.length) {
+        CXC_toast('El cliente no tiene facturas ni recibos con saldo pendiente.', 'warning');
+        return;
+    }
+    CXC_abrirModalEmailMasivo(filas);
+}
+
+function CXC_abrirModalEmailMasivo(filas) {
 
     // Agrupar por cliente: se envía UN correo por cliente con el resumen de todos sus
     // documentos seleccionados (facturas y recibos). La clave es la identificación base y
@@ -1212,7 +1252,7 @@ function CXC_envioMasivoEmail() {
         if (!g.email && r.cliente_email) g.email = r.cliente_email;
         g.numDocs++;
         g.saldo += parseFloat(r.saldo) || 0;
-        g.documentos.push({ origen: r.origen || 'FACTURA', id: r.id });
+        g.documentos.push({ origen: r.origen || 'FACTURA', id: r.id, id_empresa: parseInt(r.id_empresa) || 0 });
     }
     CXC_masivoGrupos = [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
 
@@ -1392,6 +1432,131 @@ async function CXC_enviarWA() {
 }
 
 /* ════════════════════════════════════════════════════
+   ESTADO DE CUENTA POR WHATSAPP (vista por cliente)
+   Un mensaje por cliente con el resumen vencido o el total de
+   su deuda (plantilla 'estado_cuenta_cliente'). En el consolidado
+   incluye los documentos de TODOS los establecimientos visibles:
+   cada documento viaja con su id_empresa y el servidor valida
+   que la hermana sea del grupo. Montos y conteos de la vista
+   previa son referenciales: el servidor los recalcula desde BD.
+════════════════════════════════════════════════════ */
+function CXC_resumenWAEstado(g) {
+    const res = { vencido: { n: 0, valor: 0, docs: [] }, total: { n: 0, valor: 0, docs: [] } };
+    let otrosEstab = 0;
+    for (const r of g.items) {
+        const saldo = parseFloat(r.saldo) || 0;
+        if (saldo <= 0.001) continue;
+        const doc = { origen: r.origen || 'FACTURA', id: parseInt(r.id), id_empresa: parseInt(r.id_empresa) || 0 };
+        res.total.n++; res.total.valor += saldo; res.total.docs.push(doc);
+        if ((parseInt(r.dias_vencido) || 0) > 0) {
+            res.vencido.n++; res.vencido.valor += saldo; res.vencido.docs.push(doc);
+        }
+        if (r.es_hermana) otrosEstab++;
+    }
+    res.otrosEstab = otrosEstab;
+    return res;
+}
+
+function CXC_abrirWAEstado(gkey) {
+    if (!CXC_TIENE_WA) {
+        CXC_toast('WhatsApp no está configurado para esta empresa. Active el módulo de WhatsApp para usar esta función.', 'warning');
+        return;
+    }
+    const g = CXC_gruposCliente.get(gkey);
+    if (!g) return;
+    const res = CXC_resumenWAEstado(g);
+    if (!res.total.n) { CXC_toast('El cliente no tiene documentos con saldo pendiente.', 'warning'); return; }
+
+    document.getElementById('wae-gkey').value = gkey;
+    document.getElementById('wae-subtitulo').textContent = `${g.nombre}${g.ruc ? ' · ' + g.ruc : ''}`;
+    const lbl = (x) => `${x.n} documento(s) — $${CXC_fmt(x.valor)}`;
+    document.getElementById('wae-lbl-vencido').textContent = lbl(res.vencido);
+    document.getElementById('wae-lbl-total').textContent   = lbl(res.total);
+    const rVenc = document.getElementById('wae-tipo-vencido');
+    rVenc.disabled = res.vencido.n === 0;
+    (res.vencido.n ? rVenc : document.getElementById('wae-tipo-total')).checked = true;
+
+    // Teléfono: el primero registrado en las fichas del cliente
+    const telRaw = (g.items.find(r => r.cliente_telefono) || {}).cliente_telefono || '';
+    let tel = telRaw.replace(/[^0-9]/g, '');
+    if (tel) {
+        if (tel.startsWith('0')) tel = tel.substring(1);
+        if (!tel.startsWith('593')) tel = '593' + tel;
+    }
+    document.getElementById('wae-telefono').value = tel;
+
+    document.getElementById('wae-aviso-plantilla').classList.toggle('d-none', !!CXC_plantillaEstado);
+    document.getElementById('wae-btn-enviar').disabled = !CXC_plantillaEstado;
+    document.getElementById('wae-nota').textContent = res.otrosEstab
+        ? `Incluye ${res.otrosEstab} documento(s) de otros establecimientos del mismo RUC.`
+        : '';
+
+    CXC_previewWAEstado();
+    new bootstrap.Modal(document.getElementById('modalWAEstado')).show();
+}
+
+function CXC_previewWAEstado() {
+    const g = CXC_gruposCliente.get(document.getElementById('wae-gkey').value);
+    if (!g) return;
+    const res  = CXC_resumenWAEstado(g);
+    const tipo = document.getElementById('wae-tipo-vencido').checked ? 'vencido' : 'total';
+    const vals = { 1: g.nombre, 2: String(res[tipo].n), 3: '$' + CXC_fmt(res[tipo].valor), 4: CXC_EMPRESA_NOMBRE || 'la empresa' };
+
+    let texto = 'Estimado(a) {{1}}, le recordamos que estamos pendientes del pago de {{2}} factura(s) por un valor de {{3}}. Atentamente, {{4}}. Agradecemos su puntual pago.';
+    if (CXC_plantillaEstado) {
+        try {
+            const comps = JSON.parse(CXC_plantillaEstado.componentes || '[]');
+            const body  = comps.find(c => c.type === 'BODY');
+            if (body && body.text) texto = body.text;
+        } catch {}
+    }
+    document.getElementById('wae-preview').textContent = texto.replace(/{{(\d+)}}/g, (m, n) => vals[n] ?? m);
+}
+
+async function CXC_enviarWAEstado() {
+    const g = CXC_gruposCliente.get(document.getElementById('wae-gkey').value);
+    if (!g) return;
+    const tipo     = document.getElementById('wae-tipo-vencido').checked ? 'vencido' : 'total';
+    const telefono = document.getElementById('wae-telefono').value.replace(/[^0-9]/g, '');
+    const docs     = CXC_resumenWAEstado(g)[tipo].docs;
+
+    if (!telefono || telefono.length < 7) { CXC_toast('Ingrese un número válido.', 'warning'); return; }
+    if (!docs.length) { CXC_toast('No hay documentos para ese resumen.', 'warning'); return; }
+
+    const fd = new FormData();
+    fd.append('telefono',   telefono);
+    fd.append('tipo',       tipo);
+    fd.append('documentos', JSON.stringify(docs));
+
+    Swal.fire({
+        title: 'Enviando mensaje…',
+        html: 'Contactando a WhatsApp. Por favor espera.',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/enviarWhatsappEstadoCuentaAjax`, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const data = await r.json();
+        Swal.close();
+        if (data.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalWAEstado')).hide();
+            CXC_toast(data.mensaje || 'WhatsApp enviado.', 'success');
+        } else {
+            CXC_toast(data.error || 'Error al enviar.', 'danger');
+        }
+    } catch (e) {
+        Swal.close();
+        CXC_toast('Error de conexión.', 'danger');
+    }
+}
+
+/* ════════════════════════════════════════════════════
    CARGA DE CATÁLOGOS
 ════════════════════════════════════════════════════ */
 async function CXC_cargarCatalogos() {
@@ -1418,7 +1583,10 @@ async function CXC_cargarPlantillasWA() {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await r.json();
-        if (data.ok) CXC_plantillasWA = data.plantillas || [];
+        if (data.ok) {
+            CXC_plantillasWA  = data.plantillas || [];
+            CXC_plantillaEstado = data.estado_cuenta || null;
+        }
     } catch {}
 }
 

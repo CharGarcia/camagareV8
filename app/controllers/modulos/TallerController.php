@@ -771,6 +771,7 @@ class TallerController extends BaseModuloController
                 'proforma', 'cuenta_por_cobrar', 'renovacion_suscripcion', 'renovacion_firma_electronica',
                 'retencion_compra', 'nota_credito', 'nota_debito', 'guia_remision',
                 'rol_pagos', 'descuento_empleado', 'link_pago_payphone', 'link_pago_nuvei',
+                'estado_cuenta_cliente',
             ];
             $propias = ['orden_taller', 'informe_tecnico_taller', 'precuenta_taller'];
 

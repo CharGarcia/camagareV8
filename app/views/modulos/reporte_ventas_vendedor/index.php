@@ -95,7 +95,7 @@
                     <div style="flex:1 1 170px;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;"><i class="bi bi-person-badge me-1"></i>Vendedor</label>
                         <?php if (!empty($vendedorFijo)): ?>
-                            <?php // Usuario restringido (§6): solo su propio vendedor; el servidor ignora el filtro. ?>
+                            <?php // Usuario restringido (§6) con un solo vendedor en su alcance (o ninguno); el servidor ignora el filtro. ?>
                             <input type="text" class="form-control form-control-sm shadow-none border bg-light w-100" disabled
                                    title="<?= !empty($vendedores) ? 'Solo puedes consultar las ventas de tu vendedor' : 'No tienes un vendedor vinculado: ves solo lo que registraste' ?>"
                                    value="<?= htmlspecialchars($vendedores[0]['nombre'] ?? 'Sin vendedor vinculado') ?>">
@@ -213,9 +213,6 @@
                             <i class="bi bi-envelope"></i> Correo
                         </button>
                     </div>
-                </div>
-                <div class="d-flex align-items-center gap-3">
-                    <span class="text-muted small fw-medium">Resultados Generados</span>
                 </div>
             </div>
         </div>

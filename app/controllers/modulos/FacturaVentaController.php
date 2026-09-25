@@ -738,7 +738,7 @@ class FacturaVentaController extends BaseModuloController
                 'aviso_mensajes_pendientes', 'factura_por_cobrar', 'factura_venta',
                 'proforma', 'cuenta_por_cobrar', 'renovacion_suscripcion', 'renovacion_firma_electronica',
                 'retencion_compra', 'nota_credito', 'nota_debito', 'guia_remision',
-                'rol_pagos', 'descuento_empleado'
+                'rol_pagos', 'descuento_empleado', 'estado_cuenta_cliente'
             ];
             $rapidasPermitidas = ['factura_por_cobrar', 'factura_venta'];
 

@@ -85,6 +85,9 @@ class CuentasPorCobrarController extends BaseModuloController
             'rutaModulo'  => $this->getRutaModulo(),
             'anios'       => $anios,
             'tieneWA'     => $tieneWA,
+            // Firma del estado de cuenta por WhatsApp (solo para la vista previa del modal; el
+            // servidor la vuelve a resolver al enviar).
+            'nombreEmpresa' => $tieneWA ? $this->nombreEmpresaMensaje($idEmpresa) : '',
             'vendedores'  => $vendedores,
             'vendedorFijo' => $vendedorFijo,
             // Orden guardado por el usuario al hacer clic en las cabeceras. Si la columna
@@ -1422,12 +1425,16 @@ class CuentasPorCobrarController extends BaseModuloController
             'aviso_mensajes_pendientes', 'factura_por_cobrar', 'factura_venta',
             'cuenta_por_cobrar', 'renovacion_suscripcion', 'renovacion_firma_electronica',
             'retencion_compra', 'nota_credito', 'nota_debito', 'guia_remision',
-            'rol_pagos', 'descuento_empleado'
+            'rol_pagos', 'descuento_empleado', 'estado_cuenta_cliente'
         ];
+        // estado_cuenta_cliente no va en el selector por documento: la usa solo el envío del
+        // estado de cuenta desde la vista por cliente (enviarWhatsappEstadoCuentaAjax).
         $rapidasPermitidas = ['factura_por_cobrar', 'cuenta_por_cobrar'];
 
 $plantillasFiltradas = [];
+        $estadoCuenta = null;   // plantilla del estado de cuenta (modal de la vista por cliente)
         foreach ($todasPlantillas as $p) {
+            if ($p['nombre'] === 'estado_cuenta_cliente') $estadoCuenta = $p;
             if (in_array($p['nombre'], $todasLasRapidas)) {
                 if (in_array($p['nombre'], $rapidasPermitidas)) {
                     $plantillasFiltradas[] = $p;
@@ -1438,7 +1445,7 @@ $plantillasFiltradas = [];
             }
         }
 
-        $this->jsonSuccess(['plantillas' => $plantillasFiltradas]);
+        $this->jsonSuccess(['plantillas' => $plantillasFiltradas, 'estado_cuenta' => $estadoCuenta]);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1556,23 +1563,29 @@ $plantillasFiltradas = [];
         $porCliente    = [];  // clave de cliente real => [nombre, email, ids[], docs[]]
         $sinSaldo      = 0;
         $noEncontrados = 0;
-        $vistos        = [];  // dedup ORIGEN:id
+        $vistos        = [];  // dedup EMPRESA:ORIGEN:id
+        // Consolidado por RUC: un documento de otro establecimiento viaja con su `id_empresa`
+        // y se acepta solo si es una hermana del grupo consolidable desde la matriz activa
+        // (misma regla que el listado). El correo sale con la configuración de la activa.
+        $grupo         = (new EmpresaRepository())->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
 
         foreach ($docsRaw as $d) {
-            $origen = strtoupper(trim((string)($d['origen'] ?? 'FACTURA')));
-            $id     = (int)($d['id'] ?? 0);
+            $origen   = strtoupper(trim((string)($d['origen'] ?? 'FACTURA')));
+            $id       = (int)($d['id'] ?? 0);
+            $idEmpDoc = (int)($d['id_empresa'] ?? 0) ?: $idEmpresa;
             if ($id <= 0 || !in_array($origen, ['FACTURA', 'RECIBO'], true)) continue;
-            $k = $origen . ':' . $id;
+            if ($idEmpDoc !== $idEmpresa && !in_array($idEmpDoc, $grupo, true)) { $noEncontrados++; continue; }
+            $k = $idEmpDoc . ':' . $origen . ':' . $id;
             if (isset($vistos[$k])) continue;
             $vistos[$k] = true;
 
             $doc = $origen === 'RECIBO'
-                ? $this->repo->getReciboParaCobro($id, $idEmpresa)
-                : $this->repo->getFacturaParaCobro($id, $idEmpresa);
+                ? $this->repo->getReciboParaCobro($id, $idEmpDoc)
+                : $this->repo->getFacturaParaCobro($id, $idEmpDoc);
             if (!$doc) { $noEncontrados++; continue; }
             // Alcance del usuario (§6): sin acceso total, un documento fuera de su
             // cartera se omite del envío (se cuenta como no encontrado, no corta el lote).
-            if (!$this->dentroAlcance($doc, 'id_usuario', $idEmpresa)) { $noEncontrados++; continue; }
+            if (!$this->dentroAlcance($doc, 'id_usuario', $idEmpDoc)) { $noEncontrados++; continue; }
 
             $saldo = (float)($doc['saldo'] ?? 0);
             if ($saldo <= 0.001) { $sinSaldo++; continue; }
@@ -1942,6 +1955,200 @@ $plantillasFiltradas = [];
         );
 
         $this->jsonSuccess(['mensaje' => 'WhatsApp enviado correctamente.']);
+    }
+
+    /**
+     * Estado de cuenta de UN cliente por WhatsApp (vista agrupada por cliente).
+     * `tipo` = 'vencido' (solo documentos con días de mora) o 'total' (todo el saldo).
+     * Usa la plantilla rápida `estado_cuenta_cliente`:
+     *   {{1}} cliente, {{2}} N° de documentos pendientes, {{3}} valor, {{4}} empresa que emite.
+     * Los documentos llegan de la pantalla, pero el saldo, el vencimiento y el alcance se
+     * recalculan aquí desde BD; los que no son del mismo cliente se rechazan.
+     */
+    public function enviarWhatsappEstadoCuentaAjax(): void
+    {
+        $this->requireLeer();
+        session_write_close();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        $telefono = preg_replace('/[^0-9]/', '', trim($_POST['telefono'] ?? ''));
+        $tipo     = ($_POST['tipo'] ?? '') === 'vencido' ? 'vencido' : 'total';
+        $docsRaw  = json_decode($_POST['documentos'] ?? '[]', true);
+
+        if (!is_array($docsRaw) || empty($docsRaw) || strlen($telefono) < 7) {
+            $this->jsonError('Datos incompletos.');
+        }
+        if (count($docsRaw) > 300) {
+            $this->jsonError('Máximo 300 documentos por envío.');
+        }
+        if (str_starts_with($telefono, '593') && strlen($telefono) !== 12) {
+            $this->jsonError('El número de teléfono para Ecuador (593) debe tener exactamente 12 dígitos.');
+        }
+
+        $plantilla = null;
+        foreach ($this->repo->getPlantillasWA($idEmpresa) as $p) {
+            if ($p['nombre'] === 'estado_cuenta_cliente') { $plantilla = $p; break; }
+        }
+        if (!$plantilla) {
+            $this->jsonError('Falta la plantilla "estado_cuenta_cliente" aprobada por Meta. Créela en Plantillas de WhatsApp (plantilla rápida "Estado de Cuenta del Cliente").');
+        }
+
+        // 1) Documentos desde BD: saldo real, vencimiento y alcance del usuario (§6).
+        // Consolidado por RUC: cada documento trae su `id_empresa`; se acepta una hermana solo
+        // si pertenece al grupo consolidable desde la matriz activa (misma regla que el listado
+        // y empresaLectura()). El mensaje sale siempre con la configuración de WhatsApp y las
+        // plantillas de la empresa activa.
+        $grupo     = (new EmpresaRepository())->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+        $siRepo    = new \App\repositories\modulos\SaldosInicialesRepository();
+        $restringe = [];   // id_empresa => ¿usuario restringido a su vendedor en esa empresa?
+        $hoy       = strtotime(date('Y-m-d'));
+        $claveCli  = null;
+        $nombreCli = '';
+        $idCliente = 0;
+        $numDocs   = 0;
+        $valor     = 0.0;
+        $numeros   = [];
+        $vistos    = [];
+
+        foreach ($docsRaw as $d) {
+            $origen = strtoupper(trim((string) ($d['origen'] ?? 'FACTURA')));
+            $id     = (int) ($d['id'] ?? 0);
+            $idEmpDoc = (int) ($d['id_empresa'] ?? 0) ?: $idEmpresa;
+            if ($id <= 0 || !in_array($origen, ['FACTURA', 'RECIBO', 'SALDO_INICIAL'], true)) continue;
+            if ($idEmpDoc !== $idEmpresa && !in_array($idEmpDoc, $grupo, true)) continue;
+            if (isset($vistos[$idEmpDoc . ':' . $origen . ':' . $id])) continue;
+            $vistos[$idEmpDoc . ':' . $origen . ':' . $id] = true;
+
+            if ($origen === 'SALDO_INICIAL') {
+                $si = $siRepo->getCxcPorId($id, $idEmpDoc);
+                if (!$si) continue;
+                $restringe[$idEmpDoc] ??= (bool) \App\Helpers\AlcanceRegistros::idsVendedor($this->alcanceUsuario([$idEmpDoc]));
+                $vCli = $restringe[$idEmpDoc] ? $this->repo->getIdVendedorDeCliente((int) ($si['id_cliente'] ?? 0), $idEmpDoc) : null;
+                if (!$this->dentroAlcance($si, 'created_by', $idEmpDoc, $vCli)) continue;
+                $doc = [
+                    'id_cliente'        => (int) ($si['id_cliente'] ?? 0),
+                    'cliente_nombre'    => $si['nombre_cliente'] ?? '',
+                    'cliente_ruc'       => $si['ruc_cliente'] ?? null,
+                    'numero_factura'    => $si['nro_documento'] ?? '',
+                    'fecha_vencimiento' => $si['fecha_vencimiento'] ?: ($si['fecha_emision'] ?? null),
+                    'saldo'             => $si['saldo_pendiente'] ?? 0,
+                ];
+            } else {
+                $doc = $origen === 'RECIBO'
+                    ? $this->repo->getReciboParaCobro($id, $idEmpDoc)
+                    : $this->repo->getFacturaParaCobro($id, $idEmpDoc);
+                if (!$doc || !$this->dentroAlcance($doc, 'id_usuario', $idEmpDoc)) continue;
+            }
+
+            // Mismo cliente = misma identificación base (entre establecimientos el id de la
+            // ficha cambia, el RUC no).
+            $clave = IdentificacionTercero::claveGrupo($doc['cliente_ruc'] ?? null, 'id:' . (int) ($doc['id_cliente'] ?? 0));
+            if ($claveCli === null) {
+                $claveCli  = $clave;
+                $nombreCli = (string) ($doc['cliente_nombre'] ?? '');
+            } elseif ($clave !== $claveCli) {
+                $this->jsonError('Los documentos enviados no pertenecen a un mismo cliente.');
+            }
+            // La auditoría se registra en la empresa activa: se usa la ficha de ESTA empresa.
+            if (!$idCliente && $idEmpDoc === $idEmpresa) $idCliente = (int) ($doc['id_cliente'] ?? 0);
+
+            $saldo = (float) ($doc['saldo'] ?? 0);
+            if ($saldo <= 0.001) continue;
+
+            if ($tipo === 'vencido') {
+                $fVenc = !empty($doc['fecha_vencimiento'])
+                    ? $doc['fecha_vencimiento']
+                    : date('Y-m-d', strtotime(($doc['fecha_emision'] ?? 'now') . ' +' . (int) ($doc['dias_credito'] ?? 0) . ' days'));
+                if (strtotime(date('Y-m-d', strtotime($fVenc))) >= $hoy) continue; // aún no vence
+            }
+
+            $numDocs++;
+            $valor    += $saldo;
+            $numeros[] = ($idEmpDoc !== $idEmpresa ? "[{$idEmpDoc}] " : '') . ($doc['numero_factura'] ?? '');
+        }
+
+        if ($numDocs === 0) {
+            $this->jsonError($tipo === 'vencido'
+                ? 'El cliente no tiene documentos vencidos con saldo pendiente.'
+                : 'El cliente no tiene documentos con saldo pendiente.');
+        }
+
+        // 2) Variables de la plantilla
+        $valores = [
+            1 => $nombreCli !== '' ? $nombreCli : 'Cliente',
+            2 => (string) $numDocs,
+            3 => '$' . number_format($valor, 2),
+            4 => $this->nombreEmpresaMensaje($idEmpresa),
+        ];
+
+        $componentesDB = json_decode($plantilla['componentes'] ?? '[]', true) ?? [];
+        $apiComponents = [];
+        $textoFinal    = '';
+        foreach ($componentesDB as $comp) {
+            if (($comp['type'] ?? '') !== 'BODY') continue;
+            $textoFinal = $comp['text'] ?? '';
+            if (preg_match_all('/{{(\d+)}}/', $textoFinal, $m)) {
+                $params = [];
+                for ($i = 1; $i <= (int) max($m[1]); $i++) {
+                    $params[] = ['type' => 'text', 'text' => $valores[$i] ?? ' '];
+                    $textoFinal = str_replace('{{' . $i . '}}', $valores[$i] ?? ' ', $textoFinal);
+                }
+                $apiComponents[] = ['type' => 'body', 'parameters' => $params];
+            }
+            break;
+        }
+
+        // 3) Envío
+        $result = (new WhatsappService())->sendTemplateMessage($idEmpresa, $telefono, 'estado_cuenta_cliente', $plantilla['idioma'], $apiComponents);
+        if (!($result['success'] ?? false)) {
+            $this->jsonError('Error al enviar WhatsApp: ' . ($result['message'] ?? 'Desconocido'));
+        }
+
+        // Guardar en la bandeja de WhatsApp (para el webhook de estados)
+        try {
+            $repoMsj = new \App\repositories\modulos\WhatsappMensajeRepository();
+            $idChat  = $repoMsj->getOrCreateChat($idEmpresa, $telefono, $valores[1], 'Estado de cuenta por cobrar', false);
+            $repoMsj->saveMessage(
+                $idEmpresa, $idChat, 'OUT', $telefono, 'template',
+                [
+                    'template'      => 'estado_cuenta_cliente',
+                    'variables'     => array_values($valores),
+                    'template_text' => $textoFinal,
+                ],
+                $result['data']['messages'][0]['id'] ?? null,
+                'sent'
+            );
+        } catch (\Throwable $ex) {
+            error_log('Error guardando mensaje en BD (CXC estado de cuenta): ' . $ex->getMessage());
+        }
+
+        $this->log->registrar(
+            (int) $_SESSION['id_usuario'],
+            $idEmpresa,
+            'WHATSAPP_CXC_ESTADO_CUENTA',
+            'clientes',
+            $idCliente ?: null,
+            null,
+            [
+                'telefono'   => $telefono,
+                'tipo'       => $tipo,
+                'documentos' => $numeros,
+                'valor'      => round($valor, 2),
+            ]
+        );
+
+        $this->jsonSuccess([
+            'mensaje' => "Estado de cuenta enviado por WhatsApp ({$numDocs} documento(s), $" . number_format($valor, 2) . ').',
+        ]);
+    }
+
+    /** Nombre con el que firma la empresa los mensajes al cliente: comercial o, si no hay, razón social. */
+    private function nombreEmpresaMensaje(int $idEmpresa): string
+    {
+        $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        return trim((string) ($empresa['nombre_comercial'] ?? ''))
+            ?: trim((string) ($empresa['razon_social'] ?? ''))
+            ?: 'la empresa';
     }
 
     // ─────────────────────────────────────────────────────────────────────

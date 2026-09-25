@@ -31,14 +31,18 @@ class ReporteVentasVendedorController extends BaseModuloController
 
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
 
-        // Restringido (§6): el filtro Vendedor queda fijo en su propio vendedor (o
-        // vacío si no es vendedor) y el catálogo de asesores no se manda al HTML.
+        // Restringido (§6): el filtro Vendedor solo ofrece los vendedores de su
+        // alcance (el suyo y los que el administrador le habilitó en
+        // /config/permisos-modulos); con uno solo, o ninguno si no es vendedor,
+        // queda fijo. El catálogo completo de asesores no se manda al HTML.
         $alcance      = $this->alcanceUsuario();
-        $vendedorFijo = \App\Helpers\AlcanceRegistros::restringe($alcance);
-        $vendedores   = $vendedorFijo
-            ? \App\Helpers\AlcanceRegistros::vendedorPropio($alcance, $idEmpresa, (int) $_SESSION['id_usuario'])
+        $restringido  = \App\Helpers\AlcanceRegistros::restringe($alcance);
+        $vendedores   = $restringido
+            ? (new \App\repositories\modulos\VendedorVisibleRepository())
+                ->getVendedoresPorIds($idEmpresa, \App\Helpers\AlcanceRegistros::idsVendedor($alcance))
             : ((new \App\repositories\modulos\VendedorRepository())
                 ->getListado($idEmpresa, '', 1, 500, 'nombre', 'ASC')['rows'] ?? []);
+        $vendedorFijo = $restringido && count($vendedores) <= 1;
         $marcas = (new \App\repositories\modulos\MarcaRepository())
             ->getListado($idEmpresa, '', 1, 500, 'nombre', 'ASC')['rows'] ?? [];
         $categorias = (new \App\repositories\modulos\CategoriaRepository())
@@ -52,8 +56,7 @@ class ReporteVentasVendedorController extends BaseModuloController
             'vistaConfig'         => $prefsVista,
             'rutaModulo'          => $this->getRutaModulo(),
             'vendedores'          => $vendedores,
-            'vendedorFijo'        => $vendedorFijo,
-            'marcas'              => $marcas,
+            'vendedorFijo'        => $vendedorFijo,            'marcas'              => $marcas,
             'categorias'          => $categorias,
             'anios'               => $anios,
             'fullWidth'           => true,
@@ -76,9 +79,10 @@ class ReporteVentasVendedorController extends BaseModuloController
 
         // Alcance del usuario (§6): va dentro de los filtros, así lo heredan la
         // tabla, las tarjetas, el resumen de estados, el detalle por vendedor, el
-        // PDF, el Excel y el correo. A un usuario restringido no se le aplica el
-        // filtro Vendedor de la pantalla: su alcance ya lo limita a su vendedor.
-        return \App\Helpers\AlcanceRegistros::limpiarFiltroVendedor(array_merge($filtros, $this->alcanceUsuario()));
+        // PDF, el Excel y el correo. A un usuario restringido el filtro Vendedor de
+        // la pantalla solo le sirve para elegir uno de los vendedores de su
+        // alcance; cualquier otro id se ignora.
+        return \App\Helpers\AlcanceRegistros::acotarAVendedorElegido(array_merge($filtros, $this->alcanceUsuario()));
     }
 
     /**
@@ -88,14 +92,23 @@ class ReporteVentasVendedorController extends BaseModuloController
      * de su vendedor (las que llevan su nombre y, sin vendedor, las de sus
      * clientes) y, si no, solo lo que él registró. Se resuelve del nivel, el
      * permiso y la sesión, nunca de la petición.
+     *
+     * Exclusivo de este reporte: al restringido se le suman los vendedores que el
+     * administrador le habilitó en /config/permisos-modulos ("Vendedores que
+     * puede ver").
      */
     private function alcanceUsuario(): array
     {
-        return $this->alcanceCache ??= \App\Helpers\AlcanceRegistros::resolver(
-            $this->getPermisos(),
-            (int) ($_SESSION['id_usuario'] ?? 0),
-            [(int) $_SESSION['id_empresa']]
-        );
+        if ($this->alcanceCache === null) {
+            $idUsuario  = (int) ($_SESSION['id_usuario'] ?? 0);
+            $idsEmpresa = [(int) $_SESSION['id_empresa']];
+            $this->alcanceCache = \App\Helpers\AlcanceRegistros::ampliarConVendedoresVisibles(
+                \App\Helpers\AlcanceRegistros::resolver($this->getPermisos(), $idUsuario, $idsEmpresa),
+                $idUsuario,
+                $idsEmpresa
+            );
+        }
+        return $this->alcanceCache;
     }
 
     /**

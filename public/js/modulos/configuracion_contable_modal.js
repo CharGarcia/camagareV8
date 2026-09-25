@@ -173,7 +173,16 @@
                     res.data.forEach(item => {
                         const tr = document.createElement('tr');
                         
-                        if (esRetenciones) {
+                        if (esRetenciones && item.sin_catalogo) {
+                            // Código usado en documentos pero ausente del catálogo SRI: no se puede configurar.
+                            tr.innerHTML = `
+                                <td class="ps-4 fw-bold text-dark">${item.concepto}</td>
+                                <td colspan="5" class="small text-danger">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>${item.detalle}: sus retenciones no generan línea contable hasta corregir el código en el documento o agregarlo al catálogo.
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+                        } else if (esRetenciones) {
                             // Compra: retención = pasivo (Debe: Cuentas por Pagar · Haber: Retención por pagar).
                             // Venta: retención = activo (Debe: Retención · Haber: Cuentas por Cobrar).
                             const esCompraRet = (tipoAsiento === 'retenciones_compra');

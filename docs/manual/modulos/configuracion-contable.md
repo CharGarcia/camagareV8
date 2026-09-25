@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar
-version: 1.15
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri
+version: 1.16
 orden: 5
 estado: activo
 ---
@@ -269,6 +269,20 @@ Entre los tipos configurables está el **cierre del ejercicio**, que necesita do
 cuentas: la de *resumen de resultados* y la de *resultado del ejercicio*. Son las
 que permiten cerrar el año llevando la utilidad al patrimonio.
 
+## Retenciones en venta y en compra: qué códigos aparecen
+
+En **Retenciones en Venta** y **Retenciones en Compra** la lista no es fija: muestra
+cada **código de retención** (de renta y de IVA) que la empresa ya usó en sus
+retenciones, más los que ya tienen una cuenta configurada. Se cuentan las
+retenciones de cualquier ambiente (pruebas o producción), porque la cuenta
+contable no depende del ambiente. Primero van los de renta y después los de IVA.
+
+Si un documento trae un código que **no existe en el catálogo de retenciones del
+SRI**, la fila aparece en rojo con el aviso *No existe en el catálogo de
+retenciones SRI* y no deja elegir cuenta: el asiento de esas retenciones sale sin
+esa línea hasta que se corrija el código en el documento o se agregue al
+catálogo.
+
 ## Nómina: cuentas de los préstamos
 
 En el tipo **Nómina** hay tres conceptos para las cuotas de préstamo que se
@@ -338,6 +352,10 @@ documento o en la ficha de la entidad implicada.
 ## Errores frecuentes
 
 - **Un documento no genera asiento**: falta configurar su tipo de operación.
+- **No aparece una retención (de renta o IVA) para configurar**: la lista solo
+  muestra códigos ya usados en retenciones de la empresa. Si el código sale con el
+  aviso de que no existe en el catálogo SRI, el problema es el código del
+  documento, no la configuración.
 - **El asiento va a una cuenta que no corresponde**: revise primero la ficha del
   producto, cliente o forma de pago; su cuenta manda sobre la general.
 - **La misma cuenta bancaria contabiliza distinto al cobrar que al pagar**: la
@@ -361,6 +379,11 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.16** — En Retenciones en Venta y en Compra aparecen todos los códigos
+  usados por la empresa, también los de renta que antes no salían: la lista ya no
+  se limita al ambiente actual e incluye los códigos que ya tienen cuenta. Los
+  códigos que no existen en el catálogo SRI se muestran con un aviso en vez de
+  ocultarse.
 - **1.15** — En los listados de entidades de las reglas por Proveedor, Cliente,
   Producto, Categoría y Marca, las que no tienen cuentas asignadas se muestran
   primero. En cada ficha de Proveedor se agregó el botón *Información de

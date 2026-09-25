@@ -5,8 +5,8 @@ categoria: Herramientas
 ruta_modulo: modulos/plantillas-whatsapp
 tipo: modulo
 visibilidad: todos
-etiquetas: whatsapp, plantillas, meta, mensajes aprobados, link de pago, enlace de pago, payphone, nuvei, enviar factura por whatsapp, enviar proforma por whatsapp, variables, aprobacion
-version: 1.0
+etiquetas: whatsapp, plantillas, meta, mensajes aprobados, link de pago, enlace de pago, payphone, nuvei, enviar factura por whatsapp, enviar proforma por whatsapp, variables, aprobacion, estado de cuenta, estado_cuenta_cliente, resumen de deuda, facturas pendientes
+version: 1.1
 orden: 21
 estado: activo
 ---
@@ -66,6 +66,7 @@ con la opción de borrarla también en Meta.
 | `link_pago_payphone` | No | Cliente, Monto, Referencia, Enlace | Facturas de Venta, POS |
 | `link_pago_nuvei` | No | Cliente, Monto, Referencia, Enlace | Facturas de Venta |
 | `cuenta_por_cobrar` | No | Cliente, Total por cobrar | Cuentas por Cobrar |
+| `estado_cuenta_cliente` | No | Cliente, N° de facturas pendientes, Valor pendiente, Empresa que emite | Cuentas por Cobrar (vista Por cliente) |
 | `renovacion_suscripcion` | No | Cliente, Fecha de renovación | Suscripciones |
 | `renovacion_firma_electronica` | No | Cliente, Fecha de vencimiento | Firmas Electrónicas |
 | `retencion_compra` | Sí | Proveedor, Número, Valor retenido | Retenciones en Compras |
@@ -157,6 +158,12 @@ Sin **acceso total**, el usuario ve solo las plantillas que él mismo registró.
   la plantilla que ese módulo espera (cada uno ofrece solo las suyas).
 
 ## Historial de cambios
+
+- **1.1** — Nueva plantilla rápida `estado_cuenta_cliente` (*Estado de Cuenta
+  del Cliente*): la usa Cuentas por Cobrar, vista *Por cliente*, para enviar el
+  resumen vencido o total de la deuda. El cuerpo sugerido cierra con texto
+  normal después de la última variable, porque Meta rechaza cuerpos que
+  terminan en variable.
 
 - **1.0** — Versión inicial. Incluye las plantillas rápidas `proforma` y
   `link_pago_nuvei` (enlace de pago con Nuvei), además de las ya existentes.

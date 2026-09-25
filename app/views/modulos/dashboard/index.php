@@ -215,8 +215,8 @@ $mesActual  = (int) date('n');
         ['k'=>'margen',   'w'=>2, 'lbl'=>'Margen',         'val'=>'mValMargen',   'chg'=>'mChgMargen',   'ico'=>'bi-percent',        'color'=>'info',      'ini'=>'0%'],
         ['k'=>'ingresos', 'w'=>2, 'lbl'=>'Ingresos (caja)','val'=>'mValIngresos', 'chg'=>'mChgIngresos', 'ico'=>'bi-cash-coin',      'color'=>'success',   'ini'=>'$0.00'],
         ['k'=>'egresos',  'w'=>4, 'lbl'=>'Egresos (caja)', 'val'=>'mValEgresos',  'chg'=>'mChgEgresos',  'ico'=>'bi-cash-stack',     'color'=>'warning',   'ini'=>'$0.00'],
-        ['k'=>'cxc',      'w'=>4, 'lbl'=>'CxC Pendiente',  'val'=>'mValCxc',      'nota'=>'Pendiente de cobro del período', 'ico'=>'bi-person-check', 'color'=>'primary', 'ini'=>'$0.00'],
-        ['k'=>'cxp',      'w'=>4, 'lbl'=>'CxP Pendiente',  'val'=>'mValCxp',      'nota'=>'Pendiente de pago del período',  'ico'=>'bi-building',     'color'=>'danger',  'ini'=>'$0.00'],
+        ['k'=>'cxc',      'w'=>4, 'lbl'=>'CxC Pendiente',  'val'=>'mValCxc',      'nota'=>'Saldo por cobrar', 'notaId'=>'mNotaCxc', 'ico'=>'bi-person-check', 'color'=>'primary', 'ini'=>'$0.00'],
+        ['k'=>'cxp',      'w'=>4, 'lbl'=>'CxP Pendiente',  'val'=>'mValCxp',      'nota'=>'Saldo por pagar', 'notaId'=>'mNotaCxp', 'ico'=>'bi-building',     'color'=>'danger',  'ini'=>'$0.00'],
     ];
     foreach ($metricas as $m): ?>
     <div class="db-item db-item--metrica" data-db-key="<?= $m['k'] ?>" data-db-w="<?= $m['w'] ?>" style="grid-column:span <?= $m['w'] ?>">
@@ -233,7 +233,7 @@ $mesActual  = (int) date('n');
             <?php if (isset($m['chg'])): ?>
             <div class="db-metric-change ch-neu text-tr sk mt-2" id="<?= $m['chg'] ?>">—</div>
             <?php else: ?>
-            <div class="db-metric-change ch-neu mt-2 small text-muted"><?= $m['nota'] ?></div>
+            <div class="db-metric-change ch-neu mt-2 small text-muted"<?= isset($m['notaId']) ? ' id="' . $m['notaId'] . '"' : '' ?>><?= $m['nota'] ?></div>
             <?php endif; ?>
         </div>
     </div>
@@ -290,7 +290,7 @@ $mesActual  = (int) date('n');
                     $series = [
                         ['k'=>'ventas',  'lbl'=>'Ventas',   'on'=>true],
                         ['k'=>'compras', 'lbl'=>'Compras',  'on'=>true],
-                        ['k'=>'nomina',  'lbl'=>'Nómina',   'on'=>true],
+                        ['k'=>'nomina',  'lbl'=>'Nómina',   'on'=>false],
                         ['k'=>'ingresos','lbl'=>'Ingresos', 'on'=>false],
                         ['k'=>'egresos', 'lbl'=>'Egresos',  'on'=>false],
                         ['k'=>'utilidad','lbl'=>'Utilidad', 'on'=>false],
@@ -871,6 +871,11 @@ async function applyFilters(){
         $('mChgEgresos').innerHTML    = chg(d.egresos_mes_actual, d.egresos_mes_anterior);
         $('mValCxc').textContent      = fmt(d.cxc_total);
         $('mValCxp').textContent      = fmt(d.cxp_total);
+        // Saldo de cartera al corte (fin del período o hoy): el mismo que muestran
+        // Cuentas por Cobrar / por Pagar con esa Fecha Hasta.
+        const corte = (d.cartera_corte||'').split('-').reverse().join('-');
+        $('mNotaCxc').textContent = 'Saldo por cobrar al ' + corte;
+        $('mNotaCxp').textContent = 'Saldo por pagar al ' + corte;
 
         // Gráficos
         renderTendencia(d.tendencia, tipo);

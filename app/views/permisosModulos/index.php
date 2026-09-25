@@ -506,6 +506,182 @@ window.cmgUsuarioTomSelect = function() {
         })();
     </script>
 
+    <?php // Vendedores que puede ver en el Reporte de Ventas por Vendedor. Solo aplica a
+          // usuarios de nivel 1: los niveles 2 y 3 ya ven a todos los vendedores. La
+          // pantalla completa ya exige nivel 2 o 3, así que solo ellos ven esta tarjeta. ?>
+    <?php if ((int)($usuarioSel['nivel'] ?? 0) === 1): ?>
+    <div class="card mt-3" id="card-vendedores-visibles">
+        <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong><i class="bi bi-person-badge"></i> Vendedores que puede ver <span class="text-muted fw-normal small">— Reporte de Ventas por Vendedor</span></strong>
+            <small id="vv-conteo" class="text-muted"></small>
+        </div>
+        <div class="card-body">
+            <p class="small text-muted mb-2">
+                <i class="bi bi-info-circle"></i>
+                Por defecto el usuario ve solo las ventas de <strong>su propio vendedor</strong>. Marque los demás vendedores
+                cuyas ventas también podrá consultar. Si en el submódulo <em>Reporte de Ventas por Vendedor</em> tiene
+                <strong>Ver Todo</strong>, verá a todos los vendedores sin importar esta lista.
+            </p>
+            <div class="mb-2 d-flex align-items-center gap-2">
+                <div class="input-group input-group-sm" style="max-width:350px">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" id="vv-buscador" class="form-control" placeholder="Buscar vendedor...">
+                </div>
+                <span id="vv-status" class="small"></span>
+            </div>
+            <div class="permisos-tabla-wrap" style="max-height:320px;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width:70px">Puede ver</th>
+                            <th>Vendedor</th>
+                            <th style="width:160px">Identificación</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vv-tbody">
+                        <tr><td colspan="3" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm"></span> Cargando vendedores...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            var base      = '<?= $base ?>';
+            var idUsuario = '<?= (int)$idUsuarioSel ?>';
+            var idEmpresa = '<?= (int)$idEmpresaSel ?>';
+            var tbody     = document.getElementById('vv-tbody');
+            var buscador  = document.getElementById('vv-buscador');
+            var statusEl  = document.getElementById('vv-status');
+            var conteoEl  = document.getElementById('vv-conteo');
+            var statusTimer = null;
+            if (!tbody) return;
+
+            function setStatus(tipo, texto) {
+                clearTimeout(statusTimer);
+                var color = tipo === 'ok' ? 'text-success' : (tipo === 'err' ? 'text-danger' : 'text-secondary');
+                var icon  = tipo === 'ok' ? 'bi-check-circle-fill' : (tipo === 'err' ? 'bi-x-circle-fill' : 'bi-arrow-repeat');
+                statusEl.className = 'small ' + color;
+                statusEl.innerHTML = '<i class="bi ' + icon + '"></i> ';
+                statusEl.appendChild(document.createTextNode(texto));
+                if (tipo === 'ok') statusTimer = setTimeout(function() { statusEl.innerHTML = ''; }, 2000);
+            }
+
+            function mensaje(texto) {
+                tbody.innerHTML = '';
+                var tr = document.createElement('tr');
+                var td = document.createElement('td');
+                td.colSpan = 3;
+                td.className = 'text-center text-muted py-3';
+                td.textContent = texto;
+                tr.appendChild(td);
+                tbody.appendChild(tr);
+            }
+
+            function actualizarConteo() {
+                var n = tbody.querySelectorAll('.vv-check:checked:not(:disabled)').length;
+                conteoEl.textContent = n === 0 ? 'Solo su propio vendedor' : ('Su vendedor + ' + n + ' más');
+            }
+
+            function guardar(chk) {
+                var fd = new FormData();
+                fd.append('id_usuario', idUsuario);
+                fd.append('id_empresa', idEmpresa);
+                fd.append('id_vendedor', chk.value);
+                fd.append('visible', chk.checked ? '1' : '0');
+                setStatus('load', 'Guardando...');
+                fetch(base + '/config/permisos-modulos?action=guardarVendedorVisible', {
+                    method: 'POST', body: fd, credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(j) {
+                    if (j.ok) {
+                        setStatus('ok', 'Guardado');
+                        actualizarConteo();
+                    } else {
+                        chk.checked = !chk.checked;
+                        setStatus('err', j.error || 'Error al guardar');
+                    }
+                })
+                .catch(function() {
+                    chk.checked = !chk.checked;
+                    setStatus('err', 'Error de conexión');
+                });
+            }
+
+            function pintar(vendedores, idPropio) {
+                tbody.innerHTML = '';
+                if (!vendedores.length) { mensaje('La empresa no tiene vendedores registrados.'); return; }
+                vendedores.forEach(function(v) {
+                    var esPropio = v.id === idPropio;
+                    var tr = document.createElement('tr');
+                    tr.className = 'vv-row';
+                    tr.style.cursor = esPropio ? 'default' : 'pointer';
+
+                    var tdChk = document.createElement('td');
+                    tdChk.className = 'text-center align-middle';
+                    var chk = document.createElement('input');
+                    chk.type = 'checkbox';
+                    chk.className = 'form-check-input vv-check';
+                    chk.value = v.id;
+                    chk.checked = esPropio || v.visible;
+                    chk.disabled = esPropio;
+                    chk.addEventListener('change', function() { guardar(chk); });
+                    tdChk.appendChild(chk);
+
+                    var tdNom = document.createElement('td');
+                    tdNom.className = 'align-middle';
+                    tdNom.appendChild(document.createTextNode(v.nombre || ''));
+                    if (esPropio) {
+                        tdNom.insertAdjacentHTML('beforeend', ' <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Su vendedor</span>');
+                    }
+                    if (!v.activo) {
+                        tdNom.insertAdjacentHTML('beforeend', ' <span class="badge bg-secondary bg-opacity-10 text-secondary">Inactivo</span>');
+                    }
+
+                    var tdId = document.createElement('td');
+                    tdId.className = 'align-middle small text-muted';
+                    tdId.textContent = v.identificacion || '';
+
+                    tr.appendChild(tdChk);
+                    tr.appendChild(tdNom);
+                    tr.appendChild(tdId);
+                    tr.addEventListener('click', function(e) {
+                        if (e.target === chk || chk.disabled) return;
+                        chk.checked = !chk.checked;
+                        guardar(chk);
+                    });
+                    tbody.appendChild(tr);
+                });
+                actualizarConteo();
+            }
+
+            fetch(base + '/config/permisos-modulos?action=vendedoresVisiblesJson&u=' + encodeURIComponent(idUsuario) + '&e=' + encodeURIComponent(idEmpresa), {
+                credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(j) {
+                if (!j.ok) { mensaje(j.error || 'No se pudieron cargar los vendedores.'); return; }
+                if (!j.tabla_existe) {
+                    mensaje('Falta ejecutar database/usuarios_vendedores_visibles.sql para usar esta configuración.');
+                    return;
+                }
+                pintar(j.vendedores || [], parseInt(j.id_propio, 10) || 0);
+            })
+            .catch(function() { mensaje('Error de conexión al cargar los vendedores.'); });
+
+            buscador.addEventListener('input', function() {
+                var q = buscador.value.toLowerCase().trim();
+                tbody.querySelectorAll('.vv-row').forEach(function(row) {
+                    row.style.display = !q || row.textContent.toLowerCase().indexOf(q) !== -1 ? '' : 'none';
+                });
+            });
+        })();
+    </script>
+    <?php endif; ?>
+
     <!-- Modal Aplicar combo -->
     <?php if ($nivel >= 3 && !empty($combosActivos)): ?>
     <div class="modal fade" id="modalAplicarCombo" tabindex="-1" aria-hidden="true">
