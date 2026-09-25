@@ -505,6 +505,9 @@ class NotasCreditoController extends BaseModuloController
                 'importe_total'  => (float) ($f['importe_total'] ?? 0),
                 'saldo'          => round((float) ($f['saldo'] ?? 0), 2),
                 'estado'         => $f['estado'],
+                // La NC toma el vendedor de la factura que modifica, no el actual del cliente.
+                'id_vendedor'    => !empty($f['id_vendedor']) ? (int) $f['id_vendedor'] : null,
+                'vendedor_nombre'=> $f['vendedor_nombre'] ?? '',
                 'id_cliente'     => (int) $f['id_cliente'],
                 'cliente_nombre' => $f['cliente_nombre'] ?? '',
                 'cliente_ruc'    => $f['cliente_ruc'] ?? '',

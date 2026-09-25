@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor
-version: 1.22
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente
+version: 1.23
 orden: 30
 estado: activo
 ---
@@ -54,14 +54,16 @@ llevarse por delante lo que ya rebajaron las dos anteriores.
 
 El campo **Vendedor** indica a qué asesor se le descuenta la nota en los reportes.
 
-- Al elegir el cliente se propone el **vendedor asignado a ese cliente** (ficha del
-  cliente). Si la nota se genera desde la factura o el recibo, se propone el **vendedor
-  de ese documento**.
+- Al elegir la **factura a modificar** se propone el **vendedor de esa factura**: la
+  nota se le descuenta a quien hizo la venta, aunque hoy el cliente tenga asignado otro
+  vendedor. Da lo mismo crear la nota desde este módulo o desde la factura o el recibo.
+- Mientras no se elija la factura, o si el documento es un **saldo inicial** o una factura
+  sin vendedor, queda el **vendedor asignado al cliente** (ficha del cliente).
 - Se puede cambiar por otro o dejar en *Seleccione...* (sin vendedor).
-- Solo se listan vendedores activos. Si una nota ya guardada tiene un vendedor que
-  luego se desactivó, se sigue mostrando con la marca *(inactivo)*.
+- Solo se listan vendedores activos. Si el vendedor de la factura o de una nota ya
+  guardada fue desactivado, se muestra igual con la marca *(inactivo)*.
 - El **Reporte de Ventas** (filtro *Vendedor*) y el **Reporte de Ventas por Asesor**
-  toman este vendedor, no el de la factura que modifica la nota.
+  toman el vendedor guardado en la nota.
 
 ### Información adicional
 
@@ -338,6 +340,12 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.23** — El **Vendedor** de la nota se toma de la **factura que modifica**, no del
+  vendedor actual del cliente. Antes, al crear la nota desde este módulo, quedaba el
+  vendedor de la ficha del cliente, y si se lo habían cambiado después de la venta, la
+  nota se le descontaba a otro asesor en los reportes. Saldos iniciales y facturas sin
+  vendedor siguen usando el del cliente.
 
 - **1.22** — En una nota ya **autorizada o anulada** se puede cambiar el **Vendedor** y
   guardar (antes el campo quedaba bloqueado). Solo se actualiza el vendedor; el resto del

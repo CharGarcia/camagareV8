@@ -11,6 +11,44 @@
     const modalEl = document.getElementById('modalNivel');
     let modalInst = null;
 
+
+    // ── Mensajes (SweetAlert) ────────────────────────────────────────────────
+    // Con un modal abierto el popup cuelga DENTRO de él (target): colgado de <body>
+    // el focus trap de Bootstrap le quita el foco. heightAuto:false porque la página
+    // es app-shell (html/body al 100 %).
+    function swalTarget() {
+        const abiertos = document.querySelectorAll('.modal.show');
+        return abiertos.length ? abiertos[abiertos.length - 1] : (document.getElementById('modalNivel') || 'body');
+    }
+    const TITULOS_SWAL = { success: 'Listo', error: 'Error', warning: 'Atención', info: 'Información' };
+    function aviso(icon, texto, opts = {}) {
+        if (typeof Swal === 'undefined') { window.alert(texto); return Promise.resolve(); }
+        return Swal.fire(Object.assign({
+            icon,
+            title: TITULOS_SWAL[icon] || '',
+            text: texto,
+            confirmButtonText: 'Aceptar',
+            target: swalTarget(),
+            heightAuto: false,
+        }, opts));
+    }
+    async function confirmar(texto, botonSi = 'Sí, continuar', peligro = false) {
+        if (typeof Swal === 'undefined') return window.confirm(texto);
+        const r = await Swal.fire({
+            icon: 'warning',
+            title: '¿Está seguro?',
+            text: texto,
+            showCancelButton: true,
+            confirmButtonText: botonSi,
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: peligro ? '#dc3545' : undefined,
+            reverseButtons: true,
+            target: swalTarget(),
+            heightAuto: false,
+        });
+        return r.isConfirmed;
+    }
+
     function getModal() {
         if (!modalInst && typeof bootstrap !== 'undefined' && modalEl) {
             modalInst = new bootstrap.Modal(modalEl);
@@ -77,13 +115,12 @@
             const resp = await fetch(actionUrl, { method: 'POST', body: fd });
             const json = await resp.json();
 
-            if (alertEl) {
-                alertEl.textContent = json.msg || json.error;
-                alertEl.className = `alert mb-3 py-2 small shadow-sm border-0 ${json.ok ? 'alert-success' : 'alert-danger'}`;
-                alertEl.classList.remove('d-none');
+            if (!json.ok) {
+                aviso('error', json.error || json.msg || 'No se pudo guardar.');
             }
 
             if (json.ok) {
+                await aviso('success', json.msg || 'Guardado correctamente.', { timer: 1200, showConfirmButton: false });
                 setTimeout(() => {
                     getModal()?.hide();
                     if (window.fetchSearchNivel) window.fetchSearchNivel();
@@ -93,11 +130,7 @@
                 }, 600);
             }
         } catch (e) {
-            if (alertEl) {
-                alertEl.textContent = 'Error de conexión';
-                alertEl.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
-                alertEl.classList.remove('d-none');
-            }
+            aviso('error', 'Error de conexión con el servidor.');
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
@@ -106,7 +139,7 @@
 
     window.eliminarNivelModal = async function () {
         const id = document.getElementById('nivel_id_modal')?.value;
-        if (!id || !confirm('¿Seguro que desea eliminar este nivel/curso?')) return;
+        if (!id || !(await confirmar('Se eliminará este nivel/curso.', 'Sí, eliminar', true))) return;
         const btn = document.getElementById('btnEliminarNivelModal');
 
         if (btn) btn.disabled = true;
@@ -119,9 +152,9 @@
                 getModal()?.hide();
                 if (window.fetchSearchNivel) window.fetchSearchNivel();
             } else {
-                alert(json.error || 'No se pudo eliminar.');
+                aviso('error', json.error || 'No se pudo eliminar.');
             }
-        } catch (e) {} finally { if (btn) btn.disabled = false; }
+        } catch (e) { aviso('error', 'Error de conexión al eliminar.'); } finally { if (btn) btn.disabled = false; }
     };
 
 })(window, document);

@@ -87,7 +87,11 @@ class SuscripcionFacturacionService
                 'id_producto'               => $det['id_producto'],
                 'codigo_principal'          => $det['codigo_producto'] ?? '000',
                 'descripcion'               => $det['descripcion'] ?? $det['nombre_producto'],
-                'info_adicional'            => $textoItem !== '' ? $textoItem : null,
+                // Texto propio de la línea (`info_item`, lo manda Alumnos) o, si no
+                // trae, el texto general del lote. Suscripciones no envía `info_item`.
+                'info_adicional'            => trim((string)($det['info_item'] ?? '')) !== ''
+                    ? strtr(trim((string)$det['info_item']), $reemplazos)
+                    : ($textoItem !== '' ? $textoItem : null),
                 'cantidad'                  => $det['cantidad'],
                 'precio_unitario'           => $det['precio_unitario'],
                 'descuento'                 => 0,

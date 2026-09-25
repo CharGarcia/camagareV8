@@ -602,6 +602,7 @@ class FacturaVentaRepository extends BaseRepository
 
         $sql = "SELECT v.id, v.establecimiento, v.punto_emision, v.secuencial,
                        v.fecha_emision, v.importe_total, v.estado,
+                       v.id_vendedor, (SELECT ven.nombre FROM vendedores ven WHERE ven.id = v.id_vendedor) AS vendedor_nombre,
                        v.id_cliente, c.nombre AS cliente_nombre, c.identificacion AS cliente_ruc,
                        $saldo AS saldo
                 FROM ventas_cabecera v

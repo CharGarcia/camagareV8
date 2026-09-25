@@ -278,6 +278,8 @@ class AlumnosController extends BaseModuloController
             'id' => $row['id'],
             'nombre' => $row['nombre'] ?? '',
             'precio_base' => $row['precio_base'] ?? 0,
+            'porcentaje_iva' => (float) ($row['porcentaje_iva_final'] ?? 0),
+            'id_tarifa_iva' => isset($row['tarifa_iva']) ? (int) $row['tarifa_iva'] : null,
         ], $result['rows'] ?? []);
 
         echo json_encode(['ok' => true, 'data' => $data]);
@@ -310,6 +312,8 @@ class AlumnosController extends BaseModuloController
                 'puntos_emision' => $puntosEmision,
                 'campus' => $repoCampus->getParaSelect($idEmpresa),
                 'niveles' => $repoNivel->getParaSelect($idEmpresa),
+                'tarifas_iva' => $this->service->getTarifasIva(),
+                'config_facturacion' => $this->service->getConfigFacturacion($idEmpresa),
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -321,6 +325,172 @@ class AlumnosController extends BaseModuloController
     /**
      * Sube la foto del alumno (mismo patrón que ProductosController::uploadImage).
      */
+    // ------------------------------------------------------------------
+    // Facturación desde el alumno (una factura por cliente de los servicios).
+    // Exige además poder CREAR en Facturas de Venta: el documento nace allí.
+    // ------------------------------------------------------------------
+
+    private const RUTA_FACTURAS = 'modulos/factura-venta';
+
+    private function facturacionService(): \App\Services\modulos\AlumnoFacturacionService
+    {
+        $log = new LogSistemaService();
+        return new \App\Services\modulos\AlumnoFacturacionService(
+            new AlumnoRepository(),
+            new \App\Services\modulos\SuscripcionFacturacionService(
+                new \App\Services\modulos\FacturaVentaService(
+                    new \App\repositories\modulos\FacturaVentaRepository(),
+                    new \App\Rules\modulos\FacturaVentaRules(),
+                    $log
+                ),
+                new \App\Services\SecuencialService(),
+                new \App\Services\modulos\ReciboVentaService(
+                    new \App\repositories\modulos\ReciboVentaRepository(),
+                    new \App\Rules\modulos\ReciboVentaRules(),
+                    $log
+                )
+            ),
+            $log
+        );
+    }
+
+    private function exigirPermisoFacturar(): void
+    {
+        if (!\App\Helpers\Permisos::puedeCrear(self::RUTA_FACTURAS)) {
+            echo json_encode(['ok' => false, 'error' => 'No tiene permiso para crear Facturas de Venta.']);
+            exit;
+        }
+    }
+
+    /** Líneas que se facturarían en el mes elegido, con sus clientes y avisos. */
+    public function prepararFacturaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+        $this->exigirPermisoFacturar();
+
+        try {
+            $id  = (int) ($_GET['id'] ?? 0);
+            $mes = trim((string) ($_GET['mes'] ?? date('Y-m')));
+            if ($id <= 0) throw new Exception('Guarde el alumno antes de facturar.');
+            $data = $this->facturacionService()->preparar($id, (int) $_SESSION['id_empresa'], $mes);
+            echo json_encode(['ok' => true] + $data);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function generarFacturaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+        $this->exigirPermisoFacturar();
+
+        try {
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') throw new Exception('Método no permitido.');
+            $id     = (int) ($_POST['id'] ?? 0);
+            $lineas = json_decode((string) ($_POST['lineas'] ?? '[]'), true);
+            if ($id <= 0) throw new Exception('Guarde el alumno antes de facturar.');
+
+            $res = $this->facturacionService()->generar(
+                $id,
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario'],
+                (int) ($_POST['id_punto_emision'] ?? 0),
+                trim((string) ($_POST['mes'] ?? '')),
+                is_array($lineas) ? $lineas : [],
+                trim((string) ($_POST['texto_item'] ?? ''))
+            );
+
+            $n = count($res['generadas']);
+            if ($n === 0) {
+                echo json_encode(['ok' => false, 'error' => 'No se generó ninguna factura. ' . implode(' | ', $res['errores'])]);
+                exit;
+            }
+            $msg = $n === 1 ? 'Se generó 1 factura en borrador.' : "Se generaron {$n} facturas en borrador.";
+            if ($res['errores']) {
+                $msg .= ' Con error: ' . implode(' | ', $res['errores']);
+            }
+            echo json_encode(['ok' => true, 'msg' => $msg, 'generadas' => $res['generadas'], 'errores' => $res['errores']]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Pestaña Facturas: documentos generados desde este alumno. */
+    public function facturasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+            if ($id <= 0) throw new Exception('ID no válido.');
+            $rows = $this->facturacionService()->getFacturas($id, (int) $_SESSION['id_empresa']);
+            $data = array_map(fn($r) => [
+                'id_factura' => (int) $r['id_factura'],
+                'periodo'    => date('m-Y', strtotime($r['periodo'])),
+                'numero'     => "{$r['establecimiento']}-{$r['punto_emision']}-{$r['secuencial']}",
+                'fecha'      => $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                'cliente'    => $r['cliente_nombre'] ?? '',
+                'estado'     => $r['estado_factura'],
+                'total'      => (float) $r['importe_total'],
+                'generada'   => $r['created_at'] ? date('d-m-Y H:i:s', strtotime($r['created_at'])) : '',
+                'lineas'     => array_map(fn($l) => [
+                    'codigo'      => $l['codigo'],
+                    'descripcion' => $l['descripcion'],
+                    'detalle'     => $l['detalle'],
+                    'cantidad'    => (float) $l['cantidad'],
+                    'precio'      => (float) $l['precio_unitario'],
+                    'descuento'   => (float) $l['descuento'],
+                    'subtotal'    => (float) $l['subtotal'],
+                    'iva'         => (float) $l['iva'],
+                ], $r['lineas'] ?? []),
+            ], $rows);
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Consulta una cédula en el servicio global de identificación para
+     * autocompletar nombres y apellidos del alumno. Mismo servicio que Clientes,
+     * Proveedores y Empleados (SriIdentificationService); la búsqueda local
+     * previa se acota a la empresa activa.
+     */
+    public function consultarSri(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+
+        $identificacion = trim($_POST['identificacion'] ?? '');
+        if ($identificacion === '') {
+            echo json_encode(['ok' => false, 'error' => 'Identificación vacía.']);
+            exit;
+        }
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        // Soltar el candado de la sesión antes de esperar al servicio externo.
+        session_write_close();
+
+        try {
+            $result = (new \App\Services\SriIdentificationService())->consultar($identificacion, $idEmpresa ?: null);
+            echo json_encode($result);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo consultar la identificación.']);
+        }
+        exit;
+    }
+
     public function uploadFotoAjax(): void
     {
         $this->requireCrear();
@@ -454,6 +624,16 @@ class AlumnosController extends BaseModuloController
         if (!empty($_POST['servicios_json'])) {
             $servicios = json_decode($_POST['servicios_json'], true) ?: [];
         }
+        $representantes = [];
+        if (!empty($_POST['representantes_json'])) {
+            $representantes = json_decode($_POST['representantes_json'], true) ?: [];
+        }
+        // Información adicional de las facturas: [] = sin filas; sin el campo = no se toca.
+        $infoAdicional = null;
+        if (isset($_POST['info_adicional_json'])) {
+            $infoAdicional = json_decode((string) $_POST['info_adicional_json'], true);
+            $infoAdicional = is_array($infoAdicional) ? $infoAdicional : [];
+        }
 
         return [
             'nombres'                      => trim($_POST['nombres'] ?? ''),
@@ -466,7 +646,6 @@ class AlumnosController extends BaseModuloController
             'foto_ruta'                    => trim($_POST['foto_ruta'] ?? ''),
             'estado_academico'             => trim($_POST['estado_academico'] ?? 'activo'),
             'id_cliente'                   => (int) ($_POST['id_cliente'] ?? 0),
-            'relacion_representante'       => trim($_POST['relacion_representante'] ?? ''),
             'id_punto_emision'             => (int) ($_POST['id_punto_emision'] ?? 0),
             'tipo_sangre'                  => trim($_POST['tipo_sangre'] ?? ''),
             'alergias_condiciones'         => trim($_POST['alergias_condiciones'] ?? ''),
@@ -476,7 +655,8 @@ class AlumnosController extends BaseModuloController
             'periodos'                     => $periodos,
             'horarios'                     => $horarios,
             'servicios'                    => $servicios,
-        ];
+            'representantes'               => $representantes,
+        ] + ($infoAdicional !== null ? ['info_adicional' => $infoAdicional] : []);
     }
 
     public function exportPdf(): void

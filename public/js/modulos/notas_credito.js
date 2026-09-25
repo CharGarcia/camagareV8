@@ -882,6 +882,11 @@
 
         const esSaldo = f.origen === 'saldo_inicial';
         const tipoLbl = esSaldo ? 'SALDO INICIAL' : (f.estado || '').toUpperCase();
+
+        // Vendedor de la factura modificada (la NC se le descuenta a quien hizo la venta, aunque
+        // el cliente tenga hoy otro vendedor). Saldo inicial o factura sin vendedor: se deja el
+        // que ya había (el del cliente). Si está inactivo, NC_setVendedor lo muestra marcado.
+        if (!esSaldo && f.id_vendedor) NC_setVendedor(f.id_vendedor, f.vendedor_nombre || '');
         document.getElementById('nc_info_factura_modificada').innerHTML = `
             <div class="d-flex gap-3 flex-wrap">
                 <span><i class="bi bi-calendar me-1"></i> ${fechaDia}</span>

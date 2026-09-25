@@ -27,7 +27,7 @@ class AlumnoRules
             throw new Exception('Los apellidos del alumno son obligatorios.');
         }
         if (empty($data['id_cliente'])) {
-            throw new Exception('El representante (cliente que factura) es obligatorio.');
+            throw new Exception('El cliente que factura (pestaña Facturación) es obligatorio.');
         }
 
         $tipoId = trim($data['tipo_identificacion'] ?? '');
@@ -58,6 +58,116 @@ class AlumnoRules
         }
         if (!empty($data['horarios']) && is_array($data['horarios'])) {
             $this->validarHorarios($data['horarios']);
+        }
+        if (!empty($data['representantes']) && is_array($data['representantes'])) {
+            $this->validarRepresentantes($data['representantes']);
+        }
+        foreach ($data['servicios'] ?? [] as $s) {
+            if (mb_strlen(trim((string) ($s['detalle'] ?? ''))) > 300) {
+                throw new Exception('El detalle de un servicio no puede exceder 300 caracteres.');
+            }
+        }
+        if (!empty($data['servicios']) && is_array($data['servicios'])) {
+            $this->validarServicios($data['servicios'], $data['config_facturacion'] ?? []);
+        }
+        if (isset($data['info_adicional']) && is_array($data['info_adicional'])) {
+            $this->validarInfoAdicional($data['info_adicional']);
+        }
+    }
+
+    /**
+     * Servicios a facturar, con las mismas reglas que la Factura de Venta
+     * (FacturaVentaRules::validarReglasEstablecimiento):
+     *  - un ítem libre (concepto escrito a mano, sin producto) solo si el
+     *    establecimiento tiene «Permitir ingreso de registros libremente»;
+     *  - el concepto es obligatorio y llega normalizado (espacios/saltos de línea
+     *    colapsados, ver normalizarConcepto()); máx. 300 caracteres (productos.nombre);
+     *  - cambiar el IVA de la línea solo si «editar IVA en la factura» está activo.
+     */
+    public function validarServicios(array $servicios, array $config): void
+    {
+        $libre      = !empty($config['facturacion_libre']);
+        $editarIva  = !empty($config['editar_iva_factura']);
+        foreach (array_values($servicios) as $i => $s) {
+            $num = $i + 1;
+            if (!empty($s['es_libre'])) {
+                if (!$libre) {
+                    throw new Exception("Servicio #{$num}: No se permite el ingreso de ítems libres. Debe seleccionar productos del catálogo.");
+                }
+                $concepto = self::normalizarConcepto((string) ($s['nombre_libre'] ?? ''));
+                if ($concepto === '') {
+                    throw new Exception("Servicio #{$num}: El nombre o descripción del producto/servicio es obligatorio.");
+                }
+                if (mb_strlen($concepto) > 300) {
+                    throw new Exception("Servicio #{$num}: El concepto no puede exceder 300 caracteres.");
+                }
+            } elseif (empty($s['id_producto'])) {
+                continue; // fila vacía: se descarta
+            }
+            if (!empty($s['id_tarifa_iva']) && !$editarIva && empty($s['es_libre'])) {
+                throw new Exception("Servicio #{$num}: La configuración de facturación no permite cambiar el IVA del producto.");
+            }
+            if (($s['precio_override'] ?? '') !== '' && (float) $s['precio_override'] < 0) {
+                throw new Exception("Servicio #{$num}: El precio no puede ser negativo.");
+            }
+        }
+    }
+
+    /** Mismo criterio que la Factura de Venta: un solo espacio, sin saltos de línea ni bordes. */
+    public static function normalizarConcepto(string $texto): string
+    {
+        return trim((string) preg_replace('/\s+/u', ' ', $texto));
+    }
+
+    /**
+     * Información adicional de las facturas (concepto / detalle). Topes del SRI:
+     * 300 caracteres por campo; se deja margen para el correo del cliente que el
+     * generador agrega solo (máx. 15 campos adicionales por comprobante).
+     */
+    public function validarInfoAdicional(array $filas): void
+    {
+        if (count($filas) > 10) {
+            throw new Exception('La información adicional admite máximo 10 filas.');
+        }
+        foreach ($filas as $f) {
+            $concepto = trim((string) ($f['concepto'] ?? ''));
+            $detalle  = trim((string) ($f['detalle'] ?? ''));
+            if ($concepto === '' || $detalle === '') {
+                throw new Exception('Cada fila de información adicional necesita concepto y detalle.');
+            }
+            if (mb_strlen($concepto) > 300 || mb_strlen($detalle) > 300) {
+                throw new Exception('El concepto y el detalle de la información adicional no pueden exceder 300 caracteres.');
+            }
+        }
+    }
+
+    /**
+     * Representantes / autorizados a retirar: datos libres (no son Clientes).
+     * Una fila sin nombre se descarta; los topes son los VARCHAR de la tabla.
+     */
+    public function validarRepresentantes(array $representantes): void
+    {
+        foreach ($representantes as $r) {
+            $nombres = trim((string) ($r['nombres'] ?? ''));
+            $otros = trim((string) ($r['identificacion'] ?? '')) . trim((string) ($r['telefono'] ?? ''));
+            if ($nombres === '') {
+                if ($otros !== '') {
+                    throw new Exception('Cada representante debe tener nombres y apellidos.');
+                }
+                continue;
+            }
+            if (mb_strlen($nombres) > 200) {
+                throw new Exception("El nombre del representante «{$nombres}» no puede exceder 200 caracteres.");
+            }
+            if (mb_strlen(trim((string) ($r['identificacion'] ?? ''))) > 20) {
+                throw new Exception("La identificación del representante «{$nombres}» no puede exceder 20 caracteres.");
+            }
+            if (mb_strlen(trim((string) ($r['telefono'] ?? ''))) > 30) {
+                throw new Exception("El teléfono del representante «{$nombres}» no puede exceder 30 caracteres.");
+            }
+            if (mb_strlen(trim((string) ($r['observacion'] ?? ''))) > 200) {
+                throw new Exception("La observación del representante «{$nombres}» no puede exceder 200 caracteres.");
+            }
         }
     }
 
