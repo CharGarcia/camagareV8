@@ -318,7 +318,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <i id="modalEgresoIcono" class="bi bi-cash-stack text-primary me-2"></i>
                     <span id="modalEgresoTitulo">Registrar Nuevo Egreso</span>
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                <!-- Navegación Anterior / Siguiente: recorre las filas del listado en el orden y
+                     filtro vigentes (salta de página al llegar al borde). Solo en egresos guardados. -->
+                <div id="eg-nav-registro" class="btn-group btn-group-sm ms-auto me-2 d-none">
+                    <button type="button" id="btnEgresoAnterior" class="btn btn-outline-secondary" onclick="EGR_navegarRegistro(-1)" title="Egreso anterior (Alt+←)">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <button type="button" id="btnEgresoSiguiente" class="btn btn-outline-secondary" onclick="EGR_navegarRegistro(1)" title="Egreso siguiente (Alt+→)">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+                <button type="button" class="btn-close ms-0" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body p-0">
                 <!-- Barra de Acciones Superior -->
@@ -1960,7 +1970,105 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('eg-add-pago-monto').value = egPendientePago().toFixed(2);
     }
 
+    // ── Navegación Anterior / Siguiente entre egresos (encabezado del modal) ──────────
+    // Recorre las filas visibles de #tbodyEgresos (mismo filtro y orden que ve el usuario).
+    // En el borde de la página carga la página vecina con EGR_fetchSearch y abre su
+    // primera/última fila.
+    let egNavId = null;       // egreso que muestra el modal (null = egreso nuevo)
+    let egNavOcupado = false; // evita dobles clics mientras carga el siguiente
+    let egNavFoto = null;     // estado del egreso recién abierto, para detectar cambios sin guardar
+
+    // Foto de lo que el usuario puede editar (cabecera + documentos + otros conceptos +
+    // formas de pago). Se toma al terminar de hidratar el egreso y se compara al navegar.
+    function egNavTomarFoto() {
+        const v = id => document.getElementById(id)?.value ?? '';
+        return JSON.stringify({
+            fecha: v('eg-input-fecha'), tipoSujeto: v('eg-select-tipo-sujeto'),
+            idSujeto: v('eg-input-id-sujeto'), obs: v('eg-input-obs'),
+            docs: docsEgreso, manual: manualEgreso,
+            // Fecha de cobro y nombre en el cheque se guardan al instante (sus propios
+            // endpoints): no cuentan como cambios pendientes.
+            pagos: pagosEgreso.map(p => [p.id_pago, p.id_forma, p.monto, p.ref, p.tipo_operacion_bancaria, p.numero_cheque])
+        });
+    }
+
+    function egNavHayCambios() {
+        return !esEgresoSoloLectura && egNavFoto !== null && egNavTomarFoto() !== egNavFoto;
+    }
+
+    function egNavFilas() {
+        return Array.from(document.querySelectorAll('#tbodyEgresos tr[data-id]'));
+    }
+
+    function egNavPaginaHabilitada(dir) {
+        const btns = document.querySelectorAll('#paginationContainer button');
+        const b = dir < 0 ? btns[0] : btns[btns.length - 1];
+        return !!b && !b.disabled;
+    }
+
+    function egNavActualizar() {
+        const cont = document.getElementById('eg-nav-registro');
+        if (!cont) return;
+        cont.classList.toggle('d-none', !egNavId);
+        if (!egNavId) return;
+        const filas = egNavFilas();
+        const idx = filas.findIndex(tr => tr.dataset.id === String(egNavId));
+        const hayAnt = idx > 0 || egNavPaginaHabilitada(-1);
+        const haySig = (idx >= 0 && idx < filas.length - 1) || egNavPaginaHabilitada(1);
+        document.getElementById('btnEgresoAnterior').disabled  = egNavOcupado || !hayAnt;
+        document.getElementById('btnEgresoSiguiente').disabled = egNavOcupado || !haySig;
+        filas.forEach(tr => tr.classList.toggle('table-active', tr.dataset.id === String(egNavId)));
+    }
+
+    window.EGR_navegarRegistro = async function (dir) {
+        if (egNavOcupado || !egNavId) return;
+        if (egNavHayCambios()) {
+            const r = await Swal.fire({
+                icon: 'warning',
+                title: 'Cambios sin guardar',
+                text: 'Modificó este egreso y no pulsó Actualizar. Si continúa, esos cambios se pierden.',
+                showCancelButton: true,
+                confirmButtonText: 'Descartar y continuar',
+                cancelButtonText: 'Seguir editando',
+                confirmButtonColor: '#dc3545',
+                reverseButtons: true,
+                target: document.getElementById('modalNuevoEgreso')
+            });
+            if (!r.isConfirmed) return;
+        }
+        egNavOcupado = true;
+        egNavActualizar();
+        try {
+            let filas = egNavFilas();
+            const idx = filas.findIndex(tr => tr.dataset.id === String(egNavId));
+            let destino = idx >= 0 ? filas[idx + dir] : null;
+            if (!destino && egNavPaginaHabilitada(dir)) {
+                await window.EGR_fetchSearch((window.EGR_currentPage || 1) + dir);
+                filas = egNavFilas();
+                destino = dir > 0 ? filas[0] : filas[filas.length - 1];
+            }
+            if (destino) abrirModalEgresoVer(parseInt(destino.dataset.id, 10));
+        } finally {
+            egNavOcupado = false;
+            egNavActualizar();
+        }
+    };
+
+    document.addEventListener('keydown', (ev) => {
+        if (!ev.altKey || (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight')) return;
+        if (!document.getElementById('modalNuevoEgreso')?.classList.contains('show')) return;
+        ev.preventDefault();
+        window.EGR_navegarRegistro(ev.key === 'ArrowLeft' ? -1 : 1);
+    });
+
+    document.getElementById('modalNuevoEgreso')?.addEventListener('hidden.bs.modal', () => {
+        document.querySelectorAll('#tbodyEgresos tr.table-active').forEach(tr => tr.classList.remove('table-active'));
+    });
+
     function abrirModalEgreso(esNuevo = true) {
+        egNavId = null;
+        egNavFoto = null;
+        egNavActualizar();
         document.getElementById('modalEgresoTitulo').textContent = 'Registrar Nuevo Egreso';
         document.getElementById('modalEgresoIcono').className = 'bi bi-cash-stack text-primary me-2';
         document.getElementById('formEgresoModal').reset();
@@ -2261,6 +2369,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if(!res.ok) return alert(res.mensaje);
             const e = res.data;
             abrirModalEgreso(false);
+            egNavId = e.id;
+            egNavActualizar();
             // Periodo contable cerrado (lo calcula el servidor con la misma regla que aplica al
             // guardar/anular): el modal abre en solo lectura y avisa el motivo, en vez de dejar
             // editar y rechazar recién al pulsar Actualizar.
@@ -2444,6 +2554,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             renderDocsEgreso();
             renderPagosEgreso();
             recalcEgresoTot();
+            egNavFoto = egNavTomarFoto(); // punto de partida para "¿hay cambios sin guardar?"
 
             // Anular solo cuando se puede editar (no anulado y periodo abierto).
             if (!esEgresoSoloLectura) document.getElementById('eg-footer-ver-extra').classList.remove('d-none');

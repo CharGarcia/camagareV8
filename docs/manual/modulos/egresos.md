@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora
-version: 1.28
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos
+version: 1.29
 orden: 20
 estado: activo
 ---
@@ -223,6 +223,23 @@ mientras tanto) y el periodo contable, regenera el asiento contable y, si el
 egreso paga nómina (roles semanales/quincenas, anticipos o préstamos),
 resincroniza el rol afectado con lo realmente pagado. El cambio queda en el
 historial de auditoría con los datos anteriores y los nuevos.
+
+## Pasar al egreso anterior o al siguiente
+
+Con un egreso abierto, las flechas **‹** y **›** del encabezado del modal (junto
+a la **X** de cerrar) abren el egreso anterior o el siguiente **sin cerrar el
+modal**. Atajo de teclado: **Alt + ←** y **Alt + →**.
+
+- El recorrido sigue el **listado tal como se ve**: la misma búsqueda, filtros y
+  orden. La fila del egreso abierto queda resaltada en el listado.
+- Al llegar al final (o al inicio) de la página, pasa solo a la página siguiente
+  (o anterior) del listado.
+- Cada flecha se desactiva cuando ya no hay más egresos en esa dirección.
+- Las flechas no aparecen al registrar un egreso nuevo.
+- Si modificó algo y no pulsó **Actualizar**, el sistema avisa **Cambios sin
+  guardar** antes de pasar a otro egreso: **Seguir editando** lo deja donde
+  estaba; **Descartar y continuar** pierde esos cambios. La fecha de cobro y el
+  nombre en el cheque no cuentan, porque se guardan al instante.
 
 ## Qué pasa en el listado al guardar
 
@@ -533,6 +550,11 @@ ve solo los que registró.
   1.26 solo se descuenta si además es del **mismo proveedor**.
 
 ## Historial de cambios
+
+- **1.29** — Flechas **anterior / siguiente** en el encabezado del modal para
+  recorrer los egresos del listado sin cerrarlo (también con **Alt + ← / →**).
+  Nueva sección *Pasar al egreso anterior o al siguiente*. Si hay cambios sin
+  guardar, pide confirmación antes de descartarlos.
 
 - **1.28** — En la lista de **Imprimir cheques**, los cheques se ordenan del más
   reciente al más antiguo y se seleccionan con un clic en cualquier parte de la
