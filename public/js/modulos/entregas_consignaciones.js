@@ -94,22 +94,53 @@ function entcActualizarKpis(resumen) {
 // ── Marcar entrega (única acción de escritura del módulo) ────────────────────
 let _entcDetalleActual = null;
 
-// Ubicación del navegador (GPS). Nunca rechaza: si el usuario deniega o el dispositivo
-// no tiene GPS, resuelve null y la entrega se registra solo con hora + usuario
-// (mismo comportamiento que consObtenerUbicacion() en Consignaciones en Ventas).
-function entcObtenerUbicacion() {
-    return new Promise((resolve) => {
-        if (!navigator.geolocation) return resolve(null);
-        navigator.geolocation.getCurrentPosition(
-            (pos) => resolve({
-                lat: pos.coords.latitude,
-                lon: pos.coords.longitude,
-                precision: (pos.coords.accuracy != null) ? Math.round(pos.coords.accuracy) : null,
-            }),
-            () => resolve(null),
-            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-        );
-    });
+/**
+ * Obtiene la ubicación mostrando el progreso (precisión actual) y, si la mejor lectura
+ * sigue siendo aproximada, deja elegir entre reintentar, registrar igual o cancelar.
+ * Resuelve { ubic } (ubic puede ser null) o { cancelado: true }.
+ */
+async function entcCapturarUbicacionConfirmada(target) {
+    for (;;) {
+        Swal.fire({
+            title: 'Registrando entrega…',
+            html: 'Obteniendo ubicación GPS<br><small class="text-muted" id="entc_gps_estado">Esperando señal…</small>',
+            allowOutsideClick: false,
+            target: target || 'body',
+            didOpen: () => Swal.showLoading(),
+        });
+        // CMG_Geo (public/js/geo_precisa.js) muestrea el GPS y devuelve la lectura más
+        // precisa. Nunca rechaza: sin permiso/GPS resuelve ubic = null y la entrega se
+        // registra solo con hora + usuario.
+        const { ubic } = await CMG_Geo.obtener({
+            onLectura: (l) => {
+                const el = document.getElementById('entc_gps_estado');
+                if (el) el.textContent = (l.precision != null) ? `Precisión actual: ±${l.precision} m` : 'Ubicación recibida…';
+            },
+        });
+
+        if (!CMG_Geo.esAproximada(ubic)) {
+            return { ubic };
+        }
+
+        const r = await Swal.fire({
+            icon: 'warning',
+            title: 'Ubicación aproximada',
+            html: `La mejor precisión obtenida es de <b>±${ubic.precision} m</b>, así que el punto puede no ser exacto.<br>`
+                + '<small class="text-muted">Active el GPS del dispositivo o acérquese a un lugar abierto y reintente. '
+                + 'En un computador de escritorio la ubicación siempre es aproximada (por red).</small>',
+            showDenyButton: true,
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-arrow-repeat me-1"></i> Reintentar',
+            denyButtonText: 'Registrar igual',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#198754',
+            denyButtonColor: '#6c757d',
+            target: target || 'body',
+        });
+        if (r.isConfirmed) continue;
+        if (r.isDenied) return { ubic };
+        return { cancelado: true };
+    }
 }
 
 /**
@@ -149,8 +180,11 @@ async function entcMarcarEntregada(idConsignacion, numero) {
     const c = await Swal.fire(opciones);
     if (!c.isConfirmed) return;
 
-    Swal.fire({ title: 'Registrando entrega…', text: 'Obteniendo ubicación', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    const ubic = await entcObtenerUbicacion();
+    const captura = await entcCapturarUbicacionConfirmada(opciones.target);
+    if (captura.cancelado) return;
+    const ubic = captura.ubic;
+
+    Swal.fire({ title: 'Registrando entrega…', allowOutsideClick: false, target: opciones.target || 'body', didOpen: () => Swal.showLoading() });
 
     try {
         const fd = new FormData();
@@ -172,7 +206,9 @@ async function entcMarcarEntregada(idConsignacion, numero) {
         Swal.fire({
             icon: 'success',
             title: 'Entrega registrada',
-            text: ubic ? 'Con ubicación GPS.' : 'Sin ubicación GPS (no disponible o denegada).',
+            text: ubic
+                ? (ubic.precision != null ? `Con ubicación GPS (±${ubic.precision} m).` : 'Con ubicación GPS.')
+                : 'Sin ubicación GPS (no disponible o denegada).',
             timer: 1600,
             showConfirmButton: false,
         });

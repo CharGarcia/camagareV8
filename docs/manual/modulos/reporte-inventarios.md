@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte
-version: 1.27
+etiquetas: reporte de inventario, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte
+version: 1.30
 orden: 40
 estado: activo
 ---
@@ -284,6 +284,27 @@ stock.
 
 Disponible en **PDF** y **Excel**. Para el conteo, el PDF es el más práctico.
 
+### Excel o PDF con muchos datos
+
+Cada descarga tiene un máximo de filas:
+
+| Formato | Máximo por descarga | Por qué |
+|---|---|---|
+| **Excel** | Depende de las columnas de la vista: unas **20.000 filas** en Movimientos detallado | Más filas agotan la memoria del servidor |
+| **PDF** | **1.000 filas** | El PDF tarda cada vez más con el largo: 1.000 filas ya son cerca de un minuto |
+
+Si el reporte lo supera, en vez de descargar aparece el aviso **Demasiados datos
+para Excel** (o **para PDF**) con el total de filas y el máximo permitido. Si el
+PDF no alcanza, pruebe con el Excel, que admite muchas más filas.
+
+Para descargarlo, parta el reporte y exporte cada parte por separado:
+
+- **Movimientos y Consignaciones**: filtre por año con *Fecha desde* y *Fecha
+  hasta* (del 01-01 al 31-12 de un mismo año). Si un año sigue siendo mucho,
+  hágalo por meses o trimestres.
+- **Existencias y Valorización**: acote por bodega, categoría o producto, o use
+  *Agrupar por* en lugar del detalle.
+
 ## Pestaña Consignaciones
 
 Muestra la mercadería que está **en poder de clientes**: lo entregado en
@@ -336,10 +357,26 @@ filtrado por lote, producto o bodega, y usa el modelo general del sistema aunque
 la empresa tenga una plantilla de diseño activa para la consignación. Se descarga
 sin firmas: es un estado del documento, no un comprobante de entrega.
 
+Junto al PDF está el botón **Excel**, que descarga también el documento
+**entero**: una fila por línea con consignado, retornado, facturado, a cambio y
+saldo, más dos columnas con los **números de los retornos** (*N.º retornos*) y
+de las **facturas de venta** (*N.º facturas*) que explican esas cantidades. Al
+final lleva una fila de **totales**.
+
 Si hay filtros de línea activos, el detalle muestra **solo las líneas que
 coinciden** — así los totales del detalle cuadran con los de la fila del
 listado — y avisa con un enlace **Ver todas las líneas** para mostrar el
 documento completo.
+
+### Excel de la pestaña Consignaciones
+
+En la vista **Detallado**, el Excel (y el PDF) de la pestaña trae una fila por
+línea de producto con las mismas columnas que el Excel de una consignación:
+*N.º retornos* junto a *Retornado*, *N.º facturas* junto a *Facturado* y una
+fila de **TOTALES** al final (consignado, retornado, facturado, a cambio y
+saldo). Si una línea tiene varios documentos, van separados por coma. Ya no
+lleva la columna *Valor a costo*, ni tampoco las vistas agrupadas (por cliente o
+por producto).
 
 ### De dónde salen "Retornado" y "Facturado"
 
@@ -478,6 +515,16 @@ ahí.
 
 ## Historial de cambios
 
+- **1.30** — **Consignaciones en Excel**: el Excel del Detallado lleva los
+  números de retornos y de facturas de cada línea y una fila de totales, y ya no
+  la columna *Valor a costo* (tampoco en las vistas agrupadas). Nuevo botón **Excel** en el detalle de cada
+  consignación.
+- **1.29** — **PDF con muchos datos**: el PDF admite hasta 1.000 filas; si el
+  reporte las supera aparece el mismo aviso que en el Excel, en lugar de una
+  pestaña en blanco. El Excel y el PDF se descargan sin abrir otra pestaña.
+- **1.28** — **Excel con muchos datos**: si el reporte supera el máximo de filas
+  que se puede armar en Excel, ya no se abre una pestaña en blanco: aparece un
+  aviso con el total y cómo acotarlo (por año en Movimientos y Consignaciones).
 - **1.27** — **Existencias: filtros que no se aplicaban**. *Estado* no filtraba
   en los agrupados (Por Producto / Categoría / Bodega). *Consignado* no filtraba
   en *Por lotes*, *Por caducidad* ni *Lote + caducidad*, y *Estado* seguía

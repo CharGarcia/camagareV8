@@ -1212,7 +1212,9 @@
         }
     };
 
-    window.provUsarGps = function() {
+    // Muestrea el GPS con CMG_Geo (public/js/geo_precisa.js) y se queda con la lectura más
+    // precisa: getCurrentPosition devolvía la primera (aproximada por red) o una en caché.
+    window.provUsarGps = async function() {
         if (!navigator.geolocation) {
             _provMostrarGeoAlert('Su navegador no soporta geolocalización.', 'warning');
             return;
@@ -1221,21 +1223,27 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Obteniendo...';
 
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-crosshair2 me-1"></i> Usar mi ubicación (GPS)';
-                _provMostrarGeoAlert('GPS capturado. Cargando mapa...', 'success');
-                _provProcesarCoordenadas(pos.coords.latitude, pos.coords.longitude);
+        const { ubic, errorCode } = await CMG_Geo.obtener({
+            onLectura: (u) => {
+                if (u.precision != null) {
+                    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Afinando GPS… ±${u.precision} m`;
+                }
             },
-            (err) => {
-                const msgs = { 1: 'Permiso denegado.', 2: 'Ubicación no disponible.', 3: 'Tiempo agotado.' };
-                _provMostrarGeoAlert(msgs[err.code] || 'Error al obtener GPS.', 'danger');
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-crosshair2 me-1"></i> Usar mi ubicación (GPS)';
-            },
-            { timeout: 10000, maximumAge: 60000 }
-        );
+        });
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-crosshair2 me-1"></i> Usar mi ubicación (GPS)';
+
+        if (!ubic) {
+            _provMostrarGeoAlert(CMG_Geo.mensajeError(errorCode), 'danger');
+            return;
+        }
+        const txtPrec = ubic.precision != null ? ` (±${ubic.precision} m)` : '';
+        if (CMG_Geo.esAproximada(ubic)) {
+            _provMostrarGeoAlert(`⚠ Ubicación aproximada${txtPrec}: el dispositivo no está usando GPS. Arrastre el marcador al punto exacto o active el GPS y reintente.`, 'warning');
+        } else {
+            _provMostrarGeoAlert(`GPS capturado${txtPrec}. Cargando mapa...`, 'success');
+        }
+        _provProcesarCoordenadas(ubic.lat, ubic.lon);
     };
 
     // ─── Replicar proveedor en otras empresas del usuario ───────────────────

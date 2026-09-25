@@ -34,6 +34,7 @@
         document.getElementById('punto_estado').value    = d.estado || 'activo';
         document.getElementById('punto_exige_gps').checked = (d.exige_gps === undefined) ? true : (d.exige_gps === true || d.exige_gps === 't' || d.exige_gps === '1' || d.exige_gps === 1);
         document.getElementById('punto_geo_msg').textContent = '';
+        document.getElementById('punto_geo_msg').className = 'small text-muted ms-2';
     }
 
     window.abrirModalCrearPunto = function () {
@@ -52,19 +53,36 @@
         getModalPunto()?.show();
     };
 
-    window.usarMiUbicacionPunto = function () {
+    // El punto es el CENTRO de la geocerca de asistencia: si queda corrido, se rechazan
+    // marcas legítimas. CMG_Geo (public/js/geo_precisa.js) muestrea el GPS y se queda con
+    // la lectura más precisa; getCurrentPosition devolvía la primera (aproximada por red).
+    window.usarMiUbicacionPunto = async function () {
         const msg = document.getElementById('punto_geo_msg');
-        if (!navigator.geolocation) { msg.textContent = 'GPS no disponible en este dispositivo.'; return; }
-        msg.textContent = 'Obteniendo ubicación...';
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                document.getElementById('punto_latitud').value = pos.coords.latitude.toFixed(7);
-                document.getElementById('punto_longitud').value = pos.coords.longitude.toFixed(7);
-                msg.textContent = 'Ubicación tomada (±' + Math.round(pos.coords.accuracy) + ' m).';
-            },
-            () => { msg.textContent = 'No se pudo obtener la ubicación.'; },
-            { enableHighAccuracy: true, timeout: 10000 }
-        );
+        const setMsg = (texto, clase) => { msg.textContent = texto; msg.className = 'small ms-2 ' + (clase || 'text-muted'); };
+        if (!navigator.geolocation) { setMsg('GPS no disponible en este dispositivo.', 'text-danger'); return; }
+
+        const btn = document.getElementById('btnUsarUbicacionPunto');
+        if (btn) btn.disabled = true;
+        setMsg('Esperando señal GPS...');
+
+        const { ubic, errorCode } = await CMG_Geo.obtener({
+            onLectura: (u) => { if (u.precision != null) setMsg(`Afinando GPS... ±${u.precision} m`); },
+        });
+        if (btn) btn.disabled = false;
+
+        if (!ubic) { setMsg('No se pudo obtener la ubicación: ' + CMG_Geo.mensajeError(errorCode), 'text-danger'); return; }
+
+        document.getElementById('punto_latitud').value  = ubic.lat.toFixed(7);
+        document.getElementById('punto_longitud').value = ubic.lon.toFixed(7);
+
+        const radio = parseFloat(document.getElementById('punto_radio_m').value) || 0;
+        const txtPrec = ubic.precision != null ? ` (±${ubic.precision} m)` : '';
+        if (CMG_Geo.esAproximada(ubic) || (radio > 0 && ubic.precision != null && ubic.precision > radio)) {
+            setMsg(`⚠ Ubicación aproximada${txtPrec}: el centro de la geocerca puede quedar corrido. `
+                + 'Active el GPS, tómela en el lugar (a cielo abierto) y reintente, o ingrese las coordenadas a mano.', 'text-warning');
+        } else {
+            setMsg(`Ubicación tomada${txtPrec}.`, 'text-success');
+        }
     };
 
     window.guardarPunto = function () {

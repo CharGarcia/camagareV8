@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula
-version: 2.5
+version: 2.6
 orden: 10
 estado: activo
 ---
@@ -406,6 +406,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Errores frecuentes
 
+- **«Ubicación aproximada» al usar el botón GPS / el punto del mapa no es el lugar real**: el dispositivo no está usando GPS (apagado, bajo techo o un computador de escritorio, que ubica por la red a cientos de metros). Active el GPS, dé permiso de ubicación precisa al navegador y vuelva a pulsar **Usar mi ubicación (GPS)**, o arrastre el marcador hasta el punto exacto antes de guardar.
 - **Aviso ámbar «Cédula incorrecta, revisar.»**: revise el número, lo más
   probable es un dígito mal digitado. Si está seguro de que es correcto (el SRI lo
   encuentra, o el documento físico lo confirma), puede guardar igual: el aviso no
@@ -443,6 +444,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.6** — Corregido: **Usar mi ubicación (GPS)** en la pestaña *Ubicación* no tomaba la ubicación exacta, sino la primera lectura aproximada del navegador (por red, a cientos de metros) o una guardada en caché. Ahora espera hasta unos 20 segundos a que el GPS fije un punto de ±20 m, muestra la precisión mientras la obtiene, se queda con la lectura más precisa y avisa si la ubicación sigue siendo aproximada (peor que ±100 m).
 - **2.5** — Aviso (sin bloquear) cuando la cédula o el RUC no supera el
   dígito verificador; se retira solo si el SRI encuentra el número y se refuerza
   si el SRI no lo encuentra.

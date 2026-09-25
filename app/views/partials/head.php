@@ -25,6 +25,8 @@
 <script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/favoritos.js?v=<?= asset_ver('/js/favoritos.js') ?>"></script>
 <!-- CMG_Bloqueo: bloqueo de edición concurrente entre módulos relacionados (genérico). -->
 <script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/bloqueo-edicion.js?v=<?= asset_ver('/js/bloqueo-edicion.js') ?>"></script>
+<!-- CMG_Geo: ubicación GPS precisa (muestreo con watchPosition). Clientes, Proveedores, Entregas. -->
+<script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/geo_precisa.js?v=<?= asset_ver('/js/geo_precisa.js') ?>"></script>
 <style>
     /* Prevent horizontal scrolling ("floating paper" effect on mobile) */
     html, body {

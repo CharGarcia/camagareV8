@@ -345,6 +345,59 @@ function RI_fetchGenerar(tab, params, onOk, onError, ui) {
     .finally(() => { if (vigente()) delete RI_busquedas[tab]; });
 }
 
+/**
+ * Descarga el Excel o el PDF de una pestaña con fetch en vez de abrir una pestaña nueva: así,
+ * si el reporte excede lo que el servidor puede armar (ReporteInventariosController::
+ * bloquearExportPorVolumen), llega un JSON con la explicación y se muestra en un aviso,
+ * en lugar de una pestaña en blanco.
+ */
+function RI_descargarExport(formato, params) {
+    // 'consignacion' = Excel de un solo documento (botón del modal de detalle de Consignaciones).
+    const nombre = formato === 'pdf' ? 'PDF' : 'Excel';
+    const accion = { pdf: 'exportPdf', consignacion: 'consignacionExcel' }[formato] || 'exportExcel';
+    const aviso = (icon, title, text) => {
+        if (typeof Swal !== 'undefined') Swal.fire({ icon, title, text });
+        else alert(title + '\n\n' + text);
+    };
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({ title: 'Generando ' + nombre + '…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    }
+
+    fetch(BASE_URL + '/' + RUTA_MODULO + '/' + accion + '?' + params.toString(), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(async response => {
+        // TCPDF manda varios Content-Type en la descarga del PDF; basta con descartar JSON y HTML.
+        const tipo = response.headers.get('Content-Type') || '';
+        if (tipo.includes('application/json')) {
+            const res = await response.json();
+            if (res.demasiadas_filas) aviso('warning', 'Demasiados datos para ' + nombre, res.error);
+            else aviso('error', 'No se pudo generar el ' + nombre, res.error || res.mensaje || 'Ocurrió un error');
+            return;
+        }
+        if (!response.ok || tipo.includes('text/html')) {
+            aviso('error', 'No se pudo generar el ' + nombre,
+                'El servidor no pudo armar el archivo. Si el reporte es muy grande, filtra por año o por bodega y vuelve a intentarlo.');
+            return;
+        }
+        const blob = await response.blob();
+        const disp = response.headers.get('Content-Disposition') || '';
+        const m = disp.match(/filename="?([^";]+)"?/);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = m ? decodeURIComponent(m[1]) : ('ReporteInventarios.' + (formato === 'pdf' ? 'pdf' : 'xlsx'));
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        if (typeof Swal !== 'undefined') Swal.close();
+    })
+    .catch(err => {
+        console.error(err);
+        aviso('error', 'Error de conexión', 'No se pudo comunicar con el servidor.');
+    });
+}
+
 // ════════════════════════════════════════════════════════════════════
 // PESTAÑA 1: EXISTENCIAS
 // ════════════════════════════════════════════════════════════════════
@@ -699,12 +752,12 @@ window.RI_Existencias = {
     exportarExcel() {
         const params = this._filtros();
         params.set('tab', 'existencias');
-        window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params.toString(), '_blank');
+        RI_descargarExport('excel', params);
     },
     exportarPDF() {
         const params = this._filtros();
         params.set('tab', 'existencias');
-        window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params.toString(), '_blank');
+        RI_descargarExport('pdf', params);
     },
 };
 
@@ -795,11 +848,11 @@ window.RI_Movimientos = {
 
     exportarExcel() {
         const params = this._filtros();
-        window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params.toString(), '_blank');
+        RI_descargarExport('excel', params);
     },
     exportarPDF() {
         const params = this._filtros();
-        window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params.toString(), '_blank');
+        RI_descargarExport('pdf', params);
     },
     _filtros() {
         const params = RI_paramsFromIds({
@@ -860,11 +913,11 @@ window.RI_Valorizacion = {
 
     exportarExcel() {
         const params = this._filtros();
-        window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params.toString(), '_blank');
+        RI_descargarExport('excel', params);
     },
     exportarPDF() {
         const params = this._filtros();
-        window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params.toString(), '_blank');
+        RI_descargarExport('pdf', params);
     },
     _filtros() {
         const params = RI_paramsFromIds({
@@ -931,7 +984,9 @@ window.RI_Consignaciones = {
         }
         this.idConsignacionActual = idConsignacion;
         const btnPdf = document.getElementById('ri-cv-modal-btn-pdf');
+        const btnExcel = document.getElementById('ri-cv-modal-btn-excel');
         if (btnPdf) btnPdf.disabled = true;
+        if (btnExcel) btnExcel.disabled = true;
         const tbody = document.getElementById('ri-cv-modal-tbody');
         const tfoot = document.getElementById('ri-cv-modal-tfoot');
         const aviso = document.getElementById('ri-cv-modal-aviso');
@@ -956,6 +1011,7 @@ window.RI_Consignaciones = {
                 const c = res.cabecera;
                 document.getElementById('ri-cv-modal-secuencial').textContent = c.secuencial || '';
                 if (btnPdf) btnPdf.disabled = false;
+                if (btnExcel) btnExcel.disabled = false;
                 document.getElementById('ri-cv-modal-fecha').textContent = c.fecha_emision || '';
                 document.getElementById('ri-cv-modal-cliente').textContent = c.cliente + (c.identificacion ? ` (${c.identificacion})` : '');
                 document.getElementById('ri-cv-modal-vendedor').textContent = c.vendedor || '-';
@@ -995,6 +1051,13 @@ window.RI_Consignaciones = {
     descargarPdf() {
         if (!this.idConsignacionActual) return;
         window.open(BASE_URL + '/' + RUTA_MODULO + '/consignacionPdf?id=' + encodeURIComponent(this.idConsignacionActual), '_blank');
+    },
+
+    /** Excel de la consignación abierta en el modal: el documento entero, como el PDF, una
+     *  fila por línea con los números de las facturas y los retornos que la explican. */
+    descargarExcel() {
+        if (!this.idConsignacionActual) return;
+        RI_descargarExport('consignacion', new URLSearchParams({ id: this.idConsignacionActual }));
     },
 
     /** Sub-modal (encima del de detalle, que queda fijo/abierto detrás): documentos de
@@ -1053,11 +1116,11 @@ window.RI_Consignaciones = {
 
     exportarExcel() {
         const params = this._filtros();
-        window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params.toString(), '_blank');
+        RI_descargarExport('excel', params);
     },
     exportarPDF() {
         const params = this._filtros();
-        window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params.toString(), '_blank');
+        RI_descargarExport('pdf', params);
     },
     _filtros() {
         const params = RI_paramsFromIds({

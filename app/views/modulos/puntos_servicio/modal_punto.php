@@ -28,7 +28,7 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="usarMiUbicacionPunto()">
+                        <button type="button" id="btnUsarUbicacionPunto" class="btn btn-outline-secondary btn-sm" onclick="usarMiUbicacionPunto()">
                             <i class="bi bi-crosshair me-1"></i> Usar mi ubicación actual
                         </button>
                         <span id="punto_geo_msg" class="small text-muted ms-2"></span>

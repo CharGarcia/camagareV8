@@ -13,6 +13,13 @@ import { getOrCreateDispositivoId } from '../auth/tokenStore';
 
 type Ubicacion = { latitud: number; longitud: number; precision: number | null };
 
+// Precisión (m) con la que se deja de muestrear, tiempo máximo de muestreo y umbral a
+// partir del cual se avisa que la ubicación es aproximada. Mismos valores que el módulo
+// web (public/js/modulos/entregas_consignaciones.js).
+const GPS_PRECISION_OBJETIVO = 20;
+const GPS_TIEMPO_MAX_MS = 20000;
+const GPS_PRECISION_AVISO = 100;
+
 function fechaHoraLocalSQL(): string {
   const d = new Date();
   const y = d.getFullYear();
@@ -54,29 +61,87 @@ export default function EntregaScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Muestreo GPS en curso (suscripción + temporizador), para poder cortarlo al lograr la
+  // precisión objetivo, al reintentar o al salir de la pantalla.
+  // `id` identifica el muestreo vigente: una suscripción que termina de crearse después de
+  // que ese muestreo acabó (o fue reemplazado por "Actualizar ubicación") se descarta.
+  const muestreoRef = useRef<{ id: number; sub: Location.LocationSubscription | null; timer: ReturnType<typeof setTimeout> | null }>({
+    id: 0,
+    sub: null,
+    timer: null,
+  });
+
+  function detenerMuestreo() {
+    const m = muestreoRef.current;
+    m.sub?.remove();
+    if (m.timer) clearTimeout(m.timer);
+    muestreoRef.current = { id: m.id + 1, sub: null, timer: null };
+  }
+
   useEffect(() => {
     capturarUbicacion();
+    return detenerMuestreo;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // No usa getCurrentPositionAsync(): devuelve UNA lectura, a menudo la aproximada por
+  // red (cientos de metros) porque el GPS aún no fija satélites. Con watchPositionAsync se
+  // muestrea hasta lograr GPS_PRECISION_OBJETIVO o agotar GPS_TIEMPO_MAX_MS, mostrando en
+  // pantalla la mejor lectura recibida hasta el momento.
   async function capturarUbicacion() {
+    detenerMuestreo();
+    const idMuestreo = muestreoRef.current.id;
+    const vigente = () => muestreoRef.current.id === idMuestreo;
     setErrorUbicacion(null);
+    setUbicacion(null);
     setObteniendoUbicacion(true);
     try {
       const permiso = await Location.requestForegroundPermissionsAsync();
+      if (!vigente()) return;
       if (permiso.status !== 'granted') {
         setErrorUbicacion('Necesitamos permiso de ubicación para registrar la entrega.');
+        setObteniendoUbicacion(false);
         return;
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setUbicacion({
-        latitud: pos.coords.latitude,
-        longitud: pos.coords.longitude,
-        precision: pos.coords.accuracy,
-      });
+      const gpsActivo = await Location.hasServicesEnabledAsync();
+      if (!vigente()) return;
+      if (!gpsActivo) {
+        setErrorUbicacion('El GPS está desactivado. Actívalo y toca "Actualizar ubicación".');
+        setObteniendoUbicacion(false);
+        return;
+      }
+
+      let mejor: Ubicacion | null = null;
+      const terminar = () => {
+        if (!vigente()) return;
+        detenerMuestreo();
+        setObteniendoUbicacion(false);
+        if (!mejor) {
+          setErrorUbicacion('No se pudo obtener la ubicación. Verifica que el GPS esté activado e intenta de nuevo.');
+        }
+      };
+
+      muestreoRef.current.timer = setTimeout(terminar, GPS_TIEMPO_MAX_MS);
+      const sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
+        (pos) => {
+          if (!vigente()) return;
+          const precision = pos.coords.accuracy ?? null;
+          if (!mejor || (precision != null && (mejor.precision == null || precision < mejor.precision))) {
+            mejor = { latitud: pos.coords.latitude, longitud: pos.coords.longitude, precision };
+            setUbicacion(mejor);
+          }
+          if (precision != null && precision <= GPS_PRECISION_OBJETIVO) terminar();
+        }
+      );
+      // Si el muestreo ya terminó (temporizador, precisión lograda, reintento o salida de la
+      // pantalla) mientras se creaba la suscripción, se descarta.
+      if (vigente()) muestreoRef.current.sub = sub;
+      else sub.remove();
     } catch {
+      if (!vigente()) return;
+      detenerMuestreo();
       setErrorUbicacion('No se pudo obtener la ubicación. Verifica que el GPS esté activado e intenta de nuevo.');
-    } finally {
       setObteniendoUbicacion(false);
     }
   }
@@ -85,6 +150,21 @@ export default function EntregaScreen() {
     if (!ubicacion) {
       Alert.alert('Falta la ubicación', 'Espera a que se capture la ubicación GPS, o toca "Actualizar ubicación".');
       return;
+    }
+    if (ubicacion.precision != null && ubicacion.precision > GPS_PRECISION_AVISO) {
+      const registrarIgual = await new Promise<boolean>((resolve) =>
+        Alert.alert(
+          'Ubicación aproximada',
+          `La precisión es de ±${Math.round(ubicacion.precision!)} m, así que el punto puede no ser exacto. ` +
+            'Sal a un lugar abierto y toca "Actualizar ubicación" para mejorarla.',
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Registrar igual', onPress: () => resolve(true) },
+          ],
+          { cancelable: true, onDismiss: () => resolve(false) }
+        )
+      );
+      if (!registrarIgual) return;
     }
     setGuardando(true);
     setError(null);
@@ -163,12 +243,24 @@ export default function EntregaScreen() {
         <Text style={styles.tituloSeccion}>Ubicación de la entrega</Text>
         <View style={styles.ubicacionBox}>
           {obteniendoUbicacion ? (
-            <ActivityIndicator color="#0d6efd" />
+            <View style={styles.ubicacionMuestreo}>
+              <ActivityIndicator color="#0d6efd" />
+              <Text style={styles.ubicacionTextoMuestreo}>
+                {ubicacion?.precision != null
+                  ? `Afinando GPS… precisión ±${Math.round(ubicacion.precision)} m`
+                  : 'Esperando señal GPS…'}
+              </Text>
+            </View>
           ) : ubicacion ? (
-            <Text style={styles.ubicacionTexto}>
-              {ubicacion.latitud.toFixed(6)}, {ubicacion.longitud.toFixed(6)}
-              {ubicacion.precision ? ` (±${Math.round(ubicacion.precision)}m)` : ''}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.ubicacionTexto}>
+                {ubicacion.latitud.toFixed(6)}, {ubicacion.longitud.toFixed(6)}
+                {ubicacion.precision != null ? ` (±${Math.round(ubicacion.precision)}m)` : ''}
+              </Text>
+              {ubicacion.precision != null && ubicacion.precision > GPS_PRECISION_AVISO ? (
+                <Text style={styles.avisoPrecision}>Ubicación aproximada: sal a un lugar abierto y actualízala.</Text>
+              ) : null}
+            </View>
           ) : (
             <Text style={styles.error}>{errorUbicacion ?? 'Sin ubicación'}</Text>
           )}
@@ -192,8 +284,16 @@ export default function EntregaScreen() {
           />
         </View>
 
-        <TouchableOpacity style={styles.botonGuardar} onPress={onConfirmarPress} disabled={guardando || !ubicacion}>
-          {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonGuardarTexto}>Confirmar entrega</Text>}
+        <TouchableOpacity
+          style={[styles.botonGuardar, (obteniendoUbicacion || !ubicacion) && styles.botonDeshabilitado]}
+          onPress={onConfirmarPress}
+          disabled={guardando || obteniendoUbicacion || !ubicacion}
+        >
+          {guardando ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.botonGuardarTexto}>{obteniendoUbicacion ? 'Obteniendo ubicación…' : 'Confirmar entrega'}</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -228,6 +328,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ubicacionTexto: { fontSize: 14, color: '#333', flex: 1 },
+  ubicacionMuestreo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  ubicacionTextoMuestreo: { fontSize: 13, color: '#555', marginLeft: 8, flex: 1 },
+  avisoPrecision: { fontSize: 12, color: '#b58105', marginTop: 4 },
   reintentar: { color: '#0d6efd', fontWeight: '600', fontSize: 13, marginLeft: 8 },
   firmaSeccionFija: {
     backgroundColor: '#f5f6f8',
@@ -246,5 +349,6 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
   },
   botonGuardar: { backgroundColor: '#0d6efd', borderRadius: 8, paddingVertical: 14, marginTop: 20, alignItems: 'center' },
+  botonDeshabilitado: { opacity: 0.6 },
   botonGuardarTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

@@ -729,7 +729,12 @@ $riSubtitulo = count($riNombres) > 1
                             onclick="window.RI_Consignaciones.descargarPdf();">
                         <i class="bi bi-file-earmark-pdf"></i>
                     </button>
-                    <span class="small text-muted ms-1">PDF del estado completo (facturado, devuelto y saldo)</span>
+                    <button type="button" class="btn btn-sm btn-outline-success" id="ri-cv-modal-btn-excel" disabled
+                            title="Descargar Excel del estado de la consignación, con los números de facturas y retornos de cada línea"
+                            onclick="window.RI_Consignaciones.descargarExcel();">
+                        <i class="bi bi-file-earmark-excel"></i>
+                    </button>
+                    <span class="small text-muted ms-1">Estado completo (facturado, devuelto y saldo)</span>
                 </div>
                 <div class="row g-2 mb-3 small">
                     <div class="col-md-3"><span class="text-muted">Fecha:</span> <span id="ri-cv-modal-fecha" class="fw-bold"></span></div>

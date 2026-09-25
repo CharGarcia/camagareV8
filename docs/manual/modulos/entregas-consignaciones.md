@@ -6,7 +6,7 @@ ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: entregas, entrega, buscar entrega, buscar consignacion, buscador, filtros, filtrar entregas, buscar por producto, buscar por lote, con firma, sin firma, con gps, sin gps, chips, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.9
+version: 1.10
 orden: 0
 estado: activo
 ---
@@ -60,7 +60,12 @@ hasta que se entrega.
    *Acciones*) de la fila pendiente, o abra el detalle y use **Marcar como
    entregada**. Se pide confirmación con una observación opcional (p. ej. quién
    recibió); el navegador solicita la ubicación (si se deniega o no hay GPS, la
-   entrega se registra igual, solo con fecha/hora y usuario). Al confirmar, la
+   entrega se registra igual, solo con fecha/hora y usuario). Mientras se
+   obtiene la ubicación se muestra la precisión alcanzada: el sistema espera
+   hasta unos 20 segundos a que el GPS fije un punto de ±20 m y se queda con la
+   lectura más precisa. Si aun así la precisión es peor que ±100 m, avisa que la
+   ubicación es aproximada y deja **Reintentar**, **Registrar igual** o
+   **Cancelar**. Al confirmar, la
    consignación pasa a *Entregada*, desaparece de la lista de pendientes y queda
    su evidencia con canal **Web**.
 6. Use los botones **PDF** / **Excel** para exportar el listado con el filtro
@@ -236,6 +241,10 @@ igual que una que no existe.
   responsable, estado, entrega programada) y de la tabla de evidencia de entrega.
 - **App móvil de entregas** (`api/v1/entregas`): origen de las entregas con
   canal `movil`; su lista de pendientes usa el mismo criterio que este módulo.
+  Al abrir una entrega, la app afina el GPS con los mismos criterios que la web
+  (hasta ~20 s, objetivo ±20 m, muestra la precisión en vivo); el botón
+  *Confirmar entrega* se habilita cuando termina, y si la precisión quedó peor
+  que ±100 m pide confirmar antes de registrar (o *Actualizar ubicación*).
 
 ## Errores frecuentes
 
@@ -253,8 +262,22 @@ igual que una que no existe.
   la entregó (o cambió su estado) después de que se cargó la lista; refresque.
 - **La firma no carga en el detalle**: la entrega no tiene `firma_path` (las
   entregas registradas manualmente desde la web nunca tienen firma).
+- **"Ubicación aproximada" al registrar la entrega / el punto del mapa no es el
+  lugar real**: el dispositivo no está usando GPS (lo tiene apagado, está bajo
+  techo o es un computador de escritorio, que ubica por la red a cientos de
+  metros). Active el GPS, dé permiso de ubicación "precisa" al navegador (o a la
+  app) y pulse **Reintentar** (en la app, **Actualizar ubicación**). La precisión con que se registró cada entrega se ve en
+  el detalle (±m).
 
 ## Historial de cambios
+
+- **1.10** — Corregido: la entrega registrada desde la web no guardaba la
+  ubicación exacta, sino la primera lectura aproximada del navegador (por red,
+  a cientos de metros). Ahora espera a que el GPS fije un punto preciso, se
+  queda con la mejor lectura, muestra la precisión mientras la obtiene y avisa
+  si la ubicación sigue siendo aproximada (con opción de reintentar). Lo mismo
+  en la app móvil: afina el GPS antes de habilitar *Confirmar entrega* y pide
+  confirmación si la ubicación es aproximada.
 
 - **1.9** — Corregido: al registrar una entrega desde el detalle (**Marcar como
   entregada**), el cuadro de la observación no aceptaba texto —se veía, pero al

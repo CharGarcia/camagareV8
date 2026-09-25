@@ -6,7 +6,7 @@ ruta_modulo: modulos/puntos-servicio
 tipo: modulo
 visibilidad: todos
 etiquetas: puntos de servicio, geocerca, ubicacion, gps, marcar asistencia, sede, cliente, guardias, buscar punto, buscador, filtros, filtrar puntos de servicio, puntos sin coordenadas, chips
-version: 1.2
+version: 1.3
 orden: 10
 estado: activo
 ---
@@ -35,7 +35,12 @@ suele ser razonable.
 1. Pulse **Nuevo**.
 2. Escriba el **nombre** del punto.
 3. Indique si **exige GPS**.
-4. Si lo exige, registre latitud, longitud y el **radio** de la geocerca.
+4. Si lo exige, registre latitud, longitud y el **radio** de la geocerca. Puede
+   escribir las coordenadas o, estando **en el sitio**, pulsar **Usar mi
+   ubicación actual**: el sistema espera hasta unos 20 segundos a que el GPS
+   fije un punto de ±20 m, muestra la precisión mientras la obtiene y se queda
+   con la lectura más precisa. Si la precisión es peor que ±100 m o que el radio
+   de la geocerca, avisa que la ubicación es aproximada.
 5. Guarde.
 
 ## El código QR del punto
@@ -93,11 +98,22 @@ usted registró.
   coordenadas o desactive la exigencia de GPS.
 - **El personal no puede marcar estando en el sitio**: el radio puede ser
   demasiado pequeño, o las coordenadas del punto estar mal tomadas.
+- **"Ubicación aproximada" al usar *Usar mi ubicación actual***: el dispositivo
+  no está usando GPS (apagado, bajo techo o un computador de escritorio, que
+  ubica por la red a cientos de metros). No guarde ese punto: el centro de la
+  geocerca quedaría corrido. Tómela desde un celular con GPS en el sitio, a
+  cielo abierto, o escriba las coordenadas a mano.
 - **Al escanear el QR el celular no abre nada**: vuelva a abrir el QR del punto e
   imprímalo de nuevo. Los QR impresos antes de esta corrección guardaban una
   dirección incompleta (sin el dominio) y ningún lector podía abrirla.
 
 ## Historial de cambios
+
+- **1.3** — Corregido: **Usar mi ubicación actual** tomaba la primera lectura
+  del navegador, a menudo aproximada (por red, a cientos de metros), y el centro
+  de la geocerca podía quedar corrido. Ahora espera a que el GPS fije un punto
+  preciso, muestra la precisión mientras la obtiene, se queda con la mejor
+  lectura y avisa si es aproximada (peor que ±100 m o que el radio).
 
 - **1.2** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias;
   lo que se escribe se busca en el nombre, la dirección, el radio, las

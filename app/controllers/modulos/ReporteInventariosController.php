@@ -1327,6 +1327,100 @@ class ReporteInventariosController extends BaseModuloController
     }
 
     /**
+     * Encabezados y filas de exportación de líneas de consignación (Excel/PDF de la pestaña en
+     * Detallado y Excel de un documento). Junto a Retornado y Facturado van los números de los
+     * retornos y de las facturas de venta que explican esas cantidades, resueltos en lote.
+     *
+     * @return array{0: array, 1: array}
+     */
+    private function filasExportLineasConsignacion(int $idEmpresa, array $rows): array
+    {
+        $numeros = $this->repository->getNumerosDocumentosPorLineas(
+            $idEmpresa,
+            array_column($rows, 'id_detalle')
+        );
+
+        $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Asesor', 'Responsable de traslado',
+                    'Código', 'Producto', 'Bodega', 'Lote', 'NUP', 'Consignado',
+                    'Retornado', 'N.º retornos', 'Facturado', 'N.º facturas', 'A cambio', 'Saldo'];
+        $data = array_map(function ($r) use ($numeros) {
+            $docs = $numeros[(int) ($r['id_detalle'] ?? 0)] ?? ['facturas' => '', 'retornos' => ''];
+            return [
+                date('d-m-Y', strtotime($r['fecha_emision'])), $r['secuencial'] ?? '',
+                $r['cliente_nombre'] ?? '', $r['cliente_identificacion'] ?? '',
+                $r['vendedor_nombre'] ?? '', $r['responsable_traslado_nombre'] ?? '',
+                $r['producto_codigo'] ?? '',
+                $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? '',
+                $r['numero_lote'] ?? '-', $r['nup'] ?? '-',
+                (float) $r['cantidad_consignada'],
+                (float) $r['cantidad_retornada'], $docs['retornos'],
+                (float) $r['cantidad_facturada'], $docs['facturas'],
+                (float) ($r['cantidad_cambiada'] ?? 0),
+                (float) $r['saldo'],
+            ];
+        }, $rows);
+
+        // Fila de totales de las columnas de cantidad (las de números de documento quedan vacías).
+        if ($data) {
+            $total = array_fill(0, count($headers), '');
+            $total[0] = 'TOTALES';
+            foreach ([11, 12, 14, 16, 17] as $col) {
+                $total[$col] = round(array_sum(array_column($data, $col)), 2);
+            }
+            $data[] = $total;
+        }
+
+        return [$headers, $data];
+    }
+
+    /**
+     * Excel del estado de UNA consignación (botón del modal de detalle): el documento entero,
+     * como el PDF (no reaplica los filtros del listado), sin las líneas de bodegas que el
+     * usuario no ve.
+     */
+    public function consignacionExcel(): void
+    {
+        $this->requireLeer();
+        $this->requirePestana('consignaciones');
+        $this->liberarSesion();
+
+        $idEmpresa      = (int) $_SESSION['id_empresa'];
+        $idConsignacion = (int) ($_REQUEST['id'] ?? 0);
+        $lineas = $idConsignacion > 0
+            ? $this->repository->getConsignacionDetalleLineas($idEmpresa, $idConsignacion, [
+                'bodegas_denegadas' => $this->bodegasDenegadas(),
+            ])
+            : [];
+        if (empty($lineas)) {
+            $this->json(['ok' => false, 'error' => 'No se encontró la consignación o no pertenece a esta empresa.'], 404);
+        }
+
+        [$headers, $data] = $this->filasExportLineasConsignacion($idEmpresa, $lineas);
+
+        try {
+            $empresa  = (new Empresa())->getPorId($idEmpresa) ?? [];
+            $cab      = $lineas[0];
+            $archivo  = 'Consignacion_' . preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($cab['secuencial'] ?? $idConsignacion));
+            (new \App\Services\ReportService())->exportToExcel(
+                $archivo,
+                $headers,
+                $data,
+                'Consignación',
+                $empresa['nombre'] ?? '',
+                [
+                    'Consignación' => (string) ($cab['secuencial'] ?? ''),
+                    'Cliente'      => trim(($cab['cliente_nombre'] ?? '') . ' ' . ($cab['cliente_identificacion'] ?? '')),
+                    'Estado'       => (string) ($cab['estado'] ?? ''),
+                ]
+            );
+            exit;
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => 'Error al generar el Excel: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * PDF del ESTADO completo de una consignación (botón del modal de detalle): el mismo
      * diseño del comprobante de Consignaciones de Ventas, pero con las cantidades
      * retornadas/facturadas/a cambio, el saldo por línea y el resumen del saldo en poder
@@ -1673,6 +1767,11 @@ class ReporteInventariosController extends BaseModuloController
 
         [$headers, $exportData, $titulo] = $this->datosExport($idEmpresa, $tab);
 
+        $maxFilas = self::maxFilasExcel(count($headers));
+        if (count($exportData) > $maxFilas) {
+            $this->bloquearExportPorVolumen('Excel', $tab, count($exportData), $maxFilas);
+        }
+
         try {
             $empresa       = (new Empresa())->getPorId($idEmpresa);
             $nombreEmpresa = $empresa['nombre'] ?? '';
@@ -1685,6 +1784,72 @@ class ReporteInventariosController extends BaseModuloController
         }
     }
 
+    /**
+     * Celdas máximas que se arman en un Excel. PhpSpreadsheet guarda cada celda como objeto
+     * (~1 KB con su estilo): las 50.000 filas × 12 columnas del tope de exportación son
+     * ~600.000 celdas y agotan los 512 MB de PHP, que muere con un error fatal y el usuario
+     * solo ve una pestaña en blanco. Por encima de esto se pide acotar los filtros.
+     */
+    private const EXCEL_MAX_CELDAS = 250000;
+
+    private static function maxFilasExcel(int $nColumnas): int
+    {
+        return intdiv(self::EXCEL_MAX_CELDAS, max(1, $nColumnas));
+    }
+
+    /**
+     * Filas máximas de un PDF. Html2Pdf tarda de forma cuadrática con el largo de la tabla
+     * (medido con la tabla de 12 columnas de este reporte, 25-09-2026: 500 filas 11 s,
+     * 1.000 filas 61 s, 2.000 filas 227 s): pasadas unas 2.000 filas choca con el
+     * max_execution_time de 300 s y el usuario solo ve una pestaña en blanco. La memoria
+     * no es el problema (124 MB con 2.000 filas).
+     */
+    private const PDF_MAX_FILAS = 1000;
+
+    /**
+     * Corta la exportación (Excel o PDF) por volumen y explica cómo acotarla. La pantalla descarga
+     * con fetch (X-Requested-With) y muestra el mensaje en un aviso; si se abre la URL directa,
+     * se ve la misma explicación como página. Termina la ejecución.
+     */
+    private function bloquearExportPorVolumen(string $formato, string $tab, int $total, int $maxFilas): void
+    {
+        $tope    = ReporteInventarioRepository::LIMITE_FILAS_EXPORT;
+        $totalTx = $total > $tope
+            ? 'más de ' . number_format($tope, 0, ',', '.')
+            : number_format($total, 0, ',', '.');
+        $maxTx   = number_format($maxFilas, 0, ',', '.');
+
+        $sugerencia = match ($tab) {
+            'movimientos', 'consignaciones' =>
+                'Filtra por año (Fecha desde / Fecha hasta dentro de un mismo año; si aún es mucho, por meses), '
+                . 'o acota por bodega, producto o categoría, y exporta cada parte por separado.',
+            default =>
+                'Acota el reporte por bodega, categoría o producto (o agrúpalo en lugar del detalle) '
+                . 'y exporta cada parte por separado.',
+        };
+        $mensaje = "El reporte tiene {$totalTx} filas y el máximo que se puede descargar a {$formato}"
+            . ($formato === 'Excel' ? ' con estas columnas' : '')
+            . " es de {$maxTx}. {$sugerencia}"
+            . ($formato === 'PDF' ? ' El Excel admite muchas más filas que el PDF.' : '');
+
+        if ($this->esAjaxRequest()) {
+            $this->json(['ok' => false, 'demasiadas_filas' => true, 'error' => $mensaje], 422);
+        }
+
+        http_response_code(422);
+        header('Content-Type: text/html; charset=utf-8');
+        echo '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">'
+            . '<title>Reporte demasiado grande</title>'
+            . '<style>body{font-family:Arial,Helvetica,sans-serif;background:#f6f7f9;color:#333;margin:0;padding:48px 16px}'
+            . '.caja{max-width:560px;margin:0 auto;background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:24px 28px}'
+            . 'h1{font-size:18px;margin:0 0 12px}p{line-height:1.5;margin:0}</style>'
+            . '</head><body><div class="caja">'
+            . '<h1>El reporte es demasiado grande para descargar a ' . $formato . '</h1>'
+            . '<p>' . htmlspecialchars($mensaje) . '</p>'
+            . '</div></body></html>';
+        exit;
+    }
+
     public function exportPdf(): void
     {
         $this->requireLeer();
@@ -1694,6 +1859,10 @@ class ReporteInventariosController extends BaseModuloController
         $this->liberarSesion();
 
         [$headers, $exportData, $titulo] = $this->datosExport($idEmpresa, $tab);
+
+        if (count($exportData) > self::PDF_MAX_FILAS) {
+            $this->bloquearExportPorVolumen('PDF', $tab, count($exportData), self::PDF_MAX_FILAS);
+        }
 
         try {
             $empresa       = (new Empresa())->getPorId($idEmpresa) ?? [];
@@ -1839,30 +2008,18 @@ class ReporteInventariosController extends BaseModuloController
                     default    => $this->repository->getConsignacionesDetalle($idEmpresa, $filtros),
                 };
                 if ($modo === 'NINGUNO') {
-                    $headers = ['Fecha', 'Secuencial', 'Cliente', 'Identificación', 'Asesor', 'Responsable de traslado',
-                                'Código', 'Producto', 'Bodega', 'Lote', 'NUP', 'Consignado', 'Retornado', 'Facturado', 'A cambio', 'Saldo', 'Valor a costo'];
-                    $data = array_map(fn($r) => [
-                        date('d-m-Y', strtotime($r['fecha_emision'])), $r['secuencial'] ?? '',
-                        $r['cliente_nombre'] ?? '', $r['cliente_identificacion'] ?? '',
-                        $r['vendedor_nombre'] ?? '', $r['responsable_traslado_nombre'] ?? '',
-                        $r['producto_codigo'] ?? '',
-                        $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? '',
-                        $r['numero_lote'] ?? '-', $r['nup'] ?? '-',
-                        (float) $r['cantidad_consignada'], (float) $r['cantidad_retornada'], (float) $r['cantidad_facturada'],
-                        (float) ($r['cantidad_cambiada'] ?? 0),
-                        (float) $r['saldo'], (float) $r['valor_saldo'],
-                    ], $rows);
+                    [$headers, $data] = $this->filasExportLineasConsignacion($idEmpresa, $rows);
                 } elseif ($modo === 'PRODUCTO') {
-                    $headers = ['Código', 'Producto', 'Consignaciones', 'Saldo', 'Valor a costo'];
+                    $headers = ['Código', 'Producto', 'Consignaciones', 'Saldo'];
                     $data = array_map(fn($r) => [
                         (string) ($r['codigo_grupo'] ?? ''), (string) $r['nombre_grupo'], (int) $r['cantidad_consignaciones'],
-                        (float) $r['saldo'], (float) $r['valor_saldo'],
+                        (float) $r['saldo'],
                     ], $rows);
                 } else {
-                    $headers = ['Grupo', 'Consignaciones', 'Saldo', 'Valor a costo'];
+                    $headers = ['Grupo', 'Consignaciones', 'Saldo'];
                     $data = array_map(fn($r) => [
                         (string) $r['nombre_grupo'], (int) $r['cantidad_consignaciones'],
-                        (float) $r['saldo'], (float) $r['valor_saldo'],
+                        (float) $r['saldo'],
                     ], $rows);
                 }
                 return [$headers, $data, 'Consignaciones en Poder de Clientes'];

@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula
-version: 2.3
+version: 2.4
 orden: 10
 estado: activo
 ---
@@ -387,6 +387,7 @@ usuario y la fecha.
 
 ## Errores frecuentes
 
+- **«Ubicación aproximada» al usar el botón GPS / el punto del mapa no es el lugar real**: el dispositivo no está usando GPS (apagado, bajo techo o un computador de escritorio, que ubica por la red a cientos de metros). Active el GPS, dé permiso de ubicación precisa al navegador y vuelva a pulsar **Usar mi ubicación (GPS)**, o arrastre el marcador hasta el punto exacto antes de guardar.
 - **Aviso ámbar «Cédula incorrecta, revisar.»**: revise el número, lo más
   probable es un dígito mal digitado. Si está seguro de que es correcto (el SRI lo
   encuentra, o el documento físico lo confirma), puede guardar igual: el aviso no
@@ -414,6 +415,7 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **2.4** — Corregido: **Usar mi ubicación (GPS)** en la pestaña *Ubicación* no tomaba la ubicación exacta, sino la primera lectura aproximada del navegador (por red, a cientos de metros) o una guardada en caché. Ahora espera hasta unos 20 segundos a que el GPS fije un punto de ±20 m, muestra la precisión mientras la obtiene, se queda con la lectura más precisa y avisa si la ubicación sigue siendo aproximada (peor que ±100 m).
 - **2.3** — Aviso (sin bloquear) cuando la cédula o el RUC no supera el
   dígito verificador; se retira solo si el SRI encuentra el número y se refuerza
   si el SRI no lo encuentra.

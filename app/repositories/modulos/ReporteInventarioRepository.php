@@ -1588,6 +1588,65 @@ class ReporteInventarioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Números de las facturas de venta y de los retornos de un conjunto de líneas de consignación,
+     * para las columnas del Excel. Mismos criterios que getFacturasDeLineaConsignacion() y
+     * getRetornosDeLineaConsignacion() (solo facturadas / Emitidos, no eliminados), en dos
+     * consultas para todas las líneas en vez de dos por línea.
+     *
+     * @param int[] $idsDetalle ids de consignaciones_ventas_detalles
+     * @return array<int, array{facturas: string, retornos: string}> por id de línea
+     */
+    public function getNumerosDocumentosPorLineas(int $idEmpresa, array $idsDetalle): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsDetalle), fn($i) => $i > 0)));
+        if (!$ids) {
+            return [];
+        }
+        $params = [':id_empresa' => $idEmpresa, ':ids' => '{' . implode(',', $ids) . '}'];
+        $out = [];
+
+        $sqlFacturas = "SELECT cfd.id_consignacion_detalle AS id,
+                               STRING_AGG(DISTINCT CASE
+                                   WHEN COALESCE(vc.establecimiento::text, '') <> '' AND COALESCE(vc.punto_emision::text, '') <> ''
+                                        AND COALESCE(vc.secuencial::text, '') <> ''
+                                   THEN vc.establecimiento::text || '-' || vc.punto_emision::text || '-' || vc.secuencial::text
+                                   ELSE NULLIF(TRIM(cf.numero_factura), '')
+                               END, ', ') AS numeros
+                        FROM consignaciones_facturas_detalles cfd
+                        INNER JOIN consignaciones_facturas cf ON cf.id = cfd.id_consignacion_factura
+                        LEFT JOIN ventas_cabecera vc ON vc.id = cf.id_factura AND vc.id_empresa = cf.id_empresa
+                        WHERE cfd.id_consignacion_detalle = ANY(CAST(:ids AS int[]))
+                          AND cfd.id_empresa = :id_empresa AND cfd.eliminado = false
+                          AND cf.eliminado = false AND cf.estado = 'facturada'
+                        GROUP BY cfd.id_consignacion_detalle";
+        $st = $this->db->prepare($sqlFacturas);
+        $st->execute($params);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']]['facturas'] = (string) ($r['numeros'] ?? '');
+        }
+
+        $sqlRetornos = "SELECT rcd.id_consignacion_detalle AS id,
+                               STRING_AGG(DISTINCT CONCAT_WS('-', NULLIF(TRIM(rc.serie::text), ''), rc.secuencial::text), ', ') AS numeros
+                        FROM retornos_cv_detalles rcd
+                        INNER JOIN retornos_cv rc ON rc.id = rcd.id_retorno
+                        WHERE rcd.id_consignacion_detalle = ANY(CAST(:ids AS int[]))
+                          AND rcd.id_empresa = :id_empresa AND rcd.eliminado = false
+                          AND rc.eliminado = false AND rc.estado = 'Emitida'
+                        GROUP BY rcd.id_consignacion_detalle";
+        $st = $this->db->prepare($sqlRetornos);
+        $st->execute($params);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']]['retornos'] = (string) ($r['numeros'] ?? '');
+        }
+
+        foreach ($out as &$o) {
+            $o += ['facturas' => '', 'retornos' => ''];
+        }
+        unset($o);
+        return $out;
+    }
+
     public function getConsignacionesAgrupadoCliente(int $idEmpresa, array $filtros): array
     {
         return $this->getConsignacionesAgrupado($idEmpresa, $filtros, 'id_cliente', 'cliente_nombre');
