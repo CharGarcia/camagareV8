@@ -1781,17 +1781,17 @@
 
     window.NC_exportarPdf = () => {
         const id = document.getElementById('nc_id').value;
-        if (id) window.open(`${BASE_URL}/modulos/notas_credito/exportPdfDoc?id=${id}`, '_blank');
+        if (id) CMG_descargar(`${BASE_URL}/modulos/notas_credito/exportPdfDoc?id=${id}`);
     };
 
     window.NC_exportarXml = () => {
         const id = document.getElementById('nc_id').value;
-        if (id) window.location.href = `${BASE_URL}/modulos/notas_credito/exportXmlDoc?id=${id}`;
+        if (id) CMG_descargar(`${BASE_URL}/modulos/notas_credito/exportXmlDoc?id=${id}`);
     };
 
     window.NC_exportarExcel = () => {
         const id = document.getElementById('nc_id').value;
-        if (id) window.open(`${BASE_URL}/modulos/notas_credito/exportExcelDoc?id=${id}`, '_blank');
+        if (id) CMG_descargar(`${BASE_URL}/modulos/notas_credito/exportExcelDoc?id=${id}`);
     };
 
     window.NC_enviarPorCorreo = async () => {

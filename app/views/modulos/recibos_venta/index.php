@@ -2876,21 +2876,21 @@ $totalPages = $totalPagesOriginal;
         const id = parseInt(RV_ID_ACTIVO) || 0;
         if (!id) return;
         const url = `${B_URL}/${RUTA_MODULO}/exportar-pdf-ajax?id=${id}`;
-        window.open(url, '_blank');
+        CMG_descargar(url);
     }
 
     function exportarExcel() {
         const id = parseInt(RV_ID_ACTIVO) || 0;
         if (!id) return;
         const url = `${B_URL}/${RUTA_MODULO}/exportar-excel-ajax?id=${id}`;
-        window.open(url, '_blank');
+        CMG_descargar(url);
     }
 
     function exportarXml() {
         const id = parseInt(RV_ID_ACTIVO) || 0;
         if (!id) return;
         const url = `${B_URL}/${RUTA_MODULO}/exportar-xml-ajax?id=${id}`;
-        window.open(url, '_blank');
+        CMG_descargar(url);
     }
 
     async function imprimirTicket() {

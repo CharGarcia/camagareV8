@@ -987,6 +987,9 @@ class FacturasVentaController extends ApiBaseController
             $this->jsonError('ERROR_GUARDAR', $e->getMessage(), 422);
         }
 
+        // La transacción es nuestra: el asiento se genera después del COMMIT (ver IngresoService::crear).
+        $ingresoService->tareasPostCommit($idIngreso, $payload);
+
         $this->jsonOk(['id_ingreso' => $idIngreso], [], 201);
     }
 

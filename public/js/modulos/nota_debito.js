@@ -1344,17 +1344,17 @@
 
     window.ND_exportarPdf = () => {
         const id = document.getElementById('nd_id').value;
-        if (id) window.open(`${BASE_URL}/modulos/nota_debito/exportPdfDoc?id=${id}`, '_blank');
+        if (id) CMG_descargar(`${BASE_URL}/modulos/nota_debito/exportPdfDoc?id=${id}`);
     };
 
     window.ND_exportarXml = () => {
         const id = document.getElementById('nd_id').value;
-        if (id) window.location.href = `${BASE_URL}/modulos/nota_debito/exportXmlDoc?id=${id}`;
+        if (id) CMG_descargar(`${BASE_URL}/modulos/nota_debito/exportXmlDoc?id=${id}`);
     };
 
     window.ND_exportarExcel = () => {
         const id = document.getElementById('nd_id').value;
-        if (id) window.open(`${BASE_URL}/modulos/nota_debito/exportExcelDoc?id=${id}`, '_blank');
+        if (id) CMG_descargar(`${BASE_URL}/modulos/nota_debito/exportExcelDoc?id=${id}`);
     };
 
     window.ND_enviarPorCorreo = async () => {

@@ -684,7 +684,7 @@ function CI_exportarDetalle(tipo) {
         return;
     }
     const accion = tipo === 'pdf' ? 'export-detalle-pdf' : 'export-detalle-excel';
-    window.open(`${CI_URL}/${accion}?id=${CI_cargaActual.id}`, '_blank');
+    CMG_descargar(`${CI_URL}/${accion}?id=${CI_cargaActual.id}`);
 }
 
 /**

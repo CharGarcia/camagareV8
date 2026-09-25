@@ -591,13 +591,13 @@
     window.ASIENTO_exportarPdf = function() {
         const id = document.getElementById('asiento_id').value;
         if (!id) return;
-        window.open(`${API_ASIENTOS}/exportarPdfAjax?id=${id}`, '_blank');
+        CMG_descargar(`${API_ASIENTOS}/exportarPdfAjax?id=${id}`);
     };
 
     window.ASIENTO_exportarExcel = function() {
         const id = document.getElementById('asiento_id').value;
         if (!id) return;
-        window.open(`${API_ASIENTOS}/exportarExcelAjax?id=${id}`, '_blank');
+        CMG_descargar(`${API_ASIENTOS}/exportarExcelAjax?id=${id}`);
     };
 
     window.ASIENTO_verDocumentoOrigen = function() {

@@ -2528,13 +2528,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     function pdfConsignacion() {
         const id = document.getElementById('cons_id').value;
         if (!id) return Swal.fire('Atención', 'Debe guardar la consignación primero', 'warning');
-        window.open(`${RUTA_MODULO_CONSIGNACION}/pdf?id=${id}`, '_blank');
+        CMG_descargar(`${RUTA_MODULO_CONSIGNACION}/pdf?id=${id}`);
     }
 
     function excelConsignacion() {
         const id = document.getElementById('cons_id').value;
         if (!id) return Swal.fire('Atención', 'Debe guardar la consignación primero', 'warning');
-        window.open(`${RUTA_MODULO_CONSIGNACION}/excel?id=${id}`, '_blank');
+        CMG_descargar(`${RUTA_MODULO_CONSIGNACION}/excel?id=${id}`);
     }
     async function emailConsignacion() {
         const id = document.getElementById('cons_id').value;

@@ -259,6 +259,8 @@ class PagoAutomaticoProveedorService
 
         if ($managedTransaction) {
             $this->db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver EgresoService::registrar).
+            $egresoService->tareasPostCommit($idEgreso, $dataEgreso);
         }
 
         return [

@@ -346,55 +346,18 @@ function RI_fetchGenerar(tab, params, onOk, onError, ui) {
 }
 
 /**
- * Descarga el Excel o el PDF de una pestaña con fetch en vez de abrir una pestaña nueva: así,
- * si el reporte excede lo que el servidor puede armar (ReporteInventariosController::
- * bloquearExportPorVolumen), llega un JSON con la explicación y se muestra en un aviso,
- * en lugar de una pestaña en blanco.
+ * Descarga el Excel o el PDF de una pestaña con CMG_descargar (app.js): aviso "Generando…"
+ * y, si el reporte excede lo que el servidor puede armar (ReporteInventariosController::
+ * bloquearExportPorVolumen), la explicación en un aviso en lugar de una pestaña en blanco.
+ * 'consignacion' / 'consignacion-pdf' = Excel / PDF de un solo documento (botones del modal
+ * de detalle de Consignaciones).
  */
 function RI_descargarExport(formato, params) {
-    // 'consignacion' = Excel de un solo documento (botón del modal de detalle de Consignaciones).
-    const nombre = formato === 'pdf' ? 'PDF' : 'Excel';
-    const accion = { pdf: 'exportPdf', consignacion: 'consignacionExcel' }[formato] || 'exportExcel';
-    const aviso = (icon, title, text) => {
-        if (typeof Swal !== 'undefined') Swal.fire({ icon, title, text });
-        else alert(title + '\n\n' + text);
-    };
-    if (typeof Swal !== 'undefined') {
-        Swal.fire({ title: 'Generando ' + nombre + '…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    }
-
-    fetch(BASE_URL + '/' + RUTA_MODULO + '/' + accion + '?' + params.toString(), {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    })
-    .then(async response => {
-        // TCPDF manda varios Content-Type en la descarga del PDF; basta con descartar JSON y HTML.
-        const tipo = response.headers.get('Content-Type') || '';
-        if (tipo.includes('application/json')) {
-            const res = await response.json();
-            if (res.demasiadas_filas) aviso('warning', 'Demasiados datos para ' + nombre, res.error);
-            else aviso('error', 'No se pudo generar el ' + nombre, res.error || res.mensaje || 'Ocurrió un error');
-            return;
-        }
-        if (!response.ok || tipo.includes('text/html')) {
-            aviso('error', 'No se pudo generar el ' + nombre,
-                'El servidor no pudo armar el archivo. Si el reporte es muy grande, filtra por año o por bodega y vuelve a intentarlo.');
-            return;
-        }
-        const blob = await response.blob();
-        const disp = response.headers.get('Content-Disposition') || '';
-        const m = disp.match(/filename="?([^";]+)"?/);
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = m ? decodeURIComponent(m[1]) : ('ReporteInventarios.' + (formato === 'pdf' ? 'pdf' : 'xlsx'));
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-        if (typeof Swal !== 'undefined') Swal.close();
-    })
-    .catch(err => {
-        console.error(err);
-        aviso('error', 'Error de conexión', 'No se pudo comunicar con el servidor.');
+    const esPdf = formato === 'pdf' || formato === 'consignacion-pdf';
+    const accion = { pdf: 'exportPdf', consignacion: 'consignacionExcel', 'consignacion-pdf': 'consignacionPdf' }[formato] || 'exportExcel';
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/' + accion + '?' + params.toString(), {
+        nombre: esPdf ? 'PDF' : 'Excel',
+        archivo: 'ReporteInventarios.' + (esPdf ? 'pdf' : 'xlsx'),
     });
 }
 
@@ -1050,7 +1013,7 @@ window.RI_Consignaciones = {
      *  que lo explican y el saldo. Siempre el documento entero (no reaplica los filtros). */
     descargarPdf() {
         if (!this.idConsignacionActual) return;
-        window.open(BASE_URL + '/' + RUTA_MODULO + '/consignacionPdf?id=' + encodeURIComponent(this.idConsignacionActual), '_blank');
+        RI_descargarExport('consignacion-pdf', new URLSearchParams({ id: this.idConsignacionActual }));
     },
 
     /** Excel de la consignación abierta en el modal: el documento entero, como el PDF, una

@@ -1090,7 +1090,7 @@
     window.camExcel = function () {
         const id = document.getElementById('cam_id').value;
         if (!id) return Swal.fire('Atención', 'Debe guardar el cambio primero.', 'warning');
-        window.open(`${RUTA}/excel?id=${id}`, '_blank');
+        CMG_descargar(`${RUTA}/excel?id=${id}`);
     };
     window.camEmail = async function () {
         const id = document.getElementById('cam_id').value;

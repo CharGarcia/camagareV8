@@ -278,11 +278,11 @@
 
         window.exportarExcel = function() {
             const params = new URLSearchParams(new FormData(form)).toString();
-            window.open(`<?= $base ?>/<?= $rutaModulo ?>/excel?${params}`, '_blank');
+            CMG_descargar(`<?= $base ?>/<?= $rutaModulo ?>/excel?${params}`);
         };
         window.exportarPdf = function() {
             const params = new URLSearchParams(new FormData(form)).toString();
-            window.open(`<?= $base ?>/<?= $rutaModulo ?>/pdf?${params}`, '_blank');
+            CMG_descargar(`<?= $base ?>/<?= $rutaModulo ?>/pdf?${params}`);
         };
 
         const seccionTitulos = {

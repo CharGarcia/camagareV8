@@ -138,7 +138,7 @@ class RolEgresoLoteService
                     }
                 }
 
-                $egSvc->registrar([
+                $payloadEgreso = [
                     'id_empresa'        => $idEmpresa,
                     'usuario_id'        => $idUsuario,
                     'id_punto_emision'  => $idPunto,
@@ -163,8 +163,12 @@ class RolEgresoLoteService
                         'saldo_actual'            => 0,
                     ]],
                     'pagos' => [$pago],
-                ]);
+                ];
+                $idEgreso = $egSvc->registrar($payloadEgreso);
                 $db->commit();
+                // La transacción es nuestra: registrar() no genera el asiento ni sincroniza la
+                // nómina mensual; se hace aquí, después del COMMIT (ver EgresoService::registrar).
+                $egSvc->tareasPostCommit($idEgreso, $payloadEgreso);
                 $creados++;
                 $total += $saldo;
                 if ($tipoOp === 'CHEQUE') $chequeNum++; // el siguiente cheque solo si este se registró

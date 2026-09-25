@@ -1125,8 +1125,8 @@
             Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalGuiaRemision') });
         }
     };
-    window.GR_exportarXml = function () { if (idActual) window.open(urlBaseGR + '/exportar-xml-ajax?id=' + idActual, '_blank'); };
-    window.GR_exportarExcel = function () { if (idActual) window.open(urlBaseGR + '/exportar-excel-ajax?id=' + idActual, '_blank'); };
+    window.GR_exportarXml = function () { if (idActual) CMG_descargar(urlBaseGR + '/exportar-xml-ajax?id=' + idActual); };
+    window.GR_exportarExcel = function () { if (idActual) CMG_descargar(urlBaseGR + '/exportar-excel-ajax?id=' + idActual); };
 
     window.GR_cargarHistorialSri = function (id) {
         fetch(urlBaseGR + '/get-historial-sri-ajax?id=' + id)

@@ -1160,7 +1160,7 @@ function CXP_exportarExcel() {
         // en formato mayor (sección por proveedor, subtotal y total general).
         vista:        CXP_agrupado ? 'PROVEEDOR' : '',
     });
-    window.location.href = `${BASE_URL}/${RUTA_MODULO_CXP}/exportExcel?${params}`;
+    CMG_descargar(`${BASE_URL}/${RUTA_MODULO_CXP}/exportExcel?${params}`);
 }
 
 function CXP_exportarPDF() {
@@ -1178,7 +1178,7 @@ function CXP_exportarPDF() {
         // en formato mayor (sección por proveedor, subtotal y total general).
         vista:        CXP_agrupado ? 'PROVEEDOR' : '',
     });
-    window.location.href = `${BASE_URL}/${RUTA_MODULO_CXP}/exportPdf?${params}`;
+    CMG_descargar(`${BASE_URL}/${RUTA_MODULO_CXP}/exportPdf?${params}`);
 }
 
 /* ════════════════════════════════════════════════════

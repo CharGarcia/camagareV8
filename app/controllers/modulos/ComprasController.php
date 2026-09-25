@@ -1280,6 +1280,8 @@ class ComprasController extends BaseModuloController
             
             $idEgreso = $egresoService->registrar($dataEgreso);
             $db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver EgresoService::registrar).
+            $egresoService->tareasPostCommit($idEgreso, $dataEgreso);
 
             echo json_encode([
                 'ok' => true,

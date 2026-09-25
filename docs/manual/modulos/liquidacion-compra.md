@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion
-version: 1.13
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso
+version: 1.14
 orden: 40
 estado: activo
 ---
@@ -179,6 +179,22 @@ Desde la liquidación guardada están disponibles el **PDF** del documento, su
 **Excel**, su **XML** y el envío por **correo** o **WhatsApp**, en la barra de
 acciones al inicio del formulario.
 
+## Registrar un pago desde la liquidación
+
+En la pestaña **Pagos** de una liquidación **autorizada** se registra su pago sin
+salir del módulo; el sistema genera el **Egreso** correspondiente.
+
+1. Elija la **serie** (punto de emisión) del egreso, el **concepto**, la **forma
+   de pago** y, si es banco, el tipo de operación y su número.
+2. El monto propuesto es el **saldo pendiente**: total menos retenciones y pagos
+   anteriores. Puede pagar menos (abono parcial), nunca más.
+3. Pulse **Registrar Pago y Generar Egreso**. El número del egreso lo asigna el sistema al
+   guardar, así que dos personas pagando a la vez no reciben el mismo número.
+
+El saldo se vuelve a calcular en el momento de guardar: si alguien registró otro
+pago mientras tenía la pestaña abierta, el sistema lo tiene en cuenta. El egreso
+genera su asiento contable como cualquier egreso.
+
 ## Eliminar una liquidación
 
 Solo se pueden eliminar las liquidaciones en estado **borrador** —incluidas las
@@ -200,6 +216,13 @@ vuelva a intentarlo.
 
 ## Errores frecuentes
 
+- **"Solo se pueden registrar pagos de liquidaciones autorizadas por el SRI"**:
+  la liquidación está en borrador o anulada; emítala primero.
+- **"El monto a pagar (…) supera el saldo pendiente de la liquidación"**: ya se
+  pagó o retuvo parte del valor; recargue la pestaña **Pagos** para ver el saldo
+  actual.
+- **"No se pudo reservar el número del egreso"**: la serie elegida no tiene
+  configurado el secuencial de **Egresos** (Empresa → Secuenciales).
 - **"Solo se pueden eliminar liquidaciones en estado borrador"**: el comprobante
   ya fue emitido. Use **Anular** en la barra de acciones.
 - **"No se puede eliminar la liquidación porque tiene una retención asociada"**:
@@ -242,6 +265,13 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.14** — Corregido: el botón **Registrar Pago y Generar Egreso** de la pestaña **Pagos** no
+  funcionaba nunca, porque el egreso se enviaba sin número y el sistema lo
+  rechazaba. Ahora el número se asigna en la serie elegida al guardar, el saldo
+  se calcula en el servidor, se valida que la liquidación esté autorizada y
+  pertenezca a la empresa, y el egreso genera su asiento contable. También se
+  impide modificar una liquidación de otra empresa. Nueva sección *Registrar un
+  pago desde la liquidación*.
 - **1.13** — Corregido: el asiento contable de la liquidación ignoraba las cuentas
   configuradas en el **proveedor** y solo leía la configuración General, por lo
   que aparecían avisos de asientos pendientes de liquidaciones cuyo proveedor ya

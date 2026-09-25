@@ -41,6 +41,8 @@ $ctarPestanasOcultables = array_filter([
 @media (min-width: 992px) {
     /* Más ancho que modal-xl (1140px): las dos listas del cruce van lado a lado. */
     #modalConciliacion .modal-dialog { max-width: min(1600px, 96vw); }
+    /* Casi todo el alto de la ventana: lo que sobra se lo llevan las dos listas. */
+    #modalConciliacion:not(.ctar-m-sin-cruce) .modal-dialog { margin-top: .5rem; margin-bottom: .5rem; height: calc(100vh - 1rem); }
     #modalConciliacion .modal-content { height: 100%; }
     #modalConciliacion .modal-body { display: flex; flex-direction: column; overflow: hidden; }
     #modalConciliacion .modal-body > .tab-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
@@ -66,7 +68,10 @@ $ctarPestanasOcultables = array_filter([
 #ctar-m-encabezado .form-control { padding-top: .2rem; padding-bottom: .2rem; }
 #ctar-m-encabezado .form-label { font-size: .7rem; }
 #ctar-m-archivo-info:empty { display: none; }
-#modalConciliacion .ctar-m-lista { max-height: 46vh; overflow: auto; }
+#modalConciliacion .ctar-m-lista { max-height: 65vh; overflow: auto; }
+/* Filtros Desde/Hasta en el encabezado de cada lista: compactos, mismo alto. */
+#modalConciliacion .ctar-m-fechas .form-control { width: 118px; height: 26px; font-size: .72rem; padding: .1rem .35rem; }
+#modalConciliacion #ctar-m-buscar-cobro { height: 26px; font-size: .72rem; }
 #modalConciliacion .ctar-m-lista thead th { position: sticky; top: 0; z-index: 1; }
 </style>
 <div class="modal fade" id="modalConciliacion" tabindex="-1" aria-labelledby="modalConciliacionLabel" aria-hidden="true"
@@ -158,14 +163,11 @@ $ctarPestanasOcultables = array_filter([
                             <label class="form-label small fw-bold text-muted mb-1 d-block">Fecha depósito</label>
                             <input type="date" id="ctar-m-fecha" class="form-control form-control-sm shadow-none border">
                         </div>
-                        <div style="width:125px;">
-                            <label class="form-label small fw-bold text-muted mb-1 d-block">Período desde</label>
-                            <input type="date" id="ctar-m-desde" class="form-control form-control-sm shadow-none border">
-                        </div>
-                        <div style="width:125px;">
-                            <label class="form-label small fw-bold text-muted mb-1 d-block">Período hasta</label>
-                            <input type="date" id="ctar-m-hasta" class="form-control form-control-sm shadow-none border">
-                        </div>
+                        <!-- El período ya no se muestra: los cobros pendientes se ofrecen sin
+                             límite inferior de fecha. Se conservan ocultos para no perder el
+                             valor guardado en conciliaciones anteriores. -->
+                        <input type="hidden" id="ctar-m-desde">
+                        <input type="hidden" id="ctar-m-hasta">
                         <div style="width:170px;">
                             <label class="form-label small fw-bold text-muted mb-1 d-block">Depositado en</label>
                             <select id="ctar-m-destino" class="form-select form-select-sm shadow-none border"></select>
@@ -179,9 +181,9 @@ $ctarPestanasOcultables = array_filter([
                         <!-- Estado de cuenta: se lee con el botón Cargar (una conciliación nueva se crea
                              y carga el archivo en el mismo paso). -->
                         <!-- El grupo ocupa el resto de la fila y el perfil crece hasta llenarlo
-                             (mínimo 210px); archivo y botón mantienen su ancho. -->
+                             (mínimo 180px); archivo y botón mantienen su ancho. -->
                         <div class="d-flex flex-wrap align-items-start gap-2" id="ctar-m-carga" style="flex:1 1 auto;">
-                            <div style="flex:1 1 210px;min-width:210px;">
+                            <div style="flex:1 1 180px;min-width:180px;">
                                 <label class="form-label small fw-bold text-muted mb-1 d-block">Perfil de lectura</label>
                                 <select id="ctar-m-perfil" class="form-select form-select-sm shadow-none border"
                                         title="Formato del archivo de la procesadora"></select>
@@ -216,8 +218,8 @@ $ctarPestanasOcultables = array_filter([
                     <!-- Izquierda: estado de cuenta -->
                     <div class="col-lg-7">
                       <div class="card border-0 shadow-sm rounded-3 overflow-hidden ctar-m-card-lista">
-                        <div class="card-header bg-white px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
-                            <div class="d-flex align-items-center gap-2">
+                        <div class="card-header bg-white px-3 py-2 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div class="d-flex flex-wrap align-items-center gap-2">
                                 <span class="fw-bold small"><i class="bi bi-filetype-csv me-1 text-primary"></i>Estado de cuenta de la procesadora</span>
                                 <div class="btn-group btn-group-sm">
                                     <button type="button" class="btn btn-outline-secondary px-2" onclick="CTAR_agregarLineaManual()"
@@ -229,6 +231,14 @@ $ctarPestanasOcultables = array_filter([
                                         <i class="bi bi-magic"></i>
                                     </button>
                                 </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1 ctar-m-fechas" title="Filtra las líneas por fecha del movimiento; los totales se calculan con lo filtrado (al cerrar se contabiliza todo lo cruzado)">
+                                <span class="small text-muted">Desde</span>
+                                <input type="date" id="ctar-f-lineas-desde" class="form-control form-control-sm shadow-none border"
+                                       onchange="CTAR_filtrarFechas('lineas')">
+                                <span class="small text-muted">Hasta</span>
+                                <input type="date" id="ctar-f-lineas-hasta" class="form-control form-control-sm shadow-none border"
+                                       onchange="CTAR_filtrarFechas('lineas')">
                             </div>
                             <span class="small text-muted" id="ctar-m-resumen-lineas">0 líneas</span>
                         </div>
@@ -259,32 +269,36 @@ $ctarPestanasOcultables = array_filter([
                     <!-- Derecha: cobros del sistema -->
                     <div class="col-lg-5">
                       <div class="card border-0 shadow-sm rounded-3 overflow-hidden ctar-m-card-lista">
-                        <div class="card-header bg-white px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
-                            <span class="fw-bold small"><i class="bi bi-receipt me-1 text-success"></i>Cobros del sistema</span>
+                        <div class="card-header bg-white px-3 py-2 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <span class="fw-bold small" title="Seleccione una línea del estado de cuenta y luego el cobro que le corresponde">
+                                <i class="bi bi-receipt me-1 text-success"></i>Cobros del sistema</span>
+                            <div class="d-flex align-items-center gap-1 ctar-m-fechas" title="Filtra los cobros por la fecha de la factura; los totales cuentan solo los cruces de esos cobros (al cerrar se contabiliza todo lo cruzado)">
+                                <span class="small text-muted">Desde</span>
+                                <input type="date" id="ctar-f-cobros-desde" class="form-control form-control-sm shadow-none border"
+                                       onchange="CTAR_filtrarFechas('cobros')">
+                                <span class="small text-muted">Hasta</span>
+                                <input type="date" id="ctar-f-cobros-hasta" class="form-control form-control-sm shadow-none border"
+                                       onchange="CTAR_filtrarFechas('cobros')">
+                            </div>
                             <span class="small text-muted" id="ctar-m-resumen-cobros">0 disponibles</span>
-                        </div>
-                        <div class="px-3 py-2 border-bottom">
-                            <input type="search" class="form-control form-control-sm shadow-none border" id="ctar-m-buscar-cobro"
-                                   placeholder="Filtrar por cliente, documento o valor..." oninput="CTAR_filtrarCobros(this.value)">
+                            <input type="search" class="form-control form-control-sm shadow-none border w-100" id="ctar-m-buscar-cobro"
+                                   placeholder="Filtrar por cliente, documento, fecha o valor..." oninput="CTAR_filtrarCobros(this.value)">
                         </div>
                         <div class="ctar-m-lista">
-                            <table class="table table-sm table-hover mb-0 align-middle" style="min-width:420px;">
+                            <table class="table table-sm table-hover mb-0 align-middle" style="min-width:500px;">
                                 <thead class="table-light">
                                     <tr>
                                         <th class="ps-3">Documento</th>
+                                        <th>Fecha fact.</th>
                                         <th>Cliente</th>
                                         <th class="text-end">Monto</th>
                                         <th class="text-center">Días</th>
                                     </tr>
                                 </thead>
                                 <tbody id="ctar-m-tbody-cobros">
-                                    <tr><td colspan="4" class="text-center py-4 text-muted small">Sin cobros pendientes.</td></tr>
+                                    <tr><td colspan="5" class="text-center py-4 text-muted small">Sin cobros pendientes.</td></tr>
                                 </tbody>
                             </table>
-                        </div>
-                        <div class="px-3 py-2 border-top bg-light small text-muted">
-                            <i class="bi bi-lightbulb me-1"></i>
-                            Seleccione una línea de la izquierda y luego el cobro que le corresponde.
                         </div>
                       </div>
                     </div>
@@ -293,6 +307,11 @@ $ctarPestanasOcultables = array_filter([
                 <!-- ── Totales: una sola línea compacta «etiqueta valor» ── -->
                 <div class="card border-0 shadow-sm rounded-3 px-3 py-1">
                     <div class="d-flex flex-wrap align-items-center justify-content-end column-gap-3 row-gap-1 small ctar-m-totales">
+                        <span class="text-warning d-none me-auto" id="ctar-m-t-aviso-filtro"
+                              title="Los totales corresponden a lo filtrado (fechas del estado de cuenta, fechas o buscador de cobros)">
+                            <i class="bi bi-funnel-fill me-1"></i>Totales filtrados: al cerrar se contabiliza todo lo cruzado
+                            (neto $<span id="ctar-m-t-aviso-total">0.00</span>)
+                        </span>
                         <span><span class="text-muted">Bruto conciliado</span> <strong>$<span id="ctar-m-t-bruto">0.00</span></strong></span>
                         <div class="vr"></div>
                         <span><span class="text-muted">Comisión</span> <strong class="text-secondary">$<span id="ctar-m-t-comision">0.00</span></strong></span>

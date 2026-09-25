@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/conciliacion-cobros
 tipo: modulo
 visibilidad: todos
-etiquetas: conciliacion de cobros, cuadrar cobros, banco, deposito, tarjeta, liquidacion, diferencias, serie, punto de emision, serie inactiva, generar ingresos, extracto bancario, formato del banco, perfil de mapeo, formato de extracto
-version: 1.3
+etiquetas: conciliacion de cobros, cuadrar cobros, banco, deposito, tarjeta, liquidacion, diferencias, serie, punto de emision, serie inactiva, generar ingresos, extracto bancario, formato del banco, perfil de mapeo, formato de extracto, varias facturas, varios clientes, repartir deposito, dividir linea, un deposito varias facturas, cargas anteriores
+version: 1.4
 orden: 65
 estado: activo
 ---
@@ -37,9 +37,8 @@ Mientras eso no se cruce, el saldo contable no es el saldo real.
 
 ## Serie de los ingresos: solo puntos de emisión activos
 
-Al subir el extracto (**Subir y Conciliar**) se elige el **Punto de Emisión
-(para los Ingresos)**: la serie con la que se numeran los ingresos que genera
-la carga. La lista muestra únicamente los puntos de emisión **activos**; los
+Al subir el extracto (**Subir y Conciliar**) se elige la **Serie** (el punto
+de emisión): la serie con la que se numeran los ingresos que genera la carga. La lista muestra únicamente los puntos de emisión **activos**; los
 inactivos no aparecen.
 
 - Para usar una serie que no aparece, actívela en **Empresa**, pestaña
@@ -50,6 +49,50 @@ inactivos no aparecen.
   confirmadas**. Si se inactivó después de subir la carga, no se genera ningún
   ingreso y aparece el aviso *La serie (punto de emisión) de esta carga ya no es
   válida o está inactiva*: vuelva a activarla para continuar con esa carga.
+
+## Un depósito que paga varias facturas o varios clientes
+
+Si una sola línea del banco cubre varias facturas, del mismo cliente o de
+clientes distintos, se reparte desde la lupa de la línea:
+
+1. Pulse la **lupa** de la línea. Arriba se ven el monto **Recibido**, lo
+   **Asignado** y lo **Restante**.
+2. Elija un cliente y **marque** sus documentos. Puede cambiar a otro cliente y
+   seguir marcando: lo marcado se conserva en **Documentos seleccionados**.
+3. Al marcar un documento se propone el menor entre su saldo pendiente y lo que
+   falta por asignar. El **Monto a Aplicar** se puede corregir; no puede superar
+   el saldo del documento ni lo que queda del depósito.
+4. Pulse **Repartir en N documentos** y confirme.
+
+La línea se divide en una línea por documento, ya **confirmadas**, con la
+descripción del banco y la nota *(parte 1/3 del depósito de $…)*. Si lo
+asignado es menor a lo recibido, se agrega otra línea con el **saldo sin
+asignar** para seguir conciliándola. Al pulsar **Generar ingresos de las líneas
+confirmadas**, cada parte genera su propio ingreso: un ingreso pertenece a un
+solo cliente.
+
+## Observaciones del ingreso generado
+
+Cada ingreso que genera la conciliación llena sus **Observaciones** con el
+mismo texto que arma el módulo de Ingresos al registrar un cobro a mano, y
+luego agrega los datos del extracto para rastrear el movimiento. Por ejemplo:
+
+> Cobro factura de venta 501; Cobrado con BANCO PICHINCHA $30.00 (transferencia
+> ref. 4455). Cobro conciliado desde extracto bancario (BANCO PICHINCHA).
+> Descripción banco: … Referencia/documento banco: 4455. Fecha movimiento
+> banco: 20-09-2026.
+
+- Con **un solo** documento marcado, la lupa funciona como siempre: asigna el
+  documento a la línea y se confirma con el botón ✓.
+- Una parte confirmada por error se puede quitar (↺) o ignorar (✗) como
+  cualquier otra línea.
+
+## Cargas anteriores
+
+La tabla **Cargas anteriores** lista los extractos ya subidos. Haga **clic en
+cualquier fila** para ver sus líneas en el paso 2; la carga abierta queda
+resaltada y su nombre aparece junto al título del paso 2. Si las líneas no se
+pueden cargar (por ejemplo, porque la sesión venció), se muestra el motivo.
 
 ## Formato del banco: cómo se lee el extracto
 
@@ -81,6 +124,16 @@ monto de cada movimiento.
   cobros.
 
 ## Historial de cambios
+- **1.4** — La lupa de una línea permite marcar **varios documentos, de uno o
+  varios clientes**, y repartir el depósito entre ellos (nueva sección *Un
+  depósito que paga varias facturas o varios clientes*). En **Cargas
+  anteriores** se quita el botón **Ver**: se abre con clic en la fila, y ya no
+  desaparecen las cargas cuya cuenta bancaria fue eliminada. El selector
+  **Punto de Emisión** se llama ahora **Serie**, y todos los campos de la carga
+  y el botón **Subir y Conciliar** quedan en una sola fila. Las observaciones de
+  los ingresos generados empiezan ahora con el mismo texto del módulo de
+  Ingresos (*Cobro factura de venta …; Cobrado con …*).
+
 
 - **1.3** — Se quita el botón **Perfiles de Mapeo** del módulo: los formatos de
   extracto pasan a un catálogo global que configura el nivel 3 en

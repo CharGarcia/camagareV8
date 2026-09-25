@@ -357,10 +357,34 @@ class ActivoFijoService
      * Arma (vía AsientoBuilderService::generarAsientoAltaActivoFijo) y persiste el
      * asiento de alta manual. Idempotente: si ya existe asiento para este activo lo actualiza.
      */
+    /**
+     * Generación por sincronización (automática al abrir el módulo o manual desde Asientos
+     * Contables) del asiento de alta de un activo MANUAL que quedó sin él. Los que vienen de
+     * una compra no llevan asiento de alta: la compra ya lo contabilizó.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idActivo): void
+    {
+        $origen = $this->repository->getOrigenSincronizacion($idActivo);
+        if (!$origen || ($origen['origen'] ?? '') !== 'manual') {
+            return;
+        }
+        $activo = $this->repository->getPorId($idActivo, (int) $origen['id_empresa']);
+        if (!$activo) {
+            return;
+        }
+        $activo['id_usuario'] = (int) ($_SESSION['id_usuario'] ?? $origen['created_by'] ?? 0);
+        $this->procesarAsientoAlta($idActivo, $activo);
+    }
+
     public function procesarAsientoAlta(int $idActivo, array $data): void
     {
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) ($data['id_usuario'] ?? $_SESSION['id_usuario'] ?? 0);
+
+        // Interruptor por empresa (Configuración Contable → Módulos que contabilizan).
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'activos_fijos_alta', 'activos_fijos_alta', $idActivo)) {
+            return;
+        }
 
         $builder = new AsientoBuilderService();
         $detallesSugeridos = $builder->generarAsientoAltaActivoFijo($idEmpresa, $idActivo);

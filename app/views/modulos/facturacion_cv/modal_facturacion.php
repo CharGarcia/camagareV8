@@ -1347,7 +1347,7 @@
     };
     window.faccvExcel = function () {
         const id = $('faccv_id').value; if (!id) return Swal.fire('Atención', 'Guarde el documento primero.', 'warning');
-        window.open(`${RUTA}/excel?id=${id}`, '_blank');
+        CMG_descargar(`${RUTA}/excel?id=${id}`);
     };
     window.faccvEmail = async function () {
         const id = $('faccv_id').value; if (!id) return Swal.fire('Atención', 'Guarde el documento primero.', 'warning');

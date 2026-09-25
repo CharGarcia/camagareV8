@@ -1338,18 +1338,18 @@
 
     window.FR_exportarPdf = () => {
         const id = document.getElementById('fr_id').value;
-        if (id) window.open(`${BASE_URL}/modulos/factura-reembolso/exportPdfDoc?id=${id}`, '_blank');
+        if (id) CMG_descargar(`${BASE_URL}/modulos/factura-reembolso/exportPdfDoc?id=${id}`);
     };
 
     window.FR_exportarXml = () => {
         const id = document.getElementById('fr_id').value;
         if (!id) return;
-        window.location.href = `${BASE_URL}/modulos/factura-reembolso/exportXmlDoc?id=${id}`;
+        CMG_descargar(`${BASE_URL}/modulos/factura-reembolso/exportXmlDoc?id=${id}`);
     };
 
     window.FR_exportarExcel = () => {
         const id = document.getElementById('fr_id').value;
-        if (id) window.open(`${BASE_URL}/modulos/factura-reembolso/exportExcelDoc?id=${id}`, '_blank');
+        if (id) CMG_descargar(`${BASE_URL}/modulos/factura-reembolso/exportExcelDoc?id=${id}`);
     };
 
     window.FR_enviarPorCorreo = async () => {

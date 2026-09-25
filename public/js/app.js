@@ -388,3 +388,242 @@ window.CMG_Identificacion = (function () {
         });
     });
 })();
+
+/* ============================================================================
+ * Descargas de archivos (Excel, PDF, XML, CSV, ZIP) con aviso "Generando…"
+ * ----------------------------------------------------------------------------
+ * CMG_descargar(url, opciones) pide el archivo con fetch en vez de abrir una
+ * pestaña: mientras el servidor lo arma se ve un aviso con spinner y, si falla
+ * (sin permiso, sesión vencida, demasiados datos, error del servidor), el motivo
+ * sale en un SweetAlert en lugar de una pestaña en blanco o con texto suelto.
+ * El servidor recibe X-Requested-With, así que los controladores que distinguen
+ * peticiones AJAX responden sus errores en JSON ({ error | mensaje | msg }).
+ *
+ * Opciones: { nombre: 'Excel' | 'PDF' | … (texto del aviso; si falta se deduce
+ * de la URL), archivo: nombre por defecto si el servidor no manda uno }.
+ *
+ * Además, los enlaces de exportación de los listados (href con /export-pdf o
+ * /export-excel) pasan solos por aquí: no hay que tocar cada vista. Un enlace
+ * se excluye con data-descarga-directa, y se respeta el clic con Ctrl/Cmd/
+ * Shift/rueda (abrir en otra pestaña) y cualquier handler del módulo que ya
+ * haya hecho preventDefault (p. ej. el tope de filas de Pedidos).
+ * ========================================================================== */
+(function () {
+    function nombreDesdeUrl(url) {
+        var u = String(url).toLowerCase();
+        if (/excel|xlsx|\.xls/.test(u)) return 'Excel';
+        if (/pdf/.test(u)) return 'PDF';
+        if (/xml/.test(u)) return 'XML';
+        if (/csv/.test(u)) return 'CSV';
+        if (/zip/.test(u)) return 'ZIP';
+        return 'archivo';
+    }
+
+    function nombreArchivo(disposition, porDefecto) {
+        var d = disposition || '';
+        var m = d.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i);
+        if (m) {
+            try { return decodeURIComponent(m[1].trim().replace(/^"|"$/g, '')); } catch (e) { /* sigue */ }
+        }
+        m = d.match(/filename\s*=\s*"?([^";]+)"?/i);
+        if (m) {
+            try { return decodeURIComponent(m[1].trim()); } catch (e) { return m[1].trim(); }
+        }
+        return porDefecto;
+    }
+
+    // Extensión para el nombre por defecto, cuando el servidor no manda Content-Disposition.
+    function extensionDe(tipo) {
+        var t = String(tipo).toLowerCase();
+        if (t.indexOf('spreadsheetml') !== -1) return '.xlsx';
+        if (t.indexOf('ms-excel') !== -1) return '.xls';
+        if (t.indexOf('pdf') !== -1) return '.pdf';
+        if (t.indexOf('xml') !== -1) return '.xml';
+        if (t.indexOf('csv') !== -1) return '.csv';
+        if (t.indexOf('zip') !== -1) return '.zip';
+        return '';
+    }
+
+    function aviso(icon, title, text) {
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: icon, title: title, text: text });
+        else alert(title + '\n\n' + text);
+    }
+
+    // Pide el archivo con el aviso "Generando…" y resuelve { blob, archivo } si
+    // llegó bien, o null si falló (el motivo ya se mostró en un SweetAlert).
+    function obtenerArchivo(url, opciones) {
+        opciones = opciones || {};
+        var nombre = opciones.nombre || nombreDesdeUrl(url);
+        var titulo = nombre === 'archivo' ? 'el archivo' : 'el ' + nombre;
+
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'Generando ' + (nombre === 'archivo' ? 'archivo' : nombre) + '…',
+                text: 'Esto puede tardar si hay muchos datos.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: function () { Swal.showLoading(); }
+            });
+        }
+
+        return fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+            .then(function (response) {
+                var tipo = response.headers.get('Content-Type') || '';
+                if (tipo.indexOf('application/json') !== -1) {
+                    return response.json().then(function (res) {
+                        var msg = (res && (res.error || res.mensaje || res.msg || res.message)) || 'Ocurrió un error.';
+                        if (res && res.demasiadas_filas) aviso('warning', 'Demasiados datos para ' + nombre, msg);
+                        else aviso('error', 'No se pudo generar ' + titulo, msg);
+                        return null;
+                    });
+                }
+                if (!response.ok || tipo.indexOf('text/html') !== -1) {
+                    aviso('error', 'No se pudo generar ' + titulo,
+                        'El servidor no pudo armar el archivo. Si el reporte tiene muchos datos, acota los filtros (por ejemplo por año) y vuelve a intentarlo.');
+                    return null;
+                }
+                return response.blob().then(function (blob) {
+                    return {
+                        blob: blob,
+                        archivo: nombreArchivo(response.headers.get('Content-Disposition'), opciones.archivo || ('descarga' + extensionDe(tipo)))
+                    };
+                });
+            })
+            .catch(function (err) {
+                console.error(err);
+                aviso('error', 'Error de conexión', 'No se pudo comunicar con el servidor.');
+                return null;
+            });
+    }
+
+    function guardarBlob(blob, archivo) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = archivo;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    }
+
+    window.CMG_descargar = function (url, opciones) {
+        return obtenerArchivo(url, opciones).then(function (r) {
+            if (!r) return;
+            guardarBlob(r.blob, r.archivo);
+            if (typeof Swal !== 'undefined') Swal.close();
+        });
+    };
+
+    /* ------------------------------------------------------------------------
+     * CMG_pdfDocumento(url, opciones): PDF de UN documento (retención, factura…).
+     * Genera el PDF igual que CMG_descargar y, en vez de guardarlo sin más,
+     * pregunta qué hacer: Imprimir (abre el cuadro de impresión con el PDF ya
+     * cargado en un iframe oculto), Descargar o Ver (en otra pestaña).
+     * La pregunta sale DESPUÉS de generar el PDF para que el clic del usuario
+     * abra la pestaña de "Ver" sin que la frene el bloqueador de ventanas.
+     * El navegador no permite imprimir sin mostrar su cuadro de impresión.
+     * En celulares la impresión desde un iframe no funciona: "Imprimir" abre el
+     * PDF en otra pestaña para imprimir o compartir desde ahí.
+     * ---------------------------------------------------------------------- */
+    var esMovil = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+    var urlImpresion = null;
+
+    function escHtml(t) {
+        return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function verBlob(blob) {
+        var u = URL.createObjectURL(blob);
+        var w = window.open(u, '_blank');
+        if (!w) {
+            aviso('warning', 'Ventana bloqueada',
+                'El navegador bloqueó la pestaña del PDF. Permite las ventanas emergentes para este sitio o usa "Descargar".');
+            URL.revokeObjectURL(u);
+            return;
+        }
+        // Para entonces la pestaña ya cargó el PDF.
+        setTimeout(function () { URL.revokeObjectURL(u); }, 5 * 60 * 1000);
+    }
+
+    function imprimirBlob(blob) {
+        if (esMovil) { verBlob(blob); return; }
+        if (urlImpresion) URL.revokeObjectURL(urlImpresion);
+        var u = urlImpresion = URL.createObjectURL(blob);
+
+        var viejo = document.getElementById('cmg-print-pdf');
+        if (viejo) viejo.remove();
+        var ifr = document.createElement('iframe');
+        ifr.id = 'cmg-print-pdf';
+        ifr.setAttribute('aria-hidden', 'true');
+        ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+        ifr.onload = function () {
+            // Breve espera: el visor de PDF del navegador termina de montarse después del load.
+            setTimeout(function () {
+                try {
+                    ifr.contentWindow.focus();
+                    ifr.contentWindow.print();
+                } catch (e) {
+                    console.error(e);
+                    window.open(u, '_blank');
+                }
+            }, 300);
+        };
+        ifr.src = u;
+        document.body.appendChild(ifr);
+    }
+
+    window.CMG_pdfDocumento = function (url, opciones) {
+        opciones = Object.assign({ nombre: 'PDF', archivo: 'documento.pdf' }, opciones || {});
+        return obtenerArchivo(url, opciones).then(function (r) {
+            if (!r) return;
+            // TCPDF en modo 'D' manda Content-Type application/force-download: con ese
+            // tipo el iframe y la pestaña descargarían en vez de mostrar el PDF.
+            r.blob = new Blob([r.blob], { type: 'application/pdf' });
+            if (typeof Swal === 'undefined') { guardarBlob(r.blob, r.archivo); return; }
+
+            function boton(accion, clase, icono, texto) {
+                return '<button type="button" data-pdf-accion="' + accion + '" class="btn ' + clase +
+                    ' d-flex flex-column align-items-center justify-content-center gap-1" style="width:100px;height:74px;">' +
+                    '<i class="bi ' + icono + ' fs-4"></i><span class="small">' + texto + '</span></button>';
+            }
+
+            Swal.fire({
+                title: 'PDF listo',
+                html:
+                    '<div class="text-muted small mb-3 text-truncate" title="' + escHtml(r.archivo) + '">' + escHtml(r.archivo) + '</div>' +
+                    '<div class="d-flex justify-content-center gap-2">' +
+                        boton('imprimir', 'btn-primary', 'bi-printer', 'Imprimir') +
+                        boton('descargar', 'btn-outline-secondary', 'bi-download', 'Descargar') +
+                        boton('ver', 'btn-outline-secondary', 'bi-box-arrow-up-right', 'Ver') +
+                    '</div>',
+                showConfirmButton: false,
+                showCloseButton: true,
+                width: 420,
+                didOpen: function (popup) {
+                    popup.querySelector('[data-pdf-accion="imprimir"]').focus();
+                    popup.querySelectorAll('[data-pdf-accion]').forEach(function (b) {
+                        b.addEventListener('click', function () {
+                            var accion = b.getAttribute('data-pdf-accion');
+                            Swal.close();
+                            // Dentro del mismo clic: window.open necesita el gesto del usuario.
+                            if (accion === 'imprimir') imprimirBlob(r.blob);
+                            else if (accion === 'ver') verBlob(r.blob);
+                            else guardarBlob(r.blob, r.archivo);
+                        });
+                    });
+                }
+            });
+        });
+    };
+
+    document.addEventListener('click', function (e) {
+        if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        var a = e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a || a.hasAttribute('data-descarga-directa') || a.hasAttribute('download')) return;
+        var href = a.getAttribute('href') || '';
+        if (!/\/export-(pdf|excel)(\?|$)/i.test(href)) return;
+        if (a.classList.contains('disabled') || a.getAttribute('aria-disabled') === 'true') return;
+        e.preventDefault();
+        window.CMG_descargar(a.href);
+    });
+})();

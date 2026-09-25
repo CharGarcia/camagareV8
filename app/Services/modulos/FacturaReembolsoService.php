@@ -422,9 +422,28 @@ class FacturaReembolsoService
      * autorización SRI (se llama desde SriEnvioService::enviarFacturaReembolso,
      * no al guardar el borrador).
      */
+    /**
+     * Generación por sincronización (automática al abrir el módulo o manual desde Asientos
+     * Contables): el documento ya está autorizado y le falta el asiento.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idFacturaReembolso): void
+    {
+        $fr = $this->repository->getPorId($idFacturaReembolso);
+        if (!$fr || ($fr['estado'] ?? '') !== 'autorizado') {
+            return;
+        }
+        $fr['id_usuario'] = (int) ($_SESSION['id_usuario'] ?? $fr['created_by'] ?? 0);
+        $this->procesarAsientoContable($idFacturaReembolso, $fr);
+    }
+
     public function procesarAsientoContable(int $idFacturaReembolso, array $data): void
     {
         $idEmpresa = (int) ($data['id_empresa'] ?? 0);
+
+        // Interruptor por empresa (Configuración Contable → Módulos que contabilizan).
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'factura_reembolso', 'factura_reembolso', $idFacturaReembolso)) {
+            return;
+        }
         $idUsuario = (int) ($data['id_usuario'] ?? $_SESSION['id_usuario'] ?? 0);
         $fecha = $data['fecha_emision'] ?? date('Y-m-d');
         $numero = ($data['establecimiento'] ?? '') . '-' . ($data['punto_emision'] ?? '') . '-' . ($data['secuencial'] ?? '');

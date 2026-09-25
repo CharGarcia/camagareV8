@@ -141,6 +141,17 @@ class TraspasoRepository extends BaseRepository
         ];
     }
 
+    /**
+     * Empresa y creador del documento, para generar su asiento por sincronización (que
+     * recibe solo el id, sin sesión de empresa garantizada).
+     */
+    public function getOrigenSincronizacion(int $id): ?array
+    {
+        $st = $this->db->prepare("SELECT id_empresa, created_by, estado FROM traspasos_cabecera WHERE id = ? AND eliminado = false");
+        $st->execute([$id]);
+        return $st->fetch(\PDO::FETCH_ASSOC) ?: null;
+    }
+
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT t.*,

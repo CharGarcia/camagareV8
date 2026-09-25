@@ -306,7 +306,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         }
         const params = new URLSearchParams(filtros);
         const accion = formato === 'pdf' ? 'exportPdf' : 'exportExcel';
-        window.open(`${urlBase}/${accion}?${params.toString()}`, '_blank');
+        CMG_descargar(`${urlBase}/${accion}?${params.toString()}`);
     }
 
     // ── Aviso de asientos pendientes de generar ─────────────────────────────────────

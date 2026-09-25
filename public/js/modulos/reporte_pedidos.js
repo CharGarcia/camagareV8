@@ -379,13 +379,13 @@ function RP_dibujarGrafico(rawData, agrupacion) {
 window.RP_exportarExcel = function () {
     const form = document.getElementById('form-filtros-reporte');
     const params = new URLSearchParams(new FormData(form)).toString();
-    window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params, '_blank');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params);
 };
 
 window.RP_exportarPDF = function () {
     const form = document.getElementById('form-filtros-reporte');
     const params = new URLSearchParams(new FormData(form)).toString();
-    window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params, '_blank');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params);
 };
 
 /* ════════════════════════════════════════════════════

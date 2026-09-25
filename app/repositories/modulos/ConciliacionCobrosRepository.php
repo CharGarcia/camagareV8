@@ -116,11 +116,14 @@ class ConciliacionCobrosRepository extends BaseRepository
 
     public function listarCargas(int $idEmpresa, int $limite = 30): array
     {
-        $sql = "SELECT c.*, fp.nombre AS forma_pago_nombre, p.nombre_perfil,
+        // LEFT JOIN a propósito: si la cuenta bancaria o el formato de una carga se eliminó
+        // después, la carga (y sus líneas ya conciliadas) debe seguir apareciendo en el historial.
+        $sql = "SELECT c.*, COALESCE(fp.nombre, '— cuenta eliminada —') AS forma_pago_nombre,
+                       COALESCE(p.nombre_perfil, '—') AS nombre_perfil,
                        (SELECT COUNT(*) FROM conciliacion_lineas l WHERE l.id_carga = c.id AND l.eliminado = FALSE AND l.estado = 'APLICADO') AS total_aplicadas
                 FROM conciliacion_cargas c
-                INNER JOIN empresa_formas_pago fp ON fp.id = c.id_forma_pago
-                INNER JOIN conciliacion_perfiles p ON p.id = c.id_perfil
+                LEFT JOIN empresa_formas_pago fp ON fp.id = c.id_forma_pago AND fp.id_empresa = c.id_empresa
+                LEFT JOIN conciliacion_perfiles p ON p.id = c.id_perfil
                 WHERE c.id_empresa = :id_empresa AND c.eliminado = FALSE
                 ORDER BY c.created_at DESC
                 LIMIT :limite";
@@ -219,6 +222,49 @@ class ConciliacionCobrosRepository extends BaseRepository
             ':tipo_documento_sugerido' => $data['tipo_documento_sugerido'] ?? null,
             ':id_documento_sugerido' => $data['id_documento_sugerido'] ?? null,
             ':monto_aplicar' => $data['monto_aplicar'] ?? null,
+        ]);
+    }
+
+    /**
+     * Candado transaccional sobre una línea del extracto (CLAUDE.md §8): se toma antes de
+     * releerla al dividirla entre varios documentos, para que dos usuarios no la repartan a la
+     * vez. Se libera solo al COMMIT/ROLLBACK de la transacción del llamador.
+     */
+    public function lockLinea(int $id): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('conciliacion_linea:' || :id))");
+        $st->execute([':id' => $id]);
+    }
+
+    /**
+     * Convierte la línea original en la primera parte de una división: ajusta su monto y
+     * descripción al documento asignado y la deja confirmada.
+     */
+    public function actualizarParteLinea(int $id, array $data): void
+    {
+        $sql = "UPDATE conciliacion_lineas SET
+                    descripcion_original = :descripcion_original,
+                    monto = :monto,
+                    estado = :estado,
+                    id_cliente_sugerido = :id_cliente_sugerido,
+                    tipo_documento_sugerido = :tipo_documento_sugerido,
+                    id_documento_sugerido = :id_documento_sugerido,
+                    monto_aplicar = :monto_aplicar,
+                    mensaje_error = NULL,
+                    updated_by = :usuario,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id' => $id,
+            ':descripcion_original' => $data['descripcion_original'],
+            ':monto' => $data['monto'],
+            ':estado' => $data['estado'],
+            ':id_cliente_sugerido' => $data['id_cliente_sugerido'] ?? null,
+            ':tipo_documento_sugerido' => $data['tipo_documento_sugerido'] ?? null,
+            ':id_documento_sugerido' => $data['id_documento_sugerido'] ?? null,
+            ':monto_aplicar' => $data['monto_aplicar'] ?? $data['monto'],
+            ':usuario' => $data['usuario_id'],
         ]);
     }
 

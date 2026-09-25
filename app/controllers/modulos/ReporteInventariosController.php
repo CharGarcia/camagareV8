@@ -1420,6 +1420,18 @@ class ReporteInventariosController extends BaseModuloController
         }
     }
 
+    /** Error de una descarga: JSON si la pidió la pantalla con fetch (el aviso lo muestra),
+     *  texto plano si se abrió la URL directa. Termina la ejecución. */
+    private function errorDescarga(string $mensaje, int $status): never
+    {
+        if ($this->esAjaxRequest()) {
+            $this->json(['ok' => false, 'error' => $mensaje], $status);
+        }
+        http_response_code($status);
+        echo $mensaje;
+        exit;
+    }
+
     /**
      * PDF del ESTADO completo de una consignación (botón del modal de detalle): el mismo
      * diseño del comprobante de Consignaciones de Ventas, pero con las cantidades
@@ -1439,9 +1451,7 @@ class ReporteInventariosController extends BaseModuloController
         $idEmpresa      = (int) $_SESSION['id_empresa'];
         $idConsignacion = (int) ($_REQUEST['id'] ?? 0);
         if ($idConsignacion <= 0) {
-            http_response_code(400);
-            echo 'Consignación no válida.';
-            exit;
+            $this->errorDescarga('Consignación no válida.', 400);
         }
 
         try {
@@ -1455,9 +1465,7 @@ class ReporteInventariosController extends BaseModuloController
             // bodega visible para este usuario, el documento no existe para él.
             $denegadas = $this->bodegasDenegadas();
             if (!$cons || ($denegadas && !$this->repository->consignacionVisible($idEmpresa, $idConsignacion, $denegadas))) {
-                http_response_code(404);
-                echo 'No se encontró la consignación o no pertenece a esta empresa.';
-                exit;
+                $this->errorDescarga('No se encontró la consignación o no pertenece a esta empresa.', 404);
             }
 
             // Mismas fuentes que el PDF de Consignaciones de Ventas; el saldo se calcula
@@ -1485,8 +1493,7 @@ class ReporteInventariosController extends BaseModuloController
             (new \App\Services\modulos\ConsignacionVentaPdfService())->generar($cons, $detalles, $empresa, 'D', ['completo' => true]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            http_response_code(500);
-            echo 'Error al generar el PDF: ' . $e->getMessage();
+            $this->errorDescarga('Error al generar el PDF: ' . $e->getMessage(), 500);
         }
         exit;
     }

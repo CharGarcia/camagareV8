@@ -536,7 +536,7 @@
                 desde: el('desde')?.value || '',
                 hasta: el('hasta')?.value || '',
             });
-            window.open(`${cfg.urlBase}/estadoCuentaExcel?${p.toString()}`, '_blank');
+            CMG_descargar(`${cfg.urlBase}/estadoCuentaExcel?${p.toString()}`);
         });
 
         panel.querySelectorAll('[data-fc-filtro]').forEach(btn => btn.addEventListener('click', () => {

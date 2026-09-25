@@ -53,7 +53,7 @@
         const fi = document.getElementById('if-fecha-inicio').value;
         const ff = document.getElementById('if-fecha-fin').value;
         const params = new URLSearchParams({ fecha_inicio: fi, fecha_fin: ff });
-        window.open(URL_BASE + '/pdf?' + params.toString(), '_blank');
+        CMG_descargar(URL_BASE + '/pdf?' + params.toString());
     };
 
     function renderTablero(data) {

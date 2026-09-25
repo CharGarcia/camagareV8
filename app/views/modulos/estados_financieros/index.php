@@ -1239,7 +1239,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         }
 
         let url = `${urlBase}/exportar?tipo=${tipoReporteActivo}&formato=${formato}&fecha_inicio=${fInicio}&fecha_fin=${fFin}&nivel=${nivel}&centro_costo=${centro}&proyecto=${proyecto}`;
-        window.open(url, '_blank');
+        CMG_descargar(url);
     }
 
     // La columna Documento Ref. es un enlace al documento (factura, compra, egreso…) cuando el

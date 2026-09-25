@@ -296,10 +296,146 @@ class LiquidacionCompraService
         $this->repository->updateAsientoContable($idLiquidacion, $idAsientoGenerado);
     }
 
+    /**
+     * Registra un pago (Egreso) de la liquidación desde su pestaña Pagos. Mismo patrón que
+     * EgresosController::registrarConSecuencialReservado(): la transacción se abre ANTES de
+     * reservar el secuencial y dura hasta el INSERT (el candado de obtenerSiguienteSecuencial()
+     * se libera al COMMIT, CLAUDE.md §8), y el asiento se genera después del COMMIT con
+     * tareasPostCommit() (registrar() no lo hace si la transacción es del llamador).
+     *
+     * Todo lo que decide el pago sale del servidor: la liquidación y el concepto se validan
+     * contra la empresa, la serie contra la empresa, y el saldo anterior se recalcula aquí
+     * (EgresoService::registrar() vuelve a validarlo con el documento bloqueado).
+     *
+     * @return array{id_egreso:int, numero_egreso:string}
+     */
+    public function registrarPagoEgreso(int $idEmpresa, int $idUsuario, array $data): array
+    {
+        $idLiquidacion = (int) ($data['id_compra'] ?? 0);
+        $monto         = round((float) ($data['monto_pagar'] ?? 0), 2);
+        $idPunto       = (int) ($data['id_punto_emision'] ?? 0);
+        $idConcepto    = (int) ($data['id_egreso_concepto'] ?? 0);
+        $idFormaPago   = (int) ($data['id_forma_pago'] ?? 0);
+
+        $cab = $this->repository->getPorId($idLiquidacion);
+        if (!$cab || (int) $cab['id_empresa'] !== $idEmpresa) {
+            throw new \Exception('Liquidación no encontrada.');
+        }
+        // Solo las autorizadas tienen saldo por pagar (mismo criterio que el buscador de
+        // documentos de Egresos); sin este aviso el rechazo llegaría como "saldo disponible $0".
+        if (strtolower((string) ($cab['estado'] ?? '')) !== 'autorizado') {
+            throw new \Exception('Solo se pueden registrar pagos de liquidaciones autorizadas por el SRI.');
+        }
+        if ($monto <= 0) {
+            throw new \Exception('El monto a pagar debe ser mayor a cero.');
+        }
+        if ($idPunto <= 0) {
+            throw new \Exception('Debe seleccionar la serie (punto de emisión) del egreso.');
+        }
+        if ($idFormaPago <= 0) {
+            throw new \Exception('Debe seleccionar la forma de pago.');
+        }
+
+        $punto = (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa);
+        if (!$punto) {
+            throw new \Exception('La serie (punto de emisión) no existe o no pertenece a la empresa.');
+        }
+
+        $egresoRepo = new \App\repositories\modulos\EgresoRepository();
+        $concepto = null;
+        foreach ($egresoRepo->getConceptosEgreso($idEmpresa) as $c) {
+            if ((int) $c['id'] === $idConcepto) {
+                $concepto = $c;
+                break;
+            }
+        }
+        if ($concepto === null) {
+            throw new \Exception('Debe seleccionar un concepto de egreso válido.');
+        }
+
+        $fecha   = !empty($data['fecha_emision']) ? (string) $data['fecha_emision'] : date('Y-m-d');
+        $tipoOp  = !empty($data['tipo_operacion_bancaria']) ? trim((string) $data['tipo_operacion_bancaria']) : null;
+        $numOp   = trim((string) ($data['numero_operacion'] ?? ''));
+        $numDoc  = "{$cab['establecimiento']}-{$cab['punto_emision']}-{$cab['secuencial']}";
+        $observ  = trim((string) ($data['observaciones'] ?? ''));
+
+        $egresoService = new EgresoService($egresoRepo, new \App\Rules\modulos\EgresoRules(), $this->logService);
+
+        $db = \App\core\Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $secRes = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Egresos', $fecha);
+            $secuencial = (string) ($secRes['formateado'] ?? '');
+            if ($secuencial === '') {
+                throw new \Exception('No se pudo reservar el número del egreso. Verifique el secuencial de Egresos de la serie (Empresa → Secuenciales).');
+            }
+
+            // Saldo real en este momento (retenciones, NC y pagos previos incluidos); no el que
+            // calculó el navegador al abrir la pestaña.
+            $saldoAnterior = round($egresoRepo->getSaldoPendienteDocumento('LIQUIDACION', $idLiquidacion, $idEmpresa), 2);
+            if ($monto > $saldoAnterior + 0.01) {
+                throw new \Exception('El monto a pagar ($' . number_format($monto, 2) . ') supera el saldo pendiente de la liquidación ($' . number_format($saldoAnterior, 2) . ').');
+            }
+
+            $payload = [
+                'id_empresa'         => $idEmpresa,
+                'usuario_id'         => $idUsuario,
+                'id_establecimiento' => $punto['id_establecimiento'] ?: null,
+                'id_punto_emision'   => $idPunto,
+                'establecimiento'    => $punto['establecimiento'],
+                'punto_emision'      => $punto['punto'],
+                'secuencial'         => $secuencial,
+                'numero_egreso'      => "{$punto['establecimiento']}-{$punto['punto']}-{$secuencial}",
+                'fecha_emision'      => $fecha,
+                'tipo_egreso'        => (string) ($concepto['comportamiento'] ?: 'COMPRA'),
+                'tipo_sujeto'        => 'PROVEEDOR',
+                'id_proveedor'       => (int) $cab['id_proveedor'],
+                'id_egreso_concepto' => $idConcepto,
+                'monto_total'        => $monto,
+                'observaciones'      => $observ !== '' ? $observ : "Pago de Liquidación #{$numDoc}",
+                'detalles'           => [[
+                    'tipo_documento'          => 'LIQUIDACION',
+                    'id_referencia_documento' => $idLiquidacion,
+                    'numero_documento'        => $numDoc,
+                    'fecha_documento'         => $cab['fecha_emision'] ?? null,
+                    'descripcion'             => "Liquidación de compra #{$numDoc}",
+                    'monto_documento'         => (float) $cab['importe_total'],
+                    'saldo_anterior'          => $saldoAnterior,
+                    'monto_pagado'            => $monto,
+                    'saldo_actual'            => max(0.0, round($saldoAnterior - $monto, 2)),
+                ]],
+                'pagos' => [[
+                    'id_forma_pago'           => $idFormaPago,
+                    'monto'                   => $monto,
+                    'referencia'              => $numOp !== '' ? $numOp : null,
+                    'tipo_operacion_bancaria' => $tipoOp,
+                    // Cheque: número y fecha en que se podrá cobrar (control de posfechados)
+                    'numero_cheque'           => $tipoOp === 'CHEQUE' && $numOp !== '' ? $numOp : null,
+                    'fecha_cobro'             => $tipoOp === 'CHEQUE' && !empty($data['fecha_cobro']) ? (string) $data['fecha_cobro'] : null,
+                    'banco_id'                => !empty($data['banco_id']) ? (int) $data['banco_id'] : null,
+                ]],
+            ];
+
+            $idEgreso = $egresoService->registrar($payload);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
+        $egresoService->tareasPostCommit($idEgreso, $payload);
+
+        return ['id_egreso' => $idEgreso, 'numero_egreso' => $payload['numero_egreso']];
+    }
+
     public function actualizar(int $id, array $data): int
     {
         $cabecera = $this->repository->getPorId($id);
-        if (!$cabecera) {
+        // getPorId() no filtra por empresa: sin esta comprobación, un id ajeno dejaba intacta
+        // la cabecera (su UPDATE sí filtra) pero borraba y reemplazaba sus detalles.
+        if (!$cabecera || (int) $cabecera['id_empresa'] !== (int) ($data['id_empresa'] ?? 0)) {
             throw new \Exception('Liquidación no encontrada.');
         }
 

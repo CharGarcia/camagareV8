@@ -137,7 +137,7 @@
 
     window.TRI_exportar = function (tipo) {
         const params = paramsFiltros();
-        window.open(`${URL}/${tipo === 'pdf' ? 'export-pdf' : 'export-excel'}?${params.toString()}`, '_blank');
+        CMG_descargar(`${URL}/${tipo === 'pdf' ? 'export-pdf' : 'export-excel'}?${params.toString()}`);
     };
 
     el('tri-buscar')?.addEventListener('keydown', e => {
@@ -759,7 +759,7 @@
 
     window.TRI_abrirPdf = function () {
         const id = el('tri-id').value;
-        if (id) window.open(`${URL}/pdf-documento?id=${id}`, '_blank');
+        if (id) CMG_descargar(`${URL}/pdf-documento?id=${id}`);
     };
 
     // ── Recepción: acta por correo + conformidad del destino ─────────────────

@@ -6,7 +6,7 @@ ruta_modulo: modulos/traspasos
 tipo: modulo
 visibilidad: todos
 etiquetas: traspaso, traspasos, transferencia interna, caja a banco, deposito, mover dinero, saldo, formas de pago, excel, exportar, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar traspaso, buscador, filtros, filtrar traspasos, chips
-version: 1.3
+version: 1.4
 orden: 30
 estado: activo
 ---
@@ -114,6 +114,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.4** — Asiento contable pendiente: si faltaba una cuenta o el período estaba cerrado, el documento quedaba sin asiento y nada lo volvía a intentar. Ahora, al completar la configuración contable, el asiento se genera solo la próxima vez que alguien abra el módulo (igual que en Facturas de Venta), o desde la sincronización de Asientos Contables. Respeta el interruptor *Módulos que contabilizan*.
 - **1.3** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias; lo que
   se escribe se busca en las columnas del traspaso (incluidos fecha y monto), la
   observación y el usuario, salvo Estado. Los filtros pasan a una **ventana propia**

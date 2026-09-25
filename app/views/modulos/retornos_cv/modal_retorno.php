@@ -818,7 +818,7 @@
     window.retExcel = function () {
         const id = document.getElementById('ret_id').value;
         if (!id) return Swal.fire('Atención', 'Debe guardar el retorno primero.', 'warning');
-        window.open(`${RUTA}/excel?id=${id}`, '_blank');
+        CMG_descargar(`${RUTA}/excel?id=${id}`);
     };
     window.retEmail = async function () {
         const id = document.getElementById('ret_id').value;

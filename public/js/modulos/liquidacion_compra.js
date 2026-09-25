@@ -69,8 +69,8 @@
         const dir  = window.LC_ordenDir || 'DESC';
         return `${API_URL}/${tipo}?b=${encodeURIComponent(b)}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}`;
     }
-    window.exportarPdfListado   = () => window.open(lcUrlExportListado('export-pdf'), '_blank');
-    window.exportarExcelListado = () => window.open(lcUrlExportListado('export-excel'), '_blank');
+    window.exportarPdfListado   = () => CMG_descargar(lcUrlExportListado('export-pdf'));
+    window.exportarExcelListado = () => CMG_descargar(lcUrlExportListado('export-excel'));
     window.LC_agregarFila = agregarFilaFn;
     window.LC_removerFila = removerFilaFn;
     window.seleccionarProveedor = seleccionarProveedorFn;
@@ -1317,19 +1317,19 @@
     window.LC_exportarPdf = function() {
         const id = liqIdGuardado();
         if (!id) return;
-        window.open(`${API_URL}/exportarPdfDoc?id=${id}`, '_blank');
+        CMG_descargar(`${API_URL}/exportarPdfDoc?id=${id}`);
     };
 
     window.LC_exportarXml = function() {
         const id = liqIdGuardado();
         if (!id) return;
-        window.open(`${API_URL}/descargarXmlOriginalAjax?id=${id}`, '_blank');
+        CMG_descargar(`${API_URL}/descargarXmlOriginalAjax?id=${id}`);
     };
 
     window.LC_exportarExcel = function() {
         const id = liqIdGuardado();
         if (!id) return;
-        window.open(`${API_URL}/exportarExcelDoc?id=${id}`, '_blank');
+        CMG_descargar(`${API_URL}/exportarExcelDoc?id=${id}`);
     };
 
     window.LC_enviarCorreo = async function() {

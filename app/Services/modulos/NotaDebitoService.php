@@ -159,6 +159,11 @@ class NotaDebitoService
     public function procesarAsientoContable(int $idNotaDebito, array $data): void
     {
         $idEmpresa = (int)($data['id_empresa'] ?? 0);
+
+        // Interruptor por empresa (Configuración Contable → Módulos que contabilizan).
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'notas_debito', 'nota_debito', $idNotaDebito)) {
+            return;
+        }
         $idUsuario = (int)($data['id_usuario'] ?? $data['created_by'] ?? $_SESSION['id_usuario'] ?? 0);
         $fecha = $data['fecha_emision'] ?? date('Y-m-d');
         $numND = ($data['establecimiento'] ?? '') . '-' . ($data['punto_emision'] ?? '') . '-' . ($data['secuencial'] ?? '');

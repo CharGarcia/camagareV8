@@ -197,8 +197,8 @@
 
             $('fcBtnPdf').disabled = periodos.length === 0;
             $('fcBtnExcel').disabled = periodos.length === 0;
-            $('fcBtnPdf').onclick = () => window.open(`${BASE}/${RUTA}/exportPdf?${params.toString()}`, '_blank');
-            $('fcBtnExcel').onclick = () => window.open(`${BASE}/${RUTA}/exportExcel?${params.toString()}`, '_blank');
+            $('fcBtnPdf').onclick = () => CMG_descargar(`${BASE}/${RUTA}/exportPdf?${params.toString()}`);
+            $('fcBtnExcel').onclick = () => CMG_descargar(`${BASE}/${RUTA}/exportExcel?${params.toString()}`);
         } catch (e) {
             tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Error de comunicación.</td></tr>';
         }

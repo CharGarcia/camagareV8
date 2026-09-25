@@ -478,7 +478,7 @@ class DeclaracionRetencionesService
             $this->logService
         );
 
-        $idEgreso = $egSvc->registrar([
+        $payloadEgreso = [
             'id_empresa'         => $idEmpresa,
             'usuario_id'         => $idUsuario,
             'id_punto_emision'   => $idPunto,
@@ -503,13 +503,16 @@ class DeclaracionRetencionesService
                 'saldo_actual'            => 0,
             ]],
             'pagos' => [$this->armarPagoEgreso($idForma, $monto, $tipoOp, $numeroCheque, $fechaCobro, $fecha)],
-        ]);
+        ];
+        $idEgreso = $egSvc->registrar($payloadEgreso);
 
         $this->repository->marcarEgreso($idDeclaracion, $idEmpresa, $idEgreso, $idUsuario);
         $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_EGRESO', 'declaracion_retenciones_cabecera', $idDeclaracion, null, ['id_egreso' => $idEgreso]);
 
         if ($managedTransaction) {
             $db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver EgresoService::registrar).
+            $egSvc->tareasPostCommit($idEgreso, $payloadEgreso);
         }
 
         // Recordar el proveedor elegido como sugerencia para el próximo egreso de este tipo de

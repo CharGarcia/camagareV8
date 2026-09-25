@@ -17,6 +17,34 @@ class ConciliacionCobrosRules
     }
 
     /**
+     * Valida el reparto de una línea del banco entre varios documentos (de uno o varios
+     * clientes): al menos dos documentos, sin repetir ninguno, y la suma de lo asignado no
+     * puede superar lo recibido en el banco. Cada asignación se valida además contra el saldo
+     * pendiente actual de su documento con validarMatchLinea().
+     */
+    public function validarDivision(array $asignaciones, float $montoLinea): void
+    {
+        if (count($asignaciones) < 2) {
+            throw new \Exception('Seleccione al menos dos documentos para repartir el depósito.');
+        }
+
+        $vistos = [];
+        $total = 0.0;
+        foreach ($asignaciones as $a) {
+            $clave = strtoupper((string) ($a['tipo_documento'] ?? '')) . ':' . (int) ($a['id_documento'] ?? 0);
+            if (isset($vistos[$clave])) {
+                throw new \Exception('Un mismo documento está seleccionado más de una vez.');
+            }
+            $vistos[$clave] = true;
+            $total += (float) ($a['monto_aplicar'] ?? 0);
+        }
+
+        if (round($total, 2) > round($montoLinea, 2) + 0.01) {
+            throw new \Exception('La suma asignada ($' . number_format($total, 2) . ') supera el monto recibido en el banco ($' . number_format($montoLinea, 2) . ').');
+        }
+    }
+
+    /**
      * Valida el ajuste manual de una línea (confirmación o corrección de la sugerencia).
      * $saldoPendienteDocumento es el saldo pendiente ACTUAL del documento elegido (recalculado
      * en el momento de confirmar, ver ConciliacionCobrosService::confirmarLinea); si se indica,

@@ -33,27 +33,43 @@
         }
     }
 
-    async function getJson(url) {
-        const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-        return resp.json();
+    /**
+     * Lee la respuesta como JSON sin fallar en silencio: si el servidor devuelve HTML (sesión
+     * vencida, error de PHP, tiempo agotado) o la red falla, se devuelve {ok:false, error} para
+     * que quien llama muestre el aviso, en vez de lanzar una excepción que nadie ve.
+     */
+    async function leerJson(promesa) {
+        try {
+            const resp = await promesa;
+            const texto = await resp.text();
+            try {
+                return JSON.parse(texto);
+            } catch (e) {
+                return { ok: false, error: `El servidor no respondió correctamente (HTTP ${resp.status}). Recargue la página; si persiste, puede que su sesión haya vencido.` };
+            }
+        } catch (e) {
+            return { ok: false, error: 'No se pudo conectar con el servidor.' };
+        }
     }
 
-    async function postJson(url, payload) {
-        const resp = await fetch(url, {
+    function getJson(url) {
+        return leerJson(fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }));
+    }
+
+    function postJson(url, payload) {
+        return leerJson(fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify(payload || {}),
-        });
-        return resp.json();
+        }));
     }
 
-    async function postForm(url, formData) {
-        const resp = await fetch(url, {
+    function postForm(url, formData) {
+        return leerJson(fetch(url, {
             method: 'POST',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             body: formData,
-        });
-        return resp.json();
+        }));
     }
 
     const CC = window.CC = {};
@@ -68,6 +84,25 @@
         if (formCarga) {
             formCarga.addEventListener('submit', CC.onSubmitCarga);
         }
+
+        // Historial de cargas: la fila completa abre el detalle (delegado, sirve también para
+        // las filas que se repintan con refrescarCargas()).
+        document.querySelector('#cc-tabla-cargas tbody')?.addEventListener('click', (ev) => {
+            const fila = ev.target.closest('tr[data-id-carga]');
+            if (fila) CC.abrirCarga(parseInt(fila.dataset.idCarga, 10));
+        });
+
+        // Modal de búsqueda: marcar/desmarcar documentos y editar montos (delegado).
+        document.getElementById('cc-buscar-docs-tbody')?.addEventListener('change', (ev) => {
+            if (ev.target.matches('input[data-doc-key]')) CC.toggleDocumento(ev.target.dataset.docKey, ev.target.checked);
+        });
+        document.getElementById('cc-buscar-sel-tbody')?.addEventListener('change', (ev) => {
+            if (ev.target.matches('input[data-monto-key]')) CC.cambiarMontoSeleccion(ev.target.dataset.montoKey, ev.target);
+        });
+        document.getElementById('cc-buscar-sel-tbody')?.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('button[data-quitar-key]');
+            if (btn) CC.toggleDocumento(btn.dataset.quitarKey, false);
+        });
     });
 
     // ── Formato del banco (perfiles de mapeo) ────────────────────────────────
@@ -157,47 +192,75 @@
         if (!tbody) return;
 
         if (!json.data.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin cargas todavía.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin cargas todavía.</td></tr>';
             return;
         }
 
         const badgeClase = { completado: 'success', error: 'danger' };
         tbody.innerHTML = json.data.map((c) => {
             const clase = badgeClase[c.estado] || 'warning';
-            return `<tr>
-                <td>${fmtDate(c.created_at)}</td>
-                <td>${c.nombre_archivo}</td>
-                <td>${c.forma_pago_nombre}</td>
-                <td>${c.nombre_perfil}</td>
-                <td class="text-center"><span class="badge bg-${clase} bg-opacity-25 text-${clase === 'warning' ? 'warning-emphasis' : clase}">${c.estado}</span></td>
+            return `<tr class="cc-carga-fila" data-id-carga="${c.id}" title="Clic para ver sus líneas">
+                <td>${fmtDateTime(c.created_at)}</td>
+                <td>${escHtml(c.nombre_archivo)}</td>
+                <td>${escHtml(c.forma_pago_nombre)}</td>
+                <td>${escHtml(c.nombre_perfil)}</td>
+                <td class="text-center"><span class="badge bg-${clase} bg-opacity-25 text-${clase === 'warning' ? 'warning-emphasis' : clase}">${escHtml(c.estado)}</span></td>
                 <td class="text-end">${c.total_aplicadas} / ${c.total_lineas}</td>
-                <td class="text-end"><button type="button" class="btn btn-outline-primary btn-sm" onclick="CC.abrirCarga(${c.id})"><i class="bi bi-eye"></i> Ver</button></td>
             </tr>`;
         }).join('');
+        marcarCargaActiva();
     };
+
+    function fmtDateTime(v) {
+        if (!v) return '—';
+        const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+        return m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}:${m[6]}` : fmtDate(v);
+    }
+
+    /** Resalta en el historial la carga cuyas líneas se están mostrando. */
+    function marcarCargaActiva() {
+        document.querySelectorAll('#cc-tabla-cargas tr[data-id-carga]').forEach((tr) => {
+            tr.classList.toggle('cc-carga-activa', parseInt(tr.dataset.idCarga, 10) === state.idCargaActual);
+        });
+        const fila = document.querySelector(`#cc-tabla-cargas tr[data-id-carga="${state.idCargaActual}"]`);
+        const etiqueta = document.getElementById('cc-carga-actual');
+        if (etiqueta) {
+            etiqueta.textContent = fila ? `— ${fila.cells[1].textContent.trim()} (${fila.cells[0].textContent.trim()})` : '';
+        }
+    }
 
     CC.abrirCarga = async function (idCarga) {
         state.idCargaActual = idCarga;
-        await CC.cargarLineas(idCarga);
-        document.getElementById('cc-card-lineas').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        marcarCargaActiva();
+        const ok = await CC.cargarLineas(idCarga);
+        if (ok) {
+            document.getElementById('cc-card-lineas').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     };
 
     // ── Líneas del extracto ──────────────────────────────────────────────────
 
     CC.cargarLineas = async function (idCarga) {
-        const json = await getJson(`${CC_URL_BASE}/listarLineasAjax?id_carga=${idCarga}`);
         const card = document.getElementById('cc-card-lineas');
         card.style.display = '';
+        document.getElementById('cc-tbody-lineas').innerHTML =
+            '<tr><td colspan="7" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Cargando líneas…</td></tr>';
+
+        const json = await getJson(`${CC_URL_BASE}/listarLineasAjax?id_carga=${idCarga}`);
 
         if (!json.ok) {
+            document.getElementById('cc-tbody-lineas').innerHTML =
+                `<tr><td colspan="7" class="text-center py-4 text-danger">${escHtml(json.error || 'No se pudieron cargar las líneas.')}</td></tr>`;
             alertError('No se pudieron cargar las líneas', json.error);
-            return;
+            return false;
         }
 
         state.lineas = {};
         (json.data || []).forEach((l) => { state.lineas[l.id] = l; });
 
         CC.renderLineas();
+        marcarCargaActiva();
+        return true;
     };
 
     function badgeEstado(estado) {
@@ -238,9 +301,9 @@
         };
         const claseFila = clasesPorEstado[l.estado] || '';
 
-        const clienteTxt = l.cliente_sugerido_nombre || '<span class="text-muted">— sin identificar —</span>';
+        const clienteTxt = l.cliente_sugerido_nombre ? escHtml(l.cliente_sugerido_nombre) : '<span class="text-muted">— sin identificar —</span>';
         const docTxt = l.documento_numero
-            ? `${l.tipo_documento_sugerido} ${l.documento_numero} <br><small class="text-muted">saldo: ${fmtMoney(l.documento_saldo_pendiente)}</small>`
+            ? `${escHtml(l.tipo_documento_sugerido)} ${escHtml(l.documento_numero)} <br><small class="text-muted">saldo: ${fmtMoney(l.documento_saldo_pendiente)}</small>`
             : '<span class="text-muted">— sin documento —</span>';
 
         // Tope real del monto a aplicar: no puede superar ni lo recibido en el banco ni el
@@ -292,7 +355,7 @@
 
         return `<tr class="cc-linea-fila ${claseFila}" data-id-linea="${l.id}">
             <td class="ps-3" data-col="fecha">${fmtDate(l.fecha_movimiento)}</td>
-            <td data-col="descripcion">${l.descripcion_original}</td>
+            <td data-col="descripcion">${escHtml(l.descripcion_original)}</td>
             <td class="text-end" data-col="monto">${fmtMoney(l.monto)}</td>
             <td data-col="cliente">${clienteTxt}</td>
             <td data-col="documento">${docTxt}</td>
@@ -419,74 +482,264 @@
         }
     };
 
-    // ── Búsqueda manual de cliente/documento ────────────────────────────────
+    // ── Búsqueda manual de cliente/documento(s) ─────────────────────────────
+    // Se pueden marcar uno o varios documentos, incluso de clientes distintos (un solo
+    // depósito que paga facturas de varios clientes). Lo marcado vive en `buscar.sel` y se
+    // conserva al cambiar de cliente. Con un documento la línea se asigna como siempre; con
+    // varios, el servidor la divide en una línea por documento (dividirLineaAjax).
+
+    const buscar = {
+        idLinea: null,
+        montoLinea: 0,
+        docs: {},          // clave -> documento del cliente consultado (con id_cliente/cliente_nombre)
+        sel: new Map(),    // clave -> {id_cliente, cliente_nombre, tipo_documento, id_documento, numero_documento, saldo, monto}
+    };
+
+    const r2 = (v) => Math.round(Number(v || 0) * 100) / 100;
+    const claveDoc = (tipo, id) => `${tipo}:${id}`;
+
+    function nombreCliente(idCliente) {
+        const c = (window.CC_CLIENTES || []).find((x) => x.id === Number(idCliente));
+        return c ? c.nombre : '';
+    }
+
+    function totalAsignado() {
+        let t = 0;
+        buscar.sel.forEach((s) => { t += Number(s.monto) || 0; });
+        return r2(t);
+    }
+
+    function checkboxDoc(clave) {
+        return Array.from(document.querySelectorAll('#cc-buscar-docs-tbody input[data-doc-key]'))
+            .find((el) => el.dataset.docKey === clave) || null;
+    }
 
     CC.abrirBuscarDoc = function (idLinea) {
-        document.getElementById('cc-buscar-id-linea').value = idLinea;
         const l = state.lineas[idLinea];
+        if (!l) return;
+
+        document.getElementById('cc-buscar-id-linea').value = idLinea;
+        buscar.idLinea = idLinea;
+        buscar.montoLinea = r2(l.monto);
+        buscar.docs = {};
+        buscar.sel = new Map();
+
+        // Si la línea ya tiene un documento elegido, llega preseleccionado.
+        if (l.id_cliente_sugerido && l.tipo_documento_sugerido && l.id_documento_sugerido && l.documento_numero) {
+            const saldo = l.documento_saldo_pendiente != null ? Number(l.documento_saldo_pendiente) : Number(l.monto);
+            buscar.sel.set(claveDoc(l.tipo_documento_sugerido, l.id_documento_sugerido), {
+                id_cliente: Number(l.id_cliente_sugerido),
+                cliente_nombre: l.cliente_sugerido_nombre || nombreCliente(l.id_cliente_sugerido),
+                tipo_documento: l.tipo_documento_sugerido,
+                id_documento: Number(l.id_documento_sugerido),
+                numero_documento: l.documento_numero,
+                saldo: saldo,
+                monto: r2(Math.min(l.monto_aplicar != null ? Number(l.monto_aplicar) : Number(l.monto), saldo, Number(l.monto))),
+            });
+        }
+
+        document.getElementById('cc-buscar-desc').textContent = `${fmtDate(l.fecha_movimiento)} · ${l.descripcion_original || ''}`;
+        document.getElementById('cc-buscar-monto').textContent = fmtMoney(buscar.montoLinea);
 
         const select = document.getElementById('cc-buscar-cliente');
         select.innerHTML = '<option value="">— Seleccione —</option>' +
-            (window.CC_CLIENTES || []).map((c) => `<option value="${c.id}">${c.nombre}</option>`).join('');
-        select.value = l && l.id_cliente_sugerido ? l.id_cliente_sugerido : '';
+            (window.CC_CLIENTES || []).map((c) => `<option value="${c.id}">${escHtml(c.nombre)}</option>`).join('');
+        select.value = l.id_cliente_sugerido ? String(l.id_cliente_sugerido) : '';
 
         document.getElementById('cc-buscar-docs-tbody').innerHTML =
             '<tr><td colspan="5" class="text-center text-muted py-3">Seleccione un cliente.</td></tr>';
+        CC.renderSeleccion();
 
         if (select.value) {
             CC.buscarDocumentosDeCliente();
         }
 
-        new bootstrap.Modal(document.getElementById('cc-modal-buscar-doc')).show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('cc-modal-buscar-doc')).show();
     };
 
     CC.buscarDocumentosDeCliente = async function () {
-        const idCliente = document.getElementById('cc-buscar-cliente').value;
+        const idCliente = parseInt(document.getElementById('cc-buscar-cliente').value || '0', 10);
         const tbody = document.getElementById('cc-buscar-docs-tbody');
         if (!idCliente) {
             tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Seleccione un cliente.</td></tr>';
             return;
         }
 
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Buscando…</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Buscando…</td></tr>';
         const json = await getJson(`${CC_URL_BASE}/buscarDocumentosPendientesAjax?id_cliente=${idCliente}`);
-        if (!json.ok || !json.data.length) {
+        // Si mientras cargaba se eligió otro cliente, esta respuesta ya no aplica.
+        if (parseInt(document.getElementById('cc-buscar-cliente').value || '0', 10) !== idCliente) return;
+
+        if (!json.ok) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">${escHtml(json.error || 'No se pudieron consultar los documentos.')}</td></tr>`;
+            return;
+        }
+        if (!json.data.length) {
             tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Este cliente no tiene documentos pendientes.</td></tr>';
             return;
         }
 
-        tbody.innerHTML = json.data.map((d) => `
-            <tr>
-                <td>${d.tipo_documento}</td>
-                <td>${d.numero_documento}</td>
+        const clienteNombre = nombreCliente(idCliente);
+        tbody.innerHTML = json.data.map((d) => {
+            const clave = claveDoc(d.tipo_documento, d.id);
+            buscar.docs[clave] = Object.assign({}, d, { id_cliente: idCliente, cliente_nombre: clienteNombre });
+            return `<tr>
+                <td class="text-center"><input type="checkbox" class="form-check-input m-0" data-doc-key="${escHtml(clave)}" ${buscar.sel.has(clave) ? 'checked' : ''}></td>
+                <td>${escHtml(d.tipo_documento)}</td>
+                <td>${escHtml(d.numero_documento)}</td>
                 <td>${fmtDate(d.fecha_emision)}</td>
                 <td class="text-end">${fmtMoney(d.saldo_pendiente)}</td>
-                <td class="text-end">
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick='CC.seleccionarDocumento(${idCliente}, "${d.tipo_documento}", ${d.id}, "${d.numero_documento}", ${d.saldo_pendiente})'>
-                        Seleccionar
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+            </tr>`;
+        }).join('');
     };
 
-    CC.seleccionarDocumento = function (idCliente, tipoDocumento, idDocumento, numeroDocumento, saldoPendiente) {
-        const idLinea = document.getElementById('cc-buscar-id-linea').value;
-        const l = state.lineas[idLinea];
+    /** Marca o desmarca un documento; al marcarlo propone min(saldo, lo que falta por asignar). */
+    CC.toggleDocumento = function (clave, marcado) {
+        if (marcado) {
+            const d = buscar.docs[clave];
+            if (!d) return;
+            const restante = r2(buscar.montoLinea - totalAsignado());
+            if (restante <= 0) {
+                alertError('Monto completo', 'Ya se asignó todo el monto recibido. Reduzca el monto de otro documento o desmárquelo antes de agregar uno nuevo.');
+                const chk = checkboxDoc(clave);
+                if (chk) chk.checked = false;
+                return;
+            }
+            buscar.sel.set(clave, {
+                id_cliente: d.id_cliente,
+                cliente_nombre: d.cliente_nombre,
+                tipo_documento: d.tipo_documento,
+                id_documento: Number(d.id),
+                numero_documento: d.numero_documento,
+                saldo: Number(d.saldo_pendiente),
+                monto: r2(Math.min(Number(d.saldo_pendiente), restante)),
+            });
+        } else {
+            buscar.sel.delete(clave);
+            const chk = checkboxDoc(clave);
+            if (chk) chk.checked = false;
+        }
+        CC.renderSeleccion();
+    };
+
+    /** Monto a aplicar de un documento marcado: no puede superar su saldo ni lo que queda del depósito. */
+    CC.cambiarMontoSeleccion = function (clave, input) {
+        const s = buscar.sel.get(clave);
+        if (!s) return;
+        const disponible = r2(buscar.montoLinea - (totalAsignado() - Number(s.monto)));
+        const tope = r2(Math.min(s.saldo, disponible));
+        let valor = r2(parseFloat(input.value) || 0);
+        if (valor > tope) {
+            valor = tope;
+            alertError('Monto ajustado', `El monto no puede superar ${fmtMoney(tope)} (saldo del documento o lo que queda del depósito).`);
+        }
+        if (valor < 0) valor = 0;
+        s.monto = valor;
+        CC.renderSeleccion();
+    };
+
+    CC.renderSeleccion = function () {
+        const tbody = document.getElementById('cc-buscar-sel-tbody');
+        const items = Array.from(buscar.sel.entries());
+
+        tbody.innerHTML = items.length
+            ? items.map(([clave, s]) => `<tr>
+                <td class="text-truncate" style="max-width:260px;" title="${escHtml(s.cliente_nombre)}">${escHtml(s.cliente_nombre)}</td>
+                <td>${escHtml(s.tipo_documento)} ${escHtml(s.numero_documento)}</td>
+                <td class="text-end">${fmtMoney(s.saldo)}</td>
+                <td class="text-end"><input type="number" step="0.01" min="0.01" class="form-control form-control-sm text-end" style="height:26px;" data-monto-key="${escHtml(clave)}" value="${Number(s.monto).toFixed(2)}"></td>
+                <td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm py-0 px-1" title="Quitar" data-quitar-key="${escHtml(clave)}"><i class="bi bi-x-lg"></i></button></td>
+            </tr>`).join('')
+            : '<tr><td colspan="5" class="text-center text-muted py-3">Ningún documento seleccionado.</td></tr>';
+
+        const asignado = totalAsignado();
+        const restante = r2(buscar.montoLinea - asignado);
+        document.getElementById('cc-buscar-asignado').textContent = fmtMoney(asignado);
+        const elRest = document.getElementById('cc-buscar-restante');
+        elRest.textContent = fmtMoney(restante);
+        elRest.className = restante > 0 ? 'text-warning-emphasis' : 'text-success';
+        document.getElementById('cc-buscar-sel-count').textContent = items.length;
+
+        const btn = document.getElementById('cc-buscar-aplicar');
+        btn.innerHTML = items.length > 1
+            ? `<i class="bi bi-diagram-3 me-1"></i> Repartir en ${items.length} documentos`
+            : '<i class="bi bi-check2 me-1"></i> Aplicar selección';
+    };
+
+    CC.aplicarSeleccion = async function () {
+        const l = state.lineas[buscar.idLinea];
         if (!l) return;
+        const items = Array.from(buscar.sel.values());
 
-        const clienteNombre = (window.CC_CLIENTES || []).find((c) => c.id === idCliente);
+        if (!items.length) {
+            alertError('Sin selección', 'Marque al menos un documento.');
+            return;
+        }
+        if (items.some((s) => !(Number(s.monto) > 0))) {
+            alertError('Monto inválido', 'Cada documento seleccionado debe tener un monto a aplicar mayor a cero.');
+            return;
+        }
 
-        l.id_cliente_sugerido = idCliente;
-        l.cliente_sugerido_nombre = clienteNombre ? clienteNombre.nombre : l.cliente_sugerido_nombre;
-        l.tipo_documento_sugerido = tipoDocumento;
-        l.id_documento_sugerido = idDocumento;
-        l.documento_numero = numeroDocumento;
-        l.documento_saldo_pendiente = saldoPendiente;
-        l.monto_aplicar = Math.min(Number(saldoPendiente), Number(l.monto));
-        if (l.estado === 'SIN_MATCH') l.estado = 'SUGERIDO';
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('cc-modal-buscar-doc'));
 
-        CC.renderLineas();
-        bootstrap.Modal.getInstance(document.getElementById('cc-modal-buscar-doc')).hide();
+        // Un solo documento: se asigna a la línea como siempre (se confirma con el botón ✓).
+        if (items.length === 1) {
+            const s = items[0];
+            const eraConfirmada = l.estado === 'CONFIRMADO';
+            Object.assign(l, {
+                id_cliente_sugerido: s.id_cliente,
+                cliente_sugerido_nombre: s.cliente_nombre || l.cliente_sugerido_nombre,
+                tipo_documento_sugerido: s.tipo_documento,
+                id_documento_sugerido: s.id_documento,
+                documento_numero: s.numero_documento,
+                documento_saldo_pendiente: s.saldo,
+                monto_aplicar: s.monto,
+            });
+            if (l.estado === 'SIN_MATCH' || l.estado === 'ERROR') l.estado = 'SUGERIDO';
+
+            modal.hide();
+            // Si ya estaba confirmada, se reconfirma con el documento nuevo: si no, el servidor
+            // seguiría con el documento anterior aunque la pantalla muestre el nuevo.
+            if (eraConfirmada) {
+                await CC.confirmarLinea(l.id);
+            } else {
+                CC.renderLineas();
+            }
+            return;
+        }
+
+        // Varios documentos: la línea se divide en el servidor.
+        const sobrante = r2(buscar.montoLinea - totalAsignado());
+        const texto = `La línea de ${fmtMoney(buscar.montoLinea)} se dividirá en ${items.length} líneas confirmadas (una por documento)`
+            + (sobrante > 0 ? ` y una línea más con ${fmtMoney(sobrante)} sin asignar.` : '.');
+        if (window.Swal) {
+            const r = await Swal.fire({ icon: 'question', title: '¿Repartir el depósito?', text: texto, showCancelButton: true, confirmButtonText: 'Sí, repartir', cancelButtonText: 'Cancelar' });
+            if (!r.isConfirmed) return;
+        } else if (!confirm(texto)) {
+            return;
+        }
+
+        const btn = document.getElementById('cc-buscar-aplicar');
+        btn.disabled = true;
+        try {
+            const json = await postJson(`${CC_URL_BASE}/dividirLineaAjax`, {
+                id_linea: l.id,
+                asignaciones: items.map((s) => ({
+                    id_cliente: s.id_cliente,
+                    tipo_documento: s.tipo_documento,
+                    id_documento: s.id_documento,
+                    monto_aplicar: s.monto,
+                })),
+            });
+            if (!json.ok) {
+                alertError('No se pudo repartir la línea', json.error);
+                return;
+            }
+            modal.hide();
+            await CC.cargarLineas(state.idCargaActual);
+            alertOk('Línea repartida', `Se generaron ${json.data.ids.length} líneas. Pulse «Generar ingresos» cuando termine de revisar.`);
+        } finally {
+            btn.disabled = false;
+        }
     };
 })();

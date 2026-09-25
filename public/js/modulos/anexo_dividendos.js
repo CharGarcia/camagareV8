@@ -848,7 +848,7 @@
                 if (window.Swal) {
                     Swal.fire({ title: 'Anexo generado', html, icon: 'success', width: 620 });
                 } else {
-                    window.location.href = res.url_zip || res.url_xml;
+                    CMG_descargar(res.url_zip || res.url_xml);
                 }
             })
             .catch(e => {

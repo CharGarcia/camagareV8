@@ -202,13 +202,13 @@
     window.TRP_abrirPdf = function () {
         const id = document.getElementById('btnPdfTraspaso')?.dataset.id;
         if (!id) return;
-        window.open(`${TRP_URL}/pdf?id=${id}`, '_blank');
+        CMG_descargar(`${TRP_URL}/pdf?id=${id}`);
     };
 
     window.TRP_abrirExcel = function () {
         const id = document.getElementById('btnExcelTraspaso')?.dataset.id;
         if (!id) return;
-        window.open(`${TRP_URL}/exportarExcelAjax?id=${id}`, '_blank');
+        CMG_descargar(`${TRP_URL}/exportarExcelAjax?id=${id}`);
     };
 
     // ── Formas de pago: saldo disponible + evitar elegir la misma en ambos lados ──

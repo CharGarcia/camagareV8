@@ -559,6 +559,22 @@ class SriEnvioService
         }
     }
 
+    /** Asiento de una nota de débito recién autorizada; nunca revierte el envío SRI si falla. */
+    private function procesarAsientoNotaDebito(int $idND, int $idUsuario): void
+    {
+        try {
+            $repo    = new \App\repositories\modulos\NotaDebitoRepository();
+            $service = new \App\Services\modulos\NotaDebitoService($repo, new \App\Rules\modulos\NotaDebitoRules(), new \App\Services\LogSistemaService());
+            $cab     = $repo->getPorId($idND);
+            if ($cab) {
+                $cab['id_usuario'] = $idUsuario;
+                $service->procesarAsientoContable($idND, $cab);
+            }
+        } catch (\Throwable $e) {
+            error_log('[SRI] Asiento no generado para nota de débito #' . $idND . ': ' . $e->getMessage());
+        }
+    }
+
     private function procesarAsientoRetencionCompra(int $idRetencion, int $idEmpresa, int $idUsuario): void
     {
         try {
@@ -809,6 +825,7 @@ class SriEnvioService
                 $db->prepare("UPDATE nota_debito_cabecera SET estado = 'autorizado', updated_by = ?, updated_at = NOW() WHERE id = ?")
                    ->execute([$idUsuario, $idND]);
                 try { $repo->updateDetalleXml($idND, $xmlDetalle); } catch (\Throwable) {}
+                $this->procesarAsientoNotaDebito($idND, $idUsuario);
             }
         );
         if ($preCheck !== null) {
@@ -954,6 +971,9 @@ class SriEnvioService
             } catch (\Throwable $eXml) {
                 error_log('[SRI] Error guardando detalle_xml en ND #' . $idND . ': ' . $eXml->getMessage());
             }
+
+            // Asiento contable: recién ahora que está autorizada (igual que la factura de reembolso).
+            $this->procesarAsientoNotaDebito($idND, $idUsuario);
 
             $cabecera['estado']              = 'autorizado';
             $cabecera['numero_autorizacion'] = $numAut;
@@ -1636,6 +1656,8 @@ class SriEnvioService
                 $this->procesarAsientoRetencionCompra($id, $idEmpresa, $idUsuario);
             } elseif ($tipoComprobante === 'factura_reembolso') {
                 $this->procesarAsientoFacturaReembolso($id, $idEmpresa, $idUsuario);
+            } elseif ($tipoComprobante === 'nota_debito') {
+                $this->procesarAsientoNotaDebito($id, $idUsuario);
             }
         } catch (\Throwable $eAs) {
             error_log("[SRI preVerificar] Asiento no generado ({$tipoComprobante} #{$id}): " . $eAs->getMessage());

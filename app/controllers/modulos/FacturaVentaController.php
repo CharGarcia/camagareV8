@@ -2672,6 +2672,8 @@ class FacturaVentaController extends BaseModuloController
 
             $idIngreso = $ingresoService->crear($payload);
             $db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver IngresoService::crear).
+            $ingresoService->tareasPostCommit($idIngreso, $payload);
             echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con éxito.', 'id_ingreso' => $idIngreso]);
         } catch (\Throwable $e) {
             if (isset($db) && $db->inTransaction()) $db->rollBack();

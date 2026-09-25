@@ -27,6 +27,11 @@ class ConciliacionTarjetasService
 {
     use \App\Traits\PeriodoContableTrait;
 
+    /** Clave en config/contabilidad_modulos.php y modulo_origen del asiento. */
+    public const CLAVE_CONTABLE = 'conciliacion_tarjetas';
+
+    private const MOTIVO_APAGADO = 'La empresa no contabiliza este módulo (Configuración Contable → Módulos que contabilizan).';
+
     public function __construct(
         private ConciliacionTarjetasRepository $repository,
         private ConciliacionTarjetasRules $rules,
@@ -117,9 +122,10 @@ class ConciliacionTarjetasService
         $aviso = match ($cabecera['estado']) {
             'borrador' => 'El asiento del depósito se genera al pulsar «Conciliar y cerrar».',
             'anulada'  => 'Conciliación anulada: su asiento contable fue revertido.',
-            default    => !empty($cabecera['asiento_omitido_motivo'])
+            default    => (!empty($cabecera['asiento_omitido_motivo'])
                 ? 'No se generó asiento: ' . $cabecera['asiento_omitido_motivo']
-                : 'Esta conciliación se cerró sin asiento contable.',
+                : 'Esta conciliación se cerró sin asiento contable.')
+                . ' Al completar la configuración, el asiento se genera solo la próxima vez que se abra el módulo.',
         };
 
         return ['ok' => true, 'es_guardado' => false, 'aviso' => $aviso];
@@ -141,11 +147,16 @@ class ConciliacionTarjetasService
 
         // Cobros del sistema que se pueden cruzar aquí: los pendientes, más los ya
         // cruzados en ESTA conciliación (para verlos marcados mientras se edita).
+        // Sin filtro de fechas: un cobro que sigue sin depositar es un atraso (por
+        // ejemplo, el de una factura de saldos iniciales) y puede llegar en este
+        // depósito. El período ya no se muestra en la pantalla, así que tampoco
+        // puede filtrar a escondidas (fecha_desde/fecha_hasta quedan solo como dato
+        // histórico de las conciliaciones antiguas).
         $cobros = $this->repository->getCobrosPendientes(
             $idEmpresa,
             (int) $cabecera['id_forma_cobro'],
-            $cabecera['fecha_desde'] ?: null,
-            $cabecera['fecha_hasta'] ?: null,
+            null,
+            null,
             '',
             $idUsuarioFiltro,
             $id
@@ -525,7 +536,9 @@ class ConciliacionTarjetasService
             'No se puede cerrar la conciliación porque el período contable de esa fecha está cerrado.'
         );
 
-        $diagnostico = $this->evaluarContabilidad($cabecera, $idEmpresa, $totales);
+        $diagnostico = ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, self::CLAVE_CONTABLE)
+            ? $this->evaluarContabilidad($cabecera, $idEmpresa, $totales)
+            : ['puede' => false, 'motivo' => self::MOTIVO_APAGADO, 'cuentas' => []];
 
         $db = Database::getConnection();
         $txPropia = $this->abrirTx($db);
@@ -534,11 +547,20 @@ class ConciliacionTarjetasService
             $motivo    = $diagnostico['puede'] ? null : $diagnostico['motivo'];
 
             if ($diagnostico['puede']) {
+                // SAVEPOINT: si el asiento falla con un error de SQL, PostgreSQL deja la
+                // transacción abortada (25P02) y el UPDATE del cierre reventaría también.
+                // Se vuelve al punto previo y el cierre sigue sin asiento.
+                $db->exec('SAVEPOINT ct_asiento');
                 try {
                     $idAsiento = $this->generarAsiento($cabecera, $totales, $diagnostico['cuentas'], $idEmpresa, $idUsuario);
+                    $db->exec('RELEASE SAVEPOINT ct_asiento');
                 } catch (\Throwable $e) {
+                    $db->exec('ROLLBACK TO SAVEPOINT ct_asiento');
                     // Lo contable no bloquea lo operativo: se cierra igual y se
                     // deja constancia del motivo (mismo criterio que IngresoService).
+                    // Queda pendiente: la generación automática lo reintenta al
+                    // abrir el módulo cuando cambie la configuración contable.
+                    $idAsiento = null;
                     $motivo = 'No se pudo generar el asiento: ' . $e->getMessage();
                     \App\Services\ErrorLogService::registrar($e, ['modulo' => 'conciliacion-tarjetas', 'id' => $id]);
                 }
@@ -561,6 +583,61 @@ class ConciliacionTarjetasService
             'motivo'     => $motivo,
             'totales'    => $totales,
         ];
+    }
+
+    /**
+     * Genera el asiento de una conciliación CERRADA que quedó sin él (faltaba una
+     * cuenta al cerrar, el período estaba cerrado, etc.). La invocan la generación
+     * automática al abrir el módulo (ContabilidadAutoService) y la sincronización
+     * manual de Asientos Contables, vía SincronizadorAsientosService.
+     *
+     * Si todavía no se puede contabilizar, LANZA con el motivo: así queda registrado
+     * como fallo y se reintenta solo cuando cambie la configuración contable.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $id): void
+    {
+        $origen = $this->repository->getOrigenSincronizacion($id);
+        if ($origen === null) {
+            return;
+        }
+        $idEmpresa = (int) $origen['id_empresa'];
+        // El asiento queda a nombre de quien abre el módulo (criterio de la generación
+        // automática); sin sesión, a nombre de quien creó la conciliación.
+        $idUsuario = !empty($_SESSION['id_usuario']) ? (int) $_SESSION['id_usuario'] : (int) ($origen['created_by'] ?? 0);
+
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, self::CLAVE_CONTABLE, self::CLAVE_CONTABLE, $id)) {
+            return;
+        }
+
+        $cabecera = $this->repository->getCabecera($id, $idEmpresa);
+        if ($cabecera === null || $cabecera['estado'] !== 'cerrada' || !empty($cabecera['id_asiento_contable'])) {
+            return;
+        }
+
+        $lineas  = $this->repository->getLineas($id, $idEmpresa);
+        $cruces  = $this->repository->getCruces($id, $idEmpresa);
+        $totales = $this->calcularTotales($lineas, $cruces, (float) $cabecera['neto_depositado']);
+
+        $diagnostico = $this->evaluarContabilidad($cabecera, $idEmpresa, $totales);
+        if (!$diagnostico['puede']) {
+            throw new \Exception((string) $diagnostico['motivo']);
+        }
+
+        $db = Database::getConnection();
+        $txPropia = $this->abrirTx($db);
+        try {
+            $idAsiento = $this->generarAsiento($cabecera, $totales, $diagnostico['cuentas'], $idEmpresa, $idUsuario);
+            $this->repository->enlazarAsiento($id, $idEmpresa, $idUsuario, $idAsiento);
+            $this->commitTx($db, $txPropia);
+        } catch (\Throwable $e) {
+            $this->rollbackTx($db, $txPropia);
+            throw $e;
+        }
+
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'CONTABILIZAR_CONCILIACION_TARJETAS',
+            'conciliacion_tarjetas_cabecera', $id, $cabecera, $this->repository->getCabecera($id, $idEmpresa)
+        );
     }
 
     /** Anula: revierte el asiento y libera los cobros, que vuelven a pendientes. */
@@ -739,7 +816,7 @@ class ConciliacionTarjetasService
             $idCuenta = (int) ($config[$def['campo']] ?? 0);
             if ($idCuenta <= 0) {
                 return $sin(sprintf(
-                    'Falta configurar la cuenta contable para %s. Se configura en el botón "Configuración contable" de este módulo.',
+                    'Falta configurar la cuenta contable para %s. Se configura en la pestaña «Configuración» de la conciliación.',
                     $def['nombre']
                 ));
             }

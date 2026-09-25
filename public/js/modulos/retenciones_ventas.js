@@ -273,7 +273,7 @@
             mostrarAlerta('Este registro no tiene XML disponible.', 'warning');
             return;
         }
-        window.open(`${BASE}/descargarXmlAjax?id=${retvIdActual}`, '_blank');
+        CMG_descargar(`${BASE}/descargarXmlAjax?id=${retvIdActual}`);
     };
 
     // ── MODAL — DESCARGAR PDF ────────────────────────────────────────────────────
@@ -283,7 +283,7 @@
             mostrarAlerta('Guarde la retención antes de generar el PDF.', 'warning');
             return;
         }
-        window.open(`${BASE}/exportPdfDoc?id=${retvIdActual}`, '_blank');
+        CMG_descargar(`${BASE}/exportPdfDoc?id=${retvIdActual}`);
     };
 
     // ── MODAL — DESCARGAR EXCEL ──────────────────────────────────────────────────
@@ -293,7 +293,7 @@
             mostrarAlerta('Guarde la retención antes de generar el Excel.', 'warning');
             return;
         }
-        window.open(`${BASE}/exportExcelDoc?id=${retvIdActual}`, '_blank');
+        CMG_descargar(`${BASE}/exportExcelDoc?id=${retvIdActual}`);
     };
 
     // ── MODAL — GUARDAR ─────────────────────────────────────────────────────────

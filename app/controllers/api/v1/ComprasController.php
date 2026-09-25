@@ -373,6 +373,9 @@ class ComprasController extends ApiBaseController
             $this->jsonError('ERROR_PAGO', $e->getMessage(), 422);
         }
 
+        // La transacción es nuestra: el asiento se genera después del COMMIT (ver EgresoService::registrar).
+        $egresoService->tareasPostCommit($idEgreso, $dataEgreso);
+
         $this->jsonOk([
             'id_egreso' => $idEgreso,
             'numero_egreso' => $numEgreso,

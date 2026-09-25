@@ -221,13 +221,13 @@ function RVV_dibujarCabecera(agruparPor) {
 window.RVV_exportarExcel = function () {
     const form = document.getElementById('form-filtros-rvv');
     const params = new URLSearchParams(new FormData(form)).toString();
-    window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params, '_blank');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params);
 };
 
 window.RVV_exportarPDF = function () {
     const form = document.getElementById('form-filtros-rvv');
     const params = new URLSearchParams(new FormData(form)).toString();
-    window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params, '_blank');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params);
 };
 
 /* ════════════════════════════════════════════════════

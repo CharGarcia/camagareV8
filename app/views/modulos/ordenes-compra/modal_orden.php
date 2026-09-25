@@ -555,7 +555,7 @@ window.ocPdf = function() {
 window.ocExcel = function() {
     const id = document.getElementById('oc_id').value;
     if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar la orden de compra primero.' });
-    window.open(`${OC_URL_BASE}/excel?id=${id}`, '_blank');
+    CMG_descargar(`${OC_URL_BASE}/excel?id=${id}`);
 };
 
 window.ocEnviarCorreo = async function() {

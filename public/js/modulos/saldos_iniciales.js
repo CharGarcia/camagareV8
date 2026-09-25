@@ -214,7 +214,7 @@ async function SI_importarCxc(input) {
 }
 
 function SI_descargarTemplateCxc() {
-    window.location.href = `${BASE_URL}/${RUTA_SI}/descargarTemplateCxc`;
+    CMG_descargar(`${BASE_URL}/${RUTA_SI}/descargarTemplateCxc`);
 }
 
 /* ════════════════════════════════
@@ -371,7 +371,7 @@ async function SI_importarCxp(input) {
 }
 
 function SI_descargarTemplateCxp() {
-    window.location.href = `${BASE_URL}/${RUTA_SI}/descargarTemplateCxp`;
+    CMG_descargar(`${BASE_URL}/${RUTA_SI}/descargarTemplateCxp`);
 }
 
 /* ════════════════════════════════
@@ -841,7 +841,7 @@ async function SI_importarInventario(input) {
 }
 
 function SI_descargarTemplateInventario() {
-    window.location.href = `${BASE_URL}/${RUTA_SI}/descargarTemplateInventario`;
+    CMG_descargar(`${BASE_URL}/${RUTA_SI}/descargarTemplateInventario`);
 }
 
 /* ════════════════════════════════
@@ -976,7 +976,7 @@ async function SI_importarConsig(input) {
 }
 
 function SI_descargarTemplateConsig() {
-    window.location.href = `${BASE_URL}/${RUTA_SI}/descargarTemplateConsignacion`;
+    CMG_descargar(`${BASE_URL}/${RUTA_SI}/descargarTemplateConsignacion`);
 }
 
 /* ════════════════════════════════

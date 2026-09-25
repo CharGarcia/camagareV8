@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
-etiquetas: conciliar tarjetas, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito
-version: 1.4
+etiquetas: conciliar tarjetas, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito
+version: 1.8
 orden: 66
 estado: activo
 ---
@@ -73,10 +73,13 @@ ocultarla con el engranaje de las pestañas.
 
 1. La pantalla muestra el listado de **conciliaciones** registradas. Para ver los
    cobros con tarjeta que siguen pendientes de depósito, abra una conciliación:
-   la lista **Cobros del sistema** muestra los de esa procesadora, con un semáforo
-   de días de atraso.
-2. Pulse **Nueva** (arriba a la derecha) y llene el encabezado: procesadora,
-   fecha del depósito y, si quiere, el período.
+   la lista **Cobros del sistema** muestra los de esa procesadora: la factura (o
+   facturas) que cubrió cada cobro con su **fecha de emisión**, el cliente, el
+   monto y un semáforo de días de atraso. Las facturas de **saldos iniciales**
+   (anteriores al sistema) cobradas con tarjeta aparecen marcadas con **S.I.**
+2. Pulse **Nueva** (arriba a la derecha) y llene el encabezado, todo en una sola
+   fila: procesadora, fecha del depósito, banco donde se depositó (*Depositado en*)
+   y neto depositado.
 3. En el mismo encabezado elija el **Perfil de lectura** (el formato del archivo)
    y el **Estado de cuenta** (el archivo), y pulse **Cargar**: la conciliación se
    crea, el archivo se lee en ese mismo paso y debajo aparecen, cada una en su
@@ -135,13 +138,25 @@ depósito que se generó al cerrar la conciliación; si no hay asiento, explica 
 qué (conciliación en borrador, anulada o cerrada sin cuentas contables). Quien
 además puede modificar asientos contables puede corregirlo ahí mismo.
 
+## Asientos que se generan solos al abrir el módulo
+
+Si una conciliación se cerró sin asiento (faltaba una cuenta, o el período
+contable estaba cerrado), no hace falta anularla y volver a cerrarla. Complete la
+configuración —cuenta puente de la tarjeta y del banco en *Formas de Cobro/Pago*,
+y las cuentas de comisión, IVA y retenciones en la pestaña **Configuración** de
+la conciliación— y la próxima vez que alguien abra el módulo el sistema genera,
+en segundo plano y sin mensajes, los asientos que falten. Es el mismo mecanismo
+de Facturas de Venta, Ingresos o Compras. También los genera la sincronización
+de **Contabilidad → Asientos Contables**, que además muestra el detalle de qué
+cuenta falta. Si la empresa apagó este módulo en *Configuración Contable →
+Módulos que contabilizan*, no se genera ninguno.
+
 ## Campos del formulario
 
 | Campo | Obligatorio | Qué significa |
 |-------|-------------|---------------|
 | Procesadora | Sí | La forma de cobro con tarjeta que se está conciliando. No se cambia después de crear la conciliación |
 | Fecha depósito | Sí | El día en que el dinero entró al banco |
-| Período desde / hasta | No | Acota qué cobros se ofrecen para cruzar |
 | Depositado en | Sí, al cerrar | La forma de cobro (banco) donde entró el dinero |
 | Neto depositado | No | Lo que realmente le acreditaron. Si lo deja vacío se asume el neto calculado |
 | Bruto | Sí | Valor de la venta antes de descuentos, tal como lo cobró el cliente |
@@ -193,7 +208,8 @@ además puede modificar asientos contables puede corregirlo ahí mismo.
 
 - **"La forma de cobro no tiene cuenta contable asignada"**: la conciliación se
   guarda igual, pero sin asiento. Asigne una cuenta puente en *Formas de
-  Cobro/Pago* si lleva contabilidad.
+  Cobro/Pago* si lleva contabilidad; el asiento se genera solo al volver a abrir
+  el módulo.
 - **"Apunta a la misma cuenta contable que el banco destino"**: el cobro ya
   debitó esa cuenta; contabilizar el depósito la duplicaría. La tarjeta necesita
   una cuenta puente propia, distinta de la del banco.
@@ -206,9 +222,11 @@ además puede modificar asientos contables puede corregirlo ahí mismo.
   cobro. Pida al superadministrador que lo cree o que lo deje como genérico.
 - **Las cifras no cuadran por centavos**: pida revisar el separador decimal del
   perfil (punto o coma) y suba la tolerancia si su procesadora redondea distinto.
-- **Un cobro no aparece para cruzar**: puede estar fuera del período de la
-  conciliación, ya conciliado en otra, o pertenecer a otro usuario si usted no
-  tiene acceso total.
+- **Un cobro no aparece para cruzar**: revise primero los filtros **Desde / Hasta**
+  y el buscador del encabezado de la lista. Puede estar ya conciliado en otra
+  conciliación, haberse registrado con otra forma de cobro, o pertenecer a otro
+  usuario si usted no tiene acceso total. La fecha del cobro no lo oculta: se
+  muestran todos los cobros pendientes de la procesadora.
 
 ## Períodos contables cerrados
 
@@ -223,6 +241,15 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.8** — Las listas **Estado de cuenta de la procesadora** y **Cobros del sistema** son más altas (el modal usa casi toda la pantalla). Cada una tiene en su encabezado un filtro **Desde / Hasta**: el del estado de cuenta filtra por fecha del movimiento y, mientras está activo, los **totales** (bruto, comisión, IVA, retenciones, neto y diferencia) se calculan solo con las líneas filtradas; un aviso recuerda que **al cerrar se contabiliza todo lo cruzado** y muestra ese neto y el de cobros por la **fecha de la factura** (si el cobro cubrió varias, basta con que una esté en el rango). El filtro de cobros —fechas y **buscador de texto**— también afecta los totales: solo cuentan los cruces de los cobros que pasan el filtro; si una línea del depósito se cruzó con varios cobros y solo algunos pasan, su comisión, IVA y retenciones se prorratean en esa proporción. No cambian lo que se cruza ni lo que se cierra. El buscador de cobros pasa al encabezado de su tarjeta y ya no se borra al seleccionar una línea.
+- **1.7** — El encabezado queda en **una sola fila**: Procesadora, Fecha depósito, Depositado en, Neto depositado, Perfil de lectura, archivo y **Cargar**. Se retiran los campos **Período desde / hasta**: la lista *Cobros del sistema* muestra todos los cobros pendientes de la procesadora, sin filtrar por fecha. En el PDF, el período solo aparece en las conciliaciones antiguas que lo tenían.
+- **1.6** — La lista **Cobros del sistema** muestra la **fecha de emisión de cada factura** cobrada (columna *Fecha fact.*; el filtro también busca por esa fecha) y marca con **S.I.** las facturas de **saldos iniciales** cobradas con tarjeta. Los cobros pendientes **anteriores al período** de la conciliación ya no se ocultan (antes quedaban fuera de la lista aunque siguieran sin depositar).
+- **1.5** — Las conciliaciones **cerradas sin asiento** ya no se quedan así: al
+  abrir el módulo se generan solos los asientos que falten, en cuanto la
+  configuración contable esté completa (igual que en Facturas de Venta). Se
+  respeta el interruptor *Módulos que contabilizan*. Corrección: si el asiento
+  fallaba por un error de base de datos al cerrar, el cierre entero fallaba;
+  ahora la conciliación se cierra y el asiento queda pendiente.
 - **1.4** — La pantalla pasa al diseño estándar de listados (como Proveedores):
   botón **Nueva** arriba, buscador con embudo de filtros y etiquetas, columnas,
   PDF, Excel y paginación. Se retiran la tarjeta de filtros con indicadores y

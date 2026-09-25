@@ -909,6 +909,8 @@ class SaldosInicialesService
 
         if ($managedTransaction) {
             $db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver IngresoService::crear).
+            $ingresoService->tareasPostCommit($idIngreso, $payload);
         }
 
         return [
@@ -1013,6 +1015,8 @@ class SaldosInicialesService
 
         if ($managedTransaction) {
             $db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver EgresoService::registrar).
+            $egresoService->tareasPostCommit($idEgreso, $payload);
         }
 
         return [

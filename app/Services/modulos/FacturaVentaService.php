@@ -216,6 +216,8 @@ class FacturaVentaService
 
         if ($managedTransaction) {
             $db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver IngresoService::crear).
+            $ingresoService->tareasPostCommit((int) $idIngreso, $payload);
         }
 
         return (int) $idIngreso;
@@ -360,6 +362,8 @@ class FacturaVentaService
 
         if ($managedTransaction) {
             $db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver IngresoService::crear).
+            $ingresoService->tareasPostCommit((int) $idIngreso, $payload);
         }
 
         return (int) $idIngreso;

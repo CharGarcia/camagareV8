@@ -2309,7 +2309,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const id = document.getElementById('m-input-id').value;
         if (!id) return;
         const url = `<?= BASE_URL ?>/<?= $rutaModulo ?>/exportarExcelAjax?id=${id}`;
-        window.open(url, '_blank');
+        CMG_descargar(url);
     }
 
     async function enviarCorreoIngreso() {

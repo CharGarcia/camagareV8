@@ -304,13 +304,13 @@ window.abrirModalImportacion = function (el) {
 window.IMP_exportarPdf = function () {
     const id = document.getElementById('impId').value;
     if (!id) return;
-    window.open(`${window.CMG_urlBaseImp}/exportarPdfAjax?id=${id}`, '_blank');
+    CMG_descargar(`${window.CMG_urlBaseImp}/exportarPdfAjax?id=${id}`);
 };
 
 window.IMP_exportarExcel = function () {
     const id = document.getElementById('impId').value;
     if (!id) return;
-    window.open(`${window.CMG_urlBaseImp}/exportarExcelAjax?id=${id}`, '_blank');
+    CMG_descargar(`${window.CMG_urlBaseImp}/exportarExcelAjax?id=${id}`);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -577,7 +577,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 window.IMP_descargarPlantillaExcel = function () {
-    window.location.href = `${window.CMG_urlBaseImp}/descargarPlantillaProductosAjax`;
+    CMG_descargar(`${window.CMG_urlBaseImp}/descargarPlantillaProductosAjax`);
 };
 
 // Carga masiva de líneas FOB desde Excel/CSV: sube el archivo, el backend lo

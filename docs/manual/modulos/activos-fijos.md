@@ -6,7 +6,7 @@ ruta_modulo: modulos/activos-fijos
 tipo: modulo
 visibilidad: todos
 etiquetas: activos fijos, activo, depreciacion, bienes, maquinaria, vehiculos, muebles, vida util, linea recta
-version: 1.2
+version: 1.3
 orden: 60
 estado: activo
 ---
@@ -86,6 +86,7 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.3** — Asiento de **alta** de los activos manuales: si faltaba una cuenta o el período estaba cerrado, el documento quedaba sin asiento y nada lo volvía a intentar. Ahora, al completar la configuración contable, el asiento se genera solo la próxima vez que alguien abra el módulo (igual que en Facturas de Venta), o desde la sincronización de Asientos Contables. Respeta el interruptor *Módulos que contabilizan*.
 - **1.2** — El módulo respeta ahora el **cierre contable**: no se puede operar
   sobre un activo cuyo período esté cerrado. Antes no se comprobaba.
 - **1.1** — Eliminar un activo fijo ahora **anula su asiento de alta**. Antes ese

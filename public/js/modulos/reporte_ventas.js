@@ -641,13 +641,13 @@ function RV_dibujarCabecera(agruparPor, meses) {
 window.RV_exportarExcel = function() {
     const form = document.getElementById('form-filtros-reporte');
     const params = new URLSearchParams(new FormData(form)).toString();
-    window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params, '_blank');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params);
 };
 
 window.RV_exportarPDF = function() {
     const form = document.getElementById('form-filtros-reporte');
     const params = new URLSearchParams(new FormData(form)).toString();
-    window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params, '_blank');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params);
 };
 
 /* ════════════════════════════════════════════════════

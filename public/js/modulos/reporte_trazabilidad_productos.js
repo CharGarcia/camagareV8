@@ -86,7 +86,7 @@
     });
     btnExcel.addEventListener('click', function () {
         if (!idProductoActual) return;
-        window.open(BASE_URL + '/' + RUTA_MODULO + '/exportarExcel?' + paramsExport(), '_blank');
+        CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportarExcel?' + paramsExport());
     });
 
     // ── Carga de la línea de tiempo ─────────────────────────────────────────

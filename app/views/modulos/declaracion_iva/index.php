@@ -433,7 +433,7 @@
             // envían, el Excel exporta el valor por defecto del servidor y no coincide con lo
             // que el usuario está viendo (ajustes sin guardar todavía).
             ajustesEnPantalla().forEach(([codigo, valor]) => params.append('ajuste_' + codigo, valor));
-            window.open(`<?= $base ?>/<?= $rutaModulo ?>/exportar-excel?${params.toString()}`, '_blank');
+            CMG_descargar(`<?= $base ?>/<?= $rutaModulo ?>/exportar-excel?${params.toString()}`);
         };
 
         // Fórmulas configuradas en /config/sri-casilleros-etiquetas que no llegan a verse en el

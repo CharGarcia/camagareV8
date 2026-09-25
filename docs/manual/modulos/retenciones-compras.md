@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.16
+etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
+version: 1.17
 orden: 30
 estado: activo
 ---
@@ -271,6 +271,22 @@ Desde la retención guardada están disponibles el **PDF** del comprobante, su
 **Excel**, su **XML** y el envío por **correo**, en la barra de acciones al
 inicio del formulario.
 
+### Imprimir, descargar o ver el PDF
+
+Al pulsar el botón **PDF** el sistema genera el comprobante y pregunta qué hacer
+con él:
+
+- **Imprimir**: abre directamente el cuadro de impresión con la retención ya
+  cargada; solo hay que elegir la impresora y confirmar. El navegador siempre
+  muestra ese cuadro: por seguridad, ninguna página web puede imprimir sin él.
+- **Descargar**: guarda el archivo PDF en el equipo, como antes.
+- **Ver**: abre el PDF en otra pestaña del navegador.
+
+En el celular, **Imprimir** abre el PDF en otra pestaña, desde donde se imprime o
+se comparte con las opciones del teléfono. Si al elegir **Ver** no se abre nada,
+el navegador está bloqueando las ventanas emergentes del sistema: permítalas o
+use **Descargar**.
+
 ### Envío automático del correo
 
 Cuando el SRI autoriza la retención, el sistema envía el comprobante al correo
@@ -349,6 +365,10 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
   rechazo real: corrija lo que indica el detalle antes de reenviar.
 
 ## Historial de cambios
+
+- **1.17** — El botón **PDF** de la retención pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el comprobante ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Antes solo descargaba el archivo.
 
 - **1.16** — El **código de retención de renta** se toma del **Catálogo del ATS**, como
   piden la ficha técnica de comprobantes electrónicos (campo `codigoRetencion`) y la del

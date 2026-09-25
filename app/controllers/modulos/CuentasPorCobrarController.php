@@ -1023,6 +1023,8 @@ class CuentasPorCobrarController extends BaseModuloController
 
             $idIngreso = $ingresoService->crear($payload);
             $db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver IngresoService::crear).
+            $ingresoService->tareasPostCommit($idIngreso, $payload);
 
             $nuevoSaldo = $saldo - $monto;
             $this->jsonSuccess([
@@ -1342,6 +1344,8 @@ class CuentasPorCobrarController extends BaseModuloController
 
             $idIngreso = $ingresoService->crear($payload);
             $db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver IngresoService::crear).
+            $ingresoService->tareasPostCommit($idIngreso, $payload);
 
             $nuevoSaldo = $saldo - $monto;
             $this->jsonSuccess([

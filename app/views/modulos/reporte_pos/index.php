@@ -147,8 +147,8 @@
 
             $('rposBtnPdf').disabled = json.total === 0;
             $('rposBtnExcel').disabled = json.total === 0;
-            $('rposBtnPdf').onclick   = () => window.open(json.pdf_url, '_blank');
-            $('rposBtnExcel').onclick = () => window.open(json.excel_url, '_blank');
+            $('rposBtnPdf').onclick   = () => CMG_descargar(json.pdf_url);
+            $('rposBtnExcel').onclick = () => CMG_descargar(json.excel_url);
         } catch (e) {
             tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-danger py-4">Error de comunicación.</td></tr>`;
         }

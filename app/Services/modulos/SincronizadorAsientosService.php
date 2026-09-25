@@ -786,6 +786,113 @@ class SincronizadorAsientosService
             'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
         ];
 
+        // 10. Conciliación de Tarjetas: el asiento del depósito (banco + comisión + retenciones
+        //     contra la cuenta puente) se genera al cerrar; si en ese momento faltaba una cuenta
+        //     o el período estaba cerrado, la conciliación queda cerrada sin asiento y se completa aquí.
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM conciliacion_tarjetas_cabecera WHERE id_empresa = ? AND eliminado = false AND estado = 'cerrada' AND id_asiento_contable IS NULL",
+            'params' => [$idEmpresa],
+            'factory' => function() {
+                return new \App\Services\modulos\ConciliacionTarjetasService(
+                    new \App\repositories\modulos\ConciliacionTarjetasRepository(),
+                    new \App\Rules\modulos\ConciliacionTarjetasRules(),
+                    new \App\Services\modulos\ConciliacionTarjetasImportService(),
+                    new \App\Services\modulos\ConciliacionTarjetasMatchService(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'clave'  => 'conciliacion_tarjetas',
+            'nombre' => 'Conciliación de Tarjetas',
+            'dondeConfigurar' => 'Formas de Cobro (cuenta puente y banco) y la pestaña «Configuración» de la conciliación',
+            'tablaVerif' => 'conciliacion_tarjetas_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['numero'],
+        ];
+
+        // 11. Notas de Débito de venta: el asiento se genera al autorizarse en el SRI.
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM nota_debito_cabecera WHERE id_empresa = ? AND eliminado = false AND estado = 'autorizado' AND id_asiento_contable IS NULL",
+            'params' => [$idEmpresa],
+            'factory' => function() {
+                return new \App\Services\modulos\NotaDebitoService(
+                    new \App\repositories\modulos\NotaDebitoRepository(),
+                    new \App\Rules\modulos\NotaDebitoRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'clave'  => 'notas_debito',
+            'nombre' => 'Notas de Débito',
+            'dondeConfigurar' => 'Configuración Contable (Facturas de Venta)',
+            'tablaVerif' => 'nota_debito_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
+        ];
+
+        // 12. Facturas de Reembolso: asiento «cuenta puente» al autorizarse en el SRI.
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM factura_reembolso_cabecera WHERE id_empresa = ? AND eliminado = false AND estado = 'autorizado' AND id_asiento_contable IS NULL",
+            'params' => [$idEmpresa],
+            'factory' => function() {
+                return new \App\Services\modulos\FacturaReembolsoService(
+                    new \App\repositories\modulos\FacturaReembolsoRepository(),
+                    new \App\Rules\modulos\FacturaReembolsoRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'clave'  => 'factura_reembolso',
+            'nombre' => 'Facturas de Reembolso',
+            'dondeConfigurar' => 'Configuración Contable (Factura de Reembolso)',
+            'tablaVerif' => 'factura_reembolso_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
+        ];
+
+        // 13. Traspasos de fondos entre formas de cobro/pago.
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM traspasos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) <> 'ANULADO'",
+            'params' => [$idEmpresa],
+            'factory' => function() {
+                return new \App\Services\modulos\TraspasoService(
+                    new \App\repositories\modulos\TraspasoRepository(),
+                    new \App\Rules\modulos\TraspasoRules(),
+                    new \App\repositories\modulos\FormaPagoRepository(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'clave'  => 'traspasos',
+            'nombre' => 'Traspasos',
+            'dondeConfigurar' => 'Configuración Contable (Cobros y Pagos)',
+            'tablaVerif' => 'traspasos_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+            'colsDoc' => ['numero_traspaso'],
+        ];
+
+        // 14. Activos Fijos: asiento de ALTA de los activos manuales (los de una compra ya
+        //     quedaron contabilizados por la compra). La depreciación no entra aquí: el lote
+        //     mensual se contabiliza en la misma transacción o no se crea.
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM activos_fijos WHERE id_empresa = ? AND eliminado = false AND origen = 'manual' AND id_asiento_alta IS NULL AND valor_adquisicion > 0",
+            'params' => [$idEmpresa],
+            'factory' => function() {
+                $repo    = new \App\repositories\modulos\ActivoFijoRepository();
+                $catRepo = new \App\repositories\modulos\ActivoFijoCategoriaRepository();
+                return new \App\Services\modulos\ActivoFijoService(
+                    $repo,
+                    $catRepo,
+                    new \App\repositories\modulos\ActivoFijoLoteRepository(),
+                    new \App\repositories\modulos\ComprasRepository(),
+                    new \App\Rules\modulos\ActivoFijoRules($repo, $catRepo),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'clave'  => 'activos_fijos_alta',
+            'nombre' => 'Activos Fijos (alta)',
+            'dondeConfigurar' => 'el propio activo o Configuración Contable (Activos Fijos - Alta)',
+            'tablaVerif' => 'activos_fijos',
+            'colAsiento' => 'id_asiento_alta',
+            'colsDoc' => ['codigo', 'nombre'],
+        ];
+
         // Módulos que la empresa apagó en «Módulos que contabilizan»: no se generan ni se cuentan
         // como pendientes (el aviso de Estados Financieros / Balance no debe reclamarlos). Filtrar
         // aquí cubre de una vez sincronizar(), ejecutarPaso(), contarPasos(), contarPendientes()

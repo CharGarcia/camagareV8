@@ -275,11 +275,11 @@ window.RC_generarReporte = function () {
 };
 
 window.RC_exportarExcel = function (idEntidad) {
-    window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + RC_paramsExport(idEntidad).toString(), '_blank');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + RC_paramsExport(idEntidad).toString());
 };
 
 window.RC_exportarPDF = function (idEntidad) {
-    window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + RC_paramsExport(idEntidad).toString(), '_blank');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + RC_paramsExport(idEntidad).toString());
 };
 
 // Abre el modal de correo para la entidad del encabezado; precarga su email.

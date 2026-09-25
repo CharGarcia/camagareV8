@@ -608,53 +608,12 @@ class LiquidacionCompraController extends BaseModuloController
         $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
-            $cab = $this->repository->getPorId((int)$data['id_compra']);
-            if (!$cab) throw new \Exception('Liquidación no encontrada.');
-
-            $egresoService = new \App\Services\modulos\EgresoService(
-                new \App\repositories\modulos\EgresoRepository(),
-                new \App\Rules\modulos\EgresoRules(),
-                new \App\Services\LogSistemaService()
-            );
-
-            // Adaptar payload para el service de Egresos
-            $payload = [
-                'id_empresa'         => $idEmpresa,
-                'id_punto_emision'   => (int)$data['id_punto_emision'],
-                'id_egreso_concepto' => (int)$data['id_egreso_concepto'],
-                'fecha_emision'      => $data['fecha_emision'],
-                'monto_total'        => (float)$data['monto_pagar'],
-                'tipo_egreso'        => 'PAGO',
-                'tipo_sujeto'        => 'PROVEEDOR',
-                'id_proveedor'       => $cab['id_proveedor'],
-                'observaciones'      => $data['observaciones'] ?? '',
-                'usuario_id'         => $idUsuario,
-                'detalles'           => [
-                    [
-                        'tipo_documento'           => 'LIQUIDACION',
-                        'id_referencia_documento'  => (int)$data['id_compra'],
-                        'monto_pagado'             => (float)$data['monto_pagar'],
-                        'monto_documento'          => (float)$cab['importe_total'],
-                        'numero_documento'         => "{$cab['establecimiento']}-{$cab['punto_emision']}-{$cab['secuencial']}",
-                        'descripcion'              => $data['observaciones'] ?? ''
-                    ]
-                ],
-                'pagos' => [
-                    [
-                        'id_forma_pago'           => (int)$data['id_forma_pago'],
-                        'monto'                   => (float)$data['monto_pagar'],
-                        'referencia'              => $data['numero_operacion'] ?? '',
-                        'tipo_operacion_bancaria' => $data['tipo_operacion_bancaria'] ?? null,
-                        // Cheque: número y fecha en que se podrá cobrar (control de posfechados)
-                        'numero_cheque'           => (($data['tipo_operacion_bancaria'] ?? '') === 'CHEQUE') ? ($data['numero_operacion'] ?? null) : null,
-                        'fecha_cobro'             => !empty($data['fecha_cobro']) ? $data['fecha_cobro'] : null,
-                        'banco_id'                => !empty($data['banco_id']) ? (int)$data['banco_id'] : null
-                    ]
-                ]
-            ];
-
-            $idEgreso = $egresoService->registrar($payload);
-            echo json_encode(['ok' => true, 'msg' => 'Pago registrado con éxito.', 'id_egreso' => $idEgreso]);
+            $res = $this->service->registrarPagoEgreso($idEmpresa, $idUsuario, $data);
+            echo json_encode([
+                'ok'        => true,
+                'msg'       => "Pago registrado. Egreso #{$res['numero_egreso']} generado.",
+                'id_egreso' => $res['id_egreso'],
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

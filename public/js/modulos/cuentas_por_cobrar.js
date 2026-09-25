@@ -1800,7 +1800,7 @@ function CXC_exportarExcel() {
         // cliente en formato mayor (sección por cliente, subtotal y total general).
         vista:       CXC_vista === 'producto' ? 'PRODUCTO' : (CXC_vista === 'agrupado' ? 'CLIENTE' : ''),
     });
-    window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportExcel?${params}`, '_blank');
+    CMG_descargar(`${BASE_URL}/${RUTA_MODULO_CXC}/exportExcel?${params}`);
 }
 
 function CXC_exportarPDF() {
@@ -1821,7 +1821,7 @@ function CXC_exportarPDF() {
         // cliente en formato mayor (sección por cliente, subtotal y total general).
         vista:       CXC_vista === 'producto' ? 'PRODUCTO' : (CXC_vista === 'agrupado' ? 'CLIENTE' : ''),
     });
-    window.open(`${BASE_URL}/${RUTA_MODULO_CXC}/exportPdf?${params}`, '_blank');
+    CMG_descargar(`${BASE_URL}/${RUTA_MODULO_CXC}/exportPdf?${params}`);
 }
 
 /* ════════════════════════════════════════════════════

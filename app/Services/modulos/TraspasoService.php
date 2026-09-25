@@ -240,10 +240,31 @@ class TraspasoService
      * Genera (o regenera) y enlaza el asiento contable del traspaso:
      * DEBE = cuenta de la forma destino, HABER = cuenta de la forma origen.
      */
+    /**
+     * Generación por sincronización (automática al abrir el módulo o manual desde Asientos
+     * Contables) de un traspaso registrado que quedó sin asiento.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idTraspaso): void
+    {
+        $origen = $this->repository->getOrigenSincronizacion($idTraspaso);
+        if (!$origen || ($origen['estado'] ?? '') === 'anulado') {
+            return;
+        }
+        $this->procesarAsientoContable($idTraspaso, [
+            'id_empresa' => (int) $origen['id_empresa'],
+            'id_usuario' => (int) ($_SESSION['id_usuario'] ?? $origen['created_by'] ?? 0),
+        ]);
+    }
+
     public function procesarAsientoContable(int $idTraspaso, array $data): void
     {
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) ($data['usuario_id'] ?? $data['id_usuario'] ?? 0);
+
+        // Interruptor por empresa (Configuración Contable → Módulos que contabilizan).
+        if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'traspasos', 'traspaso', $idTraspaso)) {
+            return;
+        }
 
         $traspaso = $this->repository->getPorId($idTraspaso, $idEmpresa);
         if (!$traspaso) {

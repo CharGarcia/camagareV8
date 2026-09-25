@@ -523,17 +523,18 @@
 
     window.RET_exportarPdf = () => {
         if (!retIdActual) return;
-        window.open(`${BASE}/exportPdfDoc?id=${retIdActual}`, '_blank');
+        // Pregunta Imprimir / Descargar / Ver (piloto; ver CMG_pdfDocumento en app.js).
+        CMG_pdfDocumento(`${BASE}/exportPdfDoc?id=${retIdActual}`, { archivo: 'retencion.pdf' });
     };
 
     window.RET_exportarXml = () => {
         if (!retIdActual) return;
-        window.open(`${BASE}/exportXmlDoc?id=${retIdActual}`, '_blank');
+        CMG_descargar(`${BASE}/exportXmlDoc?id=${retIdActual}`);
     };
 
     window.RET_exportarExcel = () => {
         if (!retIdActual) return;
-        window.open(`${BASE}/exportExcelDoc?id=${retIdActual}`, '_blank');
+        CMG_descargar(`${BASE}/exportExcelDoc?id=${retIdActual}`);
     };
 
     window.RET_enviarPorCorreo = async () => {

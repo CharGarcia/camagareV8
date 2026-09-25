@@ -877,7 +877,7 @@ function pdfPedido() {
 function excelPedido() {
     const id = document.getElementById('pedido_id').value;
     if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar el pedido primero.' });
-    window.open(`${window.CMG_urlBase}/excel?id=${id}`, '_blank');
+    CMG_descargar(`${window.CMG_urlBase}/excel?id=${id}`);
 }
 
 async function emailPedido() {

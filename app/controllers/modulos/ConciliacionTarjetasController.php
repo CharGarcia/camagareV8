@@ -555,7 +555,10 @@ class ConciliacionTarjetasController extends BaseModuloController
         $html .= $dato('Procesadora', $cab['procesadora_nombre'] ?? '');
         $html .= $dato('Depositado en', $cab['destino_nombre'] ?? '—');
         $html .= $dato('Fecha del depósito', $this->fecha($cab['fecha_conciliacion']));
-        $html .= $dato('Período conciliado', $this->fecha($cab['fecha_desde']) . ' a ' . $this->fecha($cab['fecha_hasta']));
+        // El período ya no se captura; solo lo traen las conciliaciones antiguas.
+        if (!empty($cab['fecha_desde']) || !empty($cab['fecha_hasta'])) {
+            $html .= $dato('Período conciliado', $this->fecha($cab['fecha_desde']) . ' a ' . $this->fecha($cab['fecha_hasta']));
+        }
         $html .= $dato('Estado', $cab['estado']);
         $html .= $dato('Asiento contable', !empty($cab['id_asiento_contable'])
             ? 'Generado (#' . $cab['id_asiento_contable'] . ')'

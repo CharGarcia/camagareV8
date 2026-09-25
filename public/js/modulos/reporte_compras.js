@@ -443,12 +443,12 @@ function RC_dibujarGrafico(rawData, agrupacion) {
 // ── Exportar ─────────────────────────────────────────────────────────────────
 window.RC_exportarExcel = function () {
     const params = new URLSearchParams(new FormData(document.getElementById('form-filtros-reporte'))).toString();
-    window.open(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params, '_blank');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params);
 };
 
 window.RC_exportarPDF = function () {
     const params = new URLSearchParams(new FormData(document.getElementById('form-filtros-reporte'))).toString();
-    window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params, '_blank');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params);
 };
 
 /* ════════════════════════════════════════════════════

@@ -169,7 +169,7 @@
     window.exportarCsv = function (id) {
         const idFinal = id || $('dt_det_id').value;
         if (!idFinal) return;
-        window.location.href = `${urlModulo}/exportarCsv?id=${idFinal}`;
+        CMG_descargar(`${urlModulo}/exportarCsv?id=${idFinal}`);
     };
 
 })(window, document);

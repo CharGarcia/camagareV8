@@ -6,7 +6,7 @@ ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso
-version: 1.6
+version: 1.7
 orden: 31
 estado: activo
 ---

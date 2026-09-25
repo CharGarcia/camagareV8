@@ -92,6 +92,17 @@ class ActivoFijoRepository extends BaseRepository
         return ['rows' => $rows, 'total' => (int) $total];
     }
 
+    /**
+     * Empresa y creador del documento, para generar su asiento por sincronización (que
+     * recibe solo el id, sin sesión de empresa garantizada).
+     */
+    public function getOrigenSincronizacion(int $id): ?array
+    {
+        $st = $this->db->prepare("SELECT id_empresa, created_by, origen FROM activos_fijos WHERE id = ? AND eliminado = false");
+        $st->execute([$id]);
+        return $st->fetch(\PDO::FETCH_ASSOC) ?: null;
+    }
+
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT a.*,

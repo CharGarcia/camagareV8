@@ -279,6 +279,22 @@ class ConciliacionTarjetasRepository extends BaseRepository
                 (SELECT string_agg(idet.numero_documento, ', ' ORDER BY idet.id)
                    FROM ingresos_detalle idet
                   WHERE idet.id_ingreso = ic.id) AS documentos,
+                -- Documentos con su fecha de emisión, para la lista del modal. Facturas,
+                -- recibos y saldos iniciales CxC (facturas anteriores al sistema). Un cobro
+                -- «por ítems» guarda varias filas por documento: se agrupan por documento.
+                (SELECT jsonb_agg(jsonb_build_object('numero', d.numero, 'fecha', d.fecha, 'tipo', d.tipo)
+                                  ORDER BY d.fecha NULLS LAST, d.numero)
+                   FROM (SELECT DISTINCT
+                                idet.tipo_documento AS tipo,
+                                idet.id_referencia_documento,
+                                split_part(COALESCE(idet.numero_documento, ''), ' · ', 1) AS numero,
+                                CASE idet.tipo_documento
+                                    WHEN 'FACTURA'       THEN (SELECT v.fecha_emision FROM ventas_cabecera v WHERE v.id = idet.id_referencia_documento)
+                                    WHEN 'SALDO_INICIAL' THEN (SELECT s.fecha_emision FROM saldos_iniciales_cxc s WHERE s.id = idet.id_referencia_documento)
+                                    WHEN 'RECIBO'        THEN (SELECT r.fecha_emision FROM recibos_venta_cabecera r WHERE r.id = idet.id_referencia_documento)
+                                END AS fecha
+                           FROM ingresos_detalle idet
+                          WHERE idet.id_ingreso = ic.id) d) AS documentos_detalle,
                 -- Código de autorización, si el cobro vino de una pasarela
                 COALESCE(
                     (SELECT pt.authorization_code FROM payphone_transacciones pt
@@ -631,6 +647,30 @@ class ConciliacionTarjetasRepository extends BaseRepository
             ':id'    => $id,
             ':e'     => $idEmpresa,
         ]);
+    }
+
+    /**
+     * Empresa y creador de una conciliación, para la generación de asientos por
+     * sincronización (que recibe solo el id, sin sesión de empresa garantizada).
+     */
+    public function getOrigenSincronizacion(int $id): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT id_empresa, created_by FROM {$this->table} WHERE id = :id AND eliminado = FALSE"
+        );
+        $st->execute([':id' => $id]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /** Enlaza el asiento generado después del cierre y limpia el motivo de omisión. */
+    public function enlazarAsiento(int $id, int $idEmpresa, int $idUsuario, int $idAsiento): void
+    {
+        $this->db->prepare(
+            "UPDATE {$this->table}
+                SET id_asiento_contable = :asi, asiento_omitido_motivo = NULL,
+                    updated_at = CURRENT_TIMESTAMP, updated_by = :u
+              WHERE id = :id AND id_empresa = :e"
+        )->execute([':asi' => $idAsiento, ':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
     }
 
     public function eliminarCabecera(int $id, int $idEmpresa, int $idUsuario): void

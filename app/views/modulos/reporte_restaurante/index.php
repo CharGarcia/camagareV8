@@ -305,8 +305,8 @@
                 : `${json.total} resultados`;
 
             habilitarAcciones(json.total > 0);
-            $('rresBtnPdf').onclick   = () => window.open(json.pdf_url, '_blank');
-            $('rresBtnExcel').onclick = () => window.open(json.excel_url, '_blank');
+            $('rresBtnPdf').onclick   = () => CMG_descargar(json.pdf_url);
+            $('rresBtnExcel').onclick = () => CMG_descargar(json.excel_url);
             // La tirilla se arma en el servidor con los mismos filtros: se abre
             // en una ventana angosta que se imprime sola, igual que las del POS.
             $('rresBtnTirilla').onclick = () => window.open(

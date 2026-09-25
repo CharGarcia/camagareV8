@@ -40,6 +40,15 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     .cc-linea-fila.cc-aplicada { background-color: rgba(25,135,84,.08); }
     .cc-linea-fila.cc-ignorada { background-color: rgba(108,117,125,.08); opacity: .6; }
     .cc-linea-fila.cc-error { background-color: rgba(220,53,69,.10); border-left: 4px solid #dc3545; }
+    /* Historial de cargas: la fila entera abre el detalle; la abierta queda resaltada. */
+    .cc-carga-fila { cursor: pointer; }
+    .cc-carga-fila.cc-carga-activa > td { background-color: rgba(13,110,253,.10); }
+    .cc-carga-fila.cc-carga-activa > td:first-child { box-shadow: inset 4px 0 0 #0d6efd; }
+    /* Modal de búsqueda: resumen de lo asignado y listas con alto acotado. */
+    .cc-buscar-resumen { font-size: .8rem; }
+    .cc-buscar-lista { max-height: 260px; overflow: auto; }
+    .cc-buscar-lista thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; }
+    .cc-buscar-lista td, .cc-buscar-lista th { font-size: .78rem; }
 </style>
 
 <div class="container-fluid pt-2 pb-3 px-0 px-md-3" id="modulo-conciliacion_cobros">
@@ -55,9 +64,9 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     <div class="card border-0 shadow-sm rounded-3 mb-3">
         <div class="card-body p-3">
             <h6 class="fw-bold mb-3"><span class="cc-step-num">1</span> Cuenta bancaria y extracto</h6>
-            <form id="cc-form-carga" class="row g-2 align-items-end">
-                <div class="col-md-3">
-                    <label class="form-label small fw-bold text-muted mb-1">Cuenta Bancaria</label>
+            <form id="cc-form-carga" class="d-flex flex-wrap align-items-start gap-2">
+                <div style="flex:1 1 260px; min-width:220px;">
+                    <label class="form-label small fw-bold text-muted mb-1 d-block">Cuenta Bancaria</label>
                     <select id="cc-forma" class="form-select form-select-sm shadow-none" required>
                         <option value="">— Seleccione —</option>
                         <?php foreach ($cuentas as $c): ?>
@@ -67,8 +76,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-bold text-muted mb-1">Punto de Emisión (para los Ingresos)</label>
+                <div style="width:110px;">
+                    <label class="form-label small fw-bold text-muted mb-1 d-block" title="Serie (punto de emisión) con la que se numeran los ingresos">Serie</label>
                     <select id="cc-punto" class="form-select form-select-sm shadow-none" required>
                         <option value=""><?= empty($puntosEmision) ? 'Sin series activas' : '— Seleccione —' ?></option>
                         <?php foreach ($puntosEmision as $p): ?>
@@ -76,18 +85,19 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-bold text-muted mb-1">Formato del Banco</label>
+                <div style="flex:1 1 230px; min-width:200px;">
+                    <label class="form-label small fw-bold text-muted mb-1 d-block">Formato del Banco</label>
                     <select id="cc-perfil" class="form-select form-select-sm shadow-none" required>
                         <option value="">— Seleccione —</option>
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-bold text-muted mb-1">Archivo del Banco (Excel/CSV o PDF)</label>
+                <div style="flex:1 1 240px; min-width:210px;">
+                    <label class="form-label small fw-bold text-muted mb-1 d-block">Archivo del Banco (Excel/CSV o PDF)</label>
                     <input type="file" id="cc-archivo" class="form-control form-control-sm shadow-none" accept=".xlsx,.xls,.csv,.pdf" required>
                 </div>
-                <div class="col-12 text-end">
-                    <button type="submit" class="btn btn-primary btn-sm mt-2">
+                <div>
+                    <label class="form-label small mb-1 d-block">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary btn-sm text-nowrap">
                         <i class="bi bi-upload me-1"></i> Subir y Conciliar
                     </button>
                 </div>
@@ -99,7 +109,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     <div class="card border-0 shadow-sm rounded-3 mb-3 cmg-table-card" id="cc-card-lineas" style="display:none;">
         <div class="card-body p-3 pb-0">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <h6 class="fw-bold mb-0"><span class="cc-step-num">2</span> Revisar y confirmar líneas del extracto</h6>
+                <h6 class="fw-bold mb-0"><span class="cc-step-num">2</span> Revisar y confirmar líneas del extracto <small class="text-muted fw-normal" id="cc-carga-actual"></small></h6>
                 <div id="cc-resumen-lineas" class="small text-muted"></div>
             </div>
         </div>
@@ -133,20 +143,20 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     <!-- ── Historial de cargas ── -->
     <div class="card border-0 shadow-sm rounded-3 mb-3">
         <div class="card-body p-3">
-            <h6 class="fw-bold mb-2"><i class="bi bi-clock-history me-1"></i> Cargas anteriores</h6>
+            <h6 class="fw-bold mb-2"><i class="bi bi-clock-history me-1"></i> Cargas anteriores <small class="text-muted fw-normal">— clic en una fila para ver sus líneas</small></h6>
             <div class="table-responsive">
                 <table class="table table-sm table-hover align-middle mb-0" id="cc-tabla-cargas">
                     <thead>
                         <tr>
                             <th>Fecha</th><th>Archivo</th><th>Cuenta</th><th>Formato</th>
-                            <th class="text-center">Estado</th><th class="text-end">Aplicadas</th><th></th>
+                            <th class="text-center">Estado</th><th class="text-end">Aplicadas</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($cargas)): ?>
-                            <tr><td colspan="7" class="text-center text-muted py-3">Sin cargas todavía.</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted py-3">Sin cargas todavía.</td></tr>
                         <?php else: foreach ($cargas as $c): ?>
-                            <tr>
+                            <tr class="cc-carga-fila" data-id-carga="<?= (int) $c['id'] ?>" title="Clic para ver sus líneas">
                                 <td><?= date('d-m-Y H:i:s', strtotime($c['created_at'])) ?></td>
                                 <td><?= htmlspecialchars($c['nombre_archivo']) ?></td>
                                 <td><?= htmlspecialchars($c['forma_pago_nombre']) ?></td>
@@ -157,11 +167,6 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                                     </span>
                                 </td>
                                 <td class="text-end"><?= (int) $c['total_aplicadas'] ?> / <?= (int) $c['total_lineas'] ?></td>
-                                <td class="text-end">
-                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="CC.abrirCarga(<?= (int) $c['id'] ?>)">
-                                        <i class="bi bi-eye"></i> Ver
-                                    </button>
-                                </td>
                             </tr>
                         <?php endforeach; endif; ?>
                     </tbody>
@@ -173,24 +178,45 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 
 <!-- ── Modal: buscar documento manualmente para una línea ── -->
 <div class="modal fade" id="cc-modal-buscar-doc" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h6 class="modal-title fw-bold">Buscar Cliente / Documento a Cobrar</h6>
+                <h6 class="modal-title fw-bold">Buscar Cliente / Documentos a Cobrar</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="cc-buscar-id-linea">
-                <div class="mb-2">
-                    <label class="form-label small fw-bold text-muted mb-1">Cliente</label>
-                    <select id="cc-buscar-cliente" class="form-select form-select-sm" onchange="CC.buscarDocumentosDeCliente()"></select>
+                <div class="cc-buscar-resumen d-flex flex-wrap gap-3 align-items-center border rounded-3 px-3 py-2 mb-2 bg-light">
+                    <div class="text-truncate" style="max-width:420px;" id="cc-buscar-desc"></div>
+                    <div class="ms-auto">Recibido: <strong id="cc-buscar-monto">$0.00</strong></div>
+                    <div>Asignado: <strong id="cc-buscar-asignado">$0.00</strong></div>
+                    <div>Restante: <strong id="cc-buscar-restante">$0.00</strong></div>
                 </div>
-                <div class="table-responsive" style="max-height:320px; overflow:auto;">
-                    <table class="table table-sm table-hover">
-                        <thead><tr><th>Tipo</th><th>Documento</th><th>Fecha</th><th class="text-end">Saldo Pendiente</th><th></th></tr></thead>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold text-muted mb-1 d-block">Cliente</label>
+                    <select id="cc-buscar-cliente" class="form-select form-select-sm" onchange="CC.buscarDocumentosDeCliente()"></select>
+                    <small class="text-muted">Marque uno o varios documentos. Puede cambiar de cliente y seguir marcando: lo marcado se conserva abajo.</small>
+                </div>
+                <div class="cc-buscar-lista border rounded-2 mb-3">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th style="width:32px;"></th><th>Tipo</th><th>Documento</th><th>Fecha</th><th class="text-end">Saldo Pendiente</th></tr></thead>
                         <tbody id="cc-buscar-docs-tbody"><tr><td colspan="5" class="text-center text-muted py-3">Seleccione un cliente.</td></tr></tbody>
                     </table>
                 </div>
+                <h6 class="small fw-bold text-muted mb-1">Documentos seleccionados <span class="badge bg-primary bg-opacity-10 text-primary" id="cc-buscar-sel-count">0</span></h6>
+                <div class="cc-buscar-lista border rounded-2">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Cliente</th><th>Documento</th><th class="text-end">Saldo Pendiente</th><th class="text-end" style="width:140px;">Monto a Aplicar</th><th style="width:40px;"></th></tr></thead>
+                        <tbody id="cc-buscar-sel-tbody"><tr><td colspan="5" class="text-center text-muted py-3">Ningún documento seleccionado.</td></tr></tbody>
+                    </table>
+                </div>
+                <small class="text-muted d-block mt-2">Con varios documentos, la línea del banco se divide en una línea por documento (ya confirmadas) y cada una genera su propio ingreso. Si sobra monto, queda una línea aparte con el saldo sin asignar.</small>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="cc-buscar-aplicar" onclick="CC.aplicarSeleccion()">
+                    <i class="bi bi-check2 me-1"></i> Aplicar selección
+                </button>
             </div>
         </div>
     </div>
@@ -199,7 +225,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 <script>
     const CC_URL_BASE = "<?= $urlBase ?>";
     const CC_PERM_CREAR = <?= !empty($perm['crear']) ? 'true' : 'false' ?>;
-    window.CC_CLIENTES = <?= json_encode(array_map(fn ($c) => ['id' => (int) $c['id'], 'nombre' => $c['nombre']], $clientes), JSON_UNESCAPED_UNICODE) ?>;
+    window.CC_CLIENTES = <?= json_encode(array_map(fn ($c) => ['id' => (int) $c['id'], 'nombre' => $c['nombre']], $clientes), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE) ?>;
     // Formatos de banco (perfiles de mapeo) del catálogo global config/conciliacion-perfiles.
     window.CC_PERFILES = <?= json_encode(array_map(fn ($p) => [
         'id' => (int) $p['id'],

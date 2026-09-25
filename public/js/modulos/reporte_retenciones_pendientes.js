@@ -100,8 +100,8 @@ async function RRP_cargar() {
 
         RRP_$('rrpBtnPdf').disabled   = RRP_datos.length === 0;
         RRP_$('rrpBtnExcel').disabled = RRP_datos.length === 0;
-        RRP_$('rrpBtnPdf').onclick    = () => window.open(RRP_urls.pdf, '_blank');
-        RRP_$('rrpBtnExcel').onclick  = () => window.open(RRP_urls.excel, '_blank');
+        RRP_$('rrpBtnPdf').onclick    = () => CMG_descargar(RRP_urls.pdf);
+        RRP_$('rrpBtnExcel').onclick  = () => CMG_descargar(RRP_urls.excel);
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="11" class="text-center text-danger py-4">Error de comunicación con el servidor.</td></tr>`;
     }

@@ -195,6 +195,7 @@ function CTAR_nueva() {
 
     CTAR_detalle = null;
     CTAR_lineaSel = null;
+    CTAR_limpiarFiltrosListas();
 
     document.getElementById('ctar-m-id').value = '';
     document.getElementById('ctar-m-titulo').textContent = 'Nueva conciliación';
@@ -215,7 +216,7 @@ function CTAR_nueva() {
     document.getElementById('ctar-m-tbody-lineas').innerHTML =
         '<tr><td colspan="8" class="text-center py-4 text-muted small">Llene el encabezado, elija el perfil y el archivo del estado de cuenta, y pulse Cargar.</td></tr>';
     document.getElementById('ctar-m-tbody-cobros').innerHTML =
-        '<tr><td colspan="4" class="text-center py-4 text-muted small">—</td></tr>';
+        '<tr><td colspan="5" class="text-center py-4 text-muted small">—</td></tr>';
 
     CTAR_habilitarAcciones(false, true);
     CTAR_mostrarModal();
@@ -225,6 +226,7 @@ async function CTAR_abrir(id) {
     try {
         CTAR_detalle = await CTAR_api(`detalleAjax?id=${id}`);
         CTAR_lineaSel = null;
+        CTAR_limpiarFiltrosListas();
         document.getElementById('ctar-m-archivo').value = '';
         CTAR_pintarModal();
         CTAR_mostrarModal();
@@ -383,14 +385,21 @@ function CTAR_pintarAvisoContable() {
 
 function CTAR_pintarLineas() {
     const tbody = document.getElementById('ctar-m-tbody-lineas');
-    const lineas = CTAR_detalle.lineas || [];
+    const todas = CTAR_detalle.lineas || [];
     const editable = CTAR_detalle.cabecera.estado === 'borrador';
 
+    // Filtro Desde/Hasta del encabezado de la tarjeta (fecha del movimiento). Solo
+    // acota lo que se ve: los totales y el cierre siguen usando todas las líneas.
+    const lineas = CTAR_lineasVisibles();
+
     document.getElementById('ctar-m-resumen-lineas').textContent =
-        `${lineas.length} líneas · ${CTAR_detalle.totales.lineas_cruzadas} cruzadas · ${CTAR_detalle.totales.lineas_sin_cobro} sin documento`;
+        (lineas.length !== todas.length ? `${lineas.length} de ` : '')
+        + `${todas.length} líneas · ${CTAR_detalle.totales.lineas_cruzadas} cruzadas · ${CTAR_detalle.totales.lineas_sin_cobro} sin documento`;
 
     if (!lineas.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted small">Cargue el estado de cuenta o agregue líneas a mano.</td></tr>';
+        tbody.innerHTML = todas.length
+            ? '<tr><td colspan="8" class="text-center py-4 text-muted small">Ninguna línea en esas fechas.</td></tr>'
+            : '<tr><td colspan="8" class="text-center py-4 text-muted small">Cargue el estado de cuenta o agregue líneas a mano.</td></tr>';
         return;
     }
 
@@ -445,7 +454,10 @@ function CTAR_seleccionarLinea(id) {
 
 // ─── Cobros del sistema ─────────────────────────────────────────────────────
 
-function CTAR_pintarCobros(filtro = '') {
+function CTAR_pintarCobros(filtro = null) {
+    // Sin argumento se respeta lo escrito en el buscador (antes, al seleccionar una
+    // línea, la lista se repintaba sin el filtro de texto).
+    if (filtro === null) filtro = document.getElementById('ctar-m-buscar-cobro')?.value || '';
     const tbody = document.getElementById('ctar-m-tbody-cobros');
     const editable = CTAR_detalle.cabecera.estado === 'borrador';
     const limite = CTAR_diasEsperados(CTAR_detalle.cabecera.id_forma_cobro);
@@ -453,35 +465,115 @@ function CTAR_pintarCobros(filtro = '') {
     // Solo los que aún no están cruzados en esta conciliación.
     CTAR_cobrosCache = (CTAR_detalle.cobros || []).filter((c) => !c.id_cruce);
 
-    const q = filtro.trim().toLowerCase();
-    const visibles = q
-        ? CTAR_cobrosCache.filter((c) => (
-            `${c.documentos || ''} ${c.cliente_nombre || ''} ${c.numero_ingreso || ''} ${c.monto}`
-        ).toLowerCase().includes(q))
-        : CTAR_cobrosCache;
+    // Filtro Desde/Hasta del encabezado de la tarjeta: fecha de la FACTURA (la columna
+    // «Fecha fact.»). Si el cobro cubrió varias, basta con que una caiga en el rango.
+    // Un cobro sin documentos con fecha (p. ej. un anticipo) se filtra por su propia fecha.
+    const rango = CTAR_rangoFechas('cobros');
+    const enFechas = CTAR_cobrosCache.filter((c) => CTAR_cobroEnRango(c, rango));
 
-    document.getElementById('ctar-m-resumen-cobros').textContent = `${CTAR_cobrosCache.length} disponibles`;
+    const q = filtro.trim().toLowerCase();
+    const visibles = q ? enFechas.filter((c) => CTAR_cobroCoincideTexto(c, q)) : enFechas;
+
+    document.getElementById('ctar-m-resumen-cobros').textContent =
+        (visibles.length !== CTAR_cobrosCache.length ? `${visibles.length} de ` : '') + `${CTAR_cobrosCache.length} disponibles`;
 
     if (!visibles.length) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted small">Sin cobros pendientes.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted small">Sin cobros pendientes.</td></tr>';
         return;
     }
 
     const puedeCruzar = editable && CTAR_lineaSel;
 
-    tbody.innerHTML = visibles.map((c) => `
+    tbody.innerHTML = visibles.map((c) => {
+        const docs = CTAR_documentosCobro(c);
+        const celdaDocs = docs.length
+            ? docs.map((d) => `<div class="text-nowrap">${CTAR_esc(d.numero || '—')}${d.tipo === 'SALDO_INICIAL'
+                ? ' <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" title="Factura de saldos iniciales">S.I.</span>' : ''}</div>`).join('')
+            : CTAR_esc(c.documentos || c.numero_ingreso || '—');
+        const celdaFechas = docs.length
+            ? docs.map((d) => `<div class="text-nowrap">${d.fecha ? CTAR_fecha(d.fecha) : '—'}</div>`).join('')
+            : '—';
+        return `
         <tr style="cursor:${puedeCruzar ? 'pointer' : 'default'};"
             ${puedeCruzar ? `onclick="CTAR_cruzarCon(${c.id_ingreso_pago})"` : ''}
             title="${puedeCruzar ? 'Cruzar con la línea seleccionada' : 'Seleccione primero una línea del estado de cuenta'}">
-            <td class="ps-3 fw-medium">${CTAR_esc(c.documentos || c.numero_ingreso || '—')}</td>
+            <td class="ps-3 fw-medium">${celdaDocs}</td>
+            <td class="small" title="Cobro ${CTAR_esc(c.numero_ingreso || '')} del ${CTAR_fecha(c.fecha_emision)}">${celdaFechas}</td>
             <td class="small">${CTAR_esc(c.cliente_nombre || '—')}</td>
             <td class="text-end fw-bold">$${CTAR_num(c.monto)}</td>
             <td class="text-center">${CTAR_badgeDias(c.dias_transcurridos, limite)}</td>
-        </tr>`).join('');
+        </tr>`;
+    }).join('');
+}
+
+/** Documentos (factura, recibo o saldo inicial) que cubrió un cobro, con su fecha de emisión. */
+function CTAR_documentosCobro(c) {
+    let docs = c.documentos_detalle;
+    if (typeof docs === 'string') {
+        try { docs = JSON.parse(docs); } catch (e) { docs = null; }
+    }
+    return Array.isArray(docs) ? docs : [];
+}
+
+// ─── Filtros Desde/Hasta de cada lista ──────────────────────────────────────
+// Viven en el encabezado de cada tarjeta y solo filtran en pantalla (no se guardan
+// ni cambian qué se cruza o se cierra).
+
+function CTAR_rangoFechas(lista) {
+    return {
+        desde: document.getElementById(`ctar-f-${lista}-desde`)?.value || '',
+        hasta: document.getElementById(`ctar-f-${lista}-hasta`)?.value || '',
+    };
+}
+
+function CTAR_enRango(fecha, rango) {
+    if (!rango.desde && !rango.hasta) return true;
+    const f = String(fecha || '').substring(0, 10);
+    if (!f) return false;
+    return (!rango.desde || f >= rango.desde) && (!rango.hasta || f <= rango.hasta);
+}
+
+/**
+ * ¿El cobro pasa el filtro Desde/Hasta de la lista de cobros? Por fecha de la FACTURA:
+ * basta con que una de las que cubrió caiga en el rango. Sin documentos con fecha (un
+ * anticipo, por ejemplo), por la fecha del propio cobro. Lo usan la lista y los totales.
+ */
+function CTAR_cobroEnRango(c, rango) {
+    const fechas = CTAR_documentosCobro(c).map((d) => d.fecha).filter(Boolean);
+    return fechas.length
+        ? fechas.some((fe) => CTAR_enRango(fe, rango))
+        : CTAR_enRango(c.fecha_emision, rango);
+}
+
+function CTAR_filtrarFechas(lista) {
+    if (!CTAR_detalle) return;
+    if (lista === 'lineas') CTAR_pintarLineas(); else CTAR_pintarCobros();
+    CTAR_pintarTotales();   // ambos filtros afectan los totales
+}
+
+function CTAR_limpiarFiltrosListas() {
+    ['ctar-f-lineas-desde', 'ctar-f-lineas-hasta', 'ctar-f-cobros-desde', 'ctar-f-cobros-hasta', 'ctar-m-buscar-cobro']
+        .forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
 }
 
 function CTAR_filtrarCobros(q) {
-    if (CTAR_detalle) CTAR_pintarCobros(q);
+    if (!CTAR_detalle) return;
+    CTAR_pintarCobros(q);
+    CTAR_pintarTotales();   // el buscador de cobros también afecta los totales
+}
+
+/** Texto del buscador de cobros (en minúsculas, sin espacios sobrantes). */
+function CTAR_textoBuscarCobro() {
+    return (document.getElementById('ctar-m-buscar-cobro')?.value || '').trim().toLowerCase();
+}
+
+/** ¿El cobro coincide con el buscador? Mismos campos que se ven en la lista. */
+function CTAR_cobroCoincideTexto(c, q) {
+    if (!q) return true;
+    return (
+        `${c.documentos || ''} ${c.cliente_nombre || ''} ${c.numero_ingreso || ''} ${c.monto} `
+        + CTAR_documentosCobro(c).map((d) => CTAR_fecha(d.fecha)).join(' ')
+    ).toLowerCase().includes(q);
 }
 
 async function CTAR_cruzarCon(idIngresoPago) {
@@ -636,8 +728,68 @@ document.addEventListener('change', (ev) => {
 
 // ─── Totales ────────────────────────────────────────────────────────────────
 
+/** Líneas del estado de cuenta que pasan el filtro Desde/Hasta (todas si no hay filtro). */
+function CTAR_lineasVisibles() {
+    const rango = CTAR_rangoFechas('lineas');
+    return (CTAR_detalle.lineas || []).filter((l) => CTAR_enRango(l.fecha_movimiento, rango));
+}
+
+/**
+ * Totales de lo que se ve en pantalla, con el mismo criterio que el servidor
+ * (ConciliacionTarjetasService::calcularTotales): solo cuentan las líneas cruzadas, y
+ * el bruto es lo cruzado. El cierre y el asiento usan SIEMPRE los del servidor (todo
+ * lo cruzado), por eso con filtro activo se avisa cuál será el total contabilizado.
+ */
+function CTAR_totalesVisibles() {
+    const r2 = (n) => Math.round(n * 100) / 100;
+    // Filtro de cobros: un cruce cuenta si su cobro pasa el filtro de fechas (fecha de la
+    // factura) y el buscador de texto.
+    // Los cobros cruzados en esta conciliación vienen en CTAR_detalle.cobros con id_cruce.
+    const rangoCobros = CTAR_rangoFechas('cobros');
+    const qCobros = CTAR_textoBuscarCobro();
+    const hayFiltroCobros = !!(rangoCobros.desde || rangoCobros.hasta || qCobros);
+    const cobroPorPago = new Map((CTAR_detalle.cobros || []).map((c) => [String(c.id_ingreso_pago), c]));
+    const cruceCuenta = (cr) => {
+        if (!hayFiltroCobros) return true;
+        const c = cobroPorPago.get(String(cr.id_ingreso_pago));
+        return c ? (CTAR_cobroEnRango(c, rangoCobros) && CTAR_cobroCoincideTexto(c, qCobros)) : false;
+    };
+
+    // Por línea visible: su bruto es lo cruzado que pasa el filtro de cobros, y sus
+    // descuentos (comisión, IVA, retenciones, otros) se prorratean en esa misma
+    // proporción — una línea de depósito cruzada con varios cobros puede pasar a medias.
+    const t = { total_bruto_cruzado: 0, total_comision: 0, total_iva_comision: 0,
+                total_retencion_ir: 0, total_retencion_iva: 0, total_otros: 0 };
+    CTAR_lineasVisibles().forEach((l) => {
+        const cruces = l.cruces_detalle || [];
+        if (!cruces.length) return;
+        const totalLinea = cruces.reduce((s, cr) => s + (parseFloat(cr.monto_cruzado) || 0), 0);
+        const incluido   = cruces.filter(cruceCuenta).reduce((s, cr) => s + (parseFloat(cr.monto_cruzado) || 0), 0);
+        if (incluido <= 0) return;
+        const prop = totalLinea > 0 ? incluido / totalLinea : 0;
+        t.total_bruto_cruzado += incluido;
+        t.total_comision      += (parseFloat(l.comision) || 0) * prop;
+        t.total_iva_comision  += (parseFloat(l.iva_comision) || 0) * prop;
+        t.total_retencion_ir  += (parseFloat(l.retencion_ir) || 0) * prop;
+        t.total_retencion_iva += (parseFloat(l.retencion_iva) || 0) * prop;
+        t.total_otros         += (parseFloat(l.otros_descuentos) || 0) * prop;
+    });
+    Object.keys(t).forEach((k) => { t[k] = r2(t[k]); });
+    t.total_neto = r2(t.total_bruto_cruzado - t.total_comision - t.total_iva_comision
+        - t.total_retencion_ir - t.total_retencion_iva - t.total_otros);
+    return t;
+}
+
+/** ¿Hay algún filtro activo (fechas del estado de cuenta, fechas o buscador de cobros)? Todos afectan los totales. */
+function CTAR_hayFiltroLineas() {
+    const l = CTAR_rangoFechas('lineas');
+    const c = CTAR_rangoFechas('cobros');
+    return !!(l.desde || l.hasta || c.desde || c.hasta || CTAR_textoBuscarCobro());
+}
+
 function CTAR_pintarTotales() {
-    const t = CTAR_detalle.totales;
+    const filtrado = CTAR_hayFiltroLineas();
+    const t = filtrado ? CTAR_totalesVisibles() : CTAR_detalle.totales;
     const retenciones = (parseFloat(t.total_retencion_ir) || 0) + (parseFloat(t.total_retencion_iva) || 0);
 
     document.getElementById('ctar-m-t-bruto').textContent       = CTAR_num(t.total_bruto_cruzado);
@@ -646,6 +798,13 @@ function CTAR_pintarTotales() {
     document.getElementById('ctar-m-t-retenciones').textContent = CTAR_num(retenciones);
     document.getElementById('ctar-m-t-neto').textContent        = CTAR_num(t.total_neto);
 
+    const aviso = document.getElementById('ctar-m-t-aviso-filtro');
+    if (aviso) {
+        aviso.classList.toggle('d-none', !filtrado);
+        document.getElementById('ctar-m-t-aviso-total').textContent =
+            CTAR_num(CTAR_detalle.totales.total_neto);
+    }
+
     CTAR_recalcularDiferencia();
 }
 
@@ -653,7 +812,7 @@ function CTAR_pintarTotales() {
 function CTAR_recalcularDiferencia() {
     if (!CTAR_detalle) return;
 
-    const neto = parseFloat(CTAR_detalle.totales.total_neto) || 0;
+    const neto = parseFloat((CTAR_hayFiltroLineas() ? CTAR_totalesVisibles() : CTAR_detalle.totales).total_neto) || 0;
     const declarado = parseFloat(document.getElementById('ctar-m-neto').value);
     const diferencia = (isNaN(declarado) || declarado === 0) ? 0 : declarado - neto;
 
@@ -1123,23 +1282,23 @@ function CTAR_paramsExportacion() {
 }
 
 function CTAR_exportarPDF() {
-    window.open(`${CTAR_URL}/exportarPdf?${CTAR_paramsExportacion()}`, '_blank');
+    CMG_descargar(`${CTAR_URL}/exportarPdf?${CTAR_paramsExportacion()}`);
 }
 
 function CTAR_exportarExcel() {
-    window.open(`${CTAR_URL}/exportarExcel?${CTAR_paramsExportacion()}`, '_blank');
+    CMG_descargar(`${CTAR_URL}/exportarExcel?${CTAR_paramsExportacion()}`);
 }
 
 function CTAR_pdfConciliacion() {
     const id = document.getElementById('ctar-m-id').value;
     if (!id) { CTAR_aviso('info', 'Guarde primero', 'La conciliación debe estar guardada.'); return; }
-    window.open(`${CTAR_URL}/comprobantePdf?id=${id}`, '_blank');
+    CMG_descargar(`${CTAR_URL}/comprobantePdf?id=${id}`);
 }
 
 function CTAR_excelConciliacion() {
     const id = document.getElementById('ctar-m-id').value;
     if (!id) { CTAR_aviso('info', 'Guarde primero', 'La conciliación debe estar guardada.'); return; }
-    window.open(`${CTAR_URL}/comprobanteExcel?id=${id}`, '_blank');
+    CMG_descargar(`${CTAR_URL}/comprobanteExcel?id=${id}`);
 }
 
 // ─── Arranque ───────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
 etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar
-version: 1.5
+version: 1.6
 orden: 21
 estado: activo
 ---

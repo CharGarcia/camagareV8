@@ -740,6 +740,8 @@ class PosVentaService
         $idIngreso = $ingresoService->crear($payload, true);
         if ($managedTransaction) {
             $this->db->commit();
+            // La transacción es nuestra: el asiento se genera después del COMMIT (ver IngresoService::crear).
+            $ingresoService->tareasPostCommit($idIngreso, $payload);
         }
         return $idIngreso;
         } catch (\Throwable $e) {

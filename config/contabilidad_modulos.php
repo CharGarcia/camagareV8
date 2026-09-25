@@ -95,6 +95,25 @@ return [
         'conceptos' => ['ventas_factura'],
     ],
 
+    // La ND de venta arma su asiento con el catálogo de la factura
+    // (AsientoBuilderService::generarAsientoNotaDebitoVenta usa 'ventas_factura').
+    'notas_debito' => [
+        'nombre'    => 'Notas de Débito',
+        'grupo'     => 'Ventas',
+        'rutas'     => ['modulos/nota_debito'],
+        'conceptos' => ['ventas_factura'],
+    ],
+
+    // La cuenta puente de terceros solo existe en 'factura_reembolso'; CxC e ingresos
+    // caen a 'ventas_factura' como respaldo, por eso ese va solo en la firma.
+    'factura_reembolso' => [
+        'nombre'          => 'Facturas de Reembolso',
+        'grupo'           => 'Ventas',
+        'rutas'           => ['modulos/factura-reembolso'],
+        'conceptos'       => ['factura_reembolso'],
+        'conceptos_firma' => ['ventas_factura'],
+    ],
+
     'retenciones_venta' => [
         'nombre'      => 'Retenciones en Ventas',
         'grupo'       => 'Ventas',
@@ -172,6 +191,65 @@ return [
                 'filtro'     => "activo = TRUE AND (aplica_en = 'AMBAS' OR aplica_en = 'EGRESO')",
             ],
         ],
+    ],
+
+    // El asiento del depósito usa la cuenta de la forma de cobro de la tarjeta (puente) y la
+    // del banco destino —ambas con COALESCE(asientos_programados 'forma_cobro', la de la
+    // forma)— más las cuentas de comisión/IVA/retenciones de la pestaña «Configuración» de la
+    // conciliación. Las tres fuentes entran en la firma: corregir cualquiera reintenta las
+    // conciliaciones cerradas que quedaron sin asiento.
+    'conciliacion_tarjetas' => [
+        'nombre'      => 'Conciliación de Tarjetas',
+        'grupo'       => 'Tesorería',
+        'rutas'       => ['modulos/conciliacion-tarjetas'],
+        'referencias' => ['forma_cobro'],
+        'tablas'      => [
+            [
+                'tabla'      => 'empresa_formas_pago',
+                'col_cuenta' => 'id_cuenta_contable',
+                'filtro'     => "activo = TRUE AND (aplica_en = 'AMBAS' OR aplica_en = 'INGRESO')",
+            ],
+            ['tabla' => 'conciliacion_tarjetas_config', 'col_cuenta' => 'id_cuenta_comision'],
+            ['tabla' => 'conciliacion_tarjetas_config', 'col_cuenta' => 'id_cuenta_iva_comision'],
+            ['tabla' => 'conciliacion_tarjetas_config', 'col_cuenta' => 'id_cuenta_retencion_ir'],
+            ['tabla' => 'conciliacion_tarjetas_config', 'col_cuenta' => 'id_cuenta_retencion_iva'],
+        ],
+        'ayuda'       => 'Asiento del depósito de la procesadora (banco, comisión, IVA y retenciones contra la cuenta puente de la tarjeta).',
+    ],
+
+    // Debe = cuenta de la forma destino (regla 'forma_cobro'), Haber = la de la forma
+    // origen (regla 'forma_pago'); ambas con respaldo en la cuenta de la propia forma.
+    'traspasos' => [
+        'nombre'      => 'Traspasos',
+        'grupo'       => 'Tesorería',
+        'rutas'       => ['modulos/traspasos'],
+        'referencias' => ['forma_pago', 'forma_cobro'],
+        'tablas'      => [
+            [
+                'tabla'      => 'empresa_formas_pago',
+                'col_cuenta' => 'id_cuenta_contable',
+                'filtro'     => 'activo = TRUE',
+            ],
+        ],
+    ],
+
+    // ─── Activos Fijos ──────────────────────────────────────────────────────
+    // Solo el asiento de ALTA de los activos manuales. La contrapartida puede estar en el
+    // propio activo o en la regla general 'activos_fijos_alta'.
+    'activos_fijos_alta' => [
+        'nombre'    => 'Activos Fijos (alta)',
+        'grupo'     => 'Activos Fijos',
+        'rutas'     => ['modulos/activos-fijos'],
+        'conceptos' => ['activos_fijos_alta'],
+        'tablas'    => [
+            [
+                'tabla'      => 'activos_fijos',
+                'col_cuenta' => 'id_cuenta_contrapartida_alta',
+                'filtro'     => "origen = 'manual'",
+            ],
+        ],
+        'ayuda'     => 'Asiento de alta de los activos registrados a mano (Activo contra la contrapartida). '
+                     . 'Los que vienen de una compra ya están contabilizados por la compra.',
     ],
 
     // ─── Consignaciones ─────────────────────────────────────────────────────

@@ -2210,7 +2210,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const id = document.getElementById('eg-input-id').value;
         if (!id) return;
         const url = `${EGR_URL}/exportarExcelAjax?id=${id}`;
-        window.open(url, '_blank');
+        CMG_descargar(url);
     }
 
     async function enviarCorreoEgreso() {

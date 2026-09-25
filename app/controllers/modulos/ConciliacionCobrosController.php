@@ -145,6 +145,28 @@ class ConciliacionCobrosController extends BaseModuloController
         exit;
     }
 
+    /** Reparte una línea del banco entre varios documentos pendientes (de uno o varios clientes). */
+    public function dividirLineaAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $data = json_decode(file_get_contents('php://input') ?: '[]', true) ?: $_POST;
+        $idLinea = (int) ($data['id_linea'] ?? 0);
+        $asignaciones = is_array($data['asignaciones'] ?? null) ? $data['asignaciones'] : [];
+
+        try {
+            $resultado = $this->service->dividirLinea($idEmpresa, $idUsuario, $idLinea, $asignaciones);
+            echo json_encode(['ok' => true, 'data' => $resultado]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function desconfirmarLineaAjax(): void
     {
         $this->requireCrear();
