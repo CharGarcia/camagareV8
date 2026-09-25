@@ -31,12 +31,10 @@ class EmpleadoPdfService
         $pdf->SetMargins(12, 12, 12);
         $pdf->SetAutoPageBreak(true, 12);
         $pdf->AddPage();
-
-        $empNom = htmlspecialchars((string)($empresa['razon_social'] ?? $empresa['nombre_comercial'] ?? 'Empresa'));
-        $empRuc = htmlspecialchars((string)($empresa['ruc'] ?? ''));
+        $conLogo = $this->dibujarLogoSiExiste($pdf, $empresa, 12, 12, 32);
 
         $html = '<style>
-            h1 { font-size: 13px; font-weight: bold; }
+            .t { font-size: 13px; font-weight: bold; }
             .sub { font-size: 8px; color: #555; }
             .sect { background-color:#e9ecef; font-weight:bold; font-size:9px; padding:4px; }
             table.d td { font-size: 8.5px; padding: 3px 4px; border-bottom: 0.5px solid #dddddd; }
@@ -45,11 +43,8 @@ class EmpleadoPdfService
             table.g td { font-size:8px; padding:3px 4px; border:0.5px solid #ddd; }
         </style>';
 
-        // Encabezado
-        $html .= '<table cellpadding="0"><tr>
-            <td width="70%"><h1>' . $empNom . '</h1><span class="sub">RUC: ' . $empRuc . '</span></td>
-            <td width="30%" align="right"><h1>FICHA DEL EMPLEADO</h1></td>
-        </tr></table><br>';
+        // Encabezado: logo + datos de la empresa a la izquierda, título a la derecha.
+        $html .= $this->htmlEncabezadoEmpresa($empresa, 'FICHA DEL EMPLEADO', htmlspecialchars((string) ($emp['nombres_apellidos'] ?? '')), $conLogo);
 
         // Datos generales
         $html .= '<div class="sect">DATOS GENERALES</div>';
@@ -113,10 +108,110 @@ class EmpleadoPdfService
             $html .= '</table>';
         }
 
+        $html .= $this->resumenMensual($emp['resumen_mensual'] ?? null);
+
         $pdf->writeHTML($html, true, false, true, false, '');
 
         $nombreArch = 'Ficha_Empleado_' . preg_replace('/[^A-Za-z0-9]/', '_', (string)($emp['identificacion'] ?? 'empleado')) . '.pdf';
         return $pdf->Output($nombreArch, $dest);
+    }
+
+    /**
+     * Resumen del sueldo mensual estimado: ingresos a la izquierda, descuentos a la
+     * derecha y el neto a recibir. $r es la salida de RolCalculoService::calcular().
+     */
+    private function resumenMensual(?array $r): string
+    {
+        if (empty($r)) return '';
+
+        $ing = array_values(array_filter($r['rubros'] ?? [], fn($x) => $x['tipo'] === 'ingreso'));
+        $egr = array_values(array_filter($r['rubros'] ?? [], fn($x) => $x['tipo'] === 'egreso'));
+
+        $html = '<br><br><div class="sect">RESUMEN DE SUELDO MENSUAL (ESTIMADO ' . htmlspecialchars((string) ($r['periodo'] ?? '')) . ')</div>';
+        $html .= '<table class="g" cellpadding="3"><tr>'
+            . '<th width="35%">Ingresos</th><th width="15%" align="right">Valor</th>'
+            . '<th width="35%">Descuentos</th><th width="15%" align="right">Valor</th></tr>';
+
+        $n = max(count($ing), count($egr), 1);
+        for ($i = 0; $i < $n; $i++) {
+            $a = $ing[$i] ?? null;
+            $b = $egr[$i] ?? null;
+            $html .= '<tr>'
+                . '<td>' . ($a ? htmlspecialchars((string) $a['concepto']) : '') . '</td>'
+                . '<td align="right">' . ($a ? '$ ' . $this->num($a['valor']) : '') . '</td>'
+                . '<td>' . ($b ? htmlspecialchars((string) $b['concepto']) : ($i === 0 ? 'Sin descuentos' : '')) . '</td>'
+                . '<td align="right">' . ($b ? '$ ' . $this->num($b['valor']) : '') . '</td>'
+                . '</tr>';
+        }
+
+        $html .= '<tr>'
+            . '<td><b>Total Ingresos</b></td><td align="right"><b>$ ' . $this->num($r['total_ingresos'] ?? 0) . '</b></td>'
+            . '<td><b>Total Descuentos</b></td><td align="right"><b>$ ' . $this->num($r['total_egresos'] ?? 0) . '</b></td>'
+            . '</tr>';
+        $html .= '<tr>'
+            . '<td colspan="3" align="right" style="background-color:#e7f5ec;"><b>NETO A RECIBIR</b></td>'
+            . '<td align="right" style="background-color:#e7f5ec;"><b>$ ' . $this->num($r['neto'] ?? 0) . '</b></td>'
+            . '</tr></table>';
+
+        $html .= '<div class="sub">Referencia calculada con el sueldo base, los rubros fijos y la configuración del empleado '
+            . '(mes completo de 30 días, sin novedades). El rol de pagos real puede variar por horas extra, '
+            . 'descuentos, anticipos, préstamos, vacaciones o días no laborados del mes.</div>';
+
+        return $html;
+    }
+
+    /**
+     * Encabezado común (mismo que el Rol de Pago): razón social/RUC/dirección/teléfono
+     * a la izquierda —con hueco si ya se dibujó el logo— y el título a la derecha.
+     */
+    private function htmlEncabezadoEmpresa(array $empresa, string $titulo, string $subtitulo, bool $conLogo): string
+    {
+        $h = fn($v) => htmlspecialchars((string) ($v ?? ''));
+        $empNom = $h($empresa['razon_social'] ?? $empresa['nombre_comercial'] ?? $empresa['nombre'] ?? 'Empresa');
+        $empRuc = $h($empresa['ruc'] ?? '');
+        $empDir = $h($empresa['direccion'] ?? '');
+        $empTel = $h($empresa['telefono'] ?? '');
+
+        $logoCell = $conLogo ? '<td width="20%">&nbsp;</td>' : '';
+        $anchoTexto = $conLogo ? '45%' : '65%';
+
+        $datos = '<span class="t">' . $empNom . '</span><br><span class="sub">RUC: ' . $empRuc . '</span>';
+        if ($empDir !== '') $datos .= '<br><span class="sub">' . $empDir . '</span>';
+        if ($empTel !== '') $datos .= '<br><span class="sub">Tel: ' . $empTel . '</span>';
+
+        return '<table cellpadding="0"><tr>'
+            . $logoCell
+            . '<td width="' . $anchoTexto . '">' . $datos . '</td>'
+            . '<td width="35%" align="right"><span class="t">' . htmlspecialchars($titulo) . '</span><br><span class="sub">' . $subtitulo . '</span></td>'
+            . '</tr></table><br><br>';
+    }
+
+    /**
+     * Dibuja el logo de la empresa en (x, y) si existe el archivo, con ancho fijo
+     * $w (alto proporcional). Devuelve true si lo dibujó, para reservar su hueco
+     * en la tabla HTML del encabezado.
+     */
+    private function dibujarLogoSiExiste(TCPDF $pdf, array $empresa, float $x, float $y, float $w): bool
+    {
+        $ruta = trim((string) ($empresa['logo_ruta'] ?? $empresa['logo'] ?? ''));
+        if ($ruta === '') return false;
+
+        $limpia = ltrim($ruta, '/');
+        foreach (['sistema/public/', 'sistema/', 'public/'] as $prefijo) {
+            if (strpos($limpia, $prefijo) === 0) {
+                $limpia = substr($limpia, strlen($prefijo));
+                break;
+            }
+        }
+
+        $rutaAbsoluta = '';
+        foreach ([MVC_ROOT . '/public/' . $limpia, MVC_ROOT . '/' . $limpia] as $candidato) {
+            if (is_file($candidato)) { $rutaAbsoluta = $candidato; break; }
+        }
+        if ($rutaAbsoluta === '') return false;
+
+        $pdf->Image($rutaAbsoluta, $x, $y, $w, 0, '', '', 'T', false, 300, '', false, false, 0, 'T');
+        return true;
     }
 
     // ─── Helpers de formato ──────────────────────────────────────────────────

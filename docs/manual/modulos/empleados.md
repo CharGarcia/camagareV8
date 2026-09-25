@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
-etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula
-version: 1.10
+etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, sueldo neto, cuanto gana, liquido a recibir, resumen de sueldo
+version: 1.11
 orden: 10
 estado: activo
 ---
@@ -77,6 +77,22 @@ verde descarga el **Excel**. Ambos incluyen los mismos datos —generales,
 laborales, bancarios, historial de periodos y rubros fijos—; el Excel los
 organiza en secciones con pares etiqueta/valor. Los dos quedan deshabilitados
 (avisan "Guarde primero") mientras el empleado no se ha guardado.
+
+### Resumen de sueldo mensual en el PDF y el Excel
+
+Al final del PDF y del Excel sale el **Resumen de sueldo mensual (estimado)**: cuánto recibe
+el empleado en un mes normal, con los ingresos a la izquierda, los descuentos a
+la derecha y el **Neto a recibir**. Se calcula con el mismo motor del Rol de
+Pagos, usando solo lo fijo de la ficha:
+
+- **Ingresos**: sueldo base, rubros fijos de ingreso y, si están configurados en
+  el rol, fondos de reserva y décimos mensualizados.
+- **Descuentos**: aporte personal al IESS (si aporta), rubros fijos de descuento e
+  Impuesto a la Renta proyectado (según tramos del año y gastos personales).
+
+Es una referencia: toma el mes actual completo (30 días) y **no** incluye
+novedades (horas extra, anticipos, préstamos, descuentos del mes), vacaciones ni
+días no laborados, así que el rol real puede ser distinto.
 
 ## Pestaña Vacaciones: períodos y saldo
 
@@ -245,6 +261,10 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Historial de cambios
 
+- **1.11** — El PDF de la ficha incluye un resumen del sueldo mensual estimado:
+  ingresos, descuentos (IESS, rubros fijos, Impuesto a la Renta) y neto a recibir.
+  Nuevo encabezado con el logo del establecimiento, dirección y teléfono de la
+  empresa, igual al del Rol de Pago. El Excel de la ficha también incluye el resumen del sueldo.
 - **1.10** — Aviso (sin bloquear) cuando la cédula o el RUC no supera el
   dígito verificador; se retira solo si el SRI encuentra el número y se refuerza
   si el SRI no lo encuentra.

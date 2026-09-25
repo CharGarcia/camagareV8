@@ -5,8 +5,8 @@ categoria: Impuestos
 ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
-etiquetas: iva, declaracion de iva, notas de credito, aviso nota de credito, tarifa distinta, no objeto de iva, casillero 441, casillero 413, casillero negativo, nota de credito no resta, devoluciones en ventas, casillero 411, casillero 421, valor neto, formulario 104, selector de año, no aparece el año, año anterior, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula, no genera la declaracion, error al generar, value too long, invalid byte sequence, nombre de producto largo, tildes, acentos, caracteres raros
-version: 1.11
+etiquetas: iva, valor a pagar, iva a pagar sale en cero, casillero 902, casillero 499, casillero 484, casillero 564, factor de proporcionalidad, casillero 563, casillero 419, saldo credito tributario proximo mes, casillero 615, casillero 617, credito del mes anterior, casillero 605, casillero 606, declaracion de iva, notas de credito, aviso nota de credito, tarifa distinta, no objeto de iva, casillero 441, casillero 413, casillero negativo, nota de credito no resta, devoluciones en ventas, casillero 411, casillero 421, valor neto, formulario 104, selector de año, no aparece el año, año anterior, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula, no genera la declaracion, error al generar, value too long, invalid byte sequence, nombre de producto largo, tildes, acentos, caracteres raros
+version: 1.12
 orden: 10
 estado: activo
 ---
@@ -195,8 +195,6 @@ división es cero**, no un error. Es lo que corresponde en el formulario:
 - Un **factor de proporcionalidad** como
   `(411+412+420+435+415+416+417+418) / 419` vale cero si no hubo ventas en el
   periodo (casillero 419 en cero).
-- Un **interruptor** como `(615/615)*609` sirve para arrastrar el 609 solo cuando
-  el 615 tiene saldo; si el 615 está en cero, el casillero queda en cero.
 
 Solo se anula esa división, no el resto: en `411+412/419`, si el 419 es cero, el
 resultado sigue siendo el valor del 411.
@@ -241,8 +239,8 @@ guarda junto con la declaración:
 | 613 | Ajuste por IVA devuelto y rechazado en retenciones de IVA, imputable al crédito tributario. |
 | 614 | Ajuste por IVA devuelto por otras instituciones del sector público. |
 | 898 | Imputación al pago: impuesto (solo en declaraciones sustitutivas). |
-| 615 / 617 | Saldo de crédito tributario que se arrastra al próximo mes. |
-| 481 / 484 / 486 | Liquidación diferida del IVA por ventas a crédito. |
+| 615 / 617 | Saldo de crédito tributario que se arrastra al próximo mes. Lo calcula el sistema (ver *Cómo se calcula el valor a pagar*); escríbalo solo si necesita corregirlo. |
+| 481 / 484 / 486 | Liquidación diferida del IVA por ventas a crédito. El 484 solo se puede escribir si la empresa usa liquidación diferida. |
 
 Al escribir en cualquiera de ellos, **los casilleros que dependen de él se
 recalculan al instante**: por ejemplo el 620 (subtotal a pagar) suma el 610 al 614
@@ -251,6 +249,40 @@ valen cero, que es el caso normal.
 
 Cualquier casillero que se marque como *editable* en *Configuración → Casilleros
 SRI* se comporta así, sin necesidad de tocar el sistema.
+
+## Cómo se calcula el valor a pagar
+
+El valor a pagar sigue la cadena del formulario 104:
+
+1. **IVA en ventas del mes (499)**: si la empresa **no** usa liquidación diferida,
+   el 484 es igual al 482 (todo el IVA de ventas del mes, casillero 429) y el 499
+   también. Con liquidación diferida, el 484 lo escribe usted y lo que no liquida
+   este mes pasa al siguiente (485 → 483).
+2. **Crédito tributario aplicable (564)**: el IVA de las compras con derecho a
+   crédito, multiplicado por el **factor de proporcionalidad (563)**. El factor es
+   ventas con derecho a crédito ÷ total de ventas (419): si parte de sus ventas
+   son con tarifa 0 % sin derecho a crédito, solo se toma esa proporción del IVA
+   de compras. Las compras *sin derecho a crédito* (522) no cuentan.
+3. **Impuesto causado (601)** = 499 − 564. Si el crédito es mayor, la diferencia
+   es crédito a favor (602).
+4. Se descuenta, en este orden:
+   - primero el **crédito de compras**: el del mes anterior (605) más el sobrante
+     del mes;
+   - después el **crédito por retenciones**: el del mes anterior (606) más las
+     retenciones que le hicieron este mes (609).
+5. Lo que sobra de cada bolsa es el **saldo para el próximo mes**: 615 (compras) y
+   617 (retenciones). Estos dos los calcula el sistema; las fórmulas que se les
+   pongan en *Configuración → Casilleros SRI* no se aplican.
+6. **Total a pagar (902)**: el subtotal (620, con los ajustes 610 a 614, 622 y 623),
+   más las **retenciones de IVA que usted hizo a sus proveedores** (799 → 801), y
+   menos la imputación al pago (898).
+
+Ejemplo: IVA en ventas 1.000, crédito de compras 400, crédito del mes anterior
+100 y retenciones que le hicieron 50 → a pagar 450, sin saldo para el mes
+siguiente. Si el mes anterior dejó 100 de crédito y este mes el impuesto causado
+es 20, se paga 0 y pasan **80** al mes siguiente en el 615.
+
+El aviso automático de IVA a pagar (Automatizaciones) usa este mismo cálculo.
 
 ## El importe del egreso
 
@@ -261,7 +293,10 @@ pagar)** tal como aparece en el formulario. Es decir:
   el resultado de esa fórmula.
 - Si no tiene fórmula pero usted escribió un valor en el campo, manda ese.
 - Si no hay ni fórmula ni valor escrito, manda el neto que calcula el sistema
-  (IVA en ventas − crédito tributario − retenciones).
+  (ver *Cómo se calcula el valor a pagar*).
+
+El botón **Generar Egreso** aparece cuando el 902 de la declaración guardada es
+mayor que cero.
 
 En el modal de **Generar Egreso** ese importe llega precargado y todavía se puede
 cambiar a mano, por si hubo un abono previo u otro ajuste.
@@ -302,8 +337,25 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
 - **No salen las retenciones de IVA**: siga la lista de *Retenciones de IVA: de
   dónde sale cada valor*. Si son retenciones emitidas (721 a 731) de periodos
   generados antes de la versión 1.7, vuelva a presionar GENERAR y guarde de nuevo.
+- **Una declaración guardada antes de la versión 1.12 muestra el total a pagar en
+  cero o muy bajo, o un saldo a favor que no corresponde**: ábrala, elija
+  *Recalcular desde documentos* (o presione GENERAR) y guárdela de nuevo. Hágalo
+  **en orden, desde el mes más antiguo**, porque cada mes toma el saldo (615/617)
+  del anterior. Si ya tiene egreso, primero hay que reabrirla.
 
 ## Historial de cambios
+
+- **1.12** — **Corrección del valor a pagar.** El casillero 484 queda igual al
+  482 cuando la empresa no usa liquidación diferida (antes quedaba en cero, y con
+  él el 499, el 601 y el 902: el IVA en ventas no llegaba al total a pagar). Los
+  saldos para el próximo mes (615 y 617) los calcula el sistema y ya no pierden
+  el crédito del mes anterior ni las retenciones sobrantes. El factor de
+  proporcionalidad (563) divide entre el total de **todas** las ventas (antes
+  podía salir mayor a 1). El botón *Generar Egreso* se basa en el 902. El aviso
+  automático de IVA a pagar usa el mismo cálculo que la declaración e incluye el
+  crédito del mes anterior y las retenciones hechas a proveedores (etiquetas
+  nuevas `{credito_anterior}` y `{retenciones_efectuadas}`; `{notas_credito}` y
+  `{notas_credito_compra}` salen en cero porque el IVA ya viene neto).
 
 - **1.11** — Aviso de **notas de crédito que no restan en el casillero que
   corresponde**: sale cuando la nota lleva una tarifa de IVA distinta a la de la

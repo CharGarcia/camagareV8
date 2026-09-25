@@ -323,6 +323,11 @@
         let ultimoLayout = [];
         let ultimosValores = {};
         let ultimoTotal480481 = 0;
+        // Datos del motor de cálculo que manda el servidor (fórmulas del sistema, casilleros que
+        // calcula el sistema, si el arrastre 615/617 está fijo) y casilleros que el usuario
+        // escribió a mano en este formulario (el recálculo en vivo ya no los pisa).
+        let ultimoMotor = null;
+        const editadosManual = new Set();
         let ultimoDetalle = []; // último detalle_documentos recibido, para filtrar sin volver a pedir el servidor
 
         // Map (no objeto literal): en los objetos JS las claves '10'-'12' se ordenan
@@ -480,6 +485,8 @@
             ultimoLayout = layout;
             ultimosValores = valores;
             ultimoTotal480481 = parseFloat(resumenData.total_480_481) || 0;
+            ultimoMotor = resumenData.motor || null;
+            editadosManual.clear();
 
             // Pre-calcular valores
             layout.forEach(r => {
@@ -696,15 +703,27 @@
             return evaluarMatematicaJS(expr);
         }
 
-        function recalcularFormulasJS(valores, layout) {
+        // Fórmulas que se aplican: las configuradas, sin las de los casilleros que calcula el
+        // sistema (615/617), más las del sistema (484 = 482 sin liquidación diferida, 429/564 de
+        // respaldo…). Calca el paso 3b de DeclaracionIvaService::getResumenCompleto().
+        function formulasEfectivasJS(layout) {
             const formulas = {};
             layout.forEach(r => {
                 if (r.casillero_bruto && r.formula_bruto) formulas[r.casillero_bruto] = r.formula_bruto;
                 if (r.casillero_neto && r.formula_neto) formulas[r.casillero_neto] = r.formula_neto;
                 if (r.casillero_impuesto && r.formula_impuesto) formulas[r.casillero_impuesto] = r.formula_impuesto;
             });
+            const m = ultimoMotor || {};
+            (m.casilleros_sistema || []).forEach(c => { delete formulas[c]; });
+            Object.assign(formulas, m.formulas_sistema || {});
+            // Con liquidación diferida, 484 = 482 es solo el valor inicial: si el usuario lo
+            // escribe, manda lo que escribió.
+            if (m.usa_liquidacion_diferida && editadosManual.has('484')) delete formulas['484'];
+            return formulas;
+        }
 
-            for (let pasada = 0; pasada < 5; pasada++) {
+        function ejecutarFormulasJS(formulas, valores) {
+            for (let pasada = 0; pasada < 10; pasada++) {
                 let cambio = false;
                 for (const casillero in formulas) {
                     const calculado = resolverFormulaJS(formulas[casillero], valores);
@@ -718,6 +737,36 @@
                 }
                 if (!cambio) break;
             }
+        }
+
+        // Calca DeclaracionIvaService::calcularSplitArrastre(): 601 = 499 − 564; se consume
+        // primero el crédito de compras (605 + 564) y después el de retenciones (606 + 609).
+        function calcularSplitArrastreJS(ventas, compras, retenciones, antCompras, antRetenciones) {
+            const r2 = n => Math.round(n * 100) / 100;
+            const netoTrasCompras = r2(ventas - r2(antCompras + compras));
+            if (netoTrasCompras <= 0) {
+                return { '615': r2(-netoTrasCompras), '617': r2(antRetenciones + retenciones), a_pagar: 0 };
+            }
+            const netoFinal = r2(netoTrasCompras - r2(antRetenciones + retenciones));
+            if (netoFinal <= 0) return { '615': 0, '617': r2(-netoFinal), a_pagar: 0 };
+            return { '615': 0, '617': 0, a_pagar: netoFinal };
+        }
+
+        function recalcularFormulasJS(valores, layout) {
+            const formulas = formulasEfectivasJS(layout);
+            ejecutarFormulasJS(formulas, valores);
+
+            // Paso 4 del servidor: arrastre 615/617 (y el 902 si no tiene fórmula), salvo que
+            // esté fijo (declaración guardada sin tocar) o que el usuario lo haya escrito a mano.
+            const m = ultimoMotor;
+            if (m && !m.arrastre_fijo) {
+                const n = c => parseFloat(valores[c]) || 0;
+                const s = calcularSplitArrastreJS(n('499'), n('564'), n('609'), n('605'), n('606'));
+                if (!editadosManual.has('615')) valores['615'] = s['615'];
+                if (!editadosManual.has('617')) valores['617'] = s['617'];
+                if (m.fallback_902 && !editadosManual.has('902')) valores['902'] = s.a_pagar;
+                ejecutarFormulasJS(formulas, valores);
+            }
             return valores;
         }
 
@@ -725,6 +774,13 @@
             document.querySelectorAll('[data-casillero-display="' + codigo + '"]').forEach(el => {
                 const dec = parseInt(el.getAttribute('data-decimales') || '2', 10);
                 el.textContent = Number(valor).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+            });
+            // Casilleros editables que recalcula el sistema (615/617, 484, 902): se actualiza el
+            // input, salvo el que el usuario está escribiendo o ya escribió a mano.
+            document.querySelectorAll('input[data-casillero-editable="' + codigo + '"]').forEach(inp => {
+                if (inp === document.activeElement || editadosManual.has(codigo)) return;
+                const dec = parseInt(inp.getAttribute('data-decimales') || '2', 10);
+                inp.value = Number(valor).toFixed(dec);
             });
         }
 
@@ -735,6 +791,10 @@
             const codigo = input.getAttribute('data-casillero-editable');
             const nuevoValor = parseFloat(input.value) || 0;
             ultimosValores[codigo] = nuevoValor;
+            editadosManual.add(codigo);
+            // Si cambia un dato del cálculo (no el arrastre ni el total), el arrastre de una
+            // declaración guardada deja de estar fijo y se recalcula como en el servidor.
+            if (ultimoMotor && !['615', '617', '902'].includes(codigo)) ultimoMotor.arrastre_fijo = false;
 
             // Caso especial 480/481: son complementarios, siempre suman el total gravado del período.
             if (codigo === '481') {
@@ -1131,7 +1191,7 @@
             btnGuardar.classList.toggle('d-none', !yaGenerado || cerrada);
             if (declaracionActual) {
                 btnAsiento.classList.remove('d-none');
-                const aPagar = parseFloat(declaracionActual.iva_a_pagar) || 0;
+                const aPagar = parseFloat(declaracionActual.total_a_pagar ?? declaracionActual.iva_a_pagar) || 0; // 902, el mismo que usa el egreso
                 const yaTieneEgreso = !!declaracionActual.id_egreso;
                 btnEgreso.classList.toggle('d-none', !(aPagar > 0 && !yaTieneEgreso));
                 btnGuardar.innerHTML = '<i class="bi bi-save"></i> ACTUALIZAR DECLARACIÓN';
@@ -1164,7 +1224,7 @@
         function cargarDeclaracionGuardada(data, declaracion) {
             tabsContainer.classList.remove('d-none');
             tabContent.classList.remove('d-none');
-            renderVentas({ layout: data.layout, valores: declaracion.valores_casilleros || {}, total_480_481: data.total_480_481 });
+            renderVentas({ layout: data.layout, valores: declaracion.valores_casilleros || {}, total_480_481: data.total_480_481, motor: data.motor });
             ultimoDetalle = []; // no hay detalle de documentos al cargar el snapshot guardado
             poblarFiltrosDetalle([]);
             limpiarFiltrosDetalle();
@@ -1275,7 +1335,7 @@
             fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/vincular-asiento-ajax`, { method: 'POST', body: fdV }).then(res => {
                 verificarDeclarado().then(() => {
                     if (res.estado_asiento !== 'contabilizado') return; // sigue en borrador
-                    const aPagar = parseFloat(declaracionActual && declaracionActual.iva_a_pagar) || 0;
+                    const aPagar = declaracionActual ? (parseFloat(declaracionActual.total_a_pagar ?? declaracionActual.iva_a_pagar) || 0) : 0;
                     const yaTieneEgreso = !!(declaracionActual && declaracionActual.id_egreso);
                     if (aPagar > 0 && !yaTieneEgreso) {
                         Swal.fire({

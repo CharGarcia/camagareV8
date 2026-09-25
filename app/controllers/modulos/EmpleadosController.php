@@ -604,6 +604,14 @@ class EmpleadosController extends BaseModuloController
                 }
             }
 
+            // Resumen del sueldo neto estimado: si falla (p. ej. catálogo de salarios
+            // sin cargar), la ficha sale igual, sin esa sección.
+            try {
+                $emp['resumen_mensual'] = $this->service->getResumenMensual($emp, $idEmpresa);
+            } catch (\Throwable $e) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            }
+
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
             (new EmpleadoPdfService())->generar($emp, $empresa, 'D');
         } catch (\Throwable $e) {
@@ -781,6 +789,68 @@ class EmpleadosController extends BaseModuloController
                     $sheet->setCellValueExplicit('D' . $row, $siNo($r['aporta_iess'] ?? false), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                     $row++;
                 }
+            }
+
+            // Resumen de sueldo mensual estimado (mismo cálculo que el PDF). Si falla,
+            // el Excel sale igual, sin esta sección.
+            $resumen = null;
+            try {
+                $resumen = $this->service->getResumenMensual($emp, $idEmpresa);
+            } catch (\Throwable $e) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            }
+            if ($resumen) {
+                $row++;
+                $sheet->setCellValue('A' . $row, 'RESUMEN DE SUELDO MENSUAL (ESTIMADO ' . ($resumen['periodo'] ?? '') . ')');
+                $sheet->mergeCells('A' . $row . ':D' . $row);
+                $sheet->getStyle('A' . $row . ':D' . $row)->applyFromArray($headerStyle);
+                $row++;
+                $sheet->setCellValue('A' . $row, 'Ingresos');
+                $sheet->setCellValue('B' . $row, 'Valor');
+                $sheet->setCellValue('C' . $row, 'Descuentos');
+                $sheet->setCellValue('D' . $row, 'Valor');
+                $sheet->getStyle('A' . $row . ':D' . $row)->getFont()->setBold(true);
+                $row++;
+
+                $ing = array_values(array_filter($resumen['rubros'] ?? [], fn($x) => $x['tipo'] === 'ingreso'));
+                $egr = array_values(array_filter($resumen['rubros'] ?? [], fn($x) => $x['tipo'] === 'egreso'));
+                $filaIni = $row;
+                for ($i = 0, $n = max(count($ing), count($egr)); $i < $n; $i++) {
+                    if (isset($ing[$i])) {
+                        $sheet->setCellValueExplicit('A' . $row, (string) $ing[$i]['concepto'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValue('B' . $row, (float) $ing[$i]['valor']);
+                    }
+                    if (isset($egr[$i])) {
+                        $sheet->setCellValueExplicit('C' . $row, (string) $egr[$i]['concepto'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValue('D' . $row, (float) $egr[$i]['valor']);
+                    }
+                    $row++;
+                }
+
+                $sheet->setCellValue('A' . $row, 'Total Ingresos');
+                $sheet->setCellValue('B' . $row, (float) ($resumen['total_ingresos'] ?? 0));
+                $sheet->setCellValue('C' . $row, 'Total Descuentos');
+                $sheet->setCellValue('D' . $row, (float) ($resumen['total_egresos'] ?? 0));
+                $sheet->getStyle('A' . $row . ':D' . $row)->getFont()->setBold(true);
+                $row++;
+                $sheet->setCellValue('C' . $row, 'NETO A RECIBIR');
+                $sheet->setCellValue('D' . $row, (float) ($resumen['neto'] ?? 0));
+                $sheet->getStyle('C' . $row . ':D' . $row)->getFont()->setBold(true);
+                $sheet->getStyle('A' . $row . ':D' . $row)->getFill()
+                    ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB('E7F5EC');
+
+                foreach (['B', 'D'] as $c) {
+                    $sheet->getStyle($c . $filaIni . ':' . $c . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                }
+                $row += 2;
+                $sheet->setCellValue('A' . $row, 'Referencia calculada con el sueldo base, los rubros fijos y la configuración del empleado '
+                    . '(mes completo de 30 días, sin novedades). El rol de pagos real puede variar por horas extra, '
+                    . 'descuentos, anticipos, préstamos, vacaciones o días no laborados del mes.');
+                // Combinada A:D y con ajuste de texto: así no ensancha la columna A al autoajustar.
+                $sheet->mergeCells('A' . $row . ':D' . $row);
+                $sheet->getStyle('A' . $row)->getFont()->setItalic(true)->setSize(9);
+                $sheet->getStyle('A' . $row)->getAlignment()->setWrapText(true)->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP);
+                $sheet->getRowDimension($row)->setRowHeight(38);
             }
 
             foreach (['A', 'B', 'C', 'D'] as $c) {

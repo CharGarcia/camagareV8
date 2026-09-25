@@ -60,7 +60,9 @@ class DeclaracionIvaHandler extends BaseHandler
             '{notas_credito}'     => '$' . $this->money($resumen['notas_credito']),
             '{credito_tributario}'=> '$' . $this->money($resumen['credito_tributario']),
             '{notas_credito_compra}'=> '$' . $this->money($resumen['notas_credito_compra']),
+            '{credito_anterior}'  => '$' . $this->money($resumen['credito_anterior']),
             '{retenciones}'       => '$' . $this->money($resumen['retenciones']),
+            '{retenciones_efectuadas}' => '$' . $this->money($resumen['retenciones_efectuadas']),
             '{iva_a_pagar}'       => '$' . $this->money($resumen['a_pagar']),
             '{saldo_favor}'       => '$' . $this->money($resumen['saldo_favor']),
             '{fecha_limite}'      => $resumen['fecha_limite'],
@@ -109,12 +111,17 @@ class DeclaracionIvaHandler extends BaseHandler
 
         $resaltado = " style='background:#f1f3f5;font-weight:bold;'";
 
-        $rows  = $fila('IVA en ventas (cobrado)', $r['iva_ventas']);
-        $rows .= $fila('(−) Notas de crédito de venta (IVA)', $r['notas_credito']);
-        $rows .= $fila('(−) Crédito tributario (IVA en compras)', $r['credito_tributario']);
-        $rows .= $fila('(+) Notas de crédito de compra (IVA)', $r['notas_credito_compra']);
+        // Mismos conceptos que el formulario 104 (ver DeclaracionIvaService::getResumenPago()).
+        $rows  = $fila('IVA en ventas (neto de notas de crédito)', $r['iva_ventas']);
+        $rows .= $fila('(−) Crédito tributario aplicable (IVA en compras)', $r['credito_tributario']);
+        if ($r['credito_anterior'] > 0) {
+            $rows .= $fila('(−) Crédito tributario del mes anterior', $r['credito_anterior']);
+        }
         $rows .= $fila('(−) Retenciones de IVA que le hicieron', $r['retenciones']);
-        $rows .= $fila('IVA a pagar', $r['a_pagar'], $resaltado);
+        if ($r['retenciones_efectuadas'] > 0) {
+            $rows .= $fila('(+) Retenciones de IVA efectuadas a proveedores', $r['retenciones_efectuadas']);
+        }
+        $rows .= $fila('Total a pagar', $r['a_pagar'], $resaltado);
         if ($r['saldo_favor'] > 0) {
             $rows .= $fila('Saldo a favor (crédito próximo mes)', $r['saldo_favor']);
         }

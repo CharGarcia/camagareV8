@@ -713,16 +713,21 @@ class DeclaracionIvaController extends BaseModuloController
             // Layout (estructura del F104) no depende del período: se envía junto con la
             // declaración para que el navegador pueda pintar el Resumen 104 directo desde
             // el snapshot guardado (valores_casilleros), sin recalcular desde los documentos.
+            // El motor le dice al navegador cómo recalcular si el usuario edita un casillero
+            // (484 fijado por el sistema, 615/617 calculados, fórmulas por defecto).
             $layout = null;
+            $motor = null;
             $total480481 = 0.0;
             if ($declaracion) {
                 $declaracion['valores_casilleros'] = json_decode((string) ($declaracion['valores_casilleros'] ?? ''), true) ?: [];
-                $layout = $this->repository->getEstructuraFormulario();
+                $formulario = $this->service->formularioDeclaracionGuardada($idEmpresa);
+                $layout = $formulario['layout'];
+                $motor = $formulario['motor'];
                 $total480481 = round((float) ($declaracion['transferencias_contado'] ?? 0) + (float) ($declaracion['transferencias_credito'] ?? 0), 2);
             }
             echo json_encode([
                 'ok' => true, 'declarado' => $declaracion !== null, 'declaracion' => $declaracion,
-                'layout' => $layout, 'total_480_481' => $total480481,
+                'layout' => $layout, 'motor' => $motor, 'total_480_481' => $total480481,
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

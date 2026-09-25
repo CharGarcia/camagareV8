@@ -236,6 +236,35 @@ class EmpleadoService
         return $norm($viejos, true) !== $norm($nuevos, false);
     }
 
+    /**
+     * Rol mensual estimado del empleado para la ficha (PDF): mismo motor que el Rol
+     * de Pagos (RolCalculoService), con el mes actual completo (30 días) y SIN
+     * novedades — solo lo fijo de la ficha: sueldo, rubros fijos, beneficios
+     * mensualizados, aporte IESS personal e Impuesto a la Renta proyectado.
+     * Es una referencia: el rol real varía con novedades, vacaciones y días laborados.
+     *
+     * @param array $emp Detalle de getDetalle() (con 'periodos' y 'rubros').
+     */
+    public function getResumenMensual(array $emp, int $idEmpresa): array
+    {
+        $anio = (int) date('Y');
+        $mes  = (int) date('n');
+
+        $salario = (new RolPagoRepository())->getSalario($anio);
+        $ir      = new ImpuestoRentaEmpleadoService();
+        $tramos  = $ir->getTramosAnio($anio);
+        $idEmp   = (int) ($emp['id'] ?? 0);
+        $rebaja  = (float) ($ir->getRebajaGastoPersonalMasivo($idEmpresa, [$idEmp], $anio)[$idEmp] ?? 0.0);
+
+        if ((string) ($emp['fondos_reserva'] ?? '') === 'desde_anio') {
+            $emp['fondos_reserva_aplica'] = RolPagoService::cumplioAnioServicio($anio, $mes, $emp['periodos'] ?? []);
+        }
+
+        $calc = (new RolCalculoService())->calcular($emp, 'MENSUAL', $salario, $emp['rubros'] ?? [], [], 0.0, 0.0, 30, [], [], $tramos, $rebaja);
+        $calc['periodo'] = sprintf('%02d-%04d', $mes, $anio);
+        return $calc;
+    }
+
     private function gastoRepo(): GastoPersonalRepository
     {
         return $this->gastoRepository ??= new GastoPersonalRepository();
