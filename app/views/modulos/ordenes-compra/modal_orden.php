@@ -549,7 +549,7 @@ window.ocAgregarFilaDetalle = function(item = {}) {
 window.ocPdf = function() {
     const id = document.getElementById('oc_id').value;
     if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar la orden de compra primero.' });
-    window.open(`${OC_URL_BASE}/pdf?id=${id}`, '_blank');
+    CMG_pdfDocumento(`${OC_URL_BASE}/pdf?id=${id}`);
 };
 
 window.ocExcel = function() {

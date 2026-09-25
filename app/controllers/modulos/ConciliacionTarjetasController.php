@@ -491,119 +491,164 @@ class ConciliacionTarjetasController extends BaseModuloController
         ];
     }
 
+    /**
+     * PDF del listado (A4 horizontal) con el formato común de reportes (App\Helpers\ReportePdf):
+     * logo y nombre de la empresa, búsqueda aplicada, anchos fijos por columna (el ancho va
+     * en el <th> y en cada <td>, si no Html2Pdf ensancha la tabla y se sale de la hoja) y
+     * fila de totales aparte.
+     */
     private function htmlTabla(string $titulo, array $encabezados, array $filas): string
     {
-        $empresa = (new \App\models\Empresa())->getPorId((int) $_SESSION['id_empresa']);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        $pt        = 7.5;
+        $esc       = static fn ($v): string => htmlspecialchars((string) $v);
+        $txt       = static fn (int $i, float $w) => static fn (array $r): string
+            => \App\Helpers\ReportePdf::texto((string) ($r[$i] ?? ''), \App\Helpers\ReportePdf::anchoPt($w, true), $pt);
+        $num       = static fn (int $i, float $w, bool $bold = false) => [
+            'w' => $w, 'cls' => 'text-end',
+            'val' => static fn (array $r): string => ($bold ? '<b>' : '') . number_format((float) ($r[$i] ?? 0), 2) . ($bold ? '</b>' : ''),
+            'tot' => static fn (array $rows): float => array_sum(array_map(static fn ($r) => (float) ($r[$i] ?? 0), $rows)),
+        ];
 
-        $html = '<style>
-            table { width:100%; border-collapse:collapse; font-size:8pt; }
-            th { background:#e9ecef; border:1px solid #adb5bd; padding:3px; text-align:left; }
-            td { border:1px solid #dee2e6; padding:3px; }
-            h2 { font-size:12pt; margin:0 0 2px 0; }
-            .sub { font-size:9pt; color:#555; margin:0 0 8px 0; }
-        </style>';
-        $html .= '<h2>' . htmlspecialchars($titulo) . '</h2>';
-        $html .= '<p class="sub">' . htmlspecialchars((string) ($empresa['nombre'] ?? ''))
-               . ' — generado el ' . date('d-m-Y H:i:s') . '</p>';
+        // Mismo orden de columnas que datosExportacionListado().
+        $cols = [
+            ['lbl' => $encabezados[0], 'w' => 9,  'cls' => '', 'val' => $txt(0, 9)],
+            ['lbl' => $encabezados[1], 'w' => 8,  'cls' => 'text-center', 'val' => static fn (array $r): string => $esc($r[1] ?? '')],
+            ['lbl' => $encabezados[2], 'w' => 15, 'cls' => '', 'val' => $txt(2, 15)],
+            ['lbl' => $encabezados[3], 'w' => 16, 'cls' => '', 'val' => $txt(3, 16)],
+            ['lbl' => $encabezados[4], 'w' => 6,  'cls' => 'text-center', 'val' => static fn (array $r): string => $esc($r[4] ?? ''),
+             'tot' => static fn (array $rows): float => array_sum(array_map(static fn ($r) => (float) ($r[4] ?? 0), $rows)),
+             'fmt' => static fn (float $v): string => number_format($v, 0)],
+            ['lbl' => $encabezados[5]] + $num(5, 10),
+            ['lbl' => $encabezados[6]] + $num(6, 9),
+            ['lbl' => $encabezados[7]] + $num(7, 9),
+            ['lbl' => $encabezados[8]] + $num(8, 10, true),
+            ['lbl' => $encabezados[9], 'w' => 8, 'cls' => 'text-center', 'val' => static fn (array $r): string => $esc($r[9] ?? '')],
+        ];
 
-        $html .= '<table><thead><tr>';
-        foreach ($encabezados as $h) {
-            $html .= '<th>' . htmlspecialchars((string) $h) . '</th>';
-        }
-        $html .= '</tr></thead><tbody>';
+        $buscar = trim((string) ($_GET['buscar'] ?? ''));
+        $n      = count($filas);
 
-        foreach ($filas as $fila) {
-            $html .= '<tr>';
-            foreach ($fila as $celda) {
-                $html .= '<td>' . htmlspecialchars((string) $celda) . '</td>';
-            }
-            $html .= '</tr>';
-        }
-
-        if (empty($filas)) {
-            $html .= '<tr><td colspan="' . count($encabezados) . '">Sin registros.</td></tr>';
-        }
-
-        return $html . '</tbody></table>';
+        return \App\Helpers\ReportePdf::pagina($pt,
+            \App\Helpers\ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), $titulo)
+            . ($buscar !== '' ? \App\Helpers\ReportePdf::filtros(['Búsqueda' => $buscar]) : '')
+            . \App\Helpers\ReportePdf::listado($cols, $filas, "TOTALES ({$n} " . ($n === 1 ? 'conciliación' : 'conciliaciones') . ')',
+                'Sin conciliaciones para la búsqueda aplicada.')
+        );
     }
 
+    /**
+     * Comprobante de una conciliación (A4 vertical), con el formato común de reportes:
+     * encabezado con logo, datos de la conciliación, banda de totales y detalle del estado
+     * de cuenta con sus cobros cruzados. Todo con anchos fijos para que encaje en la hoja.
+     */
     private function htmlComprobante(array $detalle): string
     {
-        $cab = $detalle['cabecera'];
-        $t   = $detalle['totales'];
-        $empresa = (new \App\models\Empresa())->getPorId((int) $_SESSION['id_empresa']);
+        $cab       = $detalle['cabecera'];
+        $t         = $detalle['totales'];
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        $pt        = 7.5;
+        $money     = static fn ($v): string => ((float) $v < 0 ? '-$' : '$') . number_format(abs((float) $v), 2);
+        $e         = static fn ($v): string => htmlspecialchars((string) $v);
+        $celda     = static fn (string $v, float $w): string => \App\Helpers\ReportePdf::texto($v, \App\Helpers\ReportePdf::anchoPt($w, false), 7.5);
 
-        $dato = static fn($etiqueta, $valor) =>
-            '<tr><td class="lbl">' . $etiqueta . '</td><td>' . htmlspecialchars((string) $valor) . '</td></tr>';
-        $money = static fn($v) => '$' . number_format((float) $v, 2);
-
-        $html = '<style>
-            table { width:100%; border-collapse:collapse; font-size:9pt; }
-            th { background:#e9ecef; border:1px solid #adb5bd; padding:3px; text-align:left; }
-            td { border:1px solid #dee2e6; padding:3px; }
-            .lbl { background:#f8f9fa; width:35%; font-weight:bold; }
-            .num { text-align:right; }
-            h2 { font-size:13pt; margin:0; }
-            .sub { font-size:9pt; color:#555; margin:0 0 8px 0; }
-            .box { margin-bottom:10px; }
-        </style>';
-
-        $html .= '<h2>Conciliación de tarjetas ' . htmlspecialchars((string) $cab['numero']) . '</h2>';
-        $html .= '<p class="sub">' . htmlspecialchars((string) ($empresa['nombre'] ?? '')) . '</p>';
-
-        $html .= '<table class="box">';
-        $html .= $dato('Procesadora', $cab['procesadora_nombre'] ?? '');
-        $html .= $dato('Depositado en', $cab['destino_nombre'] ?? '—');
-        $html .= $dato('Fecha del depósito', $this->fecha($cab['fecha_conciliacion']));
+        // ── Datos de la conciliación: dos pares etiqueta/valor por fila ──
+        $asiento = !empty($cab['id_asiento_contable'])
+            ? 'Generado (#' . $cab['id_asiento_contable'] . ')'
+            : 'No generado' . (!empty($cab['asiento_omitido_motivo']) ? ': ' . $cab['asiento_omitido_motivo'] : '');
+        $pares = [
+            ['Procesadora', $cab['procesadora_nombre'] ?? ''],
+            ['Depositado en', $cab['destino_nombre'] ?? '-'],
+            ['Fecha del depósito', $this->fecha($cab['fecha_conciliacion'])],
+            ['Estado', ucfirst((string) $cab['estado'])],
+        ];
         // El período ya no se captura; solo lo traen las conciliaciones antiguas.
         if (!empty($cab['fecha_desde']) || !empty($cab['fecha_hasta'])) {
-            $html .= $dato('Período conciliado', $this->fecha($cab['fecha_desde']) . ' a ' . $this->fecha($cab['fecha_hasta']));
+            $pares[] = ['Período conciliado', $this->fecha($cab['fecha_desde']) . ' a ' . $this->fecha($cab['fecha_hasta'])];
         }
-        $html .= $dato('Estado', $cab['estado']);
-        $html .= $dato('Asiento contable', !empty($cab['id_asiento_contable'])
-            ? 'Generado (#' . $cab['id_asiento_contable'] . ')'
-            : 'No generado — ' . ($cab['asiento_omitido_motivo'] ?? 'sin cuentas configuradas'));
-        $html .= '</table>';
-
-        $html .= '<table class="box">';
-        $html .= '<tr><th>Concepto</th><th class="num">Valor</th></tr>';
-        $html .= '<tr><td>Bruto conciliado</td><td class="num">' . $money($t['total_bruto_cruzado']) . '</td></tr>';
-        $html .= '<tr><td>Comisión</td><td class="num">' . $money($t['total_comision']) . '</td></tr>';
-        $html .= '<tr><td>IVA de la comisión</td><td class="num">' . $money($t['total_iva_comision']) . '</td></tr>';
-        $html .= '<tr><td>Retención de renta</td><td class="num">' . $money($t['total_retencion_ir']) . '</td></tr>';
-        $html .= '<tr><td>Retención de IVA</td><td class="num">' . $money($t['total_retencion_iva']) . '</td></tr>';
-        $html .= '<tr><td>Otros descuentos</td><td class="num">' . $money($t['total_otros']) . '</td></tr>';
-        $html .= '<tr><td><b>Neto</b></td><td class="num"><b>' . $money($t['total_neto']) . '</b></td></tr>';
-        $html .= '<tr><td>Neto depositado</td><td class="num">' . $money($t['neto_depositado']) . '</td></tr>';
-        $html .= '<tr><td>Diferencia</td><td class="num">' . $money($t['diferencia']) . '</td></tr>';
-        $html .= '</table>';
-
-        $html .= '<table><thead><tr>
-                    <th>Fecha</th><th>Autorización</th><th class="num">Bruto</th>
-                    <th class="num">Neto</th><th>Estado</th><th>Cobros cruzados</th>
-                  </tr></thead><tbody>';
-
-        foreach ($detalle['lineas'] as $l) {
-            $cruzados = array_map(
-                static fn($c) => ($c['documentos'] ?? $c['numero_ingreso']) . ' — ' . ($c['cliente_nombre'] ?? ''),
-                $l['cruces_detalle'] ?? []
-            );
-
-            $html .= '<tr>'
-                . '<td>' . $this->fecha($l['fecha_movimiento']) . '</td>'
-                . '<td>' . htmlspecialchars((string) ($l['autorizacion'] ?? $l['referencia'] ?? '')) . '</td>'
-                . '<td class="num">' . $money($l['monto_bruto']) . '</td>'
-                . '<td class="num">' . $money($l['monto_neto']) . '</td>'
-                . '<td>' . $this->etiquetaEstadoLinea((string) $l['estado']) . '</td>'
-                . '<td>' . htmlspecialchars(implode(' | ', $cruzados)) . '</td>'
+        if (!empty($cab['nombre_perfil'])) {
+            $pares[] = ['Perfil de lectura', $cab['nombre_perfil']];
+        }
+        if (!empty($cab['nombre_archivo'])) {
+            $pares[] = ['Archivo', $cab['nombre_archivo']];
+        }
+        $filasDatos = '';
+        for ($i = 0, $n = count($pares); $i < $n; $i += 2) {
+            [$lA, $vA] = $pares[$i];
+            [$lB, $vB] = $pares[$i + 1] ?? ['', ''];
+            $filasDatos .= '<tr>'
+                . "<td class='f-lbl' style='width:17%;'>" . $e($lA) . ':</td>'
+                . "<td style='width:33%;'>" . $celda((string) $vA, 33) . '</td>'
+                . "<td class='f-lbl' style='width:17%;'>" . ($lB !== '' ? $e($lB) . ':' : '') . '</td>'
+                . "<td style='width:33%;'>" . $celda((string) $vB, 33) . '</td>'
                 . '</tr>';
         }
+        // El motivo del asiento puede ser largo: va en su propia tabla a todo el ancho
+        // (un colspan en la tabla de pares haría que Html2Pdf ignore sus anchos).
+        $datos = "<table class='fil-tit'><tr><td style='width:100%;'>Datos de la conciliación</td></tr></table>"
+               . "<table class='filtros' style='margin-bottom:0;'>{$filasDatos}</table>"
+               . "<table class='filtros'><tr><td class='f-lbl' style='width:17%;'>Asiento contable:</td>"
+               . "<td style='width:83%;'>" . $celda($asiento, 83) . '</td></tr></table>';
 
-        if (empty($detalle['lineas'])) {
-            $html .= '<tr><td colspan="6">Sin líneas cargadas.</td></tr>';
-        }
+        // ── Banda de totales ──
+        $dif  = (float) $t['diferencia'];
+        $kpis = \App\Helpers\ReportePdf::indicadores([
+            ['BRUTO CONCILIADO', $money($t['total_bruto_cruzado'])],
+            ['COMISIÓN + IVA', $money((float) $t['total_comision'] + (float) $t['total_iva_comision'] + (float) $t['total_otros'])],
+            ['RETENCIONES', $money((float) $t['total_retencion_ir'] + (float) $t['total_retencion_iva'])],
+            ['NETO CALCULADO', $money($t['total_neto']), true],
+            ['NETO DEPOSITADO', $money($t['neto_depositado'])],
+            ['DIFERENCIA', $money($dif), false, abs($dif) < 0.005 ? '#146c43' : '#b02a37'],
+        ]);
 
-        return $html . '</tbody></table>';
+        // ── Detalle: una fila por línea del estado de cuenta ──
+        $txt = static fn (string $v, float $w): string => \App\Helpers\ReportePdf::texto($v, \App\Helpers\ReportePdf::anchoPt($w, false), $pt);
+        $num = static fn (string $campo, float $w, bool $bold = false) => [
+            'w' => $w, 'cls' => 'text-end',
+            'val' => static fn (array $l): string => ($bold ? '<b>' : '') . number_format((float) ($l[$campo] ?? 0), 2) . ($bold ? '</b>' : ''),
+            'tot' => static fn (array $rows): float => array_sum(array_map(static fn ($l) => (float) ($l[$campo] ?? 0), $rows)),
+        ];
+        $cols = [
+            ['lbl' => 'Fecha', 'w' => 9, 'cls' => 'text-center',
+             'val' => fn (array $l): string => $e($this->fecha($l['fecha_movimiento'] ?? null))],
+            ['lbl' => 'Autorización', 'w' => 12, 'cls' => '',
+             'val' => static fn (array $l): string => $txt((string) (($l['autorizacion'] ?? '') !== '' ? $l['autorizacion'] : ($l['referencia'] ?? '')), 12)],
+            ['lbl' => 'Bruto'] + $num('monto_bruto', 9),
+            ['lbl' => 'Comisión'] + $num('comision', 8),
+            ['lbl' => 'IVA com.'] + $num('iva_comision', 7),
+            ['lbl' => 'Retenc.', 'w' => 8, 'cls' => 'text-end',
+             'val' => static fn (array $l): string => number_format((float) $l['retencion_ir'] + (float) $l['retencion_iva'], 2),
+             'tot' => static fn (array $rows): float => array_sum(array_map(static fn ($l) => (float) $l['retencion_ir'] + (float) $l['retencion_iva'], $rows))],
+            ['lbl' => 'Neto'] + $num('monto_neto', 9, true),
+            ['lbl' => 'Estado', 'w' => 9, 'cls' => 'text-center',
+             'val' => fn (array $l): string => $e($this->etiquetaEstadoLinea((string) $l['estado']))],
+            ['lbl' => 'Cobros cruzados', 'w' => 29, 'cls' => '',
+             'val' => static function (array $l) use ($txt): string {
+                 $partes = array_map(
+                     static fn ($c) => trim((($c['documentos'] ?? '') !== '' ? $c['documentos'] : ($c['numero_ingreso'] ?? '')) . ' ' . ($c['cliente_nombre'] ?? ''))
+                         . ' ($' . number_format((float) $c['monto_cruzado'], 2) . ')',
+                     $l['cruces_detalle'] ?? []
+                 );
+                 return $partes ? implode('<br>', array_map(static fn ($p) => $txt($p, 29), $partes)) : '-';
+             }],
+        ];
+
+        $n = count($detalle['lineas']);
+        return \App\Helpers\ReportePdf::pagina($pt,
+            \App\Helpers\ReportePdf::encabezado(
+                $idEmpresa,
+                (string) ($empresa['nombre'] ?? ''),
+                'Conciliación de tarjetas ' . $cab['numero'],
+                trim(($cab['procesadora_nombre'] ?? '') . (!empty($cab['destino_nombre']) ? ' · depositado en ' . $cab['destino_nombre'] : ''))
+            )
+            . $datos
+            . $kpis
+            . "<table class='fil-tit'><tr><td style='width:100%;'>Estado de cuenta de la procesadora</td></tr></table>"
+            . \App\Helpers\ReportePdf::listado($cols, $detalle['lineas'], "TOTALES ({$n} " . ($n === 1 ? 'línea' : 'líneas') . ')',
+                'Sin líneas cargadas.')
+        );
     }
 
     private function etiquetaEstadoLinea(string $estado): string

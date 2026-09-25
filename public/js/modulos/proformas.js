@@ -277,7 +277,7 @@ const PF = (() => {
 
     function exportarPdf() {
         if (!_idActual) return;
-        CMG_descargar(`${URL}/exportarPdfAjax?id=${_idActual}`);
+        CMG_pdfDocumento(`${URL}/exportarPdfAjax?id=${_idActual}`);
     }
 
     function convertirAFactura() {

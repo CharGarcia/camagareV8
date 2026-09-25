@@ -336,6 +336,9 @@ class ConciliacionCobrosService
             $sufijo = fn (int $n) => " (parte {$n}/{$totalPartes} del depósito de $" . number_format($montoLinea, 2) . ')';
 
             $antes = $linea;
+            // Todas las partes del mismo depósito comparten origen (si la línea ya era una parte,
+            // conserva el de su depósito): así generarIngresos() las cobra en un solo ingreso por cliente.
+            $idOrigen = !empty($linea['id_linea_origen']) ? (int) $linea['id_linea_origen'] : $idLinea;
             $ids = [];
             foreach ($asignaciones as $i => $a) {
                 $datosParte = [
@@ -346,6 +349,7 @@ class ConciliacionCobrosService
                     'tipo_documento_sugerido' => $a['tipo_documento'],
                     'id_documento_sugerido' => $a['id_documento'],
                     'monto_aplicar' => $a['monto_aplicar'],
+                    'id_linea_origen' => $idOrigen,
                     'usuario_id' => $idUsuario,
                 ];
                 if ($i === 0) {
@@ -371,6 +375,7 @@ class ConciliacionCobrosService
                     'monto' => $sobrante,
                     'referencia_banco' => $linea['referencia_banco'] ?? null,
                     'estado' => 'SIN_MATCH',
+                    'id_linea_origen' => $idOrigen,
                     'usuario_id' => $idUsuario,
                 ]);
             }
@@ -438,9 +443,16 @@ class ConciliacionCobrosService
     }
 
     /**
-     * Genera un Ingreso por cada línea CONFIRMADO de la carga. Cada línea se procesa en su
-     * propia transacción (vía IngresoService::crear) para que el error de una no bloquee
-     * las demás; el resultado detalla qué líneas se aplicaron y cuáles fallaron.
+     * Genera los Ingresos de las líneas CONFIRMADO de la carga.
+     *
+     * Las partes de un mismo depósito repartido entre varios documentos (mismo id_linea_origen)
+     * se cobran JUNTAS: un Ingreso por cliente con todos sus documentos y un solo pago por el
+     * total, para que el cobro coincida con el depósito del banco. Por cliente y no uno solo,
+     * porque un Ingreso es de un único cliente (cabecera y asiento de cartera van a su nombre).
+     * Una línea que no viene de un reparto es un grupo de uno: se cobra sola, como siempre.
+     *
+     * Cada grupo va en su propia transacción, para que el error de uno no bloquee los demás;
+     * el resultado detalla qué líneas se aplicaron y cuáles fallaron.
      */
     public function generarIngresos(int $idEmpresa, int $idUsuario, int $idCarga): array
     {
@@ -456,15 +468,28 @@ class ConciliacionCobrosService
         $cuenta = $this->repository->getCuentaBancariaPorId((int) $carga['id_forma_pago'], $idEmpresa);
         $nombreCuenta = $cuenta['nombre'] ?? '';
 
-        $lineas = array_filter(
-            $this->repository->getLineasPorCarga($idCarga, $idEmpresa),
-            fn ($l) => $l['estado'] === 'CONFIRMADO'
-        );
+        $grupos = [];
+        foreach ($this->repository->getLineasPorCarga($idCarga, $idEmpresa) as $l) {
+            if ($l['estado'] !== 'CONFIRMADO') {
+                continue;
+            }
+            $origen = !empty($l['id_linea_origen']) ? 'o' . (int) $l['id_linea_origen'] : 'l' . (int) $l['id'];
+            $grupos[$origen . ':' . (int) $l['id_cliente_sugerido']][] = $l;
+        }
 
         $resultados = [];
-        foreach ($lineas as $linea) {
+        foreach ($grupos as $lineasGrupo) {
             try {
-                $idIngreso = $this->crearIngresoDesdeLinea($idEmpresa, $idUsuario, $linea, (int) $carga['id_forma_pago'], $punto, $nombreCuenta);
+                $idIngreso = $this->crearIngresoDesdeLineas($idEmpresa, $idUsuario, $lineasGrupo, (int) $carga['id_forma_pago'], $punto, $nombreCuenta);
+            } catch (\Throwable $e) {
+                foreach ($lineasGrupo as $linea) {
+                    $this->repository->marcarLineaError((int) $linea['id'], $e->getMessage());
+                    $resultados[] = ['id_linea' => (int) $linea['id'], 'ok' => false, 'mensaje' => $e->getMessage()];
+                }
+                continue;
+            }
+
+            foreach ($lineasGrupo as $linea) {
                 $this->repository->marcarLineaAplicada((int) $linea['id'], $idIngreso);
                 $resultado = ['id_linea' => (int) $linea['id'], 'ok' => true, 'id_ingreso' => $idIngreso];
 
@@ -473,15 +498,10 @@ class ConciliacionCobrosService
                 // conciliándola (p. ej. contra otra factura pendiente del mismo cliente).
                 $diferencia = round((float) $linea['monto'] - (float) $linea['monto_aplicar'], 2);
                 if ($diferencia > 0.01) {
-                    $idLineaDiferencia = $this->crearLineaDiferencia($idEmpresa, $idUsuario, $idCarga, $linea, $diferencia);
-                    $resultado['id_linea_diferencia'] = $idLineaDiferencia;
+                    $resultado['id_linea_diferencia'] = $this->crearLineaDiferencia($idEmpresa, $idUsuario, $idCarga, $linea, $diferencia);
                     $resultado['diferencia'] = $diferencia;
                 }
-
                 $resultados[] = $resultado;
-            } catch (\Throwable $e) {
-                $this->repository->marcarLineaError((int) $linea['id'], $e->getMessage());
-                $resultados[] = ['id_linea' => (int) $linea['id'], 'ok' => false, 'mensaje' => $e->getMessage()];
             }
         }
 
@@ -495,32 +515,71 @@ class ConciliacionCobrosService
         return $resultados;
     }
 
-    private function crearIngresoDesdeLinea(int $idEmpresa, int $idUsuario, array $linea, int $idFormaPago, array $punto, string $nombreCuenta = ''): int
+    /**
+     * Crea UN Ingreso para una o varias líneas confirmadas del MISMO cliente: un detalle por
+     * documento (si dos líneas apuntan al mismo documento, se suman) y un solo pago por el total.
+     */
+    private function crearIngresoDesdeLineas(int $idEmpresa, int $idUsuario, array $lineas, int $idFormaPago, array $punto, string $nombreCuenta = ''): int
     {
-        $idCliente = (int) $linea['id_cliente_sugerido'];
+        $primera = $lineas[0];
+        $idCliente = (int) $primera['id_cliente_sugerido'];
         $pendientes = $this->ingresoRepository->getFacturasPendientes($idCliente, $idEmpresa);
 
-        $doc = null;
-        foreach ($pendientes as $d) {
-            if ($d['tipo_documento'] === $linea['tipo_documento_sugerido'] && (int) $d['id'] === (int) $linea['id_documento_sugerido']) {
-                $doc = $d;
-                break;
+        // Monto a cobrar por documento (tipo:id), en el orden en que aparecen las líneas.
+        $porDocumento = [];
+        foreach ($lineas as $linea) {
+            if ((int) $linea['id_cliente_sugerido'] !== $idCliente) {
+                throw new \LogicException('Las líneas de un mismo ingreso deben ser del mismo cliente.');
             }
-        }
-        if (!$doc) {
-            throw new \Exception('El documento seleccionado ya no tiene saldo pendiente (puede haber sido cobrado por otro medio).');
+            $clave = $linea['tipo_documento_sugerido'] . ':' . (int) $linea['id_documento_sugerido'];
+            $porDocumento[$clave] = round(($porDocumento[$clave] ?? 0) + (float) $linea['monto_aplicar'], 2);
         }
 
-        $saldoAnterior = round((float) $doc['saldo_pendiente'], 2);
-        $montoCobrar = round((float) $linea['monto_aplicar'], 2);
-        if ($montoCobrar > $saldoAnterior + 0.01) {
-            throw new \Exception('El monto a aplicar (' . number_format($montoCobrar, 2) . ') supera el saldo pendiente actual (' . number_format($saldoAnterior, 2) . ') del documento ' . $doc['numero_documento'] . '.');
+        $detalles = [];
+        $docs = [];
+        foreach ($porDocumento as $clave => $montoCobrar) {
+            [$tipo, $id] = explode(':', $clave);
+            $doc = null;
+            foreach ($pendientes as $d) {
+                if ($d['tipo_documento'] === $tipo && (int) $d['id'] === (int) $id) {
+                    $doc = $d;
+                    break;
+                }
+            }
+            if (!$doc) {
+                throw new \Exception('Un documento seleccionado ya no tiene saldo pendiente (puede haber sido cobrado por otro medio).');
+            }
+            $saldoAnterior = round((float) $doc['saldo_pendiente'], 2);
+            if ($montoCobrar > $saldoAnterior + 0.01) {
+                throw new \Exception('El monto a aplicar (' . number_format($montoCobrar, 2) . ') supera el saldo pendiente actual (' . number_format($saldoAnterior, 2) . ') del documento ' . $doc['numero_documento'] . '.');
+            }
+            $docs[] = $doc;
+            $detalles[] = [
+                'tipo_documento' => $doc['tipo_documento'],
+                'id_referencia_documento' => (int) $doc['id'],
+                'numero_documento' => $doc['numero_documento'],
+                'descripcion' => 'Cobro de ' . $doc['numero_documento'],
+                'monto_documento' => (float) $doc['importe_total'],
+                'saldo_anterior' => $saldoAnterior,
+                'monto_cobrado' => $montoCobrar,
+                'saldo_actual' => max(0, $saldoAnterior - $montoCobrar),
+            ];
+        }
+
+        $montoTotal = round(array_sum($porDocumento), 2);
+
+        // Trazabilidad del extracto: con varias partes, la descripción del depósito sin el
+        // "(parte i/n …)" de cada una, y como monto recibido la suma de las partes cobradas.
+        $lineaTraza = $primera;
+        if (count($lineas) > 1) {
+            $lineaTraza['descripcion_original'] = $this->descripcionDeposito((string) $primera['descripcion_original']);
+            $lineaTraza['monto'] = round(array_sum(array_map(fn ($l) => (float) $l['monto'], $lineas)), 2);
         }
 
         // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
         // final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se libera
-        // solo al COMMIT/ROLLBACK (CLAUDE.md §8). Cada línea sigue siendo independiente (su
-        // propia transacción), tal como espera generarIngresos().
+        // solo al COMMIT/ROLLBACK (CLAUDE.md §8). Cada grupo va en su propia transacción, tal
+        // como espera generarIngresos().
         $db = \App\core\Database::getConnection();
         $managedTransaction = !$db->inTransaction();
         if ($managedTransaction) {
@@ -528,69 +587,64 @@ class ConciliacionCobrosService
         }
 
         try {
-        $secuencialService = new SecuencialService();
-        $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos', $linea['fecha_movimiento']);
+            $secRes = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos', $primera['fecha_movimiento']);
 
-        $observaciones = $this->armarObservacionesIngreso($doc, $nombreCuenta, $montoCobrar, $linea['referencia_banco'] ?? null)
-            . '. ' . $this->armarObservacionesConciliacion($linea, $nombreCuenta, $montoCobrar);
+            $observaciones = $this->armarObservacionesIngreso($docs, $nombreCuenta, $montoTotal, $primera['referencia_banco'] ?? null)
+                . '. ' . $this->armarObservacionesConciliacion($lineaTraza, $nombreCuenta, $montoTotal);
 
-        $payload = [
-            'id_empresa' => $idEmpresa,
-            'id_establecimiento' => (int) $punto['id_establecimiento'],
-            'id_punto_emision' => (int) $punto['id'],
-            'id_cliente' => $idCliente,
-            'id_usuario' => $idUsuario,
-            'fecha_emision' => $linea['fecha_movimiento'],
-            'establecimiento' => $punto['cod_establecimiento'],
-            'punto_emision' => $punto['codigo_punto'],
-            'secuencial' => $secRes['formateado'],
-            'numero_ingreso' => str_pad((string) $punto['cod_establecimiento'], 3, '0', STR_PAD_LEFT)
-                . '-' . str_pad((string) $punto['codigo_punto'], 3, '0', STR_PAD_LEFT)
-                . '-' . $secRes['formateado'],
-            'tipo_ingreso' => 'FACTURA_VENTA',
-            'id_ingreso_concepto' => null,
-            'monto_total' => $montoCobrar,
-            'observaciones' => $observaciones,
-            'recibo_de' => $linea['cliente_sugerido_nombre'] ?? '',
-            'id_recibo_cliente' => $idCliente,
-            'detalles' => [
-                [
-                    'tipo_documento' => $doc['tipo_documento'],
-                    'id_referencia_documento' => (int) $doc['id'],
-                    'numero_documento' => $doc['numero_documento'],
-                    'descripcion' => 'Cobro de ' . $doc['numero_documento'],
-                    'monto_documento' => (float) $doc['importe_total'],
-                    'saldo_anterior' => $saldoAnterior,
-                    'monto_cobrado' => $montoCobrar,
-                    'saldo_actual' => max(0, $saldoAnterior - $montoCobrar),
+            $payload = [
+                'id_empresa' => $idEmpresa,
+                'id_establecimiento' => (int) $punto['id_establecimiento'],
+                'id_punto_emision' => (int) $punto['id'],
+                'id_cliente' => $idCliente,
+                'id_usuario' => $idUsuario,
+                'fecha_emision' => $primera['fecha_movimiento'],
+                'establecimiento' => $punto['cod_establecimiento'],
+                'punto_emision' => $punto['codigo_punto'],
+                'secuencial' => $secRes['formateado'],
+                'numero_ingreso' => str_pad((string) $punto['cod_establecimiento'], 3, '0', STR_PAD_LEFT)
+                    . '-' . str_pad((string) $punto['codigo_punto'], 3, '0', STR_PAD_LEFT)
+                    . '-' . $secRes['formateado'],
+                'tipo_ingreso' => 'FACTURA_VENTA',
+                'id_ingreso_concepto' => null,
+                'monto_total' => $montoTotal,
+                'observaciones' => $observaciones,
+                'recibo_de' => $primera['cliente_sugerido_nombre'] ?? '',
+                'id_recibo_cliente' => $idCliente,
+                'detalles' => $detalles,
+                'pagos' => [
+                    [
+                        'id_forma_cobro' => $idFormaPago,
+                        'monto' => $montoTotal,
+                        'referencia' => $primera['referencia_banco'] ?? null,
+                        'tipo_operacion_bancaria' => 'TRANSFERENCIA',
+                        'numero_cheque' => null,
+                        'fecha_cobro' => null,
+                    ],
                 ],
-            ],
-            'pagos' => [
-                [
-                    'id_forma_cobro' => $idFormaPago,
-                    'monto' => $montoCobrar,
-                    'referencia' => $linea['referencia_banco'] ?? null,
-                    'tipo_operacion_bancaria' => 'TRANSFERENCIA',
-                    'numero_cheque' => null,
-                    'fecha_cobro' => null,
-                ],
-            ],
-        ];
+            ];
 
-        $idIngreso = $this->ingresoService->crear($payload);
-        if ($managedTransaction) {
-            $db->commit();
-            // Como la transacción es nuestra, IngresoService::crear() no genera el asiento ni
-            // recalcula saldos: le toca al llamador, DESPUÉS del COMMIT (ver IngresoService).
-            $this->ingresoService->tareasPostCommit($idIngreso, $payload);
-        }
-        return $idIngreso;
+            $idIngreso = $this->ingresoService->crear($payload);
+            if ($managedTransaction) {
+                $db->commit();
+                // Como la transacción es nuestra, IngresoService::crear() no genera el asiento ni
+                // recalcula saldos: le toca al llamador, DESPUÉS del COMMIT (ver IngresoService).
+                $this->ingresoService->tareasPostCommit($idIngreso, $payload);
+            }
+            return $idIngreso;
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();
             }
             throw $e;
         }
+    }
+
+    /** Descripción del depósito sin el sufijo que dividirLinea() agrega a cada parte. */
+    private function descripcionDeposito(string $descripcion): string
+    {
+        $texto = preg_replace('/ \(parte \d+\/\d+ del (depósito de \$[^)]+)\)/u', ' ($1)', $descripcion) ?? $descripcion;
+        return str_replace(' — saldo sin asignar', '', $texto);
     }
 
     /**
@@ -622,6 +676,9 @@ class ConciliacionCobrosService
             'score_match' => $sugerencia['score'],
             'tipo_documento_sugerido' => $sugerencia['tipo_documento'],
             'id_documento_sugerido' => $sugerencia['id_documento'],
+            // Sigue siendo parte del mismo depósito: si se cobra junto con sus hermanas, va al
+            // mismo ingreso del cliente.
+            'id_linea_origen' => !empty($lineaOriginal['id_linea_origen']) ? (int) $lineaOriginal['id_linea_origen'] : null,
             'usuario_id' => $idUsuario,
         ]);
     }
@@ -630,27 +687,38 @@ class ConciliacionCobrosService
      * Mismo texto que arma el modal de Ingresos al registrar un cobro a mano
      * (ingGenerarObservaciones() en app/views/modulos/ingresos/index.php), para que un
      * ingreso conciliado se lea igual que uno manual:
-     * "Cobro factura de venta 501; Cobrado con BANCO PICHINCHA $30.00 (transferencia ref. 4455)".
-     * Facturas y recibos van con el secuencial corto (sin estab./punto ni ceros a la izquierda).
+     * "Cobro facturas de venta 501, 502; recibo de venta 7; Cobrado con BANCO PICHINCHA $90.00
+     * (transferencia ref. 4455)". Agrupa por tipo con singular/plural; facturas y recibos van
+     * con el secuencial corto (sin estab./punto ni ceros a la izquierda).
+     *
+     * @param array $docs Documentos cobrados (tipo_documento, numero_documento), en orden.
      */
-    private function armarObservacionesIngreso(array $doc, string $nombreCuenta, float $montoCobrar, ?string $referencia): string
+    private function armarObservacionesIngreso(array $docs, string $nombreCuenta, float $montoCobrar, ?string $referencia): string
     {
         $etiquetas = [
-            'FACTURA' => 'factura de venta',
-            'RECIBO' => 'recibo de venta',
-            'FACTURA_REEMBOLSO' => 'factura de reembolso',
-            'SALDO_INICIAL' => 'saldo inicial',
+            'FACTURA' => ['factura de venta', 'facturas de venta'],
+            'RECIBO' => ['recibo de venta', 'recibos de venta'],
+            'FACTURA_REEMBOLSO' => ['factura de reembolso', 'facturas de reembolso'],
+            'SALDO_INICIAL' => ['saldo inicial', 'saldos iniciales'],
         ];
-        $tipo = (string) ($doc['tipo_documento'] ?? 'FACTURA');
-        $numero = trim((string) ($doc['numero_documento'] ?? ''));
-        if (in_array($tipo, ['FACTURA', 'RECIBO'], true)) {
-            $partes = explode('-', $numero);
-            $ultimo = (string) end($partes);
-            $corto = preg_replace('/^0+(?=\d)/', '', $ultimo);
-            $numero = $corto !== '' ? $corto : $numero;
+        $grupos = [];
+        foreach ($docs as $doc) {
+            $tipo = (string) ($doc['tipo_documento'] ?? 'FACTURA');
+            $numero = trim((string) ($doc['numero_documento'] ?? ''));
+            if (in_array($tipo, ['FACTURA', 'RECIBO'], true)) {
+                $partes = explode('-', $numero);
+                $corto = preg_replace('/^0+(?=\d)/', '', (string) end($partes));
+                $numero = $corto !== '' ? $corto : $numero;
+            }
+            $grupos[$tipo][] = $numero;
+        }
+        $textosTipo = [];
+        foreach ($grupos as $tipo => $numeros) {
+            [$singular, $plural] = $etiquetas[$tipo] ?? ['documento', 'documentos'];
+            $textosTipo[] = (count($numeros) > 1 ? $plural : $singular) . ' ' . implode(', ', $numeros);
         }
 
-        $texto = 'Cobro ' . ($etiquetas[$tipo] ?? 'documento') . ' ' . $numero;
+        $texto = 'Cobro ' . implode('; ', $textosTipo);
 
         if ($nombreCuenta !== '') {
             $detalle = ['transferencia'];
@@ -686,7 +754,7 @@ class ConciliacionCobrosService
 
         $montoLinea = round((float) ($linea['monto'] ?? 0), 2);
         if (abs($montoLinea - $montoCobrar) > 0.01) {
-            $partes[] = 'Monto recibido en banco: ' . number_format($montoLinea, 2) . ' (aplicado a este documento: ' . number_format($montoCobrar, 2) . ').';
+            $partes[] = 'Monto recibido en banco: ' . number_format($montoLinea, 2) . ' (cobrado en este ingreso: ' . number_format($montoCobrar, 2) . ').';
         }
 
         return implode(' ', $partes);

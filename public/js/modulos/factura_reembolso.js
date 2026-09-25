@@ -1338,7 +1338,7 @@
 
     window.FR_exportarPdf = () => {
         const id = document.getElementById('fr_id').value;
-        if (id) CMG_descargar(`${BASE_URL}/modulos/factura-reembolso/exportPdfDoc?id=${id}`);
+        if (id) CMG_pdfDocumento(`${BASE_URL}/modulos/factura-reembolso/exportPdfDoc?id=${id}`);
     };
 
     window.FR_exportarXml = () => {

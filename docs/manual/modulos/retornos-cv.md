@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total, vencimiento, fecha de vencimiento, caducidad, fecha de caducidad, columna vencimiento, vence, lote vencido, no se ve el vencimiento, asiento sigue a la consignacion, no contabilizar consignaciones, retorno sin asiento, modulos que contabilizan
-version: 1.20
+etiquetas: retorno, retornos, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total, vencimiento, fecha de vencimiento, caducidad, fecha de caducidad, columna vencimiento, vence, lote vencido, no se ve el vencimiento, asiento sigue a la consignacion, no contabilizar consignaciones, retorno sin asiento, modulos que contabilizan, imprimir, impresora
+version: 1.21
 orden: 46
 estado: activo
 ---
@@ -264,6 +264,10 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.21** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.20** — El asiento del retorno **sigue a la consignación de origen**: si
   la empresa no contabiliza las consignaciones (*Módulos que contabilizan*), no

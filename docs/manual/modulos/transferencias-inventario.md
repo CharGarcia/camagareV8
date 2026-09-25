@@ -6,7 +6,7 @@ ruta_modulo: modulos/transferencias-inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: transferencia de inventario, traslado de mercaderia, mover stock, cambiar de bodega, pasar productos de una bodega a otra, entre bodegas, entre establecimientos, entre sucursales, entre locales, traspaso de inventario, guia de remision, acta de entrega, kardex, imprimir acta, pdf de la transferencia, logo en el acta, enviar por correo, mandar el acta por email, enlace del pdf, link para ver el acta, abrir el acta sin descargar, no llega el adjunto, confirmar recepcion, aprobar lo recibido, recibi conforme, acuse de recibo, aceptar la transferencia, rechazar la transferencia, quien recibio, conformidad del destino
-version: 1.3
+version: 1.4
 orden: 0
 estado: activo
 ---
@@ -260,6 +260,10 @@ Además, el usuario solo puede transferir entre bodegas a las que tenga acceso
   ("Acta enviada a…"), así que ahí se ve a qué dirección salió.
 
 ## Historial de cambios
+
+- **1.4** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.3** — El selector de lote muestra una **advertencia** cuando el lote que se
   busca **tiene saldo en otra bodega**, para no dar por perdido un stock que solo

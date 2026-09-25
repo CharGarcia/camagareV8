@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
-etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar
-version: 1.6
+etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar, imprimir, impresora
+version: 1.7
 orden: 21
 estado: activo
 ---
@@ -191,6 +191,10 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.7** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.5** — Las filas de **Info. Adicional** tienen tope en pantalla (concepto
   300 caracteres, detalle 500), el largo que admite cada línea del comprobante.

@@ -6,7 +6,7 @@ ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento
-version: 1.6
+version: 1.7
 orden: 20
 estado: activo
 ---
@@ -155,6 +155,10 @@ problema pero no aparece en el kardex ni tiene stock.
   que originó el movimiento; revise el precio de esa compra.
 
 ## Historial de cambios
+
+- **1.7** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.6** — La ventana de un movimiento tiene arriba una **barra de acciones** con
   el botón de **PDF**: imprime el comprobante de ese movimiento (datos, cantidades

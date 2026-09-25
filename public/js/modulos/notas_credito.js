@@ -1781,7 +1781,7 @@
 
     window.NC_exportarPdf = () => {
         const id = document.getElementById('nc_id').value;
-        if (id) CMG_descargar(`${BASE_URL}/modulos/notas_credito/exportPdfDoc?id=${id}`);
+        if (id) CMG_pdfDocumento(`${BASE_URL}/modulos/notas_credito/exportPdfDoc?id=${id}`);
     };
 
     window.NC_exportarXml = () => {

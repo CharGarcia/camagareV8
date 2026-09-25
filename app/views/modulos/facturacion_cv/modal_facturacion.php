@@ -1343,7 +1343,7 @@
     // ── Acciones documento ───────────────────────────────────────────────────
     window.faccvPdf = function () {
         const id = $('faccv_id').value; if (!id) return Swal.fire('Atención', 'Guarde el documento primero.', 'warning');
-        const a = document.createElement('a'); a.href = `${RUTA}/pdf?id=${id}`; document.body.appendChild(a); a.click(); a.remove();
+        CMG_pdfDocumento(`${RUTA}/pdf?id=${id}`);
     };
     window.faccvExcel = function () {
         const id = $('faccv_id').value; if (!id) return Swal.fire('Atención', 'Guarde el documento primero.', 'warning');

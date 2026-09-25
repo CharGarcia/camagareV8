@@ -304,7 +304,7 @@ window.abrirModalImportacion = function (el) {
 window.IMP_exportarPdf = function () {
     const id = document.getElementById('impId').value;
     if (!id) return;
-    CMG_descargar(`${window.CMG_urlBaseImp}/exportarPdfAjax?id=${id}`);
+    CMG_pdfDocumento(`${window.CMG_urlBaseImp}/exportarPdfAjax?id=${id}`);
 };
 
 window.IMP_exportarExcel = function () {

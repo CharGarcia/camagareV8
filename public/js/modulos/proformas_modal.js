@@ -1820,14 +1820,7 @@
         exportarPdf() {
             const id = $id('pf_id').value;
             if (!id) { toast('Guarde la proforma antes de exportar el PDF', 'error'); return; }
-            // El endpoint responde con Content-Disposition: attachment → descarga directa
-            // (sin abrir una pestaña en blanco).
-            const a = document.createElement('a');
-            a.href = `${urlBase()}/exportarPdfAjax?id=${id}`;
-            a.rel = 'noopener';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+            CMG_pdfDocumento(`${urlBase()}/exportarPdfAjax?id=${id}`);
         },
 
         exportarExcel() {

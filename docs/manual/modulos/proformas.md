@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips
-version: 1.16
+etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora
+version: 1.17
 orden: 15
 estado: activo
 ---
@@ -484,6 +484,10 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.17** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.16** — El detalle de la proforma (y el de las plantillas) muestra la
   columna **Código** junto a *Descripción*. El código se puede escribir y

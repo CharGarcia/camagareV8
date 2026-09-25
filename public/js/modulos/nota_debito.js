@@ -1344,7 +1344,7 @@
 
     window.ND_exportarPdf = () => {
         const id = document.getElementById('nd_id').value;
-        if (id) CMG_descargar(`${BASE_URL}/modulos/nota_debito/exportPdfDoc?id=${id}`);
+        if (id) CMG_pdfDocumento(`${BASE_URL}/modulos/nota_debito/exportPdfDoc?id=${id}`);
     };
 
     window.ND_exportarXml = () => {

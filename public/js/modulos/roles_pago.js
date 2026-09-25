@@ -228,9 +228,7 @@
     // ─── PDF / Excel generales del rol (todos los empleados) ─────────────────
     window.rolVerPdf = function () {
         if (!rolActual || !rolActual.id) return;
-        const a = document.createElement('a');
-        a.href = `${urlModulo}/pdf?id=${rolActual.id}`;
-        document.body.appendChild(a); a.click(); a.remove();
+        CMG_pdfDocumento(`${urlModulo}/pdf?id=${rolActual.id}`);
     };
 
     window.rolVerExcel = function () {
@@ -467,11 +465,7 @@
             const detActual = d.id || det;
             $('rolemp_nombre').textContent = d.nombres_apellidos;
             $('rolemp_ident').textContent = d.identificacion;
-            $('rolemp_pdf').onclick = () => {
-                const a = document.createElement('a');
-                a.href = `${urlModulo}/pdfEmpleado?det=${detActual}`;
-                document.body.appendChild(a); a.click(); a.remove();
-            };
+            $('rolemp_pdf').onclick = () => CMG_pdfDocumento(`${urlModulo}/pdfEmpleado?det=${detActual}`);
             $('rolemp_excel').onclick = () => {
                 const a = document.createElement('a');
                 a.href = `${urlModulo}/excelEmpleado?det=${detActual}`;

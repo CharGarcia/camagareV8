@@ -202,7 +202,7 @@
     window.TRP_abrirPdf = function () {
         const id = document.getElementById('btnPdfTraspaso')?.dataset.id;
         if (!id) return;
-        CMG_descargar(`${TRP_URL}/pdf?id=${id}`);
+        CMG_pdfDocumento(`${TRP_URL}/pdf?id=${id}`);
     };
 
     window.TRP_abrirExcel = function () {

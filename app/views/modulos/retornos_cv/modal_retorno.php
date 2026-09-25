@@ -808,12 +808,7 @@
     window.retPdf = function () {
         const id = document.getElementById('ret_id').value;
         if (!id) return Swal.fire('Atención', 'Debe guardar el retorno primero.', 'warning');
-        const a = document.createElement('a');
-        a.href = `${RUTA}/pdf?id=${id}`;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        CMG_pdfDocumento(`${RUTA}/pdf?id=${id}`);
     };
     window.retExcel = function () {
         const id = document.getElementById('ret_id').value;

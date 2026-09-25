@@ -867,21 +867,17 @@
         }
     };
 
-    // PDF de la orden (orden de servicio externo) — descarga directa.
+    // PDF de la orden (orden de servicio externo): pregunta Imprimir / Descargar / Ver.
     window.sePdf = function () {
         const id = document.getElementById('se_id').value || SE_CUR.id;
         if (!id) { Swal.fire('Atención', 'Primero guarde la orden.', 'warning'); return; }
-        const a = document.createElement('a');
-        a.href = `${RUTA}/exportarPdfAjax?id=${id}`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        CMG_pdfDocumento(`${RUTA}/exportarPdfAjax?id=${id}`);
     };
     // PDF del documento generado (factura/recibo).
     window.sePdfDocumento = function () {
         if (!SE_CUR.id_documento) return;
         const ruta = SE_CUR.tipo_documento === 'FACTURA' ? 'factura-venta' : 'recibo-venta';
-        window.open(`${SE_BASE}/modulos/${ruta}/exportarPdfAjax?id=${SE_CUR.id_documento}`, '_blank');
+        CMG_pdfDocumento(`${SE_BASE}/modulos/${ruta}/exportarPdfAjax?id=${SE_CUR.id_documento}`);
     };
 
     // Enviar el PDF de la orden por correo (mismo patrón que consignaciones).

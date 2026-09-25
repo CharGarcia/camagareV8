@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso
-version: 1.14
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora
+version: 1.15
 orden: 40
 estado: activo
 ---
@@ -264,6 +264,10 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.15** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.14** — Corregido: el botón **Registrar Pago y Generar Egreso** de la pestaña **Pagos** no
   funcionaba nunca, porque el egreso se enviaba sin número y el sistema lo

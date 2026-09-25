@@ -1074,21 +1074,17 @@
         }
     };
 
-    // PDF de la orden (orden de servicio car-wash) — descarga directa.
+    // PDF de la orden (orden de servicio car-wash): pregunta Imprimir / Descargar / Ver.
     window.cwPdf = function () {
         const id = document.getElementById('cw_id').value || CW_CUR.id;
         if (!id) { Swal.fire('Atención', 'Primero guarde la orden.', 'warning'); return; }
-        const a = document.createElement('a');
-        a.href = `${RUTA}/exportarPdfAjax?id=${id}`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        CMG_pdfDocumento(`${RUTA}/exportarPdfAjax?id=${id}`);
     };
     // PDF del documento generado (factura/recibo).
     window.cwPdfDocumento = function () {
         if (!CW_CUR.id_documento) return;
         const ruta = CW_CUR.tipo_documento === 'FACTURA' ? 'factura-venta' : 'recibo-venta';
-        window.open(`${CW_BASE}/modulos/${ruta}/exportarPdfAjax?id=${CW_CUR.id_documento}`, '_blank');
+        CMG_pdfDocumento(`${CW_BASE}/modulos/${ruta}/exportarPdfAjax?id=${CW_CUR.id_documento}`);
     };
 
     // Enviar el PDF de la orden por correo (mismo patrón que consignaciones).

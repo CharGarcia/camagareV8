@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo
-version: 1.24
+version: 1.25
 orden: 20
 estado: activo
 ---
@@ -348,6 +348,10 @@ tienen un documento individual con tercero que mostrar.
   contabilizado. Guárdelo (o genere la contabilidad) y vuelva a la pestaña.
 
 ## Historial de cambios
+
+- **1.25** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.24** — Corregido: al generar asientos pendientes, algunos documentos que ya tenían asiento fallaban con «transacción abortada», un mensaje que no decía el motivo. Pasaba cuando la base de datos no tenía todavía alguna columna opcional (por ejemplo, la marca de asiento editado a mano). Ahora esos documentos se procesan normalmente.
 - **1.23** — Corregido: la generación de asientos pendientes podía quedarse indefinidamente en «Generando asientos… Preparando…» mientras otro usuario trabajaba en Compras, Ingresos, Egresos, Notas de Crédito/Débito, Retenciones, Liquidaciones o Consignaciones (y, mientras esperaba, podía dejar lentos esos módulos para los demás). Ahora arranca de inmediato. Si un paso no responde en 3 minutos, la ventana lo avisa en lugar de quedarse esperando; lo generado hasta ese momento se conserva.

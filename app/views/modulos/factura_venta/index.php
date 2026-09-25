@@ -3580,7 +3580,7 @@ $totalPages = $totalPagesOriginal;
         const id = parseInt(FV_ID_ACTIVO) || 0;
         if (!id) return;
         const url = `${B_URL}/${RUTA_MODULO}/exportar-pdf-ajax?id=${id}`;
-        CMG_descargar(url);
+        CMG_pdfDocumento(url);
     }
 
     function exportarXml() {

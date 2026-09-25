@@ -283,7 +283,7 @@
             mostrarAlerta('Guarde la retención antes de generar el PDF.', 'warning');
             return;
         }
-        CMG_descargar(`${BASE}/exportPdfDoc?id=${retvIdActual}`);
+        CMG_pdfDocumento(`${BASE}/exportPdfDoc?id=${retvIdActual}`);
     };
 
     // ── MODAL — DESCARGAR EXCEL ──────────────────────────────────────────────────

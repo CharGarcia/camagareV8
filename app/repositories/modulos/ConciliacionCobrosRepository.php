@@ -158,11 +158,11 @@ class ConciliacionCobrosRepository extends BaseRepository
         $sql = "INSERT INTO conciliacion_lineas (
                     id_carga, id_empresa, fecha_movimiento, descripcion_original, monto, referencia_banco,
                     estado, id_cliente_sugerido, score_match, tipo_documento_sugerido, id_documento_sugerido,
-                    monto_aplicar, created_by, updated_by
+                    monto_aplicar, id_linea_origen, created_by, updated_by
                 ) VALUES (
                     :id_carga, :id_empresa, :fecha_movimiento, :descripcion_original, :monto, :referencia_banco,
                     :estado, :id_cliente_sugerido, :score_match, :tipo_documento_sugerido, :id_documento_sugerido,
-                    :monto_aplicar, :usuario, :usuario
+                    :monto_aplicar, :id_linea_origen, :usuario, :usuario
                 ) RETURNING id";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -178,6 +178,7 @@ class ConciliacionCobrosRepository extends BaseRepository
             ':tipo_documento_sugerido' => $data['tipo_documento_sugerido'] ?? null,
             ':id_documento_sugerido' => $data['id_documento_sugerido'] ?? null,
             ':monto_aplicar' => $data['monto_aplicar'] ?? $data['monto'],
+            ':id_linea_origen' => $data['id_linea_origen'] ?? null,
             ':usuario' => $data['usuario_id'],
         ]);
         return (int) $st->fetchColumn();
@@ -251,6 +252,7 @@ class ConciliacionCobrosRepository extends BaseRepository
                     id_documento_sugerido = :id_documento_sugerido,
                     monto_aplicar = :monto_aplicar,
                     mensaje_error = NULL,
+                    id_linea_origen = :id_linea_origen,
                     updated_by = :usuario,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id";
@@ -264,6 +266,7 @@ class ConciliacionCobrosRepository extends BaseRepository
             ':tipo_documento_sugerido' => $data['tipo_documento_sugerido'] ?? null,
             ':id_documento_sugerido' => $data['id_documento_sugerido'] ?? null,
             ':monto_aplicar' => $data['monto_aplicar'] ?? $data['monto'],
+            ':id_linea_origen' => $data['id_linea_origen'] ?? null,
             ':usuario' => $data['usuario_id'],
         ]);
     }

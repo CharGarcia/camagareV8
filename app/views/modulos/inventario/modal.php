@@ -641,12 +641,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                     return;
                 }
                 // Cache-buster: evita que el navegador reuse un PDF anterior del mismo movimiento.
-                const a = document.createElement('a');
-                a.href = `<?= BASE_URL ?>/modulos/inventario/pdf?id=${id}&_=${Date.now()}`;
-                a.download = '';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
+                CMG_pdfDocumento(`<?= BASE_URL ?>/modulos/inventario/pdf?id=${id}&_=${Date.now()}`);
             });
         }
 

@@ -4226,13 +4226,7 @@ window.mcExportarPdf = function () {
         Swal.fire('Atención', 'Guarde la compra primero para generar el PDF.', 'warning');
         return;
     }
-    const a = document.createElement('a');
-    a.href = `${window.CMG_urlBase}/exportar-pdf-ajax?id=${id}`;
-    a.download = '';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    CMG_pdfDocumento(`${window.CMG_urlBase}/exportar-pdf-ajax?id=${id}`);
 };
 
 // Exportar (descargar) Excel de la compra

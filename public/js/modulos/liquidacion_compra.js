@@ -1317,7 +1317,7 @@
     window.LC_exportarPdf = function() {
         const id = liqIdGuardado();
         if (!id) return;
-        CMG_descargar(`${API_URL}/exportarPdfDoc?id=${id}`);
+        CMG_pdfDocumento(`${API_URL}/exportarPdfDoc?id=${id}`);
     };
 
     window.LC_exportarXml = function() {

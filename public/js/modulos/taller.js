@@ -1308,17 +1308,17 @@
 
     window.tllPdf = function () {
         if (!val('tll_id')) return error('Guarde primero la orden.');
-        window.open(`${RUTA}/exportarPdfAjax?id=${val('tll_id')}`, '_blank');
+        CMG_pdfDocumento(`${RUTA}/exportarPdfAjax?id=${val('tll_id')}`);
     };
 
     window.tllInforme = function () {
         if (!val('tll_id')) return error('Guarde primero la orden.');
-        window.open(`${RUTA}/informeTecnicoAjax?id=${val('tll_id')}`, '_blank');
+        CMG_pdfDocumento(`${RUTA}/informeTecnicoAjax?id=${val('tll_id')}`);
     };
 
     window.tllPrecuenta = function () {
         if (!val('tll_id')) return error('Guarde primero la orden.');
-        window.open(`${RUTA}/precuentaAjax?id=${val('tll_id')}`, '_blank');
+        CMG_pdfDocumento(`${RUTA}/precuentaAjax?id=${val('tll_id')}`);
     };
 
     /** Documentos que se pueden enviar al cliente. */

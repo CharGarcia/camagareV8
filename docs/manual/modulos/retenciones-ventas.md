@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.9
+etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
+version: 1.10
 orden: 40
 estado: activo
 ---
@@ -165,6 +165,10 @@ cerrado.
   que contabilizar. Tampoco aparece en el aviso de asientos pendientes.
 
 ## Historial de cambios
+
+- **1.10** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.9** — El concepto de cada línea de renta se toma por su **código ATS**, el que trae el
   comprobante (antes podía mostrar otro, p. ej. 323I en lugar de 323); si el código no

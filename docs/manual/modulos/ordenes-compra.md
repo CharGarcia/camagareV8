@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.14
+etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
+version: 1.15
 orden: 15
 estado: activo
 ---
@@ -326,6 +326,10 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.15** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.14** — El cuadro de búsqueda del listado queda para lo que se ve en la tabla. Los
   **productos pedidos** y el **número de las compras vinculadas** pasan a la pestaña

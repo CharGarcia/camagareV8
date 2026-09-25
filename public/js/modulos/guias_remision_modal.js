@@ -1073,16 +1073,10 @@
         });
     };
 
-    // Descarga el PDF (mismo patrón que compras: enlace temporal, sin pestaña en blanco).
+    // PDF de la guía: pregunta Imprimir / Descargar / Ver.
     window.GR_exportarPdf = function () {
         if (!idActual) return;
-        const a = document.createElement('a');
-        a.href = urlBaseGR + '/exportar-pdf-ajax?id=' + idActual;
-        a.download = '';
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        CMG_pdfDocumento(urlBaseGR + '/exportar-pdf-ajax?id=' + idActual);
     };
     // Reenvío manual por correo (mismo flujo que enviarPorCorreo() en Facturas de Venta).
     window.GR_enviarCorreo = async function () {

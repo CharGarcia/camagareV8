@@ -4,8 +4,8 @@ resumen: Qué pasa al pulsar Excel, PDF, XML o una plantilla en cualquier módul
 categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
-etiquetas: descargar, descarga, exportar, excel, pdf, xml, csv, zip, plantilla, generando, no descarga, no se descarga, pestaña en blanco, pagina en blanco, se queda cargando, demasiados datos, archivo muy grande, error al descargar, reporte muy grande
-version: 1.0
+etiquetas: descargar, imprimir, impresora, imprimir pdf, imprimir documento, ver pdf, descarga, exportar, excel, pdf, xml, csv, zip, plantilla, generando, no descarga, no se descarga, pestaña en blanco, pagina en blanco, se queda cargando, demasiados datos, archivo muy grande, error al descargar, reporte muy grande
+version: 1.1
 orden: 30
 estado: activo
 ---
@@ -32,12 +32,32 @@ En vez de una pestaña en blanco, el motivo aparece en un aviso:
 | **No se pudo generar el archivo** sin motivo | El servidor falló al armarlo | Si el reporte es grande, acote los filtros y vuelva a intentar. Si se repite con pocos datos, avise a soporte |
 | **Error de conexión** | No hubo comunicación con el servidor | Revise la conexión a internet y vuelva a intentar |
 
+## Imprimir, descargar o ver el PDF de un documento
+
+El botón **PDF** de un documento individual (factura, retención, nota de
+crédito, compra, ingreso, egreso, proforma, pedido, orden de compra, guía de
+remisión, rol de pago, orden de taller, etc.) genera el archivo y luego pregunta
+qué hacer con él:
+
+- **Imprimir**: abre directamente el cuadro de impresión con el documento ya
+  cargado; solo hay que elegir la impresora y confirmar. El navegador siempre
+  muestra ese cuadro: por seguridad, ninguna página web puede imprimir sin él.
+- **Descargar**: guarda el PDF en el equipo.
+- **Ver**: abre el PDF en otra pestaña.
+
+En el celular, **Imprimir** abre el PDF en otra pestaña, desde donde se imprime
+o se comparte con las opciones del teléfono. Si **Ver** no abre nada, el
+navegador está bloqueando las ventanas emergentes del sistema: permítalas o use
+**Descargar**.
+
+Los PDF de los **listados** y **reportes** (el botón PDF junto a Excel) se
+siguen descargando directamente, sin la pregunta.
+
 ## Documentos que se abren para ver
 
-Algunos PDF se abren en otra pestaña para verlos o imprimirlos, y no se
-descargan: pedidos, órdenes de compra, órdenes de taller, car wash, servicio
-externo, el reporte de trazabilidad, el log del sistema y la impresión de
-cheques. En esos no aparece el aviso de *Generando*.
+El reporte de trazabilidad y el log del sistema abren su PDF en otra pestaña, y
+la impresión de cheques de Egresos abre directamente el cuadro de impresión. En
+esos no aparece el aviso de *Generando*.
 
 ## Abrir el archivo en otra pestaña
 
@@ -45,6 +65,11 @@ En los botones PDF/Excel de los listados, Ctrl+clic (o clic con la rueda del
 ratón) sigue abriendo el archivo en otra pestaña, como antes.
 
 ## Historial de cambios
+
+- **1.1** — El botón PDF de los documentos pregunta si se quiere **Imprimir**
+  (abre el cuadro de impresión con el documento cargado), **Descargar** o
+  **Ver**. Pedidos, órdenes de compra, taller, car wash y servicio externo usan
+  ahora la misma pregunta en lugar de abrir otra pestaña.
 
 - **1.0** — Aviso *Generando…* y mensajes de error en todas las descargas del
   sistema, en lugar de abrir una pestaña nueva.

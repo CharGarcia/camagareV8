@@ -2297,12 +2297,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function abrirPdfIngreso() {
         const id = document.getElementById('m-input-id').value;
         if (!id) return;
-        const a = document.createElement('a');
-        a.href = `<?= BASE_URL ?>/<?= $rutaModulo ?>/pdf?id=${id}&_=${Date.now()}`;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        CMG_pdfDocumento(`<?= BASE_URL ?>/<?= $rutaModulo ?>/pdf?id=${id}&_=${Date.now()}`);
     }
 
     function exportarExcelIngreso() {

@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
-etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, sueldo neto, cuanto gana, liquido a recibir, resumen de sueldo
-version: 1.11
+etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, sueldo neto, cuanto gana, liquido a recibir, resumen de sueldo, imprimir, impresora
+version: 1.12
 orden: 10
 estado: activo
 ---
@@ -260,6 +260,10 @@ producción**: es un catálogo maestro, siempre el mismo.
   podía abrirla.
 
 ## Historial de cambios
+
+- **1.12** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.11** — El PDF de la ficha incluye un resumen del sueldo mensual estimado:
   ingresos, descuentos (IESS, rubros fijos, Impuesto a la Renta) y neto a recibir.

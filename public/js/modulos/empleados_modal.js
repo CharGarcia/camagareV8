@@ -651,13 +651,7 @@
             Swal.fire({ icon: 'info', title: 'Guarde primero', text: 'Debe guardar el empleado antes de imprimir su ficha.' });
             return;
         }
-        // Descarga directa (el servidor responde con Content-Disposition: attachment).
-        const a = document.createElement('a');
-        a.href = `${urlModuloEmp}/imprimirPdf?id=${id}`;
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        CMG_pdfDocumento(`${urlModuloEmp}/imprimirPdf?id=${id}`);
     };
 
     // Limpia los 3 campos de la pestaña Banco de un tirón (no hay forma de dejar

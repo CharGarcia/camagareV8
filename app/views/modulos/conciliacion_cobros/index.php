@@ -49,6 +49,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     .cc-buscar-lista { max-height: 260px; overflow: auto; }
     .cc-buscar-lista thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; }
     .cc-buscar-lista td, .cc-buscar-lista th { font-size: .78rem; }
+    .cc-doc-fila { cursor: pointer; user-select: none; }
 </style>
 
 <div class="container-fluid pt-2 pb-3 px-0 px-md-3" id="modulo-conciliacion_cobros">
@@ -210,7 +211,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <tbody id="cc-buscar-sel-tbody"><tr><td colspan="5" class="text-center text-muted py-3">Ningún documento seleccionado.</td></tr></tbody>
                     </table>
                 </div>
-                <small class="text-muted d-block mt-2">Con varios documentos, la línea del banco se divide en una línea por documento (ya confirmadas) y cada una genera su propio ingreso. Si sobra monto, queda una línea aparte con el saldo sin asignar.</small>
+                <small class="text-muted d-block mt-2">Con varios documentos, la línea del banco se divide en una línea por documento (ya confirmadas). Al generar, se crea un solo ingreso por cliente con todos sus documentos y un solo pago por el total. Si sobra monto, queda una línea aparte con el saldo sin asignar.</small>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>

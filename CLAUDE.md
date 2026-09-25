@@ -268,6 +268,11 @@ eliminado (boolean), deleted_at, deleted_by
 - Tablas dentro de modales con **filas compactas**: `<td class="p-0">` e inputs con
   `style="padding:0 4px;height:20px;font-size:0.78rem;"`.
 - **Barra de acciones de documento (regla general)**: los botones de **PDF, Correo y WhatsApp** (y otras acciones de documento como XML, ticket, duplicar, enviar al SRI) van en una **barra de acciones superior** al **inicio del cuerpo del modal**, **antes de las pestañas/contenido** — NO sueltos dentro de una pestaña. Es una fila horizontal `d-flex gap-1 align-items-center flex-wrap` con borde inferior; los botones son `btn btn-sm btn-outline-*` solo con ícono (`bi-file-earmark-pdf` rojo, `bi-envelope` info, `bi-whatsapp` verde) y `title`. Agrupar sets con un separador `<div class="vr mx-1"></div>`. Referencia canónica: el modal de **Facturas de Venta** (`app/views/modulos/factura_venta/index.php`, "Barra de Acciones Superior"). Cada acción valida primero que el documento esté guardado.
+- **PDF de un documento desde un modal (obligatorio)**: el botón PDF (o Imprimir) de **todo** modal, existente o futuro, llama a **`CMG_pdfDocumento(url)`** (`public/js/app.js`), que genera el PDF con el aviso "Generando PDF…" y luego pregunta **Imprimir / Descargar / Ver**. Imprimir abre el cuadro de impresión del navegador con el PDF ya cargado (iframe oculto); en celulares abre el PDF en otra pestaña. **Nunca** usar para esto `window.open(...)`, un `<a>` temporal con `click()` ni `CMG_descargar()`. Imprimir sin el cuadro de impresión es imposible desde una página web; no intentarlo.
+  - Aplica a cualquier PDF de **un** registro: documento principal y documentos derivados (informe técnico, precuenta, rol por empleado, factura generada desde una orden, etc.).
+  - **No aplica** a los PDF de **listados y reportes** (el botón PDF junto a Excel): esos siguen con `CMG_descargar()` o con el listener automático de `/export-pdf`.
+  - El endpoint debe devolver el PDF (`Output 'D'` o `'I'`, ambos sirven) y, ante un error, un JSON `{error|mensaje}` cuando la petición es AJAX; un texto suelto con `die()` se muestra como error genérico.
+  - Referencia: `window.RET_exportarPdf` en `public/js/modulos/retenciones_compras.js`. Manual de usuario: `docs/manual/guias/descargar-archivos.md`.
 
 **Controles**
 - Todos los botones, inputs, selects, etc. comparten diseño, color y tamaño.
@@ -298,7 +303,7 @@ Todo módulo nuevo debe contemplar desde el diseño: **multiempresa, permisos, a
 4. **Service** en `app/Services/modulos/{Nombre}Service.php`: lógica de negocio, **transacciones** y **auditoría** (`LogSistemaService`).
 5. **Model** en `app/models/` solo si se necesita acceso a datos adicional (extiende `BaseModel`).
 6. **Controller** en `app/controllers/modulos/{Nombre}Controller.php`: extiende `BaseModuloController`, implementa `getRutaModulo()` (p. ej. `'modulos/productos'`) y llama `requireLeer/requireCrear/requireActualizar/requireEliminar` en cada acción. Para el listado, calcular `$idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int)$_SESSION['id_usuario'] : null` y pasarlo al repository (registros propios). Sin lógica de negocio.
-7. **Vista** en `app/views/modulos/{nombre}/`: tabla estándar (§9) y modales estándar (§9). Para columnas visibles/anchos, pestañas y favoritos usar `PreferenciasHelper` (ver §9, *Preferencias de usuario*).
+7. **Vista** en `app/views/modulos/{nombre}/`: tabla estándar (§9) y modales estándar (§9). El botón PDF del modal usa `CMG_pdfDocumento(url)` (§9, *PDF de un documento desde un modal*). Para columnas visibles/anchos, pestañas y favoritos usar `PreferenciasHelper` (ver §9, *Preferencias de usuario*).
 8. **JS** en `public/js/modulos/{nombre}.js`. Al referenciarlo desde la vista, la versión del
    asset se pone con el helper `asset_ver()`, **nunca con `time()`**:
    `<script src="<?= $base ?>/js/modulos/{nombre}.js?v=<?= asset_ver('/js/modulos/{nombre}.js') ?>"></script>`.

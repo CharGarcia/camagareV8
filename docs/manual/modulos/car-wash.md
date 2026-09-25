@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, orden de servicio, tablero, vehiculo, placa, estado del servicio, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips
-version: 1.3
+etiquetas: car wash, lavado, lavadora de autos, orden de servicio, tablero, vehiculo, placa, estado del servicio, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora
+version: 1.4
 orden: 10
 estado: activo
 ---
@@ -107,6 +107,10 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.4** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.3** — Con **"La facturación afecta al inventario"** apagada en Empresa, la orden
   ya no descuenta stock ni exige bodega en los productos (antes lo hacía igual por un

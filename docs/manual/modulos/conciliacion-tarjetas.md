@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
-etiquetas: conciliar tarjetas, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito
-version: 1.8
+etiquetas: conciliar tarjetas, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito, imprimir, impresora
+version: 2.0
 orden: 66
 estado: activo
 ---
@@ -240,6 +240,19 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.0** — Nuevo diseño de los PDF. El **comprobante** de la conciliación lleva el
+  **logo** del establecimiento y el nombre de la empresa, una caja con los datos de la
+  conciliación (procesadora, banco, fecha, estado, perfil, archivo y asiento), una banda
+  de totales (bruto, comisión + IVA, retenciones, neto calculado, neto depositado y
+  diferencia) y el detalle del estado de cuenta con sus cobros cruzados y fila de
+  totales. El PDF del **listado** usa el mismo formato, en horizontal, con totales. En
+  ambos, las columnas tienen ancho fijo y el texto largo se parte en líneas: todo cabe
+  en la hoja y se numeran las páginas.
+
+- **1.9** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.8** — Las listas **Estado de cuenta de la procesadora** y **Cobros del sistema** son más altas (el modal usa casi toda la pantalla). Cada una tiene en su encabezado un filtro **Desde / Hasta**: el del estado de cuenta filtra por fecha del movimiento y, mientras está activo, los **totales** (bruto, comisión, IVA, retenciones, neto y diferencia) se calculan solo con las líneas filtradas; un aviso recuerda que **al cerrar se contabiliza todo lo cruzado** y muestra ese neto y el de cobros por la **fecha de la factura** (si el cobro cubrió varias, basta con que una esté en el rango). El filtro de cobros —fechas y **buscador de texto**— también afecta los totales: solo cuentan los cruces de los cobros que pasan el filtro; si una línea del depósito se cruzó con varios cobros y solo algunos pasan, su comisión, IVA y retenciones se prorratean en esa proporción. No cambian lo que se cruza ni lo que se cierra. El buscador de cobros pasa al encabezado de su tarjeta y ya no se borra al seleccionar una línea.
 - **1.7** — El encabezado queda en **una sola fila**: Procesadora, Fecha depósito, Depositado en, Neto depositado, Perfil de lectura, archivo y **Cargar**. Se retiran los campos **Período desde / hasta**: la lista *Cobros del sistema* muestra todos los cobros pendientes de la procesadora, sin filtrar por fecha. En el PDF, el período solo aparece en las conciliaciones antiguas que lo tenían.

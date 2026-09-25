@@ -6,7 +6,7 @@ ruta_modulo: modulos/vacaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: vacaciones, dias de vacaciones, descanso, saldo de vacaciones, antiguedad, gozadas, periodo vacacional, buscar vacaciones, buscador, filtros, filtrar vacaciones, vacaciones por empleado, chips, periodos, periodos de vacaciones, periodos tomados, periodos pagados, vacaciones tomadas, vacaciones pagadas, vacaciones no gozadas, vacaciones acumuladas, saldo inicial de vacaciones, ajustar saldo, empleados de otro sistema, migracion de empleados, vacaciones al dia, solicitud de vacaciones, solicitar vacaciones, pedir vacaciones, permiso de vacaciones, formulario de vacaciones, enlace por correo, aprobar vacaciones, rechazar vacaciones, autorizar vacaciones, solicitudes pendientes, pdf de vacaciones, imprimir vacaciones, detalle de vacaciones
-version: 1.6
+version: 1.7
 orden: 40
 estado: activo
 ---
@@ -282,6 +282,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   administrador; el resto del módulo sigue funcionando igual.
 
 ## Historial de cambios
+
+- **1.7** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.6** — Corregido: en la ventana de **Solicitudes**, los cuadros para escribir —el correo al
   *enviar la solicitud*, el *comentario* al aprobar y el *motivo* al rechazar— no

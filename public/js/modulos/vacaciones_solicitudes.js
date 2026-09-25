@@ -359,13 +359,9 @@
             }
         }
 
+        // Solo se usa para PDFs (solicitud y detalle): pregunta Imprimir / Descargar / Ver.
         descargar(url) {
-            const a = document.createElement('a');
-            a.href = url;
-            a.rel = 'noopener';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+            CMG_pdfDocumento(url);
         }
 
         enlazar() {

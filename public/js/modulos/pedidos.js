@@ -871,7 +871,7 @@ async function syncSerie(idPunto) {
 function pdfPedido() {
     const id = document.getElementById('pedido_id').value;
     if (!id) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Debe guardar el pedido primero.' });
-    window.open(`${window.CMG_urlBase}/pdf?id=${id}`, '_blank');
+    CMG_pdfDocumento(`${window.CMG_urlBase}/pdf?id=${id}`);
 }
 
 function excelPedido() {

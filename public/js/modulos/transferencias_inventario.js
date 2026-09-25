@@ -759,7 +759,7 @@
 
     window.TRI_abrirPdf = function () {
         const id = el('tri-id').value;
-        if (id) CMG_descargar(`${URL}/pdf-documento?id=${id}`);
+        if (id) CMG_pdfDocumento(`${URL}/pdf-documento?id=${id}`);
     };
 
     // ── Recepción: acta por correo + conformidad del destino ─────────────────

@@ -5,8 +5,8 @@ categoria: Operaciones
 ruta_modulo: modulos/taller
 tipo: modulo
 visibilidad: todos
-etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes de trabajo, filtro de fechas, buscar por repuesto, chips
-version: 1.9
+etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes de trabajo, filtro de fechas, buscar por repuesto, chips, imprimir, impresora
+version: 1.10
 orden: 0
 estado: activo
 ---
@@ -329,6 +329,10 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.10** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.9** — Con **"La facturación afecta al inventario"** apagada en Empresa, los
   repuestos aprobados ya no descuentan stock (antes lo hacían igual por un error al leer

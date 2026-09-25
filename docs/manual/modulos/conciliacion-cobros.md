@@ -57,19 +57,34 @@ clientes distintos, se reparte desde la lupa de la línea:
 
 1. Pulse la **lupa** de la línea. Arriba se ven el monto **Recibido**, lo
    **Asignado** y lo **Restante**.
-2. Elija un cliente y **marque** sus documentos. Puede cambiar a otro cliente y
+2. Elija un cliente y **marque** sus documentos (clic en la fila o en su casilla). Puede cambiar a otro cliente y
    seguir marcando: lo marcado se conserva en **Documentos seleccionados**.
 3. Al marcar un documento se propone el menor entre su saldo pendiente y lo que
    falta por asignar. El **Monto a Aplicar** se puede corregir; no puede superar
    el saldo del documento ni lo que queda del depósito.
-4. Pulse **Repartir en N documentos** y confirme.
+4. Pulse **Aplicar a N documentos** y confirme.
 
 La línea se divide en una línea por documento, ya **confirmadas**, con la
 descripción del banco y la nota *(parte 1/3 del depósito de $…)*. Si lo
 asignado es menor a lo recibido, se agrega otra línea con el **saldo sin
-asignar** para seguir conciliándola. Al pulsar **Generar ingresos de las líneas
-confirmadas**, cada parte genera su propio ingreso: un ingreso pertenece a un
-solo cliente.
+asignar** para seguir conciliándola.
+
+### Un solo ingreso por depósito y cliente
+
+Al pulsar **Generar ingresos de las líneas confirmadas**, las partes del mismo
+depósito se cobran **juntas**: se crea **un solo ingreso por cliente**, con todos
+sus documentos en el detalle y **un solo pago** por el total, con la referencia
+del banco. Así el cobro coincide con el depósito.
+
+- **Depósito de un solo cliente**: un único ingreso. Por ejemplo, un depósito
+  de $51,50 que paga una factura de $11,50 y un saldo inicial de $40 genera un
+  ingreso con esos dos documentos y un pago de $51,50.
+- **Depósito de varios clientes**: un ingreso por cliente, porque cada ingreso
+  pertenece a un solo cliente (su cartera y su asiento van a su nombre). La suma
+  de los pagos de esos ingresos es igual al depósito.
+- Si una parte se desconfirma y se genera después, sale en un ingreso aparte.
+- Si se anula ese ingreso, todas sus partes quedan disponibles para reactivarlas
+  y volver a generarlo.
 
 ## Observaciones del ingreso generado
 
@@ -132,7 +147,10 @@ monto de cada movimiento.
   **Punto de Emisión** se llama ahora **Serie**, y todos los campos de la carga
   y el botón **Subir y Conciliar** quedan en una sola fila. Las observaciones de
   los ingresos generados empiezan ahora con el mismo texto del módulo de
-  Ingresos (*Cobro factura de venta …; Cobrado con …*).
+  Ingresos (*Cobro factura de venta …; Cobrado con …*). Las partes de un depósito
+  repartido se cobran en **un solo ingreso por cliente con un solo pago**
+  (sección *Un solo ingreso por depósito y cliente*). Corregido además: los
+  ingresos generados desde la conciliación no creaban su asiento contable.
 
 
 - **1.3** — Se quita el botón **Perfiles de Mapeo** del módulo: los formatos de

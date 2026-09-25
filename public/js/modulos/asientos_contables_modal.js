@@ -591,7 +591,7 @@
     window.ASIENTO_exportarPdf = function() {
         const id = document.getElementById('asiento_id').value;
         if (!id) return;
-        CMG_descargar(`${API_ASIENTOS}/exportarPdfAjax?id=${id}`);
+        CMG_pdfDocumento(`${API_ASIENTOS}/exportarPdfAjax?id=${id}`);
     };
 
     window.ASIENTO_exportarExcel = function() {

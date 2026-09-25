@@ -6,7 +6,7 @@ ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
 etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.10
+version: 1.11
 orden: 55
 estado: activo
 ---
@@ -265,6 +265,10 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 **placa**, y emitirla como cualquier otra guía.
 
 ## Historial de cambios
+
+- **1.11** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.10** — Corregido: al buscar un **número de documento** en el cuadro aparecían
   también documentos que no lo tenían. La búsqueda libre miraba dentro de la **clave de

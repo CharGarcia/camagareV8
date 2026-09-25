@@ -1083,9 +1083,7 @@
     window.camPdf = function () {
         const id = document.getElementById('cam_id').value;
         if (!id) return Swal.fire('Atención', 'Debe guardar el cambio primero.', 'warning');
-        const a = document.createElement('a');
-        a.href = `${RUTA}/pdf?id=${id}`; a.download = '';
-        document.body.appendChild(a); a.click(); a.remove();
+        CMG_pdfDocumento(`${RUTA}/pdf?id=${id}`);
     };
     window.camExcel = function () {
         const id = document.getElementById('cam_id').value;

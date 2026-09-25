@@ -1208,7 +1208,7 @@
         exportarPdf() {
             const id = $id('cp_id').value;
             if (!id) return;
-            CMG_descargar(`${urlBase()}/exportarPdfAjax?id=${id}`);
+            CMG_pdfDocumento(`${urlBase()}/exportarPdfAjax?id=${id}`);
         },
 
         async enviarCorreo() {

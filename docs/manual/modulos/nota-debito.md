@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso
-version: 1.7
+etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, imprimir, impresora
+version: 1.8
 orden: 31
 estado: activo
 ---
@@ -157,6 +157,10 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.8** — El botón **PDF** del documento pregunta ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.6** — Corregido: al buscar un **número de documento** en el cuadro aparecían
   también notas que no lo tenían. La búsqueda libre miraba dentro de la **clave de

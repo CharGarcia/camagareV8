@@ -96,6 +96,15 @@
         document.getElementById('cc-buscar-docs-tbody')?.addEventListener('change', (ev) => {
             if (ev.target.matches('input[data-doc-key]')) CC.toggleDocumento(ev.target.dataset.docKey, ev.target.checked);
         });
+        // Clic en cualquier parte de la fila = marcar/desmarcar su casilla (el clic sobre la
+        // propia casilla ya lo resuelve el navegador y dispara el 'change' de arriba).
+        document.getElementById('cc-buscar-docs-tbody')?.addEventListener('click', (ev) => {
+            if (ev.target.matches('input[data-doc-key]')) return;
+            const chk = ev.target.closest('tr[data-fila-key]')?.querySelector('input[data-doc-key]');
+            if (!chk) return;
+            chk.checked = !chk.checked;
+            chk.dispatchEvent(new Event('change', { bubbles: true }));
+        });
         document.getElementById('cc-buscar-sel-tbody')?.addEventListener('change', (ev) => {
             if (ev.target.matches('input[data-monto-key]')) CC.cambiarMontoSeleccion(ev.target.dataset.montoKey, ev.target);
         });
@@ -583,7 +592,7 @@
         tbody.innerHTML = json.data.map((d) => {
             const clave = claveDoc(d.tipo_documento, d.id);
             buscar.docs[clave] = Object.assign({}, d, { id_cliente: idCliente, cliente_nombre: clienteNombre });
-            return `<tr>
+            return `<tr class="cc-doc-fila${buscar.sel.has(clave) ? ' table-primary' : ''}" data-fila-key="${escHtml(clave)}">
                 <td class="text-center"><input type="checkbox" class="form-check-input m-0" data-doc-key="${escHtml(clave)}" ${buscar.sel.has(clave) ? 'checked' : ''}></td>
                 <td>${escHtml(d.tipo_documento)}</td>
                 <td>${escHtml(d.numero_documento)}</td>
@@ -652,6 +661,13 @@
             </tr>`).join('')
             : '<tr><td colspan="5" class="text-center text-muted py-3">Ningún documento seleccionado.</td></tr>';
 
+        document.querySelectorAll('#cc-buscar-docs-tbody tr[data-fila-key]').forEach((tr) => {
+            const marcado = buscar.sel.has(tr.dataset.filaKey);
+            tr.classList.toggle('table-primary', marcado);
+            const chk = tr.querySelector('input[data-doc-key]');
+            if (chk) chk.checked = marcado;
+        });
+
         const asignado = totalAsignado();
         const restante = r2(buscar.montoLinea - asignado);
         document.getElementById('cc-buscar-asignado').textContent = fmtMoney(asignado);
@@ -662,7 +678,7 @@
 
         const btn = document.getElementById('cc-buscar-aplicar');
         btn.innerHTML = items.length > 1
-            ? `<i class="bi bi-diagram-3 me-1"></i> Repartir en ${items.length} documentos`
+            ? `<i class="bi bi-diagram-3 me-1"></i> Aplicar a ${items.length} documentos`
             : '<i class="bi bi-check2 me-1"></i> Aplicar selección';
     };
 
@@ -710,8 +726,13 @@
 
         // Varios documentos: la línea se divide en el servidor.
         const sobrante = r2(buscar.montoLinea - totalAsignado());
+        // Al generar, las partes se cobran juntas: un ingreso por cliente con un solo pago.
+        const clientes = new Set(items.map((s) => s.id_cliente)).size;
         const texto = `La línea de ${fmtMoney(buscar.montoLinea)} se dividirá en ${items.length} líneas confirmadas (una por documento)`
-            + (sobrante > 0 ? ` y una línea más con ${fmtMoney(sobrante)} sin asignar.` : '.');
+            + (sobrante > 0 ? ` y una línea más con ${fmtMoney(sobrante)} sin asignar.` : '.')
+            + (clientes === 1
+                ? ` Al generar, se creará UN solo ingreso con los ${items.length} documentos y un pago de ${fmtMoney(totalAsignado())}.`
+                : ` Al generar, se creará un ingreso por cliente (${clientes}), cada uno con sus documentos y un solo pago.`);
         if (window.Swal) {
             const r = await Swal.fire({ icon: 'question', title: '¿Repartir el depósito?', text: texto, showCancelButton: true, confirmButtonText: 'Sí, repartir', cancelButtonText: 'Cancelar' });
             if (!r.isConfirmed) return;

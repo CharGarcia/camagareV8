@@ -1292,7 +1292,7 @@ function CTAR_exportarExcel() {
 function CTAR_pdfConciliacion() {
     const id = document.getElementById('ctar-m-id').value;
     if (!id) { CTAR_aviso('info', 'Guarde primero', 'La conciliación debe estar guardada.'); return; }
-    CMG_descargar(`${CTAR_URL}/comprobantePdf?id=${id}`);
+    CMG_pdfDocumento(`${CTAR_URL}/comprobantePdf?id=${id}`);
 }
 
 function CTAR_excelConciliacion() {
