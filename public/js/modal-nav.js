@@ -187,8 +187,14 @@
         if (!g) return;
         var cerrar = modal.querySelector('.modal-header > .btn-close');
         g.classList.toggle('d-none', !ctx);
-        // La X tiene margin-left:auto; con el grupo visible, el ms-auto lo lleva el grupo.
-        if (cerrar) cerrar.classList.toggle('ms-0', !!ctx);
+        // La X tiene margin-left:auto (del CSS de Bootstrap o de un `ms-auto` en la vista);
+        // con el grupo visible, el auto lo lleva el grupo. Estilo en línea con !important
+        // porque una clase `ms-0` pierde contra `ms-auto` (ambas !important, ms-auto va después)
+        // y dos márgenes auto reparten el espacio: las flechas quedaban a media barra.
+        if (cerrar) {
+            if (ctx) cerrar.style.setProperty('margin-left', '0', 'important');
+            else cerrar.style.removeProperty('margin-left');
+        }
         if (!ctx) return;
         var filas = filasDe(ctx);
         var actual = filaActual(ctx, filas);
