@@ -79,6 +79,8 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/app.js?v=<?= asset_ver('/js/app.js') ?>"></script>
+<!-- Anterior / Siguiente en los modales abiertos desde una fila de listado (automático). -->
+<script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/modal-nav.js?v=<?= asset_ver('/js/modal-nav.js') ?>"></script>
 <!-- favoritos.js ahora se carga en <head> (ver head.php) para que CMG_initSort esté
      disponible antes de los scripts inline de las vistas. -->
 <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo ?? '') ?>

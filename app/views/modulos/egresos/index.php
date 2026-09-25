@@ -310,7 +310,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 </div>
 
 <!-- Modal Principal Nuevo / Ver Egreso -->
-<div class="modal fade" id="modalNuevoEgreso" data-bs-backdrop="static" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+<div class="modal fade" id="modalNuevoEgreso" data-cmg-nav="off" data-bs-backdrop="static" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <div class="modal-header bg-light py-3">
@@ -328,7 +328,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <i class="bi bi-chevron-right"></i>
                     </button>
                 </div>
-                <button type="button" class="btn-close ms-0" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body p-0">
                 <!-- Barra de Acciones Superior -->
@@ -2010,6 +2010,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const cont = document.getElementById('eg-nav-registro');
         if (!cont) return;
         cont.classList.toggle('d-none', !egNavId);
+        // La X trae margin-left:auto; con las flechas visibles, el ms-auto lo llevan ellas.
+        document.querySelector('#modalNuevoEgreso .modal-header > .btn-close')?.classList.toggle('ms-0', !!egNavId);
         if (!egNavId) return;
         const filas = egNavFilas();
         const idx = filas.findIndex(tr => tr.dataset.id === String(egNavId));
