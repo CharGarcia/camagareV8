@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\CruceRetencionSri;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -337,7 +338,7 @@ class RetencionVentaRepository extends BaseRepository
                     rs.porcentaje_ret AS sri_porcentaje,
                     rs.impuesto_ret AS sri_tipo
                 FROM retencion_venta_detalle d
-                LEFT JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
+                " . CruceRetencionSri::joinLateral('d.codigo_retencion', null, 'rs') . "
                 WHERE d.id_retencion = :ir
                 ORDER BY d.id";
 
@@ -581,7 +582,8 @@ class RetencionVentaRepository extends BaseRepository
         ?string $fecha = null,
         ?string $campoBusqueda = null
     ): array {
-        $sql    = "SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret
+        $sql    = "SELECT id, codigo_ret, cod_anexo_ret, concepto_ret, porcentaje_ret, impuesto_ret,
+                          (CASE WHEN UPPER(impuesto_ret) = 'RENTA' THEN COALESCE(NULLIF(cod_anexo_ret, ''), codigo_ret) ELSE codigo_ret END) AS codigo_sri
                    FROM retenciones_sri WHERE status = 1";
         $params = [];
         if ($tipo !== null) {
@@ -706,7 +708,7 @@ class RetencionVentaRepository extends BaseRepository
                           rs.concepto_ret AS sri_concepto,
                           ca.comprobante  AS doc_sustento_nombre
                    FROM retencion_venta_detalle d
-                   LEFT JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
+                   " . CruceRetencionSri::joinLateral('d.codigo_retencion', null, 'rs') . "
                    LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = d.cod_doc_sustento
                    WHERE d.id_retencion = :ir
                    ORDER BY d.codigo_impuesto, d.id";

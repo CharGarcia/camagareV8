@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-ats
 tipo: modulo
 visibilidad: todos
 etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras
-version: 1.5
+version: 1.6
 orden: 30
 estado: activo
 ---
@@ -147,6 +147,10 @@ anexo antes de presentarlo.
   autorización 9999999999, que no es un dato real.
 
 ## Historial de cambios
+
+- **1.6** — En las compras, el código de retención de renta (`codRetAir`) se informa
+  siempre con el código del **Catálogo del ATS** (Tablas 3.x, p. ej. 312A), aunque la
+  retención se haya registrado con otro código del catálogo (p. ej. 3120).
 
 - **1.5** — Las notas de crédito y débito de compra reportan como autorización
   del comprobante modificado la de la **factura registrada en Compras**; antes

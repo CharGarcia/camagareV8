@@ -6,7 +6,7 @@ ruta_modulo: modulos/declaracion_retenciones
 tipo: modulo
 visibilidad: todos
 etiquetas: retenciones, declaracion de retenciones, formulario 103, renta, impuesto a la renta, empleados, pagar retenciones
-version: 1.0
+version: 1.1
 orden: 20
 estado: activo
 ---
@@ -48,5 +48,10 @@ el periodo no arroja saldo, no hay nada que pagar.
   del periodo estén emitidos y con la fecha correcta.
 
 ## Historial de cambios
+
+- **1.1** — Si una línea de retención no está enlazada al catálogo SRI, su casillero se
+  busca primero por el **código ATS** y, si no se encuentra, por el otro código del
+  catálogo. Antes solo se buscaba por este último, y una retención con código ATS
+  (p. ej. 312A) quedaba sin casillero.
 
 - **1.0** — Versión inicial.

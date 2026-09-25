@@ -3990,11 +3990,7 @@ class AsientoBuilderService
                            pc.codigo AS cuenta_codigo,
                            pc.nombre AS cuenta_nombre
                     FROM retencion_venta_detalle d
-                    LEFT JOIN LATERAL (
-                        SELECT rs.id FROM retenciones_sri rs
-                        WHERE rs.codigo_ret = d.codigo_retencion
-                        ORDER BY rs.id DESC LIMIT 1
-                    ) rsx ON true
+                    " . \App\Helpers\CruceRetencionSri::joinLateral('d.codigo_retencion', null, 'rsx') . "
                     LEFT JOIN asientos_programados ap
                            ON ap.id_referencia = rsx.id
                           AND (ap.tipo_referencia = 'retenciones_venta_debe' OR ap.tipo_referencia = 'retenciones_venta')
@@ -4076,11 +4072,7 @@ class AsientoBuilderService
                             pc.codigo AS cuenta_codigo,
                             pc.nombre AS cuenta_nombre
                      FROM retencion_compra_detalle d
-                     LEFT JOIN LATERAL (
-                         SELECT rs.id FROM retenciones_sri rs
-                         WHERE rs.codigo_ret = d.codigo_retencion
-                         ORDER BY rs.id DESC LIMIT 1
-                     ) rsx ON true
+                     " . \App\Helpers\CruceRetencionSri::joinLateral('d.codigo_retencion', 'd.id_retencion_sri', 'rsx') . "
                      LEFT JOIN asientos_programados ap
                             ON ap.id_referencia = rsx.id
                            AND ap.tipo_referencia = 'retenciones_compra_haber'
@@ -4540,11 +4532,7 @@ class AsientoBuilderService
                            SUM(d.valor_retenido) AS total
                     FROM retencion_compra_detalle d
                     JOIN retencion_compra_cabecera c ON c.id = d.id_retencion
-                    LEFT JOIN LATERAL (
-                        SELECT rs.id FROM retenciones_sri rs
-                        WHERE rs.codigo_ret = d.codigo_retencion
-                        ORDER BY rs.id DESC LIMIT 1
-                    ) rsx ON true
+                    " . \App\Helpers\CruceRetencionSri::joinLateral('d.codigo_retencion', 'd.id_retencion_sri', 'rsx') . "
                     LEFT JOIN asientos_programados ap
                            ON ap.id_referencia = rsx.id
                           AND ap.tipo_referencia = 'retenciones_compra_haber'

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\CruceRetencionSri;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -499,7 +500,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                 FROM retencion_compra_cabecera c
                 JOIN retencion_compra_detalle d ON d.id_retencion = c.id
                 LEFT JOIN proveedores p ON p.id = c.id_proveedor
-                LEFT JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
+                " . CruceRetencionSri::joinLateral('d.codigo_retencion', 'd.id_retencion_sri', 'rs') . "
                 WHERE " . $this->condEmpresa('c') . "
                       " . $this->condFecha('c.fecha_emision', $f, $params, '') . $this->condNoAnulado('c.estado', $f) . "
                 ORDER BY c.fecha_emision, numero_documento";
@@ -570,7 +571,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                 FROM retencion_venta_cabecera c
                 JOIN retencion_venta_detalle d ON d.id_retencion = c.id
                 LEFT JOIN clientes cl ON cl.id = c.id_cliente
-                LEFT JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
+                " . CruceRetencionSri::joinLateral('d.codigo_retencion', null, 'rs') . "
                 WHERE " . $this->condEmpresa('c') . "
                       " . $this->condFecha('c.fecha_emision', $f, $params, '') . "
                 ORDER BY c.fecha_emision, numero_documento";

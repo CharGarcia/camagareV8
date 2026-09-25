@@ -292,7 +292,7 @@ class AtsService
                         'ret_aut'       => (string) $f['numero_autorizacion'],
                         'ret_fecha'     => $this->fecha($f['fecha_emision']),
                         'tipo_impuesto' => ($cod === '1' || $cod === 'RENTA') ? 'RENTA' : (($cod === '2' || $cod === 'IVA') ? 'IVA' : $cod),
-                        'codigo'        => (string) $f['codigo_retencion'],
+                        'codigo'        => (string) ($f['codigo_sri'] ?? $f['codigo_retencion']),
                         'concepto'      => (string) ($f['concepto'] ?? ''),
                         'base'          => (float) $f['base_imponible'],
                         'porcentaje'    => (float) $f['porcentaje_retener'],
@@ -630,7 +630,8 @@ class AtsService
                     }
                 } elseif ($cod === '1' || $cod === 'RENTA') {
                     $air[] = [
-                        'codRetAir'     => (string) $l['codigo_retencion'],
+                        // Ficha técnica ATS: codRetAir = código de las Tablas 3.x del Catálogo ATS.
+                        'codRetAir'     => (string) ($l['codigo_sri'] ?? $l['codigo_retencion']),
                         'baseImpAir'    => $this->money($l['base_imponible']),
                         'porcentajeAir' => $this->money($l['porcentaje_retener']),
                         'valRetAir'     => $this->money($l['valor_retenido']),

@@ -1679,10 +1679,7 @@ class DocumentoAutomatedRegisterService
         if (isset($xml->impuestos->impuesto)) {
             foreach ($xml->impuestos->impuesto as $imp) {
                 $codigoRet = (string)$imp->codigoRetencion;
-                $db = Database::getConnection();
-                $st = $db->prepare("SELECT id FROM retenciones_sri WHERE codigo_ret = ? AND status = 1 LIMIT 1");
-                $st->execute([$codigoRet]);
-                $idSri = $st->fetchColumn() ?: null;
+                $idSri = $this->retencionCompraRepo->getIdRetencionSriPorCodigo($codigoRet);
 
                 $lineas[] = [
                     'codigo_impuesto' => (string)$imp->codigo === '1' ? 'RENTA' : 'IVA',
@@ -1714,10 +1711,7 @@ class DocumentoAutomatedRegisterService
                 if (isset($doc->retenciones->retencion)) {
                     foreach ($doc->retenciones->retencion as $ret) {
                         $codigoRet = (string)$ret->codigoRetencion;
-                        $db = Database::getConnection();
-                        $st = $db->prepare("SELECT id FROM retenciones_sri WHERE codigo_ret = ? AND status = 1 LIMIT 1");
-                        $st->execute([$codigoRet]);
-                        $idSri = $st->fetchColumn() ?: null;
+                        $idSri = $this->retencionCompraRepo->getIdRetencionSriPorCodigo($codigoRet);
 
                         $lineas[] = [
                             'codigo_impuesto' => (string)$ret->codigo === '1' ? 'RENTA' : 'IVA',
@@ -2176,7 +2170,7 @@ class DocumentoAutomatedRegisterService
                     $lineas[] = [
                         'codigo_impuesto'   => 'RENTA', 
                         'id_retencion_sri'  => $retSri['id'],
-                        'codigo_retencion'  => $retSri['codigo_ret'],
+                        'codigo_retencion'  => $retSri['codigo_sri'] ?? $retSri['codigo_ret'],
                         'concepto'          => "RENTA: " . $retSri['concepto_ret'],
                         'base_imponible'    => $subtotal,
                         'porcentaje_retener'=> $retSri['porcentaje_ret'],
@@ -2194,7 +2188,7 @@ class DocumentoAutomatedRegisterService
                     $lineas[] = [
                         'codigo_impuesto'   => 'IVA',
                         'id_retencion_sri'  => $retSri['id'],
-                        'codigo_retencion'  => $retSri['codigo_ret'],
+                        'codigo_retencion'  => $retSri['codigo_sri'] ?? $retSri['codigo_ret'],
                         'concepto'          => "IVA: " . $retSri['concepto_ret'],
                         'base_imponible'    => $ivaTotal,
                         'porcentaje_retener'=> $retSri['porcentaje_ret'],

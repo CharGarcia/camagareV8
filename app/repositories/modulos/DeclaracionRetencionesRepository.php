@@ -150,11 +150,13 @@ class DeclaracionRetencionesRepository extends BaseRepository
             )->fetch(PDO::FETCH_ASSOC);
             if ($row) return $row;
         }
+        // Renta se identifica por el código ATS; si no hay, por codigo_ret (CruceRetencionSri).
         $row = $this->query(
             "SELECT casillero_base, casillero_valor FROM retenciones_sri
-             WHERE codigo_ret = ? AND impuesto_ret = 'RENTA' AND casillero_base IS NOT NULL
+             WHERE (cod_anexo_ret = ? OR codigo_ret = ?) AND impuesto_ret = 'RENTA' AND casillero_base IS NOT NULL
+             ORDER BY (cod_anexo_ret = ?) DESC, id DESC
              LIMIT 1",
-            [$codigoRetencion]
+            [$codigoRetencion, $codigoRetencion, $codigoRetencion]
         )->fetch(PDO::FETCH_ASSOC);
         return $row ?: ['casillero_base' => null, 'casillero_valor' => null];
     }

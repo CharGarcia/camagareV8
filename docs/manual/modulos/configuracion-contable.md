@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri
-version: 1.16
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada
+version: 1.17
 orden: 5
 estado: activo
 ---
@@ -277,6 +277,13 @@ retenciones, más los que ya tienen una cuenta configurada. Se cuentan las
 retenciones de cualquier ambiente (pruebas o producción), porque la cuenta
 contable no depende del ambiente. Primero van los de renta y después los de IVA.
 
+Los códigos de **renta** se muestran y se cruzan con el catálogo por su **código
+ATS** (el que viene en el comprobante electrónico: 312, 323, 3440…). Los de **IVA**,
+por el código del comprobante (1, 2, 3, 9, 10…), no por su código ATS (725, 730…).
+Si con ese código no se encuentra el concepto, se busca por el otro código del
+catálogo. Si el mismo concepto está varias veces en el catálogo (por vigencias
+distintas), todas sus retenciones usan una sola fila y una sola cuenta.
+
 Si un documento trae un código que **no existe en el catálogo de retenciones del
 SRI**, la fila aparece en rojo con el aviso *No existe en el catálogo de
 retenciones SRI* y no deja elegir cuenta: el asiento de esas retenciones sale sin
@@ -379,6 +386,12 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.17** — Las retenciones de renta se identifican por su **código ATS**, tanto
+  en esta pantalla como en el asiento. Antes se cruzaban por otro código del
+  catálogo y, cuando no coincidían (por ejemplo 323 y 323I), la cuenta se asignaba
+  a un concepto distinto del que traía el documento. Si el código no se encuentra
+  así, se busca por el otro código del catálogo. Revise las cuentas de sus
+  retenciones de renta: algún código puede aparecer ahora sin cuenta.
 - **1.16** — En Retenciones en Venta y en Compra aparecen todos los códigos
   usados por la empresa, también los de renta que antes no salían: la lista ya no
   se limita al ambiente actual e incluye los códigos que ya tienen cuenta. Los

@@ -171,6 +171,7 @@ class CuentasPorPagarRepository extends BaseRepository
                      ON regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g')
                         = regexp_replace(CONCAT(c2.establecimiento_prov,'-',c2.punto_emision_prov,'-',c2.secuencial_prov), '[^0-9]', '', 'g')
                     AND c2.id_empresa = r.id_empresa
+                    AND c2.id_proveedor = r.id_proveedor -- el número se repite entre proveedores
                     AND c2.eliminado  = false
                 WHERE r.eliminado = false
                   AND UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')
@@ -938,6 +939,7 @@ class CuentasPorPagarRepository extends BaseRepository
                                FROM retencion_compra_cabecera r
                                WHERE r.id_liquidacion IS NULL AND r.id_compra IS NULL AND r.eliminado=false
                                  AND r.id_empresa = l.id_empresa
+                                 AND r.id_proveedor = l.id_proveedor
                                  AND r.num_doc_sustento IS NOT NULL AND r.num_doc_sustento <> ''
                                  AND regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g')
                                      = regexp_replace(CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial), '[^0-9]', '', 'g')
@@ -1012,6 +1014,7 @@ class CuentasPorPagarRepository extends BaseRepository
                                FROM retencion_compra_cabecera r
                                WHERE r.id_compra IS NULL AND r.id_liquidacion IS NULL AND r.eliminado=false
                                  AND r.id_empresa = c.id_empresa
+                                 AND r.id_proveedor = c.id_proveedor
                                  AND r.num_doc_sustento IS NOT NULL AND r.num_doc_sustento <> ''
                                  AND regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g')
                                      = regexp_replace(CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov), '[^0-9]', '', 'g')

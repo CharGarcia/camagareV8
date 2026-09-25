@@ -472,7 +472,7 @@ class RetencionCompraPdfService
             $yBefore = $pdf->GetY();
 
             $pdf->MultiCell($anchos['impuesto'],   $h, $impuesto,                                       1, 'C', false, 0);
-            $pdf->MultiCell($anchos['codigo'],     $h, $l['codigo_retencion'] ?? '',                    1, 'C', false, 0);
+            $pdf->MultiCell($anchos['codigo'],     $h, $l['codigo_sri'] ?? $l['codigo_retencion'] ?? '', 1, 'C', false, 0);   // mismo código que el XML
             $pdf->MultiCell($anchos['concepto'],   $h, $concepto,                                       1, 'L', false, 0);
             $pdf->MultiCell($anchos['base'],       $h, number_format((float)($l['base_imponible']    ?? 0), 2), 1, 'R', false, 0);
             $pdf->MultiCell($anchos['porcentaje'], $h, number_format((float)($l['porcentaje_retener'] ?? 0), 2) . '%', 1, 'C', false, 0);

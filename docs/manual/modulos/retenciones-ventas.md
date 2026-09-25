@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.8
+version: 1.9
 orden: 40
 estado: activo
 ---
@@ -165,6 +165,13 @@ cerrado.
   que contabilizar. Tampoco aparece en el aviso de asientos pendientes.
 
 ## Historial de cambios
+
+- **1.9** — El concepto de cada línea de renta se toma por su **código ATS**, el que trae el
+  comprobante (antes podía mostrar otro, p. ej. 323I en lugar de 323); si el código no
+  existe como ATS se busca por el otro código del catálogo. Al registrar una
+  retención a mano, el selector del catálogo pone en renta el código ATS (el mismo que
+  trae el comprobante electrónico). Una línea cuyo código aparece
+  más de una vez en el catálogo ya no se muestra duplicada. El asiento usa la misma regla.
 
 - **1.8** — Corregido: las retenciones con **valor retenido cero** aparecían en el
   aviso de asientos pendientes de generar, aunque no tienen nada que

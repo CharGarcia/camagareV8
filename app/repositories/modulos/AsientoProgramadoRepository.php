@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\CruceRetencionSri;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -1220,8 +1221,8 @@ class AsientoProgramadoRepository extends BaseRepository
                 'id_asiento_tipo'   => 0,
                 'tipo_asiento'      => 'retenciones_venta',
                 'concepto'          => $c['concepto_ret'],
-                'detalle'           => $c['codigo_ret'] . ' - ' . $c['impuesto_ret'],
-                'codigo'            => $c['codigo_ret'],
+                'detalle'           => $c['codigo_usado'] . ' - ' . $c['impuesto_ret'],
+                'codigo'            => $c['codigo_usado'],
                 'tipo_cuenta'       => 'activo',
                 'debe_haber'        => 'debe',
 
@@ -1320,8 +1321,8 @@ class AsientoProgramadoRepository extends BaseRepository
                 'id_asiento_tipo'   => 0,
                 'tipo_asiento'      => 'retenciones_compra',
                 'concepto'          => $c['concepto_ret'],
-                'detalle'           => $c['codigo_ret'] . ' - ' . $c['impuesto_ret'],
-                'codigo'            => $c['codigo_ret'],
+                'detalle'           => $c['codigo_usado'] . ' - ' . $c['impuesto_ret'],
+                'codigo'            => $c['codigo_usado'],
                 'tipo_cuenta'       => 'pasivo',
                 'debe_haber'        => 'haber',
 
@@ -1352,7 +1353,9 @@ class AsientoProgramadoRepository extends BaseRepository
      * generador de asientos tampoco lo filtra) más los que ya tienen cuenta configurada.
      *
      * Cada código se cruza con retenciones_sri igual que el generador de asientos
-     * (AsientoBuilderService: mismo código exacto, id más reciente). Si el código no existe
+     * (AsientoBuilderService, id más reciente): en RENTA el documento trae el código ATS
+     * (cod_anexo_ret), que no siempre coincide con codigo_ret (p. ej. 323 vs. 323I); en IVA
+     * trae codigo_ret (1, 2, 3…), cuyo código ATS es otro (725, 730…). Si el código no existe
      * en el catálogo se devuelve con id = null, para mostrarlo como aviso en lugar de
      * ocultarlo en silencio.
      */
@@ -1365,29 +1368,33 @@ class AsientoProgramadoRepository extends BaseRepository
             ? "'retenciones_venta', 'retenciones_venta_debe', 'retenciones_venta_haber'"
             : "'retenciones_compra_debe', 'retenciones_compra_haber'";
 
-        $sql = "SELECT u.codigo_usado, rs.id, rs.codigo_ret, rs.concepto_ret, rs.impuesto_ret
+        $colIdSri = $esVenta ? null : 'd.id_retencion_sri';   // solo compras guarda el id del catálogo
+        $cruce    = CruceRetencionSri::joinLateral('d.codigo_retencion', $colIdSri, 'rsl');
+        $visible  = CruceRetencionSri::codigoVisible('rs');
+
+        // Cada línea se resuelve a su fila del catálogo igual que el generador de asientos;
+        // se agrupa por esa fila (o por el código, si no está en el catálogo).
+        $sql = "SELECT COALESCE({$visible}, u.codigo_sin_catalogo) AS codigo_usado,
+                       rs.id, rs.codigo_ret, rs.concepto_ret, rs.impuesto_ret
                 FROM (
-                    SELECT DISTINCT d.codigo_retencion AS codigo_usado
+                    SELECT DISTINCT rsl.id AS id_sri,
+                           CASE WHEN rsl.id IS NULL THEN d.codigo_retencion END AS codigo_sin_catalogo
                     FROM {$tablaDet} d
                     INNER JOIN {$tablaCab} c ON c.id = d.id_retencion
+                    {$cruce}
                     WHERE c.id_empresa = :id_empresa
                       AND c.eliminado = false
                       AND COALESCE(TRIM(d.codigo_retencion), '') <> ''
                     UNION
-                    SELECT rsc.codigo_ret
+                    SELECT ap.id_referencia, NULL
                     FROM asientos_programados ap
-                    INNER JOIN retenciones_sri rsc ON rsc.id = ap.id_referencia
                     WHERE ap.id_empresa = :id_empresa_conf
                       AND ap.eliminado = false
                       AND ap.tipo_referencia IN ({$tiposRef})
                 ) u
-                LEFT JOIN LATERAL (
-                    SELECT r.id, r.codigo_ret, r.concepto_ret, r.impuesto_ret
-                    FROM retenciones_sri r
-                    WHERE r.codigo_ret = u.codigo_usado
-                    ORDER BY r.id DESC LIMIT 1
-                ) rs ON true
-                ORDER BY (rs.id IS NULL) DESC, rs.impuesto_ret DESC, u.codigo_usado ASC";
+                LEFT JOIN retenciones_sri rs ON rs.id = u.id_sri
+                WHERE rs.id IS NOT NULL OR u.codigo_sin_catalogo IS NOT NULL
+                ORDER BY (rs.id IS NULL) DESC, rs.impuesto_ret DESC, 1 ASC, rs.id DESC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa, ':id_empresa_conf' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);

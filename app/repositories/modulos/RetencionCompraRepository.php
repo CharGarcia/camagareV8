@@ -422,12 +422,16 @@ class RetencionCompraRepository extends BaseRepository
 
     public function getDetalle(int $idRetencion): array
     {
+        // codigo_sri: el código que va al XML/RIDE/ATS (renta = código ATS). Se calcula aquí
+        // porque las líneas antiguas guardaron codigo_ret (p. ej. 3120 en lugar de 312A).
         $sql = "SELECT d.*,
                     rs.concepto_ret AS sri_concepto,
                     rs.porcentaje_ret AS sri_porcentaje,
-                    rs.impuesto_ret AS sri_tipo
+                    rs.impuesto_ret AS sri_tipo,
+                    " . \App\Helpers\CruceRetencionSri::codigoSri('rsc', 'd.codigo_retencion') . " AS codigo_sri
                 FROM retencion_compra_detalle d
                 LEFT JOIN retenciones_sri rs ON rs.id = d.id_retencion_sri
+                " . \App\Helpers\CruceRetencionSri::joinLateral('d.codigo_retencion', 'd.id_retencion_sri', 'rsc') . "
                 WHERE d.id_retencion = :ir
                 ORDER BY d.codigo_impuesto, d.codigo_retencion";
 
@@ -943,7 +947,8 @@ class RetencionCompraRepository extends BaseRepository
         ?string $fecha = null,
         ?string $campoBusqueda = null
     ): array {
-        $sql    = "SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret
+        $sql    = "SELECT id, codigo_ret, cod_anexo_ret, concepto_ret, porcentaje_ret, impuesto_ret,
+                          (CASE WHEN UPPER(impuesto_ret) = 'RENTA' THEN COALESCE(NULLIF(cod_anexo_ret, ''), codigo_ret) ELSE codigo_ret END) AS codigo_sri
                    FROM retenciones_sri WHERE status = 1";
         $params = [];
         if ($tipo !== null) {
@@ -1062,9 +1067,24 @@ class RetencionCompraRepository extends BaseRepository
         return (int) $st->fetchColumn() > 0;
     }
 
+    /**
+     * Id del catálogo que corresponde al código de retención de un comprobante (renta por código
+     * ATS, IVA por codigo_ret, con respaldo por el otro código). Null si no existe en el catálogo.
+     */
+    public function getIdRetencionSriPorCodigo(string $codigo): ?int
+    {
+        $st = $this->db->prepare(
+            "SELECT rs.id FROM (SELECT CAST(:c AS varchar) AS cod) v "
+            . \App\Helpers\CruceRetencionSri::joinLateral('v.cod', null, 'rs')
+        );
+        $st->execute([':c' => trim($codigo)]);
+        $id = $st->fetchColumn();
+        return $id ? (int) $id : null;
+    }
+
     public function getRetencionSriPorId(int $id): ?array
     {
-        $st = $this->db->prepare("SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret FROM retenciones_sri WHERE id = ?");
+        $st = $this->db->prepare("SELECT id, codigo_ret, cod_anexo_ret, concepto_ret, porcentaje_ret, impuesto_ret, (CASE WHEN UPPER(impuesto_ret) = 'RENTA' THEN COALESCE(NULLIF(cod_anexo_ret, ''), codigo_ret) ELSE codigo_ret END) AS codigo_sri FROM retenciones_sri WHERE id = ?");
         $st->execute([$id]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
@@ -1076,17 +1096,30 @@ class RetencionCompraRepository extends BaseRepository
      * retención. Un código puede repetirse con porcentajes distintos según la
      * vigencia (el SRI cambia la tarifa manteniendo el código), así que la
      * validación necesita el conjunto completo y no una sola fila.
+     *
+     * Se cruza como CruceRetencionSri: primero por el código propio del impuesto
+     * (renta = código ATS, IVA = codigo_ret); si no hay ninguna fila, por el otro.
      */
     public function getRetencionesSriPorCodigo(string $codigo): array
     {
-        $st = $this->db->prepare(
-            "SELECT id, codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret, desde, hasta, status
-               FROM retenciones_sri
-              WHERE TRIM(codigo_ret::text) = TRIM(:c)
-              ORDER BY status DESC, desde"
-        );
-        $st->execute([':c' => $codigo]);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        foreach ([
+            \App\Helpers\CruceRetencionSri::condicion('r', 'v.cod'),
+            \App\Helpers\CruceRetencionSri::condicionAmplia('r', 'v.cod'),
+        ] as $cond) {
+            $st = $this->db->prepare(
+                "SELECT r.id, r.codigo_ret, r.concepto_ret, r.porcentaje_ret, r.impuesto_ret, r.desde, r.hasta, r.status
+                   FROM retenciones_sri r
+                  CROSS JOIN (SELECT CAST(:c AS varchar) AS cod) v
+                  WHERE {$cond}
+                  ORDER BY r.status DESC, r.desde"
+            );
+            $st->execute([':c' => trim($codigo)]);
+            $filas = $st->fetchAll(PDO::FETCH_ASSOC);
+            if ($filas) {
+                return $filas;
+            }
+        }
+        return [];
     }
 
     /**

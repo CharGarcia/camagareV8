@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.15
+version: 1.16
 orden: 30
 estado: activo
 ---
@@ -349,6 +349,16 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
   rechazo real: corrija lo que indica el detalle antes de reenviar.
 
 ## Historial de cambios
+
+- **1.16** — El **código de retención de renta** se toma del **Catálogo del ATS**, como
+  piden la ficha técnica de comprobantes electrónicos (campo `codigoRetencion`) y la del
+  ATS (campo `codRetAir`); el de IVA, de la Tabla 20 de la ficha (9, 10, 1, 11, 2, 3, 7, 8).
+  Antes, al elegir el concepto en el selector se guardaba otro código del catálogo (por
+  ejemplo 3120 en lugar de 312A) y ese iba al XML, al RIDE y al ATS. Ahora el selector
+  guarda el código correcto, y las retenciones ya registradas con el código anterior se
+  corrigen solas al generar su XML, su RIDE o el ATS. Los comprobantes ya autorizados
+  conservan su XML autorizado. La validación acepta el código ATS y, si no lo encuentra,
+  busca por el otro código del catálogo. Lo mismo al importar el XML de una retención.
 
 - **1.15** — Corregido: al buscar un **número de documento** en el cuadro aparecían
   también documentos que no lo tenían. La búsqueda libre miraba dentro de la **clave de

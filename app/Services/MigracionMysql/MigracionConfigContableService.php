@@ -277,9 +277,22 @@ class MigracionConfigContableService
         foreach ($pg->query("SELECT id, TRIM(identificacion) AS ident FROM proveedores WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false") as $r) {
             if ($r['ident'] !== '') { $provPorIdent[(string) $r['ident']] = (int) $r['id']; }
         }
+        // Código de retención → fila canónica del catálogo, con el mismo cruce que el generador de
+        // asientos (renta por código ATS, IVA por codigo_ret, respaldo por el otro código).
         $retPorCodigo = [];
-        foreach ($pg->query("SELECT id, TRIM(codigo_ret) AS c FROM retenciones_sri") as $r) {
-            if ($r['c'] !== '' && !isset($retPorCodigo[(string) $r['c']])) { $retPorCodigo[(string) $r['c']] = (int) $r['id']; }
+        $sqlRet = "SELECT v.cod, rs.id FROM (SELECT TRIM(codigo_ret) AS cod FROM retenciones_sri
+                                            UNION SELECT TRIM(cod_anexo_ret) FROM retenciones_sri) v "
+                . \App\Helpers\CruceRetencionSri::joinLateral('v.cod', null, 'rs')
+                . " WHERE COALESCE(v.cod, '') <> '' AND rs.id IS NOT NULL";
+        foreach ($pg->query($sqlRet) as $r) { $retPorCodigo[(string) $r['cod']] = (int) $r['id']; }
+        // Par (codigo_ret | código ATS) de cada fila → fila canónica de su concepto: identifica la
+        // fila vieja exacta aunque su codigo_ret se repita en otro concepto (p. ej. 323 / 323I).
+        $retPorPar = [];
+        $sqlPar = "SELECT TRIM(r.codigo_ret) AS c, TRIM(COALESCE(r.cod_anexo_ret, '')) AS a, rs.id
+                   FROM retenciones_sri r "
+                . \App\Helpers\CruceRetencionSri::joinLateral('r.codigo_ret', 'r.id', 'rs');
+        foreach ($pg->query($sqlPar) as $r) {
+            if ($r['id']) { $retPorPar[$r['c'] . '|' . $r['a']] = (int) $r['id']; }
         }
         $tarifaPorPct = [];
         foreach ($pg->query("SELECT codigo, porcentaje_iva FROM tarifa_iva WHERE status = 1") as $r) {
@@ -314,8 +327,17 @@ class MigracionConfigContableService
             $oldProv[(string) (int) $r['id_proveedor']] = (string) $r['ruc'];
         }
         $oldRet = [];
-        foreach ($mysql->query("SELECT id_ret, TRIM(codigo_ret) AS c FROM retenciones_sri") as $r) {
-            $oldRet[(string) (int) $r['id_ret']] = (string) $r['c'];
+        $oldRetPar = [];   // id_ret viejo → 'codigo_ret|código ATS', para cruzar por la fila exacta
+        try {
+            foreach ($mysql->query("SELECT id_ret, TRIM(codigo_ret) AS c, TRIM(COALESCE(cod_anexo_ret, '')) AS a FROM retenciones_sri") as $r) {
+                $oldRet[(string) (int) $r['id_ret']] = (string) $r['c'];
+                $oldRetPar[(string) (int) $r['id_ret']] = $r['c'] . '|' . $r['a'];
+            }
+        } catch (Throwable $e) {
+            // Catálogo viejo sin columna del anexo: solo se cruza por código.
+            foreach ($mysql->query("SELECT id_ret, TRIM(codigo_ret) AS c FROM retenciones_sri") as $r) {
+                $oldRet[(string) (int) $r['id_ret']] = (string) $r['c'];
+            }
         }
 
         // Todas las reglas por entidad (id_asiento_tipo = 0) con su cuenta vieja.
@@ -378,11 +400,12 @@ class MigracionConfigContableService
                     $codigoRet = $oldRet[(string) $idProCli] ?? (string) $idProCli;
                     $esFuente  = !isset($oldRet[(string) $idProCli]); // grupo directo = fuente
                     $refTxt    = $codigoRet;
-                    $idRetNuevo = $codigoRet !== '' ? ($retPorCodigo[$codigoRet] ?? 0) : 0;
+                    $idRetNuevo = $retPorPar[$oldRetPar[(string) $idProCli] ?? ''] ?? 0;
+                    if ($idRetNuevo === 0 && $codigoRet !== '') { $idRetNuevo = $retPorCodigo[$codigoRet] ?? 0; }
                     $tipoRef = $esVenta ? 'retenciones_venta_debe' : 'retenciones_compra_haber';
                     if ($idRetNuevo > 0) {
                         $destino = ($esVenta ? 'Ret. venta' : 'Ret. compra') . " · código {$codigoRet}";
-                        $aplicar = ['via' => 'ap', 'tipo_referencia' => $tipoRef, 'id_referencia' => $idRetNuevo, 'id_asiento_tipo' => 0, '_es_fuente' => $esFuente, '_dedup' => $tipoRef . '|' . $codigoRet];
+                        $aplicar = ['via' => 'ap', 'tipo_referencia' => $tipoRef, 'id_referencia' => $idRetNuevo, 'id_asiento_tipo' => 0, '_es_fuente' => $esFuente, '_dedup' => $tipoRef . '|' . $idRetNuevo];   // por fila: dos códigos pueden caer en la misma
                     }
                     break;
 

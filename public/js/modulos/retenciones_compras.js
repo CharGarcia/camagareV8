@@ -786,12 +786,12 @@
             const isIsd   = (item.impuesto_ret == '6' || String(item.impuesto_ret).toLowerCase().includes('isd'));
             const labelImp = isIva ? `IVA (${item.impuesto_ret})` : (isIsd ? `ISD (${item.impuesto_ret})` : `RENTA (${item.impuesto_ret})`);
             btn.innerHTML = `<div class="d-flex justify-content-between">
-                <span><strong>${item.codigo_ret}</strong> — ${item.concepto_ret}</span>
+                <span><strong>${item.codigo_sri || item.codigo_ret}</strong> — ${item.concepto_ret}</span>
                 <span class="badge bg-light text-dark border ms-2">${labelImp} — ${item.porcentaje_ret}%</span>
             </div>`;
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                lineasData[idx].codigo_retencion   = item.codigo_ret;
+                lineasData[idx].codigo_retencion   = item.codigo_sri || item.codigo_ret;   // renta: código ATS (ficha técnica)
                 lineasData[idx].concepto           = item.concepto_ret;
                 lineasData[idx].porcentaje_retener = item.porcentaje_ret;
                 lineasData[idx].codigo_impuesto    = item.impuesto_ret;

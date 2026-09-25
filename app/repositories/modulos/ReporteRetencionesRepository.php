@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\CruceRetencionSri;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -107,7 +108,7 @@ class ReporteRetencionesRepository extends BaseRepository
                     FROM retencion_compra_cabecera c
                     INNER JOIN retencion_compra_detalle d ON d.id_retencion = c.id
                     LEFT  JOIN proveedores t   ON t.id = c.id_proveedor
-                    LEFT  JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion";
+                    " . CruceRetencionSri::joinLateral('d.codigo_retencion', 'd.id_retencion_sri', 'rs') . "";
         }
         return "SELECT 'VENTA'::varchar AS tipo_retencion,
                        c.id AS id_comprobante,
@@ -133,7 +134,7 @@ class ReporteRetencionesRepository extends BaseRepository
                 FROM retencion_venta_cabecera c
                 INNER JOIN retencion_venta_detalle d ON d.id_retencion = c.id
                 LEFT  JOIN clientes t ON t.id = c.id_cliente
-                LEFT  JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion";
+                " . CruceRetencionSri::joinLateral('d.codigo_retencion', null, 'rs') . "";
     }
 
     /** ¿Se incluye este tipo dado el filtro de tipo/tercero? */

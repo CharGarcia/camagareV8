@@ -286,7 +286,9 @@ class XmlRetencionCompraService
 
             $el = $dom->createElement('retencion');
             $this->addChild($dom, $el, 'codigo',            $codImp);
-            $this->addChild($dom, $el, 'codigoRetencion',   (string)($linea['codigo_retencion'] ?? ''));
+            // codigo_sri (RetencionCompraRepository::getDetalle): renta = código del Catálogo ATS,
+            // IVA = Tabla 20 de la ficha técnica. Sin él, el código guardado en la línea.
+            $this->addChild($dom, $el, 'codigoRetencion',   (string)($linea['codigo_sri'] ?? $linea['codigo_retencion'] ?? ''));
             $this->addChild($dom, $el, 'baseImponible',     $this->dec2((float)($linea['base_imponible'] ?? 0)));
             $this->addChild($dom, $el, 'porcentajeRetener', $this->dec2((float)($linea['porcentaje_retener'] ?? 0)));
             $this->addChild($dom, $el, 'valorRetenido',     $this->dec2((float)($linea['valor_retenido'] ?? 0)));

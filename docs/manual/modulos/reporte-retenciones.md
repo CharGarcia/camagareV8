@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_retenciones
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de retenciones, retenciones practicadas, retenciones recibidas, iva, renta, declaracion, cuadrar 103
-version: 1.2
+version: 1.3
 orden: 50
 estado: activo
 ---
@@ -59,6 +59,10 @@ Disponible en **PDF** y **Excel**.
   factura.
 
 ## Historial de cambios
+
+- **1.3** — Corregido: una línea cuyo código aparece más de una vez en el catálogo del SRI
+  salía **duplicada** (y sumaba de más). El concepto de las retenciones de renta se toma por
+  su **código ATS** (antes podía mostrar otro concepto, p. ej. 323I en lugar de 323).
 
 - **1.2** — Estrella de favorito en el selector "Mostrar". La vista "Comprobante
   (resumen)" se renombró a "Por retención (resumen)". Clic sobre una fila (vistas

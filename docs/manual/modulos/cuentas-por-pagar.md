@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por pagar, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, nota de debito, notas de debito, nd del proveedor, no cuadra el pdf, total menos pagado no da el saldo, totales repetidos, totales en cada hoja, letra del pdf, pdf se lee chiquito, cuadricula del pdf, columna documento cortada
-version: 1.25
+version: 1.26
 orden: 50
 estado: activo
 ---
@@ -104,7 +104,13 @@ Del conjunto de:
 - Las **compras** registradas y no pagadas.
 - Los **saldos iniciales** de proveedores cargados al empezar.
 
-Menos lo ya pagado mediante egresos.
+Menos lo ya pagado mediante egresos, las notas de crédito y las retenciones
+(más las notas de débito).
+
+Una retención se descuenta del documento al que está enlazada. Las retenciones
+**migradas**, que no traen ese enlace, se reconocen por el número del documento
+sustento **y el proveedor**: un mismo número (p. ej. `001-001-000000054`) se
+repite entre proveedores, y solo cuenta la retención del proveedor de la compra.
 
 El **vencimiento** se calcula con el *plazo* configurado en la ficha del
 proveedor. Si un documento vence antes de lo que esperaba, ese es el campo a
@@ -357,6 +363,11 @@ la factura que modifican. Mismo criterio que
 el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
+
+- **1.26** — Una retención **migrada** ya no se descuenta del saldo de compras o
+  liquidaciones de **otro proveedor** que tengan el mismo número de documento
+  (antes se restaba a todas). Aplica al listado, al detalle y al registrar el
+  pago. Actualizada *De dónde sale el saldo*.
 
 - **1.25** — Los **PDF del listado** (vistas *Detallado* y *Por proveedor*)
   muestran el **número de página al pie** de cada hoja (*Página 2/5*).

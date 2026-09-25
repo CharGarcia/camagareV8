@@ -973,6 +973,7 @@ class EgresoRepository extends BaseRepository
                                  ON regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g')
                                     = regexp_replace(CONCAT(c2.establecimiento_prov,'-',c2.punto_emision_prov,'-',c2.secuencial_prov), '[^0-9]', '', 'g')
                                 AND c2.id_empresa = r.id_empresa
+                                AND c2.id_proveedor = r.id_proveedor -- el número se repite entre proveedores
                                 AND c2.eliminado  = FALSE
                             WHERE r.id_empresa = :id_empresa
                               AND r.eliminado = FALSE
@@ -1226,6 +1227,7 @@ class EgresoRepository extends BaseRepository
                                  ON regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g')
                                     = regexp_replace(CONCAT(l2.establecimiento, '-', l2.punto_emision, '-', l2.secuencial), '[^0-9]', '', 'g')
                                 AND l2.id_empresa = r.id_empresa
+                                AND l2.id_proveedor = r.id_proveedor -- el número se repite entre proveedores
                                 AND l2.eliminado  = FALSE
                             WHERE r.id_empresa = :id_empresa
                               AND r.eliminado = FALSE

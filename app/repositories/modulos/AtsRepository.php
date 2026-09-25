@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\CruceRetencionSri;
 use App\repositories\BaseRepository;
 
 /**
@@ -240,9 +241,11 @@ class AtsRepository extends BaseRepository
                        rc.establecimiento, rc.punto_emision, rc.secuencial,
                        rc.numero_autorizacion, rc.fecha_emision,
                        rd.codigo_impuesto, rd.codigo_retencion, rd.concepto,
-                       rd.base_imponible, rd.porcentaje_retener, rd.valor_retenido
+                       rd.base_imponible, rd.porcentaje_retener, rd.valor_retenido,
+                       " . CruceRetencionSri::codigoSri('rsc', 'rd.codigo_retencion') . " AS codigo_sri
                 FROM retencion_compra_cabecera rc
                 INNER JOIN retencion_compra_detalle rd ON rd.id_retencion = rc.id
+                " . CruceRetencionSri::joinLateral('rd.codigo_retencion', 'rd.id_retencion_sri', 'rsc') . "
                 WHERE rc.id_empresa = :id_empresa
                   AND rc.eliminado = false
                   AND rc.estado <> 'anulada'
