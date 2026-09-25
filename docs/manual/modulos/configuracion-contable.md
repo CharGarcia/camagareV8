@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada
-version: 1.17
+version: 1.18
 orden: 5
 estado: activo
 ---
@@ -309,7 +309,7 @@ del empleado manda sobre la General.
 
 ## Módulos que contabilizan: apagar los asientos de un módulo
 
-El botón **Módulos que contabilizan** (arriba, junto a *Configurar Asientos*)
+El botón **Módulos que contabilizan** (arriba, junto a *Configurar*)
 abre la lista de módulos que generan asientos automáticos, agrupados en Ventas,
 Compras, Tesorería, Consignaciones y Nómina. Cada uno tiene un interruptor. Por
 defecto todos están **encendidos**.
@@ -386,6 +386,9 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.18** — El botón *Configurar Asientos* pasa a llamarse **Configurar** y es
+  más compacto, para que *Crear Cuenta Contable* y *Módulos que contabilizan*
+  quepan en la misma fila que el selector de tipo de asiento.
 - **1.17** — Las retenciones de renta se identifican por su **código ATS**, tanto
   en esta pantalla como en el asiento. Antes se cruzaban por otro código del
   catálogo y, cuando no coincidían (por ejemplo 323 y 323I), la cuenta se asignaba

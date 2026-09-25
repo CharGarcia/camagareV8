@@ -113,20 +113,20 @@ $base = BASE_URL;
                     <option value="activos_fijos_depreciacion">Activos Fijos - Depreciación (Ajuste por redondeo)</option>
                 </select>
             </div>
-            <div class="col-md-6 col-lg-3">
-                <button type="button" id="btnConfigurarAsientos" class="btn btn-primary btn-sm px-4 shadow-sm w-100 py-2 fw-medium" onclick="ASIENTOPROG_configurar()">
-                    <i class="bi bi-sliders me-1"></i> Configurar Asientos
+            <div class="col-auto">
+                <button type="button" id="btnConfigurarAsientos" class="btn btn-primary btn-sm px-3 shadow-sm py-2 fw-medium text-nowrap" onclick="ASIENTOPROG_configurar()">
+                    <i class="bi bi-sliders me-1"></i> Configurar
                 </button>
             </div>
             <?php if (\App\Helpers\Permisos::puedeCrear('modulos/plan-cuentas')): ?>
-            <div class="col-md-6 col-lg-3">
-                <button type="button" class="btn btn-outline-primary btn-sm px-4 shadow-sm w-100 py-2 fw-medium" onclick="abrirModalCrearCuentaContable()">
+            <div class="col-auto">
+                <button type="button" class="btn btn-outline-primary btn-sm px-3 shadow-sm py-2 fw-medium text-nowrap" onclick="abrirModalCrearCuentaContable()">
                     <i class="bi bi-plus-circle me-1"></i> Crear Cuenta Contable
                 </button>
             </div>
             <?php endif; ?>
-            <div class="col-md-6 col-lg-2">
-                <button type="button" class="btn btn-outline-secondary btn-sm px-3 shadow-sm w-100 py-2 fw-medium" onclick="CONTAB_INT_abrir()"
+            <div class="col-auto">
+                <button type="button" class="btn btn-outline-secondary btn-sm px-3 shadow-sm py-2 fw-medium text-nowrap" onclick="CONTAB_INT_abrir()"
                         title="Elegir qué módulos generan asientos contables automáticos en esta empresa">
                     <i class="bi bi-toggles me-1"></i> Módulos que contabilizan
                 </button>
