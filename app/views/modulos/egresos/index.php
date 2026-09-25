@@ -1854,6 +1854,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     ? `<span class="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-25" title="Impreso ${c.impreso_fecha || ''} por ${c.impreso_usuario || ''}">Impreso</span>`
                     : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pendiente</span>`;
                 const tr = document.createElement('tr');
+                tr.style.cursor = 'pointer';
                 tr.innerHTML = `
                     <td class="text-center"><input type="checkbox" class="chq-check form-check-input" value="${c.id_pago}" data-impreso="${impreso ? 1 : 0}"></td>
                     <td class="fw-bold">${c.numero_cheque || '-'}</td>
@@ -1872,6 +1873,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function chqToggleAll(el) {
         document.querySelectorAll('.chq-check').forEach(c => c.checked = el.checked);
     }
+
+    // Clic en cualquier parte de la fila marca/desmarca su cheque (el clic sobre el
+    // propio checkbox ya lo cambia el navegador). "Todos" se sincroniza con las filas.
+    // Delegado en document: el modal se declara más abajo que este script.
+    document.addEventListener('click', (e) => {
+        const tr = e.target.closest('#chq-tbody tr');
+        const chk = tr?.querySelector('.chq-check');
+        if (!chk) return;
+        if (e.target !== chk) chk.checked = !chk.checked;
+        const todos = [...document.querySelectorAll('.chq-check')];
+        const chkAll = document.getElementById('chq-check-all');
+        if (chkAll) chkAll.checked = todos.length > 0 && todos.every(c => c.checked);
+    });
 
     async function imprimirChequesSeleccionados(modo = 'print') {
         const checks = [...document.querySelectorAll('.chq-check:checked')];

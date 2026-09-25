@@ -350,7 +350,7 @@ function RI_fetchGenerar(tab, params, onOk, onError, ui) {
  * y, si el reporte excede lo que el servidor puede armar (ReporteInventariosController::
  * bloquearExportPorVolumen), la explicación en un aviso en lugar de una pestaña en blanco.
  * 'consignacion' / 'consignacion-pdf' = Excel / PDF de un solo documento (botones del modal
- * de detalle de Consignaciones).
+ * de detalle de Consignaciones; el PDF de ese modal va por CMG_pdfDocumento, ver descargarPdf).
  */
 function RI_descargarExport(formato, params) {
     const esPdf = formato === 'pdf' || formato === 'consignacion-pdf';
@@ -1013,7 +1013,9 @@ window.RI_Consignaciones = {
      *  que lo explican y el saldo. Siempre el documento entero (no reaplica los filtros). */
     descargarPdf() {
         if (!this.idConsignacionActual) return;
-        RI_descargarExport('consignacion-pdf', new URLSearchParams({ id: this.idConsignacionActual }));
+        // Un solo documento: pregunta Imprimir / Descargar / Ver (CMG_pdfDocumento).
+        CMG_pdfDocumento(BASE_URL + '/' + RUTA_MODULO + '/consignacionPdf?' + new URLSearchParams({ id: this.idConsignacionActual }).toString(),
+            { archivo: 'ReporteInventarios.pdf' });
     },
 
     /** Excel de la consignación abierta en el modal: el documento entero, como el PDF, una

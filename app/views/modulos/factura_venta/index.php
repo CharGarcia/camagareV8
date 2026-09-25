@@ -7298,7 +7298,7 @@ $totalPages = $totalPagesOriginal;
                             <small class="text-muted" style="font-size:0.65rem;">${cob.formas_cobro || '—'}</small></td>
                         <td class="text-end fw-bold">$ ${monto.toFixed(2)}</td>
                         <td class="text-center pe-3">
-                            <a href="${B_URL}/modulos/ingresos/pdf?id=${cob.id}" target="_blank" rel="noopener" class="btn btn-link btn-sm p-0 text-danger" title="Ver PDF del ingreso" onclick="event.stopPropagation()">
+                            <a href="${B_URL}/modulos/ingresos/pdf?id=${cob.id}" data-pdf-documento class="btn btn-link btn-sm p-0 text-danger" title="Ver PDF del ingreso" onclick="event.stopPropagation()">
                                 <i class="bi bi-file-earmark-pdf"></i>
                             </a>
                         </td>`;

@@ -1837,12 +1837,7 @@
         imprimirFichaProductos() {
             const id = $id('pf_id').value;
             if (!id) { toast('Guarde la proforma antes de generar la ficha', 'error'); return; }
-            const a = document.createElement('a');
-            a.href = `${urlBase()}/exportarFichaProductosAjax?id=${id}`;
-            a.rel = 'noopener';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+            CMG_pdfDocumento(`${urlBase()}/exportarFichaProductosAjax?id=${id}`);
         },
 
         /** PDF anexo con las condiciones (se genera desde lo GUARDADO en la proforma). */
@@ -1853,12 +1848,7 @@
                 toast('La proforma no tiene condiciones. Escríbalas y guarde antes de descargar el PDF', 'error');
                 return;
             }
-            const a = document.createElement('a');
-            a.href = `${urlBase()}/exportarCondicionesAjax?id=${id}`;
-            a.rel = 'noopener';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+            CMG_pdfDocumento(`${urlBase()}/exportarCondicionesAjax?id=${id}`);
         },
 
         /* ── Plantillas ──────────────────────────────────────── */

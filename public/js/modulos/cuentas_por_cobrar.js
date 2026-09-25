@@ -360,7 +360,7 @@ function CXC_accionesHtml(r) {
     return `
                 <div class="d-flex justify-content-center gap-1">
                     ${!esSaldo ? `
-                    <a class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:.72rem;" href="${urlPdf}" target="_blank" rel="noopener"
+                    <a class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:.72rem;" href="${urlPdf}" data-pdf-documento
                        title="Descargar PDF del documento">
                         <i class="bi bi-file-earmark-pdf"></i>
                     </a>` : ''}

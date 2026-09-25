@@ -575,6 +575,19 @@ window.CMG_Identificacion = (function () {
     window.CMG_pdfDocumento = function (url, opciones) {
         opciones = Object.assign({ nombre: 'PDF', archivo: 'documento.pdf' }, opciones || {});
         return obtenerArchivo(url, opciones).then(function (r) {
+            if (!r) return null;
+            // Un endpoint que respondió 200 con un texto de error (die('...')) sin
+            // Content-Type text/html llegaría aquí como "PDF": se comprueba la firma.
+            return r.blob.slice(0, 5).text().then(function (cab) {
+                if (cab.indexOf('%PDF') !== 0) {
+                    return r.blob.slice(0, 300).text().then(function (txt) {
+                        aviso('error', 'No se pudo generar el PDF', txt.replace(/<[^>]*>/g, ' ').trim() || 'El servidor no devolvió un PDF.');
+                        return null;
+                    });
+                }
+                return r;
+            });
+        }).then(function (r) {
             if (!r) return;
             // TCPDF en modo 'D' manda Content-Type application/force-download: con ese
             // tipo el iframe y la pestaña descargarían en vez de mostrar el PDF.
@@ -615,6 +628,19 @@ window.CMG_Identificacion = (function () {
             });
         });
     };
+
+    // Enlaces a un PDF de documento armados como HTML (filas de tablas dentro de
+    // modales, pestañas de fichas, celdas que devuelve el servidor): basta marcarlos
+    // con data-pdf-documento para que pregunten Imprimir / Descargar / Ver.
+    // En fase de captura porque varios llevan onclick="event.stopPropagation()"
+    // (para no disparar el clic de la fila) y así el aviso no llegaría al document.
+    document.addEventListener('click', function (e) {
+        if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        var a = e.target.closest ? e.target.closest('a[data-pdf-documento][href]') : null;
+        if (!a) return;
+        e.preventDefault();
+        window.CMG_pdfDocumento(a.href);
+    }, true);
 
     document.addEventListener('click', function (e) {
         if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;

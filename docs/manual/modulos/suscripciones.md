@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
-etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento
-version: 1.3
+etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora
+version: 1.4
 orden: 0
 estado: activo
 ---
@@ -212,6 +212,10 @@ y Excel con los filtros aplicados.
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
+
+- **1.4** — Los botones y enlaces de **PDF** de los documentos preguntan ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.3** — Corregido: al **enviar al cliente el enlace para registrar su tarjeta**, el
   cuadro del correo no aceptaba texto —se veía, pero al escribir no pasaba nada—. Ya se

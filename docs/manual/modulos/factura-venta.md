@@ -442,7 +442,8 @@ la operación de inmediato.
 
 - **2.22** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
-  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
+  **Descargar** o **Ver** en otra pestaña. También el PDF de cada cobro en la
+  pestaña de cobros. Ver la guía *Descargar archivos*.
 
 - **2.21** — **Venta en otra unidad** (caja, docena, ciento): al vender una línea
   en una unidad distinta a la del producto, el inventario descuenta la cantidad

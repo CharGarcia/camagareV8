@@ -162,7 +162,7 @@ class ChequeRepository extends BaseRepository
             }
         }
 
-        $sql = $this->selectBaseCheques() . $where . " ORDER BY ep.fecha_cobro ASC NULLS LAST, ep.id ASC";
+        $sql = $this->selectBaseCheques() . $where . " ORDER BY ep.fecha_cobro DESC NULLS LAST, ep.id DESC"; // más reciente primero
         return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 

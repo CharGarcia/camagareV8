@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension
-version: 1.4
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora
+version: 1.5
 orden: 0
 estado: activo
 ---
@@ -267,6 +267,10 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   mano y guardar normalmente.
 
 ## Historial de cambios
+
+- **1.5** — Los botones y enlaces de **PDF** de los documentos preguntan ahora si se quiere
+  **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
+  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
 - **1.4** — **Facturación desde el alumno.** La antigua pestaña **Servicios**
   se une a **Facturación**: el cliente que factura, la serie y, debajo, los

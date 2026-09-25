@@ -1265,7 +1265,7 @@ class ReporteInventariosController extends BaseModuloController
         if (!$puedeVerPdf) {
             $tdPdf = '';
         } elseif ($urlPdf !== '') {
-            $tdPdf = '<td class="text-center"><a href="' . htmlspecialchars($urlPdf, ENT_QUOTES) . '" target="_blank" rel="noopener"'
+            $tdPdf = '<td class="text-center"><a href="' . htmlspecialchars($urlPdf, ENT_QUOTES) . '" data-pdf-documento'
                 . ' class="btn btn-sm btn-outline-danger py-0 px-1" title="Imprimir PDF del documento">'
                 . '<i class="bi bi-file-earmark-pdf"></i></a></td>';
         } else {

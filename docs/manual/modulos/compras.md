@@ -561,7 +561,8 @@ aprobaciones pasa, así que no se paga dos veces.
 
 - **2.20** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
-  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
+  **Descargar** o **Ver** en otra pestaña. También el PDF de cada egreso en la
+  pestaña de pagos. Ver la guía *Descargar archivos*.
 
 - **2.19** — **Compras por cajas**: al pasar la compra al inventario, si se elige
   una medida distinta a la del producto (p. ej. CAJA X100 en un producto por

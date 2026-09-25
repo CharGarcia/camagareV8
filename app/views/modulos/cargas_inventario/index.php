@@ -683,8 +683,12 @@ function CI_exportarDetalle(tipo) {
         CI_aviso({ icon: 'info', title: 'Espere un momento', text: 'La carga todavía se está abriendo.' }, 'ci-modal-detalle');
         return;
     }
-    const accion = tipo === 'pdf' ? 'export-detalle-pdf' : 'export-detalle-excel';
-    CMG_descargar(`${CI_URL}/${accion}?id=${CI_cargaActual.id}`);
+    if (tipo === 'pdf') {
+        // PDF de una sola carga: pregunta Imprimir / Descargar / Ver.
+        CMG_pdfDocumento(`${CI_URL}/export-detalle-pdf?id=${CI_cargaActual.id}`);
+        return;
+    }
+    CMG_descargar(`${CI_URL}/export-detalle-excel?id=${CI_cargaActual.id}`);
 }
 
 /**

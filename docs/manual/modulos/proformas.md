@@ -487,7 +487,8 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 - **1.17** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
-  **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
+  **Descargar** o **Ver** en otra pestaña. También los PDF de la ficha de
+  productos y de las condiciones. Ver la guía *Descargar archivos*.
 
 - **1.16** — El detalle de la proforma (y el de las plantillas) muestra la
   columna **Código** junto a *Descripción*. El código se puede escribir y

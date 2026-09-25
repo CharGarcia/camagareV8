@@ -3935,7 +3935,7 @@ window.CMG_cargarPagosTab = async function() {
                     </td>
                     <td class="text-end fw-bold">$ ${montoVal.toFixed(2)}</td>
                     <td class="text-center pe-3">
-                        <a href="${baseUrlEgreso}/modulos/egresos/pdf?id=${eg.id_egreso}" target="_blank" rel="noopener" class="btn btn-link btn-sm p-0 text-danger" title="Ver PDF del egreso" onclick="event.stopPropagation()">
+                        <a href="${baseUrlEgreso}/modulos/egresos/pdf?id=${eg.id_egreso}" data-pdf-documento class="btn btn-link btn-sm p-0 text-danger" title="Ver PDF del egreso" onclick="event.stopPropagation()">
                             <i class="bi bi-file-earmark-pdf"></i>
                         </a>
                     </td>

@@ -465,7 +465,7 @@
                     ${sujeto ? `<span class="text-muted">· ${esc(pago.etiquetaSujeto || '')} ${esc(sujeto)}</span>` : ''}
                     ${e.concepto_nombre ? `<span class="badge bg-secondary bg-opacity-10 text-secondary border">${esc(e.concepto_nombre)}</span>` : ''}
                     <span class="ms-auto fw-bold">Total: $${fmtDinero(e.monto_total)}</span>
-                    ${urlPdf ? `<a class="btn btn-sm btn-outline-danger py-0 px-2" href="${esc(urlPdf)}" download title="Descargar el comprobante de ${esc(titulo.toLowerCase())} (PDF)"><i class="bi bi-file-earmark-pdf"></i></a>` : ''}
+                    ${urlPdf ? `<a class="btn btn-sm btn-outline-danger py-0 px-2" href="${esc(urlPdf)}" data-pdf-documento title="Descargar el comprobante de ${esc(titulo.toLowerCase())} (PDF)"><i class="bi bi-file-earmark-pdf"></i></a>` : ''}
                 </div>
                 ${e.observaciones ? `<div class="text-muted mb-2"><i class="bi bi-chat-left-text me-1"></i>${esc(e.observaciones)}</div>` : ''}
                 <div class="row g-2">

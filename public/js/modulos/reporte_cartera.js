@@ -278,8 +278,9 @@ window.RC_exportarExcel = function (idEntidad) {
     CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + RC_paramsExport(idEntidad).toString());
 };
 
+// Estado de cuenta de UNA entidad: pregunta Imprimir / Descargar / Ver.
 window.RC_exportarPDF = function (idEntidad) {
-    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + RC_paramsExport(idEntidad).toString());
+    CMG_pdfDocumento(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + RC_paramsExport(idEntidad).toString());
 };
 
 // Abre el modal de correo para la entidad del encabezado; precarga su email.

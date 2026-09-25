@@ -1076,7 +1076,7 @@
                 const anulada = f.estado === 'anulado';
                 if (!anulada) tot.docs++;
                 const numero = CFG_FACT.urlPdfFactura
-                    ? `<a href="${escAttr(CFG_FACT.urlPdfFactura)}?id=${f.id_factura}" target="_blank" rel="noopener" title="PDF de la factura"><i class="bi bi-file-earmark-pdf text-danger me-1"></i>${escHtml(f.numero)}</a>`
+                    ? `<a href="${escAttr(CFG_FACT.urlPdfFactura)}?id=${f.id_factura}" data-pdf-documento title="PDF de la factura"><i class="bi bi-file-earmark-pdf text-danger me-1"></i>${escHtml(f.numero)}</a>`
                     : escHtml(f.numero);
                 const refFactura = `<td>${escHtml(f.periodo)}</td>
                     <td>${escHtml(f.fecha)}</td>

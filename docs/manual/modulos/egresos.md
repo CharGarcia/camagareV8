@@ -6,7 +6,7 @@ ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora
-version: 1.27
+version: 1.28
 orden: 20
 estado: activo
 ---
@@ -269,7 +269,9 @@ saber cuándo se hizo efectivo. Los cheques se imprimen desde la propia fila de
 pago del egreso, o en lote desde el listado (botón **Imprimir cheques**), tanto
 a PDF (descarga) como directo a la impresora (abre el diálogo de impresión del
 navegador). Cada impresión queda registrada (control anti-reimpresión): si un
-cheque ya se imprimió, el sistema avisa y pide confirmar antes de reimprimirlo.
+cheque ya se imprimió, el sistema avisa y pide confirmar antes de reimprimirlo. En la lista de
+**Imprimir cheques** los cheques aparecen del más reciente al más antiguo (por
+fecha de cobro), y un clic en cualquier parte de la fila lo marca o desmarca.
 
 ### Cómo saber si un cheque ya se cobró
 
@@ -531,6 +533,10 @@ ve solo los que registró.
   1.26 solo se descuenta si además es del **mismo proveedor**.
 
 ## Historial de cambios
+
+- **1.28** — En la lista de **Imprimir cheques**, los cheques se ordenan del más
+  reciente al más antiguo y se seleccionan con un clic en cualquier parte de la
+  fila, no solo en la casilla.
 
 - **1.27** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
