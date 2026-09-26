@@ -742,6 +742,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 
                     // 1) Construir todas las filas primero (nada de esto depende de red).
                     const filas = [];
+                    // Carga en bloque: sin enfocar cada fila nueva ni recalcular por cada una
+                    // (ver agregarFilaConsignacion / consCalcFila). consCalcTotales() se llama
+                    // una vez al final.
+                    window.CONS_CARGANDO_DETALLES = true;
+                    try {
                     for (const d of data.data.detalles) {
                         const tr = agregarFilaConsignacion();
                         tr.dataset.idBodega = d.id_bodega || '';
@@ -792,12 +797,19 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         consCalcFila(inputCant);
                         filas.push({ tr, d });
                     }
+                    } finally {
+                        window.CONS_CARGANDO_DETALLES = false;
+                    }
 
                     // 2) Lotes/caducidad/NUP de cada línea EN PARALELO (antes se pedía una por
                     // una, en serie: con varias líneas eso hacía sentir lento el abrir la
                     // consignación). Cada llamada solo toca su propia fila, así que no hay
                     // orden que respetar entre ellas.
-                    await Promise.all(filas.map(({ tr, d }) => cargarLotesFilaGuardada(tr, d, bodegaId)));
+                    // Y además en UNA sola petición para todas las líneas (getLotesVariosAjax):
+                    // en paralelo seguían siendo cientos de peticiones en una consignación grande.
+                    // Si falla, cada fila consulta la suya como antes.
+                    const lotesPre = await consPrecargarLotes(filas, bodegaId);
+                    await Promise.all(filas.map(({ tr, d }) => cargarLotesFilaGuardada(tr, d, bodegaId, lotesPre)));
 
                     consCalcTotales();
                 }
@@ -806,14 +818,54 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             }
         }
 
-        /** Trae lote/caducidad/NUP disponibles para UNA línea ya guardada y los aplica a su fila. */
-        async function cargarLotesFilaGuardada(tr, d, bodegaId) {
-            let esInv = (d.inventariable == true || d.inventariable == 'true' || d.inventariable == 1) && d.tipo_produccion !== '02';
-            if (!(esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario)) return;
+        /** ¿La línea guardada necesita lotes/caducidad/NUP del inventario? */
+        function consLineaUsaLotes(d) {
+            const esInv = (d.inventariable == true || d.inventariable == 'true' || d.inventariable == 1) && d.tipo_produccion !== '02';
+            return esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario;
+        }
+
+        /**
+         * Lotes de todas las líneas guardadas en UNA petición (getLotesVariosAjax).
+         * Devuelve { "idProducto_idBodega": {data, stock_total} } o null si falla.
+         * Mismos parámetros que la consulta por línea (sin excluir la consignación).
+         */
+        async function consPrecargarLotes(filas, bodegaId) {
+            const pares = [];
+            const vistos = new Set();
+            filas.forEach(({ d }) => {
+                if (!consLineaUsaLotes(d)) return;
+                const idBod = d.id_bodega || bodegaId;
+                const clave = `${d.id_producto}_${idBod}`;
+                if (d.id_producto && idBod && !vistos.has(clave)) {
+                    vistos.add(clave);
+                    pares.push([parseInt(d.id_producto, 10), parseInt(idBod, 10)]);
+                }
+            });
+            if (!pares.length) return null;
+            try {
+                const fd = new FormData();
+                fd.append('pares', JSON.stringify(pares));
+                const resp = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesVariosAjax`, { method: 'POST', body: fd });
+                const json = await resp.json();
+                return json.ok ? (json.data || {}) : null;
+            } catch (e) {
+                console.error('Lotes en bloque: se consultan fila por fila.', e);
+                return null;
+            }
+        }
+
+        /** Trae lote/caducidad/NUP disponibles para UNA línea ya guardada y los aplica a su fila.
+         *  Con `lotesPre` (precarga en bloque) usa esos datos en vez de pedir los suyos. */
+        async function cargarLotesFilaGuardada(tr, d, bodegaId, lotesPre = null) {
+            if (!consLineaUsaLotes(d)) return;
             try {
                 const rowBodegaId = d.id_bodega || bodegaId;
-                const resLote = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${d.id_producto}&id_bodega=${rowBodegaId}`);
-                const dataLote = await resLote.json();
+                const pre = lotesPre?.[`${d.id_producto}_${rowBodegaId}`];
+                // Copia de la lista: abajo se le agrega el lote guardado (opts.push) y la
+                // precarga la comparten todas las filas del mismo producto y bodega.
+                const dataLote = pre
+                    ? { ok: true, data: pre.data.slice(), stock_total: pre.stock_total }
+                    : await (await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${d.id_producto}&id_bodega=${rowBodegaId}`)).json();
                 const fLote = tr.querySelector('.input-lote');
                 const fCad = tr.querySelector('.input-caducidad');
                 const fNup = tr.querySelector('.input-nup');
@@ -874,7 +926,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         const prec = parseFloat(tr.querySelector('.input-precio').value) || 0;
         const subtotal = cant * prec;
         tr.querySelector('.subtotal-line').textContent = subtotal.toFixed(2);
-        window.consCalcTotales();
+        if (!window.CONS_CARGANDO_DETALLES) window.consCalcTotales();
     };
 
     window.consCalcTotales = function() {
@@ -924,7 +976,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             tr.dataset.idBodega = document.getElementById('cons_id_bodega').value || '';
 
             const inputDesc = tr.querySelector('.input-descripcion');
-            setTimeout(() => inputDesc.focus(), 50);
+            // Solo al agregar una fila a mano: al abrir una consignación se crean todas de
+            // golpe y enfocar cada una (recalcular diseño, desplazar la tabla) la hacía lenta.
+            if (!window.CONS_CARGANDO_DETALLES) setTimeout(() => inputDesc.focus(), 50);
 
             const dropdownGlobal = document.getElementById('cons_res_prod_global') || crearDropdownConsignacion();
 

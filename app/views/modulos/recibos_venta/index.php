@@ -1099,6 +1099,11 @@ $totalPages = $totalPagesOriginal;
     // lo necesita para no volver a habilitar Lote/Caducidad en un recibo no editable cuando
     // su fetch asíncrono resuelve después del pase de solo-lectura.
     let RV_ES_BORRADOR = true;
+    // true mientras se cargan en bloque las filas de un recibo guardado (ver calcFila).
+    let RV_CARGANDO_DETALLES = false;
+    // Lotes de todas las líneas traídos en una sola petición al abrir un borrador
+    // (ver rvCargarLotesEnBloque); cargarLotesFila() los usa en vez de pedir los suyos.
+    let RV_LOTES_PRECARGADOS = null;
     let RV_FECHA_EMISION = null; // 'YYYY-MM-DD' del recibo activa; null si es nueva
     let RV_CLIENTE_RUC  = '';   // RUC/cédula del cliente activo (9999999999999 = Consumidor Final)
     // Cuando es true, cargarSecuencial no sobreescribe el campo (modo edición de factura existente)
@@ -1145,7 +1150,7 @@ $totalPages = $totalPagesOriginal;
     // módulo sigue funcionando igual que antes: sin esta guarda, el error cortaría
     // todo este bloque de script y con él la factura entera.
     const RV_DET = typeof CMG_detalleColumnas !== 'function'
-        ? { engancharDescripcion() {}, ajustarDescripciones() {} }
+        ? { engancharDescripcion() {}, ajustarDescripciones() {}, pausarAjuste() {} }
         : CMG_detalleColumnas({
             tabla:   '#m-tabla-detalle',
             tbody:   '#m-tbodyDetalle',
@@ -3423,9 +3428,14 @@ $totalPages = $totalPagesOriginal;
         inputDesc.addEventListener('blur', () => {
             inputDesc.value = inputDesc.value.replace(/\s+/g, ' ').trim();
         });
-        setTimeout(() => {
-            inputDesc.focus();
-        }, 50);
+        // Solo al agregar una fila a mano. Al abrir un recibo se crean todas de golpe:
+        // enfocar cada una (cientos de focus seguidos, cada uno recalculando el diseño,
+        // desplazando la tabla y disparando el blur de la anterior) hacía lenta la apertura.
+        if (!RV_CARGANDO_DETALLES) {
+            setTimeout(() => {
+                inputDesc.focus();
+            }, 50);
+        }
         const dropdownGlobal = document.getElementById('m-dropdown-productos-global');
 
         const seleccionarProductoEnFila = (p, row) => {
@@ -3800,6 +3810,53 @@ $totalPages = $totalPagesOriginal;
         return (p.length === 3) ? `${p[2]}-${p[1]}-${p[0]}` : iso;
     }
 
+    /**
+     * Al abrir un borrador: trae los lotes y el stock de TODAS las líneas en una sola
+     * petición (getLotesVariosAjax) y luego arma cada fila con cargarLotesFila(), que
+     * los toma de RV_LOTES_PRECARGADOS en vez de pedir los suyos. Antes era una
+     * petición por línea. Si la petición en bloque falla, cada fila consulta por su cuenta.
+     *
+     * @param {Array<{tr: HTMLElement, alTerminar: Function}>} pendientes
+     */
+    async function rvCargarLotesEnBloque(pendientes) {
+        if (!pendientes.length) return;
+        const pares = [];
+        const vistos = new Set();
+        pendientes.forEach(({ tr }) => {
+            // Misma bodega que usará cargarLotesFila() para esa fila.
+            const idProd = tr.dataset.idProducto;
+            const idBod = tr.querySelector('.select-bodega')?.value || document.getElementById('m-select-bodega')?.value;
+            const clave = `${idProd}_${idBod}`;
+            if (idProd && idBod && !vistos.has(clave)) {
+                vistos.add(clave);
+                pares.push([parseInt(idProd, 10), parseInt(idBod, 10)]);
+            }
+        });
+
+        if (pares.length) {
+            try {
+                const fd = new FormData();
+                fd.append('pares', JSON.stringify(pares));
+                fd.append('id_venta', RV_ID_ACTIVO || 0);
+                const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getLotesVariosAjax`, { method: 'POST', body: fd });
+                const json = await resp.json();
+                if (json.ok) RV_LOTES_PRECARGADOS = json.data || {};
+            } catch (e) {
+                console.error('Lotes en bloque: se consultan fila por fila.', e);
+            }
+        }
+
+        // cargarLotesFila() lee el caché antes de su primer await, así que se puede
+        // limpiar en cuanto se lanzaron todas las filas.
+        try {
+            pendientes.forEach(({ tr, alTerminar }) => {
+                Promise.resolve(cargarLotesFila(tr)).then(alTerminar);
+            });
+        } finally {
+            RV_LOTES_PRECARGADOS = null;
+        }
+    }
+
     async function cargarLotesFila(row) {
         const idProd = row.dataset.idProducto;
         const idBod = row.querySelector('.select-bodega')?.value || document.getElementById('m-select-bodega')?.value;
@@ -3827,8 +3884,14 @@ $totalPages = $totalPagesOriginal;
             const currentLote = selLote ? selLote.dataset.originalLote || '' : '';
             const currentCad = selCad ? selCad.dataset.originalCad || '' : '';
 
-            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getLotesAjax?id_producto=${idProd}&id_bodega=${idBod}&id_venta=${idVenta}`);
-            const json = await resp.json();
+            // Al abrir un borrador los lotes ya vienen precargados en bloque; si no están
+            // (fila agregada a mano, cambio de bodega o falló la precarga), se piden aquí.
+            // La lectura del caché va ANTES de cualquier await: así el llamador puede
+            // limpiarlo apenas termina de lanzar todas las filas.
+            const pre = RV_LOTES_PRECARGADOS?.[`${idProd}_${idBod}`];
+            const json = pre
+                ? { ok: true, data: pre.data, stock_total: pre.stock_total }
+                : await (await fetch(`${B_URL}/${RUTA_MODULO}/getLotesAjax?id_producto=${idProd}&id_bodega=${idBod}&id_venta=${idVenta}`)).json();
 
             // No rehabilitar Lote/Caducidad si el recibo es de solo lectura: este fetch es
             // async y puede resolver DESPUÉS del pase de solo-lectura, reabriendo campos
@@ -4142,7 +4205,10 @@ $totalPages = $totalPagesOriginal;
 
         // El subtotal de la línea muestra el neto (después de descuento)
         tr.querySelector('.subtotal-line').textContent = subtotalNeto.toFixed(2);
-        calcTotales();
+        // Al abrir un recibo se cargan todas las filas de golpe: calcTotales() recorre
+        // TODAS las filas, así que llamarlo por cada una era O(n²). La carga lo llama
+        // una sola vez al terminar.
+        if (!RV_CARGANDO_DETALLES) calcTotales();
     }
 
     // ── Toggle Con/Sin impuestos ──────────────────────────────────────────────
@@ -4749,11 +4815,20 @@ $totalPages = $totalPagesOriginal;
                 }
             }
 
+            // En un recibo que no es borrador el lote y la caducidad son de solo lectura:
+            // basta mostrar lo guardado, sin consultar los lotes con stock.
+            const rvCargaEsBorrador = (cab.estado || '').toLowerCase().trim() === 'borrador';
+            const rvLotesPendientes = [];
+            RV_CARGANDO_DETALLES = true;
+            // Sin medir la altura de cada descripción mientras se cargan (ver
+            // detalle_columnas.js): se ajustan todas juntas al reanudar, en el finally.
+            RV_DET.pausarAjuste(true);
+            try {
             json.detalles.forEach(d => {
                 agregarFila();
-                const filas = document.querySelectorAll('#m-tbodyDetalle tr.row-detalle');
-                const tr = filas[filas.length - 1];
-                if (!tr) return;
+                // agregarFila() hace appendChild: la fila nueva es la última del tbody.
+                const tr = document.getElementById('m-tbodyDetalle').lastElementChild;
+                if (!tr || !tr.classList.contains('row-detalle')) return;
 
                 tr.querySelector('.input-id-producto').value = d.id_producto || '';
                 tr.dataset.idProducto = d.id_producto || '';
@@ -4826,7 +4901,7 @@ $totalPages = $totalPagesOriginal;
                     // recibos_venta_detalle se muestra, inyectando la opción si no está.
                     const savedLote = d.numero_lote || '';
                     const savedCad  = d.fecha_caducidad || '';
-                    Promise.resolve(cargarLotesFila(tr)).then(() => {
+                    const rvRestaurarLoteGuardado = () => {
                         const sl = tr.querySelector('.input-lote');
                         const sc = tr.querySelector('.input-caducidad');
                         if (sl && savedLote && savedLote !== 'sin_lote') {
@@ -4845,7 +4920,11 @@ $totalPages = $totalPagesOriginal;
                             }
                             sc.value = savedCad;
                         }
-                    });
+                    };
+                    // Borrador: los lotes de todas las líneas se piden juntos al terminar
+                    // el bucle (rvCargarLotesEnBloque). Solo lectura: basta lo guardado.
+                    if (rvCargaEsBorrador) rvLotesPendientes.push({ tr, alTerminar: rvRestaurarLoteGuardado });
+                    else Promise.resolve().then(rvRestaurarLoteGuardado);
                 }
 
                 // Carga de Medidas y Factores
@@ -5003,6 +5082,11 @@ $totalPages = $totalPagesOriginal;
                 // la calcula desde el precio y el IVA ya cargados, y termina en calcFila.
                 syncPrecioIva(tr.querySelector('.input-precio'));
             });
+            } finally {
+                RV_CARGANDO_DETALLES = false;
+                RV_DET.pausarAjuste(false);
+            }
+            rvCargarLotesEnBloque(rvLotesPendientes);   // sin await: el modal no espera los lotes
 
             // â”€â”€ Formas de pago SRI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const contPagos = document.getElementById('m-container-pagos');

@@ -955,6 +955,8 @@
     function renderDetallesFromFactura(detalles) {
         NC_limpiarDropdownsProducto();
         tableBody.innerHTML = '';
+        NC_CARGANDO_FILAS = true;
+        try {
         detalles.forEach(d => {
             const idTarifa = resolverIdTarifa(d.impuestos, d.id_tarifa_iva);
             agregarFila({
@@ -970,15 +972,25 @@
                 id_tarifa_iva: idTarifa
             });
         });
+        } finally {
+            NC_CARGANDO_FILAS = false;
+        }
+        calcTotales();
     }
 
     function renderDetalles(detalles) {
         NC_limpiarDropdownsProducto();
         tableBody.innerHTML = '';
+        NC_CARGANDO_FILAS = true;
+        try {
         detalles.forEach(d => {
             const idTarifa = resolverIdTarifa(d.impuestos, d.id_tarifa_iva);
             agregarFila({ ...d, id_tarifa_iva: idTarifa });
         });
+        } finally {
+            NC_CARGANDO_FILAS = false;
+        }
+        calcTotales();
     }
 
     // Acepta datos opcionales: el botón "Agregar línea manual" la llama sin argumentos
@@ -1051,15 +1063,24 @@
         let inpActivo = inpDesc;   // input bajo el cual se posiciona el dropdown
 
         // El dropdown se cuelga del <body> con position:fixed para escapar el
-        // overflow de la tabla/modal.
-        const dd = document.createElement('div');
-        dd.className = 'list-group shadow d-none';
-        dd.style.cssText = 'position:fixed;z-index:20000;min-width:320px;max-height:240px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-radius:0 0 6px 6px;box-shadow:0 4px 16px rgba(0,0,0,.12);';
-        document.body.appendChild(dd);
-        tr._ncDdProd = dd;   // referencia para limpieza al eliminar la fila
-        dd._ncTr = tr;       // referencia inversa para la selección
+        // overflow de la tabla/modal. Se crea recién cuando la fila busca algo: antes
+        // cada fila creaba el suyo al nacer (500 divs en el <body> por una nota grande).
+        let dd = null;
+        function obtenerDd() {
+            if (dd) return dd;
+            dd = document.createElement('div');
+            dd.className = 'list-group shadow d-none nc-dd-prod';
+            dd.style.cssText = 'position:fixed;z-index:20000;min-width:320px;max-height:240px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-radius:0 0 6px 6px;box-shadow:0 4px 16px rgba(0,0,0,.12);';
+            document.body.appendChild(dd);
+            tr._ncDdProd = dd;   // referencia para limpieza al eliminar la fila
+            dd._ncTr = tr;       // referencia inversa para la selección
+            dd._ncPosicionar = posicionar;
+            dd._ncInputs = [inpDesc, inpCod].filter(Boolean);
+            return dd;
+        }
 
         function posicionar() {
+            if (!dd) return;
             const r = inpActivo.getBoundingClientRect();
             dd.style.top   = r.bottom + 'px';
             dd.style.left  = r.left + 'px';
@@ -1080,8 +1101,9 @@
             if (inpVd) inpVd.value = '';
             if (inp === inpDesc && inpCod) inpCod.value = '';
             const q = inp.value.trim();
-            if (q.length < (inp === inpCod ? 1 : 2)) { dd.classList.add('d-none'); return; }
+            if (q.length < (inp === inpCod ? 1 : 2)) { if (dd) dd.classList.add('d-none'); return; }
             timer = setTimeout(async () => {
+                const dd = obtenerDd();
                 try {
                     const res = await (await fetch(`${BASE_URL}/modulos/factura_venta/getProductosAjax?q=${encodeURIComponent(q)}`)).json();
                     if (!res.ok || !res.data || !res.data.length) {
@@ -1103,12 +1125,27 @@
         inpDesc.addEventListener('input', () => buscar(inpDesc));
         if (inpCod) inpCod.addEventListener('input', () => buscar(inpCod));
 
+        // Un solo listener de scroll por tabla (antes uno por fila, que se acumulaban
+        // cada vez que se abría otra nota). Reposiciona el dropdown abierto, si hay.
         const tabla = tr.closest('.table-responsive');
-        if (tabla) tabla.addEventListener('scroll', () => { if (!dd.classList.contains('d-none')) posicionar(); });
-        document.addEventListener('click', (e) => {
-            if (!inpDesc.contains(e.target) && !(inpCod && inpCod.contains(e.target)) && !dd.contains(e.target)) dd.classList.add('d-none');
-        });
+        if (tabla && !tabla._ncScrollDd) {
+            tabla._ncScrollDd = true;
+            tabla.addEventListener('scroll', () => {
+                document.querySelectorAll('.nc-dd-prod:not(.d-none)').forEach(d => d._ncPosicionar && d._ncPosicionar());
+            });
+        }
     }
+
+    // Cerrar el dropdown de productos abierto al hacer clic fuera. UN solo listener
+    // para toda la página: antes cada fila registraba el suyo en document y nunca se
+    // quitaba, así que con 500 líneas cada clic corría 500 funciones, y se sumaban
+    // otras 500 cada vez que se abría otra nota.
+    document.addEventListener('click', (e) => {
+        document.querySelectorAll('.nc-dd-prod:not(.d-none)').forEach(d => {
+            const dentro = d.contains(e.target) || (d._ncInputs || []).some(i => i.contains(e.target));
+            if (!dentro) d.classList.add('d-none');
+        });
+    });
 
     window.NC_seleccionarProducto = (el, p) => {
         const dd = el.closest('.list-group');
@@ -1234,8 +1271,13 @@
     // El subtotal de cada línea lo pinta calcTotales() (neto, sin IVA). Aquí solo se
     // dispara el recálculo: si esta función también escribiera la celda, calcTotales()
     // la sobreescribiría enseguida con otro valor y otro formato.
+    // Al cargar una nota o las líneas de una factura se crean todas las filas de golpe:
+    // calcTotales() recorre TODAS las filas, así que llamarlo por cada una era O(n²).
+    // renderDetalles*() lo llaman una sola vez al terminar. `var` y no `let`: la
+    // bandera se lee desde agregarFila(), que puede correr antes de esta línea.
+    var NC_CARGANDO_FILAS = false;
     window.NC_calcFila = () => {
-        calcTotales();
+        if (!NC_CARGANDO_FILAS) calcTotales();
     };
 
     // ─── CÁLCULOS GENERALES ─────────────────────────────────────────────────

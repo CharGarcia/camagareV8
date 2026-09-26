@@ -345,7 +345,7 @@ la operación de inmediato.
   empresa (**línea por línea** o **al subtotal**), igual que la factura.
   Antes siempre calculaba línea por línea: al devolver completa una
   factura grande hecha al subtotal, la NC podía salir unos centavos por
-  encima de la factura y el sistema la rechazaba por exceder su total.
+  encima de la factura y el sistema la rechazaba por exceder su total. Además, los documentos con muchas líneas abren mucho más rápido.
 - **1.24** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.

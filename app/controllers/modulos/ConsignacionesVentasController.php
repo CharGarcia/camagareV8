@@ -1139,6 +1139,8 @@ class ConsignacionesVentasController extends BaseModuloController
     public function getLotesDisponiblesAjax(): void
     {
         $this->requireLeer();
+        // Solo lee: con la sesión tomada estas peticiones iban de una en una.
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         $idEmpresa  = (int) $_SESSION['id_empresa'];
@@ -1161,10 +1163,46 @@ class ConsignacionesVentasController extends BaseModuloController
         $stockTotal = $repoInv->getStockActual($idProducto, $idBodega, $idEmpresa, $excludeId, $excludeTipo);
 
         echo json_encode([
-            'ok' => true, 
+            'ok' => true,
             'data' => $lotes,
             'stock_total' => $stockTotal
         ]);
+        exit;
+    }
+
+    /**
+     * getLotesDisponiblesAjax() para todas las líneas de una consignación en UNA
+     * petición (al abrirla se hacía una por línea). Recibe `pares` = JSON
+     * [[id_producto, id_bodega], …] (y opcional `id_consignacion`) y devuelve
+     * data["idProducto_idBodega"] = {data, stock_total}, con el formato de
+     * getLotesDisponiblesAjax(). Solo lee.
+     */
+    public function getLotesVariosAjax(): void
+    {
+        $this->requireLeer();
+        $this->liberarSesion();
+        header('Content-Type: application/json');
+
+        $pares = json_decode((string) ($_POST['pares'] ?? '[]'), true);
+        if (!is_array($pares) || count($pares) > 2000) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Parámetros inválidos']);
+            exit;
+        }
+        $pares = array_values(array_filter(array_map(
+            fn($x) => is_array($x) && count($x) === 2 ? [(int) $x[0], (int) $x[1]] : null,
+            $pares
+        )));
+
+        // Mismo tipo que el kardex ('CONSIGNACION_VENTA'), igual que getLotesDisponiblesAjax().
+        $idConsignacion = (int) ($_POST['id_consignacion'] ?? 0);
+        $data = (new \App\repositories\modulos\InventarioRepository())->getLotesDisponiblesVarios(
+            $pares,
+            (int) $_SESSION['id_empresa'],
+            $idConsignacion > 0 ? $idConsignacion : null,
+            $idConsignacion > 0 ? 'CONSIGNACION_VENTA' : null
+        );
+
+        echo json_encode(['ok' => true, 'data' => (object) $data]);
         exit;
     }
 

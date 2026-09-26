@@ -199,7 +199,7 @@ la operación de inmediato.
 - **1.17** — Con el IVA configurado **al subtotal**, el IVA de cada línea se reajusta al
   guardar para que su suma sea exactamente el IVA sobre el subtotal. La factura
   que se genera desde un recibo también respeta ahora ese modo (antes lo
-  calculaba siempre línea por línea).
+  calculaba siempre línea por línea). Además, los documentos con muchas líneas abren mucho más rápido.
 - **1.16** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
