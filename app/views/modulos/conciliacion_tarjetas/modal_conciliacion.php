@@ -25,10 +25,9 @@ $ctarPestanasOcultables = array_filter([
 ?>
 <style>
 /*
- * Modal a alto fijo, sin scroll en el cuerpo: cabecera, barra de acciones, datos,
- * totales y pie quedan quietos; solo se desplazan las dos listas del cruce (y la
- * pestaña del asiento, dentro de sí misma). Antes el cuerpo entero hacía scroll
- * además de las listas y todo se movía al recorrerlas.
+ * Alto según la pestaña: «Conciliación» con el cruce a la vista usa casi toda la
+ * pantalla y solo se desplazan las dos listas; las demás pestañas (y la conciliación
+ * nueva) se ajustan a su contenido, como el modal de Clientes.
  * Solo desde lg: por debajo el modal es pantalla completa con las columnas
  * apiladas y necesita el scroll normal del cuerpo.
  * Las clases de las listas NO llevan "-scroll": app.css las estiraría (app-shell).
@@ -41,24 +40,27 @@ $ctarPestanasOcultables = array_filter([
 @media (min-width: 992px) {
     /* Más ancho que modal-xl (1140px): las dos listas del cruce van lado a lado. */
     #modalConciliacion .modal-dialog { max-width: min(1600px, 96vw); }
-    /* Casi todo el alto de la ventana: lo que sobra se lo llevan las dos listas. */
-    #modalConciliacion:not(.ctar-m-sin-cruce) .modal-dialog { margin-top: .5rem; margin-bottom: .5rem; height: calc(100vh - 1rem); }
-    #modalConciliacion .modal-content { height: 100%; }
-    #modalConciliacion .modal-body { display: flex; flex-direction: column; overflow: hidden; }
-    #modalConciliacion .modal-body > .tab-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-    /* Conciliación nueva (sin paso 2 todavía): el modal se ajusta a su contenido. */
-    #modalConciliacion.ctar-m-sin-cruce .modal-content { height: auto; }
-    #modalConciliacion #ctar-pane-cruce.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
-    #modalConciliacion #ctar-pane-asiento.active,
-    #modalConciliacion #ctar-pane-config.active { flex: 1 1 auto; min-height: 0; overflow: auto; }
-    #modalConciliacion .ctar-m-card { flex-shrink: 0; }
-    #modalConciliacion .ctar-m-paso2:not(.d-none) { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
-    #modalConciliacion .ctar-m-paso2 > .card { flex-shrink: 0; }
-    #modalConciliacion .ctar-m-cruce { flex: 1 1 auto; min-height: 0; flex-wrap: nowrap; }
-    #modalConciliacion .ctar-m-cruce > [class*="col-"] { display: flex; flex-direction: column; min-height: 0; }
-    #modalConciliacion .ctar-m-card-lista { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
-    #modalConciliacion .ctar-m-card-lista > * { flex-shrink: 0; }
-    #modalConciliacion .ctar-m-card-lista > .ctar-m-lista { flex: 1 1 auto; min-height: 0; max-height: none; }
+
+    /*
+     * Alto según la pestaña (mismo comportamiento que el modal de Clientes): por defecto
+     * el modal se ajusta a su contenido y queda centrado. Solo la pestaña «Conciliación»
+     * con el cruce a la vista (clase ctar-m-lleno, la pone CTAR_ajustarAltoModal) ocupa
+     * casi todo el alto de la ventana: ese espacio se lo llevan las dos listas, que son
+     * lo único que se desplaza; cabecera, datos, totales y pie quedan quietos.
+     */
+    #modalConciliacion.ctar-m-lleno .modal-dialog { margin-top: .5rem; margin-bottom: .5rem; height: calc(100vh - 1rem); }
+    #modalConciliacion.ctar-m-lleno .modal-content { height: 100%; }
+    #modalConciliacion.ctar-m-lleno .modal-body { display: flex; flex-direction: column; overflow: hidden; }
+    #modalConciliacion.ctar-m-lleno .modal-body > .tab-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    #modalConciliacion.ctar-m-lleno #ctar-pane-cruce.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    #modalConciliacion.ctar-m-lleno .ctar-m-card { flex-shrink: 0; }
+    #modalConciliacion.ctar-m-lleno .ctar-m-paso2:not(.d-none) { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    #modalConciliacion.ctar-m-lleno .ctar-m-paso2 > .card { flex-shrink: 0; }
+    #modalConciliacion.ctar-m-lleno .ctar-m-cruce { flex: 1 1 auto; min-height: 0; flex-wrap: nowrap; }
+    #modalConciliacion.ctar-m-lleno .ctar-m-cruce > [class*="col-"] { display: flex; flex-direction: column; min-height: 0; }
+    #modalConciliacion.ctar-m-lleno .ctar-m-card-lista { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    #modalConciliacion.ctar-m-lleno .ctar-m-card-lista > * { flex-shrink: 0; }
+    #modalConciliacion.ctar-m-lleno .ctar-m-card-lista > .ctar-m-lista { flex: 1 1 auto; min-height: 0; max-height: none; }
 }
 /* Fila única del encabezado: mismo alto explícito en todos los controles (§9) —
    select, fecha, número, archivo y botón no rinden igual con los -sm de Bootstrap. */
@@ -76,7 +78,7 @@ $ctarPestanasOcultables = array_filter([
 </style>
 <div class="modal fade" id="modalConciliacion" tabindex="-1" aria-labelledby="modalConciliacionLabel" aria-hidden="true"
      data-bs-backdrop="static">
-    <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-scrollable">
+    <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-scrollable modal-dialog-centered">
         <div class="modal-content">
 
             <div class="modal-header">

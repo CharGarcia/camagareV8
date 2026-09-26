@@ -358,6 +358,20 @@ function CTAR_habilitarAcciones(editable, esNueva) {
     // Mientras es nueva, el modal se ajusta al alto del encabezado.
     mostrar('ctar-m-paso2', !esNueva);
     document.getElementById('modalConciliacion').classList.toggle('ctar-m-sin-cruce', esNueva);
+    CTAR_ajustarAltoModal();
+}
+
+/**
+ * Alto del modal según lo que muestra (como el modal de Clientes): solo la pestaña
+ * «Conciliación» con el cruce a la vista usa casi toda la pantalla para las dos listas;
+ * la conciliación nueva y las pestañas «Asiento contable» y «Configuración» se ajustan
+ * a su contenido. Se llama al cambiar de pestaña y al pintar el modal.
+ */
+function CTAR_ajustarAltoModal() {
+    const modal = document.getElementById('modalConciliacion');
+    if (!modal) return;
+    const enCruce = !!document.querySelector('#ctar-pane-cruce.active');
+    modal.classList.toggle('ctar-m-lleno', enCruce && !modal.classList.contains('ctar-m-sin-cruce'));
 }
 
 function CTAR_pintarAvisoContable() {
@@ -1305,6 +1319,11 @@ function CTAR_excelConciliacion() {
 
 document.addEventListener('DOMContentLoaded', () => {
     CTAR_initOrden();
+    // El alto se decide al empezar el cambio de pestaña (show), no al terminar (shown):
+    // así el modal ya tiene su tamaño nuevo cuando aparece el contenido.
+    document.querySelectorAll('#ctar-m-tabs [data-bs-toggle="tab"]').forEach((b) => {
+        b.addEventListener('show.bs.tab', () => setTimeout(CTAR_ajustarAltoModal, 0));
+    });
     document.getElementById('ctar-tab-asiento-btn')?.addEventListener('shown.bs.tab', CTAR_cargarAsiento);
     document.getElementById('ctar-tab-config-btn')?.addEventListener('shown.bs.tab', CTAR_cargarConfig);
     document.getElementById('ctar-m-procesadora').addEventListener('change', () => {

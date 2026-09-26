@@ -6,7 +6,7 @@ ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
 etiquetas: conciliar tarjetas, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito, imprimir, impresora
-version: 2.0
+version: 2.1
 orden: 66
 estado: activo
 ---
@@ -240,6 +240,8 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.1** — El modal ajusta su alto a lo que muestra cada pestaña, como la ficha de Clientes: **Conciliación** (con el estado de cuenta ya cargado) usa casi toda la pantalla para las dos listas; **Asiento contable**, **Configuración** y una conciliación nueva se ajustan a su contenido y quedan centradas.
 
 - **2.0** — Nuevo diseño de los PDF. El **comprobante** de la conciliación lleva el
   **logo** del establecimiento y el nombre de la empresa, una caja con los datos de la
