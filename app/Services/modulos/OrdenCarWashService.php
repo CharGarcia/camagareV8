@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\Helpers\IvaSubtotal;
 use App\repositories\modulos\OrdenCarWashRepository;
 use App\Rules\modulos\OrdenCarWashRules;
 use App\Services\LogSistemaService;
@@ -217,7 +218,7 @@ class OrdenCarWashService
             ];
             $idOrden = $this->repository->create($cabecera);
 
-            $tot = $this->guardarLineas($idOrden, $idEmpresa, $data);
+            $tot = $this->guardarLineas($idOrden, $idEmpresa, $data, $this->modoIvaEstablecimiento($idEstab));
 
             $this->repository->updateTotales($idOrden, $idEmpresa, $tot['subtotal'], $tot['descuento'], $tot['iva'], $tot['total']);
             $cabecera = array_merge($cabecera, $tot);
@@ -263,7 +264,7 @@ class OrdenCarWashService
             $db->beginTransaction();
 
             $this->repository->limpiarLineas($id, $idEmpresa);
-            $tot = $this->guardarLineas($id, $idEmpresa, $data);
+            $tot = $this->guardarLineas($id, $idEmpresa, $data, $this->modoIvaEstablecimiento((int) ($data['id_establecimiento'] ?? $cab['id_establecimiento'] ?? 0)));
 
             $this->repository->updateCabecera($id, $idEmpresa, [
                 'id_vehiculo'       => (int) $data['id_vehiculo'],
@@ -456,6 +457,21 @@ class OrdenCarWashService
             throw new Exception('No hay líneas válidas para facturar.');
         }
 
+        // Modo 'subtotal' del establecimiento: IVA de cada tarifa sobre la suma de bases,
+        // repartido entre las líneas para que el XML y el RIDE cuadren con el total.
+        $modoIva = IvaSubtotal::modo($empresaConfig);
+        if ($modoIva === 'subtotal') {
+            $lineasIva = [];
+            foreach ($det as $k => $d) {
+                $lineasIva[$k] = ['grupo' => $d['id_tarifa_iva'] ?: (string) $d['porcentaje_iva'], 'base' => $d['precio_total_sin_impuesto'], 'pct' => $d['porcentaje_iva']];
+            }
+            $ivaTotal = 0.0;
+            foreach (IvaSubtotal::repartir($lineasIva, $modoIva) as $k => $ivaLinea) {
+                $det[$k]['impuestos'][0]['valor'] = $ivaLinea;
+                $ivaTotal += $ivaLinea;
+            }
+        }
+
         $totalSinImp  = round($totalSinImp, 2);
         $totalDesc    = round($totalDesc, 2);
         $ivaTotal     = round($ivaTotal, 2);
@@ -583,6 +599,17 @@ class OrdenCarWashService
         return empty($limpio) ? null : json_encode($limpio, JSON_UNESCAPED_UNICODE);
     }
 
+    /** Modo de cálculo del IVA del establecimiento ('subtotal' | 'linea_linea'). */
+    private function modoIvaEstablecimiento(int $idEstablecimiento): string
+    {
+        if ($idEstablecimiento <= 0) return 'linea_linea';
+        try {
+            return IvaSubtotal::modo((new \App\repositories\modulos\EmpresaRepository())->getEstablecimientoConfig($idEstablecimiento));
+        } catch (\Throwable $e) {
+            return 'linea_linea';
+        }
+    }
+
     /** Decodifica la info adicional almacenada (JSON) a array [{nombre,valor}]. */
     private function decodeInfoAdicional($raw): array
     {
@@ -596,11 +623,26 @@ class OrdenCarWashService
      * Inserta las líneas de detalle y novedades de una orden y devuelve los totales.
      * Los importes se calculan en el backend a partir de cantidad/precio/descuento/%IVA.
      */
-    private function guardarLineas(int $idOrden, int $idEmpresa, array $data): array
+    private function guardarLineas(int $idOrden, int $idEmpresa, array $data, string $modoIva = 'linea_linea'): array
     {
         $subtotal = 0.0; $descuento = 0.0; $iva = 0.0; $total = 0.0;
 
-        foreach ($data['detalles'] as $det) {
+        // IVA de cada línea según el modo del establecimiento: en 'subtotal' se calcula
+        // sobre la suma de bases de cada tarifa y se reparte entre las líneas, igual que
+        // el total que muestra la pantalla (antes aquí siempre era línea a línea).
+        $lineasIva = [];
+        foreach ($data['detalles'] as $k => $det) {
+            if ((float) ($det['cantidad'] ?? 0) <= 0 || trim((string) ($det['descripcion'] ?? '')) === '') continue;
+            $pct = (float) ($det['porcentaje_iva'] ?? 0);
+            $lineasIva[$k] = [
+                'grupo' => !empty($det['id_tarifa_iva']) ? (int) $det['id_tarifa_iva'] : (string) $pct,
+                'base'  => max(0.0, round((float) ($det['precio_unitario'] ?? 0) * (float) $det['cantidad'] - (float) ($det['descuento'] ?? 0), 2)),
+                'pct'   => $pct,
+            ];
+        }
+        $ivaLineas = IvaSubtotal::repartir($lineasIva, $modoIva);
+
+        foreach ($data['detalles'] as $k => $det) {
             $cant = (float) ($det['cantidad'] ?? 0);
             $desc = trim((string) ($det['descripcion'] ?? ''));
             if ($cant <= 0 || $desc === '') continue;
@@ -611,7 +653,7 @@ class OrdenCarWashService
 
             $baseLinea = round($precio * $cant - $dscto, 2);
             if ($baseLinea < 0) $baseLinea = 0.0;
-            $valorIva  = round($baseLinea * ($porcIva / 100), 2);
+            $valorIva  = $ivaLineas[$k];
             $totalLin  = round($baseLinea + $valorIva, 2);
 
             $this->repository->insertDetalle([

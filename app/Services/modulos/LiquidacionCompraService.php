@@ -188,23 +188,25 @@ class LiquidacionCompraService
             $grupos[$idTarifa]['lineas'][] = $i;
         }
 
+        // 'subtotal': el IVA de la tarifa se calcula sobre la base acumulada del grupo
+        // y los centavos de diferencia se reparten entre sus líneas (ninguna se mueve
+        // más de 0,01), para que la suma de las líneas cuadre EXACTO con el total de la
+        // tarifa — es lo que el SRI compara en totalConImpuestos. Antes el residuo
+        // entero caía en la última línea: en una liquidación grande esa línea podía
+        // quedar con varios centavos de desvío, o con IVA negativo si era pequeña.
+        $lineasIva = [];
+        foreach ($grupos as $idTarifa => $g) {
+            foreach ($g['lineas'] as $i) {
+                $lineasIva[$i] = ['grupo' => $idTarifa, 'base' => (float) $detalles[$i]['precio_total_sin_impuesto'], 'pct' => $g['pct']];
+            }
+        }
+        $ivaLineas = \App\Helpers\IvaSubtotal::repartir($lineasIva, $modoIva);
+
         $totalIva = 0.0;
         foreach ($grupos as $g) {
-            // 'subtotal': el IVA de la tarifa se calcula sobre la base acumulada del
-            // grupo y el residuo de centavos se asienta en su última línea, para que
-            // la suma de las líneas cuadre EXACTO con el total de la tarifa — es lo
-            // que el SRI compara en totalConImpuestos.
-            $ivaGrupo   = $modoIva === 'subtotal' ? round($g['base'] * $g['pct'] / 100, 2) : 0.0;
-            $acumulado  = 0.0;
-            $ultimaPos  = count($g['lineas']) - 1;
-
-            foreach ($g['lineas'] as $pos => $i) {
+            foreach ($g['lineas'] as $i) {
                 $base = (float) $detalles[$i]['precio_total_sin_impuesto'];
-                $iva  = round($base * $g['pct'] / 100, 2);
-                if ($modoIva === 'subtotal' && $pos === $ultimaPos) {
-                    $iva = round($ivaGrupo - $acumulado, 2);
-                }
-                $acumulado = round($acumulado + $iva, 2);
+                $iva  = $ivaLineas[$i];
 
                 $detalles[$i]['impuestos'] = [[
                     'codigo_impuesto'   => '2', // IVA

@@ -905,7 +905,9 @@
             });
         });
 
-        // En modo 'subtotal' el IVA se recalcula sobre la base acumulada de cada tarifa.
+        // En modo 'subtotal' el IVA se recalcula sobre la base acumulada de cada tarifa,
+        // y el IVA de cada línea se reajusta para que su suma cuadre con él (app.js).
+        window.CMG_repartirIvaSubtotal(detalles, modo);
         if (modo === 'subtotal') {
             Object.values(grupos).forEach(g => { g.iva = r2(g.base * g.tasa / 100); });
         }

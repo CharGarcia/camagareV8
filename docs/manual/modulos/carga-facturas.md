@@ -6,7 +6,7 @@ ruta_modulo: modulos/carga-facturas
 tipo: modulo
 visibilidad: todos
 etiquetas: carga masiva facturas, importar facturas excel, subir facturas, facturar en lote, plantilla facturas, cargar ventas desde excel, migrar facturas, xlsx facturas, facturas iguales, mismo cliente mismo monto, factura repetida, factura duplicada
-version: 1.1
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -261,6 +261,9 @@ Dos cosas que **no** hace, a propósito:
 
 ## Historial de cambios
 
+- **1.2** — Con el IVA configurado **al subtotal**, los centavos de diferencia se reparten
+  entre las líneas de cada tarifa (ninguna cambia más de un centavo), en lugar
+  de cargarlos todos a la línea de mayor valor.
 - **1.1** — Se pueden cargar **varias facturas iguales al mismo cliente** (misma
   fecha, mismo total, mismas líneas): lo que antes bloqueaba ahora es solo un aviso.
   Subir otra vez el mismo archivo ya aplicado sigue rechazándose. Además, los

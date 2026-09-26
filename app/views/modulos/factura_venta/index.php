@@ -1968,7 +1968,8 @@ $totalPages = $totalPagesOriginal;
             title: 'Atención',
             text: 'Debe agregar al menos un producto o servicio.'
         });
-        fvRepartirIvaSubtotal(detalles);
+        // IVA al subtotal: cuadrar Σ IVA por línea con el IVA de la tarifa (public/js/app.js).
+        CMG_repartirIvaSubtotal(detalles, EMPRESA_CONFIG.calculo_iva ?? 'linea_linea');
 
         // ”€”€ Recolectar pagos ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         let sumPagos = 0;
@@ -5086,47 +5087,6 @@ $totalPages = $totalPagesOriginal;
             && !!document.querySelector('#m-tbodyDetalle .input-medida:not(.d-none)');
         document.querySelectorAll('#modalNuevaFactura .col-medida').forEach(el => {
             el.classList.toggle('d-none', !hayMedida);
-        });
-    }
-
-    /**
-     * Modo "IVA al subtotal": el IVA de cada tarifa es r2(Σ bases × %), pero el SRI
-     * exige además el valor por línea. Redondeando cada línea por su cuenta, la suma
-     * difiere del IVA al subtotal en hasta medio centavo por línea: en facturas de
-     * cientos de ítems eso pasa de 0,05 y el XML, el RIDE y el modal (que solo
-     * concilian hasta 0,05) volvían a mostrar el IVA línea a línea, descuadrado con
-     * el importe total. Aquí se reparten esos centavos entre las líneas de mayor
-     * residuo de redondeo (ninguna se mueve más de 0,01), para que Σ líneas = IVA al
-     * subtotal EXACTO. Misma agrupación (id de tarifa) y base (neto + ICE) que calcTotales().
-     */
-    function fvRepartirIvaSubtotal(detalles) {
-        if ((EMPRESA_CONFIG.calculo_iva ?? 'linea_linea') !== 'subtotal') return;
-        const grupos = {};
-        detalles.forEach(d => {
-            const imp = (d.impuestos || []).find(i => String(i.codigo_impuesto) === '2');
-            const pct = parseFloat(imp?.tarifa) || 0;
-            if (!imp || pct <= 0) return;
-            const key = String(d.id_tarifa_iva || imp.codigo_porcentaje);
-            const base = parseFloat(imp.base_imponible) || 0;
-            (grupos[key] ??= { pct, base: 0, lineas: [] });
-            grupos[key].base = r2(grupos[key].base + base);
-            grupos[key].lineas.push({ imp, exacto: base * pct / 100, valor: r2(base * pct / 100) });
-        });
-        Object.values(grupos).forEach(g => {
-            const objetivo = r2(g.base * g.pct / 100);
-            const suma = r2(g.lineas.reduce((s, l) => s + l.valor, 0));
-            let centavos = Math.round((objetivo - suma) * 100);
-            if (centavos === 0) return;
-            const paso = centavos > 0 ? 0.01 : -0.01;
-            // Faltan centavos → subir las que más perdieron al redondear; sobran → bajar las que más ganaron.
-            const orden = [...g.lineas].sort((a, b) => paso > 0
-                ? (b.exacto - b.valor) - (a.exacto - a.valor)
-                : (a.exacto - a.valor) - (b.exacto - b.valor));
-            for (let i = 0; centavos !== 0 && orden.length; i = (i + 1) % orden.length) {
-                orden[i].valor = r2(orden[i].valor + paso);
-                centavos += paso > 0 ? -1 : 1;
-            }
-            g.lineas.forEach(l => { l.imp.valor = l.valor.toFixed(2); });
         });
     }
 

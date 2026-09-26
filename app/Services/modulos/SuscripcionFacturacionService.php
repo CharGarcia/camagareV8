@@ -111,6 +111,19 @@ class SuscripcionFacturacionService
             ];
         }
 
+        // Modo 'subtotal': reajustar el IVA de cada línea para que su suma sea
+        // exactamente el IVA de la tarifa calculado abajo (si no, en documentos con
+        // muchas líneas el XML y el RIDE mostraban el IVA línea a línea).
+        if ($modoIva === 'subtotal') {
+            $lineasIva = [];
+            foreach ($detallesFactura as $k => $df) {
+                $lineasIva[$k] = ['grupo' => (string) $df['porcentaje_iva'], 'base' => $df['precio_total_sin_impuesto'], 'pct' => $df['porcentaje_iva']];
+            }
+            foreach (\App\Helpers\IvaSubtotal::repartir($lineasIva, $modoIva) as $k => $ivaLinea) {
+                $detallesFactura[$k]['impuestos'][0]['valor'] = $ivaLinea;
+            }
+        }
+
         // Totales por tarifa, respetando el modo configurado (idéntico a la factura):
         //   linea_linea → IVA = suma de los IVA de línea ya redondeados
         //   subtotal    → IVA = round(base_grupo * tarifa/100)

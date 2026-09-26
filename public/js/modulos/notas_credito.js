@@ -1262,6 +1262,7 @@
         // Agrupadores por tarifa
         const subtotalesPorTarifa = {};
         const ivasPorTarifa = {};
+        const pctPorTarifa = {};
 
         const rows = tableBody.querySelectorAll('tr.row-det');
         rows.forEach(tr => {
@@ -1296,6 +1297,7 @@
             if (porcIva > 0) {
                 if (!ivasPorTarifa[nombreIva]) ivasPorTarifa[nombreIva] = 0;
                 ivasPorTarifa[nombreIva] = r2(ivasPorTarifa[nombreIva] + valorIva);
+                pctPorTarifa[nombreIva] = porcIva;
             }
 
             // El subtotal de la línea muestra el neto (después de descuento, SIN IVA):
@@ -1304,6 +1306,15 @@
             const totalFilaEl = tr.querySelector('.nc-fila-total');
             if (totalFilaEl) totalFilaEl.textContent = baseConDesc.toFixed(decP);
         });
+
+        // IVA "al subtotal" (misma config que Facturas de Venta): el IVA de cada tarifa
+        // se calcula una vez sobre la suma de sus bases, no sumando el de cada línea.
+        // Así una NC que devuelve la factura completa lleva exactamente su mismo IVA.
+        if (window.nc_calculo_iva === 'subtotal') {
+            Object.keys(ivasPorTarifa).forEach(nombre => {
+                ivasPorTarifa[nombre] = r2(subtotalesPorTarifa[nombre] * pctPorTarifa[nombre] / 100);
+            });
+        }
 
         const decP = window.nc_dec_p || 2;
 
@@ -1495,6 +1506,8 @@
                 }]
             });
         });
+        // IVA al subtotal: cuadrar Σ IVA por línea con el IVA de la tarifa (public/js/app.js).
+        window.CMG_repartirIvaSubtotal(detalles, window.nc_calculo_iva || 'linea_linea');
 
         const payload = {
             id: document.getElementById('nc_id').value,

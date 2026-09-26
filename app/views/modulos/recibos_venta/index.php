@@ -1484,6 +1484,8 @@ $totalPages = $totalPagesOriginal;
             title: 'Atención',
             text: 'Debe agregar al menos un producto o servicio.'
         });
+        // IVA al subtotal: cuadrar Σ IVA por línea con el IVA de la tarifa (public/js/app.js).
+        CMG_repartirIvaSubtotal(detalles, EMPRESA_CONFIG.calculo_iva ?? 'linea_linea');
 
         // ”€”€ Recolectar pagos ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         let sumPagos = 0;

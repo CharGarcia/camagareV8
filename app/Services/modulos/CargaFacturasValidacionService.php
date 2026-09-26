@@ -996,26 +996,26 @@ class CargaFacturasValidacionService
                 $grupos[$codigo]['lineas'][] = $i;
             }
 
+            // Modo subtotal: repartir los centavos de desfase entre las líneas de cada
+            // tarifa (ninguna se mueve más de 0,01) para que la suma de los impuestos
+            // por línea dé exactamente el IVA del grupo. Antes caía todo en la línea de
+            // mayor base, que en cargas grandes quedaba varios centavos desviada.
+            if ($modoIva === 'subtotal') {
+                $lineasIva = [];
+                foreach ($grupos as $codigo => $g) {
+                    foreach ($g['lineas'] as $i) {
+                        $lineasIva[$i] = ['grupo' => $codigo, 'base' => $f['detalles'][$i]['precio_total_sin_impuesto'], 'pct' => $g['pct']];
+                    }
+                }
+                foreach (\App\Helpers\IvaSubtotal::repartir($lineasIva, $modoIva) as $i => $ivaLinea) {
+                    $facturas[$clave]['detalles'][$i]['valor_iva'] = $ivaLinea;
+                }
+            }
+
             $iva = 0.0;
             foreach ($grupos as $g) {
                 if ($modoIva === 'subtotal') {
-                    $ivaGrupo = round(round($g['base'], 2) * $g['pct'] / 100, 2);
-
-                    // Repartir el desfase en la línea de mayor base del grupo, para
-                    // que la suma de los impuestos por línea dé exactamente esto.
-                    $desfase = round($ivaGrupo - round($g['iva'], 2), 2);
-                    if (abs($desfase) >= 0.01 && $g['lineas']) {
-                        $iMax = $g['lineas'][0];
-                        foreach ($g['lineas'] as $i) {
-                            if ($f['detalles'][$i]['precio_total_sin_impuesto']
-                                > $f['detalles'][$iMax]['precio_total_sin_impuesto']) {
-                                $iMax = $i;
-                            }
-                        }
-                        $ajustada = round($facturas[$clave]['detalles'][$iMax]['valor_iva'] + $desfase, 2);
-                        $facturas[$clave]['detalles'][$iMax]['valor_iva'] = $ajustada;
-                    }
-                    $iva += $ivaGrupo;
+                    $iva += round(round($g['base'], 2) * $g['pct'] / 100, 2);
                 } else {
                     $iva += round($g['iva'], 2);
                 }

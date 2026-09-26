@@ -659,6 +659,21 @@ class ReciboVentaService
             ];
         }
 
+        // Respetar el modo de cálculo del IVA del establecimiento: en 'subtotal' el IVA
+        // de cada tarifa se calcula sobre la suma de bases y se reparte entre las líneas.
+        $modoIva = \App\Helpers\IvaSubtotal::modo($empresaConfig);
+        if ($modoIva === 'subtotal') {
+            $lineasIva = [];
+            foreach ($detFactura as $k => $df) {
+                $lineasIva[$k] = ['grupo' => $df['id_tarifa_iva'], 'base' => $df['precio_total_sin_impuesto'], 'pct' => $df['impuestos'][0]['tarifa']];
+            }
+            $ivaTotal = 0.0;
+            foreach (\App\Helpers\IvaSubtotal::repartir($lineasIva, $modoIva) as $k => $ivaLinea) {
+                $detFactura[$k]['impuestos'][0]['valor'] = $ivaLinea;
+                $ivaTotal += $ivaLinea;
+            }
+        }
+
         $ivaTotal     = round($ivaTotal, 2);
         // total_sin_impuestos ya es NETO (suma de precio_total_sin_impuesto = base tras descuento),
         // por eso el descuento NO se vuelve a restar en el importe total.

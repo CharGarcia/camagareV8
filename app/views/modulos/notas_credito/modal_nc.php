@@ -477,4 +477,9 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
     #modalNC.nc-lectura .nc-edit-only {
         display: none !important;
     }
-</style>
+</style><script>
+    // Modo de cálculo del IVA del establecimiento (Empresa → Facturación). Va en el
+    // modal porque se incluye también desde Facturas de Venta: ahí $empresa ya trae
+    // la config del establecimiento fusionada; en /notas_credito la pasa el controller.
+    window.nc_calculo_iva = <?= json_encode((($ncCalculoIva ?? $empresa['calculo_iva_facturacion'] ?? 'linea_linea') === 'subtotal') ? 'subtotal' : 'linea_linea') ?>;
+</script>

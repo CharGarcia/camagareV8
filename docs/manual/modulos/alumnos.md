@@ -6,7 +6,7 @@ ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
 etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora
-version: 1.5
+version: 1.6
 orden: 0
 estado: activo
 ---
@@ -268,6 +268,10 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
 
 ## Historial de cambios
 
+- **1.6** — Con el IVA configurado **al subtotal**, el IVA de cada línea de las facturas
+  generadas se reajusta para que su suma sea exactamente el IVA sobre el
+  subtotal. Antes, con muchas líneas, el XML y el PDF podían no cuadrar con el
+  total.
 - **1.5** — Los botones y enlaces de **PDF** de los documentos preguntan ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.

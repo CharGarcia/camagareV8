@@ -652,4 +652,54 @@ window.CMG_Identificacion = (function () {
         e.preventDefault();
         window.CMG_descargar(a.href);
     });
+
+    /**
+     * IVA "al subtotal" (Empresa → Facturación → calculo_iva_facturacion = 'subtotal').
+     * El IVA de cada tarifa es r2(Σ bases × %), pero el documento guarda además el IVA de
+     * cada línea; redondeando cada línea por su cuenta la suma difiere del IVA al subtotal
+     * en hasta medio centavo por línea (0,23 con 500 líneas), y el XML, el RIDE y el modal
+     * solo concilian hasta 0,05. Aquí se reparten esos centavos entre las líneas de mayor
+     * residuo de redondeo (ninguna se mueve más de 0,01) para que Σ líneas = IVA al
+     * subtotal EXACTO. Equivale a App\Helpers\IvaSubtotal::repartir() del servidor.
+     *
+     * @param {Array}  detalles Líneas del payload: { id_tarifa_iva?, impuestos: [{codigo_impuesto,
+     *                          codigo_porcentaje, tarifa, base_imponible, valor}] }. Se modifica
+     *                          el `valor` del impuesto IVA (conserva su tipo: texto o número).
+     * @param {string} modo     'subtotal' | 'linea_linea' (con 'linea_linea' no hace nada).
+     */
+    window.CMG_repartirIvaSubtotal = function (detalles, modo) {
+        if (modo !== 'subtotal' || !Array.isArray(detalles)) return;
+        var r2 = function (v) { return Math.round(v * 100) / 100; };
+        var grupos = {};
+        detalles.forEach(function (d) {
+            var imp = (d.impuestos || []).filter(function (i) { return String(i.codigo_impuesto) === '2'; })[0];
+            var pct = imp ? (parseFloat(imp.tarifa) || 0) : 0;
+            if (!imp || pct <= 0) return;
+            var key = String(d.id_tarifa_iva || imp.codigo_porcentaje || pct);
+            var base = parseFloat(imp.base_imponible) || 0;
+            if (!grupos[key]) grupos[key] = { pct: pct, base: 0, lineas: [] };
+            grupos[key].base = r2(grupos[key].base + base);
+            grupos[key].lineas.push({ imp: imp, exacto: base * pct / 100, valor: r2(base * pct / 100) });
+        });
+        Object.keys(grupos).forEach(function (k) {
+            var g = grupos[k];
+            var objetivo = r2(g.base * g.pct / 100);
+            var suma = r2(g.lineas.reduce(function (s, l) { return s + l.valor; }, 0));
+            var centavos = Math.round((objetivo - suma) * 100);
+            if (centavos === 0) return;
+            var paso = centavos > 0 ? 0.01 : -0.01;
+            // Faltan centavos → subir las que más perdieron al redondear; sobran → bajar las que más ganaron.
+            var orden = g.lineas.slice().sort(function (a, b) {
+                return paso > 0 ? (b.exacto - b.valor) - (a.exacto - a.valor)
+                                : (a.exacto - a.valor) - (b.exacto - b.valor);
+            });
+            for (var i = 0; centavos !== 0; i = (i + 1) % orden.length) {
+                orden[i].valor = r2(orden[i].valor + paso);
+                centavos += paso > 0 ? -1 : 1;
+            }
+            g.lineas.forEach(function (l) {
+                l.imp.valor = typeof l.imp.valor === 'number' ? l.valor : l.valor.toFixed(2);
+            });
+        });
+    };
 })();

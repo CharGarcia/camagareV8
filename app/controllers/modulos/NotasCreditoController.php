@@ -75,6 +75,20 @@ class NotasCreditoController extends BaseModuloController
 
         $vendedores = (new \App\repositories\modulos\VendedorRepository())->getVendedoresActivos($idEmpresa);
 
+        // Modo de cálculo del IVA (línea a línea / al subtotal) del establecimiento,
+        // el mismo que usa Facturas de Venta: así una NC que devuelve la factura
+        // completa lleva exactamente su mismo IVA.
+        $ncCalculoIva = 'linea_linea';
+        if (!empty($establecimientos)) {
+            try {
+                $ncCalculoIva = \App\Helpers\IvaSubtotal::modo(
+                    (new \App\repositories\modulos\EmpresaRepository())->getEstablecimientoConfig((int) $establecimientos[0]['id'])
+                );
+            } catch (\Throwable $e) {
+                // Migración pendiente: se queda en línea a línea.
+            }
+        }
+
         $total = $result['total'];
         $this->viewWithLayout('layouts.main', 'modulos/notas_credito/index', [
             'titulo'      => 'Notas de Crédito',
@@ -93,6 +107,7 @@ class NotasCreditoController extends BaseModuloController
             'base'        => BASE_URL,
             'rutaModulo'  => $this->getRutaModulo(),
             'empresa'     => $empresaData,
+            'ncCalculoIva' => $ncCalculoIva,
             'establecimientos' => $establecimientos,
             'puntos'      => $puntos,
             'seriesFiltro' => $seriesFiltro,
