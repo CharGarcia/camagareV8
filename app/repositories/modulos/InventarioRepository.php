@@ -899,6 +899,85 @@ class InventarioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * getLotesDisponibles() + getStockActual() para VARIOS pares producto/bodega en
+     * una sola consulta. Al abrir una factura en borrador de cientos de líneas se
+     * pedían por separado (una petición HTTP por línea, dos consultas cada una);
+     * con la base remota eso eran segundos de pura latencia.
+     *
+     * Mismo resultado que las dos funciones originales:
+     *   - data: lotes con stock > 0, ordenados por caducidad (nulos al final) y lote.
+     *   - stock_total: suma de TODOS los movimientos del par (incluye lotes en cero
+     *     o negativos), como getStockActual() sin filtro de lote.
+     *
+     * @param array<int, array{0:int,1:int}> $pares [[id_producto, id_bodega], …]
+     * @return array<string, array{data: array, stock_total: float}> clave "idProducto_idBodega";
+     *         todo par pedido viene en el resultado (sin movimientos: data vacía, stock 0).
+     */
+    public function getLotesDisponiblesVarios(array $pares, int $idEmpresa, ?int $excludeRefId = null, ?string $excludeRefTipo = null): array
+    {
+        $resultado = [];
+        $prods = [];
+        $bods  = [];
+        foreach ($pares as [$p, $b]) {
+            $p = (int) $p; $b = (int) $b;
+            if ($p <= 0 || $b <= 0 || isset($resultado["{$p}_{$b}"])) continue;
+            $resultado["{$p}_{$b}"] = ['data' => [], 'stock_total' => 0.0];
+            $prods[] = $p;
+            $bods[]  = $b;
+        }
+        if (!$resultado) return [];
+
+        $whereExcluir = "";
+        $params = [
+            ':e'     => $idEmpresa,
+            ':prods' => '{' . implode(',', $prods) . '}',
+            ':bods'  => '{' . implode(',', $bods) . '}',
+        ];
+        if ($excludeRefId !== null && $excludeRefTipo !== null) {
+            $whereExcluir = " AND NOT (k.referencia_id = :erid AND k.referencia_tipo = :ertipo)";
+            $params[':erid']   = $excludeRefId;
+            $params[':ertipo'] = $excludeRefTipo;
+        }
+
+        $sql = "WITH pares AS (
+                    SELECT x.p, x.b FROM unnest(CAST(:prods AS int[]), CAST(:bods AS int[])) AS x(p, b)
+                ),
+                g AS (
+                    SELECT k.id_producto, k.id_bodega,
+                           COALESCE(k.numero_lote, 'sin_lote') AS numero_lote,
+                           MAX(k.fecha_caducidad) AS fecha_caducidad,
+                           SUM(k.cantidad) AS suma
+                    FROM inventario_kardex k
+                    JOIN pares ON k.id_producto = pares.p AND k.id_bodega = pares.b
+                    WHERE k.id_empresa = :e AND k.eliminado = false
+                      AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+                      $whereExcluir
+                    GROUP BY k.id_producto, k.id_bodega, COALESCE(k.numero_lote, 'sin_lote')
+                )
+                SELECT id_producto, id_bodega, numero_lote, fecha_caducidad,
+                       ROUND(suma, 2) AS stock_lote,
+                       ROUND(SUM(suma) OVER (PARTITION BY id_producto, id_bodega), 2) AS stock_total
+                FROM g
+                ORDER BY id_producto, id_bodega, fecha_caducidad ASC NULLS LAST, numero_lote ASC";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $k = (int) $row['id_producto'] . '_' . (int) $row['id_bodega'];
+            if (!isset($resultado[$k])) continue;
+            $resultado[$k]['stock_total'] = (float) $row['stock_total'];
+            if ((float) $row['stock_lote'] > 0) {   // = HAVING ROUND(SUM(cantidad), 2) > 0
+                $resultado[$k]['data'][] = [
+                    'numero_lote'     => $row['numero_lote'],
+                    'fecha_caducidad' => $row['fecha_caducidad'],
+                    'stock_lote'      => $row['stock_lote'],
+                ];
+            }
+        }
+        return $resultado;
+    }
+
     // insertarAjuste es un alias de registrarMovimiento para compatibilidad
     public function insertarAjuste(array $data): int
     {

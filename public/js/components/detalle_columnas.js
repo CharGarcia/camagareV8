@@ -44,8 +44,16 @@
 
     const valueNativo = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
 
+    // Carga en bloque (abrir un documento de cientos de líneas): medir el alto de
+    // cada descripción al asignarla obliga al navegador a recalcular el diseño de
+    // toda la tabla —que va creciendo— varias veces por línea (O(n²)). Mientras
+    // dura la pausa no se mide nada; al terminar, quien la pidió llama a
+    // ajustarDescripciones(), que mide todas de una vez.
+    let pausado = false;
+
     /** Ajusta el alto de un textarea de descripción a su texto. */
     function ajustarAltura(ta) {
+        if (pausado) return;
         // Oculto (modal cerrado u otra pestaña): scrollHeight vale 0. Se recalcula
         // al mostrarse (shown.bs.modal / shown.bs.tab).
         if (!ta || ta.offsetParent === null) return;
@@ -70,8 +78,30 @@
         const limites = Object.assign({}, LIMITES, opts.limites || {});
         const campos  = Object.assign({}, CAMPOS, opts.campos || {});
 
+        /**
+         * Ajusta todas las descripciones en tres pasadas (leer, escribir, leer,
+         * escribir agrupados) en vez de medir y escribir fila por fila: así el
+         * navegador recalcula el diseño un par de veces en total, no una por línea.
+         */
         function ajustarDescripciones() {
-            document.querySelectorAll(`${selBody} ${campos.descripcion}`).forEach(ajustarAltura);
+            if (pausado) return;
+            const tas = Array.from(document.querySelectorAll(`${selBody} ${campos.descripcion}`))
+                .filter(ta => ta.offsetParent !== null);   // ocultas: se ajustan al mostrarse
+            if (!tas.length) return;
+            tas.forEach(ta => ta.style.setProperty('height', ALTO_MIN + 'px', 'important'));
+            const contenido = tas.map(ta => ta.scrollHeight);
+            tas.forEach((ta, i) => {
+                const alto = Math.min(Math.max(contenido[i], ALTO_MIN), ALTO_MAX);
+                ta.style.setProperty('height', alto + 'px', 'important');
+                ta.style.overflowY = contenido[i] > alto ? 'auto' : 'hidden';
+            });
+        }
+
+        /** Pausa (true) o reanuda (false) el ajuste de alto línea por línea. Al
+         *  reanudar se ajustan todas las descripciones de una vez. */
+        function pausarAjuste(estado) {
+            pausado = !!estado;
+            if (!pausado) ajustarDescripciones();
         }
 
         /**
@@ -207,6 +237,6 @@
             timerResize = setTimeout(ajustarDescripciones, 150);
         });
 
-        return { engancharDescripcion, ajustarDescripciones };
+        return { engancharDescripcion, ajustarDescripciones, pausarAjuste };
     };
 })();

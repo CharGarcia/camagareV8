@@ -1872,10 +1872,45 @@ class FacturaVentaController extends BaseModuloController
         $stockTotal = $repoInv->getStockActual($idProducto, $idBodega, $idEmpresa, $excludeId, $excludeTipo);
 
         echo json_encode([
-            'ok' => true, 
+            'ok' => true,
             'data' => $lotes,
             'stock_total' => $stockTotal
         ]);
+        exit;
+    }
+
+    /**
+     * getLotesAjax() para todas las líneas de una factura en UNA petición: al abrir
+     * un borrador de cientos de ítems se hacía una petición por línea. Recibe
+     * `pares` = JSON [[id_producto, id_bodega], …] y devuelve
+     * data["idProducto_idBodega"] = {data, stock_total}, con el mismo formato de
+     * getLotesAjax(). Solo lee.
+     */
+    public function getLotesVariosAjax(): void
+    {
+        $this->requireLeer();
+        $this->liberarSesion();
+        header('Content-Type: application/json');
+
+        $pares = json_decode((string) ($_POST['pares'] ?? '[]'), true);
+        if (!is_array($pares) || count($pares) > 2000) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Parámetros inválidos']);
+            exit;
+        }
+        $pares = array_values(array_filter(array_map(
+            fn($x) => is_array($x) && count($x) === 2 ? [(int) $x[0], (int) $x[1]] : null,
+            $pares
+        )));
+
+        $idVenta = (int) ($_POST['id_venta'] ?? 0);
+        $data = (new \App\repositories\modulos\InventarioRepository())->getLotesDisponiblesVarios(
+            $pares,
+            (int) $_SESSION['id_empresa'],
+            $idVenta > 0 ? $idVenta : null,
+            $idVenta > 0 ? 'factura_venta' : null
+        );
+
+        echo json_encode(['ok' => true, 'data' => (object) $data]);
         exit;
     }
 
