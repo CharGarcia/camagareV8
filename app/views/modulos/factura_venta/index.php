@@ -1504,6 +1504,8 @@ $totalPages = $totalPagesOriginal;
     // lo necesita para no volver a habilitar Lote/Caducidad en una factura autorizada
     // cuando su fetch asíncrono resuelve después del pase de solo-lectura.
     let FV_ES_BORRADOR = true;
+    // true mientras se cargan en bloque las filas de una factura guardada (ver calcFila).
+    let FV_CARGANDO_DETALLES = false;
     const TARIFAS_IVA = <?= json_encode($tarifasIva) ?>;
     const UNIDADES = <?= json_encode($unidades) ?>;
     // Si solo hay una bodega, se usa esa fija como respaldo cuando el <select> no tiene valor
@@ -1966,6 +1968,7 @@ $totalPages = $totalPagesOriginal;
             title: 'Atención',
             text: 'Debe agregar al menos un producto o servicio.'
         });
+        fvRepartirIvaSubtotal(detalles);
 
         // ”€”€ Recolectar pagos ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         let sumPagos = 0;
@@ -5061,7 +5064,10 @@ $totalPages = $totalPagesOriginal;
 
         // El subtotal de la línea muestra el neto (después de descuento)
         tr.querySelector('.subtotal-line').textContent = subtotalNeto.toFixed(2);
-        calcTotales();
+        // Al abrir una factura se cargan todas las filas de golpe: calcTotales() recorre
+        // TODAS las filas, así que llamarlo por cada una era O(n²) y congelaba el modal
+        // en facturas de cientos de ítems. La carga lo llama una sola vez al terminar.
+        if (!FV_CARGANDO_DETALLES) calcTotales();
     }
 
     /**
@@ -5080,6 +5086,47 @@ $totalPages = $totalPagesOriginal;
             && !!document.querySelector('#m-tbodyDetalle .input-medida:not(.d-none)');
         document.querySelectorAll('#modalNuevaFactura .col-medida').forEach(el => {
             el.classList.toggle('d-none', !hayMedida);
+        });
+    }
+
+    /**
+     * Modo "IVA al subtotal": el IVA de cada tarifa es r2(Σ bases × %), pero el SRI
+     * exige además el valor por línea. Redondeando cada línea por su cuenta, la suma
+     * difiere del IVA al subtotal en hasta medio centavo por línea: en facturas de
+     * cientos de ítems eso pasa de 0,05 y el XML, el RIDE y el modal (que solo
+     * concilian hasta 0,05) volvían a mostrar el IVA línea a línea, descuadrado con
+     * el importe total. Aquí se reparten esos centavos entre las líneas de mayor
+     * residuo de redondeo (ninguna se mueve más de 0,01), para que Σ líneas = IVA al
+     * subtotal EXACTO. Misma agrupación (id de tarifa) y base (neto + ICE) que calcTotales().
+     */
+    function fvRepartirIvaSubtotal(detalles) {
+        if ((EMPRESA_CONFIG.calculo_iva ?? 'linea_linea') !== 'subtotal') return;
+        const grupos = {};
+        detalles.forEach(d => {
+            const imp = (d.impuestos || []).find(i => String(i.codigo_impuesto) === '2');
+            const pct = parseFloat(imp?.tarifa) || 0;
+            if (!imp || pct <= 0) return;
+            const key = String(d.id_tarifa_iva || imp.codigo_porcentaje);
+            const base = parseFloat(imp.base_imponible) || 0;
+            (grupos[key] ??= { pct, base: 0, lineas: [] });
+            grupos[key].base = r2(grupos[key].base + base);
+            grupos[key].lineas.push({ imp, exacto: base * pct / 100, valor: r2(base * pct / 100) });
+        });
+        Object.values(grupos).forEach(g => {
+            const objetivo = r2(g.base * g.pct / 100);
+            const suma = r2(g.lineas.reduce((s, l) => s + l.valor, 0));
+            let centavos = Math.round((objetivo - suma) * 100);
+            if (centavos === 0) return;
+            const paso = centavos > 0 ? 0.01 : -0.01;
+            // Faltan centavos → subir las que más perdieron al redondear; sobran → bajar las que más ganaron.
+            const orden = [...g.lineas].sort((a, b) => paso > 0
+                ? (b.exacto - b.valor) - (a.exacto - a.valor)
+                : (a.exacto - a.valor) - (b.exacto - b.valor));
+            for (let i = 0; centavos !== 0 && orden.length; i = (i + 1) % orden.length) {
+                orden[i].valor = r2(orden[i].valor + paso);
+                centavos += paso > 0 ? -1 : 1;
+            }
+            g.lineas.forEach(l => { l.imp.valor = l.valor.toFixed(2); });
         });
     }
 
@@ -5774,11 +5821,18 @@ $totalPages = $totalPagesOriginal;
                 }
             }
 
+            // En una factura autorizada/anulada el lote y la caducidad son de solo lectura:
+            // basta mostrar lo guardado, sin consultar a getLotesAjax los lotes con stock
+            // (una petición por línea: cientos en una factura grande, y en fila por el
+            // candado de sesión).
+            const fvCargaEsBorrador = (cab.estado || '').toLowerCase().trim() === 'borrador';
+            FV_CARGANDO_DETALLES = true;
+            try {
             json.detalles.forEach(d => {
                 agregarFila();
-                const filas = document.querySelectorAll('#m-tbodyDetalle tr.row-detalle');
-                const tr = filas[filas.length - 1];
-                if (!tr) return;
+                // agregarFila() hace appendChild: la fila nueva es la última del tbody.
+                const tr = document.getElementById('m-tbodyDetalle').lastElementChild;
+                if (!tr || !tr.classList.contains('row-detalle')) return;
 
                 tr.querySelector('.input-id-producto').value = d.id_producto || '';
                 tr.dataset.idProducto = d.id_producto || '';
@@ -5854,7 +5908,7 @@ $totalPages = $totalPagesOriginal;
                     // ventas_detalle se muestra, inyectando la opción si no está en el select.
                     const savedLote = d.numero_lote || '';
                     const savedCad  = d.fecha_caducidad || '';
-                    Promise.resolve(cargarLotesFila(tr)).then(() => {
+                    Promise.resolve(fvCargaEsBorrador ? cargarLotesFila(tr) : null).then(() => {
                         const sl = tr.querySelector('.input-lote');
                         const sc = tr.querySelector('.input-caducidad');
                         if (sl && savedLote && savedLote !== 'sin_lote') {
@@ -6035,6 +6089,9 @@ $totalPages = $totalPagesOriginal;
                 // la calcula desde el precio y el IVA ya cargados, y termina en calcFila.
                 syncPrecioIva(tr.querySelector('.input-precio'));
             });
+            } finally {
+                FV_CARGANDO_DETALLES = false;
+            }
 
             // â”€â”€ Formas de pago SRI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const contPagos = document.getElementById('m-container-pagos');

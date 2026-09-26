@@ -1849,6 +1849,9 @@ class FacturaVentaController extends BaseModuloController
     public function getLotesAjax(): void
     {
         $this->requireLeer();
+        // Solo lee: al abrir un borrador se pide una vez por línea, y con la sesión
+        // tomada esas peticiones iban de una en una (y congelaban el resto de la app).
+        $this->liberarSesion();
         header('Content-Type: application/json');
 
         $idEmpresa  = (int) $_SESSION['id_empresa'];
