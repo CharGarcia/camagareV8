@@ -46,7 +46,9 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
             <h5 class="mb-0 fw-bold"><i class="bi bi-bank me-2 text-primary"></i><?= htmlspecialchars($titulo) ?></h5>
             <small class="text-muted">Detalle de transacciones por cuenta bancaria, conciliación y seguimiento de cheques posfechados</small>
         </div>
-        <div class="d-flex gap-2">
+        <!-- ms-auto + justify-content-end: aunque la fila se parta en pantallas angostas, los
+             botones quedan pegados a la derecha. -->
+        <div class="d-flex flex-wrap justify-content-end gap-2 ms-auto">
             <button type="button" class="btn btn-outline-warning btn-sm" onclick="CB_abrirModalPosfechados()">
                 <i class="bi bi-calendar-event me-1"></i> Cheques Posfechados
             </button>
