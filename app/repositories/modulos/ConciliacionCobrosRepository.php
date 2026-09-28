@@ -158,11 +158,11 @@ class ConciliacionCobrosRepository extends BaseRepository
         $sql = "INSERT INTO conciliacion_lineas (
                     id_carga, id_empresa, fecha_movimiento, descripcion_original, monto, referencia_banco,
                     estado, id_cliente_sugerido, score_match, tipo_documento_sugerido, id_documento_sugerido,
-                    monto_aplicar, id_linea_origen, created_by, updated_by
+                    monto_aplicar, id_linea_origen, mensaje_error, created_by, updated_by
                 ) VALUES (
                     :id_carga, :id_empresa, :fecha_movimiento, :descripcion_original, :monto, :referencia_banco,
                     :estado, :id_cliente_sugerido, :score_match, :tipo_documento_sugerido, :id_documento_sugerido,
-                    :monto_aplicar, :id_linea_origen, :usuario, :usuario
+                    :monto_aplicar, :id_linea_origen, :mensaje_error, :usuario, :usuario
                 ) RETURNING id";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -179,6 +179,7 @@ class ConciliacionCobrosRepository extends BaseRepository
             ':id_documento_sugerido' => $data['id_documento_sugerido'] ?? null,
             ':monto_aplicar' => $data['monto_aplicar'] ?? $data['monto'],
             ':id_linea_origen' => $data['id_linea_origen'] ?? null,
+            ':mensaje_error' => $data['mensaje_error'] ?? null,
             ':usuario' => $data['usuario_id'],
         ]);
         return (int) $st->fetchColumn();
@@ -235,6 +236,123 @@ class ConciliacionCobrosRepository extends BaseRepository
     {
         $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('conciliacion_linea:' || :id))");
         $st->execute([':id' => $id]);
+    }
+
+    /**
+     * Candado transaccional sobre un documento por cobrar (CLAUDE.md §8): se toma antes de
+     * leer cuánto de su saldo ya está apartado por otras líneas confirmadas, para que dos
+     * confirmaciones simultáneas no aparten el mismo saldo dos veces.
+     */
+    public function lockDocumento(int $idEmpresa, string $tipoDocumento, int $idDocumento): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('conciliacion_doc:' || :e || ':' || :t || ':' || :d))");
+        $st->execute([':e' => $idEmpresa, ':t' => $tipoDocumento, ':d' => $idDocumento]);
+    }
+
+    /**
+     * Monto ya apartado para cada documento por líneas CONFIRMADO que todavía no generaron su
+     * ingreso (de cualquier carga de la empresa). Ese monto aún no descuenta el saldo de la
+     * cuenta por cobrar, así que hay que restarlo para no cobrar el mismo saldo dos veces.
+     *
+     * @param int[] $excluirLineas Líneas que no cuentan (la que se está editando).
+     * @return array<string,float> 'TIPO:id' => monto apartado
+     */
+    public function getMontosApartados(int $idEmpresa, array $excluirLineas = [], ?string $tipoDocumento = null, ?int $idDocumento = null): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $filtro = '';
+        if ($tipoDocumento !== null && $idDocumento !== null) {
+            $filtro .= ' AND l.tipo_documento_sugerido = :tipo AND l.id_documento_sugerido = :id_doc';
+            $params[':tipo'] = $tipoDocumento;
+            $params[':id_doc'] = $idDocumento;
+        }
+        $excluir = array_values(array_filter(array_map('intval', $excluirLineas)));
+        if ($excluir) {
+            $filtro .= ' AND l.id <> ALL(CAST(:excluir AS int[]))';
+            $params[':excluir'] = '{' . implode(',', $excluir) . '}';
+        }
+
+        $sql = "SELECT l.tipo_documento_sugerido AS tipo, l.id_documento_sugerido AS id_doc, SUM(l.monto_aplicar) AS apartado
+                FROM conciliacion_lineas l
+                INNER JOIN conciliacion_cargas c ON c.id = l.id_carga AND c.eliminado = FALSE
+                WHERE l.id_empresa = :id_empresa AND l.eliminado = FALSE
+                  AND l.estado = 'CONFIRMADO'
+                  AND l.id_documento_sugerido IS NOT NULL
+                  {$filtro}
+                GROUP BY l.tipo_documento_sugerido, l.id_documento_sugerido";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        $mapa = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $mapa[$r['tipo'] . ':' . (int) $r['id_doc']] = round((float) $r['apartado'], 2);
+        }
+        return $mapa;
+    }
+
+    /**
+     * Candado de SESIÓN para generar los ingresos de una carga: evita que dos pulsaciones de
+     * "Generar ingresos" (doble clic, dos usuarios) procesen las mismas líneas a la vez. Es de
+     * sesión y no transaccional porque cada grupo de líneas va en su propia transacción.
+     * Devuelve false si otra sesión ya lo tiene.
+     */
+    public function tomarCandadoGeneracion(int $idCarga): bool
+    {
+        $st = $this->db->prepare("SELECT pg_try_advisory_lock(hashtext('conciliacion_generar:' || :id))");
+        $st->execute([':id' => $idCarga]);
+        return (bool) $st->fetchColumn();
+    }
+
+    public function soltarCandadoGeneracion(int $idCarga): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_unlock(hashtext('conciliacion_generar:' || :id))");
+        $st->execute([':id' => $idCarga]);
+    }
+
+    /**
+     * ¿Este movimiento del banco ya está en OTRA carga de la misma cuenta? Pasa al subir
+     * extractos que se solapan en fechas. Se compara por fecha, referencia, descripción del
+     * banco y monto; un depósito repartido entre varios documentos cuenta como uno solo
+     * (sus partes comparten id_linea_origen y se suman). No cuentan las cargas eliminadas ni
+     * los movimientos cuyas líneas quedaron todas ignoradas.
+     *
+     * @return array|null ['id_carga', 'nombre_archivo', 'created_at', 'id_ingreso'] de la primera coincidencia
+     */
+    public function buscarMovimientoRepetido(int $idEmpresa, int $idFormaPago, int $idCargaActual, string $fecha, float $monto, ?string $referencia, string $descripcion): ?array
+    {
+        $sql = "WITH candidatas AS (
+                    SELECT l.id, l.id_carga, l.estado, l.monto, l.id_ingreso_generado,
+                           COALESCE(l.id_linea_origen, l.id) AS grupo,
+                           c.nombre_archivo, c.created_at
+                    FROM conciliacion_lineas l
+                    INNER JOIN conciliacion_cargas c ON c.id = l.id_carga AND c.eliminado = FALSE
+                    WHERE l.id_empresa = :id_empresa AND l.eliminado = FALSE
+                      AND c.id_forma_pago = :id_forma_pago
+                      AND l.id_carga <> :id_carga
+                      AND l.fecha_movimiento = :fecha
+                      AND COALESCE(l.referencia_banco, '') = COALESCE(:referencia, '')
+                      AND l.descripcion_original NOT LIKE '%(diferencia de pago parcial)'
+                      AND split_part(l.descripcion_original, ' (parte ', 1) = :descripcion
+                )
+                SELECT MIN(id_carga) AS id_carga, MIN(nombre_archivo) AS nombre_archivo, MIN(created_at) AS created_at,
+                       MAX(id_ingreso_generado) AS id_ingreso
+                FROM candidatas
+                GROUP BY grupo
+                HAVING ROUND(SUM(monto), 2) = ROUND(CAST(:monto AS numeric), 2)
+                   AND bool_or(estado <> 'IGNORADO')
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa' => $idEmpresa,
+            ':id_forma_pago' => $idFormaPago,
+            ':id_carga' => $idCargaActual,
+            ':fecha' => $fecha,
+            ':referencia' => $referencia,
+            ':descripcion' => $descripcion,
+            ':monto' => $monto,
+        ]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 
     /**

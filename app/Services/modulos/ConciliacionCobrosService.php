@@ -125,6 +125,31 @@ class ConciliacionCobrosService
             $clientes = $this->getClientesConSaldoPendiente($idEmpresa);
 
             foreach ($resultado['filas'] as $fila) {
+                // Mismo movimiento ya subido en otra carga de esta cuenta (extractos que se
+                // solapan en fechas): entra IGNORADO para no cobrarlo dos veces. Si de verdad es
+                // otro depósito idéntico, el usuario lo reactiva con ↺.
+                $repetido = $this->repository->buscarMovimientoRepetido(
+                    $idEmpresa, (int) $cuenta['id'], $idCarga, (string) $fila['fecha'], (float) $fila['monto'],
+                    $fila['referencia'] ?? null, (string) $fila['descripcion']
+                );
+                if ($repetido) {
+                    $this->repository->insertLinea([
+                        'id_carga' => $idCarga,
+                        'id_empresa' => $idEmpresa,
+                        'fecha_movimiento' => $fila['fecha'],
+                        'descripcion_original' => $fila['descripcion'],
+                        'monto' => $fila['monto'],
+                        'referencia_banco' => $fila['referencia'],
+                        'estado' => 'IGNORADO',
+                        'mensaje_error' => 'Movimiento repetido: ya está en la carga «' . $repetido['nombre_archivo'] . '» del '
+                            . date('d-m-Y H:i:s', strtotime((string) $repetido['created_at']))
+                            . (!empty($repetido['id_ingreso']) ? ', que ya generó su ingreso' : '')
+                            . '. Si es otro depósito idéntico, reactívelo.',
+                        'usuario_id' => $idUsuario,
+                    ]);
+                    continue;
+                }
+
                 $sugerencia = $this->matchService->sugerir($fila, $clientes, $idEmpresa);
                 $this->repository->insertLinea([
                     'id_carga' => $idCarga,
@@ -225,48 +250,106 @@ class ConciliacionCobrosService
         return $this->repository->getLineaPorId($idLinea, $idEmpresa) ?? [];
     }
 
-    public function buscarDocumentosPendientes(int $idEmpresa, int $idCliente): array
+    /**
+     * Documentos por cobrar de un cliente para el buscador de la lupa, con el saldo que
+     * realmente queda por conciliar: saldo de la cuenta por cobrar menos lo que otras líneas
+     * confirmadas (aún sin ingreso) ya tienen apartado. Los que no tienen nada disponible no
+     * se ofrecen. $idLinea es la línea que se está editando: lo suyo no cuenta como apartado.
+     */
+    public function buscarDocumentosPendientes(int $idEmpresa, int $idCliente, int $idLinea = 0): array
     {
-        return $this->ingresoRepository->getFacturasPendientes($idCliente, $idEmpresa);
+        $apartados = $this->repository->getMontosApartados($idEmpresa, $idLinea > 0 ? [$idLinea] : []);
+
+        $docs = [];
+        foreach ($this->ingresoRepository->getFacturasPendientes($idCliente, $idEmpresa) as $doc) {
+            $apartado = $apartados[$doc['tipo_documento'] . ':' . (int) $doc['id']] ?? 0.0;
+            $disponible = round((float) $doc['saldo_pendiente'] - $apartado, 2);
+            if ($disponible <= 0.009) {
+                continue;
+            }
+            $doc['saldo_cxc'] = round((float) $doc['saldo_pendiente'], 2);
+            $doc['apartado'] = $apartado;
+            $doc['saldo_pendiente'] = $disponible;
+            $docs[] = $doc;
+        }
+        return $docs;
     }
 
-    /** Confirma (o corrige manualmente) la línea: el usuario marca el check de "sí es este cliente/esta factura". */
+    /**
+     * Saldo de la cuenta por cobrar de un documento y lo que otras líneas confirmadas ya tienen
+     * apartado de él. Llamar DENTRO de una transacción que ya tomó lockDocumento(): así ninguna
+     * otra confirmación puede apartar ese saldo entre la lectura y la escritura.
+     *
+     * @return array{doc: array, saldo: float, apartado: float}
+     */
+    private function saldoDisponibleDocumento(int $idEmpresa, int $idCliente, string $tipo, int $idDocumento, array $excluirLineas, array &$cachePendientes = []): array
+    {
+        if (!isset($cachePendientes[$idCliente])) {
+            $cachePendientes[$idCliente] = $this->ingresoRepository->getFacturasPendientes($idCliente, $idEmpresa);
+        }
+        foreach ($cachePendientes[$idCliente] as $doc) {
+            if ($doc['tipo_documento'] === $tipo && (int) $doc['id'] === $idDocumento) {
+                $apartados = $this->repository->getMontosApartados($idEmpresa, $excluirLineas, $tipo, $idDocumento);
+                return [
+                    'doc' => $doc,
+                    'saldo' => round((float) $doc['saldo_pendiente'], 2),
+                    'apartado' => $apartados[$tipo . ':' . $idDocumento] ?? 0.0,
+                ];
+            }
+        }
+        throw new \Exception('El documento seleccionado ya no tiene saldo pendiente en la cuenta por cobrar o ya no está disponible.');
+    }
+
+    /**
+     * Confirma (o corrige manualmente) la línea: el usuario marca el check de "sí es este
+     * cliente/esta factura". Se valida contra el saldo ACTUAL de la cuenta por cobrar menos lo
+     * que otras líneas confirmadas ya apartaron del mismo documento, con el documento bloqueado,
+     * para que el mismo saldo no se pueda cobrar dos veces.
+     */
     public function confirmarLinea(int $idEmpresa, int $idUsuario, int $idLinea, array $data): array
     {
-        $linea = $this->repository->getLineaPorId($idLinea, $idEmpresa);
-        if (!$linea) {
-            throw new \Exception('La línea indicada no existe.');
-        }
-        if (in_array($linea['estado'], ['APLICADO', 'IGNORADO'], true)) {
-            throw new \Exception('Esta línea ya fue ' . strtolower($linea['estado']) . ' y no se puede modificar.');
-        }
-
         $data['tipo_documento'] = strtoupper((string) ($data['tipo_documento'] ?? ''));
-
         $idCliente = (int) ($data['id_cliente'] ?? 0);
         $idDocumento = (int) ($data['id_documento'] ?? 0);
-        $saldoPendienteDocumento = null;
-        if ($idCliente > 0 && $idDocumento > 0) {
-            foreach ($this->ingresoRepository->getFacturasPendientes($idCliente, $idEmpresa) as $doc) {
-                if ($doc['tipo_documento'] === $data['tipo_documento'] && (int) $doc['id'] === $idDocumento) {
-                    $saldoPendienteDocumento = (float) $doc['saldo_pendiente'];
-                    break;
-                }
+
+        $db = \App\core\Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $this->repository->lockLinea($idLinea);
+            $linea = $this->repository->getLineaPorId($idLinea, $idEmpresa);
+            if (!$linea) {
+                throw new \Exception('La línea indicada no existe.');
             }
-            if ($saldoPendienteDocumento === null) {
-                throw new \Exception('El documento seleccionado ya no tiene saldo pendiente o ya no está disponible.');
+            if (in_array($linea['estado'], ['APLICADO', 'IGNORADO'], true)) {
+                throw new \Exception('Esta línea ya fue ' . strtolower($linea['estado']) . ' y no se puede modificar.');
             }
+
+            $saldo = null;
+            $apartado = 0.0;
+            if ($idCliente > 0 && $idDocumento > 0 && $data['tipo_documento'] !== '') {
+                $this->repository->lockDocumento($idEmpresa, $data['tipo_documento'], $idDocumento);
+                $info = $this->saldoDisponibleDocumento($idEmpresa, $idCliente, $data['tipo_documento'], $idDocumento, [$idLinea]);
+                $saldo = $info['saldo'];
+                $apartado = $info['apartado'];
+                $data['numero_documento'] = $info['doc']['numero_documento'];
+            }
+
+            $this->rules->validarMatchLinea($data, (float) $linea['monto'], $saldo, $apartado);
+
+            $this->repository->actualizarMatchLinea($idLinea, [
+                'estado' => 'CONFIRMADO',
+                'id_cliente_sugerido' => $idCliente,
+                'tipo_documento_sugerido' => $data['tipo_documento'],
+                'id_documento_sugerido' => $idDocumento,
+                'monto_aplicar' => round((float) $data['monto_aplicar'], 2),
+            ]);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
         }
-
-        $this->rules->validarMatchLinea($data, (float) $linea['monto'], $saldoPendienteDocumento);
-
-        $this->repository->actualizarMatchLinea($idLinea, [
-            'estado' => 'CONFIRMADO',
-            'id_cliente_sugerido' => (int) $data['id_cliente'],
-            'tipo_documento_sugerido' => $data['tipo_documento'],
-            'id_documento_sugerido' => (int) $data['id_documento'],
-            'monto_aplicar' => round((float) $data['monto_aplicar'], 2),
-        ]);
 
         return $this->repository->getLineaPorId($idLinea, $idEmpresa) ?? [];
     }
@@ -307,25 +390,24 @@ class ConciliacionCobrosService
             $montoLinea = round((float) $linea['monto'], 2);
             $this->rules->validarDivision($asignaciones, $montoLinea);
 
-            // Saldo pendiente ACTUAL de cada documento (cacheado por cliente: getFacturasPendientes
-            // es la consulta más pesada del sistema, no repetirla por documento).
+            // Candado de cada documento en orden fijo (evita que dos repartos simultáneos se
+            // bloqueen entre sí) y luego el saldo ACTUAL de su cuenta por cobrar menos lo que
+            // otras líneas confirmadas ya apartaron. Los pendientes se cachean por cliente:
+            // getFacturasPendientes es la consulta más pesada del sistema.
+            $claves = array_map(fn ($a) => $a['tipo_documento'] . ':' . $a['id_documento'], $asignaciones);
+            sort($claves);
+            foreach ($claves as $clave) {
+                [$tipo, $idDoc] = explode(':', $clave);
+                $this->repository->lockDocumento($idEmpresa, $tipo, (int) $idDoc);
+            }
             $pendientesPorCliente = [];
             foreach ($asignaciones as &$a) {
-                if ($a['id_cliente'] > 0 && !isset($pendientesPorCliente[$a['id_cliente']])) {
-                    $pendientesPorCliente[$a['id_cliente']] = $this->ingresoRepository->getFacturasPendientes($a['id_cliente'], $idEmpresa);
+                if ($a['id_cliente'] <= 0) {
+                    throw new \Exception('Uno de los documentos seleccionados no tiene cliente.');
                 }
-                $doc = null;
-                foreach ($pendientesPorCliente[$a['id_cliente']] ?? [] as $d) {
-                    if ($d['tipo_documento'] === $a['tipo_documento'] && (int) $d['id'] === $a['id_documento']) {
-                        $doc = $d;
-                        break;
-                    }
-                }
-                if ($doc === null) {
-                    throw new \Exception('Uno de los documentos seleccionados ya no tiene saldo pendiente o ya no está disponible.');
-                }
-                $a['numero_documento'] = $doc['numero_documento'];
-                $this->rules->validarMatchLinea($a, $montoLinea, (float) $doc['saldo_pendiente']);
+                $info = $this->saldoDisponibleDocumento($idEmpresa, $a['id_cliente'], $a['tipo_documento'], $a['id_documento'], [$idLinea], $pendientesPorCliente);
+                $a['numero_documento'] = $info['doc']['numero_documento'];
+                $this->rules->validarMatchLinea($a, $montoLinea, $info['saldo'], $info['apartado']);
             }
             unset($a);
 
@@ -468,6 +550,30 @@ class ConciliacionCobrosService
         $cuenta = $this->repository->getCuentaBancariaPorId((int) $carga['id_forma_pago'], $idEmpresa);
         $nombreCuenta = $cuenta['nombre'] ?? '';
 
+        // Una sola generación a la vez por carga (doble clic, dos usuarios): sin esto, las dos
+        // leerían las mismas líneas CONFIRMADO y cobrarían dos veces un pago parcial.
+        if (!$this->repository->tomarCandadoGeneracion($idCarga)) {
+            throw new \Exception('Los ingresos de esta carga ya se están generando en otra ventana o por otro usuario. Espere a que termine y recargue las líneas.');
+        }
+        try {
+            $resultados = $this->generarIngresosDeGrupos($idEmpresa, $idUsuario, $idCarga, (int) $carga['id_forma_pago'], $punto, $nombreCuenta);
+        } finally {
+            $this->repository->soltarCandadoGeneracion($idCarga);
+        }
+
+        $lineasActuales = $this->repository->getLineasPorCarga($idCarga, $idEmpresa);
+        $quedanPendientes = !empty(array_filter(
+            $lineasActuales,
+            fn ($l) => in_array($l['estado'], ['SIN_MATCH', 'SUGERIDO', 'CONFIRMADO'], true)
+        ));
+        $this->repository->actualizarEstadoCarga($idCarga, $quedanPendientes ? 'pendiente_revision' : 'completado', null, count($lineasActuales));
+
+        return $resultados;
+    }
+
+    /** Cuerpo de generarIngresos(), ya con el candado de la carga tomado. */
+    private function generarIngresosDeGrupos(int $idEmpresa, int $idUsuario, int $idCarga, int $idFormaPago, array $punto, string $nombreCuenta): array
+    {
         $grupos = [];
         foreach ($this->repository->getLineasPorCarga($idCarga, $idEmpresa) as $l) {
             if ($l['estado'] !== 'CONFIRMADO') {
@@ -480,7 +586,13 @@ class ConciliacionCobrosService
         $resultados = [];
         foreach ($grupos as $lineasGrupo) {
             try {
-                $idIngreso = $this->crearIngresoDesdeLineas($idEmpresa, $idUsuario, $lineasGrupo, (int) $carga['id_forma_pago'], $punto, $nombreCuenta);
+                $idIngreso = $this->crearIngresoDesdeLineas($idEmpresa, $idUsuario, $lineasGrupo, $idFormaPago, $punto, $nombreCuenta);
+            } catch (LineaYaProcesadaException $e) {
+                // Otra sesión ya la cobró o la cambió: no es un error de la línea, no se marca.
+                foreach ($lineasGrupo as $linea) {
+                    $resultados[] = ['id_linea' => (int) $linea['id'], 'ok' => false, 'mensaje' => $e->getMessage()];
+                }
+                continue;
             } catch (\Throwable $e) {
                 foreach ($lineasGrupo as $linea) {
                     $this->repository->marcarLineaError((int) $linea['id'], $e->getMessage());
@@ -489,8 +601,8 @@ class ConciliacionCobrosService
                 continue;
             }
 
+            // Las líneas ya quedaron APLICADO dentro de la misma transacción del ingreso.
             foreach ($lineasGrupo as $linea) {
-                $this->repository->marcarLineaAplicada((int) $linea['id'], $idIngreso);
                 $resultado = ['id_linea' => (int) $linea['id'], 'ok' => true, 'id_ingreso' => $idIngreso];
 
                 // Pago parcial: lo recibido en el banco fue mayor a lo aplicado a este documento.
@@ -505,19 +617,15 @@ class ConciliacionCobrosService
             }
         }
 
-        $lineasActuales = $this->repository->getLineasPorCarga($idCarga, $idEmpresa);
-        $quedanPendientes = !empty(array_filter(
-            $lineasActuales,
-            fn ($l) => in_array($l['estado'], ['SIN_MATCH', 'SUGERIDO', 'CONFIRMADO'], true)
-        ));
-        $this->repository->actualizarEstadoCarga($idCarga, $quedanPendientes ? 'pendiente_revision' : 'completado', null, count($lineasActuales));
-
         return $resultados;
     }
 
     /**
      * Crea UN Ingreso para una o varias líneas confirmadas del MISMO cliente: un detalle por
      * documento (si dos líneas apuntan al mismo documento, se suman) y un solo pago por el total.
+     * Dentro de la misma transacción del ingreso relee cada línea con su candado (si otra sesión
+     * ya la cobró o la cambió, no se cobra: LineaYaProcesadaException) y la deja APLICADO, así
+     * el ingreso y la marca de la línea se graban juntos o no se graba ninguno.
      */
     private function crearIngresoDesdeLineas(int $idEmpresa, int $idUsuario, array $lineas, int $idFormaPago, array $punto, string $nombreCuenta = ''): int
     {
@@ -587,6 +695,19 @@ class ConciliacionCobrosService
         }
 
         try {
+            // Releer cada línea con su candado: si entre la lectura del listado y aquí otra
+            // sesión la cobró, la desconfirmó o le cambió el documento/monto, no se cobra.
+            foreach ($lineas as $linea) {
+                $this->repository->lockLinea((int) $linea['id']);
+                $actual = $this->repository->getLineaPorId((int) $linea['id'], $idEmpresa);
+                if (!$actual || $actual['estado'] !== 'CONFIRMADO' || !empty($actual['id_ingreso_generado'])
+                    || (int) $actual['id_documento_sugerido'] !== (int) $linea['id_documento_sugerido']
+                    || $actual['tipo_documento_sugerido'] !== $linea['tipo_documento_sugerido']
+                    || abs((float) $actual['monto_aplicar'] - (float) $linea['monto_aplicar']) > 0.009) {
+                    throw new LineaYaProcesadaException('La línea cambió o ya fue cobrada por otra sesión; recargue las líneas para ver su estado actual.');
+                }
+            }
+
             $secRes = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos', $primera['fecha_movimiento']);
 
             $observaciones = $this->armarObservacionesIngreso($docs, $nombreCuenta, $montoTotal, $primera['referencia_banco'] ?? null)
@@ -625,6 +746,9 @@ class ConciliacionCobrosService
             ];
 
             $idIngreso = $this->ingresoService->crear($payload);
+            foreach ($lineas as $linea) {
+                $this->repository->marcarLineaAplicada((int) $linea['id'], $idIngreso);
+            }
             if ($managedTransaction) {
                 $db->commit();
                 // Como la transacción es nuestra, IngresoService::crear() no genera el asiento ni
@@ -802,4 +926,12 @@ class ConciliacionCobrosService
             'ruta_absoluta' => $destino,
         ];
     }
+}
+
+/**
+ * La línea ya no está como se leyó al empezar a generar (otra sesión la cobró, la desconfirmó
+ * o le cambió el documento): no es un error de la línea, simplemente no se cobra de nuevo.
+ */
+final class LineaYaProcesadaException extends \RuntimeException
+{
 }

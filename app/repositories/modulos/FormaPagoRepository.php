@@ -342,6 +342,36 @@ class FormaPagoRepository extends BaseRepository
     }
 
     /**
+     * Tipo (BANCO, CHEQUE, …) de las formas BANCARIAS (con banco asignado) de la empresa que
+     * estén entre $ids. Las que no son bancarias no aparecen en el resultado.
+     *
+     * @return array<int,string> [id_forma => tipo]
+     */
+    public function getTiposFormasBancarias(int $idEmpresa, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids) {
+            return [];
+        }
+        $marcas = [];
+        $params = [':id_empresa' => $idEmpresa];
+        foreach ($ids as $i => $id) {
+            $marcas[] = ":id{$i}";
+            $params[":id{$i}"] = $id;
+        }
+        $sql = "SELECT fp.id, fp.tipo FROM {$this->table} fp
+                WHERE fp.id_empresa = :id_empresa AND fp.id_banco IS NOT NULL
+                  AND fp.id IN (" . implode(', ', $marcas) . ")";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = (string) $r['tipo'];
+        }
+        return $out;
+    }
+
+    /**
      * Formas activas de un flujo (INGRESO | EGRESO).
      *
      * $ordenConfigurado: respeta el "Orden" definido en Formas de Cobro y Pago (1 = primera; las que

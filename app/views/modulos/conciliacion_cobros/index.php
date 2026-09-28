@@ -200,14 +200,14 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                 </div>
                 <div class="cc-buscar-lista border rounded-2 mb-3">
                     <table class="table table-sm table-hover mb-0">
-                        <thead><tr><th style="width:32px;"></th><th>Tipo</th><th>Documento</th><th>Fecha</th><th class="text-end">Saldo Pendiente</th></tr></thead>
+                        <thead><tr><th style="width:32px;"></th><th>Tipo</th><th>Documento</th><th>Fecha</th><th class="text-end" title="Saldo de la cuenta por cobrar menos lo ya apartado por otras líneas confirmadas">Saldo Disponible</th></tr></thead>
                         <tbody id="cc-buscar-docs-tbody"><tr><td colspan="5" class="text-center text-muted py-3">Seleccione un cliente.</td></tr></tbody>
                     </table>
                 </div>
                 <h6 class="small fw-bold text-muted mb-1">Documentos seleccionados <span class="badge bg-primary bg-opacity-10 text-primary" id="cc-buscar-sel-count">0</span></h6>
                 <div class="cc-buscar-lista border rounded-2">
                     <table class="table table-sm align-middle mb-0">
-                        <thead><tr><th>Cliente</th><th>Documento</th><th class="text-end">Saldo Pendiente</th><th class="text-end" style="width:140px;">Monto a Aplicar</th><th style="width:40px;"></th></tr></thead>
+                        <thead><tr><th>Cliente</th><th>Documento</th><th class="text-end">Saldo Disponible</th><th class="text-end" style="width:140px;">Monto a Aplicar</th><th style="width:40px;"></th></tr></thead>
                         <tbody id="cc-buscar-sel-tbody"><tr><td colspan="5" class="text-center text-muted py-3">Ningún documento seleccionado.</td></tr></tbody>
                     </table>
                 </div>

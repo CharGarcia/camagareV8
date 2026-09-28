@@ -409,6 +409,36 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     </ul>
                 </div>
 
+                <!-- Cheques posfechados por cobrar (recibidos / emitidos): fecha cumplida sin Fecha
+                     Banco o por vencer. Cada línea abre el modal "Cheques Posfechados" de Control
+                     Bancario en su pestaña. Lo llena CMG_refreshContadores (clave cheques_posfechados). -->
+                <div class="dropdown d-none cmg-cheques-wrap">
+                    <a class="text-white text-decoration-none position-relative" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Cheques posfechados por cobrar">
+                        <i class="bi bi-cash-coin" style="font-size: 1.1rem;"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-cheques-total" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 320px; z-index: 5065;">
+                        <li><h6 class="dropdown-header text-primary"><i class="bi bi-cash-coin me-1"></i>Cheques posfechados por cobrar</h6></li>
+                        <li><hr class="dropdown-divider my-1"></li>
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="recibidos-listos" href="<?= $base ?>/modulos/control-bancario?posfechados=recibidos">
+                            <span><i class="bi bi-box-arrow-in-down me-2 text-danger"></i>Recibidos: listos para depositar<br><small class="text-muted ms-4 cmg-chq-monto"></small></span>
+                            <span class="badge bg-danger rounded-pill cmg-chq-badge">0</span>
+                        </a>
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="recibidos-por_vencer" href="<?= $base ?>/modulos/control-bancario?posfechados=recibidos">
+                            <span><i class="bi bi-box-arrow-in-down me-2 text-warning"></i>Recibidos: por vencer<br><small class="text-muted ms-4 cmg-chq-monto"></small></span>
+                            <span class="badge bg-warning text-dark rounded-pill cmg-chq-badge">0</span>
+                        </a>
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="emitidos-listos" href="<?= $base ?>/modulos/control-bancario?posfechados=emitidos">
+                            <span><i class="bi bi-box-arrow-up me-2 text-danger"></i>Emitidos: ya se pueden cobrar<br><small class="text-muted ms-4 cmg-chq-monto"></small></span>
+                            <span class="badge bg-danger rounded-pill cmg-chq-badge">0</span>
+                        </a>
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="emitidos-por_vencer" href="<?= $base ?>/modulos/control-bancario?posfechados=emitidos">
+                            <span><i class="bi bi-box-arrow-up me-2 text-warning"></i>Emitidos: por vencer<br><small class="text-muted ms-4 cmg-chq-monto"></small></span>
+                            <span class="badge bg-warning text-dark rounded-pill cmg-chq-badge">0</span>
+                        </a>
+                    </ul>
+                </div>
+
                 <!-- Firma electrónica por caducar / caducada (empresa activa) -->
                 <a href="<?= $base ?>/modulos/empresa" class="text-white text-decoration-none position-relative d-none cmg-firma-wrap" title="Firma electrónica">
                     <i class="bi bi-file-earmark-lock-fill" style="font-size: 1.1rem;"></i>
@@ -607,6 +637,16 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-truck text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-guias_remision">0</span>
                     <small>Guía SRI</small>
+                </a>
+                <a class="cmg-chq-tile d-none" data-chq-tile="recibidos" href="<?= $base ?>/modulos/control-bancario?posfechados=recibidos">
+                    <i class="bi bi-box-arrow-in-down text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-chq-tile-badge">0</span>
+                    <small>Ch. recib.</small>
+                </a>
+                <a class="cmg-chq-tile d-none" data-chq-tile="emitidos" href="<?= $base ?>/modulos/control-bancario?posfechados=emitidos">
+                    <i class="bi bi-box-arrow-up text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-chq-tile-badge">0</span>
+                    <small>Ch. emit.</small>
                 </a>
                 <a class="cmg-firma-wrap d-none" href="<?= $base ?>/modulos/empresa">
                     <i class="bi bi-file-earmark-lock-fill text-danger"></i>
@@ -965,6 +1005,49 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 document.querySelectorAll('.cmg-novedad-sri-wrap').forEach(function(w){
                     if (totalNov > 0) w.classList.remove('d-none'); else w.classList.add('d-none');
                 });
+
+                // Cheques posfechados por cobrar: badge = total (rojo si alguno ya cumplió su
+                // fecha sin Fecha Banco; amarillo si solo hay por vencer) + desglose con montos.
+                const chq = c.cheques_posfechados || null;
+                const fmtChq = function(v) {
+                    return '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                };
+                const pintarBadgeChq = function(b, n, urgente) {
+                    b.textContent = n > 99 ? '99+' : n;
+                    b.classList.remove('bg-warning', 'text-dark', 'bg-danger', 'text-white');
+                    if (urgente) { b.classList.add('bg-danger', 'text-white'); }
+                    else { b.classList.add('bg-warning', 'text-dark'); }
+                };
+                let chqTotal = 0, chqUrgente = false;
+                ['recibidos', 'emitidos'].forEach(function(grupo) {
+                    const g = (chq && chq[grupo]) || {};
+                    const listos = parseInt(g.listos || 0, 10);
+                    const porVencer = parseInt(g.por_vencer || 0, 10);
+                    chqTotal += listos + porVencer;
+                    if (listos > 0) chqUrgente = true;
+                    [['listos', listos, g.monto_listos], ['por_vencer', porVencer, g.monto_por_vencer]].forEach(function(t) {
+                        document.querySelectorAll('.cmg-chq-item[data-chq="' + grupo + '-' + t[0] + '"]').forEach(function(it) {
+                            it.classList.toggle('d-none', t[1] <= 0);
+                            const b = it.querySelector('.cmg-chq-badge');
+                            if (b) b.textContent = t[1] > 99 ? '99+' : t[1];
+                            const m = it.querySelector('.cmg-chq-monto');
+                            if (m) {
+                                m.textContent = t[0] === 'por_vencer'
+                                    ? fmtChq(t[2]) + ' · próximos ' + (chq ? chq.dias_por_vencer : '') + ' días'
+                                    : fmtChq(t[2]) + ' · sin Fecha Banco';
+                            }
+                        });
+                    });
+                    // Ficha móvil por grupo (recibidos / emitidos)
+                    document.querySelectorAll('.cmg-chq-tile[data-chq-tile="' + grupo + '"]').forEach(function(tile) {
+                        tile.classList.toggle('d-none', (listos + porVencer) <= 0);
+                        const b = tile.querySelector('.cmg-chq-tile-badge');
+                        if (b) pintarBadgeChq(b, listos + porVencer, listos > 0);
+                        tile.setAttribute('title', 'Cheques ' + grupo + ': ' + listos + ' con fecha cumplida · ' + porVencer + ' por vencer');
+                    });
+                });
+                document.querySelectorAll('.cmg-cheques-total').forEach(function(b) { pintarBadgeChq(b, chqTotal, chqUrgente); });
+                document.querySelectorAll('.cmg-cheques-wrap').forEach(function(w) { w.classList.toggle('d-none', chqTotal <= 0); });
 
                 // Suscripción del sistema (empresa activa): por vencer / vencida
                 const susc = c.suscripcion || null;

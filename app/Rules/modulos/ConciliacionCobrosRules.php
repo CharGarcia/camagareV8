@@ -50,7 +50,7 @@ class ConciliacionCobrosRules
      * en el momento de confirmar, ver ConciliacionCobrosService::confirmarLinea); si se indica,
      * el monto a aplicar no puede superarlo (no se puede cobrar más de lo que el documento debe).
      */
-    public function validarMatchLinea(array $data, float $montoLinea, ?float $saldoPendienteDocumento = null): void
+    public function validarMatchLinea(array $data, float $montoLinea, ?float $saldoPendienteDocumento = null, float $apartadoOtrasLineas = 0.0): void
     {
         if (empty($data['id_cliente'])) {
             throw new \Exception('Debe indicar el cliente de la línea.');
@@ -70,8 +70,20 @@ class ConciliacionCobrosRules
         if ($montoAplicar > $montoLinea + 0.01) {
             throw new \Exception('El monto a aplicar no puede ser mayor al monto de la línea del banco.');
         }
-        if ($saldoPendienteDocumento !== null && $montoAplicar > $saldoPendienteDocumento + 0.01) {
-            throw new \Exception('El monto a aplicar ($' . number_format($montoAplicar, 2) . ') no puede ser mayor al saldo pendiente del documento ($' . number_format($saldoPendienteDocumento, 2) . ').');
+        if ($saldoPendienteDocumento !== null) {
+            // Lo que otras líneas ya confirmadas (sin ingreso generado aún) tienen apartado de
+            // este documento todavía no descuenta la cuenta por cobrar: se resta aquí para que el
+            // mismo saldo no se cobre dos veces.
+            $disponible = round($saldoPendienteDocumento - $apartadoOtrasLineas, 2);
+            if ($disponible <= 0.009) {
+                throw new \Exception('El documento ' . ($data['numero_documento'] ?? '') . ' ya tiene todo su saldo ($' . number_format($saldoPendienteDocumento, 2) . ') apartado por otras líneas confirmadas. No se puede cobrar dos veces.');
+            }
+            if ($montoAplicar > $disponible + 0.01) {
+                $detalle = $apartadoOtrasLineas > 0.009
+                    ? ' Saldo de la cuenta por cobrar: $' . number_format($saldoPendienteDocumento, 2) . '; ya apartado por otras líneas confirmadas: $' . number_format($apartadoOtrasLineas, 2) . '.'
+                    : '';
+                throw new \Exception('El monto a aplicar ($' . number_format($montoAplicar, 2) . ') supera el saldo disponible del documento ($' . number_format($disponible, 2) . ').' . $detalle);
+            }
         }
     }
 }

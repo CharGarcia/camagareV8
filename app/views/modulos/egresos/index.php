@@ -2222,7 +2222,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         return { detalles, docsSel };
     }
 
+    // Un solo guardado a la vez: sin este candado, un doble clic durante la verificación del
+    // periodo (await) mandaba dos guardados y, con un pago parcial, se registraban dos egresos
+    // (el botón se deshabilitaba recién después de esa espera).
+    let egGuardando = false;
     async function guardarEgreso() {
+        if (egGuardando) return;
+        egGuardando = true;
+        const btnG = document.getElementById('btnGuardarEgreso');
+        if (btnG) btnG.disabled = true;
+        try {
+            await guardarEgresoInterno();
+        } finally {
+            egGuardando = false;
+            if (btnG) btnG.disabled = false;
+        }
+    }
+
+    async function guardarEgresoInterno() {
         const tS = document.getElementById('eg-select-tipo-sujeto').value;
         const inputFec = document.getElementById('eg-input-fecha').value;
         const hoy = CMG_fechaLocal();
@@ -2296,7 +2313,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
 
         const b = document.getElementById('btnGuardarEgreso'); b.disabled = true;
-        fetch(`${EGR_URL}/guardarAjax`, {
+        return fetch(`${EGR_URL}/guardarAjax`, {
             method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
             body: 'data=' + encodeURIComponent(JSON.stringify(data))
         }).then(r=>r.json()).then(res => {

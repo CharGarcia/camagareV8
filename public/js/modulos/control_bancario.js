@@ -592,7 +592,45 @@
     };
 
     // ── Cheques posfechados ──────────────────────────────────────────────────
-    function renderPosfechados(tbodyId, rows, terceroLabel) {
+    function escHtml(v) {
+        return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    /** Días entre hoy y la fecha del cheque (negativo = ya pasó). */
+    function diasHastaFecha(v) {
+        if (!v) return null;
+        const f = new Date(String(v).substring(0, 10) + 'T00:00:00');
+        if (isNaN(f.getTime())) return null;
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        return Math.round((f - hoy) / 86400000);
+    }
+
+    /**
+     * Estado del cheque en el modal: con la fecha cumplida (y sin Fecha Banco, que es lo
+     * único que devuelve el servidor en ese caso) → "Por cobrar"; dentro de la ventana
+     * de aviso → "Vence en N días". Mismos criterios que el aviso del navbar.
+     */
+    function badgePosfechado(fecha, diasPorVencer) {
+        const d = diasHastaFecha(fecha);
+        if (d === null) return '';
+        if (d <= 0) return '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1">Por cobrar</span>';
+        if (d <= diasPorVencer) {
+            const txt = d === 1 ? 'Vence mañana' : `Vence en ${d} días`;
+            return `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-1">${txt}</span>`;
+        }
+        return '';
+    }
+
+    /**
+     * Cheque de un ingreso/egreso migrado del sistema anterior: se lista si su fecha es
+     * futura, pero sin etiqueta, porque el aviso del navbar no los cuenta.
+     */
+    function esMigrado(r) {
+        return r.es_migrado === true || r.es_migrado === 't' || r.es_migrado === 1;
+    }
+
+    function renderPosfechados(tbodyId, rows, diasPorVencer) {
         const tbody = document.getElementById(tbodyId);
         if (!rows || !rows.length) {
             tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">No hay cheques posfechados.</td></tr>`;
@@ -601,16 +639,21 @@
         tbody.innerHTML = rows.map(r => {
             const monto = parseFloat(r.debe) > 0 ? r.debe : r.haber;
             return `<tr>
-                <td>${fmtDateDisplay(r.fecha_cheque)}</td>
-                <td>${r.numero_cheque || ''}</td>
-                <td>${r.forma_pago_nombre || ''}</td>
-                <td>${r.nombre_entidad || ''}</td>
+                <td class="text-nowrap">${fmtDateDisplay(r.fecha_cheque)}${esMigrado(r) ? '' : badgePosfechado(r.fecha_cheque, diasPorVencer)}</td>
+                <td>${escHtml(r.numero_cheque)}</td>
+                <td>${escHtml(r.forma_pago_nombre)}</td>
+                <td>${escHtml(r.nombre_entidad)}</td>
                 <td class="text-end">$${Number(monto || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>`;
         }).join('');
     }
 
-    window.CB_abrirModalPosfechados = async function () {
+    /**
+     * @param {string} [pestana] 'recibidos' | 'emitidos': pestaña a mostrar al abrir (la usa
+     *        el aviso del navbar vía ?posfechados=…). En 'emitidos', si no hay cheques a
+     *        proveedores pero sí a empleados, se abre la de empleados.
+     */
+    window.CB_abrirModalPosfechados = async function (pestana) {
         new bootstrap.Modal(document.getElementById('modalPosfechadosCB')).show();
         document.getElementById('cb-posf-modal-loader')?.classList.remove('d-none');
         try {
@@ -619,9 +662,21 @@
                 fetchJson(`${CB_URL_BASE}/chequesPosfechadosAjax?direccion=EMITIDO`),
                 fetchJson(`${CB_URL_BASE}/chequesPosfechadosAjax?direccion=EMITIDO_EMPLEADO`),
             ]);
-            renderPosfechados('cb-tbody-posf-recibidos', recibidos.ok ? recibidos.data : []);
-            renderPosfechados('cb-tbody-posf-emitidos', emitidos.ok ? emitidos.data : []);
-            renderPosfechados('cb-tbody-posf-emitidos-emp', emitidosEmp.ok ? emitidosEmp.data : []);
+            const diasPorVencer = parseInt(recibidos.dias_por_vencer, 10) || 5;
+            const rowsRec = recibidos.ok ? recibidos.data : [];
+            const rowsEmi = emitidos.ok ? emitidos.data : [];
+            const rowsEmp = emitidosEmp.ok ? emitidosEmp.data : [];
+            renderPosfechados('cb-tbody-posf-recibidos', rowsRec, diasPorVencer);
+            renderPosfechados('cb-tbody-posf-emitidos', rowsEmi, diasPorVencer);
+            renderPosfechados('cb-tbody-posf-emitidos-emp', rowsEmp, diasPorVencer);
+
+            let destino = null;
+            if (pestana === 'recibidos') destino = '#cb-tab-recibidos';
+            else if (pestana === 'emitidos') destino = (!rowsEmi.length && rowsEmp.length) ? '#cb-tab-emitidos-emp' : '#cb-tab-emitidos';
+            if (destino) {
+                const btn = document.querySelector(`#cb-tabs-posfechados [data-bs-target="${destino}"]`);
+                if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -648,6 +703,12 @@
         if (state.forma) {
             cargarSaldos();
             window.CB_fetchSearch(1);
+        }
+
+        // Llegada desde el aviso de cheques posfechados del navbar: abrir el modal en su pestaña.
+        const posf = new URLSearchParams(window.location.search).get('posfechados');
+        if (posf === 'recibidos' || posf === 'emitidos') {
+            window.CB_abrirModalPosfechados(posf);
         }
     });
 })();

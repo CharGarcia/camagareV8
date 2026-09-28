@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
-etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips
-version: 1.12
+etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques
+version: 1.14
 orden: 60
 estado: activo
 ---
@@ -136,6 +136,83 @@ exporta a PDF y Excel es exactamente lo que quedó en pantalla.
 Si el período ya fue marcado como conciliado, primero hay que reabrirlo desde el
 historial de conciliaciones; mientras esté cerrado, sus movimientos no se
 editan.
+
+## Ventana "Cheques Posfechados"
+
+El botón **Cheques Posfechados** (arriba, junto al título) abre una ventana con
+los cheques de **todas las cuentas bancarias** de la empresa, en tres pestañas:
+**Recibidos** (de clientes), **Emitidos** (a proveedores) y **Emitidos a
+Empleados**. Muestra:
+
+- Los cheques con **fecha futura**, todos.
+- **Todos** los cheques **posfechados cuya fecha ya llegó** y que todavía **no
+  tienen Fecha Banco**, sin importar hace cuánto. Son los que hay que depositar
+  (si son recibidos) o los que el beneficiario ya puede cobrar (si son emitidos).
+
+Junto a la fecha, cada cheque lleva una etiqueta:
+
+| Etiqueta | Significado |
+|----------|-------------|
+| **Por cobrar** (rojo) | La fecha del cheque ya llegó y no tiene Fecha Banco |
+| **Vence en N días** (ámbar) | La fecha cae dentro de los próximos 5 días |
+| Sin etiqueta | Fecha más lejana |
+
+Un cheque sale de la ventana en cuanto se le registra la **Fecha Banco** (ver
+*Marcar un cheque como cobrado*). "Posfechado" quiere decir que la fecha del
+cheque es posterior a la del ingreso/egreso: un cheque al día no aparece aquí.
+
+Los cheques **migrados del sistema anterior** se tratan aparte: si su fecha es
+futura se siguen listando, pero **sin etiqueta**; si su fecha ya pasó y no tienen
+Fecha Banco, **no se muestran**. Las etiquetas y el aviso son solo para los
+cheques registrados en este sistema.
+
+## Aviso de cheques posfechados en la barra superior
+
+En la barra superior del sistema aparece un ícono de **billete con monedas**
+cuando hay cheques posfechados pendientes. El número es la cantidad total de
+cheques y el color indica la urgencia:
+
+- **Rojo**: hay al menos un cheque con la fecha ya cumplida y sin Fecha Banco.
+- **Ámbar**: solo hay cheques que vencen en los próximos 5 días.
+
+Al hacer clic se despliega el detalle, con la cantidad y el monto de cada grupo:
+
+| Línea | Qué cuenta |
+|-------|------------|
+| Recibidos: listos para depositar | Cheques de clientes con fecha cumplida sin Fecha Banco |
+| Recibidos: por vencer | Cheques de clientes con fecha en los próximos 5 días |
+| Emitidos: ya se pueden cobrar | Cheques girados con fecha cumplida sin Fecha Banco |
+| Emitidos: por vencer | Cheques girados con fecha en los próximos 5 días (conviene tener fondos) |
+
+Cada línea abre esta pantalla con la ventana **Cheques Posfechados** ya
+desplegada en su pestaña. En el celular, el aviso aparece en el menú lateral
+como dos accesos: **Ch. recib.** y **Ch. emit.**
+
+Detalles:
+
+- Solo lo ven los usuarios con permiso para **ver** Control Bancario en la
+  empresa activa.
+- Se actualiza solo, sin recargar la pantalla, y al instante tras guardar un
+  ingreso, un egreso o una Fecha Banco.
+- Solo cuenta cheques de **cuentas bancarias** (formas de pago con banco) cuyo
+  ingreso/egreso no esté anulado ni eliminado. Un cheque de egreso **anulado**
+  no cuenta.
+- Solo avisa de cheques **registrados en este sistema**. Los que vienen de
+  ingresos o egresos **migrados** del sistema anterior no cuentan, estén
+  vencidos o por vencer.
+- Un cheque vencido sigue avisándose **hasta que se le registre la Fecha
+  Banco**, por antiguo que sea.
+
+## Fecha de cobro de transferencias, depósitos y débitos
+
+Al guardar un ingreso o un egreso con una **cuenta bancaria**, la fecha de cobro
+de las **transferencias, depósitos y débitos** es automáticamente la **fecha de
+emisión** del documento: esos movimientos se hacen efectivos el mismo día y no
+quedan pendientes de nada. Si se cambia la fecha del documento, la fecha de cobro
+lo acompaña.
+
+Solo el **cheque** conserva su propia fecha (la que lleva girada) y queda
+**pendiente** hasta que se registre su **Fecha Banco** en esta pantalla.
 
 ## Buscar y filtrar el listado
 
@@ -271,6 +348,17 @@ mayor contable, sin ninguna acción adicional.
 
 ## Historial de cambios
 
+- **1.14** — La ventana *Cheques Posfechados* y el aviso de la barra superior
+  muestran **todos** los cheques posfechados vencidos sin Fecha Banco (antes, solo
+  los de los últimos 15 días). Las transferencias, depósitos y débitos de cuentas
+  bancarias toman como fecha de cobro la fecha de emisión del ingreso/egreso; solo
+  el cheque queda pendiente de su Fecha Banco.
+- **1.13** — Nuevo **aviso de cheques posfechados** en la barra superior (recibidos
+  y emitidos, con fecha cumplida sin Fecha Banco o por vencer en 5 días); cada línea
+  abre la ventana *Cheques Posfechados* en su pestaña. Esa ventana ahora muestra
+  también los posfechados cuya fecha llegó en los últimos 15 días y siguen sin
+  cobrar, con las etiquetas **Por cobrar** y **Vence en N días**. Los cheques
+  migrados del sistema anterior no generan aviso ni etiqueta.
 - **1.12** — Nuevo buscador de la tabla: el cuadro ya no despliega sugerencias; lo que
   se escribe se busca en todas las columnas del movimiento (incluidos fechas, debe,
   haber, saldo y beneficiario) y en la observación, salvo Tipo y dirección del cheque.

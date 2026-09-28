@@ -594,14 +594,26 @@ class IngresoRepository extends BaseRepository
                            s.saldo_inicial AS importe_total,
                            COALESCE(csi.total_cobrado, 0) AS monto_cobrado,
                            COALESCE(rsi.total_retenido, 0)  AS monto_retenido,
-                           (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) AS saldo_pendiente
+                           (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0) - COALESCE(ncsi.total_nc, 0)) AS saldo_pendiente
                     FROM saldos_iniciales_cxc s
                     LEFT JOIN cobrado_si csi  ON s.id = csi.id_referencia_documento
                     LEFT JOIN retenido_si rsi ON s.id = rsi.id_saldo
+                    -- Notas de crédito emitidas contra el saldo inicial (mismo criterio que
+                    -- SaldosInicialesRepository::getNcSaldoCxc): sin restarlas, la parte que la nota
+                    -- ya canceló se podía volver a cobrar. No aplica si existe la factura real con ese
+                    -- número: entonces la nota ya descuenta esa factura.
+                    LEFT JOIN nc_aplic ncsi
+                           ON ncsi.num_norm = " . AbonosVentaSql::normalizar('s.nro_documento') . "
+                          AND NOT EXISTS (
+                              SELECT 1 FROM ventas_cabecera vcn
+                              WHERE vcn.id_empresa = s.id_empresa AND vcn.eliminado = FALSE
+                                AND regexp_replace(CONCAT(vcn.establecimiento, '-', vcn.punto_emision, '-', vcn.secuencial), '[^0-9]', '', 'g')
+                                    = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                          )
                     WHERE s.id_cliente = :id_cliente
                       AND s.id_empresa = :id_empresa
                       AND s.eliminado = FALSE
-                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0
+                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0) - COALESCE(ncsi.total_nc, 0)) > 0
 
                     UNION ALL
 
@@ -730,9 +742,21 @@ class IngresoRepository extends BaseRepository
                     FROM saldos_iniciales_cxc s
                     LEFT JOIN cobrado_si csi  ON s.id = csi.id_referencia_documento
                     LEFT JOIN retenido_si rsi ON s.id = rsi.id_saldo
+                    -- Notas de crédito emitidas contra el saldo inicial (mismo criterio que
+                    -- SaldosInicialesRepository::getNcSaldoCxc): sin restarlas, la parte que la nota
+                    -- ya canceló se podía volver a cobrar. No aplica si existe la factura real con ese
+                    -- número: entonces la nota ya descuenta esa factura.
+                    LEFT JOIN nc_aplic ncsi
+                           ON ncsi.num_norm = " . AbonosVentaSql::normalizar('s.nro_documento') . "
+                          AND NOT EXISTS (
+                              SELECT 1 FROM ventas_cabecera vcn
+                              WHERE vcn.id_empresa = s.id_empresa AND vcn.eliminado = FALSE
+                                AND regexp_replace(CONCAT(vcn.establecimiento, '-', vcn.punto_emision, '-', vcn.secuencial), '[^0-9]', '', 'g')
+                                    = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                          )
                     WHERE s.id_empresa = :id_empresa
                       AND s.eliminado = FALSE
-                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0
+                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0) - COALESCE(ncsi.total_nc, 0)) > 0
 
                     UNION
 
@@ -1161,7 +1185,7 @@ class IngresoRepository extends BaseRepository
                            s.saldo_inicial AS importe_total,
                            COALESCE(csi.total_cobrado, 0) AS monto_cobrado,
                            COALESCE(rsi.total_retenido, 0)  AS monto_retenido,
-                           (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) AS saldo_pendiente,
+                           (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0) - COALESCE(ncsi.total_nc, 0)) AS saldo_pendiente,
                            c.id                                          AS id_cliente,
                            COALESCE(c.nombre, s.nombre_cliente)          AS cliente_nombre,
                            COALESCE(c.identificacion, s.ruc_cliente)     AS cliente_ruc
@@ -1169,9 +1193,21 @@ class IngresoRepository extends BaseRepository
                     LEFT JOIN clientes c      ON s.id_cliente = c.id
                     LEFT JOIN cobrado_si csi  ON s.id = csi.id_referencia_documento
                     LEFT JOIN retenido_si rsi ON s.id = rsi.id_saldo
+                    -- Notas de crédito emitidas contra el saldo inicial (mismo criterio que
+                    -- SaldosInicialesRepository::getNcSaldoCxc): sin restarlas, la parte que la nota
+                    -- ya canceló se podía volver a cobrar. No aplica si existe la factura real con ese
+                    -- número: entonces la nota ya descuenta esa factura.
+                    LEFT JOIN nc_aplic ncsi
+                           ON ncsi.num_norm = " . AbonosVentaSql::normalizar('s.nro_documento') . "
+                          AND NOT EXISTS (
+                              SELECT 1 FROM ventas_cabecera vcn
+                              WHERE vcn.id_empresa = s.id_empresa AND vcn.eliminado = FALSE
+                                AND regexp_replace(CONCAT(vcn.establecimiento, '-', vcn.punto_emision, '-', vcn.secuencial), '[^0-9]', '', 'g')
+                                    = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                          )
                     WHERE s.id_empresa = :id_empresa
                       AND s.eliminado = FALSE
-                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0
+                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0) - COALESCE(ncsi.total_nc, 0)) > 0
                       $filtroBusqCxc
 
                     UNION ALL

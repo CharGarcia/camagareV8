@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos
-version: 1.29
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada
+version: 1.31
 orden: 20
 estado: activo
 ---
@@ -282,7 +282,10 @@ documentos que había pagado y se anula su asiento contable.
 ## Cheques
 
 Cuando el pago sale por cheque se puede registrar su **fecha de cobro**, para
-saber cuándo se hizo efectivo. Los cheques se imprimen desde la propia fila de
+saber cuándo se hizo efectivo. En cambio, si el pago bancario es por
+**transferencia, depósito o débito**, la fecha de cobro es automáticamente la
+**fecha de emisión** del egreso y no queda pendiente: solo el cheque espera a que
+se confirme su **Fecha Banco** en Control Bancario. Los cheques se imprimen desde la propia fila de
 pago del egreso, o en lote desde el listado (botón **Imprimir cheques**), tanto
 a PDF (descarga) como directo a la impresora (abre el diálogo de impresión del
 navegador). Cada impresión queda registrada (control anti-reimpresión): si un
@@ -512,8 +515,29 @@ el egreso es nuevo y no se ha guardado.
 Con **acceso total** se ven los egresos de toda la empresa; sin él, cada usuario
 ve solo los que registró.
 
+## Cómo se evita pagar dos veces lo mismo
+
+Todo egreso, venga de donde venga (este módulo, Compras, Liquidaciones, Cuentas
+por Pagar, Saldos Iniciales, declaraciones, roles de pago o el pago automático a
+proveedores), pasa por la misma revisión al guardar:
+
+- Cada documento que paga se **bloquea** mientras se guarda y se vuelve a
+  calcular su **saldo real** en ese momento: si otra persona lo pagó mientras
+  usted tenía el formulario abierto, el sistema lo rechaza en vez de pagarlo dos
+  veces.
+- Las **declaraciones de IVA y de retenciones** se pagan **una sola vez**: un
+  segundo pago de la misma declaración se rechaza e indica el egreso que ya la
+  pagó.
+- El botón **Guardar** queda bloqueado desde el primer clic hasta que el sistema
+  responde, así que un doble clic no genera dos egresos.
+
 ## Errores frecuentes
 
+- **"El documento … ya no tiene saldo suficiente (disponible: $…)"**: otro
+  egreso ya pagó parte o todo ese documento. Cierre y vuelva a abrir la búsqueda
+  de documentos pendientes para ver el saldo actual.
+- **"La declaración … ya tiene su pago registrado en el egreso …"**: esa
+  declaración ya está pagada; si el pago estaba mal, anule ese egreso primero.
 - **"El total detallado no coincide con el total pagado"**: revise ambas
   columnas; el mensaje muestra las dos cifras.
 - **"El monto a pagar no puede superar el saldo pendiente"**: está pagando de más
@@ -551,6 +575,8 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.31** — Los pagos bancarios por **transferencia, depósito o débito** toman como fecha de cobro la fecha de emisión del egreso; solo el cheque queda pendiente de confirmar su Fecha Banco en Control Bancario.
+- **1.30** — No se puede pagar dos veces lo mismo. Corregido: los pagos de  **saldos iniciales por pagar**, **facturas de importación** y **declaraciones**  se rechazaban siempre con *"ya no tiene saldo suficiente (disponible: $0.00)"*;  ahora se valida su saldo real. Una declaración solo admite un pago vigente, y  el botón **Guardar** ya no permite un doble clic que generaba dos egresos.  Nueva sección *Cómo se evita pagar dos veces lo mismo*.
 - **1.29** — Flechas **anterior / siguiente** en el encabezado del modal para
   recorrer los egresos del listado sin cerrarlo (también con **Alt + ← / →**).
   Nueva sección *Pasar al egreso anterior o al siguiente*. Si hay cambios sin

@@ -7,6 +7,8 @@ namespace App\Services\modulos;
 use App\repositories\modulos\EgresoRepository;
 use App\repositories\modulos\AsientoProgramadoRepository;
 use App\Rules\modulos\EgresoRules;
+use App\Rules\modulos\ControlBancarioRules;
+use App\repositories\modulos\FormaPagoRepository;
 use App\Services\LogSistemaService;
 use App\core\Database;
 use App\Services\modulos\PeriodosContablesService;
@@ -57,6 +59,16 @@ class EgresoService
     public function buscarEnDetalles(int $idEmpresa, string $q, ?int $idUsuario = null, int $limit = 50): array
     {
         return $this->repository->buscarEnDetalles($idEmpresa, $q, $idUsuario, $limit);
+    }
+
+    /**
+     * Pagos por cuenta bancaria que no son cheque (transferencia, depósito, débito): la
+     * fecha de cobro es la de emisión. Ver ControlBancarioRules::fijarFechaCobroPagos().
+     */
+    private function fijarFechaCobroBancaria(array $pagos, int $idEmpresa, ?string $fechaEmision): array
+    {
+        $bancarias = (new FormaPagoRepository())->getTiposFormasBancarias($idEmpresa, array_column($pagos, 'id_forma_pago'));
+        return ControlBancarioRules::fijarFechaCobroPagos($pagos, 'id_forma_pago', $bancarias, $fechaEmision);
     }
 
     /**
@@ -257,6 +269,7 @@ class EgresoService
 
             // Insertar Pagos
             if (!empty($data['pagos'])) {
+                $data['pagos'] = $this->fijarFechaCobroBancaria($data['pagos'], (int) $data['id_empresa'], $data['fecha_emision'] ?? null);
                 foreach ($data['pagos'] as $pago) {
                     $pago['id_egreso'] = $idEgreso;
                     $this->repository->insertPago($pago);
@@ -493,6 +506,7 @@ class EgresoService
             );
 
             // 2. Insertar nuevos pagos
+            $pagos = $this->fijarFechaCobroBancaria($pagos, $idEmpresa, $fechaFinal);
             foreach ($pagos as $pago) {
                 $pago['id_egreso'] = $id;
                 $this->repository->insertPago($pago);
@@ -645,6 +659,17 @@ class EgresoService
             [$tipoDoc, $idRef] = explode(':', $clave, 2);
             $idRef = (int) $idRef;
             $this->repository->lockDocumentoPago($tipoDoc, $idRef, $idEmpresa);
+
+            // Las declaraciones se pagan una sola vez y su monto lo decide el usuario (casillero
+            // 902 editable): no hay "saldo" que comparar, pero sí un segundo pago que impedir.
+            if ($tipoDoc === 'DECLARACION_IVA' || $tipoDoc === 'DECLARACION_RETENCIONES') {
+                $numEgreso = $this->repository->getEgresoVigenteDocumento($tipoDoc, $idRef, $idEmpresa, $excluirEgresoId);
+                if ($numEgreso !== null) {
+                    throw new \Exception('La declaración ' . $numeroPorDoc[$clave] . ' ya tiene su pago registrado en el egreso ' . $numEgreso . '. Anúlelo primero si necesita registrarlo de nuevo.');
+                }
+                continue;
+            }
+
             if ($tipoDoc === 'COMPRA' && !isset($comprasYaPagadas[$idRef])) {
                 $this->rules->validarCompraPagable(
                     $this->repository->getEstadoCompra($idRef, $idEmpresa),

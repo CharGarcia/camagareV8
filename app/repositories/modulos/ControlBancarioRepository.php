@@ -803,8 +803,12 @@ class ControlBancarioRepository extends BaseRepository
     /**
      * Cheques posfechados (fecha_cheque > hoy), recibidos o emitidos, de todas las
      * cuentas bancarias de la empresa o de una en particular.
+     *
+     * Con $incluirNoCobrados incluye además los posfechados cuya fecha ya llegó y siguen
+     * sin Fecha Banco (listos para cobrar/depositar), sin importar su antigüedad. Sin él
+     * (por defecto) el resultado es el de siempre: solo fecha futura.
      */
-    public function getChequesPosfechados(int $idEmpresa, ?int $idFormaPago, string $direccion): array
+    public function getChequesPosfechados(int $idEmpresa, ?int $idFormaPago, string $direccion, bool $incluirNoCobrados = false): array
     {
         $sql = "SELECT
                     ad.id AS id_asiento_detalle,
@@ -820,6 +824,14 @@ class ControlBancarioRepository extends BaseRepository
                     (egc.id_empleado IS NOT NULL) AS es_empleado,
                     fp.id AS id_forma_pago,
                     fp.nombre AS forma_pago_nombre,
+                    -- Migrado del sistema anterior: asiento del diario histórico o ingreso/egreso
+                    -- con fila en migracion_mysql_map. No entra en los avisos (ver sqlCondPosfechado).
+                    (COALESCE(ac.modulo_origen, '') = 'migracion'
+                     OR EXISTS (SELECT 1 FROM migracion_mysql_map mm
+                                WHERE mm.id_empresa = ac.id_empresa AND mm.entidad = 'ingresos' AND mm.id_destino = ip.id_ingreso)
+                     OR EXISTS (SELECT 1 FROM migracion_mysql_map mm
+                                WHERE mm.id_empresa = ac.id_empresa AND mm.entidad = 'egresos' AND mm.id_destino = ep.id_egreso)
+                    ) AS es_migrado,
                     {$this->selectDerivado()}
                 FROM asientos_contables_detalle ad
                 INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
@@ -863,7 +875,7 @@ class ControlBancarioRepository extends BaseRepository
         }
 
         $sqlFull = "SELECT * FROM ({$sql}) x
-                     WHERE x.tipo_transaccion = 'CHEQUE' AND x.fecha_cheque > CURRENT_DATE
+                     WHERE x.tipo_transaccion = 'CHEQUE' AND {$this->sqlCondPosfechado($incluirNoCobrados, 'x.es_migrado')}
                      {$filtroEmpleado}
                      ORDER BY x.fecha_cheque ASC";
 
@@ -874,7 +886,7 @@ class ControlBancarioRepository extends BaseRepository
         // El bloque anterior solo alcanza cuentas con cuenta contable (el mayor). Las cuentas
         // sin contabilidad aportan sus cheques desde los cobros/pagos.
         foreach ($this->getFormasSinCuentaContable($idEmpresa, $idFormaPago) as $idForma) {
-            foreach ($this->getChequesPosfechadosTesoreria($idEmpresa, $idForma, $direccion) as $r) {
+            foreach ($this->getChequesPosfechadosTesoreria($idEmpresa, $idForma, $direccion, $incluirNoCobrados) as $r) {
                 $rows[] = $r;
             }
         }
@@ -899,15 +911,53 @@ class ControlBancarioRepository extends BaseRepository
         return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN) ?: []);
     }
 
+    /**
+     * Condición de "posfechado" sobre las columnas ya derivadas (alias x): fecha futura o,
+     * con $incluirNoCobrados, fecha ya cumplida (de cualquier antigüedad) sin Fecha Banco y
+     * posterior a la del documento (un cheque al día no es posfechado).
+     *
+     * Los MIGRADOS del sistema anterior ($exprMigrado) no entran en ese segundo grupo: muchos
+     * nunca se conciliaron y el aviso es solo para cheques registrados en este sistema. Los
+     * migrados con fecha futura se siguen listando, como siempre.
+     */
+    private function sqlCondPosfechado(bool $incluirNoCobrados, string $exprMigrado): string
+    {
+        if (!$incluirNoCobrados) {
+            return "x.fecha_cheque > CURRENT_DATE";
+        }
+        return "(x.fecha_cheque > CURRENT_DATE
+                 OR (x.fecha_cheque <= CURRENT_DATE
+                     AND x.fecha_banco_manual IS NULL
+                     AND x.fecha_cheque > x.fecha_asiento
+                     AND NOT ({$exprMigrado})))";
+    }
+
+    /**
+     * ¿El cobro/pago de una fila de baseTesoreria() (alias x) viene de un ingreso/egreso
+     * migrado? Usa el placeholder :id_empresa_mig.
+     */
+    private function sqlEsMigradoTesoreria(): string
+    {
+        return "(EXISTS (SELECT 1 FROM ingresos_pagos pm
+                          JOIN migracion_mysql_map mm ON mm.id_empresa = :id_empresa_mig
+                               AND mm.entidad = 'ingresos' AND mm.id_destino = pm.id_ingreso
+                          WHERE x.origen_tipo = 'ingreso' AND pm.id = x.origen_id)
+                 OR EXISTS (SELECT 1 FROM egresos_pagos pm
+                          JOIN migracion_mysql_map mm ON mm.id_empresa = :id_empresa_mig
+                               AND mm.entidad = 'egresos' AND mm.id_destino = pm.id_egreso
+                          WHERE x.origen_tipo = 'egreso' AND pm.id = x.origen_id))";
+    }
+
     /** Cheques posfechados de una cuenta sin contabilidad (fuente: cobros/pagos). */
-    private function getChequesPosfechadosTesoreria(int $idEmpresa, int $idFormaPago, string $direccion): array
+    private function getChequesPosfechadosTesoreria(int $idEmpresa, int $idFormaPago, string $direccion, bool $incluirNoCobrados = false): array
     {
         $direccion = strtoupper($direccion);
         $dirBanco = in_array($direccion, ['EMITIDO', 'EMITIDO_EMPLEADO'], true) ? 'EMITIDO'
                   : ($direccion === 'RECIBIDO' ? 'RECIBIDO' : '');
 
-        $where = "WHERE x.tipo_transaccion = 'CHEQUE' AND x.fecha_cheque > CURRENT_DATE";
-        $params = $this->paramsTesoreria($idEmpresa, $idFormaPago) + [':id_forma_fp' => $idFormaPago];
+        $where = "WHERE x.tipo_transaccion = 'CHEQUE' AND {$this->sqlCondPosfechado($incluirNoCobrados, $this->sqlEsMigradoTesoreria())}";
+        $params = $this->paramsTesoreria($idEmpresa, $idFormaPago)
+                + [':id_forma_fp' => $idFormaPago, ':id_empresa_mig' => $idEmpresa];
         if ($dirBanco !== '') {
             $where .= " AND x.cheque_direccion = :direccion";
             $params[':direccion'] = $dirBanco;
@@ -921,7 +971,8 @@ class ControlBancarioRepository extends BaseRepository
         $sql = "SELECT x.*,
                        (x.tipo_entidad = 'empleado') AS es_empleado,
                        fp.id AS id_forma_pago,
-                       fp.nombre AS forma_pago_nombre
+                       fp.nombre AS forma_pago_nombre,
+                       {$this->sqlEsMigradoTesoreria()} AS es_migrado
                 FROM ({$this->baseTesoreria()}) x
                 INNER JOIN empresa_formas_pago fp ON fp.id = :id_forma_fp
                 {$where}

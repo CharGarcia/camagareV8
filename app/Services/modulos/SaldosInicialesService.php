@@ -43,6 +43,7 @@ class SaldosInicialesService
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
+            $this->verificarNoDuplicadoCxc($data, (int) $data['id_empresa']);
             $id = $this->repo->insertCxc($data);
             $this->log->registrar(
                 (int)($data['created_by'] ?? 0),
@@ -76,6 +77,7 @@ class SaldosInicialesService
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
+            $this->verificarNoDuplicadoCxc($data, $idEmpresa, $id);
             $this->repo->updateCxc($id, $idEmpresa, $data);
             $this->log->registrar(
                 (int)($data['updated_by'] ?? 0),
@@ -134,6 +136,7 @@ class SaldosInicialesService
                         $idLote = $this->repo->insertLote($idEmpresa, 'CXC', $nombreArchivo, 0, $idUsuario);
                     }
                     $fila['id_lote'] = $idLote;
+                    $this->verificarNoDuplicadoCxc($fila, $idEmpresa);
                     $this->repo->insertCxc($fila);
                     $insertados++;
                 } catch (\Throwable $e) {
@@ -171,6 +174,7 @@ class SaldosInicialesService
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
+            $this->verificarNoDuplicadoCxp($data, (int) $data['id_empresa']);
             $id = $this->repo->insertCxp($data);
             $this->log->registrar(
                 (int)($data['created_by'] ?? 0),
@@ -204,6 +208,7 @@ class SaldosInicialesService
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
+            $this->verificarNoDuplicadoCxp($data, $idEmpresa, $id);
             $this->repo->updateCxp($id, $idEmpresa, $data);
             $this->log->registrar(
                 (int)($data['updated_by'] ?? 0),
@@ -262,6 +267,7 @@ class SaldosInicialesService
                         $idLote = $this->repo->insertLote($idEmpresa, 'CXP', $nombreArchivo, 0, $idUsuario);
                     }
                     $fila['id_lote'] = $idLote;
+                    $this->verificarNoDuplicadoCxp($fila, $idEmpresa);
                     $this->repo->insertCxp($fila);
                     $insertados++;
                 } catch (\Throwable $e) {
@@ -292,6 +298,41 @@ class SaldosInicialesService
      * (3 establecimiento - 3 punto emisión - 9 secuencial).
      * Si no se puede inferir, lo deja igual y las Rules lo rechazarán.
      */
+    /**
+     * Impide cargar dos veces el mismo documento por cobrar (mismo cliente y número), o cargar
+     * como saldo inicial una factura que ya existe en el sistema. Llamar DENTRO de la
+     * transacción, con el número ya normalizado: toma el candado del documento antes de buscar.
+     */
+    private function verificarNoDuplicadoCxc(array $data, int $idEmpresa, ?int $excluirId = null): void
+    {
+        $idCliente = (int) ($data['id_cliente'] ?? 0);
+        $nro = (string) ($data['nro_documento'] ?? '');
+        $this->repo->lockDocumentoSaldoInicial('cxc', $idEmpresa, $idCliente, $nro);
+        $this->rules->validarNoDuplicado(
+            $this->repo->getCxcDuplicado($idEmpresa, $idCliente, $nro, $excluirId),
+            $this->repo->existeFacturaVentaReal($idEmpresa, $idCliente, $nro),
+            $nro,
+            'cliente',
+            'factura de venta'
+        );
+    }
+
+    /** Igual que verificarNoDuplicadoCxc(), para los saldos por pagar (proveedor + tipo + número). */
+    private function verificarNoDuplicadoCxp(array $data, int $idEmpresa, ?int $excluirId = null): void
+    {
+        $idProveedor = (int) ($data['id_proveedor'] ?? 0);
+        $tipo = (string) ($data['tipo_documento'] ?? '');
+        $nro = (string) ($data['nro_documento'] ?? '');
+        $this->repo->lockDocumentoSaldoInicial('cxp:' . $tipo, $idEmpresa, $idProveedor, $nro);
+        $this->rules->validarNoDuplicado(
+            $this->repo->getCxpDuplicado($idEmpresa, $idProveedor, $tipo, $nro, $excluirId),
+            $this->repo->existeDocumentoCompraReal($idEmpresa, $idProveedor, $tipo, $nro),
+            $nro,
+            'proveedor',
+            $tipo === 'LIQUIDACION' ? 'liquidación de compra' : 'compra'
+        );
+    }
+
     private function normalizarNroDocumento(array &$data): void
     {
         $v = trim((string)($data['nro_documento'] ?? ''));

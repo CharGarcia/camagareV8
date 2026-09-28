@@ -1295,6 +1295,23 @@ class EgresoRepository extends BaseRepository
      */
     public function getSaldoPendienteDocumento(string $tipoDocumento, int $idReferencia, int $idEmpresa, ?int $excluirEgresoId = null): float
     {
+        // Documentos que el buscador de pendientes de Egresos no lista (se pagan desde su propio
+        // módulo): mismo cálculo que ese módulo — total del documento menos lo pagado por egresos
+        // vigentes. Sin esto su saldo salía 0 y validarSaldoDocumentos() rechazaba todo pago.
+        if ($tipoDocumento === 'SALDO_INICIAL' || $tipoDocumento === 'IMPORTACION') {
+            $total = $tipoDocumento === 'SALDO_INICIAL'
+                ? "SELECT s.saldo_inicial FROM saldos_iniciales_cxp s
+                    WHERE s.id = :id AND s.id_empresa = :id_empresa AND s.eliminado = FALSE"
+                : "SELECT fe.monto_usd FROM importaciones_factura_exterior fe
+                    JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
+                    WHERE fe.id = :id AND ic.id_empresa = :id_empresa AND fe.eliminado = FALSE AND ic.eliminado = FALSE";
+            $monto = $this->query($total, [':id' => $idReferencia, ':id_empresa' => $idEmpresa])->fetchColumn();
+            if ($monto === false) {
+                return 0.0;
+            }
+            return max(0.0, round((float) $monto - $this->getPagadoVigenteDocumento($tipoDocumento, $idReferencia, $idEmpresa, $excluirEgresoId), 2));
+        }
+
         $categoria = match ($tipoDocumento) {
             'COMPRA'      => 'COMPRA',
             'LIQUIDACION' => 'LIQUIDACION',
@@ -1311,6 +1328,47 @@ class EgresoRepository extends BaseRepository
             }
         }
         return 0.0;
+    }
+
+    /**
+     * Suma de lo pagado a un documento por egresos vigentes (no anulados ni eliminados) de la
+     * empresa. $excluirEgresoId excluye el propio egreso al editarlo.
+     */
+    public function getPagadoVigenteDocumento(string $tipoDocumento, int $idReferencia, int $idEmpresa, ?int $excluirEgresoId = null): float
+    {
+        $sql = "SELECT COALESCE(SUM(ed.monto_pagado), 0)
+                FROM egresos_detalle ed
+                INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                WHERE ec.id_empresa = :id_empresa
+                  AND ed.tipo_documento = :tipo AND ed.id_referencia_documento = :id
+                  AND ec.estado <> 'anulado' AND ec.eliminado = FALSE AND ed.eliminado = FALSE";
+        $params = [':id_empresa' => $idEmpresa, ':tipo' => $tipoDocumento, ':id' => $idReferencia];
+        if ($excluirEgresoId !== null) {
+            $sql .= " AND ec.id <> :excluir";
+            $params[':excluir'] = $excluirEgresoId;
+        }
+        return (float) $this->query($sql, $params)->fetchColumn();
+    }
+
+    /**
+     * Número del egreso vigente que ya paga un documento, o null. Para los documentos que se
+     * pagan una sola vez (declaraciones de IVA y de retenciones).
+     */
+    public function getEgresoVigenteDocumento(string $tipoDocumento, int $idReferencia, int $idEmpresa, ?int $excluirEgresoId = null): ?string
+    {
+        $sql = "SELECT ec.numero_egreso
+                FROM egresos_detalle ed
+                INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                WHERE ec.id_empresa = :id_empresa
+                  AND ed.tipo_documento = :tipo AND ed.id_referencia_documento = :id
+                  AND ec.estado <> 'anulado' AND ec.eliminado = FALSE AND ed.eliminado = FALSE";
+        $params = [':id_empresa' => $idEmpresa, ':tipo' => $tipoDocumento, ':id' => $idReferencia];
+        if ($excluirEgresoId !== null) {
+            $sql .= " AND ec.id <> :excluir";
+            $params[':excluir'] = $excluirEgresoId;
+        }
+        $num = $this->query($sql . ' LIMIT 1', $params)->fetchColumn();
+        return $num === false ? null : (string) $num;
     }
 
     /**

@@ -238,6 +238,132 @@ class ContadoresNavbarRepository
     }
 
     /**
+     * Cheques POSFECHADOS pendientes de cobro, recibidos (ingresos) y emitidos (egresos).
+     *
+     * Por grupo devuelve dos cortes:
+     *   - listos:     la fecha del cheque ya llegó (sin importar hace cuánto)
+     *                 y todavía no tiene Fecha Banco → hay que depositarlo / lo pueden cobrar.
+     *   - por_vencer: la fecha cae entre mañana y hoy + $diasAdelante.
+     *
+     * Mismos criterios que el modal "Cheques Posfechados" de Control Bancario
+     * (ControlBancarioRepository::getChequesPosfechados con no cobrados), pero leídos
+     * directo de los cobros/pagos: aquella consulta recorre los asientos y es demasiado
+     * pesada para el sondeo del navbar. "Posfechado" = fecha del cheque posterior a la
+     * del documento (un cheque al día no cuenta); solo cuentas bancarias (id_banco).
+     * Los ingresos/egresos MIGRADOS del sistema anterior (fila en migracion_mysql_map) no
+     * cuentan: el aviso es solo para los cheques registrados en este sistema — muchos
+     * migrados nunca se conciliaron y dejarían el aviso encendido sin motivo.
+     * "Cobrado" = tiene Fecha Banco en control_bancario_movimientos por cualquiera de sus
+     * dos anclajes: el cobro/pago (cuentas sin contabilidad) o la línea del asiento.
+     *
+     * @return array{recibidos:array{listos:int,monto_listos:float,por_vencer:int,monto_por_vencer:float},
+     *               emitidos:array{listos:int,monto_listos:float,por_vencer:int,monto_por_vencer:float}}
+     */
+    public function getChequesPosfechados(int $idEmpresa, int $diasAdelante): array
+    {
+        $sql = "WITH amb AS (
+                    SELECT CAST(tipo_ambiente AS VARCHAR(1)) AS t FROM empresas WHERE id = :e
+                ),
+                ch AS (
+                    SELECT 'recibidos' AS grupo, ip.monto, COALESCE(cbm.fecha_cheque, ip.fecha_cobro) AS fecha
+                    FROM ingresos_cabecera ic
+                    INNER JOIN ingresos_pagos ip ON ip.id_ingreso = ic.id
+                    INNER JOIN empresa_formas_pago fp ON fp.id = ip.id_forma_cobro
+                        AND fp.eliminado = FALSE AND fp.id_banco IS NOT NULL
+                    LEFT JOIN control_bancario_movimientos cbm
+                        ON cbm.origen_tipo = 'ingreso' AND cbm.origen_id = ip.id AND cbm.eliminado = FALSE
+                    WHERE ic.id_empresa = :e
+                      AND ic.eliminado = FALSE
+                      AND COALESCE(ic.estado, 'registrado') <> 'anulado'
+                      AND ic.tipo_ambiente = (SELECT t FROM amb)
+                      AND ip.fecha_cobro IS NOT NULL
+                      AND COALESCE(cbm.fecha_cheque, ip.fecha_cobro)
+                          <= CURRENT_DATE + CAST(:adelante AS INTEGER)
+                      AND COALESCE(cbm.fecha_cheque, ip.fecha_cobro) > ic.fecha_emision
+                      AND NOT EXISTS (
+                            SELECT 1 FROM migracion_mysql_map mm
+                            WHERE mm.id_empresa = :e AND mm.entidad = 'ingresos' AND mm.id_destino = ic.id
+                      )
+                      AND COALESCE(cbm.tipo_transaccion, UPPER(NULLIF(ip.tipo_operacion_bancaria, '')),
+                                   CASE fp.tipo WHEN 'CHEQUE' THEN 'CHEQUE' END) = 'CHEQUE'
+                      AND cbm.fecha_banco IS NULL
+                      AND NOT EXISTS (
+                            SELECT 1
+                            FROM asientos_contables_cabecera acc
+                            JOIN asientos_contables_detalle acd ON acd.id_asiento = acc.id AND acd.eliminado = FALSE
+                            JOIN control_bancario_movimientos cba ON cba.id_asiento_detalle = acd.id AND cba.eliminado = FALSE
+                            WHERE acc.id_empresa = :e
+                              AND UPPER(acc.tipo_comprobante) = 'INGRESOS'
+                              AND acc.id_referencia_origen = ic.id
+                              AND acc.eliminado = FALSE
+                              AND acd.id_cuenta_contable = fp.id_cuenta_contable
+                              AND cba.fecha_banco IS NOT NULL
+                      )
+
+                    UNION ALL
+
+                    SELECT 'emitidos', ep.monto, COALESCE(cbm.fecha_cheque, ep.fecha_cobro)
+                    FROM egresos_cabecera ec
+                    INNER JOIN egresos_pagos ep ON ep.id_egreso = ec.id
+                    INNER JOIN empresa_formas_pago fp ON fp.id = ep.id_forma_pago
+                        AND fp.eliminado = FALSE AND fp.id_banco IS NOT NULL
+                    LEFT JOIN control_bancario_movimientos cbm
+                        ON cbm.origen_tipo = 'egreso' AND cbm.origen_id = ep.id AND cbm.eliminado = FALSE
+                    WHERE ec.id_empresa = :e
+                      AND ec.eliminado = FALSE
+                      AND COALESCE(ep.eliminado, FALSE) = FALSE
+                      AND COALESCE(ec.estado, 'registrado') <> 'anulado'
+                      AND COALESCE(ep.estado_cheque, 'vigente') <> 'anulado'
+                      AND ec.tipo_ambiente = (SELECT t FROM amb)
+                      AND ep.fecha_cobro IS NOT NULL
+                      AND COALESCE(cbm.fecha_cheque, ep.fecha_cobro)
+                          <= CURRENT_DATE + CAST(:adelante AS INTEGER)
+                      AND COALESCE(cbm.fecha_cheque, ep.fecha_cobro) > ec.fecha_emision
+                      AND NOT EXISTS (
+                            SELECT 1 FROM migracion_mysql_map mm
+                            WHERE mm.id_empresa = :e AND mm.entidad = 'egresos' AND mm.id_destino = ec.id
+                      )
+                      AND COALESCE(cbm.tipo_transaccion, UPPER(NULLIF(ep.tipo_operacion_bancaria, '')),
+                                   CASE fp.tipo WHEN 'CHEQUE' THEN 'CHEQUE' END) = 'CHEQUE'
+                      AND cbm.fecha_banco IS NULL
+                      AND NOT EXISTS (
+                            SELECT 1
+                            FROM asientos_contables_cabecera acc
+                            JOIN asientos_contables_detalle acd ON acd.id_asiento = acc.id AND acd.eliminado = FALSE
+                            JOIN control_bancario_movimientos cba ON cba.id_asiento_detalle = acd.id AND cba.eliminado = FALSE
+                            WHERE acc.id_empresa = :e
+                              AND UPPER(acc.tipo_comprobante) = 'EGRESOS'
+                              AND acc.id_referencia_origen = ec.id
+                              AND acc.eliminado = FALSE
+                              AND acd.id_cuenta_contable = fp.id_cuenta_contable
+                              AND cba.fecha_banco IS NOT NULL
+                      )
+                )
+                SELECT grupo,
+                       COUNT(*) FILTER (WHERE fecha <= CURRENT_DATE)                    AS listos,
+                       COALESCE(SUM(monto) FILTER (WHERE fecha <= CURRENT_DATE), 0)    AS monto_listos,
+                       COUNT(*) FILTER (WHERE fecha >  CURRENT_DATE)                    AS por_vencer,
+                       COALESCE(SUM(monto) FILTER (WHERE fecha >  CURRENT_DATE), 0)    AS monto_por_vencer
+                FROM ch
+                GROUP BY grupo";
+
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa, ':adelante' => $diasAdelante]);
+
+        $vacio = ['listos' => 0, 'monto_listos' => 0.0, 'por_vencer' => 0, 'monto_por_vencer' => 0.0];
+        $out = ['recibidos' => $vacio, 'emitidos' => $vacio];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+            $out[$r['grupo']] = [
+                'listos'           => (int) $r['listos'],
+                'monto_listos'     => round((float) $r['monto_listos'], 2),
+                'por_vencer'       => (int) $r['por_vencer'],
+                'monto_por_vencer' => round((float) $r['monto_por_vencer'], 2),
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Estado de la FIRMA ELECTRÓNICA vigente (es_activo) de la empresa activa.
      *
      * Usa la misma firma que el sistema emplea para firmar (empresa_firma con

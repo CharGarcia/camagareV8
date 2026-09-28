@@ -123,6 +123,96 @@ class SaldosInicialesRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Candado transaccional por documento de saldo inicial (CLAUDE.md §8): se toma antes de
+     * buscar si ya existe, para que dos altas o dos importaciones simultáneas del mismo
+     * documento no pasen las dos. Se libera al COMMIT/ROLLBACK.
+     */
+    public function lockDocumentoSaldoInicial(string $tipo, int $idEmpresa, int $idTercero, string $nroDocumento): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('saldo_inicial:' || :t || ':' || :e || ':' || :ter || ':' || :nro))");
+        $st->execute([':t' => $tipo, ':e' => $idEmpresa, ':ter' => $idTercero, ':nro' => $nroDocumento]);
+    }
+
+    /** Saldo inicial CxC vigente con el mismo cliente y número (otro que $excluirId), o null. */
+    public function getCxcDuplicado(int $idEmpresa, int $idCliente, string $nroDocumento, ?int $excluirId = null): ?array
+    {
+        $sql = "SELECT id, nro_documento, saldo_inicial FROM saldos_iniciales_cxc
+                WHERE id_empresa = :id_empresa AND eliminado = false
+                  AND id_cliente = :id_cliente AND nro_documento = :nro";
+        $params = [':id_empresa' => $idEmpresa, ':id_cliente' => $idCliente, ':nro' => $nroDocumento];
+        if ($excluirId !== null) {
+            $sql .= ' AND id <> :excluir';
+            $params[':excluir'] = $excluirId;
+        }
+        $st = $this->db->prepare($sql . ' LIMIT 1');
+        $st->execute($params);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /** Saldo inicial CxP vigente con el mismo proveedor, tipo y número (otro que $excluirId), o null. */
+    public function getCxpDuplicado(int $idEmpresa, int $idProveedor, string $tipoDocumento, string $nroDocumento, ?int $excluirId = null): ?array
+    {
+        $sql = "SELECT id, nro_documento, saldo_inicial FROM saldos_iniciales_cxp
+                WHERE id_empresa = :id_empresa AND eliminado = false
+                  AND id_proveedor = :id_proveedor AND tipo_documento = :tipo AND nro_documento = :nro";
+        $params = [':id_empresa' => $idEmpresa, ':id_proveedor' => $idProveedor, ':tipo' => $tipoDocumento, ':nro' => $nroDocumento];
+        if ($excluirId !== null) {
+            $sql .= ' AND id <> :excluir';
+            $params[':excluir'] = $excluirId;
+        }
+        $st = $this->db->prepare($sql . ' LIMIT 1');
+        $st->execute($params);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * ¿Ya existe en el sistema la factura de venta real (no anulada) con ese número para ese
+     * cliente? Si existe, cargarla además como saldo inicial la pondría dos veces en la cartera.
+     */
+    public function existeFacturaVentaReal(int $idEmpresa, int $idCliente, string $nroDocumento): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT 1 FROM ventas_cabecera v
+             WHERE v.id_empresa = :id_empresa AND v.eliminado = false AND v.id_cliente = :id_cliente
+               AND LOWER(COALESCE(v.estado, '')) NOT IN ('anulado', 'anulada')
+               AND regexp_replace(CONCAT(v.establecimiento, v.punto_emision, v.secuencial), '[^0-9]', '', 'g')
+                   = regexp_replace(:nro, '[^0-9]', '', 'g')
+             LIMIT 1"
+        );
+        $st->execute([':id_empresa' => $idEmpresa, ':id_cliente' => $idCliente, ':nro' => $nroDocumento]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
+     * ¿Ya existe en el sistema la compra (factura del proveedor) o la liquidación de compra real,
+     * no anulada, con ese número para ese proveedor?
+     */
+    public function existeDocumentoCompraReal(int $idEmpresa, int $idProveedor, string $tipoDocumento, string $nroDocumento): bool
+    {
+        if ($tipoDocumento === 'FACTURA_COMPRA') {
+            $sql = "SELECT 1 FROM compras_cabecera c
+                    WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.id_proveedor = :id_proveedor
+                      AND LOWER(COALESCE(c.estado, '')) NOT IN ('anulado', 'anulada', 'rechazado', 'rechazada')
+                      AND COALESCE(c.tipo_comprobante, '01') NOT IN ('04', '05')
+                      AND regexp_replace(CONCAT(c.establecimiento_prov, c.punto_emision_prov, c.secuencial_prov), '[^0-9]', '', 'g')
+                          = regexp_replace(:nro, '[^0-9]', '', 'g')
+                    LIMIT 1";
+        } elseif ($tipoDocumento === 'LIQUIDACION') {
+            $sql = "SELECT 1 FROM liquidaciones_cabecera l
+                    WHERE l.id_empresa = :id_empresa AND l.eliminado = false AND l.id_proveedor = :id_proveedor
+                      AND LOWER(COALESCE(l.estado, '')) NOT IN ('anulado', 'anulada')
+                      AND regexp_replace(CONCAT(l.establecimiento, l.punto_emision, l.secuencial), '[^0-9]', '', 'g')
+                          = regexp_replace(:nro, '[^0-9]', '', 'g')
+                    LIMIT 1";
+        } else {
+            return false; // Notas de crédito/débito: no se cruzan con documentos del sistema
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':id_proveedor' => $idProveedor, ':nro' => $nroDocumento]);
+        return (bool) $st->fetchColumn();
+    }
+
     public function getCxcPorId(int $id, int $idEmpresa): ?array
     {
         $st = $this->db->prepare(

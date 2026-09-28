@@ -336,7 +336,7 @@
         } else if (l.estado === 'IGNORADO') {
             acciones = `
                 <div class="d-flex gap-1 justify-content-center align-items-center flex-nowrap">
-                    <span class="badge bg-secondary bg-opacity-25 text-secondary">IGNORADO</span>
+                    <span class="badge bg-secondary bg-opacity-25 text-secondary" title="${escHtml(l.mensaje_error || "")}">${(l.mensaje_error || "").startsWith("Movimiento repetido") ? "REPETIDO" : "IGNORADO"}</span>
                     <button type="button" class="btn btn-outline-warning btn-sm" title="Reactivar (la ignoré por error)" onclick="CC.reactivarLinea(${l.id})"><i class="bi bi-arrow-counterclockwise"></i></button>
                 </div>`;
         } else if (l.estado === 'ERROR') {
@@ -575,7 +575,7 @@
         }
 
         tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Buscando…</td></tr>';
-        const json = await getJson(`${CC_URL_BASE}/buscarDocumentosPendientesAjax?id_cliente=${idCliente}`);
+        const json = await getJson(`${CC_URL_BASE}/buscarDocumentosPendientesAjax?id_cliente=${idCliente}&id_linea=${buscar.idLinea || 0}`);
         // Si mientras cargaba se eligió otro cliente, esta respuesta ya no aplica.
         if (parseInt(document.getElementById('cc-buscar-cliente').value || '0', 10) !== idCliente) return;
 
@@ -597,7 +597,7 @@
                 <td>${escHtml(d.tipo_documento)}</td>
                 <td>${escHtml(d.numero_documento)}</td>
                 <td>${fmtDate(d.fecha_emision)}</td>
-                <td class="text-end">${fmtMoney(d.saldo_pendiente)}</td>
+                <td class="text-end">${fmtMoney(d.saldo_pendiente)}${Number(d.apartado) > 0 ? `<br><small class="text-warning-emphasis" title="Saldo de la cuenta por cobrar ${fmtMoney(d.saldo_cxc)}; ya apartado por otras líneas confirmadas ${fmtMoney(d.apartado)}">(−${fmtMoney(d.apartado)} en otras líneas)</small>` : ""}</td>
             </tr>`;
         }).join('');
     };

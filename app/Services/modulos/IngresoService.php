@@ -7,6 +7,8 @@ namespace App\Services\modulos;
 use App\repositories\modulos\IngresoRepository;
 use App\repositories\modulos\AsientoProgramadoRepository;
 use App\Rules\modulos\IngresoRules;
+use App\Rules\modulos\ControlBancarioRules;
+use App\repositories\modulos\FormaPagoRepository;
 use App\Services\LogSistemaService;
 use App\core\Database;
 use App\Services\modulos\PeriodosContablesService;
@@ -181,6 +183,7 @@ class IngresoService
 
             // Insert Pagos (Formas de Cobro)
             if (!empty($data['pagos']) && is_array($data['pagos'])) {
+                $data['pagos'] = $this->fijarFechaCobroBancaria($data['pagos'], (int) $data['id_empresa'], $data['fecha_emision'] ?? null);
                 foreach ($data['pagos'] as $p) {
                     $p['id_ingreso'] = $idIngreso;
                     $this->repository->insertPago($p);
@@ -320,6 +323,7 @@ class IngresoService
 
             // Insert Payments
             if (!empty($data['pagos']) && is_array($data['pagos'])) {
+                $data['pagos'] = $this->fijarFechaCobroBancaria($data['pagos'], $idEmpresa, $data['fecha_emision'] ?? $original['fecha_emision']);
                 foreach ($data['pagos'] as $p) {
                     $p['id_ingreso'] = $id;
                     $this->repository->insertPago($p);
@@ -549,6 +553,16 @@ class IngresoService
     /**
      * Valida que la fecha de emisión no sea anterior a la fecha de ningún documento en el detalle.
      */
+    /**
+     * Cobros por cuenta bancaria que no son cheque (transferencia, depósito, débito): la
+     * fecha de cobro es la de emisión. Ver ControlBancarioRules::fijarFechaCobroPagos().
+     */
+    private function fijarFechaCobroBancaria(array $pagos, int $idEmpresa, ?string $fechaEmision): array
+    {
+        $bancarias = (new FormaPagoRepository())->getTiposFormasBancarias($idEmpresa, array_column($pagos, 'id_forma_cobro'));
+        return ControlBancarioRules::fijarFechaCobroPagos($pagos, 'id_forma_cobro', $bancarias, $fechaEmision);
+    }
+
     private function validarFechaVsDocumentos(array $data): void
     {
         $fechaEmision = $data['fecha_emision'] ?? null;

@@ -8,6 +8,7 @@ use App\Helpers\Cache;
 use App\models\PermisoSubmodulo;
 use App\repositories\ContadoresNavbarRepository;
 use App\repositories\TareaRepository;
+use App\Services\modulos\ControlBancarioService;
 
 /**
  * Orquesta los contadores del navbar: consulta (una sola), caché en APCu y
@@ -78,6 +79,12 @@ class ContadoresNavbarService
     /** Ruta MVC del chat de WhatsApp (ícono siempre visible para quien lo tiene). */
     public const RUTA_WHATSAPP = 'modulos/whatsapp-chat';
 
+    /**
+     * Ruta MVC de Control Bancario: el aviso de cheques posfechados se muestra a quien puede
+     * verlo, porque el clic abre ahí el modal "Cheques Posfechados".
+     */
+    public const RUTA_CONTROL_BANCARIO = 'modulos/control-bancario';
+
     /** Ventana en días para "suscripciones por vencer" (cobros próximos de los clientes). */
     private const DIAS_SUSCRIPCIONES_POR_VENCER = 7;
 
@@ -115,6 +122,12 @@ class ContadoresNavbarService
         'factura_express_solicitudes',
         'whatsapp_chats',
         'sri_envio_log', // cualquier acción SRI (devuelta/autorizado/…) cambia las novedades
+        // Cheques posfechados: cobros/pagos (alta, edición, anulación de cheque) y la Fecha Banco
+        // que se registra en Control Bancario.
+        'ingresos_cabecera',
+        'egresos_cabecera',
+        'egresos_pagos',
+        'control_bancario_movimientos',
     ];
 
     private ContadoresNavbarRepository $repo;
@@ -200,6 +213,16 @@ class ContadoresNavbarService
             $datos['__firma'] = $this->repo->getEstadoFirma($idEmpresa);
         } catch (\Throwable $e) {
             $datos['__firma'] = null;
+        }
+        // Cheques posfechados por cobrar (recibidos y emitidos). Mismas ventanas que el modal
+        // "Cheques Posfechados" de Control Bancario, para que el aviso y el modal cuadren.
+        try {
+            $datos['__cheques'] = $this->repo->getChequesPosfechados(
+                $idEmpresa,
+                ControlBancarioService::DIAS_POSFECHADOS_POR_VENCER
+            );
+        } catch (\Throwable $e) {
+            $datos['__cheques'] = null;
         }
         Cache::set(self::claveEmpresa($idEmpresa), $datos, self::TTL_CONTADORES);
         return $datos;
@@ -301,7 +324,7 @@ class ContadoresNavbarService
         $rutas = array_unique(array_merge(
             array_values(self::RUTAS_MODULO),
             array_values(self::NOVEDAD_RUTAS),
-            [self::RUTA_EMPRESA, self::RUTA_SUSCRIPCIONES]
+            [self::RUTA_EMPRESA, self::RUTA_SUSCRIPCIONES, self::RUTA_CONTROL_BANCARIO]
         ));
         $perms = [];
         foreach ($rutas as $ruta) {
@@ -403,6 +426,26 @@ class ContadoresNavbarService
                             'estado' => $dias < 0 ? 'caducada' : 'por_caducar',
                         ];
                     }
+                }
+            }
+        }
+
+        // Cheques posfechados por cobrar: solo para quien ve Control Bancario (el clic abre
+        // ahí el modal). Se omite si no hay ninguno en las ventanas de aviso.
+        if ($idEmpresa > 0 && !empty($permRuta[self::RUTA_CONTROL_BANCARIO])) {
+            $ch = $empresa['__cheques'] ?? null;
+            if (is_array($ch)) {
+                $rec = $ch['recibidos'] ?? [];
+                $emi = $ch['emitidos'] ?? [];
+                $total = (int) ($rec['listos'] ?? 0) + (int) ($rec['por_vencer'] ?? 0)
+                       + (int) ($emi['listos'] ?? 0) + (int) ($emi['por_vencer'] ?? 0);
+                if ($total > 0) {
+                    $out['cheques_posfechados'] = [
+                        'recibidos'       => $rec,
+                        'emitidos'        => $emi,
+                        'total'           => $total,
+                        'dias_por_vencer' => ControlBancarioService::DIAS_POSFECHADOS_POR_VENCER,
+                    ];
                 }
             }
         }

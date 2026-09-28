@@ -120,7 +120,8 @@ class ConciliacionCobrosController extends BaseModuloController
             exit;
         }
 
-        $docs = $this->service->buscarDocumentosPendientes($idEmpresa, $idCliente);
+        $idLinea = (int) ($_GET['id_linea'] ?? 0);
+        $docs = $this->service->buscarDocumentosPendientes($idEmpresa, $idCliente, $idLinea);
         echo json_encode(['ok' => true, 'data' => $docs]);
         exit;
     }

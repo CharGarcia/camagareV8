@@ -295,11 +295,17 @@ class ControlBancarioController extends BaseModuloController
         $consolidado = !empty($_GET['consolidado'] ?? '');
         $direccion = strtoupper(trim($_GET['direccion'] ?? ''));
 
+        // El modal muestra también todos los que ya cumplieron su fecha y siguen sin Fecha
+        // Banco (mismos criterios que el aviso del navbar).
         $pares = $idFormaPago ? $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado) : [];
         $rows = $pares
-            ? $this->service->getChequesPosfechadosGrupo($pares, $direccion)
-            : $this->service->getChequesPosfechados($idEmpresa, $idFormaPago, $direccion);
-        echo json_encode(['ok' => true, 'data' => $rows]);
+            ? $this->service->getChequesPosfechadosGrupo($pares, $direccion, true)
+            : $this->service->getChequesPosfechados($idEmpresa, $idFormaPago, $direccion, true);
+        echo json_encode([
+            'ok' => true,
+            'data' => $rows,
+            'dias_por_vencer' => ControlBancarioService::DIAS_POSFECHADOS_POR_VENCER,
+        ]);
         exit;
     }
 

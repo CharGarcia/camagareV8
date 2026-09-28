@@ -2104,7 +2104,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         modal.show();
     }
 
+    // Un solo guardado a la vez: sin este candado, un doble clic durante la verificación del
+    // periodo (await) mandaba dos guardados y, con un cobro parcial, se registraban dos ingresos
+    // (el botón se deshabilitaba recién después de esa espera).
+    let ingGuardando = false;
     async function guardarIngreso() {
+        if (ingGuardando) return;
+        ingGuardando = true;
+        const btnG = document.getElementById('btnGuardarIngreso');
+        if (btnG) btnG.disabled = true;
+        try {
+            await guardarIngresoInterno();
+        } finally {
+            ingGuardando = false;
+            if (btnG) btnG.disabled = false;
+        }
+    }
+
+    async function guardarIngresoInterno() {
         const tipo   = document.getElementById('m-input-tipo-ingreso').value;
         const idConc = document.getElementById('m-select-concepto').value;
         const reciboDe = document.getElementById('m-recibo-de-input').value.trim();
@@ -2260,7 +2277,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
 
-        fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/guardarAjax`, {
+        return fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/guardarAjax`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded'

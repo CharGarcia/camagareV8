@@ -1069,7 +1069,23 @@ function SI_toggleChequeFecha(val) {
     if (!esCheque) document.getElementById('si-mov-fecha-cheque').value = '';
 }
 
+// Un solo guardado a la vez: un doble clic registraba dos cobros/pagos (con un abono parcial,
+// el saldo alcanzaba para ambos y el servidor no tenía cómo distinguirlos).
+let SI_guardandoMovimiento = false;
 async function SI_guardarMovimiento() {
+    if (SI_guardandoMovimiento) return;
+    SI_guardandoMovimiento = true;
+    const btn = document.querySelector('[onclick="SI_guardarMovimiento()"]');
+    if (btn) btn.disabled = true;
+    try {
+        await SI_guardarMovimientoInterno();
+    } finally {
+        SI_guardandoMovimiento = false;
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function SI_guardarMovimientoInterno() {
     const tipo    = document.getElementById('si-mov-tipo').value;
     const idSaldo = document.getElementById('si-mov-id').value;
     const divBanco = document.getElementById('si-mov-div-banco');

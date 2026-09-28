@@ -72,4 +72,36 @@ class ControlBancarioRules
             }
         }
     }
+
+    /**
+     * Fecha de cobro de los cobros/pagos de un ingreso o egreso. En una cuenta bancaria, una
+     * transferencia, depósito o débito se hace efectiva el mismo día del documento: su fecha
+     * de cobro ES la fecha de emisión (se fuerza aunque venga otra, para que siga al documento
+     * si se le cambia la fecha). Solo el CHEQUE conserva la fecha que trae (la que lleva girada)
+     * y queda pendiente de que se confirme su Fecha Banco en Control Bancario. Las formas que
+     * no son bancarias no se tocan.
+     *
+     * @param array<int,string> $formasBancarias [id_forma => tipo] (FormaPagoRepository::getTiposFormasBancarias)
+     */
+    public static function fijarFechaCobroPagos(array $pagos, string $campoForma, array $formasBancarias, ?string $fechaEmision): array
+    {
+        $fecha = substr((string) $fechaEmision, 0, 10);
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            return $pagos;
+        }
+        foreach ($pagos as &$p) {
+            $idForma = (int) ($p[$campoForma] ?? 0);
+            if (!isset($formasBancarias[$idForma])) {
+                continue;
+            }
+            $tipoOp = strtoupper(trim((string) ($p['tipo_operacion_bancaria'] ?? '')));
+            $esCheque = $tipoOp === 'CHEQUE'
+                || ($tipoOp === '' && strtoupper($formasBancarias[$idForma]) === 'CHEQUE');
+            if (!$esCheque) {
+                $p['fecha_cobro'] = $fecha;
+            }
+        }
+        unset($p);
+        return $pagos;
+    }
 }

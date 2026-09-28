@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/conciliacion-cobros
 tipo: modulo
 visibilidad: todos
-etiquetas: conciliacion de cobros, cuadrar cobros, banco, deposito, tarjeta, liquidacion, diferencias, serie, punto de emision, serie inactiva, generar ingresos, extracto bancario, formato del banco, perfil de mapeo, formato de extracto, varias facturas, varios clientes, repartir deposito, dividir linea, un deposito varias facturas, cargas anteriores
-version: 1.4
+etiquetas: conciliacion de cobros, cuadrar cobros, banco, deposito, tarjeta, liquidacion, diferencias, serie, punto de emision, serie inactiva, generar ingresos, extracto bancario, formato del banco, perfil de mapeo, formato de extracto, varias facturas, varios clientes, repartir deposito, dividir linea, un deposito varias facturas, cargas anteriores, cobro duplicado, cobrar dos veces, saldo disponible, saldo apartado, movimiento repetido, extracto repetido, doble cobro
+version: 1.5
 orden: 65
 estado: activo
 ---
@@ -102,6 +102,27 @@ luego agrega los datos del extracto para rastrear el movimiento. Por ejemplo:
 - Una parte confirmada por error se puede quitar (↺) o ignorar (✗) como
   cualquier otra línea.
 
+## Cómo se evita cobrar dos veces lo mismo
+
+Cada confirmación se valida contra el **saldo de la cuenta por cobrar** del
+documento en ese momento, y el sistema impide cobrar dos veces por tres caminos:
+
+- **Varias líneas contra el mismo documento.** Lo que una línea confirmada
+  (aún sin ingreso generado) aplica a un documento queda **apartado**. Otra línea
+  solo puede usar el **saldo disponible**: saldo de la cuenta por cobrar menos lo
+  apartado. En la lupa, la columna **Saldo Disponible** ya lo descuenta e indica
+  cuánto está apartado en otras líneas; un documento sin saldo disponible no
+  aparece. Aplica también entre cargas distintas.
+- **Generar dos veces a la vez.** Si alguien pulsa **Generar ingresos** mientras
+  otra persona (u otra ventana) genera la misma carga, se rechaza con el aviso
+  *Los ingresos de esta carga ya se están generando*. Cada línea se revisa otra
+  vez justo antes de cobrarla: si ya se cobró o cambió, no se vuelve a cobrar.
+- **El mismo movimiento en dos extractos.** Al subir un extracto que se solapa
+  en fechas con uno anterior de la misma cuenta, los movimientos que ya estaban
+  (misma fecha, referencia, descripción y monto) entran como **REPETIDO**
+  (ignorados). Al pasar el mouse sobre la etiqueta se ve en qué carga estaban. Si
+  en verdad es otro depósito idéntico, reactívelo con ↺.
+
 ## Cargas anteriores
 
 La tabla **Cargas anteriores** lista los extractos ya subidos. Haga **clic en
@@ -126,6 +147,13 @@ monto de cada movimiento.
 
 ## Errores frecuentes
 
+- **"El monto a aplicar supera el saldo disponible del documento"** o **"ya
+  tiene todo su saldo apartado por otras líneas confirmadas"**: otra línea
+  confirmada ya aplica ese saldo. Revise las líneas confirmadas (también en otras
+  cargas); si una está mal, quite su confirmación (↺).
+- **Una línea aparece como REPETIDO al subir el extracto**: ese movimiento ya
+  estaba en una carga anterior de la misma cuenta. No hace falta hacer nada; si
+  es otro depósito idéntico, reactívelo.
 - **Todo queda sin cruzar**: revise el rango de fechas y la cuenta bancaria
   seleccionada.
 - **Las tarjetas nunca cuadran exactamente**: es esperable; la diferencia es la
@@ -139,6 +167,7 @@ monto de cada movimiento.
   cobros.
 
 ## Historial de cambios
+- **1.5** — No se puede cobrar dos veces lo mismo: cada confirmación se valida  contra el saldo de la cuenta por cobrar menos lo ya apartado por otras líneas  confirmadas (columna **Saldo Disponible** en la lupa), **Generar ingresos** no  corre dos veces a la vez sobre la misma carga, y los movimientos que ya estaban  en otro extracto de la misma cuenta entran como **REPETIDO**. Nueva sección  *Cómo se evita cobrar dos veces lo mismo*.
 - **1.4** — La lupa de una línea permite marcar **varios documentos, de uno o
   varios clientes**, y repartir el depósito entre ellos (nueva sección *Un
   depósito que paga varias facturas o varios clientes*). En **Cargas

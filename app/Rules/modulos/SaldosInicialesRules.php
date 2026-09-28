@@ -29,6 +29,30 @@ class SaldosInicialesRules
         }
     }
 
+    /**
+     * Un documento no puede existir dos veces como saldo inicial, ni como saldo inicial y como
+     * documento real del sistema a la vez: en ambos casos quedaría dos veces en la cartera y
+     * cada copia podría cobrarse/pagarse por separado (cada una tiene su propio saldo).
+     *
+     * @param array|null $duplicado        Saldo inicial vigente con el mismo tercero y número.
+     * @param bool       $existeDocumentoReal Ya existe la factura/compra real en el sistema.
+     */
+    public function validarNoDuplicado(?array $duplicado, bool $existeDocumentoReal, string $nroDocumento, string $tercero, string $documentoReal): void
+    {
+        if ($duplicado !== null) {
+            throw new \InvalidArgumentException(
+                "El documento {$nroDocumento} ya está registrado como saldo inicial de este {$tercero} "
+                . '(saldo $' . number_format((float) $duplicado['saldo_inicial'], 2) . '). No se puede cargar dos veces.'
+            );
+        }
+        if ($existeDocumentoReal) {
+            throw new \InvalidArgumentException(
+                "El documento {$nroDocumento} ya existe en el sistema como {$documentoReal} de este {$tercero}: "
+                . 'su saldo ya está en la cartera y no debe cargarse también como saldo inicial.'
+            );
+        }
+    }
+
     public function validarCxp(array $data): void
     {
         $tiposValidos = ['FACTURA_COMPRA', 'LIQUIDACION', 'NOTA_CREDITO', 'NOTA_DEBITO'];

@@ -18,6 +18,14 @@ use TCPDF;
 
 class ControlBancarioService
 {
+    /**
+     * Cheques posfechados: ventana "por vencer" (días hacia adelante). Los que ya cumplieron
+     * su fecha y siguen sin Fecha Banco se muestran todos, sin importar la antigüedad.
+     * Única fuente: la usan el modal de Control Bancario y el aviso del navbar
+     * (ContadoresNavbarService), para que los dos cuenten lo mismo.
+     */
+    public const DIAS_POSFECHADOS_POR_VENCER = 5;
+
     private EmpresaRepository $empresaRepo;
 
     public function __construct(
@@ -193,9 +201,9 @@ class ControlBancarioService
         return $result;
     }
 
-    public function getChequesPosfechados(int $idEmpresa, ?int $idFormaPago, string $direccion): array
+    public function getChequesPosfechados(int $idEmpresa, ?int $idFormaPago, string $direccion, bool $incluirNoCobrados = false): array
     {
-        return $this->repository->getChequesPosfechados($idEmpresa, $idFormaPago, $direccion);
+        return $this->repository->getChequesPosfechados($idEmpresa, $idFormaPago, $direccion, $incluirNoCobrados);
     }
 
     /** Impide reclasificar/quitar un movimiento cuya fecha cae dentro de un período ya conciliado (bloqueado). */
@@ -562,11 +570,11 @@ class ControlBancarioService
     ];
 
     /** Cheques posfechados de todas las cuentas del grupo, unidos y ordenados por fecha. */
-    public function getChequesPosfechadosGrupo(array $pares, string $direccion): array
+    public function getChequesPosfechadosGrupo(array $pares, string $direccion, bool $incluirNoCobrados = false): array
     {
         $todas = [];
         foreach ($pares as $p) {
-            $rows = $this->repository->getChequesPosfechados((int) $p['id_empresa'], (int) $p['id'], $direccion);
+            $rows = $this->repository->getChequesPosfechados((int) $p['id_empresa'], (int) $p['id'], $direccion, $incluirNoCobrados);
             foreach ($rows as $r) {
                 $r['empresa_nombre'] = $p['empresa_nombre'] ?? null;
                 $todas[] = $r;
