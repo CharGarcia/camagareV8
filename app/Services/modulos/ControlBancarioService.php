@@ -26,6 +26,16 @@ class ControlBancarioService
      */
     public const DIAS_POSFECHADOS_POR_VENCER = 5;
 
+    /**
+     * Fuente del detalle de TODAS las cuentas: los cobros y pagos registrados en Ingresos y
+     * Egresos (fecha y número del documento), nunca el mayor contable. Decisión del usuario
+     * (28-09-2026): el módulo resume lo que se registra en Ingresos/Egresos y no depende de los
+     * asientos — que además mezclaban el mayor de varias cuentas bancarias cuando compartían
+     * la misma cuenta contable. El repositorio arma esa fuente (baseTesoreria) cuando recibe
+     * cuenta contable 0.
+     */
+    private const FUENTE_INGRESOS_EGRESOS = 0;
+
     private EmpresaRepository $empresaRepo;
 
     public function __construct(
@@ -155,7 +165,7 @@ class ControlBancarioService
         $forma = $this->getFormaBancariaOFallar($idFormaPago, $idEmpresa);
         $saldoInicialCuenta = $this->repository->getSaldoInicial($idEmpresa, $idFormaPago);
 
-        $resumen = $this->repository->getResumenPeriodo($idEmpresa, (int) $forma['id_cuenta_contable'], $fechaInicio, $fechaFin, $idFormaPago);
+        $resumen = $this->repository->getResumenPeriodo($idEmpresa, self::FUENTE_INGRESOS_EGRESOS, $fechaInicio, $fechaFin, $idFormaPago);
 
         $saldoInicial = $saldoInicialCuenta + $resumen['delta_antes'];
         $saldoFinal = $saldoInicial + $resumen['creditos'] - $resumen['debitos'];
@@ -183,7 +193,7 @@ class ControlBancarioService
         $result = $this->repository->getMovimientos(
             $idEmpresa,
             $idFormaPago,
-            (int) $forma['id_cuenta_contable'],
+            self::FUENTE_INGRESOS_EGRESOS,
             $saldoInicial,
             $filtros,
             $page,
@@ -253,7 +263,7 @@ class ControlBancarioService
         $res = $this->repository->getMovimientos(
             $idEmpresa,
             $idFormaPago,
-            (int) $forma['id_cuenta_contable'],
+            self::FUENTE_INGRESOS_EGRESOS,
             0.0,
             $filtros,
             1,
@@ -350,6 +360,67 @@ class ControlBancarioService
         return $conciliacion ?? [];
     }
 
+    /**
+     * Comprobación del período contra la contabilidad (solo lectura). Compara el saldo en libros
+     * según Ingresos/Egresos (saldo inicial + todos los cobros y pagos, cheques incluidos desde
+     * que se emiten, igual que los registra la contabilidad) con el saldo de la cuenta contable,
+     * al inicio y al fin del período, y lista las partidas del período que explican la diferencia.
+     *
+     * Si la cuenta contable la comparten varias cuentas bancarias, se comparan todas juntas: la
+     * contabilidad no las distingue.
+     */
+    public function getComprobacionContable(int $idEmpresa, int $idFormaPago, string $fechaInicio, string $fechaFin): array
+    {
+        $this->rules->validarConciliacion([
+            'id_forma_pago' => $idFormaPago, 'fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin,
+        ]);
+        $forma = $this->getFormaBancariaOFallar($idFormaPago, $idEmpresa);
+        $idCuenta = (int) ($forma['id_cuenta_contable'] ?? 0);
+        if ($idCuenta <= 0) {
+            return ['sin_cuenta_contable' => true, 'forma' => $forma['nombre']];
+        }
+
+        $formas = $this->repository->getFormasBancariasPorCuentaContable($idEmpresa, $idCuenta);
+        $idsFormas = array_map(static fn ($f) => (int) $f['id'], $formas);
+        $saldoInicial = 0.0;
+        foreach ($idsFormas as $idF) {
+            $saldoInicial += $this->repository->getSaldoInicial($idEmpresa, $idF);
+        }
+
+        $t = $this->repository->getTotalesCruceContable($idEmpresa, $idCuenta, $idsFormas, $fechaInicio, $fechaFin);
+        $limite = 1000;
+        $partidas = $this->repository->getPartidasCruceContable($idEmpresa, $idCuenta, $idsFormas, $fechaInicio, $fechaFin, $limite + 1);
+        $truncado = count($partidas) > $limite;
+        $partidas = array_slice($partidas, 0, $limite);
+
+        $resumenClases = [];
+        foreach ($partidas as $p) {
+            $c = $p['clase'];
+            $resumenClases[$c]['cantidad'] = ($resumenClases[$c]['cantidad'] ?? 0) + 1;
+            $resumenClases[$c]['diferencia'] = round(($resumenClases[$c]['diferencia'] ?? 0) + (float) $p['diferencia'], 2);
+        }
+
+        $librosIni = round($saldoInicial + $t['doc_ini'], 2);
+        $librosFin = round($saldoInicial + $t['doc_fin'], 2);
+        $contIni = round($t['cont_ini'], 2);
+        $contFin = round($t['cont_fin'], 2);
+
+        return [
+            'sin_cuenta_contable' => false,
+            'cuenta' => $this->repository->getCuentaContable($idEmpresa, $idCuenta),
+            'formas' => $formas,
+            'fecha_inicio' => $fechaInicio,
+            'fecha_fin' => $fechaFin,
+            'saldo_inicial_bancos' => round($saldoInicial, 2),
+            'inicio' => ['libros' => $librosIni, 'contable' => $contIni, 'diferencia' => round($librosIni - $contIni, 2)],
+            'fin' => ['libros' => $librosFin, 'contable' => $contFin, 'diferencia' => round($librosFin - $contFin, 2)],
+            'diferencia_periodo' => round(($librosFin - $librosIni) - ($contFin - $contIni), 2),
+            'resumen_clases' => $resumenClases,
+            'partidas' => $partidas,
+            'truncado' => $truncado,
+        ];
+    }
+
     public function reabrirConciliacion(int $idEmpresa, int $idUsuario, int $idConciliacion): void
     {
         $antes = $this->repository->getConciliacionPorId($idConciliacion, $idEmpresa);
@@ -404,13 +475,13 @@ class ControlBancarioService
     /**
      * Arma todos los datos del reporte de Conciliación Bancaria para el período:
      * resumen (saldo inicial/créditos/débitos/saldo final), el detalle completo de
-     * movimientos (mayor contable de la cuenta), separado en créditos y débitos, y
+     * movimientos (cobros y pagos de Ingresos/Egresos de la cuenta), separado en créditos y débitos, y
      * los cheques emitidos en circulación / cobrados en el período.
      */
     public function getReporteConciliacion(int $idEmpresa, int $idFormaPago, string $fechaInicio, string $fechaFin): array
     {
         $forma = $this->getFormaBancariaOFallar($idFormaPago, $idEmpresa);
-        $idCuenta = (int) $forma['id_cuenta_contable'];
+        $idCuenta = self::FUENTE_INGRESOS_EGRESOS;
 
         foreach ($this->repository->getFormasBancarias($idEmpresa) as $f) {
             if ((int) $f['id'] === $idFormaPago) {
@@ -446,8 +517,8 @@ class ControlBancarioService
             'movimientos' => $movimientos,
             'creditos' => $creditos,
             'debitos' => $debitos,
-            // Cuenta sin cuenta contable: el detalle sale de los cobros/pagos, no del mayor.
-            'sin_contabilidad' => $idCuenta <= 0,
+            // El detalle siempre sale de Ingresos/Egresos (ver FUENTE_INGRESOS_EGRESOS).
+            'sin_contabilidad' => true,
             'cheques_no_cobrados' => $this->repository->getChequesEmitidosNoCobrados($idEmpresa, $idFormaPago, $idCuenta, $fechaInicio, $fechaFin),
             'cheques_cobrados' => $this->repository->getChequesEmitidosCobradosEnPeriodo($idEmpresa, $idFormaPago, $idCuenta, $fechaInicio, $fechaFin),
         ];
@@ -469,7 +540,7 @@ class ControlBancarioService
         $debitos = 0.0;
         foreach ($pares as $p) {
             $idEmpresa = (int) $p['id_empresa'];
-            $idCuenta = (int) $p['id_cuenta_contable'];
+            $idCuenta = self::FUENTE_INGRESOS_EGRESOS;
             $saldoCuenta = $this->repository->getSaldoInicial($idEmpresa, (int) $p['id']);
             $r = $this->repository->getResumenPeriodo($idEmpresa, $idCuenta, $fechaInicio, $fechaFin, (int) $p['id']);
             $saldoInicial += $saldoCuenta + $r['delta_antes'];
@@ -499,7 +570,7 @@ class ControlBancarioService
         foreach ($pares as $p) {
             $idEmpresa = (int) $p['id_empresa'];
             $idForma = (int) $p['id'];
-            $idCuenta = (int) $p['id_cuenta_contable'];
+            $idCuenta = self::FUENTE_INGRESOS_EGRESOS;
             $saldoCuenta = $this->repository->getSaldoInicial($idEmpresa, $idForma);
 
             if ($fechaInicio) {
@@ -676,7 +747,7 @@ class ControlBancarioService
         foreach ($pares as $p) {
             $idEmpresa = (int) $p['id_empresa'];
             $idForma = (int) $p['id'];
-            $idCuenta = (int) $p['id_cuenta_contable'];
+            $idCuenta = self::FUENTE_INGRESOS_EGRESOS;
             foreach ($this->repository->getChequesEmitidosNoCobrados($idEmpresa, $idForma, $idCuenta, $fechaInicio, $fechaFin) as $r) {
                 $r['empresa_nombre'] = $p['empresa_nombre'] ?? null;
                 $chequesNoCobrados[] = $r;
@@ -708,8 +779,8 @@ class ControlBancarioService
             'movimientos' => $movimientos,
             'creditos' => array_values(array_filter($movimientos, fn ($r) => (float) $r['debe'] > 0)),
             'debitos' => array_values(array_filter($movimientos, fn ($r) => (float) $r['haber'] > 0)),
-            // Solo si NINGUNA cuenta del grupo lleva contabilidad.
-            'sin_contabilidad' => !array_filter($pares, static fn ($p) => !empty($p['id_cuenta_contable'])),
+            // El detalle siempre sale de Ingresos/Egresos (ver FUENTE_INGRESOS_EGRESOS).
+            'sin_contabilidad' => true,
             'cheques_no_cobrados' => $chequesNoCobrados,
             'cheques_cobrados' => $chequesCobrados,
         ];

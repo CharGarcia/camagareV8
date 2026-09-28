@@ -110,7 +110,9 @@
                                         <input type="text" class="form-control form-control-sm border-primary border-opacity-25 text-center bg-light" style="height:31px;" id="faccv_secuencial" placeholder="000000000" readonly>
                                     </div>
                                     <div class="col-md-2">
-                                        <label class="x-small fw-bold text-muted mb-1">Vendedor</label>
+                                        <label class="x-small fw-bold text-muted mb-1">Vendedor<?php
+                                            $faccvVendObl = (($empresa['mostrar_vendedor_factura'] ?? false) === 'true' || ($empresa['mostrar_vendedor_factura'] ?? false) === true);
+                                            if ($faccvVendObl): ?> <span class="text-danger" title="Obligatorio según la configuración de facturación">*</span><?php endif; ?></label>
                                         <select class="form-select form-select-sm border-primary border-opacity-10" id="faccv_id_vendedor" style="height:31px;" onchange="faccvInfoVendedor()">
                                             <option value="">Seleccione...</option>
                                             <?php foreach (($vendedores ?? []) as $v): ?>
@@ -1218,6 +1220,12 @@
     function faccvPayload() {
         if (!$('faccv_id_cliente').value) { Swal.fire('Atención', 'Seleccione el cliente a facturar.', 'warning'); return null; }
         if (!$('faccv_secuencial').value) { Swal.fire('Atención', 'Falta el secuencial. Configure el punto de emisión.', 'warning'); return null; }
+        // «Mostrar nombre del vendedor en la factura» (Reglas de Facturación) lo vuelve obligatorio.
+        if (window.EMPRESA_CONFIG && EMPRESA_CONFIG.mostrar_vendedor_factura && !$('faccv_id_vendedor').value) {
+            Swal.fire('Atención', 'Seleccione el vendedor: la configuración de facturación exige un vendedor en la factura.', 'warning');
+            $('faccv_id_vendedor').focus();
+            return null;
+        }
         const detalles = [];
         document.querySelectorAll('#faccv_lineas_body tr[data-idcd]').forEach(tr => {
             const c = num(tr.dataset.cant);

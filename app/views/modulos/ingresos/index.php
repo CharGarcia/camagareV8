@@ -1874,6 +1874,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     let prefix = p.tipo_operacion_bancaria;
                     if (p.tipo_operacion_bancaria === 'CHEQUE') {
                         prefix = `CHEQUE #${p.numero_cheque || '?'} [Fec: ${p.fecha_cobro || '?'}]`;
+                    } else if (p.fecha_cobro) {
+                        // Transferencia/depósito: cobrado el día del ingreso (fecha que pone el servidor al guardar).
+                        prefix += ` · cobro ${p.fecha_cobro}`;
                     }
                     textRef = `[${prefix}] ` + textRef;
                 }

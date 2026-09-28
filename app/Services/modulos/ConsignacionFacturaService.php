@@ -670,6 +670,7 @@ class ConsignacionFacturaService
         if (!$doc) throw new Exception('Documento no encontrado.');
         if (($doc['estado'] ?? '') === 'facturada') throw new Exception('El documento ya fue facturado.');
         if (($doc['estado'] ?? '') === 'anulada')   throw new Exception('El documento está anulado.');
+        $this->rules->validarVendedor($doc['id_vendedor'] ?? null, $empresaConfig);
 
         $detalles = $this->repository->getDetalles($idDoc, $idEmpresa);
         if (empty($detalles)) throw new Exception('El documento no tiene líneas.');

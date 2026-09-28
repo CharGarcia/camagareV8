@@ -48,5 +48,29 @@ class ConsignacionFacturaRules
         if (!$hayCantidad) {
             throw new Exception('Indique una cantidad mayor a cero en al menos una línea.');
         }
+
+        if (isset($data['empresa_config']) && is_array($data['empresa_config'])) {
+            $this->validarVendedor($data['id_vendedor'] ?? null, $data['empresa_config']);
+        }
+    }
+
+    /**
+     * Con «Mostrar nombre del vendedor en la factura» activo en las Reglas de
+     * Facturación del establecimiento, la factura lleva el vendedor en su
+     * información adicional: sin vendedor saldría esa fila vacía. Se exige al
+     * guardar el documento y otra vez al generar la factura (el borrador pudo
+     * guardarse antes de activar el interruptor). Clave ausente = no se exige.
+     */
+    public static function vendedorObligatorio(array $empresaConfig): bool
+    {
+        $v = $empresaConfig['mostrar_vendedor_factura'] ?? false;
+        return $v === true || in_array((string) $v, ['t', 'true', '1'], true);
+    }
+
+    public function validarVendedor($idVendedor, array $empresaConfig): void
+    {
+        if (self::vendedorObligatorio($empresaConfig) && (int) $idVendedor <= 0) {
+            throw new Exception('Seleccione el vendedor: la configuración de facturación exige un vendedor en la factura.');
+        }
     }
 }

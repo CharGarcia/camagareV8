@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
-etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques
-version: 1.14
+etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques, comprobar con contabilidad, cuadrar con contabilidad, saldo contable vs banco, diferencia contable, asiento faltante, sin asiento
+version: 1.15
 orden: 60
 estado: activo
 ---
@@ -44,9 +44,7 @@ tipo de tercero del movimiento.
 
 Un ingreso o egreso **anulado** (o eliminado) no se muestra en el listado, no
 entra en el saldo acumulado ni en el resumen del período, y tampoco aparece
-entre los cheques posfechados o en circulación. Esto vale aunque, por algún
-error al anular, su asiento contable haya quedado sin anular: el módulo mira el
-estado del documento de origen, no solo el del asiento.
+entre los cheques posfechados o en circulación. El módulo mira el estado del documento de origen.
 
 ### Qué se puede editar aquí y qué no
 
@@ -59,10 +57,6 @@ fecha, el comprobante, la glosa y el monto. Abajo queda un solo campo: la
 Para corregir cualquiera de esos datos hay que ir al ingreso/egreso; cambiarlos
 solo en la conciliación dejaría los dos módulos diciendo cosas distintas del
 mismo pago.
-
-Los movimientos que **no** tienen un cobro/pago detrás (asientos manuales o del
-diario general) siguen siendo totalmente editables: ahí este módulo es el único
-lugar donde se pueden anotar esos datos.
 
 ## Cheques
 
@@ -214,6 +208,11 @@ lo acompaña.
 Solo el **cheque** conserva su propia fecha (la que lleva girada) y queda
 **pendiente** hasta que se registre su **Fecha Banco** en esta pantalla.
 
+Por lo mismo, al abrir una transferencia, depósito o débito en la ventana
+**Clasificar Movimiento**, el campo *Fecha Banco* ya viene con la fecha del
+documento (o con la que se haya registrado a mano). En un cheque viene vacío
+hasta que se confirme su cobro.
+
 ## Buscar y filtrar el listado
 
 La **tarjeta de filtros de arriba** (cuenta bancaria, flujo, tipo, cheques, año,
@@ -228,7 +227,7 @@ aparte, a la derecha).
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas del movimiento: fecha,
 fecha banco, comprobante, número y fecha del cheque, beneficiario / cliente,
-documento de referencia, tercero, glosa (o el concepto del asiento), debe, haber y
+documento de referencia, tercero, glosa (o el concepto del documento), debe, haber y
 **saldo**, y además en la observación registrada al clasificarlo. La columna
 **Tipo** y la dirección del cheque (recibido / emitido) no entran en la búsqueda
 libre: para filtrar por ellas use la ventana de filtros o el selector *Tipo* de la
@@ -262,68 +261,86 @@ algo: un cobro, un pago, una comisión. Al revés, un pago registrado que no apa
 en el banco puede ser un cheque no cobrado todavía.
 
 La conciliación es lo que convierte el saldo contable en un saldo en el que se
-puede confiar.
+puede confiar. El período se concilia con los cobros y pagos de **Ingresos y
+Egresos** (ver *De dónde salen los movimientos*).
 
-## Tipo de transacción detectado automáticamente
+## Comprobar con la contabilidad
 
-Si el movimiento no tiene una clasificación manual guardada, el sistema intenta
-adivinar el **tipo de transacción** antes de mostrar "Otro":
+El botón **Comprobar con Contabilidad** (arriba) compara, para la cuenta y el
+período seleccionados, lo registrado en Ingresos/Egresos con la **cuenta
+contable** del banco. No modifica nada: es solo una revisión.
 
-1. Si el ingreso/egreso que originó la línea ya trae el dato específico
-   (depósito, transferencia, cheque, débito) — lo que el usuario elige al
-   registrar el cobro/pago con una forma de tipo banco — se usa ese.
-2. Si no, pero la línea sí corresponde a un ingreso o egreso real (incluyendo
-   los **migrados** del sistema anterior), se usa el tipo de la cuenta bancaria:
-   cuenta de tipo cheque → "Cheque"; cuenta bancaria → "Depósito" si el dinero
-   **entra** a la cuenta o "Transferencia" si **sale**.
-3. Solo queda como **"Otro"** cuando el asiento no tiene ningún ingreso/egreso
-   detrás (asientos manuales o del diario general migrado sin esa clasificación).
+Muestra tres líneas, cada una con su diferencia:
 
-La detección siempre queda atada a **la cuenta contable de la cuenta bancaria
-que se está viendo** (la línea contable debe pertenecer a esa cuenta) y **a la
-forma de pago usada en ese ingreso/egreso específico** — pero "la forma de
-pago de la cuenta" no significa una sola fila: si esa cuenta bancaria tiene
-**más de una forma de pago bancaria** apuntándole (p. ej. "Cheques Pichincha" y
-"Transferencias Pichincha" son la misma cuenta física vista por dos formas),
-un cobro/pago hecho con CUALQUIERA de esas formas se reconoce igual, sin
-importar cuál de las dos se tenga seleccionada en el filtro — nunca se toman
-datos de una cuenta contable distinta.
+| Línea | Qué compara |
+|-------|-------------|
+| Saldo al inicio del período | Todo lo anterior a la fecha de inicio |
+| Movimiento del período | Lo registrado dentro del rango |
+| Saldo al final del período | Todo hasta la fecha de fin |
+
+"Según Ingresos/Egresos" es el **saldo en libros**: saldo inicial de
+[Saldos iniciales](saldos-iniciales.md) más todos los cobros y pagos, con los
+cheques desde que se emiten (así los registra la contabilidad). Puede diferir del
+saldo del listado, que solo cuenta un cheque cuando tiene Fecha Banco.
+
+Debajo lista las **partidas del período** que explican la diferencia, documento
+por documento:
+
+| Situación | Qué significa |
+|-----------|---------------|
+| Sin asiento contable | El ingreso/egreso no tiene asiento contabilizado en la cuenta del banco |
+| Solo en contabilidad | Asiento sin ingreso/egreso detrás (manual, migrado, apertura) |
+| Asiento de documento anulado | El ingreso/egreso está anulado, pero su asiento sigue contabilizado |
+| Cobrado/pagado con otra cuenta | El asiento toca esta cuenta contable, pero el documento usó otra forma de pago |
+| Monto distinto | El documento y su asiento mueven montos distintos en el banco |
+| Fecha en otro período | El documento y su asiento tienen fechas en períodos distintos |
+
+El número del asiento abre su detalle. La diferencia al **inicio** viene de
+períodos anteriores (por ejemplo, la apertura migrada): para ver sus partidas,
+compruebe un período anterior.
+
+Si la cuenta contable la usan **varias cuentas bancarias**, se comparan todas
+juntas (la contabilidad no las distingue) y la ventana lo avisa. Una cuenta sin
+cuenta contable no tiene contra qué compararse. En la vista **Consolidar por
+RUC** la comprobación no está disponible: se hace cuenta por cuenta.
+
+Al **marcar un período como conciliado**, la ventana muestra también el saldo
+según contabilidad y si cuadra, con un enlace a este detalle.
+
+## De dónde salen los movimientos
+
+El detalle de **cada cuenta bancaria** se arma con los **cobros y pagos
+registrados en Ingresos y Egresos** con esa cuenta. No depende de los asientos
+contables:
+
+- Cada línea de pago de un **ingreso** es una entrada de dinero; cada línea de
+  pago de un **egreso**, una salida. Esto incluye los ingresos y egresos que
+  generan otros módulos (recibos, facturas, POS, roles de pago, liquidaciones).
+- La **fecha** de cada fila es la fecha de emisión del ingreso/egreso y el
+  **comprobante** es su número, no los del asiento.
+- Se excluyen los documentos eliminados o anulados y los cheques anulados.
+- Cada cuenta muestra **solo sus propios cobros y pagos**, aunque varias cuentas
+  bancarias compartan la misma cuenta contable.
+- El saldo del período, los créditos y débitos, el saldo acumulado línea a
+  línea, el buscador, los filtros, la exportación a PDF/Excel, los cheques
+  posfechados y la conciliación del período salen todos de esa misma fuente.
+- Lo que se registró **solo como asiento** (asientos manuales, el diario o la
+  apertura migrados del sistema anterior) **no aparece** aquí. El saldo con que
+  arranca la cuenta se registra en [Saldos iniciales](saldos-iniciales.md).
+
+## Tipo de transacción
+
+El tipo de cada movimiento es el que se eligió al registrar el cobro/pago
+(depósito, transferencia, cheque, débito). Si el cobro/pago no lo trae (por
+ejemplo, los **migrados** del sistema anterior), se usa el tipo de la forma de
+pago: cuenta de tipo cheque → "Cheque"; cuenta bancaria → "Depósito" si el
+dinero **entra** o "Transferencia" si **sale**.
 
 ## Selector de cuenta bancaria
 
 El selector lista toda forma de pago con **banco asignado** (activa, no
-eliminada), tenga o no **cuenta contable** configurada. Si le falta, aparece
-marcada como "— sin cuenta contable", y el módulo funciona igual: ver la
-sección siguiente.
-
-## Cuentas sin cuenta contable (empresas que no llevan contabilidad)
-
-Hay empresas que no llevan contabilidad pero sí controlan su cuenta bancaria.
-En ellas la cuenta no tiene cuenta contable asignada, así que **no existe un
-mayor** del cual sacar el detalle. En ese caso el módulo arma el movimiento
-directamente desde los **cobros y pagos** registrados con esa cuenta:
-
-- Cada línea de pago de un **ingreso** es una entrada de dinero; cada línea de
-  pago de un **egreso**, una salida.
-- Se excluyen los documentos eliminados o anulados y los cheques anulados.
-- El saldo del período, los créditos y débitos, el saldo acumulado línea a
-  línea, el buscador, los filtros, la exportación a PDF/Excel y la
-  conciliación del período funcionan igual que con contabilidad.
-- La **clasificación manual** (tipo, Nº de cheque, fechas, observación)
-  también funciona: la anotación se guarda contra el cobro/pago en vez de
-  contra una línea de asiento.
-- Los **cheques posfechados** y los cheques emitidos en circulación de estas
-  cuentas también aparecen en sus pestañas.
-
-Al seleccionar una de estas cuentas el módulo lo avisa arriba del listado, para
-que quede claro de dónde salen las cifras. Dos diferencias con una cuenta que
-sí lleva contabilidad: el número de comprobante es el del ingreso/egreso y no
-abre el asiento (no hay), y la segunda hoja del Excel de conciliación se llama
-"Movimientos" en vez de "Mayor Contable".
-
-Si más adelante se le asigna la cuenta contable (desde
-[Formas de cobro y pago](formas-cobros-pagos.md)), el módulo pasa a mostrar el
-mayor contable, sin ninguna acción adicional.
+eliminada), tenga o no cuenta contable configurada: el módulo funciona igual en
+los dos casos.
 
 ## Errores frecuentes
 
@@ -332,13 +349,9 @@ mayor contable, sin ninguna acción adicional.
   tipo cheque.
 - **El saldo del banco no coincide con el contable**: revise los movimientos sin
   clasificar y los cheques girados que aún no se cobraron.
-- **Aparecen movimientos de Efectivo/Tarjeta/otra forma no bancaria mezclados
-  en esta cuenta**: esa forma de pago quedó configurada con la MISMA cuenta
-  contable que este banco (ver [Formas de cobro y pago](formas-cobros-pagos.md)).
-  Como este módulo arma el mayor filtrando por cuenta contable, cualquier
-  forma que postee ahí aparece, sea o no bancaria. Corrija la cuenta contable
-  de esa forma de pago (el sistema ya bloquea que esto vuelva a pasar al
-  guardar una forma nueva).
+- **Falta un movimiento que está en contabilidad**: este módulo solo muestra
+  lo registrado en Ingresos y Egresos. Un asiento manual no aparece; registre el
+  movimiento como ingreso o egreso con la cuenta bancaria.
 - **Movimientos migrados aparecían todos como "Otro"** (incluso depósitos):
   el enlace a los pagos migrados se buscaba por un dato que los migrados no
   siempre tienen, y las corridas de migración antiguas guardaron el dato de
@@ -348,11 +361,20 @@ mayor contable, sin ninguna acción adicional.
 
 ## Historial de cambios
 
+- **1.15** — El módulo deja de depender de los asientos contables: el detalle,
+  el saldo, los cheques y la conciliación de **todas** las cuentas salen de los
+  cobros y pagos de Ingresos y Egresos, con su fecha y su número. Cada cuenta
+  muestra solo lo suyo aunque varias compartan la cuenta contable. En el detalle
+  del movimiento, "Fecha asiento" pasa a ser **Fecha**. Nuevo botón **Comprobar
+  con Contabilidad**: compara el saldo según Ingresos/Egresos con el de la cuenta
+  contable y lista, documento por documento, las partidas que explican la
+  diferencia; la ventana de conciliar muestra si cuadra.
 - **1.14** — La ventana *Cheques Posfechados* y el aviso de la barra superior
   muestran **todos** los cheques posfechados vencidos sin Fecha Banco (antes, solo
   los de los últimos 15 días). Las transferencias, depósitos y débitos de cuentas
-  bancarias toman como fecha de cobro la fecha de emisión del ingreso/egreso; solo
-  el cheque queda pendiente de su Fecha Banco.
+  bancarias toman como fecha de cobro la fecha de emisión del ingreso/egreso, y en
+  *Clasificar Movimiento* su Fecha Banco ya viene llena; solo el cheque queda
+  pendiente de su Fecha Banco.
 - **1.13** — Nuevo **aviso de cheques posfechados** en la barra superior (recibidos
   y emitidos, con fecha cumplida sin Fecha Banco o por vencer en 5 días); cada línea
   abre la ventana *Cheques Posfechados* en su pestaña. Esa ventana ahora muestra

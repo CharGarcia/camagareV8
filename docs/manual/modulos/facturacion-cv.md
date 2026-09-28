@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long, asiento de reingreso, no contabilizar consignaciones, sin reingreso, modulos que contabilizan, acceso denegado a la bodega, bodega no asignada, otra bodega, no me deja facturar, imprimir, impresora
-version: 1.23
+etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, vendedor obligatorio, exige vendedor, seleccione el vendedor, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long, asiento de reingreso, no contabilizar consignaciones, sin reingreso, modulos que contabilizan, acceso denegado a la bodega, bodega no asignada, otra bodega, no me deja facturar, imprimir, impresora
+version: 1.24
 orden: 47
 estado: activo
 ---
@@ -186,7 +186,7 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 | Fecha | Sí | Fecha de emisión del documento. |
 | Serie | Sí | Punto de emisión con secuencial de facturación de consignaciones. |
 | Secuencial | — | Lo asigna el servidor al guardar; no se teclea. |
-| Vendedor | No | Se precarga con el vendedor del cliente. |
+| Vendedor | Según configuración | Se precarga con el vendedor del cliente. Es **obligatorio** cuando el establecimiento tiene activo *Mostrar nombre del vendedor en la factura* (Reglas de Facturación); en ese caso la etiqueta muestra un asterisco rojo. |
 | Observaciones | No | Nota interna del documento. Pasa al campo Observaciones de la factura de venta (se imprime en el PDF del sistema), pero **no** se copia a la información adicional: lo que deba salir ahí se escribe en la fila *Observaciones* de la pestaña Info. Adicional. Máximo **300 caracteres**. |
 | Cliente a facturar | Sí | A quién se le emite. Puede ser distinto del cliente de la consignación. |
 | Precio | Sí | Precio de la consignación o uno de la lista de precios del producto. |
@@ -226,6 +226,7 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   - **Observaciones**: solo si el usuario escribió el detalle de la fila *Observaciones* en la pestaña Info. Adicional. El campo *Observaciones* de la cabecera **no** se copia aquí.
   - **Vendedor** y **Cajero**: el vendedor del documento y el usuario que genera la factura, siempre que la empresa los tenga activados en su ficha (*¿Mostrar el cajero / el vendedor en la factura?*).
   - **Correo del cliente** y **RUC Proveedor**: los agrega la factura de venta, igual que en cualquier otra factura.
+- **Vendedor obligatorio**: si en *Empresa → Reglas de Facturación* está activo *Mostrar nombre del vendedor en la factura*, el documento no se guarda ni se genera la factura sin vendedor. Se revisa también al **Generar factura**, así que un borrador guardado antes de activar el interruptor debe completarse con su vendedor.
 - Si el documento ya trae una línea de información adicional escrita a mano con uno de esos conceptos, manda la suya: el sistema no la duplica ni la pisa. Todas estas líneas salen en el **RIDE** y viajan en el **XML** autorizado.
 - **Crear nueva desde esta** (duplicar) solo aparece en documentos *facturada* o
   *anulada*. Recorta cada cantidad al saldo vigente y **escala el descuento en la
@@ -259,6 +260,10 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   contable no los tratan como documentos sin asiento.
 
 ## Errores frecuentes
+
+- **«Seleccione el vendedor: la configuración de facturación exige un vendedor
+  en la factura»**: el establecimiento tiene activo *Mostrar nombre del vendedor
+  en la factura*. Elija el vendedor en la cabecera, guarde y vuelva a generar.
 
 - **No aparecen series en el modal**: falta configurar el secuencial *Facturación
   consignaciones ventas* en el punto de emisión.
@@ -296,6 +301,10 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   consignación. Ya está corregido.
 
 ## Historial de cambios
+
+- **1.24** — El **Vendedor** pasa a ser obligatorio (al guardar y al generar la
+  factura) cuando la configuración de facturación tiene activo *Mostrar nombre
+  del vendedor en la factura*.
 
 - **1.23** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

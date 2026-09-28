@@ -1581,6 +1581,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 if (p.tipo_operacion_bancaria) {
                     let pref = p.tipo_operacion_bancaria;
                     if (pref === 'CHEQUE') pref = `CHQ#${p.numero_cheque||'?'} (${p.fecha_cobro||'?'})`;
+                    // Transferencia/depósito/débito: cobrado el día del egreso (fecha que pone el servidor al guardar).
+                    else if (p.fecha_cobro) pref += ` · cobro ${p.fecha_cobro}`;
                     txtRef = `[${pref}] ` + txtRef;
                 }
                 if (!txtRef.trim()) txtRef = '-';

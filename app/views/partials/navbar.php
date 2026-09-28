@@ -420,19 +420,19 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 320px; z-index: 5065;">
                         <li><h6 class="dropdown-header text-primary"><i class="bi bi-cash-coin me-1"></i>Cheques posfechados por cobrar</h6></li>
                         <li><hr class="dropdown-divider my-1"></li>
-                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="recibidos-listos" href="<?= $base ?>/modulos/control-bancario?posfechados=recibidos">
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="recibidos-listos" href="<?= $base ?>/modulos/control-bancario/posfechados-recibidos">
                             <span><i class="bi bi-box-arrow-in-down me-2 text-danger"></i>Recibidos: listos para depositar<br><small class="text-muted ms-4 cmg-chq-monto"></small></span>
                             <span class="badge bg-danger rounded-pill cmg-chq-badge">0</span>
                         </a>
-                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="recibidos-por_vencer" href="<?= $base ?>/modulos/control-bancario?posfechados=recibidos">
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="recibidos-por_vencer" href="<?= $base ?>/modulos/control-bancario/posfechados-recibidos">
                             <span><i class="bi bi-box-arrow-in-down me-2 text-warning"></i>Recibidos: por vencer<br><small class="text-muted ms-4 cmg-chq-monto"></small></span>
                             <span class="badge bg-warning text-dark rounded-pill cmg-chq-badge">0</span>
                         </a>
-                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="emitidos-listos" href="<?= $base ?>/modulos/control-bancario?posfechados=emitidos">
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="emitidos-listos" href="<?= $base ?>/modulos/control-bancario/posfechados-emitidos">
                             <span><i class="bi bi-box-arrow-up me-2 text-danger"></i>Emitidos: ya se pueden cobrar<br><small class="text-muted ms-4 cmg-chq-monto"></small></span>
                             <span class="badge bg-danger rounded-pill cmg-chq-badge">0</span>
                         </a>
-                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="emitidos-por_vencer" href="<?= $base ?>/modulos/control-bancario?posfechados=emitidos">
+                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center gap-2 cmg-chq-item" data-chq="emitidos-por_vencer" href="<?= $base ?>/modulos/control-bancario/posfechados-emitidos">
                             <span><i class="bi bi-box-arrow-up me-2 text-warning"></i>Emitidos: por vencer<br><small class="text-muted ms-4 cmg-chq-monto"></small></span>
                             <span class="badge bg-warning text-dark rounded-pill cmg-chq-badge">0</span>
                         </a>
@@ -638,12 +638,12 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-guias_remision">0</span>
                     <small>Guía SRI</small>
                 </a>
-                <a class="cmg-chq-tile d-none" data-chq-tile="recibidos" href="<?= $base ?>/modulos/control-bancario?posfechados=recibidos">
+                <a class="cmg-chq-tile d-none" data-chq-tile="recibidos" href="<?= $base ?>/modulos/control-bancario/posfechados-recibidos">
                     <i class="bi bi-box-arrow-in-down text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-chq-tile-badge">0</span>
                     <small>Ch. recib.</small>
                 </a>
-                <a class="cmg-chq-tile d-none" data-chq-tile="emitidos" href="<?= $base ?>/modulos/control-bancario?posfechados=emitidos">
+                <a class="cmg-chq-tile d-none" data-chq-tile="emitidos" href="<?= $base ?>/modulos/control-bancario/posfechados-emitidos">
                     <i class="bi bi-box-arrow-up text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-chq-tile-badge">0</span>
                     <small>Ch. emit.</small>

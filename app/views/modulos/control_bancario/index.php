@@ -50,6 +50,9 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
             <button type="button" class="btn btn-outline-warning btn-sm" onclick="CB_abrirModalPosfechados()">
                 <i class="bi bi-calendar-event me-1"></i> Cheques Posfechados
             </button>
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="CB_abrirComprobacionContable()" title="Compara el saldo según Ingresos/Egresos con el de la cuenta contable del banco">
+                <i class="bi bi-journal-check me-1"></i> Comprobar con Contabilidad
+            </button>
             <button type="button" class="btn btn-outline-secondary btn-sm" onclick="CB_abrirModalHistorialConciliaciones()">
                 <i class="bi bi-clock-history me-1"></i> Historial de Conciliaciones
             </button>
@@ -73,8 +76,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <option value="">— Seleccione —</option>
                         <?php foreach ($formas as $f): ?>
                             <option value="<?= (int) $f['id'] ?>" <?= (int) $f['id'] === $idFormaPago ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($f['nombre'] . ($f['nombre_banco'] ? ' — ' . $f['nombre_banco'] : '') . ($f['numero_cuenta'] ? ' (' . $f['numero_cuenta'] . ')' : '')) ?><?= empty($f['id_cuenta_contable']) ? ' — sin cuenta contable' : '' ?>
-                            </option>
+                                <?= htmlspecialchars($f['nombre'] . ($f['nombre_banco'] ? ' — ' . $f['nombre_banco'] : '') . ($f['numero_cuenta'] ? ' (' . $f['numero_cuenta'] . ')' : '')) ?>                            </option>
                         <?php endforeach; ?>
                     </select>
                     <div class="form-check form-switch mt-1" id="cb-consolidado-wrap" style="display:none;">
@@ -345,7 +347,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                      Abajo solo queda lo que este módulo sí decide. -->
                 <div class="p-2 border rounded-3 bg-light mb-3">
                     <div class="row g-1 small">
-                        <div class="col-6"><span class="text-muted">Fecha asiento:</span> <span id="cbm-info-fecha" class="fw-bold"></span></div>
+                        <div class="col-6"><span class="text-muted">Fecha:</span> <span id="cbm-info-fecha" class="fw-bold"></span></div>
                         <div class="col-6"><span class="text-muted">Comprobante:</span> <span id="cbm-info-comprobante" class="fw-bold"></span></div>
                         <div class="col-12" id="cbm-info-establecimiento-wrap" style="display:none;"><span class="text-muted">Establecimiento:</span> <span id="cbm-info-establecimiento" class="fw-bold text-info"></span></div>
                         <div class="col-12"><span class="text-muted">Glosa:</span> <span id="cbm-info-glosa"></span></div>
@@ -500,6 +502,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                     <div><span class="text-muted">Cuenta:</span> <span id="cbc-info-cuenta" class="fw-bold"></span></div>
                     <div><span class="text-muted">Período:</span> <span id="cbc-info-periodo" class="fw-bold"></span></div>
                     <div><span class="text-muted">Saldo final según el sistema:</span> <span id="cbc-info-saldo-sistema" class="fw-bold"></span></div>
+                    <!-- Comprobación rápida contra la contabilidad (se llena por AJAX). -->
+                    <div id="cbc-info-contable" class="mt-1"></div>
                 </div>
                 <div class="row g-2">
                     <div class="col-12">
@@ -518,6 +522,28 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                 <button type="button" class="btn btn-success btn-sm px-4" onclick="window.CB_confirmarConciliar()">
                     <i class="bi bi-lock-fill me-1"></i> Conciliar y Bloquear Período
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════ MODAL: Comprobación con Contabilidad ═══════════════════ -->
+<div class="modal fade" id="modalComprobacionContableCB" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white py-2 px-3">
+                <h6 class="modal-title fw-bold"><i class="bi bi-journal-check me-2"></i>Comprobación con Contabilidad</h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3 position-relative">
+                <div id="cb-comp-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Comparando con la contabilidad...</div>
+                </div>
+                <div id="cb-comp-contenido"></div>
+            </div>
+            <div class="modal-footer py-2 px-3">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>
@@ -565,12 +591,12 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     // SÍ tienen con qué consolidar; controla cuándo se muestra el switch "Consolidar por RUC".
     window.CB_GRUPOS_CUENTAS = <?= json_encode(array_map('count', $gruposDeCuentas ?? []), JSON_UNESCAPED_UNICODE) ?>;
     window.CB_CONSOLIDADO_INICIAL = <?= $consolidado ? 'true' : 'false' ?>;
-    // Cuentas sin cuenta contable: su detalle se arma desde los cobros y pagos registrados con
-    // esa cuenta (empresas que no llevan contabilidad), no desde el mayor.
-    window.CB_CUENTAS_SIN_CONTABILIDAD = <?= json_encode(array_values(array_map(
-        static fn ($f) => (int) $f['id'],
-        array_filter($formas, static fn ($f) => empty($f['id_cuenta_contable']))
-    ))) ?>;
+    // Pestaña del modal "Cheques Posfechados" a abrir al entrar desde el aviso del navbar
+    // ('recibidos' | 'emitidos' | ''); viene de sesión, así la URL queda limpia.
+    window.CB_ABRIR_POSFECHADOS = <?= json_encode(in_array($abrirPosfechados ?? '', ['recibidos', 'emitidos'], true) ? $abrirPosfechados : '') ?>;
+    // Todas las cuentas se arman desde los cobros y pagos de Ingresos/Egresos (no desde el
+    // mayor contable), así que ya no hay aviso de "cuenta sin contabilidad".
+    window.CB_CUENTAS_SIN_CONTABILIDAD = [];
 </script>
 <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo) ?>
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>

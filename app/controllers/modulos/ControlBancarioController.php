@@ -60,6 +60,31 @@ class ControlBancarioController extends BaseModuloController
         return count($pares) > 1 ? $pares : [];
     }
 
+    /** Clave de sesión con la pestaña del modal de posfechados a abrir ('recibidos' | 'emitidos'). */
+    private const SESION_ABRIR_POSFECHADOS = 'control_bancario_abrir_posfechados';
+
+    /**
+     * Entradas desde el aviso de cheques posfechados del navbar
+     * (/modulos/control-bancario/posfechados-recibidos | -emitidos): dejan en sesión la
+     * pestaña del modal y redirigen a la URL limpia del módulo, que lo abre.
+     */
+    public function posfechadosRecibidos(): void
+    {
+        $this->entrarAPosfechados('recibidos');
+    }
+
+    public function posfechadosEmitidos(): void
+    {
+        $this->entrarAPosfechados('emitidos');
+    }
+
+    private function entrarAPosfechados(string $pestana): never
+    {
+        $this->requireLeer();
+        $_SESSION[self::SESION_ABRIR_POSFECHADOS] = $pestana;
+        $this->redirect(rtrim(BASE_URL ?? '', '/') . '/' . $this->getRutaModulo());
+    }
+
     public function index(): void
     {
         $this->requireLeer();
@@ -93,6 +118,11 @@ class ControlBancarioController extends BaseModuloController
             }
         }
 
+        // Pestaña del modal "Cheques Posfechados" a abrir al llegar desde el aviso del navbar
+        // (ver posfechadosRecibidos/posfechadosEmitidos). De un solo uso: al recargar no se reabre.
+        $abrirPosfechados = (string) ($_SESSION[self::SESION_ABRIR_POSFECHADOS] ?? '');
+        unset($_SESSION[self::SESION_ABRIR_POSFECHADOS]);
+
         $this->viewWithLayout('layouts.main', 'modulos.control_bancario.index', [
             'titulo' => 'Control Bancario',
             'perm' => $this->getPermisos(),
@@ -101,6 +131,7 @@ class ControlBancarioController extends BaseModuloController
             'idFormaPago' => $idFormaPago,
             'gruposDeCuentas' => $gruposDeCuentas,
             'consolidado' => $consolidado,
+            'abrirPosfechados' => $abrirPosfechados,
             'aniosDisponibles' => $aniosDisponibles,
             'fechaInicio' => $fechaInicio,
             'fechaFin' => $fechaFin,
@@ -383,6 +414,28 @@ class ControlBancarioController extends BaseModuloController
             ? $this->service->getConciliacionDelRangoGrupo($pares, $fechaInicio, $fechaFin)
             : $this->service->getConciliacionDelRango($idFormaPago, $fechaInicio, $fechaFin);
         echo json_encode(['ok' => true, 'data' => $conciliacion]);
+        exit;
+    }
+
+    /** Comprobación del período contra la contabilidad (solo lectura, una cuenta a la vez). */
+    public function comprobacionContableAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        try {
+            $data = $this->service->getComprobacionContable(
+                $idEmpresa,
+                (int) ($_GET['forma'] ?? 0),
+                trim($_GET['fecha_inicio'] ?? ''),
+                trim($_GET['fecha_fin'] ?? '')
+            );
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
         exit;
     }
 

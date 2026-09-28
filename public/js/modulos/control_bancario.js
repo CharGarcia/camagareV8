@@ -152,7 +152,168 @@
         document.getElementById('cbc-saldo-banco').value = '';
         document.getElementById('cbc-observaciones').value = '';
         new bootstrap.Modal(document.getElementById('modalConciliarCB')).show();
+        cargarLineaContableConciliar(fechaInicio, fechaFin);
     };
+
+    // ── Comprobación con Contabilidad (solo lectura) ─────────────────────────
+    const CLASES_COMPROBACION = {
+        solo_documento:    { txt: 'Sin asiento contable',            cls: 'warning',   ayuda: 'El ingreso/egreso no tiene asiento contabilizado en la cuenta del banco.' },
+        solo_contabilidad: { txt: 'Solo en contabilidad',            cls: 'info',      ayuda: 'Asiento sin ingreso/egreso detrás (manual, migrado, etc.).' },
+        documento_anulado: { txt: 'Asiento de documento anulado',    cls: 'danger',    ayuda: 'El ingreso/egreso está anulado o eliminado pero su asiento sigue contabilizado.' },
+        otra_cuenta:       { txt: 'Cobrado/pagado con otra cuenta',  cls: 'secondary', ayuda: 'El asiento toca esta cuenta contable pero el documento se cobró/pagó con otra forma de pago.' },
+        monto_distinto:    { txt: 'Monto distinto',                  cls: 'danger',    ayuda: 'El documento y su asiento mueven montos distintos en el banco.' },
+        fecha_distinta:    { txt: 'Fecha en otro período',           cls: 'secondary', ayuda: 'El documento y su asiento tienen fechas que caen en períodos distintos.' },
+    };
+
+    function paramsComprobacion() {
+        return new URLSearchParams({
+            forma: state.forma,
+            fecha_inicio: document.getElementById('cb-fecha-inicio').value,
+            fecha_fin: document.getElementById('cb-fecha-fin').value,
+        });
+    }
+
+    function celdaDif(v) {
+        const n = Number(v || 0);
+        const cls = Math.abs(n) < 0.005 ? 'text-success' : 'text-danger';
+        return `<span class="fw-bold ${cls}">${fmtMoney(n)}</span>`;
+    }
+
+    // Línea resumida dentro del modal "Marcar Período como Conciliado".
+    async function cargarLineaContableConciliar() {
+        const cont = document.getElementById('cbc-info-contable');
+        if (!cont) return;
+        cont.innerHTML = '';
+        if (!state.forma || state.consolidado) return;
+        cont.innerHTML = '<span class="text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Comparando con la contabilidad…</span>';
+        try {
+            const json = await fetchJson(`${CB_URL_BASE}/comprobacionContableAjax?${paramsComprobacion().toString()}`);
+            if (!json.ok || !json.data || json.data.sin_cuenta_contable) { cont.innerHTML = ''; return; }
+            const f = json.data.fin;
+            const cuadra = Math.abs(f.diferencia) < 0.005;
+            cont.innerHTML = `<span class="text-muted">Saldo según contabilidad:</span> <span class="fw-bold">${fmtMoney(f.contable)}</span>
+                <span class="badge ms-1 ${cuadra ? 'bg-success' : 'bg-danger'} bg-opacity-10 ${cuadra ? 'text-success border-success' : 'text-danger border-danger'} border border-opacity-25">
+                    ${cuadra ? '<i class="bi bi-check-circle-fill"></i> Cuadra' : 'Diferencia ' + fmtMoney(f.diferencia)}</span>
+                <a href="#" class="ms-1 small" onclick="event.preventDefault(); CB_abrirComprobacionContable();">Ver detalle</a>`;
+        } catch (e) {
+            console.error(e);
+            cont.innerHTML = '';
+        }
+    }
+
+    window.CB_abrirComprobacionContable = async function () {
+        if (!state.forma) {
+            Swal.fire({ icon: 'info', title: 'Seleccione una cuenta', text: 'Elija la cuenta bancaria a comprobar.' });
+            return;
+        }
+        if (state.consolidado) {
+            Swal.fire({ icon: 'info', title: 'Vista consolidada', text: 'La comprobación con contabilidad se hace por cuenta: desactive "Consolidar por RUC".' });
+            return;
+        }
+        const cont = document.getElementById('cb-comp-contenido');
+        const loader = document.getElementById('cb-comp-loader');
+        cont.innerHTML = '<div style="min-height:160px;"></div>';
+        loader.classList.remove('d-none');
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalComprobacionContableCB')).show();
+        try {
+            const json = await fetchJson(`${CB_URL_BASE}/comprobacionContableAjax?${paramsComprobacion().toString()}`);
+            if (!json.ok) {
+                cont.innerHTML = `<div class="alert alert-danger small mb-0">${escHtml(json.error || 'No se pudo hacer la comprobación.')}</div>`;
+                return;
+            }
+            cont.innerHTML = renderComprobacion(json.data);
+        } catch (e) {
+            console.error(e);
+            cont.innerHTML = '<div class="alert alert-danger small mb-0">Error de red o servidor.</div>';
+        } finally {
+            loader.classList.add('d-none');
+        }
+    };
+
+    function renderComprobacion(d) {
+        if (d.sin_cuenta_contable) {
+            return `<div class="alert alert-info small mb-0"><i class="bi bi-info-circle me-1"></i>
+                La cuenta <strong>${escHtml(d.forma)}</strong> no tiene cuenta contable asignada: no hay contabilidad contra la cual comparar.
+                Se asigna en <em>Formas de cobro y pago</em>.</div>`;
+        }
+        const cuenta = d.cuenta ? `${escHtml(d.cuenta.codigo)} — ${escHtml(d.cuenta.nombre)}` : '—';
+        const formas = (d.formas || []).map(f => escHtml(f.nombre)).join(', ');
+        const avisoCompartida = (d.formas || []).length > 1
+            ? `<div class="alert alert-warning py-2 px-3 small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>
+                   Esta cuenta contable la usan <strong>${d.formas.length} cuentas bancarias</strong> (${formas}). La contabilidad no las distingue,
+                   así que se comparan <strong>todas juntas</strong>.</div>`
+            : '';
+        const movLibros = d.fin.libros - d.inicio.libros;
+        const movCont = d.fin.contable - d.inicio.contable;
+
+        const chips = Object.keys(d.resumen_clases || {}).map(k => {
+            const c = CLASES_COMPROBACION[k] || { txt: k, cls: 'secondary', ayuda: '' };
+            const r = d.resumen_clases[k];
+            return `<span class="badge bg-${c.cls} bg-opacity-10 text-${c.cls === 'warning' ? 'warning-emphasis' : c.cls} border border-${c.cls} border-opacity-25 me-1 mb-1" title="${escHtml(c.ayuda)}">
+                        ${c.txt}: ${r.cantidad} · ${fmtMoney(r.diferencia)}</span>`;
+        }).join('');
+
+        const filas = (d.partidas || []).map(p => {
+            const c = CLASES_COMPROBACION[p.clase] || { txt: p.clase, cls: 'secondary', ayuda: '' };
+            const tipoDoc = p.tipo === 'ingreso' ? 'Ingreso' : (p.tipo === 'egreso' ? 'Egreso' : 'Asiento');
+            const asiento = p.id_asiento
+                ? `<a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${parseInt(p.id_asiento, 10)});" title="Ver asiento">${escHtml(p.numero_asiento || 'Asiento')}</a>`
+                : '—';
+            const doc = p.tipo === 'asiento' ? escHtml(p.concepto || '') : `${tipoDoc} ${escHtml(p.numero || '')}`;
+            return `<tr>
+                <td class="p-1"><span class="badge bg-${c.cls} bg-opacity-10 text-${c.cls === 'warning' ? 'warning-emphasis' : c.cls} border border-${c.cls} border-opacity-25" title="${escHtml(c.ayuda)}">${c.txt}</span></td>
+                <td class="p-1 text-truncate" style="max-width:220px;" title="${doc}">${doc}</td>
+                <td class="p-1 text-nowrap">${p.fecha_doc ? fmtDateDisplay(p.fecha_doc) : '—'}</td>
+                <td class="p-1 text-end">${p.monto_doc !== null ? fmtMoney(p.monto_doc) : '—'}</td>
+                <td class="p-1">${asiento}</td>
+                <td class="p-1 text-nowrap">${p.fecha_asiento ? fmtDateDisplay(p.fecha_asiento) : '—'}</td>
+                <td class="p-1 text-end">${p.monto_asiento !== null ? fmtMoney(p.monto_asiento) : '—'}</td>
+                <td class="p-1 text-end">${celdaDif(p.diferencia)}</td>
+            </tr>`;
+        }).join('');
+
+        const cuadra = Math.abs(d.fin.diferencia) < 0.005;
+        return `
+            <div class="p-2 border rounded-3 bg-light mb-2 small d-flex flex-wrap gap-3">
+                <div><span class="text-muted">Cuenta contable:</span> <span class="fw-bold">${cuenta}</span></div>
+                <div><span class="text-muted">Período:</span> <span class="fw-bold">${fmtDateDisplay(d.fecha_inicio)} al ${fmtDateDisplay(d.fecha_fin)}</span></div>
+                <div>${cuadra
+                    ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-circle-fill"></i> Cuadra con la contabilidad</span>'
+                    : '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"><i class="bi bi-exclamation-circle-fill"></i> No cuadra con la contabilidad</span>'}</div>
+            </div>
+            ${avisoCompartida}
+            <table class="table table-sm table-bordered small mb-2">
+                <thead class="table-light">
+                    <tr><th></th><th class="text-end">Según Ingresos/Egresos</th><th class="text-end">Según Contabilidad</th><th class="text-end">Diferencia</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Saldo al inicio del período</td><td class="text-end">${fmtMoney(d.inicio.libros)}</td><td class="text-end">${fmtMoney(d.inicio.contable)}</td><td class="text-end">${celdaDif(d.inicio.diferencia)}</td></tr>
+                    <tr><td>Movimiento del período</td><td class="text-end">${fmtMoney(movLibros)}</td><td class="text-end">${fmtMoney(movCont)}</td><td class="text-end">${celdaDif(d.diferencia_periodo)}</td></tr>
+                    <tr class="fw-bold"><td>Saldo al final del período</td><td class="text-end">${fmtMoney(d.fin.libros)}</td><td class="text-end">${fmtMoney(d.fin.contable)}</td><td class="text-end">${celdaDif(d.fin.diferencia)}</td></tr>
+                </tbody>
+            </table>
+            <div class="form-text mb-2">
+                "Según Ingresos/Egresos" es el saldo en libros: saldo inicial de Saldos Iniciales más todos los cobros y pagos,
+                con los cheques desde que se emiten (igual que la contabilidad). Por eso puede diferir del saldo de esta pantalla,
+                que solo cuenta un cheque cuando tiene Fecha Banco.
+            </div>
+            <h6 class="fw-bold small mt-3 mb-1">Partidas del período que explican la diferencia</h6>
+            <div class="mb-2">${chips || '<span class="text-success small"><i class="bi bi-check-circle me-1"></i>No hay partidas con diferencia en el período.</span>'}</div>
+            ${filas ? `
+            <div class="comprobacion-scroll" style="max-height:340px;overflow:auto;">
+                <table class="table table-sm table-hover small mb-0">
+                    <thead class="table-light" style="position:sticky;top:0;">
+                        <tr><th>Situación</th><th>Documento</th><th>Fecha doc.</th><th class="text-end">Monto doc.</th>
+                            <th>Asiento</th><th>Fecha asiento</th><th class="text-end">Monto contable</th><th class="text-end">Diferencia</th></tr>
+                    </thead>
+                    <tbody>${filas}</tbody>
+                </table>
+            </div>` : ''}
+            ${d.truncado ? '<div class="small text-warning mt-1">Se muestran las primeras 1000 partidas; acote el período para ver el resto.</div>' : ''}
+            ${Math.abs(d.inicio.diferencia) >= 0.005 ? `<div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>
+                La diferencia al <strong>inicio</strong> viene de períodos anteriores (por ejemplo, la apertura migrada o un saldo inicial distinto
+                en Saldos Iniciales). Para ver sus partidas, compruebe un período anterior.</div>` : ''}`;
+    }
 
     window.CB_confirmarConciliar = async function () {
         const fechaInicio = document.getElementById('cb-fecha-inicio').value;
@@ -499,11 +660,14 @@
         selDir.disabled = true;
         document.getElementById('cbm-numero-cheque').value = row.numero_cheque || '';
         document.getElementById('cbm-fecha-cheque').value = fmtDateInput(row.fecha_cheque);
-        // Solo la Fecha Banco REALMENTE registrada (fecha_banco_manual). La columna fecha_banco
-        // del listado cae a la fecha del movimiento cuando no se ha conciliado: precargarla aquí
-        // dejaba el campo lleno sin que nadie lo hubiera conciliado y, al guardar cualquier otro
-        // cambio, marcaba el cheque como cobrado sin querer.
-        document.getElementById('cbm-fecha-banco').value = fmtDateInput(row.fecha_banco_manual);
+        // Cheque: solo la Fecha Banco REALMENTE registrada (fecha_banco_manual). La columna
+        // fecha_banco del listado cae a la fecha del movimiento cuando no se ha conciliado:
+        // precargarla en un cheque dejaba el campo lleno sin que nadie lo hubiera conciliado y,
+        // al guardar cualquier otro cambio, lo marcaba como cobrado sin querer.
+        // Transferencia, depósito o débito: se hacen efectivos el día del documento, así que su
+        // Fecha Banco es esa (o la que se haya registrado a mano) y no queda pendiente.
+        document.getElementById('cbm-fecha-banco').value = fmtDateInput(
+            tipo === 'CHEQUE' ? row.fecha_banco_manual : (row.fecha_banco_manual || row.fecha_banco));
         document.getElementById('cbm-observacion').value = row.observacion || '';
 
         // Estado de cobro del cheque + cómo marcarlo.
@@ -650,7 +814,7 @@
 
     /**
      * @param {string} [pestana] 'recibidos' | 'emitidos': pestaña a mostrar al abrir (la usa
-     *        el aviso del navbar vía ?posfechados=…). En 'emitidos', si no hay cheques a
+     *        el aviso del navbar, vía CB_ABRIR_POSFECHADOS). En 'emitidos', si no hay cheques a
      *        proveedores pero sí a empleados, se abre la de empleados.
      */
     window.CB_abrirModalPosfechados = async function (pestana) {
@@ -705,8 +869,9 @@
             window.CB_fetchSearch(1);
         }
 
-        // Llegada desde el aviso de cheques posfechados del navbar: abrir el modal en su pestaña.
-        const posf = new URLSearchParams(window.location.search).get('posfechados');
+        // Llegada desde el aviso de cheques posfechados del navbar: abrir el modal en su
+        // pestaña. La pestaña viene de sesión (CB_ABRIR_POSFECHADOS), no de la URL.
+        const posf = window.CB_ABRIR_POSFECHADOS || '';
         if (posf === 'recibidos' || posf === 'emitidos') {
             window.CB_abrirModalPosfechados(posf);
         }
