@@ -152,6 +152,7 @@ class SuscripcionesRepository extends BaseRepository
                            c.email          AS email_cliente,
                            per.nombre       AS nombre_periodicidad,
                            per.meses        AS periodicidad_meses,
+                           per.codigo       AS codigo_periodicidad,
                            nt.ultimos4      AS nuvei_ultimos4,
                            nt.marca         AS nuvei_marca,
                            (SELECT COUNT(*) FROM suscripciones_pagos
@@ -1392,6 +1393,44 @@ class SuscripcionesRepository extends BaseRepository
                 ORDER BY sd.orden ASC, sd.id ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $idSuscripcion]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Ítems (lo que se factura en cada cobro) de un conjunto de suscripciones,
+     * línea por línea, con su tarifa de IVA. Base de la hoja "Detalle por cliente"
+     * del Excel del listado.
+     *
+     * @param int[] $ids Suscripciones ya filtradas por el listado (buscador y registros propios).
+     */
+    public function getDetalleValores(int $idEmpresa, array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids) {
+            return [];
+        }
+
+        $sql = "SELECT d.id_suscripcion,
+                       COALESCE(p.codigo, '')                   AS codigo,
+                       COALESCE(NULLIF(p.nombre, ''), d.descripcion, 'Sin concepto') AS concepto,
+                       COALESCE(d.descripcion, '')              AS descripcion,
+                       d.cantidad,
+                       d.precio_unitario,
+                       ROUND(d.porcentaje_iva, 2)               AS porcentaje_iva,
+                       COALESCE(ti.tarifa, CONCAT('IVA ', ROUND(d.porcentaje_iva, 2), '%')) AS tarifa,
+                       d.cantidad * d.precio_unitario           AS base,
+                       d.cantidad * d.precio_unitario * d.porcentaje_iva / 100 AS iva
+                FROM suscripciones_detalle d
+                JOIN suscripciones s    ON s.id  = d.id_suscripcion
+                LEFT JOIN productos p    ON p.id  = d.id_producto
+                LEFT JOIN tarifa_iva ti ON ti.id = d.id_tarifa_iva
+                WHERE s.id_empresa = :id_empresa
+                  AND s.eliminado = false
+                  AND d.eliminado = false
+                  AND s.id = ANY(CAST(:ids AS int[]))
+                ORDER BY d.id_suscripcion, d.orden, d.id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':ids' => '{' . implode(',', $ids) . '}']);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

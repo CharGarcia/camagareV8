@@ -966,15 +966,22 @@ class SuscripcionesController extends BaseModuloController
 
             $exportData = array_map(fn($r) => $this->filaExport($r), $rows);
 
+            // Las tres hojas salen de las mismas $rows: el filtro de búsqueda del listado.
+            $filtro = trim($_GET['b'] ?? $_POST['b'] ?? '');
+            $textoFiltro = $filtro !== '' ? $filtro : 'Ninguno (todas las suscripciones)';
+
             $reportService = new \App\Services\ReportService();
             $libro = $reportService->construirSpreadsheet(
                 self::CABECERAS_EXPORT,
                 $exportData,
                 'Listado de Suscripciones',
-                $nombreEmpresa
+                $nombreEmpresa,
+                ['Filtro de búsqueda' => $textoFiltro, 'Suscripciones' => (string) count($rows)]
             );
             // Segunda hoja: resumen de valores por periodicidad, concepto e IVA.
-            $this->service->agregarHojaResumenExcel($libro, (int) $_SESSION['id_empresa'], $rows);
+            $this->service->agregarHojaResumenExcel($libro, (int) $_SESSION['id_empresa'], $rows, $textoFiltro);
+            // Tercera hoja: cada cliente con lo que se le factura, línea por línea, con IVA.
+            $this->service->agregarHojaDetalleClientesExcel($libro, (int) $_SESSION['id_empresa'], $rows, $textoFiltro);
             $reportService->descargarSpreadsheet($libro, 'Suscripciones');
             exit;
         } catch (\Throwable $e) {

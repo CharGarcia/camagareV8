@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
-etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto
-version: 1.6
+etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente
+version: 1.8
 orden: 0
 estado: activo
 ---
@@ -168,6 +168,12 @@ documentos generados. El botón del embudo abre los filtros (próximo cobro, est
 periodicidad, comprobante, forma de cobro, monto, etc.). El listado se exporta a PDF
 y Excel con los filtros aplicados.
 
+Las **tres hojas** del Excel (listado, Resumen y Detalle por cliente) toman exactamente
+las suscripciones que deja el **filtro de búsqueda** vigente al momento de pulsar el
+botón, y cada hoja indica arriba el filtro aplicado y cuántas suscripciones incluye. El
+filtro elige suscripciones: de cada una salen todos sus ítems (buscar `Honorarios` trae
+las suscripciones que tienen ese servicio, con todo lo que se les factura).
+
 ### Hoja «Resumen» del Excel
 
 El Excel trae una segunda hoja, **Resumen**, con los valores de las mismas
@@ -187,6 +193,16 @@ La proyección anual multiplica el total de cada cobro por los cobros del año (
 12, trimestral 4, anual 1, semanal 52, quincenal 24, diario 365); no considera fechas de
 inicio o fin ni el estado de la suscripción: si solo quiere las activas, filtre
 `estado:activo` antes de exportar.
+
+### Hoja «Detalle por cliente» del Excel
+
+La tercera hoja lista, cliente por cliente (en orden alfabético), **cada ítem que se
+factura** en sus suscripciones: periodicidad, estado, comprobante, próximo cobro,
+código y concepto, cantidad, precio unitario, subtotal, tarifa y valor del IVA, total
+por cobro y proyección anual. Cada cliente cierra con una fila **Total** (con el número
+de suscripciones que tiene) y al final va el **TOTAL GENERAL**, que coincide con los
+totales de la hoja Resumen. Una suscripción sin productos aparece como *Sin ítems
+registrados*.
 
 ## Permisos
 
@@ -232,6 +248,13 @@ inicio o fin ni el estado de la suscripción: si solo quiere las activas, filtre
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
+
+- **1.8** — El Excel y el PDF se generan siempre con el filtro de búsqueda vigente al
+  pulsar el botón (antes, si se pulsaba justo después de cambiar el filtro, podían salir
+  con el anterior). Cada hoja del Excel muestra el filtro aplicado.
+
+- **1.7** — Nueva hoja **Detalle por cliente** en el Excel del listado: cada cliente con
+  lo que se le factura, línea por línea, con subtotal, IVA, total y proyección anual.
 
 - **1.6** — El Excel del listado trae una nueva hoja **Resumen** con los valores por
   periodicidad, por concepto, conceptos por periodicidad y por tarifa de IVA, con

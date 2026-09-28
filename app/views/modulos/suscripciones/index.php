@@ -402,5 +402,21 @@ $estadoClases = [
     });
 
     if (inputB) inputB.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => fetchSearch(1), 400); });
+
+    // PDF/Excel: la URL se arma con el filtro de búsqueda vigente en el momento del
+    // clic, sin depender de que la última búsqueda AJAX haya respondido (antes, un
+    // clic rápido tras cambiar el filtro exportaba con el filtro anterior). Corre
+    // antes que el listener global de descargas de app.js (que está en document).
+    const syncExport = (id, ruta) => {
+        const a = document.getElementById(id);
+        if (!a) return;
+        const fijar = () => {
+            const b = inputB ? inputB.value.trim() : '';
+            a.href = `${urlBase}/${ruta}?b=${encodeURIComponent(b)}&sort=${encodeURIComponent(window.currentSort)}&dir=${encodeURIComponent(window.currentDir)}`;
+        };
+        ['mousedown', 'focus', 'click'].forEach(ev => a.addEventListener(ev, fijar));
+    };
+    syncExport('btnExportPdf', 'export-pdf');
+    syncExport('btnExportExcel', 'export-excel');
 })();
 </script>

@@ -262,7 +262,7 @@ class SuscripcionesService
      *
      * @param array $rows Filas del listado ya filtradas (buscador + registros propios).
      */
-    public function agregarHojaResumenExcel(\PhpOffice\PhpSpreadsheet\Spreadsheet $libro, int $idEmpresa, array $rows): void
+    public function agregarHojaResumenExcel(\PhpOffice\PhpSpreadsheet\Spreadsheet $libro, int $idEmpresa, array $rows, string $textoFiltro = ''): void
     {
         $lineas = $this->repository->getResumenValores($idEmpresa, array_column($rows, 'id'));
 
@@ -308,7 +308,7 @@ class SuscripcionesService
             $k = (int) ($r['id_periodicidad'] ?? 0);
             $porPer[$k] ??= [
                 'nombre' => $r['nombre_periodicidad'] ?? 'Sin periodicidad',
-                'anio'   => $this->cobrosPorAnio((int) ($r['periodicidad_meses'] ?? 0), ''),
+                'anio'   => $this->cobrosPorAnio((int) ($r['periodicidad_meses'] ?? 0), (string) ($r['codigo_periodicidad'] ?? '')),
                 'base'   => 0.0, 'iva' => 0.0, 'anual' => 0.0,
             ];
         }
@@ -361,9 +361,10 @@ class SuscripcionesService
 
         $h->setCellValue('A1', 'RESUMEN DE VALORES DE SUSCRIPCIONES');
         $h->getStyle('A1')->getFont()->setBold(true)->setSize(14);
-        $h->setCellValue('A2', 'Suscripciones incluidas: ' . count($rows) . ' (las mismas del listado, según los filtros aplicados).');
+        $h->setCellValueExplicit('A2', 'Filtro de búsqueda: ' . $textoFiltro . ' — Suscripciones incluidas: ' . count($rows) . ' (las mismas de la hoja del listado).', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         $h->setCellValue('A3', 'Subtotal, IVA y Total son el valor de UN cobro de cada suscripción; la proyección multiplica por los cobros que genera su periodicidad en un año.');
         $h->getStyle('A2:A3')->getFont()->setItalic(true)->getColor()->setRGB('555555');
+        $h->getStyle('A2')->getFont()->setBold(true);
         $fila = 5;
 
         // 1. Por periodicidad
@@ -438,6 +439,171 @@ class SuscripcionesService
         // Las notas de A1:A3 no deben ensanchar la columna A.
         $h->getColumnDimension('A')->setAutoSize(false)->setWidth(22);
         $h->getColumnDimension('B')->setAutoSize(false)->setWidth(45);
+    }
+
+    /**
+     * Agrega al libro del Excel del listado la hoja "Detalle por cliente": una fila
+     * por cada ítem que se factura en cada suscripción (cantidad, precio, subtotal,
+     * tarifa e IVA, total por cobro y proyección anual), agrupada por cliente con
+     * un total por cliente y un total general.
+     *
+     * @param array $rows Filas del listado ya filtradas (buscador + registros propios).
+     */
+    public function agregarHojaDetalleClientesExcel(\PhpOffice\PhpSpreadsheet\Spreadsheet $libro, int $idEmpresa, array $rows, string $textoFiltro = ''): void
+    {
+        $itemsPorSusc = [];
+        foreach ($this->repository->getDetalleValores($idEmpresa, array_column($rows, 'id')) as $it) {
+            $itemsPorSusc[(int) $it['id_suscripcion']][] = $it;
+        }
+
+        // Agrupado por cliente (alfabético), sin importar el orden del listado.
+        usort($rows, static fn($a, $b) => strcasecmp((string) ($a['nombre_cliente'] ?? ''), (string) ($b['nombre_cliente'] ?? ''))
+            ?: ((int) $a['id_cliente'] <=> (int) $b['id_cliente'])
+            ?: ((int) $a['id'] <=> (int) $b['id']));
+
+        $h = $libro->createSheet();
+        $h->setTitle('Detalle por cliente');
+        $Fill   = \PhpOffice\PhpSpreadsheet\Style\Fill::class;
+        $Border = \PhpOffice\PhpSpreadsheet\Style\Border::class;
+        $col    = static fn(int $i) => \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i);
+
+        $cabeceras = [
+            'Cliente', 'Identificación', 'Correo', 'Periodicidad', 'Estado', 'Comprobante', 'Próximo cobro',
+            'Código', 'Concepto', 'Descripción', 'Cantidad', 'Precio unitario', 'Subtotal',
+            'Tarifa IVA', '% IVA', 'IVA', 'Total por cobro', 'Cobros al año', 'Proyección anual',
+        ];
+        $nCols   = count($cabeceras);
+        $ultima  = $col($nCols);
+        $monedas = [12, 13, 16, 17, 19];   // precio, subtotal, IVA, total, proyección
+
+        $h->setCellValue('A1', 'DETALLE DE SUSCRIPCIONES POR CLIENTE');
+        $h->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $h->setCellValueExplicit('A2', 'Filtro de búsqueda: ' . $textoFiltro . ' — Suscripciones incluidas: ' . count($rows) . '. Una fila por cada ítem que se factura en cada cobro.', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $h->getStyle('A2')->getFont()->setItalic(true)->setBold(true)->getColor()->setRGB('555555');
+
+        $fila = 4;
+        foreach ($cabeceras as $i => $t) {
+            $h->setCellValueExplicit($col($i + 1) . $fila, $t, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        }
+        $h->getStyle("A{$fila}:{$ultima}{$fila}")->applyFromArray([
+            'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => $Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER],
+            'borders'   => ['allBorders' => ['borderStyle' => $Border::BORDER_THIN]],
+        ]);
+        $h->freezePane('A' . ($fila + 1));
+        $fila++;
+
+        $estiloTotal = function (int $f, string $rgb) use ($h, $ultima, $Fill, $Border): void {
+            $h->getStyle("A{$f}:{$ultima}{$f}")->applyFromArray([
+                'font'    => ['bold' => true],
+                'fill'    => ['fillType' => $Fill::FILL_SOLID, 'startColor' => ['rgb' => $rgb]],
+                'borders' => ['top' => ['borderStyle' => $Border::BORDER_THIN]],
+            ]);
+        };
+        $escribir = function (array $valores) use ($h, $col, &$fila): void {
+            foreach ($valores as $i => $v) {
+                if ($v === null) {
+                    continue;
+                }
+                $celda = $col($i + 1) . $fila;
+                if (is_string($v)) {
+                    $h->setCellValueExplicit($celda, $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                } else {
+                    $h->setCellValue($celda, $v);
+                }
+            }
+            $fila++;
+        };
+        $fecha = static fn($v) => !empty($v) ? date('d-m-Y', strtotime((string) $v)) : '-';
+
+        $primeraDatos = $fila;
+        $general      = ['base' => 0.0, 'iva' => 0.0, 'anual' => 0.0];
+        $grupo        = null;   // id_cliente del bloque en curso
+        $tc           = ['nombre' => '', 'susc' => 0, 'base' => 0.0, 'iva' => 0.0, 'anual' => 0.0];
+
+        $cerrarCliente = function () use (&$tc, &$fila, $escribir, $estiloTotal): void {
+            $escribir([
+                'Total ' . $tc['nombre'] . ' (' . $tc['susc'] . ($tc['susc'] === 1 ? ' suscripción' : ' suscripciones') . ')',
+                null, null, null, null, null, null, null, null, null, null, null,
+                $tc['base'], null, null, $tc['iva'], $tc['base'] + $tc['iva'], null, $tc['anual'],
+            ]);
+            $estiloTotal($fila - 1, 'D9E1F2');
+        };
+
+        foreach ($rows as $r) {
+            $idCliente = (int) ($r['id_cliente'] ?? 0);
+            if ($grupo !== null && $grupo !== $idCliente) {
+                $cerrarCliente();
+            }
+            if ($grupo !== $idCliente) {
+                $grupo = $idCliente;
+                $tc    = ['nombre' => (string) ($r['nombre_cliente'] ?? '') ?: '(cliente no encontrado)', 'susc' => 0, 'base' => 0.0, 'iva' => 0.0, 'anual' => 0.0];
+            }
+            $tc['susc']++;
+
+            $anio  = $this->cobrosPorAnio((int) ($r['periodicidad_meses'] ?? 0), (string) ($r['codigo_periodicidad'] ?? ''));
+            $datosSusc = [
+                (string) ($r['nombre_cliente'] ?? ''),
+                (string) ($r['identificacion_cliente'] ?? ''),
+                (string) ($r['email_cliente'] ?? ''),
+                (string) ($r['nombre_periodicidad'] ?? '-'),
+                ucfirst((string) ($r['estado'] ?? 'activo')),
+                ucfirst((string) ($r['tipo_comprobante'] ?? 'factura')),
+                $fecha($r['proximo_cobro'] ?? null),
+            ];
+
+            $items = $itemsPorSusc[(int) $r['id']] ?? [];
+            if (!$items) {
+                $escribir(array_merge($datosSusc, ['', 'Sin ítems registrados']));
+                continue;
+            }
+            foreach ($items as $it) {
+                // Redondeo por línea, igual que la hoja Resumen: los totales coinciden.
+                $base  = round((float) $it['base'], 2);
+                $iva   = round((float) $it['iva'], 2);
+                $anual = round(($base + $iva) * $anio, 2);
+                $desc  = trim((string) $it['descripcion']);
+                $escribir(array_merge($datosSusc, [
+                    (string) $it['codigo'],
+                    (string) $it['concepto'],
+                    $desc !== $it['concepto'] ? $desc : '',
+                    round((float) $it['cantidad'], 6),
+                    round((float) $it['precio_unitario'], 6),
+                    $base,
+                    (string) $it['tarifa'],
+                    (float) $it['porcentaje_iva'],
+                    $iva,
+                    $base + $iva,
+                    $anio,
+                    $anual,
+                ]));
+                $tc['base']  += $base;      $general['base']  += $base;
+                $tc['iva']   += $iva;       $general['iva']   += $iva;
+                $tc['anual'] += $anual;     $general['anual'] += $anual;
+            }
+        }
+        if ($grupo !== null) {
+            $cerrarCliente();
+        }
+
+        $escribir([
+            'TOTAL GENERAL', null, null, null, null, null, null, null, null, null, null, null,
+            $general['base'], null, null, $general['iva'], $general['base'] + $general['iva'], null, $general['anual'],
+        ]);
+        $estiloTotal($fila - 1, 'B4C6E7');
+
+        if ($fila > $primeraDatos) {
+            foreach ($monedas as $i) {
+                $h->getStyle($col($i) . $primeraDatos . ':' . $col($i) . ($fila - 1))
+                  ->getNumberFormat()->setFormatCode('#,##0.00');
+            }
+        }
+        for ($i = 1; $i <= $nCols; $i++) {
+            $h->getColumnDimensionByColumn($i)->setAutoSize(true);
+        }
+        // Título y nota de A1:A2 no deben ensanchar la columna del cliente.
+        $h->getColumnDimension('A')->setAutoSize(false)->setWidth(38);
     }
 
     public function calcularProximoCobro(string $fechaActual, int $meses, string $codigo = ''): string
