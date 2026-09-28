@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
-etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente
-version: 1.8
+etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf
+version: 1.11
 orden: 0
 estado: activo
 ---
@@ -174,7 +174,17 @@ botón, y cada hoja indica arriba el filtro aplicado y cuántas suscripciones in
 filtro elige suscripciones: de cada una salen todos sus ítems (buscar `Honorarios` trae
 las suscripciones que tienen ese servicio, con todo lo que se les factura).
 
-### Hoja «Resumen» del Excel
+### Resumen de valores (Excel y PDF)
+
+El **PDF** del listado trae, en hojas aparte al final, el mismo **Resumen de valores**
+que el Excel (mismos bloques y mismos totales) y el **Detalle por cliente**, también según
+el filtro de búsqueda. En el PDF el detalle va compacto: una fila por cliente con su
+identificación y correo, debajo una línea por ítem (periodicidad, estado, próximo cobro,
+concepto, cantidad, precio, subtotal, tarifa, IVA, total y proyección anual), la
+información adicional en una línea debajo de cada suscripción, el total por cliente y
+el total general.
+
+#### Hoja «Resumen» del Excel
 
 El Excel trae una segunda hoja, **Resumen**, con los valores de las mismas
 suscripciones exportadas (respeta la búsqueda y los filtros). Los valores son los de
@@ -199,7 +209,9 @@ inicio o fin ni el estado de la suscripción: si solo quiere las activas, filtre
 La tercera hoja lista, cliente por cliente (en orden alfabético), **cada ítem que se
 factura** en sus suscripciones: periodicidad, estado, comprobante, próximo cobro,
 código y concepto, cantidad, precio unitario, subtotal, tarifa y valor del IVA, total
-por cobro y proyección anual. Cada cliente cierra con una fila **Total** (con el número
+por cobro y proyección anual. Al final van las columnas de **información adicional**
+de la suscripción: un par *Concepto* / *Detalle* por cada línea (si alguna suscripción
+tiene varias, se numeran: Info adicional 1, 2…). Cada cliente cierra con una fila **Total** (con el número
 de suscripciones que tiene) y al final va el **TOTAL GENERAL**, que coincide con los
 totales de la hoja Resumen. Una suscripción sin productos aparece como *Sin ítems
 registrados*.
@@ -248,6 +260,16 @@ registrados*.
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
+
+- **1.11** — El **PDF** del listado incluye también el **Detalle por cliente**: lo que se
+  le factura a cada cliente, con IVA, información adicional y totales.
+
+- **1.10** — El **PDF** del listado incluye al final el **Resumen de valores** (por
+  periodicidad, por concepto, conceptos por periodicidad y por tarifa de IVA) y muestra
+  el filtro de búsqueda aplicado.
+
+- **1.9** — La hoja **Detalle por cliente** del Excel incluye al final la información
+  adicional de cada suscripción (concepto y detalle).
 
 - **1.8** — El Excel y el PDF se generan siempre con el filtro de búsqueda vigente al
   pulsar el botón (antes, si se pulsaba justo después de cambiar el filtro, podían salir

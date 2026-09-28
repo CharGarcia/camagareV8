@@ -256,13 +256,18 @@ class SuscripcionesService
     }
 
     /**
-     * Agrega al libro del Excel del listado la hoja "Resumen": valores por
-     * periodicidad, por concepto, conceptos dentro de cada periodicidad y por
-     * tarifa de IVA, de las mismas suscripciones exportadas en la primera hoja.
+     * Resumen de valores de las suscripciones exportadas, listo para dibujar en
+     * Excel o PDF: cuatro secciones (por periodicidad, por concepto, conceptos por
+     * periodicidad y por tarifa de IVA). Los valores son los de UN cobro; la
+     * proyección multiplica por los cobros que genera la periodicidad en un año.
+     *
+     * Cada sección: ['titulo', 'cabeceras' => [...], 'monedas' => [índices 0-based],
+     * 'filas' => [['tipo' => 'dato'|'grupo'|'total', 'valores' => [...]]]].
+     * Los centavos se redondean por línea, así las cuatro secciones suman lo mismo.
      *
      * @param array $rows Filas del listado ya filtradas (buscador + registros propios).
      */
-    public function agregarHojaResumenExcel(\PhpOffice\PhpSpreadsheet\Spreadsheet $libro, int $idEmpresa, array $rows, string $textoFiltro = ''): void
+    public function getResumenValores(int $idEmpresa, array $rows): array
     {
         $lineas = $this->repository->getResumenValores($idEmpresa, array_column($rows, 'id'));
 
@@ -277,7 +282,6 @@ class SuscripcionesService
         foreach ($lineas as $l) {
             $kPer  = (int) $l['id_periodicidad'];
             $anio  = $this->cobrosPorAnio((int) $l['meses'], (string) $l['codigo_periodicidad']);
-            // Redondeo por línea: así las cuatro secciones suman exactamente lo mismo.
             $base  = round((float) $l['base'], 2);
             $iva   = round((float) $l['iva'], 2);
             $kCon  = (int) $l['id_producto'];
@@ -317,10 +321,108 @@ class SuscripcionesService
         uasort($porConcepto, static fn($a, $b) => ($b['base'] + $b['iva']) <=> ($a['base'] + $a['iva']));
         uasort($porTarifa, static fn($a, $b) => $b['pct'] <=> $a['pct']);
 
-        // ── Escritura de la hoja ─────────────────────────────────────────────
+        $dato  = static fn(array $v) => ['tipo' => 'dato',  'valores' => $v];
+        $total = static fn(array $v) => ['tipo' => 'total', 'valores' => $v];
+        $secciones = [];
+
+        // 1. Por periodicidad
+        $filas = [];
+        $t = ['susc' => 0, 'base' => 0.0, 'iva' => 0.0, 'mes' => 0.0, 'anio' => 0.0];
+        foreach ($porPer as $k => $p) {
+            $b = round($p['base'], 2);
+            $i = round($p['iva'], 2);
+            $filas[] = $dato([(string) $p['nombre'], $suscPorPer[$k] ?? 0, $b, $i, $b + $i, $p['anio'], round($p['anual'] / 12, 2), round($p['anual'], 2)]);
+            $t['susc'] += $suscPorPer[$k] ?? 0;
+            $t['base'] += $b;
+            $t['iva']  += $i;
+            $t['mes']  += round($p['anual'] / 12, 2);
+            $t['anio'] += round($p['anual'], 2);
+        }
+        $filas[] = $total(['TOTAL', $t['susc'], $t['base'], $t['iva'], $t['base'] + $t['iva'], '', $t['mes'], $t['anio']]);
+        $secciones[] = [
+            'titulo'    => 'Por periodicidad',
+            'cabeceras' => ['Periodicidad', 'Suscripciones', 'Subtotal', 'IVA', 'Total por cobro', 'Cobros al año', 'Proyección mensual', 'Proyección anual'],
+            'monedas'   => [2, 3, 4, 6, 7],
+            'filas'     => $filas,
+        ];
+
+        // 2. Por concepto
+        $filas = [];
+        $t = ['base' => 0.0, 'iva' => 0.0, 'anio' => 0.0];
+        foreach ($porConcepto as $c) {
+            $b = round($c['base'], 2);
+            $i = round($c['iva'], 2);
+            $filas[] = $dato([(string) $c['codigo'], (string) $c['nombre'], $c['susc'], round($c['cant'], 2), $b, $i, $b + $i, round($c['anual'], 2)]);
+            $t['base'] += $b;
+            $t['iva']  += $i;
+            $t['anio'] += round($c['anual'], 2);
+        }
+        $filas[] = $total(['', 'TOTAL', '', '', $t['base'], $t['iva'], $t['base'] + $t['iva'], $t['anio']]);
+        $secciones[] = [
+            'titulo'    => 'Por concepto',
+            'cabeceras' => ['Código', 'Concepto', 'Suscripciones', 'Cantidad', 'Subtotal', 'IVA', 'Total por cobro', 'Proyección anual'],
+            'monedas'   => [4, 5, 6, 7],
+            'filas'     => $filas,
+        ];
+
+        // 3. Conceptos por periodicidad
+        $filas = [];
+        foreach ($porPer as $k => $p) {
+            if (empty($conceptosPorPer[$k])) {
+                continue;
+            }
+            $filas[] = ['tipo' => 'grupo', 'valores' => [mb_strtoupper((string) $p['nombre'])]];
+            $sb = $si = 0.0;
+            foreach ($conceptosPorPer[$k] as $l) {
+                $b = round((float) $l['base'], 2);
+                $i = round((float) $l['iva'], 2);
+                $filas[] = $dato([(string) $l['codigo'], (string) $l['concepto'], (string) $l['tarifa'], (int) $l['suscripciones'], round((float) $l['cantidad'], 2), $b, $i, $b + $i]);
+                $sb += $b;
+                $si += $i;
+            }
+            $filas[] = $total(['', 'Subtotal ' . $p['nombre'], '', '', '', $sb, $si, $sb + $si]);
+        }
+        $secciones[] = [
+            'titulo'    => 'Conceptos por periodicidad',
+            'cabeceras' => ['Código', 'Concepto', 'Tarifa IVA', 'Suscripciones', 'Cantidad', 'Subtotal', 'IVA', 'Total por cobro'],
+            'monedas'   => [5, 6, 7],
+            'filas'     => $filas,
+        ];
+
+        // 4. Por tarifa de IVA
+        $filas = [];
+        $t = ['base' => 0.0, 'iva' => 0.0, 'ba' => 0.0, 'ia' => 0.0];
+        foreach ($porTarifa as $x) {
+            $b  = round($x['base'], 2);
+            $i  = round($x['iva'], 2);
+            $ba = round($x['base_anual'], 2);
+            $ia = round($x['iva_anual'], 2);
+            $filas[] = $dato([(string) $x['nombre'], $x['pct'], $b, $i, $b + $i, $ba, $ia, $ba + $ia]);
+            $t['base'] += $b; $t['iva'] += $i; $t['ba'] += $ba; $t['ia'] += $ia;
+        }
+        $filas[] = $total(['TOTAL', '', $t['base'], $t['iva'], $t['base'] + $t['iva'], $t['ba'], $t['ia'], $t['ba'] + $t['ia']]);
+        $secciones[] = [
+            'titulo'    => 'Por tarifa de IVA',
+            'cabeceras' => ['Tarifa', '% IVA', 'Base imponible', 'IVA', 'Total por cobro', 'Base anual', 'IVA anual', 'Total anual'],
+            'monedas'   => [2, 3, 4, 5, 6, 7],
+            'filas'     => $filas,
+        ];
+
+        return $secciones;
+    }
+
+    /**
+     * Agrega al libro del Excel del listado la hoja "Resumen" (ver getResumenValores()),
+     * de las mismas suscripciones exportadas en la primera hoja.
+     *
+     * @param array $rows Filas del listado ya filtradas (buscador + registros propios).
+     */
+    public function agregarHojaResumenExcel(\PhpOffice\PhpSpreadsheet\Spreadsheet $libro, int $idEmpresa, array $rows, string $textoFiltro = ''): void
+    {
+        $secciones = $this->getResumenValores($idEmpresa, $rows);
+
         $h = $libro->createSheet();
         $h->setTitle('Resumen');
-        $fmtMoneda = '#,##0.00';
         $cab = [
             'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill'      => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']],
@@ -333,31 +435,6 @@ class SuscripcionesService
             'borders' => ['top' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN]],
         ];
         $col = static fn(int $i) => \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i);
-        $fila = 1;
-
-        // Escribe una fila; $monedas = índices (1-based) con formato de moneda.
-        $escribir = function (array $valores, array $monedas = [], ?array $estilo = null) use ($h, $col, &$fila, $fmtMoneda): void {
-            foreach (array_values($valores) as $i => $v) {
-                $celda = $col($i + 1) . $fila;
-                if (is_string($v)) {
-                    $h->setCellValueExplicit($celda, $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                } else {
-                    $h->setCellValue($celda, $v);
-                }
-                if (in_array($i + 1, $monedas, true)) {
-                    $h->getStyle($celda)->getNumberFormat()->setFormatCode($fmtMoneda);
-                }
-            }
-            if ($estilo) {
-                $h->getStyle('A' . $fila . ':' . $col(count($valores)) . $fila)->applyFromArray($estilo);
-            }
-            $fila++;
-        };
-        $titulo = function (string $texto) use ($h, &$fila): void {
-            $h->setCellValue('A' . $fila, $texto);
-            $h->getStyle('A' . $fila)->getFont()->setBold(true)->setSize(12);
-            $fila++;
-        };
 
         $h->setCellValue('A1', 'RESUMEN DE VALORES DE SUSCRIPCIONES');
         $h->getStyle('A1')->getFont()->setBold(true)->setSize(14);
@@ -367,71 +444,43 @@ class SuscripcionesService
         $h->getStyle('A2')->getFont()->setBold(true);
         $fila = 5;
 
-        // 1. Por periodicidad
-        $titulo('Por periodicidad');
-        $escribir(['Periodicidad', 'Suscripciones', 'Subtotal', 'IVA', 'Total por cobro', 'Cobros al año', 'Proyección mensual', 'Proyección anual'], [], $cab);
-        $t = ['susc' => 0, 'base' => 0.0, 'iva' => 0.0, 'mes' => 0.0, 'anio' => 0.0];
-        foreach ($porPer as $k => $p) {
-            $total = round($p['base'], 2) + round($p['iva'], 2);
-            $anual = $p['anual'];
-            $escribir([(string) $p['nombre'], $suscPorPer[$k] ?? 0, round($p['base'], 2), round($p['iva'], 2), $total, $p['anio'], round($anual / 12, 2), round($anual, 2)], [3, 4, 5, 7, 8]);
-            $t['susc'] += $suscPorPer[$k] ?? 0;
-            $t['base'] += round($p['base'], 2);
-            $t['iva']  += round($p['iva'], 2);
-            $t['mes']  += round($anual / 12, 2);
-            $t['anio'] += round($anual, 2);
-        }
-        $escribir(['TOTAL', $t['susc'], $t['base'], $t['iva'], $t['base'] + $t['iva'], '', $t['mes'], $t['anio']], [3, 4, 5, 7, 8], $tot);
-        $fila++;
-
-        // 2. Por concepto
-        $titulo('Por concepto');
-        $escribir(['Código', 'Concepto', 'Suscripciones', 'Cantidad', 'Subtotal', 'IVA', 'Total por cobro', 'Proyección anual'], [], $cab);
-        $t = ['base' => 0.0, 'iva' => 0.0, 'anio' => 0.0];
-        foreach ($porConcepto as $c) {
-            $escribir([(string) $c['codigo'], (string) $c['nombre'], $c['susc'], round($c['cant'], 2), round($c['base'], 2), round($c['iva'], 2), round($c['base'], 2) + round($c['iva'], 2), round($c['anual'], 2)], [5, 6, 7, 8]);
-            $t['base'] += round($c['base'], 2);
-            $t['iva']  += round($c['iva'], 2);
-            $t['anio'] += round($c['anual'], 2);
-        }
-        $escribir(['', 'TOTAL', '', '', $t['base'], $t['iva'], $t['base'] + $t['iva'], $t['anio']], [5, 6, 7, 8], $tot);
-        $fila++;
-
-        // 3. Conceptos por periodicidad
-        $titulo('Conceptos por periodicidad');
-        $escribir(['Código', 'Concepto', 'Tarifa IVA', 'Suscripciones', 'Cantidad', 'Subtotal', 'IVA', 'Total por cobro'], [], $cab);
-        foreach ($porPer as $k => $p) {
-            if (empty($conceptosPorPer[$k])) {
-                continue;
-            }
-            $h->setCellValue('A' . $fila, mb_strtoupper((string) $p['nombre']));
-            $h->getStyle('A' . $fila)->getFont()->setBold(true)->getColor()->setRGB('1F4E79');
+        foreach ($secciones as $s) {
+            $h->setCellValue('A' . $fila, $s['titulo']);
+            $h->getStyle('A' . $fila)->getFont()->setBold(true)->setSize(12);
             $fila++;
-            $sb = $si = 0.0;
-            foreach ($conceptosPorPer[$k] as $l) {
-                $b = round((float) $l['base'], 2);
-                $i = round((float) $l['iva'], 2);
-                $escribir([(string) $l['codigo'], (string) $l['concepto'], (string) $l['tarifa'], (int) $l['suscripciones'], round((float) $l['cantidad'], 2), $b, $i, $b + $i], [6, 7, 8]);
-                $sb += $b;
-                $si += $i;
-            }
-            $escribir(['', 'Subtotal ' . $p['nombre'], '', '', '', $sb, $si, $sb + $si], [6, 7, 8], $tot);
-        }
-        $fila++;
 
-        // 4. Por impuesto
-        $titulo('Por tarifa de IVA');
-        $escribir(['Tarifa', '% IVA', 'Base imponible', 'IVA', 'Total por cobro', 'Base anual', 'IVA anual', 'Total anual'], [], $cab);
-        $t = ['base' => 0.0, 'iva' => 0.0, 'ba' => 0.0, 'ia' => 0.0];
-        foreach ($porTarifa as $x) {
-            $b  = round($x['base'], 2);
-            $i  = round($x['iva'], 2);
-            $ba = round($x['base_anual'], 2);
-            $ia = round($x['iva_anual'], 2);
-            $escribir([(string) $x['nombre'], $x['pct'], $b, $i, $b + $i, $ba, $ia, $ba + $ia], [3, 4, 5, 6, 7, 8]);
-            $t['base'] += $b; $t['iva'] += $i; $t['ba'] += $ba; $t['ia'] += $ia;
+            $nCols = count($s['cabeceras']);
+            foreach ($s['cabeceras'] as $i => $t) {
+                $h->setCellValueExplicit($col($i + 1) . $fila, $t, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            }
+            $h->getStyle("A{$fila}:" . $col($nCols) . $fila)->applyFromArray($cab);
+            $fila++;
+
+            foreach ($s['filas'] as $f) {
+                if ($f['tipo'] === 'grupo') {
+                    $h->setCellValue('A' . $fila, $f['valores'][0]);
+                    $h->getStyle('A' . $fila)->getFont()->setBold(true)->getColor()->setRGB('1F4E79');
+                    $fila++;
+                    continue;
+                }
+                foreach ($f['valores'] as $i => $v) {
+                    $celda = $col($i + 1) . $fila;
+                    if (is_string($v)) {
+                        $h->setCellValueExplicit($celda, $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    } else {
+                        $h->setCellValue($celda, $v);
+                    }
+                    if (in_array($i, $s['monedas'], true)) {
+                        $h->getStyle($celda)->getNumberFormat()->setFormatCode('#,##0.00');
+                    }
+                }
+                if ($f['tipo'] === 'total') {
+                    $h->getStyle("A{$fila}:" . $col($nCols) . $fila)->applyFromArray($tot);
+                }
+                $fila++;
+            }
+            $fila++;
         }
-        $escribir(['TOTAL', '', $t['base'], $t['iva'], $t['base'] + $t['iva'], $t['ba'], $t['ia'], $t['ba'] + $t['ia']], [3, 4, 5, 6, 7, 8], $tot);
 
         foreach (range(1, 8) as $i) {
             $h->getColumnDimensionByColumn($i)->setAutoSize(true);
@@ -442,14 +491,16 @@ class SuscripcionesService
     }
 
     /**
-     * Agrega al libro del Excel del listado la hoja "Detalle por cliente": una fila
-     * por cada ítem que se factura en cada suscripción (cantidad, precio, subtotal,
-     * tarifa e IVA, total por cobro y proyección anual), agrupada por cliente con
-     * un total por cliente y un total general.
+     * Detalle por cliente de las suscripciones exportadas, listo para dibujar en
+     * Excel o PDF: clientes (alfabético) → suscripciones → ítems que se facturan en
+     * cada cobro, con subtotal, IVA, total y proyección anual, más la información
+     * adicional de cada suscripción y los totales por cliente y general.
+     * Centavos redondeados por línea (igual que getResumenValores(): los totales coinciden).
      *
      * @param array $rows Filas del listado ya filtradas (buscador + registros propios).
+     * @return array{clientes: array, general: array, max_info: int}
      */
-    public function agregarHojaDetalleClientesExcel(\PhpOffice\PhpSpreadsheet\Spreadsheet $libro, int $idEmpresa, array $rows, string $textoFiltro = ''): void
+    public function getDetalleClientes(int $idEmpresa, array $rows): array
     {
         $itemsPorSusc = [];
         foreach ($this->repository->getDetalleValores($idEmpresa, array_column($rows, 'id')) as $it) {
@@ -460,6 +511,93 @@ class SuscripcionesService
         usort($rows, static fn($a, $b) => strcasecmp((string) ($a['nombre_cliente'] ?? ''), (string) ($b['nombre_cliente'] ?? ''))
             ?: ((int) $a['id_cliente'] <=> (int) $b['id_cliente'])
             ?: ((int) $a['id'] <=> (int) $b['id']));
+
+        $fecha    = static fn($v) => !empty($v) ? date('d-m-Y', strtotime((string) $v)) : '-';
+        $clientes = [];
+        $general  = ['susc' => 0, 'base' => 0.0, 'iva' => 0.0, 'anual' => 0.0];
+        $maxInfo  = 0;
+
+        foreach ($rows as $r) {
+            $idCliente = (int) ($r['id_cliente'] ?? 0);
+            $clientes[$idCliente] ??= [
+                'nombre'         => (string) ($r['nombre_cliente'] ?? '') ?: '(cliente no encontrado)',
+                'identificacion' => (string) ($r['identificacion_cliente'] ?? ''),
+                'email'          => (string) ($r['email_cliente'] ?? ''),
+                'suscripciones'  => [],
+                'totales'        => ['susc' => 0, 'base' => 0.0, 'iva' => 0.0, 'anual' => 0.0],
+            ];
+            $c = &$clientes[$idCliente];
+
+            // Información adicional (JSON [{concepto, detalle}]).
+            $infoRaw = $r['info_adicional'] ?? null;
+            $arr     = is_array($infoRaw) ? $infoRaw : json_decode((string) $infoRaw, true);
+            $info    = [];
+            foreach (is_array($arr) ? $arr : [] as $x) {
+                if (!is_array($x)) {
+                    continue;
+                }
+                $concepto = trim((string) ($x['concepto'] ?? ''));
+                $detalle  = trim((string) ($x['detalle'] ?? ''));
+                if ($concepto !== '' || $detalle !== '') {
+                    $info[] = ['concepto' => $concepto, 'detalle' => $detalle];
+                }
+            }
+            $maxInfo = max($maxInfo, count($info));
+
+            $anio  = $this->cobrosPorAnio((int) ($r['periodicidad_meses'] ?? 0), (string) ($r['codigo_periodicidad'] ?? ''));
+            $items = [];
+            foreach ($itemsPorSusc[(int) $r['id']] ?? [] as $it) {
+                $base  = round((float) $it['base'], 2);
+                $iva   = round((float) $it['iva'], 2);
+                $anual = round(($base + $iva) * $anio, 2);
+                $desc  = trim((string) $it['descripcion']);
+                $items[] = [
+                    'codigo'      => (string) $it['codigo'],
+                    'concepto'    => (string) $it['concepto'],
+                    'descripcion' => $desc !== $it['concepto'] ? $desc : '',
+                    'cantidad'    => round((float) $it['cantidad'], 6),
+                    'precio'      => round((float) $it['precio_unitario'], 6),
+                    'base'        => $base,
+                    'tarifa'      => (string) $it['tarifa'],
+                    'pct'         => (float) $it['porcentaje_iva'],
+                    'iva'         => $iva,
+                    'total'       => $base + $iva,
+                    'anual'       => $anual,
+                ];
+                $c['totales']['base']  += $base;  $general['base']  += $base;
+                $c['totales']['iva']   += $iva;   $general['iva']   += $iva;
+                $c['totales']['anual'] += $anual; $general['anual'] += $anual;
+            }
+
+            $c['suscripciones'][] = [
+                'periodicidad'  => (string) ($r['nombre_periodicidad'] ?? '-'),
+                'estado'        => ucfirst((string) ($r['estado'] ?? 'activo')),
+                'comprobante'   => ucfirst((string) ($r['tipo_comprobante'] ?? 'factura')),
+                'proximo_cobro' => $fecha($r['proximo_cobro'] ?? null),
+                'anio'          => $anio,
+                'info'          => $info,
+                'items'         => $items,
+            ];
+            $c['totales']['susc']++;
+            $general['susc']++;
+            unset($c);
+        }
+
+        return ['clientes' => array_values($clientes), 'general' => $general, 'max_info' => $maxInfo];
+    }
+
+    /**
+     * Agrega al libro del Excel del listado la hoja "Detalle por cliente" (ver
+     * getDetalleClientes()): una fila por cada ítem que se factura, con la info
+     * adicional al final (un par Concepto/Detalle por línea), total por cliente y
+     * total general.
+     *
+     * @param array $rows Filas del listado ya filtradas (buscador + registros propios).
+     */
+    public function agregarHojaDetalleClientesExcel(\PhpOffice\PhpSpreadsheet\Spreadsheet $libro, int $idEmpresa, array $rows, string $textoFiltro = ''): void
+    {
+        $det     = $this->getDetalleClientes($idEmpresa, $rows);
+        $maxInfo = $det['max_info'];
 
         $h = $libro->createSheet();
         $h->setTitle('Detalle por cliente');
@@ -472,6 +610,12 @@ class SuscripcionesService
             'Código', 'Concepto', 'Descripción', 'Cantidad', 'Precio unitario', 'Subtotal',
             'Tarifa IVA', '% IVA', 'IVA', 'Total por cobro', 'Cobros al año', 'Proyección anual',
         ];
+        $nFijas = count($cabeceras);
+        for ($i = 1; $i <= $maxInfo; $i++) {
+            $sufijo      = $maxInfo > 1 ? " {$i}" : '';
+            $cabeceras[] = "Info adicional{$sufijo} – Concepto";
+            $cabeceras[] = "Info adicional{$sufijo} – Detalle";
+        }
         $nCols   = count($cabeceras);
         $ultima  = $col($nCols);
         $monedas = [12, 13, 16, 17, 19];   // precio, subtotal, IVA, total, proyección
@@ -515,82 +659,39 @@ class SuscripcionesService
             }
             $fila++;
         };
-        $fecha = static fn($v) => !empty($v) ? date('d-m-Y', strtotime((string) $v)) : '-';
+        $filaTotal = static fn(string $etiqueta, array $t) => [
+            $etiqueta, null, null, null, null, null, null, null, null, null, null, null,
+            $t['base'], null, null, $t['iva'], $t['base'] + $t['iva'], null, $t['anual'],
+        ];
 
         $primeraDatos = $fila;
-        $general      = ['base' => 0.0, 'iva' => 0.0, 'anual' => 0.0];
-        $grupo        = null;   // id_cliente del bloque en curso
-        $tc           = ['nombre' => '', 'susc' => 0, 'base' => 0.0, 'iva' => 0.0, 'anual' => 0.0];
+        foreach ($det['clientes'] as $c) {
+            foreach ($c['suscripciones'] as $s) {
+                $datosSusc = [$c['nombre'], $c['identificacion'], $c['email'], $s['periodicidad'], $s['estado'], $s['comprobante'], $s['proximo_cobro']];
+                // Pares Concepto/Detalle de la info adicional, rellenos hasta $maxInfo pares.
+                $info = [];
+                foreach ($s['info'] as $x) {
+                    $info[] = $x['concepto'];
+                    $info[] = $x['detalle'];
+                }
+                $info = array_pad($info, $maxInfo * 2, '');
 
-        $cerrarCliente = function () use (&$tc, &$fila, $escribir, $estiloTotal): void {
-            $escribir([
-                'Total ' . $tc['nombre'] . ' (' . $tc['susc'] . ($tc['susc'] === 1 ? ' suscripción' : ' suscripciones') . ')',
-                null, null, null, null, null, null, null, null, null, null, null,
-                $tc['base'], null, null, $tc['iva'], $tc['base'] + $tc['iva'], null, $tc['anual'],
-            ]);
+                if (!$s['items']) {
+                    $escribir(array_merge($datosSusc, ['', 'Sin ítems registrados'], array_fill(0, $nFijas - count($datosSusc) - 2, null), $info));
+                    continue;
+                }
+                foreach ($s['items'] as $it) {
+                    $escribir(array_merge($datosSusc, [
+                        $it['codigo'], $it['concepto'], $it['descripcion'], $it['cantidad'], $it['precio'], $it['base'],
+                        $it['tarifa'], $it['pct'], $it['iva'], $it['total'], $s['anio'], $it['anual'],
+                    ], $info));
+                }
+            }
+            $n = $c['totales']['susc'];
+            $escribir($filaTotal('Total ' . $c['nombre'] . ' (' . $n . ($n === 1 ? ' suscripción' : ' suscripciones') . ')', $c['totales']));
             $estiloTotal($fila - 1, 'D9E1F2');
-        };
-
-        foreach ($rows as $r) {
-            $idCliente = (int) ($r['id_cliente'] ?? 0);
-            if ($grupo !== null && $grupo !== $idCliente) {
-                $cerrarCliente();
-            }
-            if ($grupo !== $idCliente) {
-                $grupo = $idCliente;
-                $tc    = ['nombre' => (string) ($r['nombre_cliente'] ?? '') ?: '(cliente no encontrado)', 'susc' => 0, 'base' => 0.0, 'iva' => 0.0, 'anual' => 0.0];
-            }
-            $tc['susc']++;
-
-            $anio  = $this->cobrosPorAnio((int) ($r['periodicidad_meses'] ?? 0), (string) ($r['codigo_periodicidad'] ?? ''));
-            $datosSusc = [
-                (string) ($r['nombre_cliente'] ?? ''),
-                (string) ($r['identificacion_cliente'] ?? ''),
-                (string) ($r['email_cliente'] ?? ''),
-                (string) ($r['nombre_periodicidad'] ?? '-'),
-                ucfirst((string) ($r['estado'] ?? 'activo')),
-                ucfirst((string) ($r['tipo_comprobante'] ?? 'factura')),
-                $fecha($r['proximo_cobro'] ?? null),
-            ];
-
-            $items = $itemsPorSusc[(int) $r['id']] ?? [];
-            if (!$items) {
-                $escribir(array_merge($datosSusc, ['', 'Sin ítems registrados']));
-                continue;
-            }
-            foreach ($items as $it) {
-                // Redondeo por línea, igual que la hoja Resumen: los totales coinciden.
-                $base  = round((float) $it['base'], 2);
-                $iva   = round((float) $it['iva'], 2);
-                $anual = round(($base + $iva) * $anio, 2);
-                $desc  = trim((string) $it['descripcion']);
-                $escribir(array_merge($datosSusc, [
-                    (string) $it['codigo'],
-                    (string) $it['concepto'],
-                    $desc !== $it['concepto'] ? $desc : '',
-                    round((float) $it['cantidad'], 6),
-                    round((float) $it['precio_unitario'], 6),
-                    $base,
-                    (string) $it['tarifa'],
-                    (float) $it['porcentaje_iva'],
-                    $iva,
-                    $base + $iva,
-                    $anio,
-                    $anual,
-                ]));
-                $tc['base']  += $base;      $general['base']  += $base;
-                $tc['iva']   += $iva;       $general['iva']   += $iva;
-                $tc['anual'] += $anual;     $general['anual'] += $anual;
-            }
         }
-        if ($grupo !== null) {
-            $cerrarCliente();
-        }
-
-        $escribir([
-            'TOTAL GENERAL', null, null, null, null, null, null, null, null, null, null, null,
-            $general['base'], null, null, $general['iva'], $general['base'] + $general['iva'], null, $general['anual'],
-        ]);
+        $escribir($filaTotal('TOTAL GENERAL', $det['general']));
         $estiloTotal($fila - 1, 'B4C6E7');
 
         if ($fila > $primeraDatos) {
@@ -604,6 +705,11 @@ class SuscripcionesService
         }
         // Título y nota de A1:A2 no deben ensanchar la columna del cliente.
         $h->getColumnDimension('A')->setAutoSize(false)->setWidth(38);
+        // Detalles de info adicional largos: ancho acotado con ajuste de texto.
+        for ($i = $nFijas + 2; $i <= $nCols; $i += 2) {
+            $h->getColumnDimensionByColumn($i)->setAutoSize(false)->setWidth(50);
+            $h->getStyle($col($i) . ($primeraDatos) . ':' . $col($i) . max($primeraDatos, $fila - 1))->getAlignment()->setWrapText(true);
+        }
     }
 
     public function calcularProximoCobro(string $fechaActual, int $meses, string $codigo = ''): string
