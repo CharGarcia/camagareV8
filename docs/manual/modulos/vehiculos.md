@@ -6,7 +6,7 @@ ruta_modulo: modulos/vehiculos
 tipo: modulo
 visibilidad: todos
 etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, filtros
-version: 1.1
+version: 1.2
 orden: 11
 estado: activo
 ---
@@ -96,10 +96,20 @@ En **Automatizaciones** cree una tarea del módulo **Car-Wash**:
 - **Recordatorio de próxima cita (WhatsApp)**: con los días de anticipación y la
   plantilla aprobada por Meta. Variables del cuerpo, en orden: {{1}} cliente,
   {{2}} placa, {{3}} fecha de la cita, {{4}} empresa, {{5}} N.° de orden.
+- **Recordatorio de próxima cita (Correo y WhatsApp)**: los dos canales en la misma
+  tarea (correo a quien tenga correo, WhatsApp a quien tenga teléfono).
 
 Programada a diario, avisa las citas que caen entre hoy y hoy + los días indicados.
 **Cada cita se avisa una sola vez por canal**, aunque la tarea corra varias veces.
 Los envíos aparecen en el historial de la pestaña Recordatorios como *Automático*.
+Si en una ejecución ninguno sale (por ejemplo, el correo de la empresa no está
+configurado o falta la API de WhatsApp), la ejecución queda como **Error** en el
+historial de la automatización, con el motivo; esas citas se vuelven a intentar en la
+siguiente ejecución.
+
+**Qué se necesita para que salgan:** para correo, el correo de salida configurado en
+Empresa; para WhatsApp, la API de WhatsApp configurada y una plantilla aprobada por
+Meta con las variables en el orden indicado.
 
 ## Campos del formulario
 
@@ -148,6 +158,9 @@ Los envíos aparecen en el historial de la pestaña Recordatorios como *Automát
 
 ## Historial de cambios
 
+- **1.2** — Automatización **Correo y WhatsApp** en una sola tarea. Si ningún
+  recordatorio sale, la ejecución queda como error con el motivo (antes figuraba como
+  exitosa).
 - **1.1** — Nuevas pestañas **Transacciones** (órdenes de Car-Wash del vehículo con su
   detalle y resumen) y **Recordatorios** (próximas citas con envío por correo o
   WhatsApp e historial de avisos). Nueva automatización **Car-Wash → Recordatorio de

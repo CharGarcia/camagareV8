@@ -29,6 +29,9 @@ class CarWashRecordatorioService
     private CarWashRecordatorioRepository $repo;
     private LogSistemaService $log;
 
+    /** Motivo del último envío fallido (lo muestra el log de Automatizaciones). */
+    public ?string $ultimoError = null;
+
     public function __construct(?CarWashRecordatorioRepository $repo = null, ?LogSistemaService $log = null)
     {
         $this->repo = $repo ?? new CarWashRecordatorioRepository();
@@ -97,6 +100,7 @@ class CarWashRecordatorioService
             $detalle = 'Error al enviar el correo: ' . $e->getMessage();
         }
 
+        if (!$ok) $this->ultimoError = $detalle;
         $this->registrar($cita, $idEmpresa, $idUsuario, 'correo', $destinatarios, $asunto, $mensaje, $ok, $detalle, $origen);
         return ['ok' => $ok, 'mensaje' => $ok ? 'Recordatorio enviado a ' . $destinatarios . '.' : (string) $detalle];
     }
@@ -145,7 +149,7 @@ class CarWashRecordatorioService
         try {
             $resp = (new \App\services\WhatsappService())->sendTemplateMessage($idEmpresa, $tel, $plantilla, $idioma, $components);
             $ok = (bool) ($resp['success'] ?? false);
-            if (!$ok) $detalle = 'WhatsApp rechazó el envío: ' . json_encode($resp['error'] ?? $resp, JSON_UNESCAPED_UNICODE);
+            if (!$ok) $detalle = 'WhatsApp rechazó el envío: ' . (string) ($resp['message'] ?? json_encode($resp['data']['error'] ?? $resp, JSON_UNESCAPED_UNICODE));
             if ($ok) {
                 // Registrar en el Chat Center (si falla, el envío igual cuenta).
                 try {
@@ -161,6 +165,7 @@ class CarWashRecordatorioService
         } catch (\Throwable $e) {
             $detalle = 'Error al enviar por WhatsApp: ' . $e->getMessage();
         }
+        if (!$ok) $this->ultimoError = $detalle;
         $this->registrar($cita, $idEmpresa, $idUsuario, 'whatsapp', $tel, null,
             'Plantilla ' . $plantilla . ': ' . implode(' | ', array_slice($valores, 0, max(1, $numVars))), $ok, $detalle, $origen);
         return $ok;

@@ -429,12 +429,17 @@
                         dd.classList.remove('d-none');
                         return;
                     }
-                    dd.innerHTML = data.data.map(c =>
-                        `<div class="list-group-item list-group-item-action py-2 pf-dd-item" onclick='window._pfSelCliente(${JSON.stringify(c)})'>
+                    // El objeto NO va dentro del onclick: un apóstrofo en cualquier campo
+                    // (p. ej. «D'ONOFRIO») cortaba el atributo y el clic no hacía nada.
+                    dd.innerHTML = data.data.map((c, i) =>
+                        `<div class="list-group-item list-group-item-action py-2 pf-dd-item" data-idx="${i}">
                             <div class="fw-semibold small">${_esc(c.nombre || c.razon_social || '')}</div>
                             <div class="text-muted" style="font-size:0.75rem;">${_esc(c.identificacion || c.ruc || '')}</div>
                         </div>`
                     ).join('');
+                    dd.querySelectorAll('[data-idx]').forEach(el => {
+                        el.addEventListener('click', () => _seleccionarCliente(data.data[+el.dataset.idx]));
+                    });
                     dd.classList.remove('d-none');
                 } catch(e) { console.error(e); }
             }, 300);
@@ -605,13 +610,17 @@
                         if (!res.ok || !res.data?.length) {
                             ddProd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados</div>';
                         } else {
-                            ddProd.innerHTML = res.data.map(p =>
-                                `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;"
-                                     onclick='window._pfSelProd(this, ${JSON.stringify(p)})'>
+                            // El producto NO va serializado dentro del onclick: un apóstrofo en el
+                            // nombre/código (p. ej. «TUBO 1/2'») rompía el atributo y el clic no hacía nada.
+                            ddProd.innerHTML = res.data.map((p, i) =>
+                                `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;" data-idx="${i}">
                                     <span class="fw-semibold">${_esc(p.codigo || '')} — ${_esc(p.nombre || '')}</span>
                                     <span class="text-muted ms-2 float-end">$${parseFloat(p.precio_base || 0).toFixed(2)}</span>
                                 </div>`
                             ).join('');
+                            ddProd.querySelectorAll('[data-idx]').forEach(el => {
+                                el.addEventListener('click', () => window._pfSelProd(el, res.data[+el.dataset.idx]));
+                            });
                         }
                         _posDdProd();
                         ddProd.classList.remove('d-none');
@@ -1274,13 +1283,15 @@
                         if (!res.ok || !res.data?.length) {
                             ddProd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados</div>';
                         } else {
-                            ddProd.innerHTML = res.data.map(p =>
-                                `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;"
-                                     onclick='window._pltSelProd(this, ${JSON.stringify(p)})'>
+                            ddProd.innerHTML = res.data.map((p, i) =>
+                                `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;" data-idx="${i}">
                                     <span class="fw-semibold">${_esc(p.codigo || '')} — ${_esc(p.nombre || '')}</span>
                                     <span class="text-muted ms-2 float-end">$${parseFloat(p.precio_base || 0).toFixed(2)}</span>
                                 </div>`
                             ).join('');
+                            ddProd.querySelectorAll('[data-idx]').forEach(el => {
+                                el.addEventListener('click', () => window._pltSelProd(el, res.data[+el.dataset.idx]));
+                            });
                         }
                         _posDdProd();
                         ddProd.classList.remove('d-none');

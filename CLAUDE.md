@@ -357,3 +357,16 @@ sin `.md` no está terminado.
   los títulos deben decir de qué tratan. Las **etiquetas** del front-matter pesan
   igual que el título, así que deben incluir los sinónimos que usaría alguien
   que no conoce el sistema.
+
+---
+
+## 13. App móvil y reglas de Apple (App Store) — no negociables
+
+La app iOS (`mobile/`, bundle `com.camagare.mobile`) fue **aprobada por Apple el 2026-09-25** bajo condiciones concretas. **Nunca** se hace un cambio, en la app o en el servidor, que se salte, relaje o esquive esas condiciones, aunque sea "temporal", "solo para un cliente" o para una prueba.
+
+- **Guideline 3.1.1 / 3.1.3(c) — solo equipos de trabajo en iOS**: CaMaGaRe se cobra fuera de la App Store (sin In-App Purchase), así que en iPhone/iPad solo pueden entrar empresas con equipo. La regla vive en `AuthController::validarEquipoRealParaIOS()` (`app/controllers/api/v1/AuthController.php`, constante `MIN_USUARIOS_EMPRESA_IOS = 2`) + `Empresa::contarUsuariosRealesAsignados()`. No bajar el mínimo, no quitar la validación, no crear usuarios ficticios para superarla, no exentar empresas ni usuarios de nivel 1/2, y no dejar de enviar `plataforma` desde la app.
+- **Nada de pagos, precios ni enlaces para comprar/suscribirse dentro de la app iOS** (botones de pago, links a Payphone/Nuvei/planes, textos tipo "suscríbete en la web"). Cobrar dentro de la app exigiría In-App Purchase.
+- **Actualizaciones directas (EAS Update / `expo-updates`)**: solo para correcciones y mejoras menores. Nunca para agregar funciones nuevas importantes ni cambiar lo que hace la app evitando la revisión de Apple/Google.
+- **Permisos del dispositivo** (cámara, ubicación, fotos, micrófono): cada uno con su texto de uso real en `mobile/app.json`; no pedir permisos que la app no usa.
+- **Cuenta demo para revisores**: debe pertenecer a una empresa que cumpla la regla de equipo (≥2 usuarios reales) y mantenerse funcionando.
+- **Ante la duda, avisar antes de cambiar**: si un cambio (en `mobile/` o en `api/v1`) puede chocar con una guideline de Apple, detenerse y consultarlo con el usuario en lugar de implementarlo.

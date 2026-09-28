@@ -1,8 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import * as Location from 'expo-location';
-import SignatureView, { SignatureViewRef } from 'react-native-signature-canvas';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -19,6 +30,8 @@ type Ubicacion = { latitud: number; longitud: number; precision: number | null }
 const GPS_PRECISION_OBJETIVO = 20;
 const GPS_TIEMPO_MAX_MS = 20000;
 const GPS_PRECISION_AVISO = 100;
+// Mismo tope que la observación del módulo web (maxlength del cuadro de confirmación).
+const OBSERVACIONES_MAX = 500;
 
 function fechaHoraLocalSQL(): string {
   const d = new Date();
@@ -35,6 +48,9 @@ export default function EntregaScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'Entrega'>>();
   const { id } = route.params;
+  // En iOS el teclado taparía el cuadro de observación y el botón fijo de abajo; el
+  // KeyboardAvoidingView necesita la altura del encabezado para calcular cuánto subir.
+  const alturaEncabezado = useHeaderHeight();
 
   const [cargando, setCargando] = useState(true);
   const [consignacion, setConsignacion] = useState<ConsignacionDetalle | null>(null);
@@ -44,8 +60,8 @@ export default function EntregaScreen() {
   const [obteniendoUbicacion, setObteniendoUbicacion] = useState(false);
   const [errorUbicacion, setErrorUbicacion] = useState<string | null>(null);
 
+  const [observaciones, setObservaciones] = useState('');
   const [guardando, setGuardando] = useState(false);
-  const firmaRef = useRef<SignatureViewRef>(null);
   const uuidRef = useRef(generarUuid());
 
   useEffect(() => {
@@ -146,7 +162,7 @@ export default function EntregaScreen() {
     }
   }
 
-  async function confirmarEntrega(firmaBase64?: string) {
+  async function confirmarEntrega() {
     if (!ubicacion) {
       Alert.alert('Falta la ubicación', 'Espera a que se capture la ubicación GPS, o toca "Actualizar ubicación".');
       return;
@@ -177,7 +193,7 @@ export default function EntregaScreen() {
         latitud: ubicacion.latitud,
         longitud: ubicacion.longitud,
         precision_m: ubicacion.precision ?? undefined,
-        firma_base64: firmaBase64,
+        observaciones: observaciones.trim() || undefined,
         dispositivo_id: dispositivoId,
       });
       Alert.alert(
@@ -194,12 +210,6 @@ export default function EntregaScreen() {
     } finally {
       setGuardando(false);
     }
-  }
-
-  // La firma es opcional: si el pad está vacío, se confirma la entrega igual (sin firma)
-  // en vez de bloquear con un aviso.
-  function onConfirmarPress() {
-    firmaRef.current?.readSignature();
   }
 
   if (cargando) {
@@ -219,7 +229,11 @@ export default function EntregaScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={alturaEncabezado}
+    >
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -268,25 +282,28 @@ export default function EntregaScreen() {
             <Text style={styles.reintentar}>Actualizar ubicación</Text>
           </TouchableOpacity>
         </View>
+
+        <Text style={styles.tituloSeccion}>Observación (opcional)</Text>
+        <TextInput
+          style={styles.observaciones}
+          value={observaciones}
+          onChangeText={setObservaciones}
+          placeholder="Ej.: recibió el guardia, se dejó en bodega…"
+          placeholderTextColor="#999"
+          multiline
+          maxLength={OBSERVACIONES_MAX}
+          textAlignVertical="top"
+          editable={!guardando}
+        />
+        <Text style={styles.contador}>
+          {observaciones.length}/{OBSERVACIONES_MAX}
+        </Text>
       </ScrollView>
 
-      {/* Fuera del ScrollView a propósito: si la pantalla se mueve mientras se dibuja
-          la firma, el trazo queda deformado (el dedo y el dibujo se desalinean). */}
-      <View style={styles.firmaSeccionFija}>
-        <Text style={styles.tituloSeccion}>Firma de quien recibe (opcional)</Text>
-        <View style={styles.firmaBox}>
-          <SignatureView
-            ref={firmaRef}
-            onOK={confirmarEntrega}
-            onEmpty={() => confirmarEntrega(undefined)}
-            descriptionText=""
-            webStyle={firmaWebStyle}
-          />
-        </View>
-
+      <View style={styles.pieFijo}>
         <TouchableOpacity
           style={[styles.botonGuardar, (obteniendoUbicacion || !ubicacion) && styles.botonDeshabilitado]}
-          onPress={onConfirmarPress}
+          onPress={confirmarEntrega}
           disabled={guardando || obteniendoUbicacion || !ubicacion}
         >
           {guardando ? (
@@ -296,16 +313,9 @@ export default function EntregaScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
-
-const firmaWebStyle = `
-  .m-signature-pad--footer { display: none; margin: 0; }
-  .m-signature-pad--body { border: none; }
-  .m-signature-pad { box-shadow: none; border: none; height: 100%; }
-  body,html { background-color: #f5f6f8; height: 100%; }
-`;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f6f8' },
@@ -332,23 +342,25 @@ const styles = StyleSheet.create({
   ubicacionTextoMuestreo: { fontSize: 13, color: '#555', marginLeft: 8, flex: 1 },
   avisoPrecision: { fontSize: 12, color: '#b58105', marginTop: 4 },
   reintentar: { color: '#0d6efd', fontWeight: '600', fontSize: 13, marginLeft: 8 },
-  firmaSeccionFija: {
+  observaciones: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    padding: 12,
+    minHeight: 90,
+    fontSize: 14,
+    color: '#333',
+  },
+  contador: { fontSize: 11, color: '#888', textAlign: 'right', marginTop: 4 },
+  pieFijo: {
     backgroundColor: '#f5f6f8',
     paddingHorizontal: 16,
     paddingBottom: 16,
-    paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: '#e3e3e3',
   },
-  firmaBox: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    height: 160,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  botonGuardar: { backgroundColor: '#0d6efd', borderRadius: 8, paddingVertical: 14, marginTop: 20, alignItems: 'center' },
+  botonGuardar: { backgroundColor: '#0d6efd', borderRadius: 8, paddingVertical: 14, marginTop: 12, alignItems: 'center' },
   botonDeshabilitado: { opacity: 0.6 },
   botonGuardarTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

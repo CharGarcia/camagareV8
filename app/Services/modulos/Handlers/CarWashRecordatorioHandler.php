@@ -11,7 +11,10 @@ use App\Services\modulos\CarWashRecordatorioService;
  * En cada ejecución busca las órdenes cuya próxima cita cae entre hoy y hoy + N días y
  * que aún no tienen recordatorio automático enviado por ese canal, y avisa al cliente:
  *  - enviar_correo:   correo con asunto y mensaje configurables (etiquetas {cliente}…);
- *  - enviar_whatsapp: plantilla de WhatsApp aprobada por Meta.
+ *  - enviar_whatsapp: plantilla de WhatsApp aprobada por Meta;
+ *  - correo_whatsapp: los dos canales en la misma ejecución.
+ * Si hubo citas y NINGÚN recordatorio salió (todos con error), se lanza una excepción para
+ * que el log de la automatización quede en "error" con el motivo (antes quedaba "exitoso").
  * Cada cita se avisa UNA sola vez por canal (carwash_recordatorios + índice único), así
  * que la automatización puede correr a diario sin repetir mensajes. El "cuándo" lo decide
  * la automatización; este handler solo busca y envía.
@@ -24,11 +27,18 @@ class CarWashRecordatorioHandler extends BaseHandler
         if (!$svc->tablaDisponible()) {
             return ['registros' => 0, 'mensaje' => 'Falta aplicar el SQL de recordatorios de Car-Wash (20260929_carwash_recordatorios.sql).'];
         }
-        return match ($this->accion) {
+        $res = match ($this->accion) {
             'recordatorio_cita_correo'   => $this->porCorreo($svc, $idEmpresa, $idEstablecimiento, $idUsuario, $parametros),
             'recordatorio_cita_whatsapp' => $this->porWhatsapp($svc, $idEmpresa, $idEstablecimiento, $idUsuario, $parametros),
+            'recordatorio_cita_correo_whatsapp' => $this->porAmbos($svc, $idEmpresa, $idEstablecimiento, $idUsuario, $parametros),
             default => throw new \RuntimeException("Acción '{$this->accion}' no implementada en CarWashRecordatorioHandler."),
         };
+        // Hubo citas con error y ninguna salió: que el log lo muestre como error, con el motivo.
+        if (($res['registros'] ?? 0) === 0 && !empty($res['errores'])) {
+            throw new \RuntimeException($res['mensaje'] . ($svc->ultimoError ? ' Motivo: ' . $svc->ultimoError : ''));
+        }
+        unset($res['errores']);
+        return $res;
     }
 
     private function porCorreo(CarWashRecordatorioService $svc, int $idEmpresa, ?int $idEst, int $idUsuario, array $p): array
@@ -53,7 +63,7 @@ class CarWashRecordatorioHandler extends BaseHandler
                 $errores++;
             }
         }
-        return ['registros' => $enviados, 'mensaje' => $this->resumen($enviados, count($citas), $sinCorreo, $errores, 'sin correo')];
+        return ['registros' => $enviados, 'errores' => $errores, 'mensaje' => $this->resumen($enviados, count($citas), $sinCorreo, $errores, 'sin correo')];
     }
 
     private function porWhatsapp(CarWashRecordatorioService $svc, int $idEmpresa, ?int $idEst, int $idUsuario, array $p): array
@@ -91,7 +101,19 @@ class CarWashRecordatorioHandler extends BaseHandler
                 $errores++;
             }
         }
-        return ['registros' => $enviados, 'mensaje' => $this->resumen($enviados, count($citas), $sinTel, $errores, 'sin teléfono')];
+        return ['registros' => $enviados, 'errores' => $errores, 'mensaje' => $this->resumen($enviados, count($citas), $sinTel, $errores, 'sin teléfono')];
+    }
+
+    /** Correo y WhatsApp en la misma ejecución (cada canal lleva su propio control de "ya avisada"). */
+    private function porAmbos(CarWashRecordatorioService $svc, int $idEmpresa, ?int $idEst, int $idUsuario, array $p): array
+    {
+        $c = $this->porCorreo($svc, $idEmpresa, $idEst, $idUsuario, $p);
+        $w = $this->porWhatsapp($svc, $idEmpresa, $idEst, $idUsuario, $p);
+        return [
+            'registros' => (int) $c['registros'] + (int) $w['registros'],
+            'errores'   => (int) ($c['errores'] ?? 0) + (int) ($w['errores'] ?? 0),
+            'mensaje'   => 'Correo: ' . $c['mensaje'] . ' | WhatsApp: ' . $w['mensaje'],
+        ];
     }
 
     private function resumen(int $enviados, int $total, int $sinDestino, int $errores, string $etqSin): string

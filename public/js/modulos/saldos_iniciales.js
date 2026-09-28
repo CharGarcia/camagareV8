@@ -81,6 +81,19 @@ async function SI_cargarCxc() {
     } catch(e) { tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-4">Error de conexión</td></tr>`; }
 }
 
+// Los botones de fila llevan data-si-accion + data-idx en vez de onclick='fn(${JSON.stringify(f)})':
+// un apóstrofo en cualquier campo (p. ej. un nombre «D'ONOFRIO») cortaba el atributo y el clic no hacía nada.
+function siEnlazarAcciones(tbody, filas) {
+    tbody.querySelectorAll('[data-si-accion]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const fn = window[btn.dataset.siAccion];
+            const f  = filas[+btn.dataset.idx];
+            if (typeof fn !== 'function' || !f) return;
+            btn.dataset.siArg ? fn(f, btn.dataset.siArg) : fn(f);
+        });
+    });
+}
+
 function SI_renderCxc(filas) {
     const tbody = document.getElementById('si-cxc-tbody');
     document.getElementById('si-cxc-count').textContent = filas.length + ' registros';
@@ -88,7 +101,7 @@ function SI_renderCxc(filas) {
         tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>Sin registros</td></tr>`;
         return;
     }
-    tbody.innerHTML = filas.map(f => {
+    tbody.innerHTML = filas.map((f, i) => {
         const dias = parseInt(f.dias_vencido) || 0;
         const color = dias > 0 ? 'color:#dc3545;' : '';
         const fEmis = siFmtFecha(f.fecha_emision);
@@ -110,13 +123,14 @@ function SI_renderCxc(filas) {
             <td class="text-center">${estadoBadge}</td>
             <td class="text-center">
                 <div class="btn-group btn-group-sm">
-                    ${parseFloat(f.saldo_pendiente) > 0 && SI_PERM_CREAR ? `<button class="btn btn-outline-success btn-sm py-0 px-1" onclick='SI_abrirMovimiento(${JSON.stringify(f)},"CXC")' title="Registrar cobro"><i class="bi bi-cash-coin"></i></button>` : ''}
+                    ${parseFloat(f.saldo_pendiente) > 0 && SI_PERM_CREAR ? `<button class="btn btn-outline-success btn-sm py-0 px-1" data-si-accion="SI_abrirMovimiento" data-si-arg="CXC" data-idx="${i}" title="Registrar cobro"><i class="bi bi-cash-coin"></i></button>` : ''}
                     <button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="SI_verHistorialCxc(${f.id})" title="Historial"><i class="bi bi-clock-history"></i></button>
-                    ${puedeEditar && SI_PERM_MODIFICAR ? `<button class="btn btn-outline-warning btn-sm py-0 px-1" onclick='SI_abrirModalCxc(${JSON.stringify(f)})' title="Editar"><i class="bi bi-pencil"></i></button>` : ''}
+                    ${puedeEditar && SI_PERM_MODIFICAR ? `<button class="btn btn-outline-warning btn-sm py-0 px-1" data-si-accion="SI_abrirModalCxc" data-idx="${i}" title="Editar"><i class="bi bi-pencil"></i></button>` : ''}
                 </div>
             </td>
         </tr>`;
     }).join('');
+    siEnlazarAcciones(tbody, filas);
 }
 
 function SI_filtrarCxc(q) {
@@ -243,7 +257,7 @@ function SI_renderCxp(filas) {
         tbody.innerHTML = `<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>Sin registros</td></tr>`;
         return;
     }
-    tbody.innerHTML = filas.map(f => {
+    tbody.innerHTML = filas.map((f, i) => {
         const dias = parseInt(f.dias_vencido) || 0;
         const color = dias > 0 ? 'color:#dc3545;' : '';
         const fEmis = siFmtFecha(f.fecha_emision);
@@ -267,13 +281,14 @@ function SI_renderCxp(filas) {
             <td class="text-center">${estadoBadge}</td>
             <td class="text-center">
                 <div class="btn-group btn-group-sm">
-                    ${parseFloat(f.saldo_pendiente) > 0 && SI_PERM_CREAR ? `<button class="btn btn-outline-primary btn-sm py-0 px-1" onclick='SI_abrirMovimiento(${JSON.stringify(f)},"CXP")' title="Registrar pago"><i class="bi bi-cash-stack"></i></button>` : ''}
+                    ${parseFloat(f.saldo_pendiente) > 0 && SI_PERM_CREAR ? `<button class="btn btn-outline-primary btn-sm py-0 px-1" data-si-accion="SI_abrirMovimiento" data-si-arg="CXP" data-idx="${i}" title="Registrar pago"><i class="bi bi-cash-stack"></i></button>` : ''}
                     <button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="SI_verHistorialCxp(${f.id})" title="Historial"><i class="bi bi-clock-history"></i></button>
-                    ${puedeEditar && SI_PERM_MODIFICAR ? `<button class="btn btn-outline-warning btn-sm py-0 px-1" onclick='SI_abrirModalCxp(${JSON.stringify(f)})' title="Editar"><i class="bi bi-pencil"></i></button>` : ''}
+                    ${puedeEditar && SI_PERM_MODIFICAR ? `<button class="btn btn-outline-warning btn-sm py-0 px-1" data-si-accion="SI_abrirModalCxp" data-idx="${i}" title="Editar"><i class="bi bi-pencil"></i></button>` : ''}
                 </div>
             </td>
         </tr>`;
     }).join('');
+    siEnlazarAcciones(tbody, filas);
 }
 
 function SI_filtrarCxp(q) {
@@ -595,7 +610,7 @@ function SI_renderAnticipos(filas) {
         tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>Sin registros</td></tr>`;
         return;
     }
-    tbody.innerHTML = filas.map(f => {
+    tbody.innerHTML = filas.map((f, i) => {
         const esCli = f.tipo === 'CLIENTE';
         const badge = esCli
             ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.65rem;">Cliente</span>'
@@ -608,10 +623,11 @@ function SI_renderAnticipos(filas) {
             <td class="text-end fw-bold">$${f.saldo_inicial}</td>
             <td class="small text-muted text-truncate" style="max-width:200px;" title="${siEsc(f.observaciones||'')}">${siEsc(f.observaciones||'')}</td>
             <td class="text-center">
-                ${SI_PERM_MODIFICAR ? `<button class="btn btn-outline-warning btn-sm py-0 px-1" onclick='SI_abrirModalAnticipo(${JSON.stringify(f)})' title="Editar"><i class="bi bi-pencil"></i></button>` : ''}
+                ${SI_PERM_MODIFICAR ? `<button class="btn btn-outline-warning btn-sm py-0 px-1" data-si-accion="SI_abrirModalAnticipo" data-idx="${i}" title="Editar"><i class="bi bi-pencil"></i></button>` : ''}
             </td>
         </tr>`;
     }).join('');
+    siEnlazarAcciones(tbody, filas);
 }
 
 function SI_filtrarAnticipos(q) {
@@ -868,7 +884,7 @@ function SI_renderConsig(filas) {
         tbody.innerHTML = `<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>Sin registros</td></tr>`;
         return;
     }
-    tbody.innerHTML = filas.map(f => `<tr>
+    tbody.innerHTML = filas.map((f, i) => `<tr>
         <td class="ps-3 font-monospace small">${siEsc(f.nro_documento||'—')}</td>
         <td class="text-center small">${siFmtFecha(f.fecha_emision)}</td>
         <td class="text-truncate" title="${siEsc(f.nombre_cliente)}">${siEsc(f.nombre_cliente)}${f.ruc_cliente ? `<small class="text-muted d-block">${siEsc(f.ruc_cliente)}</small>` : ''}</td>
@@ -879,9 +895,10 @@ function SI_renderConsig(filas) {
         <td class="small">${siEsc(f.nombre_vendedor||'—')}</td>
         <td class="small">${siEsc(f.nombre_bodega||'—')}</td>
         <td class="text-center">
-            ${SI_PERM_MODIFICAR ? `<button class="btn btn-outline-warning btn-sm py-0 px-1" onclick='SI_abrirModalConsig(${JSON.stringify(f)})' title="Editar"><i class="bi bi-pencil"></i></button>` : ''}
+            ${SI_PERM_MODIFICAR ? `<button class="btn btn-outline-warning btn-sm py-0 px-1" data-si-accion="SI_abrirModalConsig" data-idx="${i}" title="Editar"><i class="bi bi-pencil"></i></button>` : ''}
         </td>
     </tr>`).join('');
+    siEnlazarAcciones(tbody, filas);
 }
 
 function SI_filtrarConsig(q) {

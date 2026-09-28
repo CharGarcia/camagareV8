@@ -162,6 +162,21 @@ class HandlerFactory
                              'ayuda' => 'Plantilla aprobada por Meta. Variables del cuerpo, en orden: {{1}} cliente, {{2}} placa, {{3}} fecha de la cita, {{4}} empresa, {{5}} N.° de orden.'],
                         ],
                     ],
+                    'recordatorio_cita_correo_whatsapp' => [
+                        'label'       => 'Recordatorio de próxima cita (Correo y WhatsApp)',
+                        'descripcion' => 'Envía el recordatorio de la próxima cita de Car-Wash por los DOS canales en la misma ejecución: correo (si hay correo) y WhatsApp con plantilla aprobada por Meta (si hay teléfono). Cada cita se avisa una sola vez por canal. Destinatarios: los del vehículo o, si no tiene, los del cliente de la orden.',
+                        'handler'     => Handlers\CarWashRecordatorioHandler::class,
+                        'parametros'  => [
+                            ['key' => 'dias_anticipacion', 'label' => 'Avisar con cuántos días de anticipación', 'tipo' => 'number', 'default' => 1,
+                             'ayuda' => 'Se avisan las citas que caen entre hoy y hoy + estos días. 0 = solo las citas de hoy.'],
+                            ['key' => 'asunto', 'label' => 'Asunto del correo', 'tipo' => 'text', 'default' => \App\Services\modulos\CarWashRecordatorioService::ASUNTO_DEFECTO,
+                             'ayuda' => 'Etiquetas: ' . \App\Services\modulos\CarWashRecordatorioService::ETIQUETAS . '.'],
+                            ['key' => 'cuerpo', 'label' => 'Mensaje del correo', 'tipo' => 'textarea', 'default' => \App\Services\modulos\CarWashRecordatorioService::MENSAJE_DEFECTO,
+                             'ayuda' => 'Etiquetas: ' . \App\Services\modulos\CarWashRecordatorioService::ETIQUETAS . '.'],
+                            ['key' => 'plantilla_whatsapp', 'label' => 'Plantilla de WhatsApp', 'tipo' => 'select_dinamico', 'fuente' => 'whatsapp_plantillas', 'default' => '',
+                             'ayuda' => 'Plantilla aprobada por Meta. Variables del cuerpo, en orden: {{1}} cliente, {{2}} placa, {{3}} fecha de la cita, {{4}} empresa, {{5}} N.° de orden.'],
+                        ],
+                    ],
                 ],
             ],
 

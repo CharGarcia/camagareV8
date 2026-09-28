@@ -515,6 +515,8 @@ class EntregasConsignacionesRepository extends BaseRepository
     /**
      * KPIs del rango filtrado (sin aplicar el filtro de estado de entrega): pendientes,
      * entregadas (total y por canal), evidencia incompleta y tiempo promedio emisión→entrega.
+     * "Incompleta" = sin evidencia o sin GPS. La firma ya no cuenta: la app móvil dejó de
+     * pedirla (se reemplazó por la observación), igual que la entrega web.
      */
     public function getResumen(int $idEmpresa, string $buscar, ?array $idsResponsables): array
     {
@@ -527,8 +529,7 @@ class EntregasConsignacionesRepository extends BaseRepository
                     COUNT(*) FILTER (WHERE e.id IS NOT NULL AND e.canal = 'web') AS total_web,
                     COUNT(*) FILTER (
                         WHERE cv.estado IN ('Entregada', 'Facturada')
-                          AND (e.id IS NULL OR e.latitud IS NULL OR e.longitud IS NULL
-                               OR (e.canal = 'movil' AND e.firma_path IS NULL))
+                          AND (e.id IS NULL OR e.latitud IS NULL OR e.longitud IS NULL)
                     ) AS incompletas,
                     AVG(EXTRACT(EPOCH FROM (e.capturado_en - (cv.fecha_emision)::timestamp)) / 3600.0)
                         FILTER (WHERE e.id IS NOT NULL AND cv.fecha_emision IS NOT NULL) AS horas_promedio

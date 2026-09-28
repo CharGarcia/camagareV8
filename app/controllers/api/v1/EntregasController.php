@@ -143,7 +143,7 @@ class EntregasController extends ApiBaseController
                 'capturado_en'    => $capturadoEn,
                 'dispositivo_id'  => trim((string) ($body['dispositivo_id'] ?? '')),
                 'canal'           => 'movil',
-                'observaciones'   => $body['observaciones'] ?? null,
+                'observaciones'   => $this->normalizarObservaciones($body['observaciones'] ?? null),
             ]);
         } catch (Exception $e) {
             // La firma ya se guardó en disco antes de este punto: si el registro falla
@@ -200,7 +200,24 @@ class EntregasController extends ApiBaseController
         );
     }
 
-    /** Decodifica la firma (PNG en base64, con o sin prefijo data:) y la guarda en disco. */
+    /**
+     * Observación de la entrega: vacía → null, y con el mismo tope de 500 caracteres
+     * que el cuadro del módulo web (la app ya lo limita, esto cubre llamadas directas).
+     */
+    private function normalizarObservaciones(mixed $valor): ?string
+    {
+        if (!is_scalar($valor)) {
+            return null;
+        }
+        $texto = trim((string) $valor);
+        return $texto === '' ? null : mb_substr($texto, 0, 500);
+    }
+
+    /**
+     * Decodifica la firma (PNG en base64, con o sin prefijo data:) y la guarda en disco.
+     * Desde la versión de la app que quitó el recuadro de firma ya no llega, pero se
+     * mantiene para las versiones anteriores que siguen instaladas en los celulares.
+     */
     private function guardarFirma(int $idEmpresa, string $uuid, string $base64): string
     {
         $data = $base64;

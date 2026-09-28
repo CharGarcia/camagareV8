@@ -176,12 +176,16 @@
                         dd.classList.remove('d-none');
                         return;
                     }
-                    dd.innerHTML = data.data.map(c =>
-                        `<div class="list-group-item list-group-item-action py-2" onclick='window._cpSelCliente(${JSON.stringify(c)})'>
+                    // El objeto no viaja serializado dentro del onclick: un apóstrofo en cualquier campo cortaba el atributo.
+                    dd.innerHTML = data.data.map((c, i) =>
+                        `<div class="list-group-item list-group-item-action py-2" data-idx="${i}">
                             <div class="fw-semibold small">${_esc(c.nombre || c.razon_social || '')}</div>
                             <div class="text-muted" style="font-size:0.75rem;">${_esc(c.identificacion || c.ruc || '')}</div>
                         </div>`
                     ).join('');
+                    dd.querySelectorAll('[data-idx]').forEach(el => {
+                        el.addEventListener('click', () => window._cpSelCliente(data.data[+el.dataset.idx]));
+                    });
                     dd.classList.remove('d-none');
                 } catch (e) { console.error(e); }
             }, 300);
@@ -476,13 +480,16 @@
                     if (!res.ok || !res.data.length) {
                         dd.innerHTML = '<div class="list-group-item text-muted small py-2">Sin resultados</div>';
                     } else {
-                        dd.innerHTML = res.data.map(p =>
-                            `<div class="list-group-item list-group-item-action py-1" style="font-size:0.8rem;cursor:pointer;"
-                                 onclick='window._cpSelProveedor(this, ${JSON.stringify(p)})'>
+                        // El objeto no viaja serializado dentro del onclick: un apóstrofo en cualquier campo cortaba el atributo.
+                        dd.innerHTML = res.data.map((p, i) =>
+                            `<div class="list-group-item list-group-item-action py-1" style="font-size:0.8rem;cursor:pointer;" data-idx="${i}">
                                 <span class="fw-semibold">${_esc(p.nombre)}</span>
                                 <span class="text-muted ms-2 small">${_esc(p.identificacion || '')}</span>
                             </div>`
                         ).join('');
+                        dd.querySelectorAll('[data-idx]').forEach(el => {
+                            el.addEventListener('click', () => window._cpSelProveedor(el, res.data[+el.dataset.idx]));
+                        });
                     }
                     _posDropdown(dd, inp);
                     dd.classList.remove('d-none');
@@ -524,10 +531,10 @@
                     ddFact.innerHTML = '<div class="list-group-item text-muted small py-2">Este proveedor no tiene facturas de compra registradas (o ya fueron usadas). Puede ingresar el N° y el costo manualmente.</div>';
                     return;
                 }
-                ddFact.innerHTML = res.data.map(f => {
+                // El objeto no viaja serializado dentro del onclick: un apóstrofo en cualquier campo cortaba el atributo.
+                ddFact.innerHTML = res.data.map((f, i) => {
                     const fecha = (f.fecha_emision || '').slice(0, 10).split('-').reverse().join('-');
-                    return `<div class="list-group-item list-group-item-action py-1" style="font-size:0.8rem;cursor:pointer;"
-                             onclick='window._cpSelFactura(this, ${JSON.stringify(f)})'>
+                    return `<div class="list-group-item list-group-item-action py-1" style="font-size:0.8rem;cursor:pointer;" data-idx="${i}">
                             <div class="d-flex justify-content-between">
                                 <span class="fw-semibold">${_esc(f.numero)}</span>
                                 <span class="text-muted">${_esc(fecha)}</span>
@@ -535,6 +542,9 @@
                             <div class="text-muted">Subtotal: $${parseFloat(f.total_sin_impuestos || 0).toFixed(2)}</div>
                         </div>`;
                 }).join('');
+                ddFact.querySelectorAll('[data-idx]').forEach(el => {
+                    el.addEventListener('click', () => window._cpSelFactura(el, res.data[+el.dataset.idx]));
+                });
             } catch (e) {
                 console.error('Error al buscar facturas del proveedor:', e);
                 ddFact.innerHTML = '<div class="list-group-item text-danger small py-2">Error de conexión al buscar facturas.</div>';
@@ -949,12 +959,16 @@
                         dd.classList.remove('d-none');
                         return;
                     }
-                    dd.innerHTML = data.data.map(c =>
-                        `<div class="list-group-item list-group-item-action py-2" onclick='window._cpfSelCliente(${JSON.stringify(c)})'>
+                    // El objeto no viaja serializado dentro del onclick: un apóstrofo en cualquier campo cortaba el atributo.
+                    dd.innerHTML = data.data.map((c, i) =>
+                        `<div class="list-group-item list-group-item-action py-2" data-idx="${i}">
                             <div class="fw-semibold small">${_esc(c.nombre || c.razon_social || '')}</div>
                             <div class="text-muted" style="font-size:0.75rem;">${_esc(c.identificacion || c.ruc || '')}</div>
                         </div>`
                     ).join('');
+                    dd.querySelectorAll('[data-idx]').forEach(el => {
+                        el.addEventListener('click', () => window._cpfSelCliente(data.data[+el.dataset.idx]));
+                    });
                     dd.classList.remove('d-none');
                 } catch (e) { console.error(e); }
             }, 300);
@@ -1036,13 +1050,16 @@
                     if (!res.ok || !res.data?.length) {
                         ddProd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados</div>';
                     } else {
-                        ddProd.innerHTML = res.data.map(p =>
-                            `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;"
-                                 onclick='window._cpfSelProd(this, ${JSON.stringify(p)})'>
+                        // El objeto no viaja serializado dentro del onclick: un apóstrofo en cualquier campo cortaba el atributo.
+                        ddProd.innerHTML = res.data.map((p, i) =>
+                            `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;" data-idx="${i}">
                                 <span class="fw-semibold">${_esc(p.codigo || '')} — ${_esc(p.nombre || '')}</span>
                                 <span class="text-muted ms-2 float-end">$${parseFloat(p.precio_base || 0).toFixed(2)}</span>
                             </div>`
                         ).join('');
+                        ddProd.querySelectorAll('[data-idx]').forEach(el => {
+                            el.addEventListener('click', () => window._cpfSelProd(el, res.data[+el.dataset.idx]));
+                        });
                     }
                     _posDdProd();
                     ddProd.classList.remove('d-none');

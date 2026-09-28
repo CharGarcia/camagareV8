@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
-etiquetas: entregas, entrega, buscar entrega, buscar consignacion, buscador, filtros, filtrar entregas, buscar por producto, buscar por lote, con firma, sin firma, con gps, sin gps, chips, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.10
+etiquetas: entregas, entrega, comentario de entrega, observación de entrega, nota de entrega, buscar entrega, buscar consignacion, buscador, filtros, filtrar entregas, buscar por producto, buscar por lote, con firma, sin firma, con gps, sin gps, chips, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
+version: 1.11
 orden: 0
 estado: activo
 ---
@@ -15,8 +15,8 @@ Este módulo muestra las [Consignaciones en Ventas](consignaciones-ventas.md)
 desde el punto de vista de la entrega. **Al abrirlo lista solo las consignaciones
 pendientes de entregar** (estado *Emitida*): es la cola de trabajo del
 repartidor. Con el selector de estado también se pueden ver las ya entregadas,
-con la evidencia que registró el repartidor desde la app móvil (GPS y firma del
-cliente) o la que quedó al marcarlas manualmente como "Entregada" desde el
+con la evidencia que registró el repartidor desde la app móvil (GPS y
+observación; las entregas anteriores pueden tener además la firma del cliente) o la que quedó al marcarlas manualmente como "Entregada" desde el
 sistema. Desde aquí el usuario puede **marcar cada pendiente como entregada**
 (botón *Entregar* de la fila o del detalle), con la misma evidencia que deja el
 marcado manual en Consignaciones en Ventas. No crea, edita ni elimina
@@ -27,7 +27,7 @@ consignaciones.
 Sirve para saber de un vistazo **qué queda por entregar** (a quién, a dónde,
 para cuándo y hace cuántos días se emitió), y, cambiando el estado, revisar
 cuántas entregas se hicieron, cuáles vinieron de la app móvil y cuáles se
-marcaron manualmente, cuáles quedaron con evidencia incompleta (sin firma o sin
+marcaron manualmente, cuáles quedaron con evidencia incompleta (sin
 ubicación) y cuánto está tardando el proceso desde que se emite la consignación
 hasta que se entrega.
 
@@ -84,8 +84,8 @@ hasta que se entrega.
 | Estado | **Pendiente** (Emitida), **Entregada** o **Facturada**. |
 | Días | Días desde la emisión hasta la entrega; si sigue pendiente, hasta hoy. |
 | Fecha/hora entrega | Momento en que se capturó la evidencia (hora del celular si vino de la app, o de guardado si fue manual). Vacío mientras esté pendiente. |
-| Canal | **App móvil** (registrada por el repartidor con GPS/firma) o **Web** (marcada manualmente desde el sistema). |
-| Firma | Si existe firma de recepción capturada. |
+| Canal | **App móvil** (registrada por el repartidor con GPS y observación) o **Web** (marcada manualmente desde el sistema). |
+| Firma | Si existe firma de recepción capturada (solo entregas hechas con versiones anteriores de la app; la app actual ya no pide firma). |
 | GPS | Si existe ubicación (latitud/longitud) capturada. |
 | Registrado por | Usuario que quedó como autor de la evidencia. |
 | Observaciones | Nota libre de la entrega, si la hay. |
@@ -108,9 +108,8 @@ parte.
   por canal.
 - **Tiempo prom. emisión→entrega**: horas promedio entre la fecha de emisión y
   la fecha/hora en que se confirmó la entrega.
-- **Evidencia incompleta**: entregadas sin evidencia registrada, sin GPS, o de
-  canal móvil sin firma (una entrega web nunca captura firma, así que eso solo
-  no cuenta como incompleta).
+- **Evidencia incompleta**: entregadas sin evidencia registrada o sin GPS. La
+  firma no cuenta: la app móvil ya no la pide.
 
 ## Buscar y filtrar el listado
 
@@ -245,6 +244,10 @@ igual que una que no existe.
   (hasta ~20 s, objetivo ±20 m, muestra la precisión en vivo); el botón
   *Confirmar entrega* se habilita cuando termina, y si la precisión quedó peor
   que ±100 m pide confirmar antes de registrar (o *Actualizar ubicación*).
+  Antes de confirmar, el repartidor puede escribir una **observación opcional**
+  (hasta 500 caracteres, p. ej. quién recibió), igual que en la web; se ve en la
+  columna *Observaciones* y en el detalle. La app ya no muestra el recuadro de
+  firma.
 
 ## Errores frecuentes
 
@@ -260,8 +263,9 @@ igual que una que no existe.
   (`/config/permisos-modulos`), o la fila no está pendiente.
 - **"Solo se puede marcar la entrega de una consignación pendiente"**: alguien
   la entregó (o cambió su estado) después de que se cargó la lista; refresque.
-- **La firma no carga en el detalle**: la entrega no tiene `firma_path` (las
-  entregas registradas manualmente desde la web nunca tienen firma).
+- **La firma no carga en el detalle**: la entrega no tiene `firma_path`. Las
+  entregas web nunca tienen firma, y desde la versión 1.11 la app móvil tampoco
+  la pide; solo las entregas hechas con versiones anteriores de la app la tienen.
 - **"Ubicación aproximada" al registrar la entrega / el punto del mapa no es el
   lugar real**: el dispositivo no está usando GPS (lo tiene apagado, está bajo
   techo o es un computador de escritorio, que ubica por la red a cientos de
@@ -270,6 +274,11 @@ igual que una que no existe.
   el detalle (±m).
 
 ## Historial de cambios
+
+- **1.11** — App móvil (iPhone y Android): al registrar una entrega ya se puede
+  escribir una **observación** (opcional, hasta 500 caracteres), como en la web,
+  y se quitó el recuadro de **firma**. El KPI *Evidencia incompleta* ya no cuenta
+  la falta de firma, solo la falta de evidencia o de GPS.
 
 - **1.10** — Corregido: la entrega registrada desde la web no guardaba la
   ubicación exacta, sino la primera lectura aproximada del navegador (por red,

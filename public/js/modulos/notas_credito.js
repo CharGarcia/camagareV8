@@ -1109,13 +1109,16 @@
                     if (!res.ok || !res.data || !res.data.length) {
                         dd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados — puede dejar la descripción manual.</div>';
                     } else {
-                        dd.innerHTML = res.data.map(p =>
-                            `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;"
-                                 onclick='window.NC_seleccionarProducto(this, ${JSON.stringify(p).replace(/'/g, "&#39;")})'>
+                        // El producto no viaja serializado dentro del onclick (un apóstrofo lo rompía).
+                        dd.innerHTML = res.data.map((p, i) =>
+                            `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;" data-idx="${i}">
                                 <span class="fw-semibold">${(p.codigo || '')} — ${(p.nombre || '')}</span>
                                 <span class="text-muted ms-2 float-end">$${parseFloat(p.precio_base || 0).toFixed(2)}</span>
                             </div>`
                         ).join('');
+                        dd.querySelectorAll('[data-idx]').forEach(el => {
+                            el.addEventListener('click', () => window.NC_seleccionarProducto(el, res.data[+el.dataset.idx]));
+                        });
                     }
                     posicionar();
                     dd.classList.remove('d-none');
