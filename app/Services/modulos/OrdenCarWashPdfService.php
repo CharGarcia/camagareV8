@@ -508,8 +508,8 @@ class OrdenCarWashPdfService
     /**
      * PDF aparte que deja constancia de CÓMO INGRESA el vehículo al taller: datos del
      * vehículo y del cliente, condiciones de ingreso (texto con formato de la pestaña
-     * "Condiciones de ingreso"), novedades (Info. Adicional) y los servicios que se
-     * espera realizar, con firmas de recepción y entrega. Se imprime y se envía por
+     * "Condiciones de ingreso") y novedades (Info. Adicional), con firmas de recepción y
+     * entrega. No lleva servicios, productos ni valores. Se imprime y se envía por
      * correo desde la orden. No muestra información tributaria (no es un comprobante).
      *
      * @param string $outputDest 'I' inline, 'D' descarga, 'S' string
@@ -535,7 +535,7 @@ class OrdenCarWashPdfService
         $y = $this->ingresoDatosCliente($orden, $y + 2);
         $y = $this->ingresoCondiciones($orden, $y + 2);
         $y = $this->ingresoNovedades($orden, $y + 2);
-        $y = $this->ingresoServicios($orden, $y + 2);
+        $y = $this->ingresoProximaCita($orden, $y + 2);
         $y = $this->ingresoDeclaracion($orden, $y + 3);
         $this->dibujarFirmas($orden, $y + 2, ['Recibido por (taller)', 'Entrega el vehículo (cliente)']);
 
@@ -675,69 +675,24 @@ class OrdenCarWashPdfService
         return $y;
     }
 
-    /** Servicios y productos que se espera realizar, con el valor estimado (incluye IVA). */
-    private function ingresoServicios(array $o, float $y): float
+    /**
+     * Próxima cita sugerida. El acta NO lleva servicios ni productos (ni cantidades ni
+     * valores): solo deja constancia de cómo ingresa el vehículo.
+     */
+    private function ingresoProximaCita(array $o, float $y): float
     {
+        if (empty($o['proxima_cita'])) return $y;
         $pdf = $this->pdf;
-        $det = array_values(array_filter($o['detalles'] ?? [], fn($d) => (float) ($d['cantidad'] ?? 0) > 0));
-        $y = $this->tituloSeccion('SERVICIOS Y PRODUCTOS SOLICITADOS', $y);
-        $wN = 10; $wCod = 26; $wCant = 22; $wVal = 28;
-        $wDesc = $this->contentW - $wN - $wCod - $wCant - $wVal;
-        $enc = function (float $yE) use ($pdf, $wN, $wCod, $wDesc, $wCant, $wVal): float {
-            $pdf->SetFont('helvetica', 'B', self::FUENTE_ENCABEZADO_TABLA);
-            $pdf->SetFillColor(245, 245, 245);
-            $pdf->SetXY($this->marginL, $yE);
-            foreach ([[$wN, '#'], [$wCod, 'Código'], [$wDesc, 'Descripción'], [$wCant, 'Cantidad'], [$wVal, 'Valor estimado']] as [$w, $t]) {
-                $pdf->Cell($w, 5, $t, 1, 0, 'C', true);
-            }
-            return $yE + 5;
-        };
-        $y = $enc($y);
-        if (!$det) {
-            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
-            $pdf->SetXY($this->marginL, $y);
-            $pdf->Cell($this->contentW, self::ALTO_MIN_FILA, 'Sin servicios ni productos registrados.', 1, 1, 'C');
-            return $y + self::ALTO_MIN_FILA;
-        }
-        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
-        $total = 0.0;
-        foreach ($det as $k => $d) {
-            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
-            $desc = (string) ($d['descripcion'] ?? '');
-            $h = max(self::ALTO_MIN_FILA, max(1, $pdf->getNumLines($desc, $wDesc)) * self::LINEA_CUERPO);
-            if ($y + $h > $limiteY) { $pdf->AddPage(); $y = $enc($pdf->GetY()); $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO); }
-            $pdf->SetXY($this->marginL, $y);
-            $pdf->Cell($wN, $h, (string) ($k + 1), 1, 0, 'C');
-            $pdf->Cell($wCod, $h, (string) ($d['producto_codigo'] ?? ''), 1, 0, 'L', false, '', 1);
-            $pdf->MultiCell($wDesc, $h, $desc, 1, 'L', false, 0, '', '', true, 0, false, true, $h, 'M');
-            $pdf->Cell($wCant, $h, number_format((float) $d['cantidad'], $this->decCantidad), 1, 0, 'R');
-            $pdf->Cell($wVal, $h, number_format((float) ($d['total_linea'] ?? 0), 2), 1, 1, 'R');
-            $total += (float) ($d['total_linea'] ?? 0);
-            $y += $h;
-        }
-        $totalOrden = (float) ($o['total'] ?? $total);
-        $pdf->SetFont('helvetica', 'B', self::FUENTE_CUERPO);
-        $pdf->SetFillColor(230, 230, 230);
-        $pdf->SetXY($this->marginL + $this->contentW - $wVal - 52, $y);
-        $pdf->Cell(52, 5, 'TOTAL ESTIMADO (incluye IVA)', 1, 0, 'L', true);
-        $pdf->Cell($wVal, 5, number_format($totalOrden, 2), 1, 1, 'R', true);
-        $y += 5;
-
-        if (!empty($o['proxima_cita'])) {
-            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
-            $pdf->SetXY($this->marginL, $y + 1);
-            $pdf->Cell($this->contentW, 5, 'Próxima cita sugerida: ' . date('d-m-Y', strtotime((string) $o['proxima_cita'])), 0, 1, 'L');
-            $y += 6;
-        }
-        return $y;
+        $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+        $pdf->SetXY($this->marginL, $y + 1);
+        $pdf->Cell($this->contentW, 5, 'Próxima cita sugerida: ' . date('d-m-Y', strtotime((string) $o['proxima_cita'])), 0, 1, 'L');
+        return $y + 6;
     }
 
     private function ingresoDeclaracion(array $o, float $y): float
     {
         $pdf = $this->pdf;
-        $txt = 'Con su firma, el cliente confirma que el vehículo ingresa en las condiciones descritas en este '
-             . 'documento y solicita los servicios detallados. El valor es referencial: el valor final es el de la '
-             . 'factura o recibo que se emita al entregar el vehículo.';
+        $txt = 'Con su firma, el cliente confirma que el vehículo ingresa en las condiciones descritas en este documento.';
         $pdf->SetFont('helvetica', 'I', 8);
         $pdf->SetTextColor(80, 80, 80);
         $pdf->SetXY($this->marginL, $y);

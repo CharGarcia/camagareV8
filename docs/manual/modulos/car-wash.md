@@ -47,8 +47,11 @@ se le entrega al cliente.
    **bodega** y, si quiere, kilometraje, combustible y **próxima cita**.
 3. Agregue los **servicios y productos** en la grilla (igual que en una factura).
 4. Anote las novedades en **Info. Adicional** y pulse **Guardar**.
-5. Para cobrar, abra la orden y pulse **Factura** o **Recibo** en la barra superior.
-   Elija la forma de pago y confirme. La orden pasa a **Facturado** y queda
+5. Para cobrar, abra la orden y pulse **Factura** o **Recibo** en la barra superior y
+   confirme. La **forma de pago SRI** no se pregunta: se toma de la ficha del
+   **cliente** o, si no la tiene, de la **configuración de facturación** (Empresa →
+   Facturación); si ninguna está definida, se usa *01 - Sin utilización del sistema
+   financiero*. La ventana de confirmación muestra cuál se usará y de dónde sale. La orden pasa a **Facturado** y queda
    bloqueada.
 
 El modal tiene tres pestañas:
@@ -89,6 +92,13 @@ primero), **Descripción** (busca por nombre), Adicional, Cantidad, P. Sin Imp.,
 P. Con Imp., Descuento, IVA y Subtotal. Las columnas **Medida** y **Precios** solo
 aparecen cuando algún ítem tiene unidades de medida o listas de precios.
 
+**Descuento rápido.** Junto al descuento de cada línea está el botón **+** (si la
+empresa permite editar descuentos): abre una ventana para aplicar el descuento por
+**porcentaje** o por **valor**, a esa línea o, con *Aplicar a todos los ítems*, a toda
+la orden. Muestra el valor calculado antes de confirmar. No acepta más del 100 % ni un
+valor mayor que el subtotal de la línea, y deja el descuento con 2 decimales, igual
+que en la factura o el recibo que se emite.
+
 ## Condiciones de ingreso y Acta de ingreso del vehículo
 
 Junto a **Info. Adicional** está la pestaña **Condiciones de ingreso**: un editor de
@@ -100,9 +110,8 @@ Con la orden guardada, el botón del portapapeles de la barra superior (o **Acta
 ingreso** dentro de la pestaña) genera el **Acta de ingreso del vehículo**: un PDF
 aparte, sin datos tributarios, con los datos del vehículo (placa, marca, modelo, año,
 color, chasis, motor, kilometraje, combustible), del cliente, las condiciones de
-ingreso, las novedades, los servicios y productos solicitados con su valor estimado,
-la próxima cita y las firmas de quien recibe (taller) y de quien entrega (cliente).
-Deja constancia de cómo ingresa el vehículo y qué se va a hacer.
+ingreso, las novedades, la próxima cita y las firmas de quien recibe (taller) y de quien entrega (cliente).
+Deja constancia de cómo ingresa el vehículo; no lleva servicios, productos ni valores.
 
 Para enviarla, pulse **Correo** y elija el documento *Acta de ingreso del vehículo*
 (o *Orden de servicio*).
@@ -326,6 +335,10 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
   Precio Unitario, Descuento, Precio Total), los **totales** (subtotal por tarifa, no
   objeto, exento, sin impuestos, descuento, ICE, IVA por tarifa y VALOR TOTAL) y la
   **información adicional**, más observaciones y la leyenda del PDF de la empresa.
+  La **forma de pago SRI** ya no se pide al emitir: sale del cliente o de la
+  configuración de facturación, como en Factura de venta.
+  **Descuento rápido** por porcentaje o valor, por línea o a todos los ítems (como la
+  factura).
   Nueva pestaña **Condiciones de ingreso** y nuevo PDF **Acta de ingreso del vehículo**,
   que se imprime y se envía por correo. Al editar una orden ya no se borran sus
   observaciones (p. ej. las de órdenes migradas). La factura y el recibo llevan una sola

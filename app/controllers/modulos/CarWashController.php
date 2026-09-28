@@ -64,7 +64,7 @@ class CarWashController extends BaseModuloController
 
         $empresaData = $this->getEmpresaConfig($idEmpresa);
 
-        // Series (puntos de emisión) para la numeración, formas de pago y bodegas (emisión de documento).
+        // Series (puntos de emisión) para la numeración y bodegas (emisión de documento).
         $empresaRepo = new \App\repositories\modulos\EmpresaRepository();
         $secRepo = new \App\repositories\SecuencialRepository();
         $puntos = [];
@@ -92,7 +92,6 @@ class CarWashController extends BaseModuloController
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
         // Usuarios que registraron órdenes (select "Usuario" del modal de filtros).
         $usuariosFiltro = $this->repository->getUsuariosConOrdenes($idEmpresa);
-        $formasPago = $this->repository->getFormasPago();
         $bodegaRepo = new \App\repositories\modulos\BodegaRepository();
         $bodegas = $bodegaRepo->getBodegasPermitidas((int) $_SESSION['id_usuario'], $idEmpresa, (int) ($_SESSION['nivel'] ?? 1));
         $tarifasIva = $this->repository->getTarifasIva();
@@ -106,7 +105,6 @@ class CarWashController extends BaseModuloController
             'puntos'      => $puntos,
             'seriesFiltro' => $seriesFiltro,
             'usuariosFiltro' => $usuariosFiltro,
-            'formasPago'  => $formasPago,
             'bodegas'     => $bodegas,
             'tarifasIva'  => $tarifasIva,
             'unidades'    => $unidades,
@@ -525,7 +523,6 @@ class CarWashController extends BaseModuloController
             if (!in_array($tipo, ['FACTURA', 'RECIBO'], true)) throw new \Exception('Tipo de documento no válido.');
 
             $extra = [
-                'forma_pago' => trim($_POST['forma_pago'] ?? '01'),
                 'id_bodega'  => (int) ($_POST['id_bodega'] ?? 0),
             ];
 

@@ -3,7 +3,7 @@
 /** @var array $puntos */
 ?>
 <div class="modal fade" id="modalOrdenCW" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow">
             <div class="modal-header py-2">
                 <h5 class="modal-title" id="cwTitulo"><i class="bi bi-droplet-half me-1 text-info"></i> Nueva orden de Car-Wash</h5>
@@ -567,7 +567,7 @@
             pintarBadge(o.estado, o.estado, o.documento_vigente);
             CW_CUR = { id: o.id, id_documento: o.id_documento || 0, tipo_documento: o.tipo_documento || '', estado: o.estado || '',
                        id_vehiculo: o.id_vehiculo || 0, id_cliente: o.id_cliente || 0, documento_vigente: o.documento_vigente,
-                       placa: o.placa || '', cliente: o.cliente_nombre || '' };
+                       placa: o.placa || '', cliente: o.cliente_nombre || '', forma_pago_sri: o.forma_pago_sri || null };
             cwRenderDocumentos(o.documentos || []);
 
             // Serie / secuencial (se conserva la numeración de la orden; el selector queda bloqueado).
@@ -828,7 +828,14 @@
             <td class="col-lista-precios d-none"><select class="form-select form-select-sm input-detalle input-lista-precios d-none"><option value="">P. Base</option></select></td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="cwCalcSinImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(${DEC_PRECIO})" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio-iva" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="cwCalcConImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(${DEC_PRECIO})" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
-            <td><input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" oninput="cwCalcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}></td>
+            <td>
+                <div class="d-flex align-items-center">
+                    <input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" min="0" oninput="cwCalcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}>
+                    <button type="button" class="btn btn-link btn-sm p-1 text-primary shadow-none border-0 cw-btn-desc ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'd-none'}" onclick="cwAbrirDescuento(this)" title="Aplicar descuento rápido">
+                        <i class="bi bi-plus-circle"></i>
+                    </button>
+                </div>
+            </td>
             <td>
                 <select class="form-select form-select-sm input-detalle text-center input-iva" onchange="cwSyncPrecioIva(this)" ${EMPRESA_CONFIG.editar_iva_factura ? '' : 'disabled'}>
                     ${TARIFAS_IVA.map(t => `<option value="${t.porcentaje_iva}" data-codigo="${t.codigo}" data-id="${t.id}">${t.tarifa}</option>`).join('')}
@@ -1181,6 +1188,75 @@
         });
     });
 
+    // ─── Descuento rápido (igual que Factura de Venta) ────────────────────────
+    // Porcentaje o valor, para la línea o para todos los ítems. El descuento se deja con
+    // 2 decimales: es como se guarda en la orden y en la factura/recibo, así lo que se ve
+    // es exactamente lo que se emite.
+    window.cwAbrirDescuento = async function (btn) {
+        const trBase = btn.closest('tr');
+        const modalEl = document.getElementById('modalOrdenCW');
+        const subtotalFila = tr => r2(r6(tr.querySelector('.input-precio').value) * r6(tr.querySelector('.input-cantidad').value || 1));
+        const actual = parseFloat(trBase.querySelector('.input-desc').value) || 0;
+        const { value: form } = await Swal.fire({
+            title: '<span style="font-size:1rem"><i class="bi bi-percent me-1 text-primary"></i>Aplicar descuento</span>',
+            width: 340, target: modalEl, heightAuto: false,
+            html: `<div class="text-start" style="font-size:.8rem">
+                    <label class="text-muted mb-1 d-block">Modo</label>
+                    <div class="btn-group w-100 btn-group-sm mb-2" role="group">
+                        <input type="radio" class="btn-check" name="cwTipoDesc" id="cwDescP" value="P" ${actual > 0 ? '' : 'checked'}>
+                        <label class="btn btn-outline-primary py-1" for="cwDescP">Porcentaje (%)</label>
+                        <input type="radio" class="btn-check" name="cwTipoDesc" id="cwDescV" value="V" ${actual > 0 ? 'checked' : ''}>
+                        <label class="btn btn-outline-primary py-1" for="cwDescV">Valor ($)</label>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><label class="text-muted mb-1 d-block">Ingreso</label>
+                            <input type="number" id="cwDescIn" class="form-control form-control-sm text-center" step="any" min="0" value="${actual > 0 ? actual : 0}"></div>
+                        <div class="col-6"><label class="text-muted mb-1 d-block">Calculado ($)</label>
+                            <input type="text" id="cwDescCalc" class="form-control form-control-sm text-center bg-light border-0 text-primary" readonly></div>
+                    </div>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="cwDescTodos">
+                        <label class="form-check-label text-muted" for="cwDescTodos">Aplicar a todos los ítems</label>
+                    </div>
+                   </div>`,
+            showCancelButton: true, confirmButtonText: 'Confirmar', cancelButtonText: 'Cancelar',
+            didOpen: (popup) => {
+                const calc = () => {
+                    const tipo = popup.querySelector('input[name="cwTipoDesc"]:checked').value;
+                    const v = parseFloat(popup.querySelector('#cwDescIn').value) || 0;
+                    const res = tipo === 'P' ? r2(subtotalFila(trBase) * v / 100) : r2(v);
+                    popup.querySelector('#cwDescCalc').value = res.toFixed(2);
+                };
+                popup.querySelectorAll('input[name="cwTipoDesc"], #cwDescIn').forEach(el => el.addEventListener('input', calc));
+                popup.querySelectorAll('input[name="cwTipoDesc"]').forEach(el => el.addEventListener('change', calc));
+                calc();
+                setTimeout(() => { const i = popup.querySelector('#cwDescIn'); i.focus(); i.select(); }, 150);
+            },
+            preConfirm: () => {
+                const popup = Swal.getPopup();
+                const tipo = popup.querySelector('input[name="cwTipoDesc"]:checked').value;
+                const v = parseFloat(popup.querySelector('#cwDescIn').value) || 0;
+                const todos = popup.querySelector('#cwDescTodos').checked;
+                if (v < 0) { Swal.showValidationMessage('El valor no puede ser negativo.'); return false; }
+                if (tipo === 'P' && v > 100) { Swal.showValidationMessage('El porcentaje no puede pasar de 100.'); return false; }
+                const filas = todos ? Array.from(document.querySelectorAll('#cw_tbodyDetalle tr.row-detalle')) : [trBase];
+                if (tipo === 'V') {
+                    const excede = filas.find(tr => (tr.querySelector('.input-descripcion').value || '').trim() && v > subtotalFila(tr) + 0.0001);
+                    if (excede) { Swal.showValidationMessage('El descuento no puede ser mayor que el subtotal de la línea "' + excede.querySelector('.input-descripcion').value.trim() + '".'); return false; }
+                }
+                return { tipo, v, filas };
+            }
+        });
+        if (!form) return;
+        form.filas.forEach(tr => {
+            if (!(tr.querySelector('.input-descripcion').value || '').trim()) return; // filas vacías, nada que descontar
+            const desc = form.tipo === 'P' ? r2(subtotalFila(tr) * form.v / 100) : r2(form.v);
+            const inp = tr.querySelector('.input-desc');
+            inp.value = desc.toFixed(2);
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    };
+
     window.cwAgregarOpcionServicioLibre = function (texto, tr, dropdown) {
         const sep = document.createElement('div');
         sep.className = 'list-group-item py-1 text-muted x-small border-top bg-light';
@@ -1491,22 +1567,23 @@
         if (!idOrden) { Swal.fire('Atención', 'Primero guarde la orden.', 'warning'); return; }
         if (CW_CUR.id_documento && CW_CUR.documento_vigente !== false) { Swal.fire('Atención', 'Esta orden ya generó un documento vigente. Para volver a facturarla, anule primero ese documento.', 'warning'); return; }
 
-        const formas = window.CW_FORMAS_PAGO || [];
-        const optForma = formas.map(f => `<option value="${esc(f.codigo)}">${esc(f.nombre)}</option>`).join('') || '<option value="01">Efectivo</option>';
+        // La forma de pago SRI la resuelve el servidor: la del cliente o, si no tiene, la de
+        // la configuración de facturación (igual que Factura de Venta). Aquí solo se informa.
         const etq = tipo === 'FACTURA' ? 'Factura electrónica' : 'Recibo de venta';
-
-        const { value: form } = await Swal.fire({
+        const fp = CW_CUR.forma_pago_sri || {};
+        const { isConfirmed: form } = await Swal.fire({
             title: 'Generar ' + etq,
             target: document.getElementById('modalOrdenCW'),
-            html: `<div class="text-start">
-                    <label class="form-label small fw-semibold mb-1">Forma de pago</label>
-                    <select id="cwEmForma" class="form-select form-select-sm">${optForma}</select>
+            icon: 'question',
+            html: `<div class="text-start small">
+                    <div class="mb-1"><span class="text-muted">Forma de pago SRI:</span>
+                        <b>${esc(fp.codigo || '01')}${fp.nombre ? ' - ' + esc(fp.nombre) : ''}</b></div>
+                    <div class="text-muted" style="font-size:.75rem">Tomada ${fp.origen === 'cliente' ? 'de la ficha del cliente' : (fp.origen === 'configuración de facturación' ? 'de la configuración de facturación (Empresa → Facturación)' : 'por defecto: no está definida en el cliente ni en la configuración de facturación')}.</div>
                     <div class="form-text">El inventario se descarga de la bodega seleccionada en la orden.</div>
                    </div>`,
             showCancelButton: true,
             confirmButtonText: '<i class="bi bi-receipt me-1"></i> Generar',
             cancelButtonText: 'Cancelar',
-            preConfirm: () => ({ forma_pago: document.getElementById('cwEmForma').value || '01', id_bodega: 0 })
         });
         if (!form) return;
 
@@ -1515,8 +1592,7 @@
             const fd = new FormData();
             fd.append('id_orden', idOrden);
             fd.append('tipo', tipo);
-            fd.append('forma_pago', form.forma_pago);
-            fd.append('id_bodega', form.id_bodega);
+            fd.append('id_bodega', 0);
             const res = await fetch(`${RUTA}/generarDocumentoAjax`, { method: 'POST', body: fd });
             const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'No se pudo generar el documento.');

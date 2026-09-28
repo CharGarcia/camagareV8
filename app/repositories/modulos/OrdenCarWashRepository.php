@@ -462,6 +462,7 @@ class OrdenCarWashRepository extends BaseRepository
                        c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
                        c.direccion AS cliente_direccion, c.email AS cliente_email, c.telefono AS cliente_telefono,
                        (c.id IS NOT NULL AND c.status = 1 AND c.eliminado = false) AS cliente_activo,
+                       c.id_forma_pago_sri AS cliente_id_forma_pago_sri,
                        v.placa AS vehiculo_placa, v.marca AS vehiculo_marca, v.modelo AS vehiculo_modelo,
                        v.anio AS vehiculo_anio, v.color AS vehiculo_color, v.chasis AS vehiculo_chasis,
                        v.motor AS vehiculo_motor, v.tipo_vehiculo AS vehiculo_tipo,

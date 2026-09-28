@@ -256,7 +256,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         'codigo_punto'        => $p['codigo_punto'] ?? '',
         'calculo_iva'         => $p['calculo_iva'] ?? 'linea_linea',
     ], $puntos ?? [])) ?>;
-    window.CW_FORMAS_PAGO = <?= json_encode($formasPago ?? []) ?>;
     window.CW_BODEGAS = <?= json_encode(array_map(fn($b) => ['id' => (int)$b['id'], 'nombre' => $b['nombre'] ?? ''], $bodegas ?? [])) ?>;
 </script>
 

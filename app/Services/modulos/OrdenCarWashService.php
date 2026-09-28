@@ -189,6 +189,7 @@ class OrdenCarWashService
         $cab['documento_vigente'] = self::aBool($cab['documento_vigente'] ?? null);
         $cab['cliente_activo'] = self::aBool($cab['cliente_activo'] ?? null) === true;
         $cab['puede_facturar'] = $this->puedeFacturar($cab);
+        $cab['forma_pago_sri'] = $this->resolverFormaPagoSri($cab);
         $cab['editable'] = $this->esEditable($cab);
         return $cab;
     }
@@ -255,6 +256,40 @@ class OrdenCarWashService
         }
         usort($out, fn($a, $b) => [$b['_puntaje'], $b['stock_actual']] <=> [$a['_puntaje'], $a['stock_actual']]);
         return array_map(function ($p) { unset($p['_puntaje']); return $p; }, array_slice($out, 0, $limite));
+    }
+
+    /**
+     * Forma de pago SRI del documento que se emite desde la orden. Misma cascada que
+     * Factura de Venta, el POS y la carga de facturas (ver PosVentaService::resolverCodigoSriPago):
+     *   1. la forma de pago SRI de la ficha del CLIENTE (clientes.id_forma_pago_sri);
+     *   2. la de la CONFIGURACIÓN DE FACTURACIÓN del establecimiento de la orden
+     *      (empresa_establecimiento.id_forma_pago_sri_def);
+     *   3. '01' (sin utilización del sistema financiero).
+     * Es un dato fiscal: lo resuelve el servidor, no se toma de la pantalla.
+     *
+     * @return array{codigo:string, nombre:string, origen:string}
+     */
+    private function resolverFormaPagoSri(array $orden): array
+    {
+        $fp = new \App\models\FormaPagoSri();
+        $codigo = null; $origen = '';
+        if (!empty($orden['id_cliente'])) {
+            $codigo = $fp->getCodigoPorId((int) ($orden['cliente_id_forma_pago_sri'] ?? 0));
+            if ($codigo !== null) $origen = 'cliente';
+        }
+        if ($codigo === null) {
+            $cfg = $this->configEstablecimiento((int) ($orden['id_establecimiento'] ?? 0));
+            $codigo = $fp->getCodigoPorId((int) ($cfg['id_forma_pago_sri_def'] ?? 0));
+            if ($codigo !== null) $origen = 'configuración de facturación';
+        }
+        if ($codigo === null) { $codigo = '01'; $origen = 'por defecto'; }
+
+        static $nombres = null;
+        if ($nombres === null) {
+            $nombres = [];
+            foreach ($this->repository->getFormasPago() as $f) { $nombres[(string) $f['codigo']] = (string) $f['nombre']; }
+        }
+        return ['codigo' => $codigo, 'nombre' => $nombres[$codigo] ?? '', 'origen' => $origen];
     }
 
     /** Historial de órdenes por vehículo o por cliente (pestaña Historial del modal). */
@@ -575,7 +610,8 @@ class OrdenCarWashService
         }
         $estCod   = (string) ($orden['establecimiento'] ?? '');
         $puntoCod = (string) ($orden['punto_emision'] ?? '');
-        $formaPago = (string) ($extra['forma_pago'] ?? '01');
+        // Forma de pago SRI: cliente → configuración de facturación → '01' (no se pide en pantalla).
+        $formaPago = (string) ($orden['forma_pago_sri']['codigo'] ?? '01');
         // La bodega de la orden (cabecera) manda; si no, la que venga en la emisión.
         $idBodegaExtra = (int) ($orden['id_bodega'] ?? 0) ?: (int) ($extra['id_bodega'] ?? 0);
 
