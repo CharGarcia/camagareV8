@@ -70,6 +70,9 @@ class MigracionMysqlService
         'consignaciones_fact' => ['label' => 'Facturación de consignación',       'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion = 'FACTURA'"],
         'consignaciones_ret' => ['label' => 'Retornos de consignación',           'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion LIKE 'DEVOL%'"],
         'cambios_producto'  => ['label' => 'Cambios de productos',               'tabla' => 'cambio_productos_facturados', 'fecha' => 'fecha_cambio',  'tipo' => 'documento'],
+        // Órdenes de servicio del viejo (módulo orden_mecanica) → módulo Car-Wash. DESPUÉS de Facturas y
+        // Recibos: enlaza cada orden con el documento en que se emitió (registros_facturados).
+        'carwash'           => ['label' => 'Órdenes de servicio (Car-Wash / mecánica)', 'tabla' => 'encabezado_mecanica', 'fecha' => 'fecha_recepcion', 'tipo' => 'documento'],
         // Historial de "aprobar inventario" (cargas por Excel en cuarentena) → inventario_cargas.
         // Solo registro: NO re-aplica al kardex (ese se migra en 'inventario'). El detalle solo se
         // recupera para las APROBADAS (sus movimientos quedaron en `inventarios` por `referencia`).
@@ -343,6 +346,8 @@ class MigracionMysqlService
                 return $this->migrarConsignacionesDerivado($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta, 'DEVOLUCION');
             case 'cambios_producto':
                 return $this->migrarCambiosProducto($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'carwash':
+                return $this->migrarCarwash($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'cargas_inventario':
                 return $this->migrarCargasInventario($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             default:
@@ -403,6 +408,9 @@ class MigracionMysqlService
             'nietos' => [], 'hijos' => [['pedidos_detalle', 'id_pedido']]],
         'cargas_inventario' => ['cab' => 'inventario_cargas', 'fecha' => 'fecha',
             'nietos' => [], 'hijos' => [['inventario_cargas_detalle', 'id_carga']]],
+        // Novedades e historial de documentos (carwash_ordenes_documentos) caen por ON DELETE CASCADE.
+        'carwash' => ['cab' => 'carwash_ordenes', 'fecha' => 'fecha_ingreso',
+            'nietos' => [], 'hijos' => [['carwash_ordenes_detalle', 'id_orden']]],
         'roles_pago' => ['cab' => 'rol_cabecera', 'fecha' => 'fecha_pago',
             'nietos' => [['rol_detalle_rubro', 'id_detalle', 'rol_detalle', 'id_rol']],
             'hijos'  => [['rol_detalle', 'id_rol']]],
@@ -433,7 +441,7 @@ class MigracionMysqlService
         'proformas' => 'proformas_cabecera', 'consignaciones' => 'consignaciones_ventas',
         'consignaciones_fact' => 'consignaciones_facturas', 'consignaciones_ret' => 'retornos_cv',
         'cambios_producto' => 'cambios_producto_cv', 'pedidos' => 'pedidos_cabecera',
-        'cargas_inventario' => 'inventario_cargas',
+        'cargas_inventario' => 'inventario_cargas', 'carwash' => 'carwash_ordenes',
     ];
 
     /**
@@ -3269,6 +3277,344 @@ class MigracionMysqlService
                 if ($pg->inTransaction()) { $pg->rollBack(); }
                 $res['errores']++;
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Órdenes de servicio del sistema anterior (módulo "orden_mecanica") → módulo Car-Wash.
+     *
+     * Origen (todo enlazado por `codigo_unico` + ruc_empresa):
+     *  - `encabezado_mecanica`: la orden (numero_orden correlativo por ruc_empresa, cliente, fecha/hora
+     *    de recepción y entrega, persona a cargo del vehículo, próximo chequeo, estado EN ESPERA /
+     *    EN TALLER / CERRADA).
+     *  - `vehiculos` (viejo): UN registro por orden (snapshot) → se consolida por PLACA en `vehiculos`
+     *    del sistema nuevo (get-or-create; la placa es única por empresa).
+     *  - `detalle_factura_mecanica`: servicios/productos (precio SIN IVA, subtotal neto de descuento,
+     *    tarifa_iva = código SRI, bodega).
+     *  - `observaciones_mecanica`: observaciones de entrada y demás notas → Info. Adicional.
+     *  - `registros_facturados` (emitido_desde = 'orden_mecanica'): en qué Factura/Recibo se emitió
+     *    cada orden (puede haber más de uno). Se enlaza con el documento YA migrado del sistema nuevo
+     *    por serie + secuencial → pestaña Facturación (carwash_ordenes_documentos).
+     *
+     * NO mueve inventario: el kardex del sistema anterior se migra como dato en la entidad
+     * "Inventario". Conviene migrar antes Clientes, Productos, Bodegas, Facturas y Recibos; si las
+     * facturas/recibos se migran después, basta re-correr esta entidad: re-enlaza los documentos.
+     *
+     * Numeración: el viejo no tiene serie propia para la orden, solo un correlativo por RUC. Todas
+     * las órdenes caen en UNA serie (la más usada en sus facturas, o la serie por defecto) con
+     * secuencial = número de orden del viejo, para que el N° que conoce el cliente se conserve. Si
+     * ese secuencial ya está ocupado (orden nativa o de otro establecimiento), se renumera al
+     * siguiente libre por encima del número viejo más alto.
+     */
+    private function migrarCarwash(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'carwash', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [],
+                'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0, 'renumerados' => 0, 'documentos_enlazados' => 0,
+                'omitidos_motivo' => 'la orden del sistema anterior no tiene servicios ni productos'];
+
+        $mapOrden    = $this->mapaDe($pg, $idEmpresa, 'carwash');
+        $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $mapProd     = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $mapBodega   = $this->mapaDe($pg, $idEmpresa, 'bodegas');
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $prodPorCod  = $this->productosPorCodigo($pg, $idEmpresa);
+        $insMap      = $this->stmtMap($pg, 'carwash');
+        $amb         = $this->ambienteEmpresa($pg, $idEmpresa);
+        $conTablaDocs = (bool) $pg->query("SELECT to_regclass('public.carwash_ordenes_documentos') IS NOT NULL")->fetchColumn();
+
+        // Vehículos del sistema nuevo por placa normalizada (incluye eliminados: la placa es única por empresa).
+        $normPlaca = static fn($p): string => preg_replace('/[^A-Z0-9]/', '', strtoupper(trim((string) $p)));
+        $vehPorPlaca = [];
+        $qv = $pg->prepare("SELECT id, placa FROM vehiculos WHERE id_empresa = ? ORDER BY eliminado, id");
+        $qv->execute([$idEmpresa]);
+        foreach ($qv->fetchAll(PDO::FETCH_ASSOC) as $v) {
+            $k = $normPlaca($v['placa']);
+            if ($k !== '' && !isset($vehPorPlaca[$k])) { $vehPorPlaca[$k] = (int) $v['id']; }
+        }
+
+        // Serie de las órdenes: la más usada en el detalle (= serie de sus facturas), o la de defecto.
+        $qBase = $mysql->quote($base . '%');
+        $serieTop = (string) ($mysql->query("SELECT serie FROM detalle_factura_mecanica
+                 WHERE ruc_empresa LIKE $qBase AND serie REGEXP '^[0-9]{3}-[0-9]{3}$'
+                 GROUP BY serie ORDER BY COUNT(*) DESC LIMIT 1")->fetchColumn() ?: '');
+        if ($serieTop !== '') {
+            [$e, $p] = explode('-', $serieTop);
+            $serie = [
+                'establecimiento'    => $this->estabDestino ?? $e,
+                'punto_emision'      => $p,
+                'id_establecimiento' => $this->getEstablecimientoId($idEmpresa, $e, $idUsuario),
+                'id_punto_emision'   => $this->getPuntoEmisionId($idEmpresa, $e, $p, $idUsuario),
+            ];
+        } else {
+            $serie = $this->serieDefecto($idEmpresa, $idUsuario);
+        }
+        $idPunto = (int) $serie['id_punto_emision'];
+
+        // ── Precargas del viejo (tablas por empresa; se leen una sola vez) ──
+        $vehViejo = [];
+        foreach ($mysql->query("SELECT codigo_unico, marca, placa, chasis, anio, propietario FROM vehiculos WHERE ruc_empresa LIKE $qBase") as $v) {
+            $vehViejo[(string) $v['codigo_unico']] = $v;
+        }
+        $obsViejo = [];
+        foreach ($mysql->query("SELECT codigo_unico, concepto, detalle FROM observaciones_mecanica WHERE ruc_empresa LIKE $qBase ORDER BY id_obs") as $o) {
+            $obsViejo[(string) $o['codigo_unico']][] = $o;
+        }
+        $regViejo = [];
+        foreach ($mysql->query("SELECT ruc_empresa, documento_generado, numero_orden, serie, numero_documento, total, fecha
+                                  FROM registros_facturados
+                                 WHERE emitido_desde = 'orden_mecanica' AND ruc_empresa LIKE $qBase ORDER BY fecha, id") as $r) {
+            $regViejo[$r['ruc_empresa'] . '|' . (int) trim((string) $r['numero_orden'])][] = $r;
+        }
+
+        // ── Cabeceras ──
+        $sql = "SELECT id_enc_mecanica, ruc_empresa, numero_orden, id_cliente, nombre_usuario, contacto_usuario, correo_usuario,
+                       fecha_recepcion, hora_recepcion, fecha_entrega, hora_entrega, fecha_registro, codigo_unico,
+                       proximo_chequeo, obs_prox_chequeo, estado
+                  FROM encabezado_mecanica
+                 WHERE ruc_empresa LIKE $qBase" . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)
+               . $this->clausulaFecha('fecha_recepcion', $desde, $hasta, $mysql) . " ORDER BY id_enc_mecanica";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $cabeceras = $mysql->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        $maxNumViejo = 0;
+        foreach ($cabeceras as $c) { $maxNumViejo = max($maxNumViejo, (int) $c['numero_orden']); }
+
+        // ── Sentencias del sistema nuevo ──
+        $insVeh = $pg->prepare("INSERT INTO vehiculos (id_empresa, id_usuario, marca, placa, chasis, anio, propietario, estado, id_cliente, eliminado, created_by, updated_by)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, 'activo', ?, false, ?, ?) RETURNING id");
+        $insCab = $pg->prepare("INSERT INTO carwash_ordenes (id_empresa, id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial, tipo_ambiente,
+                                    numero_orden, id_vehiculo, id_cliente, id_bodega, placa, marca, modelo, fecha_ingreso, fecha_entrega, estado,
+                                    observaciones, info_adicional, proxima_cita, subtotal, descuento, iva, total,
+                                    tipo_documento, id_documento, numero_documento, created_at, updated_at, created_by, updated_by, eliminado)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, CAST(? AS JSONB), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false) RETURNING id");
+        $insDet = $pg->prepare("INSERT INTO carwash_ordenes_detalle (id_orden, id_empresa, id_producto, tipo_linea, es_libre, descripcion, id_bodega,
+                                    cantidad, precio_unitario, descuento, porcentaje_iva, valor_iva, total_linea, id_tarifa_iva, eliminado)
+                                VALUES (?, ?, ?, ?, false, ?, ?, ?, ?, ?, ?, ?, ?, ?, false)");
+        $qOcupado = $pg->prepare("SELECT o.id, o.placa, o.fecha_ingreso::date AS f,
+                                         EXISTS (SELECT 1 FROM migracion_mysql_map m WHERE m.id_empresa = o.id_empresa AND m.entidad = 'carwash' AND m.id_destino = o.id) AS migrada
+                                    FROM carwash_ordenes o
+                                   WHERE o.id_empresa = ? AND o.id_punto_emision = ? AND o.secuencial = ? AND o.tipo_ambiente = ? AND o.eliminado = false LIMIT 1");
+        $qFactura = $pg->prepare("SELECT id FROM ventas_cabecera WHERE id_empresa = ? AND establecimiento = ? AND punto_emision = ? AND secuencial = ? ORDER BY eliminado, id LIMIT 1");
+        $qRecibo  = $pg->prepare("SELECT id FROM recibos_venta_cabecera WHERE id_empresa = ? AND establecimiento = ? AND punto_emision = ? AND secuencial = ? ORDER BY eliminado, id LIMIT 1");
+        $delDocs  = $conTablaDocs ? $pg->prepare("DELETE FROM carwash_ordenes_documentos WHERE id_orden = ? AND origen = 'migracion'") : null;
+        $insDoc   = $conTablaDocs ? $pg->prepare("INSERT INTO carwash_ordenes_documentos (id_empresa, id_orden, tipo_documento, id_documento, numero_documento, fecha_emision, total, origen, created_by, updated_by)
+                                                   VALUES (?, ?, ?, ?, ?, ?, ?, 'migracion', ?, ?)") : null;
+        $updDocCab = $pg->prepare("UPDATE carwash_ordenes SET tipo_documento = ?, id_documento = ?, numero_documento = ?, estado = 'facturado', tipo_ambiente = ? WHERE id = ? AND id_empresa = ?");
+
+        // Documentos (Factura/Recibo) del viejo de una orden, resueltos contra el sistema nuevo.
+        $documentosDe = function (array $c) use ($regViejo, $qFactura, $qRecibo, $idEmpresa): array {
+            $out = [];
+            foreach ($regViejo[$c['ruc_empresa'] . '|' . (int) $c['numero_orden']] ?? [] as $r) {
+                $esFactura = stripos((string) $r['documento_generado'], 'fact') !== false;
+                $partes = explode('-', trim((string) $r['serie']));
+                $e = str_pad(preg_replace('/\D/', '', $partes[0] ?? '') ?: '001', 3, '0', STR_PAD_LEFT);
+                $p = str_pad(preg_replace('/\D/', '', $partes[1] ?? '') ?: '001', 3, '0', STR_PAD_LEFT);
+                $sec = str_pad(preg_replace('/\D/', '', (string) $r['numero_documento']), 9, '0', STR_PAD_LEFT);
+                $q = $esFactura ? $qFactura : $qRecibo;
+                $q->execute([$idEmpresa, $e, $p, $sec]);
+                $idDoc = $q->fetchColumn();
+                $out[] = [
+                    'tipo'   => $esFactura ? 'FACTURA' : 'RECIBO',
+                    'id'     => $idDoc !== false ? (int) $idDoc : null,
+                    'numero' => "$e-$p-$sec",
+                    'fecha'  => self::fechaCorta($r['fecha']) ? substr((string) $r['fecha'], 0, 19) : date('Y-m-d H:i:s'),
+                    'total'  => (float) $r['total'],
+                ];
+            }
+            return $out;
+        };
+        // Guarda el historial de documentos y enlaza el último en la cabecera.
+        $enlazarDocs = function (int $idOrden, array $docs) use ($delDocs, $insDoc, $updDocCab, $idEmpresa, $idUsuario, $amb, &$res): void {
+            if ($delDocs) { $delDocs->execute([$idOrden]); }
+            foreach ($docs as $d) {
+                if ($insDoc) { $insDoc->execute([$idEmpresa, $idOrden, $d['tipo'], $d['id'], $d['numero'], $d['fecha'], $d['total'], $idUsuario, $idUsuario]); }
+                if ($d['id']) { $res['documentos_enlazados']++; }
+            }
+            if ($docs) {
+                $ult = end($docs);
+                $updDocCab->execute([$ult['tipo'], $ult['id'], $ult['numero'], $amb, $idOrden, $idEmpresa]);
+            }
+        };
+
+        foreach (array_chunk($cabeceras, 300) as $lote) {
+            // Detalle del lote + nombres/códigos de sus productos (el detalle viejo no trae nombre).
+            $codigos = array_map(fn($c) => (string) $c['codigo_unico'], $lote);
+            $detalles = [];
+            $in = implode(',', array_map([$mysql, 'quote'], $codigos));
+            foreach ($mysql->query("SELECT codigo_unico, id_producto, precio, cantidad, subtotal, descuento, id_bodega, tipo_produccion, tarifa_iva
+                                      FROM detalle_factura_mecanica WHERE ruc_empresa LIKE $qBase AND codigo_unico IN ($in) ORDER BY id_detalle") as $d) {
+                $detalles[(string) $d['codigo_unico']][] = $d;
+            }
+            $idsProd = [];
+            foreach ($detalles as $ls) { foreach ($ls as $l) { $idsProd[(int) $l['id_producto']] = true; } }
+            $prodViejo = [];
+            if ($idsProd) {
+                $inP = implode(',', array_map('intval', array_keys($idsProd)));
+                foreach ($mysql->query("SELECT id, codigo_producto, nombre_producto, tipo_produccion, tarifa_iva FROM productos_servicios WHERE id IN ($inP)") as $p) {
+                    $prodViejo[(int) $p['id']] = $p;
+                }
+            }
+
+            foreach ($lote as $c) {
+                $res['total']++;
+                $old = (int) $c['id_enc_mecanica'];
+
+                // Ya migrada: solo se re-enlazan sus documentos (por si Facturas/Recibos se migraron después).
+                if (isset($mapOrden[(string) $old])) {
+                    $res['ya_migrados']++;
+                    try {
+                        $pg->beginTransaction();
+                        $docs = $documentosDe($c);
+                        if ($docs) { $enlazarDocs($mapOrden[(string) $old], $docs); }
+                        $pg->commit();
+                    } catch (Throwable $ex) {
+                        if ($pg->inTransaction()) { $pg->rollBack(); }
+                    }
+                    continue;
+                }
+
+                $lineas = $detalles[(string) $c['codigo_unico']] ?? [];
+                if (!$lineas) { $res['omitidos']++; continue; }
+
+                $vv = $vehViejo[(string) $c['codigo_unico']] ?? [];
+                $placa = mb_substr(strtoupper(trim((string) ($vv['placa'] ?? ''))), 0, 20);
+                if ($placa === '') { $placa = 'SIN-PLACA'; }
+                $kPlaca = $normPlaca($placa);
+
+                // Fechas.
+                $fRec = self::fechaCorta($c['fecha_recepcion']) ?? self::fechaCorta($c['fecha_registro']) ?? date('Y-m-d');
+                $hRec = preg_match('/^\d{2}:\d{2}(:\d{2})?$/', (string) $c['hora_recepcion']) ? substr((string) $c['hora_recepcion'], 0, 8) : '00:00:00';
+                $fechaIngreso = $fRec . ' ' . (strlen($hRec) === 5 ? $hRec . ':00' : $hRec);
+                $fEnt = self::fechaCorta($c['fecha_entrega']);
+                $fechaEntrega = $fEnt ? $fEnt . ' ' . (preg_match('/^\d{2}:\d{2}:\d{2}$/', (string) $c['hora_entrega']) ? $c['hora_entrega'] : '00:00:00') : null;
+                $creado = self::fechaCorta($c['fecha_registro']) ? substr((string) $c['fecha_registro'], 0, 19) : $fechaIngreso;
+
+                // Número: secuencial = N° de orden del viejo; si está ocupado, se renumera. Se decide
+                // ANTES de abrir la transacción (y de crear cliente/vehículo) para que un vínculo no
+                // deje en caché ids de filas revertidas.
+                $sec = str_pad((string) (int) $c['numero_orden'], 9, '0', STR_PAD_LEFT);
+                $qOcupado->execute([$idEmpresa, $idPunto, $sec, $amb]);
+                $ocup = $qOcupado->fetch(PDO::FETCH_ASSOC);
+                if ($ocup) {
+                    $mismaOrden = empty($ocup['migrada']) && $normPlaca($ocup['placa']) === $kPlaca && (string) $ocup['f'] === $fRec;
+                    if ($mismaOrden) {
+                        // Misma placa y fecha: es la misma orden registrada a mano → se vincula, no se duplica.
+                        $this->marcarVinculado($res, $mapOrden, $pg, $idEmpresa, $old, (int) $ocup['id'], self::numeroDoc($serie, $sec), $idUsuario);
+                        $mapOrden[(string) $old] = (int) $ocup['id'];
+                        continue;
+                    }
+                    $qMax = $pg->prepare("SELECT COALESCE(MAX(NULLIF(regexp_replace(secuencial, '[^0-9]', '', 'g'), '')::bigint), 0)
+                                            FROM carwash_ordenes WHERE id_empresa = ? AND id_punto_emision = ? AND tipo_ambiente = ?");
+                    $qMax->execute([$idEmpresa, $idPunto, $amb]);
+                    $sec = str_pad((string) (max((int) $qMax->fetchColumn(), $maxNumViejo) + 1), 9, '0', STR_PAD_LEFT);
+                    $res['renumerados']++;
+                }
+                $numero = self::numeroDoc($serie, $sec);
+
+                // Si la transacción falla, las cachés no deben quedarse con ids de filas revertidas.
+                [$snapVeh, $snapCli, $snapProd] = [$vehPorPlaca, $cliPorIdent, $prodPorCod];
+                try {
+                    $pg->beginTransaction();
+
+                    // Cliente (opcional en la orden).
+                    $idCliente = (int) $c['id_cliente'] > 0
+                        ? $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $c['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg)
+                        : null;
+
+                    // Vehículo: get-or-create por placa.
+                    if (!isset($vehPorPlaca[$kPlaca])) {
+                        $anio = (int) ($vv['anio'] ?? 0);
+                        $pg->exec('SAVEPOINT sp_veh');
+                        try {
+                            $insVeh->execute([$idEmpresa, $idUsuario, self::nz(mb_substr((string) ($vv['marca'] ?? ''), 0, 100)), $placa,
+                                self::nz(mb_substr((string) ($vv['chasis'] ?? ''), 0, 100)), $anio > 1900 ? $anio : null,
+                                self::nz(mb_substr((string) ($vv['propietario'] ?? ''), 0, 200)), $idCliente, $idUsuario, $idUsuario]);
+                            $vehPorPlaca[$kPlaca] = (int) $insVeh->fetchColumn();
+                            $pg->exec('RELEASE SAVEPOINT sp_veh');
+                        } catch (Throwable $e) {
+                            $pg->exec('ROLLBACK TO SAVEPOINT sp_veh');
+                            $q = $pg->prepare("SELECT id FROM vehiculos WHERE id_empresa = ? AND UPPER(placa) = ? LIMIT 1");
+                            $q->execute([$idEmpresa, $placa]);
+                            $idV = (int) $q->fetchColumn();
+                            if (!$idV) { throw $e; }
+                            $vehPorPlaca[$kPlaca] = $idV;
+                        }
+                    }
+                    $idVehiculo = $vehPorPlaca[$kPlaca];
+
+                    // Líneas y totales.
+                    $filas = []; $sub = 0.0; $desc = 0.0; $iva = 0.0; $idBodegaCab = null;
+                    foreach ($lineas as $l) {
+                        $pv = $prodViejo[(int) $l['id_producto']] ?? [];
+                        $codIva = trim((string) ($l['tarifa_iva'] ?? '')) !== '' ? trim((string) $l['tarifa_iva']) : trim((string) ($pv['tarifa_iva'] ?? '0'));
+                        $idProd = $this->resolverOCrearProducto($prodPorCod, $mapProd, (int) $l['id_producto'],
+                            (string) ($pv['codigo_producto'] ?? ''), (string) ($pv['nombre_producto'] ?? ''), $codIva, $idEmpresa, $idUsuario, $pg);
+                        $pct  = (float) (self::IVA_PCT[$codIva] ?? 0);
+                        $baseL = round((float) $l['subtotal'], 2);
+                        $ivaL = round($baseL * $pct / 100, 2);
+                        $idBod = $mapBodega[(string) (int) $l['id_bodega']] ?? null;
+                        if ($idBodegaCab === null && $idBod) { $idBodegaCab = $idBod; }
+                        $tp = trim((string) ($l['tipo_produccion'] ?: ($pv['tipo_produccion'] ?? '01')));
+                        $filas[] = [$idProd, $tp === '02' ? 'servicio' : 'producto',
+                            mb_substr(trim((string) ($pv['nombre_producto'] ?? '')) ?: 'ITEM', 0, 300), $idBod,
+                            (float) $l['cantidad'], (float) $l['precio'], round((float) $l['descuento'], 2),
+                            $pct, $ivaL, round($baseL + $ivaL, 2), $this->ivaIdPorCodigo($pg, $codIva)];
+                        $sub += $baseL; $desc += (float) $l['descuento']; $iva += $ivaL;
+                    }
+
+                    // Info adicional: observaciones de la orden + persona a cargo del vehículo.
+                    $info = [];
+                    foreach ($obsViejo[(string) $c['codigo_unico']] ?? [] as $o) {
+                        $val = trim(preg_replace('/\s+/u', ' ', (string) $o['detalle']));
+                        if ($val !== '') { $info[] = ['nombre' => mb_substr(trim((string) $o['concepto']) ?: 'Observación', 0, 100), 'valor' => mb_substr($val, 0, 300)]; }
+                    }
+                    $contacto = trim((string) $c['nombre_usuario']);
+                    if ($contacto !== '' && strcasecmp($contacto, 'Usuario final') !== 0) {
+                        $tel = trim((string) $c['contacto_usuario']);
+                        $info[] = ['nombre' => 'A cargo del vehículo', 'valor' => mb_substr($contacto . ($tel !== '' ? " · $tel" : ''), 0, 300)];
+                    }
+                    if (trim((string) $c['obs_prox_chequeo']) !== '') {
+                        $info[] = ['nombre' => 'Próximo chequeo', 'valor' => mb_substr(trim((string) $c['obs_prox_chequeo']), 0, 300)];
+                    }
+
+                    $docs = $documentosDe($c);
+                    $ult  = $docs ? end($docs) : null;
+                    // CERRADA = la orden se terminó en el sistema anterior (con o sin documento enlazado).
+                    $estado = ($ult || stripos((string) $c['estado'], 'CERRAD') !== false) ? 'facturado' : 'borrador';
+
+                    $insCab->execute([
+                        $idEmpresa, (int) $serie['id_establecimiento'], $idPunto, $serie['establecimiento'], $serie['punto_emision'], $sec, $amb,
+                        $numero, $idVehiculo, $idCliente, $idBodegaCab, $placa, self::nz(mb_substr((string) ($vv['marca'] ?? ''), 0, 100)),
+                        $fechaIngreso, $fechaEntrega, $estado,
+                        'Migrado del sistema anterior (orden N° ' . (int) $c['numero_orden'] . ')',
+                        $info ? json_encode($info, JSON_UNESCAPED_UNICODE) : null,
+                        self::fechaCorta($c['proximo_chequeo']),
+                        round($sub, 2), round($desc, 2), round($iva, 2), round($sub + $iva, 2),
+                        $ult['tipo'] ?? null, $ult['id'] ?? null, $ult['numero'] ?? null,
+                        $creado, $creado, $idUsuario, $idUsuario,
+                    ]);
+                    $idOrden = (int) $insCab->fetchColumn();
+
+                    foreach ($filas as $f) {
+                        $insDet->execute([$idOrden, $idEmpresa, $f[0], $f[1], $f[2], $f[3], $f[4], $f[5], $f[6], $f[7], $f[8], $f[9], $f[10]]);
+                    }
+                    if ($docs) { $enlazarDocs($idOrden, $docs); }
+
+                    $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idOrden, ':cn' => $numero, ':vin' => 'f', ':cb' => $idUsuario]);
+                    $pg->commit();
+                    $mapOrden[(string) $old] = $idOrden;
+                    $res['migrados']++;
+                } catch (Throwable $ex) {
+                    if ($pg->inTransaction()) { $pg->rollBack(); }
+                    [$vehPorPlaca, $cliPorIdent, $prodPorCod] = [$snapVeh, $snapCli, $snapProd];
+                    $res['errores']++;
+                    if (empty($res['error_muestra'])) { $res['error_muestra'] = 'Orden ' . (int) $c['numero_orden'] . ': ' . substr($ex->getMessage(), 0, 180); }
+                }
             }
         }
         return $res;

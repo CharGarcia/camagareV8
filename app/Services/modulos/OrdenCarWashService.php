@@ -14,9 +14,10 @@ use Exception;
  * Lógica de negocio del módulo Servicio Car-Wash.
  *
  * Una orden registra el ingreso de un vehículo, sus servicios/productos, las
- * novedades encontradas y la próxima cita. La orden NO mueve inventario ni genera
- * asiento contable por sí misma: eso ocurre al emitir el documento de venta
- * (Factura o Recibo) desde generarDocumento() — ver Fase 2.
+ * novedades encontradas y la próxima cita. La orden descarga inventario al guardarse
+ * (bodega de la cabecera); al emitir el documento de venta (Factura o Recibo) desde
+ * generarDocumento() esa salida se devuelve y la hace el documento. El asiento contable
+ * lo genera el documento, nunca la orden.
  */
 class OrdenCarWashService
 {
@@ -63,7 +64,7 @@ class OrdenCarWashService
             if ($cant <= 0 || $idProd <= 0) continue;
             $out[] = [
                 'id_producto' => $idProd,
-                'id_bodega'   => (int) ($d['id_bodega'] ?? 0) ?: $idBodega,
+                'id_bodega'   => $idBodega ?: (int) ($d['id_bodega'] ?? 0), // la bodega de la cabecera aplica a toda la orden
                 'cantidad'    => $cant,
                 'nombre'      => $d['descripcion'] ?? '',
             ];
@@ -117,7 +118,7 @@ class OrdenCarWashService
             $cant   = (float) ($d['cantidad'] ?? 0);
             if ($idProd <= 0 || $cant <= 0) continue;
 
-            $bodega = (int) ($d['id_bodega'] ?? 0) ?: $idBodegaDefault;
+            $bodega = $idBodegaDefault ?: (int) ($d['id_bodega'] ?? 0);
             if ($bodega > 0) continue;
 
             $info  = $prodRepo->getInfoControlInventario($idProd, $idEmpresa);
@@ -158,7 +159,47 @@ class OrdenCarWashService
         $cab['detalles']  = $this->repository->getDetalles($id, $idEmpresa);
         $cab['novedades'] = $this->repository->getNovedades($id, $idEmpresa);
         $cab['info_adicional'] = $this->decodeInfoAdicional($cab['info_adicional'] ?? null);
+        $cab['documentos'] = $this->repository->getDocumentos($id, $idEmpresa);
+        $cab['documento_vigente'] = self::aBool($cab['documento_vigente'] ?? null);
+        $cab['puede_facturar'] = $this->puedeFacturar($cab);
+        $cab['editable'] = $this->esEditable($cab);
         return $cab;
+    }
+
+    /** Historial de órdenes por vehículo o por cliente (pestaña Historial del modal). */
+    public function getHistorial(int $idEmpresa, string $modo, string $q, ?int $idVehiculo, ?int $idCliente, ?int $idUsuarioFiltro): array
+    {
+        return $this->repository->getHistorial($idEmpresa, $modo === 'cliente' ? 'cliente' : 'vehiculo', $q, $idVehiculo, $idCliente, $idUsuarioFiltro);
+    }
+
+    private static function aBool($v): ?bool
+    {
+        if ($v === null) return null;
+        return $v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1';
+    }
+
+    /**
+     * Una orden facturada queda bloqueada mientras su documento siga vigente. Si la factura o el
+     * recibo se ANULÓ o ELIMINÓ en su módulo, la orden se libera: se puede corregir y volver a
+     * facturar (el documento anterior queda en el historial de Facturación).
+     * Las órdenes migradas del sistema anterior pueden estar facturadas sin documento enlazado
+     * (el documento no existe en el sistema nuevo): siguen bloqueadas.
+     */
+    private function documentoLiberado(array $cab): bool
+    {
+        return !empty($cab['id_documento']) && self::aBool($cab['documento_vigente'] ?? null) === false;
+    }
+
+    private function esEditable(array $cab): bool
+    {
+        if (($cab['estado'] ?? '') === 'anulado') return false;
+        if ($this->documentoLiberado($cab)) return true;
+        return empty($cab['id_documento']) && ($cab['estado'] ?? 'borrador') !== 'facturado';
+    }
+
+    private function puedeFacturar(array $cab): bool
+    {
+        return $this->esEditable($cab);
     }
 
     // ─── Crear ────────────────────────────────────────────────────────────────
@@ -251,11 +292,12 @@ class OrdenCarWashService
         if (!$cab) {
             throw new Exception("Orden no encontrada.");
         }
-        if (!empty($cab['id_documento'])) {
-            throw new Exception("No se puede editar una orden que ya generó un documento.");
-        }
         if (($cab['estado'] ?? '') === 'anulado') {
             throw new Exception("No se puede editar una orden anulada.");
+        }
+        if (!$this->esEditable($cab)) {
+            throw new Exception("No se puede editar una orden que ya generó un documento vigente ("
+                . ($cab['numero_documento'] ?? '') . "). Anule primero el documento.");
         }
 
         $idUsuario = (int) $data['id_usuario'];
@@ -286,7 +328,14 @@ class OrdenCarWashService
                 'total'             => $tot['total'],
                 'updated_by'        => $idUsuario,
                 'updated_at'        => date('Y-m-d H:i:s'),
-            ]);
+            ] + ($this->documentoLiberado($cab) && $this->repository->existeTablaDocumentos() ? [
+                // Su factura/recibo se anuló: la orden vuelve a borrador para re-facturarla.
+                // El documento anterior queda en el historial de Facturación.
+                'estado'           => 'borrador',
+                'tipo_documento'   => null,
+                'id_documento'     => null,
+                'numero_documento' => null,
+            ] : []));
 
             // Inventario: se revierte la salida anterior y se vuelve a aplicar con las líneas nuevas.
             $this->validarBodegasLineas($data['detalles'], (int) ($data['id_bodega'] ?? 0), $idEmpresa, (int) ($data['id_establecimiento'] ?? $cab['id_establecimiento'] ?? 0));
@@ -351,7 +400,7 @@ class OrdenCarWashService
         if (!$cab) {
             throw new Exception("Orden no encontrada.");
         }
-        if (!empty($cab['id_documento'])) {
+        if ((!empty($cab['id_documento']) || ($cab['estado'] ?? '') === 'facturado') && !$this->documentoLiberado($cab)) {
             throw new Exception("No se puede eliminar una orden que ya generó un documento. Anule primero el documento.");
         }
 
@@ -414,10 +463,12 @@ class OrdenCarWashService
             $base   = round($precio * $cant - $dscto, 2);
             if ($base < 0) $base = 0.0;
 
-            // Resolver tarifa de IVA: producto → id_tarifa_iva → por porcentaje.
+            // Resolver tarifa de IVA: la de la línea (lo que se guardó y cotizó en la orden) →
+            // la del producto → por porcentaje. Antes mandaba la del producto y el documento
+            // podía salir con un total distinto al de la orden.
             $tar = null;
-            if (!empty($d['id_producto'])) $tar = $this->repository->getTarifaIvaProducto((int) $d['id_producto']);
-            if (!$tar && !empty($d['id_tarifa_iva'])) $tar = $this->repository->getTarifaIvaById((int) $d['id_tarifa_iva']);
+            if (!empty($d['id_tarifa_iva'])) $tar = $this->repository->getTarifaIvaById((int) $d['id_tarifa_iva']);
+            if (!$tar && !empty($d['id_producto'])) $tar = $this->repository->getTarifaIvaProducto((int) $d['id_producto']);
             if (!$tar) $tar = $this->repository->getTarifaIvaByPorcentaje((float) ($d['porcentaje_iva'] ?? 0));
 
             $pct    = $tar ? (float) $tar['porcentaje_iva'] : (float) ($d['porcentaje_iva'] ?? 0);
@@ -429,12 +480,18 @@ class OrdenCarWashService
             $totalSinImp += $base;
             $totalDesc   += $dscto;
 
-            $bodegaLinea = (int) ($d['id_bodega'] ?? 0) ?: $idBodegaExtra;
+            // La bodega de la cabecera aplica a toda la orden (las líneas ya no eligen bodega).
+            $bodegaLinea = $idBodegaExtra ?: (int) ($d['id_bodega'] ?? 0);
             if ($idBodega === 0 && $bodegaLinea > 0) $idBodega = $bodegaLinea;
 
+            $esLibre = empty($d['id_producto']);
             $det[] = [
-                'id_producto'               => !empty($d['id_producto']) ? (int) $d['id_producto'] : null,
+                'id_producto'               => $esLibre ? null : (int) $d['id_producto'],
                 'id_bodega'                 => $bodegaLinea ?: null,
+                // El XML SRI exige codigoPrincipal: sin él la factura sale con <codigoPrincipal/>
+                // vacío y el SRI la devuelve. Los ítems libres toman el código del servicio que
+                // se crea en el catálogo al emitir (crearServicioLibre).
+                'codigo_principal'          => $esLibre ? null : ((string) ($d['producto_codigo'] ?? '') ?: null),
                 'descripcion'               => $d['descripcion'],
                 'nombre'                    => $d['descripcion'],
                 'cantidad'                  => $cant,
@@ -442,7 +499,8 @@ class OrdenCarWashService
                 'descuento'                 => $dscto,
                 'precio_total_sin_impuesto' => $base,
                 'id_tarifa_iva'             => $idTar,
-                'es_libre'                  => empty($d['id_producto']) ? '1' : 0,
+                'codigo_porcentaje'         => $codPct,
+                'es_libre'                  => $esLibre ? '1' : 0,
                 'porcentaje_iva'            => $pct,
                 'impuestos'                 => [[
                     'codigo_impuesto'   => '2',
@@ -478,64 +536,78 @@ class OrdenCarWashService
         $importeTotal = round($totalSinImp + $ivaTotal, 2);
         if ($idBodegaExtra > 0) $idBodega = $idBodegaExtra;
 
-        // Secuencial propio del documento (Factura o Recibo) para el mismo punto. Se abre la
-        // transacción ANTES de calcularlo y se mantiene hasta el INSERT final (crear() más
-        // abajo): el lock de obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK
-        // (CLAUDE.md §8).
+        // Info adicional del documento: la de la orden + placa y número de orden (como hacía el
+        // sistema anterior), sin duplicar si el usuario ya los escribió.
+        $infoAdicional = is_array($orden['info_adicional'] ?? null) ? $orden['info_adicional'] : [];
+        $yaTiene = array_map(fn($ia) => mb_strtolower(trim((string) ($ia['nombre'] ?? ''))), $infoAdicional);
+        if (!empty($orden['placa']) && !in_array('placa', $yaTiene, true)) {
+            $infoAdicional[] = ['nombre' => 'Placa', 'valor' => (string) $orden['placa']];
+        }
+        if (!empty($orden['numero_orden']) && !in_array('orden n.', $yaTiene, true)) {
+            $infoAdicional[] = ['nombre' => 'Orden N.', 'valor' => (string) $orden['numero_orden']];
+        }
+
+        // TODO el proceso va en UNA transacción: secuencial (su candado se libera solo al
+        // COMMIT/ROLLBACK, CLAUDE.md §8) → devolver el inventario de la orden → crear el
+        // documento → marcar la orden + historial. Si algo falla, el rollback deja la orden
+        // exactamente como estaba (incluida su salida de inventario). Antes la emisión y el
+        // marcado iban en transacciones separadas y, al fallar, se "restauraba" la salida de
+        // la orden a mano sobre un rollback que ya la había conservado → descontaba dos veces.
         $db = Database::getConnection();
         $managedTransaction = !$db->inTransaction();
         if ($managedTransaction) {
             $db->beginTransaction();
         }
 
-        $tipoDocSec = ($tipo === 'FACTURA') ? 'Facturas de venta' : 'Recibos de venta';
-        $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, $tipoDocSec, date('Y-m-d'));
-        $secuencial = $sec['formateado'];
-        $numeroDoc  = $estCod . '-' . $puntoCod . '-' . $secuencial;
-
-        $payload = [
-            'id_empresa'          => $idEmpresa,
-            'id_usuario'          => $idUsuario,
-            'empresa_config'      => $empresaConfig,
-            'id_establecimiento'  => $idEstab,
-            'id_punto_emision'    => $idPunto,
-            'establecimiento'     => $estCod,
-            'punto_emision'       => $puntoCod,
-            'secuencial'          => $secuencial,
-            'fecha_emision'       => date('Y-m-d'),
-            'id_cliente'          => (int) $orden['id_cliente'],
-            'id_vendedor'         => null,
-            'dias_credito'        => 0,
-            'moneda'              => 'DOLAR',
-            'observaciones'       => 'Generado desde orden car-wash ' . ($orden['numero_orden'] ?? ''),
-            'id_bodega'           => $idBodega ?: null,
-            'total_sin_impuestos' => $totalSinImp,
-            'total_descuento'     => $totalDesc,
-            'total_ice'           => 0,
-            'propina'             => 0,
-            'importe_total'       => $importeTotal,
-            'detalles'            => $det,
-            'pagos'               => [[
-                'forma_pago'    => $formaPago,
-                'total'         => $importeTotal,
-                'plazo'         => 0,
-                'unidad_tiempo' => 'dias',
-            ]],
-            'info_adicional'      => is_array($orden['info_adicional'] ?? null) ? $orden['info_adicional'] : [],
-        ];
-
-        // El documento hace su propia salida de inventario: primero devolvemos al stock
-        // lo que consumió la orden, para no descontar dos veces.
-        $this->revertirInventario($idOrden, $idEmpresa, $idUsuario);
-
         try {
+            $tipoDocSec = ($tipo === 'FACTURA') ? 'Facturas de venta' : 'Recibos de venta';
+            $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, $tipoDocSec, date('Y-m-d'));
+            $secuencial = $sec['formateado'];
+            $numeroDoc  = $estCod . '-' . $puntoCod . '-' . $secuencial;
+
+            $payload = [
+                'id_empresa'          => $idEmpresa,
+                'id_usuario'          => $idUsuario,
+                'empresa_config'      => $empresaConfig,
+                'id_establecimiento'  => $idEstab,
+                'id_punto_emision'    => $idPunto,
+                'establecimiento'     => $estCod,
+                'punto_emision'       => $puntoCod,
+                'secuencial'          => $secuencial,
+                'fecha_emision'       => date('Y-m-d'),
+                'id_cliente'          => (int) $orden['id_cliente'],
+                'id_vendedor'         => null,
+                'dias_credito'        => 0,
+                'moneda'              => 'DOLAR',
+                'observaciones'       => 'Generado desde orden car-wash ' . ($orden['numero_orden'] ?? ''),
+                'id_bodega'           => $idBodega ?: null,
+                'total_sin_impuestos' => $totalSinImp,
+                'total_descuento'     => $totalDesc,
+                'total_ice'           => 0,
+                'propina'             => 0,
+                'importe_total'       => $importeTotal,
+                'detalles'            => $det,
+                'pagos'               => [[
+                    'forma_pago'    => $formaPago,
+                    'total'         => $importeTotal,
+                    'plazo'         => 0,
+                    'unidad_tiempo' => 'dias',
+                ]],
+                'info_adicional'      => $infoAdicional,
+            ];
+
+            // El documento hace su propia salida de inventario: primero devolvemos al stock
+            // lo que consumió la orden, para no descontar dos veces.
+            $this->revertirInventario($idOrden, $idEmpresa, $idUsuario);
+
+            $svcFactura = null;
             if ($tipo === 'FACTURA') {
-                $svc = new FacturaVentaService(
+                $svcFactura = new FacturaVentaService(
                     new \App\repositories\modulos\FacturaVentaRepository(),
                     new \App\Rules\modulos\FacturaVentaRules(),
                     $this->logService
                 );
-                $idDoc = $svc->crear($payload);
+                $idDoc = $svcFactura->crear($payload);
             } else {
                 $payload['con_impuestos'] = true;
                 $payload['estado']        = 'borrador';
@@ -547,6 +619,24 @@ class OrdenCarWashService
                 );
                 $idDoc = $svc->crear($payload);
             }
+
+            // Marcar la orden como facturada + historial de Facturación.
+            $this->repository->marcarDocumentoGenerado($idOrden, $idEmpresa, $tipo, (int) $idDoc, $numeroDoc, $idUsuario);
+            $this->repository->insertDocumento([
+                'id_empresa'       => $idEmpresa,
+                'id_orden'         => $idOrden,
+                'tipo_documento'   => $tipo,
+                'id_documento'     => (int) $idDoc,
+                'numero_documento' => $numeroDoc,
+                'fecha_emision'    => date('Y-m-d H:i:s'),
+                'total'            => $importeTotal,
+                'origen'           => 'sistema',
+                'id_usuario'       => $idUsuario,
+            ]);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_DOCUMENTO_CARWASH', 'carwash_ordenes', $idOrden,
+                ['estado' => $orden['estado'] ?? '', 'id_documento' => $orden['id_documento'] ?? null],
+                ['tipo_documento' => $tipo, 'id_documento' => $idDoc, 'numero_documento' => $numeroDoc]);
+
             if ($managedTransaction) {
                 $db->commit();
             }
@@ -554,29 +644,15 @@ class OrdenCarWashService
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();
             }
-            // Si falla la emisión, restauramos la salida de inventario de la orden.
-            try {
-                $this->aplicarSalidaInventario(
-                    $idOrden, $idEmpresa, $idUsuario, $detalles, $idEstab, $idBodegaExtra,
-                    (string) ($orden['numero_orden'] ?? ''), false
-                );
-            } catch (\Throwable $e2) {
-                error_log("[CarWash] No se pudo restaurar el inventario de la orden {$idOrden}: " . $e2->getMessage());
-            }
             throw $e;
         }
 
-        // Marcar la orden como facturada con el documento generado.
-        $managed = !$db->inTransaction();
-        if ($managed) $db->beginTransaction();
-        try {
-            $this->repository->marcarDocumentoGenerado($idOrden, $idEmpresa, $tipo, (int) $idDoc, $numeroDoc, $idUsuario);
-            $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_DOCUMENTO_CARWASH', 'carwash_ordenes', $idOrden,
-                ['estado' => $orden['estado'] ?? ''], ['tipo_documento' => $tipo, 'id_documento' => $idDoc, 'numero_documento' => $numeroDoc]);
-            if ($managed) $db->commit();
-        } catch (\Throwable $e) {
-            if ($managed && $db->inTransaction()) $db->rollBack();
-            throw new Exception("El documento {$numeroDoc} se generó, pero la orden no pudo marcarse como facturada: " . $e->getMessage());
+        // XML de la factura FUERA de la transacción: FacturaVentaService::crear() solo lo genera
+        // cuando controla él la transacción; anidado aquí no lo hacía y la factura quedaba sin
+        // XML (no se podía enviar al SRI). Si falla, la factura queda creada y el XML puede
+        // regenerarse desde Facturas de Venta.
+        if ($svcFactura !== null && $managedTransaction) {
+            $svcFactura->generarYGuardarXml((int) $idDoc, $empresaConfig);
         }
 
         return ['tipo' => $tipo, 'id_documento' => (int) $idDoc, 'numero_documento' => $numeroDoc];

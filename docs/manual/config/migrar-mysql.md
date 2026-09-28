@@ -6,7 +6,7 @@ ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
 etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada
-version: 1.11
+version: 1.12
 orden: 2
 estado: activo
 ---
@@ -274,6 +274,25 @@ asiento venía mal.
   usar el script `database/migrations/20260923_corregir_iva_x1000_asientos_migrados.sql`
   sin volver a migrar.
 
+## Órdenes de servicio (Car-Wash / mecánica)
+
+La entidad **Órdenes de servicio (Car-Wash / mecánica)** trae las órdenes del módulo
+*Orden mecánica* del sistema anterior al módulo **Servicio de car wash**: cada orden
+con sus servicios y productos, el vehículo (se crea en Vehículos si no existe, uno
+por placa), el cliente, fechas de recepción y entrega, próxima cita y
+observaciones. Conserva el número de orden como secuencial, en la serie que más
+usaban sus facturas.
+
+- Migre antes **Clientes**, **Productos**, **Bodegas**, **Facturas** y **Recibos**: así
+  cada orden queda enlazada con la factura o el recibo en que se cobró (pestaña
+  *Facturación* de la orden).
+- Si Facturas o Recibos se migran después, vuelva a ejecutar las órdenes: se
+  re-enlazan sus documentos sin duplicar nada.
+- Las órdenes cerradas llegan como *Facturado*; las que estaban en taller o en
+  espera, como *Borrador*. No mueven inventario (el kardex se migra aparte).
+- Si el número de una orden ya está ocupado por otra en esa serie, se renumera al
+  siguiente libre; si es la misma orden (misma placa y fecha), se vincula.
+
 ## Errores frecuentes
 
 - **El asiento de una compra migrada tiene el IVA mucho mayor que el
@@ -349,6 +368,9 @@ asiento venía mal.
 
 ## Historial de cambios
 
+- **1.12** — Nueva entidad **Órdenes de servicio (Car-Wash / mecánica)**: migra el
+  módulo *Orden mecánica* del sistema anterior al Servicio de car wash, con su
+  vehículo, servicios y la factura o recibo en que se emitió cada orden.
 - **1.11** — **Contabilidad**: los asientos de compra que el sistema anterior
   grabó con el **IVA multiplicado por 1000** se corrigen al importar, y el
   resumen avisa cuáles fueron. Volver a migrar Contabilidad corrige los que ya

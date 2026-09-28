@@ -48,7 +48,8 @@ class OrdenCarWashRules
             throw new Exception("Debe agregar al menos un servicio o producto con cantidad mayor a 0.");
         }
 
-        if (!empty($data['proxima_cita'])) {
+        // Solo al crear: una orden antigua (o migrada) con su cita ya pasada debe poder editarse.
+        if (empty($data['id']) && !empty($data['proxima_cita'])) {
             $cita = strtotime((string) $data['proxima_cita']);
             $hoy  = strtotime(date('Y-m-d'));
             if ($cita !== false && $cita < $hoy) {
@@ -66,15 +67,16 @@ class OrdenCarWashRules
         if (!in_array($tipo, ['FACTURA', 'RECIBO'], true)) {
             throw new Exception("Tipo de documento no válido.");
         }
-        if (!empty($orden['id_documento'])) {
-            throw new Exception("Esta orden ya generó un documento (" . ($orden['numero_documento'] ?? '') . ").");
-        }
-        if (empty($orden['id_cliente'])) {
-            throw new Exception("Debe asignar un cliente a la orden antes de facturar.");
-        }
         $estado = (string) ($orden['estado'] ?? 'borrador');
         if ($estado === 'anulado') {
             throw new Exception("La orden está anulada; no se puede facturar.");
+        }
+        // puede_facturar lo calcula el Service: sin documento, o con su documento anulado/eliminado.
+        if (empty($orden['puede_facturar'])) {
+            throw new Exception("Esta orden ya generó un documento vigente (" . ($orden['numero_documento'] ?? '') . "). Para volver a facturarla, anule primero ese documento.");
+        }
+        if (empty($orden['id_cliente'])) {
+            throw new Exception("Debe asignar un cliente a la orden antes de facturar.");
         }
     }
 

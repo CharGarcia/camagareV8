@@ -1,40 +1,166 @@
 ---
 titulo: Servicio de car wash
-resumen: Órdenes de lavado con tablero por estado, que luego se convierten en factura o recibo.
+resumen: Órdenes de servicio por vehículo (lavado, cambio de aceite, mecánica ligera) que luego se facturan o se cobran con recibo, con historial por vehículo y por cliente.
 categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, orden de servicio, tablero, vehiculo, placa, estado del servicio, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora
-version: 1.5
+etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora
+version: 1.6
 orden: 10
 estado: activo
 ---
 
-El módulo de **car wash** gestiona las órdenes de lavado: qué vehículo entró, qué
-servicio se le hace, en qué estado está y quién lo atiende.
+El módulo de **car wash** registra cada ingreso de un vehículo: qué vehículo es, de
+qué cliente, qué servicios y productos se le hicieron, las novedades encontradas y
+la fecha de la próxima cita. Desde la misma orden se emite la **factura
+electrónica** o el **recibo de venta**.
 
-Está pensado para tablet: el tablero se maneja de pie, junto al vehículo.
+Sirve igual para una lavadora de autos, una lubricadora o un taller de mecánica
+ligera: la orden es el control interno del trabajo y el documento de venta es lo que
+se le entrega al cliente.
 
-## El tablero por estado
+## Qué es y para qué sirve
 
-Las órdenes se organizan en columnas según su estado, de modo que de un vistazo
-se sabe qué hay en cola, qué se está lavando y qué está listo para entregar.
+- Llevar el registro de cada vehículo atendido, con su placa, kilometraje y nivel de
+  combustible al ingresar.
+- Cobrar el servicio sin volver a digitar nada: la orden se convierte en factura o
+  recibo con un clic.
+- Consultar el **historial** de un vehículo o de un cliente: cuántas veces vino, qué
+  se le hizo y cuándo fue su última visita.
+- Saber en qué factura o recibo se cobró cada orden.
 
-Cambiar de estado es mover la orden: no hace falta abrir formularios para
-actualizar el avance.
+## Requisitos previos
 
-## El recorrido
+- Un **punto de emisión** con numeración para *Ordenes car-wash* (Empresa →
+  Secuenciales). Si no se configura, arranca en 1.
+- Para facturar: numeración de *Facturas de venta* o *Recibos de venta* en el mismo
+  punto de emisión, y firma electrónica vigente en el caso de la factura.
+- Los vehículos se crean desde el propio modal (botón del carrito) o desde el módulo
+  **Vehículos**; los clientes y los servicios, igual.
 
-1. **Recepción**: se registra el vehículo y el servicio solicitado.
-2. **Proceso**: la orden avanza por los estados del tablero.
-3. **Entrega y cobro**: la orden se convierte en **factura** o **recibo de
-   venta**, según lo que pida el cliente.
+## Cómo se usa
 
-## La orden no es el documento de venta
+1. Pulse **Nuevo** para abrir la orden. El cursor empieza en **Vehículo**: escriba
+   la placa, la marca o el propietario y elija.
+2. Elija el **cliente** (opcional al registrar, obligatorio para facturar), la
+   **bodega** y, si quiere, kilometraje, combustible y **próxima cita**.
+3. Agregue los **servicios y productos** en la grilla (igual que en una factura).
+4. Anote las novedades en **Info. Adicional** y pulse **Guardar**.
+5. Para cobrar, abra la orden y pulse **Factura** o **Recibo** en la barra superior.
+   Elija la forma de pago y confirme. La orden pasa a **Facturado** y queda
+   bloqueada.
 
-Una orden de lavado no es un comprobante: es el control interno del trabajo. La
-venta existe cuando se genera la factura o el recibo a partir de ella.
+El modal tiene tres pestañas:
+
+- **General**: la orden en sí (cabecera, servicios, info adicional y totales).
+- **Historial**: todas las órdenes de un **vehículo** o de un **cliente** (ver abajo).
+- **Facturación**: en qué factura(s) o recibo(s) se emitió esta orden y el estado
+  actual de cada documento.
+
+Cada usuario puede ocultar las pestañas que no use con el engranaje a la derecha de
+las pestañas.
+
+## La bodega es una sola para toda la orden
+
+La bodega se elige **una vez**, en la cabecera, y aplica a todos los productos de la
+orden: de ahí se descuenta el inventario al guardar y de ahí sale la factura o el
+recibo. Al cambiarla, el saldo disponible de cada línea se recalcula. Las líneas ya
+no tienen una columna de bodega propia.
+
+## Historial por vehículo o por cliente
+
+En la pestaña **Historial** elija **Buscar por**: *Vehículo* o *Cliente*.
+
+- Al entrar, se carga solo el historial del vehículo (o cliente) de la orden abierta.
+  El botón **De esta orden** vuelve a cargarlo.
+- Para consultar otro, escriba la placa, marca o propietario (o el nombre o la
+  identificación del cliente). Se aceptan varias palabras en cualquier orden y no
+  importan mayúsculas ni tildes.
+- Arriba se resume: número de órdenes, total facturado (sin las anuladas), fecha de
+  la última visita y cuántos vehículos o clientes distintos aparecen.
+- Cada fila muestra fecha, número de orden, placa, cliente, servicios, total,
+  documento emitido y estado. Un clic en una fila abre esa orden. La orden abierta
+  se resalta.
+
+Se muestran hasta las 200 órdenes más recientes.
+
+## Facturación: en qué documento se emitió la orden
+
+La pestaña **Facturación** lista cada documento emitido desde la orden con su fecha,
+tipo (factura o recibo), número, total, **estado actual** (autorizado, borrador,
+anulado o eliminado), origen (*Car-Wash* o *Sistema anterior*) y usuario. El ícono
+rojo abre el PDF del documento (Imprimir / Descargar / Ver).
+
+**Volver a facturar una orden.** Si la factura o el recibo se **anula** o se
+**elimina** en su módulo, la orden se libera sola: en el listado aparece como
+**Doc. anulado**, se puede corregir y volver a emitir. El documento anterior se
+conserva en esta pestaña, así que siempre queda el rastro completo.
+
+## Campos del formulario
+
+| Campo | Para qué sirve |
+|-------|----------------|
+| Fecha ingreso | Fecha y hora en que el vehículo llegó. |
+| Serie / Secuencial | Punto de emisión y número de la orden. |
+| Cliente | A quién se le factura. Opcional al registrar. |
+| Vehículo | Placa del vehículo atendido. Obligatorio. |
+| Kilometraje / Combustible | Estado del vehículo al ingresar. |
+| Próx. cita | Fecha sugerida para la siguiente visita (no puede ser anterior a hoy al crear la orden). |
+| Bodega | De dónde se toman los productos. Aplica a toda la orden. |
+| Servicios / productos | Grilla igual a la de la factura: precio, descuento e IVA por línea. |
+| Info. Adicional | Novedades, observaciones y el correo del cliente; viajan a la factura. |
+
+## Permisos
+
+- **Ver**: consultar órdenes, su historial y su facturación.
+- **Crear**: registrar órdenes y emitir la factura o el recibo.
+- **Modificar**: editar órdenes no facturadas (o cuyo documento se anuló).
+- **Eliminar**: eliminar órdenes sin documento vigente.
+- **Acceso total**: ver las órdenes de toda la empresa; sin él, cada usuario ve solo
+  las que registró (también en el Historial).
+
+Los botones **PDF**, **Correo** y **WhatsApp** del documento generado usan los
+módulos de Facturas y Recibos de venta, así que requieren permiso de lectura en ellos.
+
+## Reglas de negocio
+
+- La orden descuenta inventario al guardarse (si el establecimiento trabaja con
+  inventario). Al emitir el documento, esa salida se devuelve y la hace el
+  documento, así el stock nunca se descuenta dos veces.
+- Toda la emisión (número del documento, inventario, documento y marca de la orden)
+  ocurre en una sola operación: si algo falla, nada queda a medias.
+- La factura lleva en Info. Adicional la **placa** y el **número de orden**, además de
+  lo que se haya escrito en la orden.
+- Una orden con documento vigente no se puede editar, eliminar ni volver a facturar.
+
+## Integraciones con otros módulos
+
+- **Facturas de venta** y **Recibos de venta**: reciben el documento emitido; ahí se
+  envía al SRI, se anula o se cobra.
+- **Inventario**: movimientos de salida por la orden y luego por el documento.
+- **Vehículos** y **Clientes**: catálogos que usa la orden.
+- **Migración desde el sistema anterior** (`/config/migrar-mysql`, solo
+  superadministrador): la entidad *Órdenes de servicio (Car-Wash / mecánica)* trae las
+  órdenes del módulo *Orden mecánica* del sistema anterior (ver abajo).
+
+## Órdenes migradas del sistema anterior
+
+La migración trae cada orden con sus servicios y productos, el vehículo (se crea en
+**Vehículos** si no existe, uno por placa), el cliente, la fecha y hora de recepción
+y de entrega, la próxima cita y sus observaciones (en Info. Adicional, junto con la
+persona a cargo del vehículo). Conserva el **número de orden** del sistema anterior
+como secuencial.
+
+- Las órdenes **cerradas** llegan como **Facturado**; las que estaban *En taller* o
+  *En espera*, como **Borrador**.
+- La pestaña **Facturación** muestra la factura o el recibo en que se emitió cada
+  una (origen *Sistema anterior*). Si esas facturas y recibos ya se migraron, quedan
+  enlazados y se ve su estado y su PDF; conviene migrar **Facturas** y **Recibos**
+  antes que las órdenes. Si se migran después, basta volver a correr la entidad de
+  órdenes: re-enlaza los documentos sin duplicar nada.
+- Las órdenes migradas **no mueven inventario**: el kardex del sistema anterior se
+  migra aparte, como dato.
 
 ## Buscar y filtrar el listado
 
@@ -85,9 +211,15 @@ Detalles muestran solo las órdenes que usted registró.
 
 ## Errores frecuentes
 
-- **La orden no aparece en ventas**: falta generar el documento de venta.
-- **Una orden lleva días en el tablero**: se quedó sin cerrar; ciérrela o
-  anúlela para que el tablero refleje la realidad.
+- **La orden no aparece en ventas**: falta emitir la factura o el recibo desde la orden.
+- **"Debe asignar un cliente a la orden antes de facturar"**: elija el cliente y
+  guarde antes de pulsar Factura o Recibo.
+- **"Esta orden ya generó un documento vigente"**: para volver a facturarla, anule
+  primero ese documento en Facturas o Recibos de venta.
+- **"No se permite el ingreso de ítems libres"**: la empresa no admite servicios
+  escritos a mano; use un servicio del catálogo (botón de la caja para crearlo).
+- **No puedo editar una orden migrada del sistema anterior**: si estaba cerrada allá,
+  llega como Facturado y queda bloqueada, igual que las facturadas aquí.
 
 ## Numeración por fecha de emisión
 
@@ -108,6 +240,17 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.6** — El modal se organiza en pestañas: **General**, **Historial** (todas las
+  órdenes de un vehículo o de un cliente, con resumen de visitas) y **Facturación**
+  (en qué factura o recibo se emitió la orden, con su estado actual y PDF). La
+  **bodega** se elige una sola vez en la cabecera; se quitó la columna de bodega de
+  cada línea. Si la factura o el recibo se anula o elimina, la orden se libera para
+  corregirla y volver a facturarla. Correcciones al facturar: la factura ahora queda
+  con su **XML** listo para enviar al SRI y con el **código** de cada ítem; usa el
+  IVA elegido en cada línea de la orden; lleva la placa y el número de orden en la
+  información adicional; y si la emisión falla, el inventario ya no se descuenta dos
+  veces. Nueva migración de las órdenes del módulo *Orden mecánica* del sistema
+  anterior.
 - **1.5** — La orden y la factura o recibo que se genera desde ella respetan ahora el IVA
   **al subtotal** configurado en la empresa. Antes el sistema guardaba siempre
   el IVA línea por línea, aunque la pantalla mostrara el total calculado al

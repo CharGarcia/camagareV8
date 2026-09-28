@@ -40,6 +40,36 @@
                     <div class="spinner-border text-primary mb-2" role="status"></div>
                     <div class="small text-muted">Cargando información de la orden...</div>
                 </div>
+
+                <!-- Pestañas: General (la orden) / Historial (por vehículo o cliente) / Facturación -->
+                <?php
+                $pestanasCW = [
+                    'cw-pane-general'     => 'General',
+                    'cw-pane-historial'   => 'Historial',
+                    'cw-pane-facturacion' => 'Facturación',
+                ];
+                ?>
+                <ul class="nav nav-tabs nav-tabs-sm mb-2 align-items-center" role="tablist" id="cwTabs">
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link active py-1 small" id="cw-tab-general" data-bs-toggle="tab" href="#cw-pane-general" data-bs-target="#cw-pane-general" role="tab">
+                            <i class="bi bi-card-list me-1"></i>General
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link py-1 small" id="cw-tab-historial" data-bs-toggle="tab" href="#cw-pane-historial" data-bs-target="#cw-pane-historial" role="tab">
+                            <i class="bi bi-clock-history me-1"></i>Historial
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link py-1 small" id="cw-tab-facturacion" data-bs-toggle="tab" href="#cw-pane-facturacion" data-bs-target="#cw-pane-facturacion" role="tab">
+                            <i class="bi bi-receipt me-1"></i>Facturación <span class="badge bg-secondary bg-opacity-10 text-secondary ms-1 d-none" id="cw-badge-docs">0</span>
+                        </a>
+                    </li>
+                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasCW, $vistaConfig ?? [], 'modulos/car-wash') ?>
+                </ul>
+
+                <div class="tab-content">
+                <div class="tab-pane fade show active" id="cw-pane-general" role="tabpanel">
                 <form id="formOrdenCW" autocomplete="off">
                     <input type="hidden" id="cw_id">
                     <input type="hidden" id="cw_id_vehiculo">
@@ -132,7 +162,6 @@
                                         <th class="ps-3 py-2 small fw-bold text-muted" style="width: 20%;">Descripción</th>
                                         <th class="py-2 small fw-bold text-muted" style="width: 8%;">Adicional</th>
                                         <th class="py-2 small fw-bold text-muted col-medida-header <?= (($empresa['mostrar_unidad_medida'] ?? true) === 'true' || ($empresa['mostrar_unidad_medida'] ?? true) === true) ? '' : 'd-none' ?>" style="width: 7%;">Medida</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width: 11%;">Bodega</th>
                                         <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
                                         <th class="py-2 small fw-bold text-muted" style="width: 10%;">Precios</th>
                                         <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Sin Imp.</th>
@@ -207,6 +236,82 @@
                         </div>
                     </div>
                 </form>
+                </div><!-- /cw-pane-general -->
+
+                <!-- Historial: todas las órdenes de un vehículo o de un cliente -->
+                <div class="tab-pane fade" id="cw-pane-historial" role="tabpanel">
+                    <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
+                        <div style="width:150px">
+                            <label class="x-small fw-bold text-muted mb-1 d-block">Buscar por</label>
+                            <select id="cw_hist_modo" class="form-select form-select-sm" onchange="cwHistorialModoChange()">
+                                <option value="vehiculo">Vehículo</option>
+                                <option value="cliente">Cliente</option>
+                            </select>
+                        </div>
+                        <div style="width:340px">
+                            <label class="x-small fw-bold text-muted mb-1 d-block" id="cw_hist_lbl">Placa, marca o propietario</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                <input type="text" id="cw_hist_q" class="form-control" placeholder="Escriba al menos 2 letras..." oninput="cwHistorialBuscarTexto()">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="x-small fw-bold text-muted mb-1 d-block">&nbsp;</label>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="cwHistorialDeEstaOrden()" title="Historial del vehículo / cliente de esta orden">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>De esta orden
+                            </button>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-3 small mb-2" id="cw_hist_resumen"></div>
+                    <div class="border rounded-3 overflow-auto bg-white" style="max-height:420px;">
+                        <table class="table table-sm table-hover mb-0 text-nowrap" style="font-size:.8rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-2">Fecha</th>
+                                    <th>N° Orden</th>
+                                    <th>Placa</th>
+                                    <th>Cliente</th>
+                                    <th>Servicios / productos</th>
+                                    <th class="text-end">Total</th>
+                                    <th>Documento</th>
+                                    <th class="text-center pe-2">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cw_hist_body">
+                                <tr><td colspan="8" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Facturación: en qué factura(s) o recibo(s) se emitió esta orden -->
+                <div class="tab-pane fade" id="cw-pane-facturacion" role="tabpanel">
+                    <div class="small text-muted mb-2">
+                        Documentos de venta emitidos desde esta orden, con su estado actual. Si la factura o el recibo se
+                        anula o elimina en su módulo, la orden queda libre para corregirse y volver a facturarse; el documento
+                        anterior se conserva aquí.
+                    </div>
+                    <div class="border rounded-3 overflow-auto bg-white">
+                        <table class="table table-sm table-hover mb-0 text-nowrap" style="font-size:.8rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-2">Fecha</th>
+                                    <th>Documento</th>
+                                    <th>Número</th>
+                                    <th class="text-end">Total</th>
+                                    <th class="text-center">Estado</th>
+                                    <th>Origen</th>
+                                    <th>Usuario</th>
+                                    <th class="text-center pe-2" style="width:50px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="cw_docs_body">
+                                <tr><td colspan="8" class="text-center text-muted py-4">La orden aún no se ha facturado.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                </div><!-- /tab-content -->
             </div>
 
             <div class="modal-footer py-2 d-flex justify-content-between">
@@ -227,7 +332,7 @@
     const RUTA = window.RUTA_MODULO_CW;
     const DEC_P = (window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.decimales_precio) || 2;
     let modal, vehTimer = null, cliTimer = null, prodTimers = {};
-    let CW_CUR = { id: 0, id_documento: 0, tipo_documento: '', estado: '' };
+    let CW_CUR = { id: 0, id_documento: 0, tipo_documento: '', estado: '', id_vehiculo: 0, id_cliente: 0 };
 
     function getModal() { if (!modal) modal = new bootstrap.Modal(document.getElementById('modalOrdenCW')); return modal; }
     function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
@@ -246,9 +351,16 @@
         document.getElementById('cw_tbodyDetalle').innerHTML = '';
         document.getElementById('cw_info_body').innerHTML = '';
         document.getElementById('cw_info_cliente').innerHTML = '';
-        CW_CUR = { id: 0, id_documento: 0, tipo_documento: '', estado: '' };
+        CW_CUR = { id: 0, id_documento: 0, tipo_documento: '', estado: '', id_vehiculo: 0, id_cliente: 0 };
         cwToggleDocBtns(false);
         cwRecalcular();
+        // Pestañas: siempre se abre en General, con Historial y Facturación limpios.
+        const tabGen = document.getElementById('cw-tab-general');
+        if (tabGen) bootstrap.Tab.getOrCreateInstance(tabGen).show();
+        document.getElementById('cw_hist_q').value = '';
+        document.getElementById('cw_hist_resumen').innerHTML = '';
+        document.getElementById('cw_hist_body').innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>';
+        cwRenderDocumentos([]);
     }
 
     function setEditable(editable) {
@@ -256,6 +368,8 @@
          'cw_nivel_combustible','cw_proxima_cita','cw_id_bodega'].forEach(id => {
             const el = document.getElementById(id); if (el) el.disabled = !editable;
         });
+        // La numeración de una orden ya guardada no cambia (el servidor la ignora al editar).
+        if (document.getElementById('cw_id').value) document.getElementById('cw_select_serie').disabled = true;
         document.getElementById('cw_btn_guardar').classList.toggle('d-none', !editable);
     }
 
@@ -293,14 +407,18 @@
             const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'No se pudo cargar la orden.');
             const o = data.data;
-            const yaFacturado = !!o.id_documento || o.estado === 'facturado' || o.estado === 'anulado';
-            const editable = window.CW_PERM.actualizar && !yaFacturado;
+            // editable / puede_facturar los calcula el servidor: una orden facturada se libera si su
+            // factura o recibo fue anulado o eliminado.
+            const editable = window.CW_PERM.actualizar && !!o.editable;
 
             document.getElementById('cw_id').value = o.id;
             document.getElementById('cw_numero_orden').value = o.numero_orden || '';
             document.getElementById('cwTitulo').innerHTML = '<i class="bi bi-droplet-half me-1 text-info"></i> Orden ' + (o.numero_orden || '');
-            pintarBadge(o.estado, o.estado);
-            CW_CUR = { id: o.id, id_documento: o.id_documento || 0, tipo_documento: o.tipo_documento || '', estado: o.estado || '' };
+            pintarBadge(o.estado, o.estado, o.documento_vigente);
+            CW_CUR = { id: o.id, id_documento: o.id_documento || 0, tipo_documento: o.tipo_documento || '', estado: o.estado || '',
+                       id_vehiculo: o.id_vehiculo || 0, id_cliente: o.id_cliente || 0, documento_vigente: o.documento_vigente,
+                       placa: o.placa || '', cliente: o.cliente_nombre || '' };
+            cwRenderDocumentos(o.documentos || []);
 
             // Serie / secuencial (se conserva la numeración de la orden; el selector queda bloqueado).
             const selSerie = document.getElementById('cw_select_serie');
@@ -331,11 +449,11 @@
             cwCalcTotales();
 
             setEditable(editable);
-            document.getElementById('cw_btn_eliminar').classList.toggle('d-none', !(window.CW_PERM.eliminar && !o.id_documento));
+            document.getElementById('cw_btn_eliminar').classList.toggle('d-none', !(window.CW_PERM.eliminar && !!o.editable));
 
             // Botones de documento: generar si es borrador sin documento; PDF/correo/wa si ya hay documento.
             cwToggleDocBtns(true, o);
-            if (irAFacturar && !o.id_documento) {
+            if (irAFacturar && o.puede_facturar) {
                 document.getElementById('cw_btn_factura').classList.add('shadow');
             }
         } catch (e) {
@@ -345,14 +463,15 @@
         }
     };
 
-    function pintarBadge(estado, label) {
+    function pintarBadge(estado, label, docVigente) {
         estado = estado || 'borrador';
         const nombres = { borrador: 'Borrador', facturado: 'Facturado', anulado: 'Anulado' };
         const b = document.getElementById('cw_estado_badge');
         b.classList.remove('d-none');
         b.textContent = nombres[estado] || label || estado;
         let cls = 'bg-warning bg-opacity-10 text-warning'; // borrador
-        if (estado === 'facturado') cls = 'bg-success bg-opacity-10 text-success';
+        if (estado === 'facturado' && docVigente === false) b.textContent = 'Documento anulado · por re-facturar';
+        else if (estado === 'facturado') cls = 'bg-success bg-opacity-10 text-success';
         else if (estado === 'anulado') cls = 'bg-danger bg-opacity-10 text-danger';
         b.className = 'badge ms-2 ' + cls;
     }
@@ -368,8 +487,8 @@
 
     // Habilita/deshabilita los botones de documento según el estado de la orden.
     function cwToggleDocBtns(mostrar, o) {
-        const hayDoc = mostrar && o && !!o.id_documento;
-        const puedeFacturar = mostrar && o && !o.id_documento && (o.estado || 'borrador') === 'borrador' && window.CW_PERM.crear;
+        const hayDoc = mostrar && o && !!o.id_documento && o.documento_vigente !== false;
+        const puedeFacturar = mostrar && o && !!o.puede_facturar && window.CW_PERM.crear;
         const esFactura = hayDoc && (o.tipo_documento === 'FACTURA');
         const ordenGuardada = !!(document.getElementById('cw_id').value);
         ['cw_btn_factura','cw_btn_recibo'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !puedeFacturar; });
@@ -509,17 +628,11 @@
     const r2 = v => Math.round(v * 100) / 100;
     function cwDebounce(fn, wait) { let t; return function (...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), wait); }; }
 
-    // Opciones de bodega para cada línea (por defecto, la bodega de la cabecera).
-    function cwOpcionesBodega(idSel) {
-        const bods = window.CW_BODEGAS || [];
-        const def = idSel || (document.getElementById('cw_id_bodega') ? document.getElementById('cw_id_bodega').value : '');
-        let html = '<option value="">— Bodega —</option>';
-        bods.forEach(b => { html += `<option value="${b.id}" ${String(b.id) === String(def) ? 'selected' : ''}>${esc(b.nombre)}</option>`; });
-        return html;
-    }
-
-    // Al cambiar la bodega de una línea se recalcula su saldo disponible.
-    window.cwBodegaLineaChange = function (el) { cwActualizarSaldoFila(el.closest('tr')); };
+    // La bodega es UNA para toda la orden (selector de la cabecera): al cambiarla se
+    // recalcula el saldo disponible de todas las líneas.
+    document.getElementById('cw_id_bodega')?.addEventListener('change', () => {
+        document.querySelectorAll('#cw_tbodyDetalle .row-detalle').forEach(tr => cwActualizarSaldoFila(tr));
+    });
 
     // Muestra el saldo del producto de la fila en la bodega elegida.
     async function cwActualizarSaldoFila(tr) {
@@ -528,7 +641,7 @@
         const lbl  = tr.querySelector('.lbl-saldo-valor');
         if (!cont || !lbl) return;
         const idProd = tr.querySelector('.input-id-producto') ? tr.querySelector('.input-id-producto').value : '';
-        const idBod  = tr.querySelector('.input-bodega') ? tr.querySelector('.input-bodega').value : '';
+        const idBod  = document.getElementById('cw_id_bodega').value || ''; // la bodega de la cabecera aplica a toda la orden
         if (!idProd || !idBod || tr.dataset.controlaStock !== '1') { cont.classList.add('d-none'); return; }
         try {
             const idOrd = document.getElementById('cw_id').value || 0;
@@ -569,7 +682,6 @@
             <td class="${EMPRESA_CONFIG.mostrar_unidad_medida ? '' : 'd-none'}">
                 <select class="form-select form-select-sm input-detalle input-medida d-none"><option value="">Medida</option></select>
             </td>
-            <td><select class="form-select form-select-sm input-detalle input-bodega" onchange="cwBodegaLineaChange(this)">${cwOpcionesBodega()}</select></td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="1" step="any" oninput="cwCalcFila(this)"></td>
             <td><select class="form-select form-select-sm input-detalle input-lista-precios"><option value="">P. Base</option></select></td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="cwCalcSinImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(${DEC_PRECIO})" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
@@ -602,9 +714,8 @@
             dropdownGlobal.classList.remove('d-none');
             dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
             try {
-                // Stock según la bodega de ESTA línea (si no tiene, la de la cabecera).
-                const idBod = (tr.querySelector('.input-bodega') && tr.querySelector('.input-bodega').value)
-                    || document.getElementById('cw_id_bodega').value || 0;
+                // Stock según la bodega de la cabecera (aplica a toda la orden).
+                const idBod = document.getElementById('cw_id_bodega').value || 0;
                 const idOrd = document.getElementById('cw_id').value || 0;
                 const resp = await fetch(`${RUTA}/getProductosAjax?q=${encodeURIComponent(q)}&id_bodega=${idBod}&id_orden=${idOrd}`);
                 const json = await resp.json();
@@ -862,8 +973,6 @@
         tr.dataset.idProducto = d.id_producto || '';
         tr.dataset.tipoProduccion = (d.tipo_linea === 'servicio') ? '02' : '01';
         tr.dataset.controlaStock = (d.id_producto && d.tipo_linea === 'producto') ? '1' : '0';
-        const selBod = tr.querySelector('.input-bodega');
-        if (selBod && d.id_bodega) selBod.value = d.id_bodega;
         tr.querySelector('.input-descripcion').value = d.descripcion || '';
         tr.querySelector('.input-id-producto').value = d.id_producto || '';
         tr.querySelector('.input-es-libre').value = (d.es_libre === true || d.es_libre === 't' || d.es_libre === 'true' || d.es_libre === 1) ? '1' : '0';
@@ -936,7 +1045,7 @@
                 tipo_linea: (tipoProd === '02' || esLibre) ? 'servicio' : (idProd ? 'producto' : 'servicio'),
                 es_libre: esLibre,
                 descripcion: desc,
-                id_bodega: (tr.querySelector('.input-bodega') && tr.querySelector('.input-bodega').value) || null,
+                id_bodega: null, // la bodega de la cabecera aplica a toda la orden
                 id_tarifa_iva: optIva ? (optIva.dataset.id || null) : null,
                 cantidad: cant,
                 precio_unitario: num(tr.querySelector('.input-precio')?.value),
@@ -1025,7 +1134,7 @@
     window.cwGenerarDocumento = async function (tipo) {
         const idOrden = document.getElementById('cw_id').value;
         if (!idOrden) { Swal.fire('Atención', 'Primero guarde la orden.', 'warning'); return; }
-        if (CW_CUR.id_documento) { Swal.fire('Atención', 'Esta orden ya generó un documento.', 'warning'); return; }
+        if (CW_CUR.id_documento && CW_CUR.documento_vigente !== false) { Swal.fire('Atención', 'Esta orden ya generó un documento vigente. Para volver a facturarla, anule primero ese documento.', 'warning'); return; }
 
         const formas = window.CW_FORMAS_PAGO || [];
         const optForma = formas.map(f => `<option value="${esc(f.codigo)}">${esc(f.nombre)}</option>`).join('') || '<option value="01">Efectivo</option>';
@@ -1057,13 +1166,10 @@
             const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'No se pudo generar el documento.');
 
+            // Recarga la orden: queda bloqueada y la pestaña Facturación muestra el documento nuevo.
+            await cwAbrirVerId(idOrden, false);
             CW_CUR.id_documento = data.id_documento;
             CW_CUR.tipo_documento = data.tipo_documento;
-            CW_CUR.estado = 'facturado';
-            pintarBadge('facturado', 'Facturado');
-            setEditable(false);
-            document.getElementById('cw_btn_eliminar').classList.add('d-none');
-            cwToggleDocBtns(true, { id_documento: data.id_documento, tipo_documento: data.tipo_documento, estado: 'facturado' });
             if (typeof cwRecargarTablero === 'function') cwRecargarTablero();
             if (typeof cargarGrid === 'function') cargarGrid();
 
@@ -1145,6 +1251,124 @@
             Swal.fire({ icon: 'success', title: '¡Enviado!', text: d2.mensaje || 'Mensaje enviado.', timer: 2200, showConfirmButton: false });
         } catch (e) { Swal.fire('Error', e.message, 'error'); }
     };
+
+    // ─── Pestaña Facturación: documentos emitidos desde la orden ─────────────
+    const CW_ESTADOS_DOC = {
+        autorizado: ['success', 'Autorizado'], autorizada: ['success', 'Autorizado'],
+        borrador: ['warning', 'Borrador'], pendiente: ['warning', 'Pendiente'], emitido: ['success', 'Emitido'],
+        anulado: ['danger', 'Anulado'], anulada: ['danger', 'Anulado'], eliminado: ['secondary', 'Eliminado'],
+    };
+    function cwFechaHora(f) {
+        if (!f) return '';
+        const m = String(f).match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+        if (!m) return esc(f);
+        return `${m[3]}-${m[2]}-${m[1]} ${m[4] || '00'}:${m[5] || '00'}:${m[6] || '00'}`;
+    }
+    window.cwRenderDocumentos = function (docs) {
+        const tbody = document.getElementById('cw_docs_body');
+        const badge = document.getElementById('cw-badge-docs');
+        if (badge) { badge.textContent = docs.length; badge.classList.toggle('d-none', !docs.length); }
+        if (!docs.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">La orden aún no se ha facturado.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = docs.map(d => {
+            const est = CW_ESTADOS_DOC[String(d.estado_documento || '').toLowerCase()]
+                || (d.id_documento ? ['secondary', d.estado_documento || '—'] : ['secondary', 'Sistema anterior']);
+            const tipo = d.tipo_documento === 'FACTURA' ? 'Factura' : 'Recibo';
+            const pdf = d.id_documento && d.estado_documento !== 'eliminado'
+                ? `<button type="button" class="btn btn-link btn-sm p-0 text-danger" title="PDF del documento" onclick="cwPdfDocumentoId('${esc(d.tipo_documento)}', ${parseInt(d.id_documento, 10)})"><i class="bi bi-file-earmark-pdf"></i></button>`
+                : '';
+            return `<tr>
+                <td class="ps-2">${cwFechaHora(d.fecha_emision)}</td>
+                <td><i class="bi ${d.tipo_documento === 'FACTURA' ? 'bi-receipt' : 'bi-receipt-cutoff'} me-1 text-muted"></i>${tipo}</td>
+                <td class="fw-semibold">${esc(d.numero_documento || '')}</td>
+                <td class="text-end">${fmt(d.total, 2)}</td>
+                <td class="text-center"><span class="badge bg-${est[0]} bg-opacity-10 text-${est[0]} border border-${est[0]} border-opacity-25">${esc(est[1])}</span></td>
+                <td>${d.origen === 'migracion' ? '<span class="text-muted">Sistema anterior</span>' : 'Car-Wash'}</td>
+                <td class="text-muted">${esc(d.usuario || '')}</td>
+                <td class="text-center pe-2">${pdf}</td>
+            </tr>`;
+        }).join('');
+    };
+    window.cwPdfDocumentoId = function (tipo, id) {
+        if (!id) return;
+        const ruta = tipo === 'FACTURA' ? 'factura-venta' : 'recibo-venta';
+        CMG_pdfDocumento(`${CW_BASE}/modulos/${ruta}/exportarPdfAjax?id=${id}`);
+    };
+
+    // ─── Pestaña Historial: órdenes por vehículo o por cliente ────────────────
+    let histTimer = null;
+    window.cwHistorialModoChange = function () {
+        const modo = document.getElementById('cw_hist_modo').value;
+        document.getElementById('cw_hist_lbl').textContent = modo === 'cliente' ? 'Nombre o identificación del cliente' : 'Placa, marca o propietario';
+        document.getElementById('cw_hist_q').value = '';
+        cwHistorialDeEstaOrden();
+    };
+    window.cwHistorialBuscarTexto = function () {
+        clearTimeout(histTimer);
+        const q = document.getElementById('cw_hist_q').value.trim();
+        if (q.length < 2) return;
+        histTimer = setTimeout(() => cwCargarHistorial({ q }), 350);
+    };
+    // Carga el historial del vehículo (o cliente) de la orden abierta.
+    window.cwHistorialDeEstaOrden = function () {
+        const modo = document.getElementById('cw_hist_modo').value;
+        const idVeh = document.getElementById('cw_id_vehiculo').value || CW_CUR.id_vehiculo;
+        const idCli = document.getElementById('cw_id_cliente').value || CW_CUR.id_cliente;
+        if (modo === 'cliente' && idCli) { cwCargarHistorial({ id_cliente: idCli }); return; }
+        if (modo === 'vehiculo' && idVeh) { cwCargarHistorial({ id_vehiculo: idVeh }); return; }
+        document.getElementById('cw_hist_resumen').innerHTML = '';
+        document.getElementById('cw_hist_body').innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">La orden no tiene ${modo === 'cliente' ? 'cliente' : 'vehículo'} seleccionado. Escriba para buscar.</td></tr>`;
+    };
+    async function cwCargarHistorial(filtro) {
+        const modo = document.getElementById('cw_hist_modo').value;
+        const tbody = document.getElementById('cw_hist_body');
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span>Buscando...</td></tr>';
+        try {
+            const params = new URLSearchParams({ modo, ...filtro });
+            const res = await fetch(`${RUTA}/historialAjax?${params.toString()}`);
+            const data = await res.json();
+            if (!data.ok) throw new Error(data.error || 'No se pudo cargar el historial.');
+            const rows = data.data || [];
+            const idActual = parseInt(document.getElementById('cw_id').value || 0, 10);
+            if (!rows.length) {
+                document.getElementById('cw_hist_resumen').innerHTML = '';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Sin órdenes registradas.</td></tr>';
+                return;
+            }
+            const total = rows.reduce((a, r) => a + (r.estado === 'anulado' ? 0 : num(r.total)), 0);
+            const placas = new Set(rows.map(r => (r.placa || '').toUpperCase()).filter(Boolean));
+            const clientes = new Set(rows.map(r => r.cliente_nombre).filter(Boolean));
+            document.getElementById('cw_hist_resumen').innerHTML = `
+                <span><i class="bi bi-list-check text-primary me-1"></i><b>${rows.length}</b> ${rows.length === 1 ? 'orden' : 'órdenes'}${rows.length >= 200 ? ' (últimas 200)' : ''}</span>
+                <span><i class="bi bi-cash-stack text-success me-1"></i>Total: <b>${fmt(total, 2)}</b></span>
+                <span><i class="bi bi-calendar-check text-info me-1"></i>Última visita: <b>${esc(rows[0].fecha || '')}</b></span>
+                ${modo === 'cliente' ? `<span><i class="bi bi-car-front text-secondary me-1"></i>${placas.size} vehículo(s)</span>` : `<span><i class="bi bi-person text-secondary me-1"></i>${clientes.size} cliente(s)</span>`}`;
+            const nombres = { borrador: ['warning', 'Borrador'], facturado: ['success', 'Facturado'], anulado: ['danger', 'Anulado'] };
+            tbody.innerHTML = rows.map(r => {
+                const e = nombres[r.estado] || ['secondary', r.estado || ''];
+                const doc = r.numero_documento ? `${r.tipo_documento === 'FACTURA' ? 'Fact.' : 'Rec.'} ${esc(r.numero_documento)}` : '<span class="text-muted">—</span>';
+                const actual = parseInt(r.id, 10) === idActual;
+                return `<tr role="button" class="${actual ? 'table-primary' : ''}" title="${actual ? 'Orden abierta' : 'Abrir esta orden'}" onclick="${actual ? '' : `cwAbrirVerId(${parseInt(r.id, 10)}, false)`}">
+                    <td class="ps-2">${esc(r.fecha || '')}</td>
+                    <td class="fw-semibold text-primary">${esc(r.numero_orden || '')}</td>
+                    <td>${esc(r.placa || '')}</td>
+                    <td class="text-truncate" style="max-width:200px">${esc(r.cliente_nombre || '')}</td>
+                    <td class="text-truncate" style="max-width:320px" title="${esc(r.servicios || '')}">${esc(r.servicios || '')}</td>
+                    <td class="text-end">${fmt(r.total, 2)}</td>
+                    <td>${doc}</td>
+                    <td class="text-center pe-2"><span class="badge bg-${e[0]} bg-opacity-10 text-${e[0]}">${esc(e[1])}</span></td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
+        }
+    }
+    // Al entrar a la pestaña Historial sin búsqueda previa, carga el de esta orden.
+    document.getElementById('cw-tab-historial')?.addEventListener('shown.bs.tab', () => {
+        if (!document.getElementById('cw_hist_q').value.trim()) cwHistorialDeEstaOrden();
+    });
 
     // ─── Crear entidades al vuelo (reutiliza modales existentes) ───────────────
     window.cwCrearVehiculo = function () {

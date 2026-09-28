@@ -303,6 +303,40 @@ class CarWashController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Pestaña Historial del modal: órdenes de la empresa por vehículo o por cliente.
+     * GET modo=vehiculo|cliente, q (texto) o id_vehiculo / id_cliente (exacto).
+     */
+    public function historialAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $modo       = ($_GET['modo'] ?? 'vehiculo') === 'cliente' ? 'cliente' : 'vehiculo';
+            $q          = trim($_GET['q'] ?? '');
+            $idVehiculo = (int) ($_GET['id_vehiculo'] ?? 0) ?: null;
+            $idCliente  = (int) ($_GET['id_cliente'] ?? 0) ?: null;
+            if ($q === '' && !$idVehiculo && !$idCliente) {
+                echo json_encode(['ok' => true, 'data' => []]);
+                exit;
+            }
+            $perm = $this->getPermisos();
+            $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+            $rows = $this->service->getHistorial((int) $_SESSION['id_empresa'], $modo, $q, $idVehiculo, $idCliente, $idUsuarioFiltro);
+            foreach ($rows as &$r) {
+                $r['fecha'] = !empty($r['fecha_ingreso']) ? date('d-m-Y H:i:s', strtotime($r['fecha_ingreso'])) : '';
+            }
+            unset($r);
+            echo json_encode(['ok' => true, 'data' => $rows], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     // ─── PDF de la orden (encabezado estilo comprobante de ingresos) ──────────
 
     public function exportarPdfAjax(): void
@@ -613,8 +647,12 @@ class CarWashController extends BaseModuloController
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     /** Badge HTML según el estado operativo de la orden. */
-    public static function badgeEstado(string $estado): string
+    public static function badgeEstado(string $estado, $documentoVigente = null): string
     {
+        // Facturada, pero su factura/recibo se anuló o eliminó: se puede corregir y volver a facturar.
+        if ($estado === 'facturado' && in_array($documentoVigente, [false, 'f', 'false', 0], true)) {
+            return '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" title="El documento emitido fue anulado o eliminado; la orden puede volver a facturarse">Doc. anulado</span>';
+        }
         switch ($estado) {
             case 'borrador':
                 return '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Borrador</span>';
@@ -631,7 +669,7 @@ class CarWashController extends BaseModuloController
     {
         $fecha = !empty($r['fecha_ingreso']) ? date('d-m-Y H:i', strtotime($r['fecha_ingreso'])) : '';
         $dataJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
-        $badge = self::badgeEstado($r['estado'] ?? '');
+        $badge = self::badgeEstado($r['estado'] ?? '', $r['documento_vigente'] ?? null);
         return '<tr class="cw-row" role="button" tabindex="0" data-row=\'' . $dataJson . '\' onclick="cwAbrirVer(this)">
                     <td class="ps-3" data-col="fecha_ingreso">' . htmlspecialchars($fecha) . '</td>
                     <td data-col="numero_orden" class="fw-bold text-primary">' . htmlspecialchars($r['numero_orden'] ?? '') . '</td>

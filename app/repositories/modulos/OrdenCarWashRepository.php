@@ -142,7 +142,8 @@ class OrdenCarWashRepository extends BaseRepository
         $sort = $colMap[$ordenCol] ?? 'o.fecha_ingreso';
         $dir  = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
-        $sql = "SELECT o.*, c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion
+        $sql = "SELECT o.*, c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+                       " . self::SQL_DOC_VIGENTE . " AS documento_vigente
                 FROM carwash_ordenes o
                 LEFT JOIN clientes c ON c.id = o.id_cliente
                 $where
@@ -405,7 +406,8 @@ class OrdenCarWashRepository extends BaseRepository
         $sql = "SELECT o.*,
                        c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
                        c.direccion AS cliente_direccion, c.email AS cliente_email, c.telefono AS cliente_telefono,
-                       v.placa AS vehiculo_placa, v.marca AS vehiculo_marca
+                       v.placa AS vehiculo_placa, v.marca AS vehiculo_marca,
+                       " . self::SQL_DOC_VIGENTE . " AS documento_vigente
                 FROM carwash_ordenes o
                 LEFT JOIN clientes c ON c.id = o.id_cliente
                 LEFT JOIN vehiculos v ON v.id = o.id_vehiculo
@@ -506,5 +508,149 @@ class OrdenCarWashRepository extends BaseRepository
              SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :u
              WHERE id = :id AND id_empresa = :e AND eliminado = false"
         )->execute([':id' => $id, ':e' => $idEmpresa, ':u' => $idUsuario]);
+    }
+
+    // ─── DOCUMENTO VIGENTE / HISTORIAL DE FACTURACIÓN ─────────────────────────
+
+    /**
+     * Expresión SQL (sobre el alias `o`) que dice si el documento enlazado a la orden sigue
+     * vigente: NULL = la orden no tiene documento enlazado; false = la factura/recibo fue
+     * anulado o eliminado en su módulo (la orden puede volver a facturarse); true = vigente.
+     */
+    private const SQL_DOC_VIGENTE = "CASE WHEN o.id_documento IS NULL THEN NULL
+            WHEN o.tipo_documento = 'FACTURA' THEN EXISTS (SELECT 1 FROM ventas_cabecera vcx
+                 WHERE vcx.id = o.id_documento AND vcx.eliminado = false AND vcx.estado <> 'anulado')
+            ELSE EXISTS (SELECT 1 FROM recibos_venta_cabecera rvx
+                 WHERE rvx.id = o.id_documento AND rvx.eliminado = false AND rvx.estado <> 'anulado') END";
+
+    /** ¿El documento enlazado a la orden sigue vigente? (null si no tiene documento). */
+    public function documentoVigente(int $idOrden, int $idEmpresa): ?bool
+    {
+        $st = $this->db->prepare("SELECT " . self::SQL_DOC_VIGENTE . " AS v FROM carwash_ordenes o WHERE o.id = :id AND o.id_empresa = :e");
+        $st->execute([':id' => $idOrden, ':e' => $idEmpresa]);
+        $v = $st->fetchColumn();
+        if ($v === false || $v === null) return null;
+        return $v === true || $v === 't' || $v === 1 || $v === '1';
+    }
+
+    /** ¿Existe ya la tabla del historial de documentos? (el código no debe romperse si aún no se aplicó el SQL). */
+    public function existeTablaDocumentos(): bool
+    {
+        static $existe = null;
+        if ($existe === null) {
+            $existe = (bool) $this->db->query("SELECT to_regclass('public.carwash_ordenes_documentos') IS NOT NULL")->fetchColumn();
+        }
+        return $existe;
+    }
+
+    /** Registra un documento de venta emitido desde la orden (historial de facturación). */
+    public function insertDocumento(array $d): void
+    {
+        if (!$this->existeTablaDocumentos()) return;
+        $this->db->prepare(
+            "INSERT INTO carwash_ordenes_documentos
+                (id_empresa, id_orden, tipo_documento, id_documento, numero_documento, fecha_emision, total, origen, created_by, updated_by)
+             VALUES (:e, :o, :t, :idd, :num, :f, :tot, :ori, :u, :u)"
+        )->execute([
+            ':e'   => $d['id_empresa'],
+            ':o'   => $d['id_orden'],
+            ':t'   => $d['tipo_documento'],
+            ':idd' => $d['id_documento'] ?: null,
+            ':num' => $d['numero_documento'],
+            ':f'   => $d['fecha_emision'],
+            ':tot' => $d['total'] ?? 0,
+            ':ori' => $d['origen'] ?? 'sistema',
+            ':u'   => $d['id_usuario'],
+        ]);
+    }
+
+    /**
+     * Historial de documentos (facturas/recibos) emitidos desde la orden, con el estado ACTUAL
+     * de cada documento en su módulo (autorizado, borrador, anulado o eliminado). Si la tabla
+     * del historial aún no existe, se arma con el documento enlazado en la cabecera.
+     */
+    public function getDocumentos(int $idOrden, int $idEmpresa): array
+    {
+        $estadoDoc = "CASE
+                WHEN d.tipo_documento = 'FACTURA' THEN (SELECT CASE WHEN vc.eliminado THEN 'eliminado' ELSE vc.estado END FROM ventas_cabecera vc WHERE vc.id = d.id_documento AND vc.id_empresa = :e)
+                ELSE (SELECT CASE WHEN rv.eliminado THEN 'eliminado' ELSE rv.estado END FROM recibos_venta_cabecera rv WHERE rv.id = d.id_documento AND rv.id_empresa = :e)
+            END";
+
+        if ($this->existeTablaDocumentos()) {
+            $sql = "SELECT d.id, d.tipo_documento, d.id_documento, d.numero_documento, d.fecha_emision, d.total, d.origen,
+                           d.created_at, u.nombre AS usuario, $estadoDoc AS estado_documento
+                    FROM carwash_ordenes_documentos d
+                    LEFT JOIN usuarios u ON u.id = d.created_by
+                    WHERE d.id_orden = :o AND d.id_empresa = :e AND d.eliminado = false
+                    ORDER BY d.fecha_emision DESC, d.id DESC";
+        } else {
+            $sql = "SELECT d.id, d.tipo_documento, d.id_documento, d.numero_documento, d.updated_at AS fecha_emision, d.total,
+                           'sistema' AS origen, d.updated_at AS created_at, u.nombre AS usuario, $estadoDoc AS estado_documento
+                    FROM carwash_ordenes d
+                    LEFT JOIN usuarios u ON u.id = d.updated_by
+                    WHERE d.id = :o AND d.id_empresa = :e AND d.eliminado = false AND d.tipo_documento IS NOT NULL";
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute([':o' => $idOrden, ':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Historial de órdenes de la empresa por VEHÍCULO o por CLIENTE (pestaña Historial del modal).
+     * - Con $idVehiculo / $idCliente: todas las órdenes de ese vehículo / cliente.
+     * - Con texto: búsqueda multipalabra sin acentos sobre placa/marca/modelo (vehículo) o
+     *   nombre/identificación (cliente).
+     * Respeta registros propios (§6) y trae un resumen de servicios y el documento emitido.
+     */
+    public function getHistorial(int $idEmpresa, string $modo, string $q, ?int $idVehiculo, ?int $idCliente, ?int $idUsuarioFiltro, int $limit = 200): array
+    {
+        $where  = "o.id_empresa = :e AND o.eliminado = false";
+        $params = [':e' => $idEmpresa];
+        if ($idUsuarioFiltro !== null) {
+            $where .= " AND o.created_by = :uid";
+            $params[':uid'] = $idUsuarioFiltro;
+        }
+
+        $q = trim($q);
+        if ($modo === 'cliente') {
+            if ($idCliente) {
+                $where .= " AND o.id_cliente = :idc";
+                $params[':idc'] = $idCliente;
+            } elseif ($q !== '') {
+                $cond = \App\Helpers\FiltrosBusqueda::condicionTexto(['c.nombre', 'c.identificacion'], $q, $params, 'hc');
+                if ($cond === '') return [];
+                $where .= " AND $cond";
+            } else {
+                return [];
+            }
+        } else {
+            if ($idVehiculo) {
+                $where .= " AND o.id_vehiculo = :idv";
+                $params[':idv'] = $idVehiculo;
+            } elseif ($q !== '') {
+                $cond = \App\Helpers\FiltrosBusqueda::condicionTexto(['o.placa', 'v.placa', 'o.marca', 'o.modelo', 'v.propietario'], $q, $params, 'hv');
+                if ($cond === '') return [];
+                $where .= " AND $cond";
+            } else {
+                return [];
+            }
+        }
+
+        $limit = max(1, min(500, $limit));
+        $sql = "SELECT o.id, o.numero_orden, o.fecha_ingreso, o.placa, o.marca, o.kilometraje, o.total, o.estado,
+                       o.tipo_documento, o.numero_documento, o.id_vehiculo, o.id_cliente,
+                       c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+                       (SELECT STRING_AGG(d.descripcion, ', ' ORDER BY d.id)
+                          FROM carwash_ordenes_detalle d
+                         WHERE d.id_orden = o.id AND d.eliminado = false) AS servicios
+                FROM carwash_ordenes o
+                LEFT JOIN clientes c  ON c.id = o.id_cliente
+                LEFT JOIN vehiculos v ON v.id = o.id_vehiculo
+                WHERE $where
+                ORDER BY o.fecha_ingreso DESC, o.id DESC
+                LIMIT $limit";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 }

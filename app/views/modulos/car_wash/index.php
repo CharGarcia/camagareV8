@@ -211,7 +211,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="placa" class="fw-semibold"><?= htmlspecialchars($r['placa'] ?? '') ?></td>
                                 <td data-col="cliente" class="text-truncate" style="max-width:240px" title="<?= htmlspecialchars($r['cliente_nombre'] ?? '') ?>"><?= htmlspecialchars($r['cliente_nombre'] ?? '') ?></td>
                                 <td data-col="total" class="text-end"><?= number_format((float)($r['total'] ?? 0), 2) ?></td>
-                                <td class="text-center pe-3" data-col="estado"><?= CarWashController::badgeEstado($r['estado'] ?? '') ?></td>
+                                <td class="text-center pe-3" data-col="estado"><?= CarWashController::badgeEstado($r['estado'] ?? '', $r['documento_vigente'] ?? null) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
