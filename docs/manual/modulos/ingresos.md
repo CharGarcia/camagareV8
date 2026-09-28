@@ -6,7 +6,7 @@ ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
 etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, imprimir, impresora, doble clic, ingreso duplicado, cobro duplicado, cobrar dos veces, doble cobro, ya no tiene saldo suficiente
-version: 3.6
+version: 3.7
 orden: 10
 estado: activo
 ---
@@ -444,6 +444,7 @@ misma revisión al guardar:
 
 ## Historial de cambios
 
+- **3.7** — Corregido: al agregar una forma de cobro, la línea (y las observaciones automáticas) guardaban el saldo que muestra la lista (`Banco Pichincha — $1,250.00`); ahora se registra solo el nombre de la forma.
 - **3.6** — Los cobros bancarios por **transferencia o depósito** toman como fecha de cobro la fecha de emisión del ingreso; solo el cheque queda pendiente de confirmar su Fecha Banco en Control Bancario.
 - **3.5** — Corregido: el saldo de un **saldo inicial por cobrar** no restaba las **notas de crédito** emitidas contra ese documento (Saldos Iniciales y Cuentas por Cobrar sí las restaban), así que desde Ingresos se podía volver a cobrar la parte que la nota ya había cancelado.
 - **3.4** — El botón **Guardar** queda bloqueado desde el primer clic hasta que el sistema responde: un doble clic mientras se verificaba el período contable podía registrar el mismo cobro dos veces. Nueva sección *Cómo se evita cobrar dos veces lo mismo*.

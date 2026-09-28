@@ -574,6 +574,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                         <option value="<?= $fc['id'] ?>"
                                                                 data-tipo="<?= htmlspecialchars($fc['tipo'] ?? '') ?>"
                                                                 data-anticipo="<?= $esAnt ? '1' : '0' ?>"
+                                                                data-nombre="<?= htmlspecialchars($fc['nombre']) ?>"
                                                                 data-mostrar-saldo="<?= $muestraSaldo ? '1' : '0' ?>"
                                                                 data-saldo="<?= $conSaldo ? number_format((float)($fc['saldo'] ?? 0), 2, '.', '') : '' ?>"><?= htmlspecialchars($fc['nombre']) . $lblSaldo ?></option>
                                                     <?php endforeach; ?>
@@ -1904,7 +1905,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const combo = document.getElementById('m-add-cobro-forma');
         const formaId = combo.value;
         const selectedOpt = combo.options[combo.selectedIndex];
-        const formaNombre = selectedOpt.text;
+        const formaNombre = selectedOpt.dataset.nombre || selectedOpt.text; // sin el " — $saldo" de la etiqueta
         const tipoPadre = selectedOpt.dataset.tipo || '';
 
         const monto = parseFloat(document.getElementById('m-add-cobro-monto').value) || 0;

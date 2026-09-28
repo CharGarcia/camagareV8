@@ -584,6 +584,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                         <option value="<?= $fp['id'] ?>"
                                                                 data-tipo="<?= htmlspecialchars($fp['tipo'] ?? '') ?>"
                                                                 data-anticipo="<?= $esAnt ? '1' : '0' ?>"
+                                                                data-nombre="<?= htmlspecialchars($fp['nombre']) ?>"
                                                                 data-mostrar-saldo="<?= $muestraSaldo ? '1' : '0' ?>"
                                                                 data-saldo="<?= $conSaldo ? number_format((float)($fp['saldo'] ?? 0), 2, '.', '') : '' ?>"><?= htmlspecialchars($fp['nombre']) . $lblSaldo ?></option>
                                                     <?php endforeach; ?>
@@ -1952,7 +1953,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         pagosEgreso.push({
             id_forma: c.value,
-            nombre: selOpt.text,
+            nombre: selOpt.dataset.nombre || selOpt.text, // sin el " — $saldo" de la etiqueta
             monto: m,
             ref: r,
             tipo_operacion_bancaria: tipoOp,
