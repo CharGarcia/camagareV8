@@ -1394,4 +1394,47 @@ class SuscripcionesRepository extends BaseRepository
         $st->execute([':id' => $idSuscripcion]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    /**
+     * Valores de los ítems de un conjunto de suscripciones, agrupados por
+     * periodicidad + concepto (producto) + tarifa de IVA. Base de la hoja
+     * "Resumen" del Excel del listado. Son los valores de UN cobro de cada
+     * suscripción (cantidad × precio unitario, más su IVA).
+     *
+     * @param int[] $ids Suscripciones ya filtradas por el listado (buscador y registros propios).
+     */
+    public function getResumenValores(int $idEmpresa, array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids) {
+            return [];
+        }
+
+        $sql = "SELECT s.id_periodicidad,
+                       COALESCE(MAX(per.nombre), 'Sin periodicidad') AS periodicidad,
+                       COALESCE(MAX(per.meses), 0)                    AS meses,
+                       COALESCE(MAX(per.codigo), '')                  AS codigo_periodicidad,
+                       d.id_producto,
+                       COALESCE(MAX(p.codigo), '')                    AS codigo,
+                       COALESCE(NULLIF(MAX(p.nombre), ''), MAX(d.descripcion), 'Sin concepto') AS concepto,
+                       ROUND(d.porcentaje_iva, 2)                     AS porcentaje_iva,
+                       COALESCE(MAX(ti.tarifa), CONCAT('IVA ', ROUND(d.porcentaje_iva, 2), '%')) AS tarifa,
+                       COUNT(DISTINCT s.id)                           AS suscripciones,
+                       SUM(d.cantidad)                                AS cantidad,
+                       SUM(d.cantidad * d.precio_unitario)            AS base,
+                       SUM(d.cantidad * d.precio_unitario * d.porcentaje_iva / 100) AS iva
+                FROM suscripciones s
+                JOIN suscripciones_detalle d ON d.id_suscripcion = s.id AND d.eliminado = false
+                LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                LEFT JOIN productos p   ON p.id  = d.id_producto
+                LEFT JOIN tarifa_iva ti ON ti.id = d.id_tarifa_iva
+                WHERE s.id_empresa = :id_empresa
+                  AND s.eliminado = false
+                  AND s.id = ANY(CAST(:ids AS int[]))
+                GROUP BY s.id_periodicidad, d.id_producto, ROUND(d.porcentaje_iva, 2)
+                ORDER BY meses, periodicidad, concepto, porcentaje_iva";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':ids' => '{' . implode(',', $ids) . '}']);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
 }

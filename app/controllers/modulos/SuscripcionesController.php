@@ -967,13 +967,15 @@ class SuscripcionesController extends BaseModuloController
             $exportData = array_map(fn($r) => $this->filaExport($r), $rows);
 
             $reportService = new \App\Services\ReportService();
-            $reportService->exportToExcel(
-                'Suscripciones',
+            $libro = $reportService->construirSpreadsheet(
                 self::CABECERAS_EXPORT,
                 $exportData,
                 'Listado de Suscripciones',
                 $nombreEmpresa
             );
+            // Segunda hoja: resumen de valores por periodicidad, concepto e IVA.
+            $this->service->agregarHojaResumenExcel($libro, (int) $_SESSION['id_empresa'], $rows);
+            $reportService->descargarSpreadsheet($libro, 'Suscripciones');
             exit;
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

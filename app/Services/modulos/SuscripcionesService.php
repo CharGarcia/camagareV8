@@ -244,6 +244,202 @@ class SuscripcionesService
         }
     }
 
+    /** Cuántos cobros genera una periodicidad en un año (Diario/Semanal/Quincenal tienen meses = 1 en el catálogo). */
+    public function cobrosPorAnio(int $meses, string $codigo = ''): float
+    {
+        return match (strtoupper($codigo)) {
+            'DIARIO'    => 365.0,
+            'SEMANAL'   => 52.0,
+            'QUINCENAL' => 24.0,
+            default     => $meses > 0 ? 12 / $meses : 0.0,
+        };
+    }
+
+    /**
+     * Agrega al libro del Excel del listado la hoja "Resumen": valores por
+     * periodicidad, por concepto, conceptos dentro de cada periodicidad y por
+     * tarifa de IVA, de las mismas suscripciones exportadas en la primera hoja.
+     *
+     * @param array $rows Filas del listado ya filtradas (buscador + registros propios).
+     */
+    public function agregarHojaResumenExcel(\PhpOffice\PhpSpreadsheet\Spreadsheet $libro, int $idEmpresa, array $rows): void
+    {
+        $lineas = $this->repository->getResumenValores($idEmpresa, array_column($rows, 'id'));
+
+        // Suscripciones por periodicidad (del listado: incluye las que no tienen ítems).
+        $suscPorPer = [];
+        foreach ($rows as $r) {
+            $k = (int) ($r['id_periodicidad'] ?? 0);
+            $suscPorPer[$k] = ($suscPorPer[$k] ?? 0) + 1;
+        }
+
+        $porPer = $porConcepto = $porTarifa = $conceptosPorPer = [];
+        foreach ($lineas as $l) {
+            $kPer  = (int) $l['id_periodicidad'];
+            $anio  = $this->cobrosPorAnio((int) $l['meses'], (string) $l['codigo_periodicidad']);
+            // Redondeo por línea: así las cuatro secciones suman exactamente lo mismo.
+            $base  = round((float) $l['base'], 2);
+            $iva   = round((float) $l['iva'], 2);
+            $kCon  = (int) $l['id_producto'];
+            $kTar  = (string) $l['tarifa'] . '|' . $l['porcentaje_iva'];
+
+            $porPer[$kPer] ??= ['nombre' => $l['periodicidad'], 'anio' => $anio, 'base' => 0.0, 'iva' => 0.0, 'anual' => 0.0];
+            $porPer[$kPer]['base']  += $base;
+            $porPer[$kPer]['iva']   += $iva;
+            $porPer[$kPer]['anual'] += ($base + $iva) * $anio;
+
+            $porConcepto[$kCon] ??= ['codigo' => $l['codigo'], 'nombre' => $l['concepto'], 'susc' => 0, 'cant' => 0.0, 'base' => 0.0, 'iva' => 0.0, 'anual' => 0.0];
+            $porConcepto[$kCon]['susc']  += (int) $l['suscripciones'];
+            $porConcepto[$kCon]['cant']  += (float) $l['cantidad'];
+            $porConcepto[$kCon]['base']  += $base;
+            $porConcepto[$kCon]['iva']   += $iva;
+            $porConcepto[$kCon]['anual'] += ($base + $iva) * $anio;
+
+            $porTarifa[$kTar] ??= ['nombre' => $l['tarifa'], 'pct' => (float) $l['porcentaje_iva'], 'base' => 0.0, 'iva' => 0.0, 'base_anual' => 0.0, 'iva_anual' => 0.0];
+            $porTarifa[$kTar]['base']       += $base;
+            $porTarifa[$kTar]['iva']        += $iva;
+            $porTarifa[$kTar]['base_anual'] += $base * $anio;
+            $porTarifa[$kTar]['iva_anual']  += $iva * $anio;
+
+            $conceptosPorPer[$kPer][] = $l;
+        }
+        // Periodicidades de las suscripciones sin ítems (aparecen con valores en cero).
+        foreach ($rows as $r) {
+            $k = (int) ($r['id_periodicidad'] ?? 0);
+            $porPer[$k] ??= [
+                'nombre' => $r['nombre_periodicidad'] ?? 'Sin periodicidad',
+                'anio'   => $this->cobrosPorAnio((int) ($r['periodicidad_meses'] ?? 0), ''),
+                'base'   => 0.0, 'iva' => 0.0, 'anual' => 0.0,
+            ];
+        }
+        // Más frecuentes primero (Diario, Semanal, …, Mensual, …, Anual).
+        uasort($porPer, static fn($a, $b) => $b['anio'] <=> $a['anio'] ?: strcmp((string) $a['nombre'], (string) $b['nombre']));
+        uasort($porConcepto, static fn($a, $b) => ($b['base'] + $b['iva']) <=> ($a['base'] + $a['iva']));
+        uasort($porTarifa, static fn($a, $b) => $b['pct'] <=> $a['pct']);
+
+        // ── Escritura de la hoja ─────────────────────────────────────────────
+        $h = $libro->createSheet();
+        $h->setTitle('Resumen');
+        $fmtMoneda = '#,##0.00';
+        $cab = [
+            'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER],
+            'borders'   => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN]],
+        ];
+        $tot = [
+            'font'    => ['bold' => true],
+            'fill'    => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D9E1F2']],
+            'borders' => ['top' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN]],
+        ];
+        $col = static fn(int $i) => \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i);
+        $fila = 1;
+
+        // Escribe una fila; $monedas = índices (1-based) con formato de moneda.
+        $escribir = function (array $valores, array $monedas = [], ?array $estilo = null) use ($h, $col, &$fila, $fmtMoneda): void {
+            foreach (array_values($valores) as $i => $v) {
+                $celda = $col($i + 1) . $fila;
+                if (is_string($v)) {
+                    $h->setCellValueExplicit($celda, $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                } else {
+                    $h->setCellValue($celda, $v);
+                }
+                if (in_array($i + 1, $monedas, true)) {
+                    $h->getStyle($celda)->getNumberFormat()->setFormatCode($fmtMoneda);
+                }
+            }
+            if ($estilo) {
+                $h->getStyle('A' . $fila . ':' . $col(count($valores)) . $fila)->applyFromArray($estilo);
+            }
+            $fila++;
+        };
+        $titulo = function (string $texto) use ($h, &$fila): void {
+            $h->setCellValue('A' . $fila, $texto);
+            $h->getStyle('A' . $fila)->getFont()->setBold(true)->setSize(12);
+            $fila++;
+        };
+
+        $h->setCellValue('A1', 'RESUMEN DE VALORES DE SUSCRIPCIONES');
+        $h->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $h->setCellValue('A2', 'Suscripciones incluidas: ' . count($rows) . ' (las mismas del listado, según los filtros aplicados).');
+        $h->setCellValue('A3', 'Subtotal, IVA y Total son el valor de UN cobro de cada suscripción; la proyección multiplica por los cobros que genera su periodicidad en un año.');
+        $h->getStyle('A2:A3')->getFont()->setItalic(true)->getColor()->setRGB('555555');
+        $fila = 5;
+
+        // 1. Por periodicidad
+        $titulo('Por periodicidad');
+        $escribir(['Periodicidad', 'Suscripciones', 'Subtotal', 'IVA', 'Total por cobro', 'Cobros al año', 'Proyección mensual', 'Proyección anual'], [], $cab);
+        $t = ['susc' => 0, 'base' => 0.0, 'iva' => 0.0, 'mes' => 0.0, 'anio' => 0.0];
+        foreach ($porPer as $k => $p) {
+            $total = round($p['base'], 2) + round($p['iva'], 2);
+            $anual = $p['anual'];
+            $escribir([(string) $p['nombre'], $suscPorPer[$k] ?? 0, round($p['base'], 2), round($p['iva'], 2), $total, $p['anio'], round($anual / 12, 2), round($anual, 2)], [3, 4, 5, 7, 8]);
+            $t['susc'] += $suscPorPer[$k] ?? 0;
+            $t['base'] += round($p['base'], 2);
+            $t['iva']  += round($p['iva'], 2);
+            $t['mes']  += round($anual / 12, 2);
+            $t['anio'] += round($anual, 2);
+        }
+        $escribir(['TOTAL', $t['susc'], $t['base'], $t['iva'], $t['base'] + $t['iva'], '', $t['mes'], $t['anio']], [3, 4, 5, 7, 8], $tot);
+        $fila++;
+
+        // 2. Por concepto
+        $titulo('Por concepto');
+        $escribir(['Código', 'Concepto', 'Suscripciones', 'Cantidad', 'Subtotal', 'IVA', 'Total por cobro', 'Proyección anual'], [], $cab);
+        $t = ['base' => 0.0, 'iva' => 0.0, 'anio' => 0.0];
+        foreach ($porConcepto as $c) {
+            $escribir([(string) $c['codigo'], (string) $c['nombre'], $c['susc'], round($c['cant'], 2), round($c['base'], 2), round($c['iva'], 2), round($c['base'], 2) + round($c['iva'], 2), round($c['anual'], 2)], [5, 6, 7, 8]);
+            $t['base'] += round($c['base'], 2);
+            $t['iva']  += round($c['iva'], 2);
+            $t['anio'] += round($c['anual'], 2);
+        }
+        $escribir(['', 'TOTAL', '', '', $t['base'], $t['iva'], $t['base'] + $t['iva'], $t['anio']], [5, 6, 7, 8], $tot);
+        $fila++;
+
+        // 3. Conceptos por periodicidad
+        $titulo('Conceptos por periodicidad');
+        $escribir(['Código', 'Concepto', 'Tarifa IVA', 'Suscripciones', 'Cantidad', 'Subtotal', 'IVA', 'Total por cobro'], [], $cab);
+        foreach ($porPer as $k => $p) {
+            if (empty($conceptosPorPer[$k])) {
+                continue;
+            }
+            $h->setCellValue('A' . $fila, mb_strtoupper((string) $p['nombre']));
+            $h->getStyle('A' . $fila)->getFont()->setBold(true)->getColor()->setRGB('1F4E79');
+            $fila++;
+            $sb = $si = 0.0;
+            foreach ($conceptosPorPer[$k] as $l) {
+                $b = round((float) $l['base'], 2);
+                $i = round((float) $l['iva'], 2);
+                $escribir([(string) $l['codigo'], (string) $l['concepto'], (string) $l['tarifa'], (int) $l['suscripciones'], round((float) $l['cantidad'], 2), $b, $i, $b + $i], [6, 7, 8]);
+                $sb += $b;
+                $si += $i;
+            }
+            $escribir(['', 'Subtotal ' . $p['nombre'], '', '', '', $sb, $si, $sb + $si], [6, 7, 8], $tot);
+        }
+        $fila++;
+
+        // 4. Por impuesto
+        $titulo('Por tarifa de IVA');
+        $escribir(['Tarifa', '% IVA', 'Base imponible', 'IVA', 'Total por cobro', 'Base anual', 'IVA anual', 'Total anual'], [], $cab);
+        $t = ['base' => 0.0, 'iva' => 0.0, 'ba' => 0.0, 'ia' => 0.0];
+        foreach ($porTarifa as $x) {
+            $b  = round($x['base'], 2);
+            $i  = round($x['iva'], 2);
+            $ba = round($x['base_anual'], 2);
+            $ia = round($x['iva_anual'], 2);
+            $escribir([(string) $x['nombre'], $x['pct'], $b, $i, $b + $i, $ba, $ia, $ba + $ia], [3, 4, 5, 6, 7, 8]);
+            $t['base'] += $b; $t['iva'] += $i; $t['ba'] += $ba; $t['ia'] += $ia;
+        }
+        $escribir(['TOTAL', '', $t['base'], $t['iva'], $t['base'] + $t['iva'], $t['ba'], $t['ia'], $t['ba'] + $t['ia']], [3, 4, 5, 6, 7, 8], $tot);
+
+        foreach (range(1, 8) as $i) {
+            $h->getColumnDimensionByColumn($i)->setAutoSize(true);
+        }
+        // Las notas de A1:A3 no deben ensanchar la columna A.
+        $h->getColumnDimension('A')->setAutoSize(false)->setWidth(22);
+        $h->getColumnDimension('B')->setAutoSize(false)->setWidth(45);
+    }
+
     public function calcularProximoCobro(string $fechaActual, int $meses, string $codigo = ''): string
     {
         $dt = new \DateTime($fechaActual);

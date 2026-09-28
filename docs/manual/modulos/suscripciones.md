@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
-etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora
-version: 1.5
+etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto
+version: 1.6
 orden: 0
 estado: activo
 ---
@@ -168,6 +168,26 @@ documentos generados. El botón del embudo abre los filtros (próximo cobro, est
 periodicidad, comprobante, forma de cobro, monto, etc.). El listado se exporta a PDF
 y Excel con los filtros aplicados.
 
+### Hoja «Resumen» del Excel
+
+El Excel trae una segunda hoja, **Resumen**, con los valores de las mismas
+suscripciones exportadas (respeta la búsqueda y los filtros). Los valores son los de
+**un cobro** de cada suscripción (cantidad × precio, más su IVA) y tiene cuatro bloques:
+
+- **Por periodicidad**: número de suscripciones, subtotal, IVA y total por cobro, cuántos
+  cobros genera en un año y la **proyección mensual y anual**.
+- **Por concepto**: cada producto o servicio con sus suscripciones, cantidad, subtotal,
+  IVA, total y proyección anual.
+- **Conceptos por periodicidad**: el detalle anterior separado por periodicidad, con su
+  tarifa de IVA y un subtotal por periodicidad.
+- **Por tarifa de IVA**: base imponible e IVA de cada tarifa (15 %, 0 %, exento…), por
+  cobro y proyectados al año.
+
+La proyección anual multiplica el total de cada cobro por los cobros del año (mensual
+12, trimestral 4, anual 1, semanal 52, quincenal 24, diario 365); no considera fechas de
+inicio o fin ni el estado de la suscripción: si solo quiere las activas, filtre
+`estado:activo` antes de exportar.
+
 ## Permisos
 
 - **Ver**, **crear**, **modificar** y **eliminar** según el permiso del módulo.
@@ -212,6 +232,10 @@ y Excel con los filtros aplicados.
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
+
+- **1.6** — El Excel del listado trae una nueva hoja **Resumen** con los valores por
+  periodicidad, por concepto, conceptos por periodicidad y por tarifa de IVA, con
+  proyección mensual y anual.
 
 - **1.5** — Con el IVA configurado **al subtotal**, el IVA de cada línea de la factura
   generada se reajusta para que su suma sea exactamente el IVA sobre el
