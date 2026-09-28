@@ -89,6 +89,24 @@ primero), **Descripción** (busca por nombre), Adicional, Cantidad, P. Sin Imp.,
 P. Con Imp., Descuento, IVA y Subtotal. Las columnas **Medida** y **Precios** solo
 aparecen cuando algún ítem tiene unidades de medida o listas de precios.
 
+## Condiciones de ingreso y Acta de ingreso del vehículo
+
+Junto a **Info. Adicional** está la pestaña **Condiciones de ingreso**: un editor de
+texto con formato (negrita, colores, listas), igual al de *Condiciones* de la
+Proforma, para describir cómo llega el vehículo (golpes, rayones, objetos que deja,
+accesorios).
+
+Con la orden guardada, el botón del portapapeles de la barra superior (o **Acta de
+ingreso** dentro de la pestaña) genera el **Acta de ingreso del vehículo**: un PDF
+aparte, sin datos tributarios, con los datos del vehículo (placa, marca, modelo, año,
+color, chasis, motor, kilometraje, combustible), del cliente, las condiciones de
+ingreso, las novedades, los servicios y productos solicitados con su valor estimado,
+la próxima cita y las firmas de quien recibe (taller) y de quien entrega (cliente).
+Deja constancia de cómo ingresa el vehículo y qué se va a hacer.
+
+Para enviarla, pulse **Correo** y elija el documento *Acta de ingreso del vehículo*
+(o *Orden de servicio*).
+
 ## La orden sigue la configuración de facturación
 
 La orden aplica la misma configuración de facturación del establecimiento que la
@@ -303,6 +321,16 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
   cada línea y se quitó el saldo que se mostraba bajo cada ítem; la grilla ahora es
   igual a la de Factura de venta (columna **Código**, Medida y Precios solo cuando se
   usan). Si un producto no tiene saldo, se ofrecen **productos similares con saldo**.
+  El **PDF de la orden** usa el mismo diseño que el RIDE de la factura en el cuerpo
+  (Cód. Principal, Cantidad, Descripción, Detalle Adicional con lote/caducidad/NUP,
+  Precio Unitario, Descuento, Precio Total), los **totales** (subtotal por tarifa, no
+  objeto, exento, sin impuestos, descuento, ICE, IVA por tarifa y VALOR TOTAL) y la
+  **información adicional**, más observaciones y la leyenda del PDF de la empresa.
+  Nueva pestaña **Condiciones de ingreso** y nuevo PDF **Acta de ingreso del vehículo**,
+  que se imprime y se envía por correo. Al editar una orden ya no se borran sus
+  observaciones (p. ej. las de órdenes migradas). La factura y el recibo llevan una sola
+  vez el **correo del cliente**, siempre el vigente (antes el recibo podía llevar un
+  correo viejo o no llevarlo).
   Solo se puede facturar a **clientes activos**. La orden sigue la **configuración de
   facturación** del establecimiento igual que la factura: ítems libres, **lote,
   caducidad y NUP** obligatorios (con la carga de lotes disponibles) y la **unidad de

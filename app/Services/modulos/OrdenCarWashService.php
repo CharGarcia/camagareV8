@@ -361,6 +361,10 @@ class OrdenCarWashService
                 'created_by'        => $idUsuario,
                 'updated_by'        => $idUsuario,
             ];
+            if ($this->repository->tieneColumnaCondiciones()) {
+                // Mismo saneamiento que las Condiciones de la Proforma (solo etiquetas de formato).
+                $cabecera['condiciones_html'] = \App\Rules\modulos\ProformaRules::sanitizarCondiciones($data['condiciones_html'] ?? null);
+            }
             $idOrden = $this->repository->create($cabecera);
 
             $tot = $this->guardarLineas($idOrden, $idEmpresa, $data, $this->modoIvaEstablecimiento($idEstab));
@@ -428,8 +432,10 @@ class OrdenCarWashService
                 'kilometraje'       => ($data['kilometraje'] ?? '') === '' ? null : (int) $data['kilometraje'],
                 'nivel_combustible' => $data['nivel_combustible'] ?? null,
                 'fecha_ingreso'     => $data['fecha_ingreso'],
-                'novedades_texto'   => $data['novedades_texto'] ?? null,
-                'observaciones'     => $data['observaciones'] ?? null,
+                // La pantalla no edita estos dos campos: se conservan (p. ej. la nota de las
+                // órdenes migradas). Antes se enviaban vacíos y se borraban al editar.
+                'novedades_texto'   => $data['novedades_texto'] ?? ($cab['novedades_texto'] ?? null),
+                'observaciones'     => $data['observaciones'] ?? ($cab['observaciones'] ?? null),
                 'info_adicional'    => $this->encodeInfoAdicional($data['info_adicional'] ?? []),
                 'proxima_cita'      => empty($data['proxima_cita']) ? null : $data['proxima_cita'],
                 'subtotal'          => $tot['subtotal'],
@@ -438,7 +444,10 @@ class OrdenCarWashService
                 'total'             => $tot['total'],
                 'updated_by'        => $idUsuario,
                 'updated_at'        => date('Y-m-d H:i:s'),
-            ] + ($this->documentoLiberado($cab) && $this->repository->existeTablaDocumentos() ? [
+            ] + ($this->repository->tieneColumnaCondiciones()
+                ? ['condiciones_html' => \App\Rules\modulos\ProformaRules::sanitizarCondiciones($data['condiciones_html'] ?? null)]
+                : []
+            ) + ($this->documentoLiberado($cab) && $this->repository->existeTablaDocumentos() ? [
                 // Su factura/recibo se anuló: la orden vuelve a borrador para re-facturarla.
                 // El documento anterior queda en el historial de Facturación.
                 'estado'           => 'borrador',
@@ -668,6 +677,16 @@ class OrdenCarWashService
         }
         if (!empty($orden['numero_orden']) && !in_array('orden n.', $yaTiene, true)) {
             $infoAdicional[] = ['nombre' => 'Orden N.', 'valor' => (string) $orden['numero_orden']];
+        }
+        // "Correo del cliente": UNA sola fila y con el correo VIGENTE del cliente, igual en
+        // factura y recibo. La factura ya lo hacía (FacturaVentaService actualiza la fila),
+        // pero el recibo guardaba lo que trajera la orden: un correo viejo si el cliente lo
+        // cambió, o ninguno si la orden no tenía la fila (p. ej. órdenes migradas).
+        $infoAdicional = array_values(array_filter($infoAdicional,
+            fn($ia) => strcasecmp(trim((string) ($ia['nombre'] ?? '')), 'Correo del cliente') !== 0));
+        $correoCliente = trim((string) ($orden['cliente_email'] ?? ''));
+        if ($correoCliente !== '') {
+            $infoAdicional[] = ['nombre' => 'Correo del cliente', 'valor' => $correoCliente];
         }
 
         // TODO el proceso va en UNA transacción: secuencial (su candado se libera solo al

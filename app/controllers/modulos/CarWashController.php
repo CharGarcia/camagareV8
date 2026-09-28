@@ -372,7 +372,41 @@ class CarWashController extends BaseModuloController
         exit;
     }
 
-    /** Envía el PDF de la orden por correo (mismo patrón que consignaciones de venta). */
+    /**
+     * Acta de ingreso del vehículo (PDF aparte): datos del vehículo y cliente, condiciones de
+     * ingreso, novedades y servicios solicitados, con firmas. Constancia de cómo ingresa.
+     */
+    public function exportarIngresoPdfAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $orden = $this->service->getDetalleCompleto($id, $idEmpresa);
+            if (!$orden) { http_response_code(404); echo 'Orden no encontrada'; exit; }
+
+            $empresa = $this->cargarEmpresaPdf($idEmpresa);
+            (new \App\Services\modulos\OrdenCarWashPdfService())->generarIngreso($orden, $empresa, 'D');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(500);
+            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+                header('Content-Type: application/json');
+                echo json_encode(['error' => 'Error al generar el acta de ingreso: ' . $e->getMessage()]);
+            } else {
+                echo 'Error al generar el acta de ingreso: ' . $e->getMessage();
+            }
+        }
+        exit;
+    }
+
+    /**
+     * Envía por correo el PDF de la orden o, con tipo=ingreso, el Acta de ingreso del
+     * vehículo (mismo patrón que consignaciones de venta).
+     */
     public function enviarCorreoAjax(): void
     {
         ob_start();
@@ -390,8 +424,10 @@ class CarWashController extends BaseModuloController
             $orden = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$orden) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Orden no encontrada.']); exit; }
 
-            $empresa = $this->cargarEmpresaPdf($idEmpresa);
-            $pdfString = (new \App\Services\modulos\OrdenCarWashPdfService())->generar($orden, $empresa, 'S');
+            $empresa  = $this->cargarEmpresaPdf($idEmpresa);
+            $esIngreso = ($_POST['tipo'] ?? '') === 'ingreso';
+            $pdfSvc   = new \App\Services\modulos\OrdenCarWashPdfService();
+            $pdfString = $esIngreso ? $pdfSvc->generarIngreso($orden, $empresa, 'S') : $pdfSvc->generar($orden, $empresa, 'S');
 
             $numero = trim((string)($orden['numero_orden'] ?? ''));
 
@@ -408,17 +444,21 @@ class CarWashController extends BaseModuloController
 
             $clienteNombre = (string)($orden['cliente_nombre'] ?? 'Cliente');
             $empresaNombre = (string)($empresa['nombre'] ?? '');
-            $asunto = 'Orden Car-Wash ' . ($numero !== '' ? $numero : '') . ($empresaNombre !== '' ? ' — ' . $empresaNombre : '');
+            $placa  = trim((string)($orden['placa'] ?? ''));
+            $asunto = ($esIngreso ? 'Acta de ingreso del vehículo ' . $placa . ' — Orden ' : 'Orden Car-Wash ') . ($numero !== '' ? $numero : '') . ($empresaNombre !== '' ? ' — ' . $empresaNombre : '');
+            $parrafo = $esIngreso
+                ? 'Adjunto encontrará el acta de ingreso de su vehículo <strong>' . htmlspecialchars($placa) . '</strong> (orden <strong>' . htmlspecialchars($numero) . '</strong>): deja constancia de las condiciones en que ingresa y de los servicios solicitados.'
+                : 'Adjunto encontrará el comprobante de la orden de servicio <strong>' . htmlspecialchars($numero) . '</strong>.';
             $cuerpo = "<div style='font-family:Arial,sans-serif;line-height:1.5;'>"
                 . "<p>Estimad@ " . htmlspecialchars($clienteNombre) . ",</p>"
-                . "<p>Adjunto encontrará el comprobante de la orden de servicio <strong>" . htmlspecialchars($numero) . "</strong>.</p>"
+                . "<p>" . $parrafo . "</p>"
                 . "<p>Saludos cordiales,<br>" . htmlspecialchars($empresaNombre) . "</p>"
                 . "</div>";
 
             $emailSvc = new \App\Services\EnvioDocumentosSRIService();
             $enviado  = $emailSvc->enviarPdfSimple(
                 $idEmpresa, $correosDestino, $clienteNombre, $asunto, $cuerpo, $pdfString,
-                'Orden_CarWash_' . ($numero !== '' ? $numero : 'orden'), $empresaNombre
+                ($esIngreso ? 'Acta_Ingreso_' : 'Orden_CarWash_') . ($numero !== '' ? $numero : 'orden'), $empresaNombre
             );
 
             if (ob_get_level() > 0) ob_end_clean();

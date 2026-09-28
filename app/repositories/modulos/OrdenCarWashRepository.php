@@ -420,6 +420,16 @@ class OrdenCarWashRepository extends BaseRepository
         return $id;
     }
 
+    /** ¿Existe ya carwash_ordenes.condiciones_html? (el código no debe romperse sin el SQL). */
+    public function tieneColumnaCondiciones(): bool
+    {
+        static $tiene = false;
+        if (!$tiene) {
+            $tiene = (bool) $this->db->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'carwash_ordenes' AND column_name = 'condiciones_html'")->fetchColumn();
+        }
+        return $tiene;
+    }
+
     /** ¿Existen ya las columnas lote/fecha_caducidad/nup/id_unidad_medida en el detalle? */
     public function tieneColumnasLote(): bool
     {
@@ -452,7 +462,9 @@ class OrdenCarWashRepository extends BaseRepository
                        c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
                        c.direccion AS cliente_direccion, c.email AS cliente_email, c.telefono AS cliente_telefono,
                        (c.id IS NOT NULL AND c.status = 1 AND c.eliminado = false) AS cliente_activo,
-                       v.placa AS vehiculo_placa, v.marca AS vehiculo_marca,
+                       v.placa AS vehiculo_placa, v.marca AS vehiculo_marca, v.modelo AS vehiculo_modelo,
+                       v.anio AS vehiculo_anio, v.color AS vehiculo_color, v.chasis AS vehiculo_chasis,
+                       v.motor AS vehiculo_motor, v.tipo_vehiculo AS vehiculo_tipo,
                        " . self::SQL_DOC_VIGENTE . " AS documento_vigente
                 FROM carwash_ordenes o
                 LEFT JOIN clientes c ON c.id = o.id_cliente
@@ -470,7 +482,9 @@ class OrdenCarWashRepository extends BaseRepository
         // mostrar Lote-Caducidad-NUP y la unidad igual que en Factura de Venta.
         $sql = "SELECT d.*, p.codigo AS producto_codigo, b.nombre AS bodega_nombre,
                        p.inventariable AS producto_inventariable, p.tipo_produccion AS producto_tipo_produccion,
-                       p.id_tipo_medida AS producto_id_tipo_medida, p.id_medida AS producto_id_medida
+                       p.id_tipo_medida AS producto_id_tipo_medida, p.id_medida AS producto_id_medida,
+                       p.codigo_auxiliar AS producto_codigo_auxiliar,
+                       (SELECT ti.codigo FROM tarifa_iva ti WHERE ti.id = d.id_tarifa_iva) AS tarifa_codigo
                 FROM carwash_ordenes_detalle d
                 LEFT JOIN productos p ON p.id = d.id_producto
                 LEFT JOIN bodegas b   ON b.id = d.id_bodega

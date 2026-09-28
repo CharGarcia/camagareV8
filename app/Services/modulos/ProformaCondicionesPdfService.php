@@ -42,7 +42,7 @@ class ProformaCondicionesPdfService
 
         $pdf->SetTextColor(40, 44, 52);
         $pdf->SetFont('helvetica', '', 9.5);
-        $pdf->writeHTML($this->htmlParaTcpdf($html), true, false, true, false, '');
+        $pdf->writeHTML(self::htmlParaTcpdf($html), true, false, true, false, '');
 
         return (string) $pdf->Output('Condiciones_' . $numero . '.pdf', $outputDest);
     }
@@ -82,9 +82,10 @@ class ProformaCondicionesPdfService
     /**
      * Adapta el HTML que produce el editor (Quill) a lo que entiende TCPDF:
      * la alineación y la sangría vienen como clases `ql-align-*` / `ql-indent-*`
-     * y TCPDF solo aplica estilos en línea.
+     * y TCPDF solo aplica estilos en línea. Público: también lo usa el Acta de
+     * ingreso del vehículo de Car-Wash (condiciones de ingreso con el mismo editor).
      */
-    private function htmlParaTcpdf(string $html): string
+    public static function htmlParaTcpdf(string $html): string
     {
         $html = preg_replace_callback('/<([a-z][a-z0-9]*)\b([^>]*)>/i', static function (array $m): string {
             $tag   = strtolower($m[1]);

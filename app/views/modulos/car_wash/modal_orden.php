@@ -30,7 +30,8 @@
                     <i class="bi bi-receipt-cutoff"></i> <span class="d-none d-md-inline">Recibo</span>
                 </button>
                 <div class="vr mx-1"></div>
-                <button type="button" id="cw_btn_pdf" class="btn btn-outline-danger btn-sm px-2" onclick="cwPdf()" title="PDF del documento" disabled><i class="bi bi-file-earmark-pdf"></i></button>
+                <button type="button" id="cw_btn_pdf" class="btn btn-outline-danger btn-sm px-2" onclick="cwPdf()" title="PDF de la orden" disabled><i class="bi bi-file-earmark-pdf"></i></button>
+                <button type="button" id="cw_btn_acta" class="btn btn-outline-danger btn-sm px-2" onclick="cwPdfIngreso()" title="Acta de ingreso del vehículo (PDF)" disabled><i class="bi bi-clipboard2-check"></i></button>
                 <button type="button" id="cw_btn_correo" class="btn btn-outline-info btn-sm px-2" onclick="cwCorreo()" title="Enviar por correo" disabled><i class="bi bi-envelope"></i></button>
                 <button type="button" id="cw_btn_whatsapp" class="btn btn-outline-success btn-sm px-2" onclick="cwWhatsapp()" title="Enviar por WhatsApp" disabled><i class="bi bi-whatsapp"></i></button>
             </div>
@@ -198,6 +199,7 @@
                         <div class="col-12 col-md-7">
                             <ul class="nav nav-tabs nav-tabs-sm mb-0" role="tablist">
                                 <li class="nav-item"><button class="nav-link active py-1 small" data-bs-toggle="tab" data-bs-target="#cw-subtab-info" type="button"><i class="bi bi-info-circle me-1"></i>Info. Adicional</button></li>
+                                <li class="nav-item"><button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#cw-subtab-condiciones" type="button"><i class="bi bi-clipboard2-check me-1"></i>Condiciones de ingreso</button></li>
                             </ul>
                             <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height:120px;">
                                 <div class="tab-pane fade show active" id="cw-subtab-info" role="tabpanel">
@@ -220,6 +222,17 @@
                                             </button>
                                         </div>
                                     </div>
+                                </div>
+                                <!-- Condiciones de ingreso: texto con formato (como Condiciones de la Proforma).
+                                     Se imprime en el Acta de ingreso del vehículo. -->
+                                <div class="tab-pane fade" id="cw-subtab-condiciones" role="tabpanel">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="x-small text-muted">Estado en que ingresa el vehículo (golpes, rayones, objetos, accesorios…). Sale en el Acta de ingreso, que se puede imprimir y enviar por correo.</span>
+                                        <button type="button" class="btn btn-outline-danger btn-sm px-2 ms-auto flex-shrink-0" onclick="cwPdfIngreso()" title="Acta de ingreso del vehículo">
+                                            <i class="bi bi-file-earmark-pdf me-1"></i>Acta de ingreso
+                                        </button>
+                                    </div>
+                                    <div id="cw_condicionesEditor" class="cw-quill bg-white"></div>
                                 </div>
                             </div>
                         </div>
@@ -328,9 +341,35 @@
     </div>
 </div>
 
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+<style>
+    .cw-quill .ql-toolbar.ql-snow { padding: 3px 4px; border-radius: 4px 4px 0 0; }
+    .cw-quill .ql-toolbar.ql-snow .ql-formats { margin-right: 6px; }
+    .cw-quill .ql-container.ql-snow { border-radius: 0 0 4px 4px; font-size: 0.8rem; }
+    .cw-quill .ql-editor { min-height: 110px; max-height: 220px; overflow-y: auto; }
+    .cw-quill .ql-editor.ql-blank::before { font-style: italic; color: #adb5bd; }
+</style>
 <script>
 (function () {
     const RUTA = window.RUTA_MODULO_CW;
+
+    // ─── Editor de condiciones de ingreso (Quill, mismo que Proforma) ─────────
+    // Sin imágenes a propósito (irían en base64 dentro de la columna de texto).
+    let cwQuillInst = null;
+    function cwQuill() {
+        if (!cwQuillInst && window.Quill && document.getElementById('cw_condicionesEditor')) {
+            cwQuillInst = new Quill('#cw_condicionesEditor', {
+                theme: 'snow',
+                placeholder: 'Ej.: rayón en la puerta trasera izquierda, tapicería manchada, deja gata y llanta de repuesto…',
+                modules: { toolbar: [['bold', 'italic', 'underline'], [{ color: [] }], [{ list: 'ordered' }, { list: 'bullet' }], ['clean']] },
+            });
+            cwQuillInst.on('text-change', (d, o, source) => { if (source === 'user') cwBorradorCambio(); });
+        }
+        return cwQuillInst;
+    }
+    function cwCondicionesHtml() { const q = cwQuill(); return (q && q.getText().trim()) ? q.root.innerHTML : ''; }
+    function cwSetCondiciones(html) { const q = cwQuill(); if (q) q.setContents(html ? q.clipboard.convert(html) : [], 'silent'); }
     const DEC_P = (window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.decimales_precio) || 2;
     let modal, vehTimer = null, cliTimer = null, prodTimers = {};
     let CW_CUR = { id: 0, id_documento: 0, tipo_documento: '', estado: '', id_vehiculo: 0, id_cliente: 0 };
@@ -382,7 +421,7 @@
             id_vehiculo: val('cw_id_vehiculo'), vehiculo_texto: veh.value, placa: veh.dataset.placa || '', marca: veh.dataset.marca || '', modelo: veh.dataset.modelo || '',
             id_cliente: val('cw_id_cliente'), cliente_texto: val('cw_cliente_busqueda'),
             kilometraje: val('cw_kilometraje'), combustible: val('cw_nivel_combustible'), proxima_cita: val('cw_proxima_cita'), id_bodega: val('cw_id_bodega'),
-            lineas, info,
+            lineas, info, condiciones_html: cwCondicionesHtml(),
         };
     }
     function cwBorrEscribir() {
@@ -390,7 +429,7 @@
         if (!CW_BORR_ON) return;
         const snap = cwBorrSnapshot();
         // Sin nada que valga la pena recuperar: no se deja basura guardada.
-        if (!snap.id_vehiculo && !snap.id_cliente && !snap.lineas.length) { cwBorrBorrar(); return; }
+        if (!snap.id_vehiculo && !snap.id_cliente && !snap.lineas.length && !snap.condiciones_html) { cwBorrBorrar(); return; }
         try { localStorage.setItem(cwBorrKey(), JSON.stringify(snap)); } catch (e) {}
     }
     window.cwBorradorCambio = function () {
@@ -420,6 +459,7 @@
         if (!(b.lineas || []).length) cwAgregarLinea();
         document.getElementById('cw_info_body').innerHTML = '';
         (b.info || []).forEach(ia => ia.tipo === 'correo-cliente' ? cwActualizarInfoCorreoCliente(ia.valor) : cwAgregarInfo(ia));
+        if (b.condiciones_html) cwSetCondiciones(b.condiciones_html);
         cwCalcTotales();
     }
     // Si hay un borrador para la orden que se abre, pregunta si recuperarlo.
@@ -458,6 +498,7 @@
         document.getElementById('cw_tbodyDetalle').innerHTML = '';
         document.getElementById('cw_info_body').innerHTML = '';
         document.getElementById('cw_info_cliente').innerHTML = '';
+        cwSetCondiciones('');
         CW_CUR = { id: 0, id_documento: 0, tipo_documento: '', estado: '', id_vehiculo: 0, id_cliente: 0 };
         cwToggleDocBtns(false);
         cwRecalcular();
@@ -478,6 +519,7 @@
         // La numeración de una orden ya guardada no cambia (el servidor la ignora al editar).
         if (document.getElementById('cw_id').value) document.getElementById('cw_select_serie').disabled = true;
         document.getElementById('cw_btn_guardar').classList.toggle('d-none', !editable);
+        const q = cwQuill(); if (q) q.enable(!!editable);
     }
 
     window.cwAbrirNuevo = function () {
@@ -551,6 +593,7 @@
 
             (o.detalles || []).forEach(d => cwCargarLineaGuardada(d));
             (o.info_adicional || []).forEach(ia => cwAgregarInfo(ia));
+            cwSetCondiciones(o.condiciones_html || '');
             // Novedades antiguas (órdenes previas) se muestran como líneas de Info. Adicional.
             (o.novedades || []).forEach(n => cwAgregarInfo({ nombre: 'Novedad', valor: n.descripcion }));
             if (!(o.detalles || []).length) cwAgregarLinea();
@@ -607,6 +650,7 @@
         const ordenGuardada = !!(document.getElementById('cw_id').value);
         ['cw_btn_factura','cw_btn_recibo'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !puedeFacturar; });
         const bp = document.getElementById('cw_btn_pdf'); if (bp) bp.disabled = !ordenGuardada; // PDF de la orden
+        const ba = document.getElementById('cw_btn_acta'); if (ba) ba.disabled = !ordenGuardada; // Acta de ingreso
         const bc = document.getElementById('cw_btn_correo'); if (bc) bc.disabled = !ordenGuardada; // Correo de la orden
         const bw = document.getElementById('cw_btn_whatsapp'); if (bw) bw.disabled = !esFactura;
     }
@@ -1394,10 +1438,9 @@
             nivel_combustible: document.getElementById('cw_nivel_combustible').value,
             id_bodega: document.getElementById('cw_id_bodega').value || null,
             fecha_ingreso: (document.getElementById('cw_fecha_ingreso').value || '').replace('T', ' '),
-            novedades_texto: '',
-            observaciones: '',
             proxima_cita: document.getElementById('cw_proxima_cita').value,
-            detalles, novedades: [], info_adicional
+            detalles, novedades: [], info_adicional,
+            condiciones_html: cwCondicionesHtml(),
         };
 
         const keyBorrador = cwBorrKey();
@@ -1498,6 +1541,12 @@
         if (!id) { Swal.fire('Atención', 'Primero guarde la orden.', 'warning'); return; }
         CMG_pdfDocumento(`${RUTA}/exportarPdfAjax?id=${id}`);
     };
+    // Acta de ingreso del vehículo (se genera desde lo GUARDADO en la orden).
+    window.cwPdfIngreso = function () {
+        const id = document.getElementById('cw_id').value || CW_CUR.id;
+        if (!id) { Swal.fire({ icon: 'warning', title: 'Atención', text: 'Guarde la orden antes de generar el acta de ingreso.', target: document.getElementById('modalOrdenCW') }); return; }
+        CMG_pdfDocumento(`${RUTA}/exportarIngresoPdfAjax?id=${id}`);
+    };
     // PDF del documento generado (factura/recibo).
     window.cwPdfDocumento = function () {
         if (!CW_CUR.id_documento) return;
@@ -1510,21 +1559,28 @@
         const id = document.getElementById('cw_id').value || CW_CUR.id;
         if (!id) { Swal.fire('Atención', 'Primero guarde la orden.', 'warning'); return; }
         const correoActual = (document.getElementById('cw_info_cliente').textContent.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [''])[0];
-        const { value: correos, isConfirmed } = await Swal.fire({
+        const { value: form, isConfirmed } = await Swal.fire({
             title: 'Enviar por correo',
-            input: 'text',
-            inputLabel: 'Correo(s) destino, separados por coma.',
-            inputValue: correoActual,
-            inputPlaceholder: 'cliente@correo.com',
+            html: `<div class="text-start">
+                    <label class="form-label small fw-semibold mb-1">Documento</label>
+                    <select id="cwMailTipo" class="form-select form-select-sm mb-2">
+                        <option value="orden">Orden de servicio (PDF)</option>
+                        <option value="ingreso">Acta de ingreso del vehículo (condiciones y servicios)</option>
+                    </select>
+                    <label class="form-label small fw-semibold mb-1">Correo(s) destino, separados por coma</label>
+                    <input id="cwMailPara" class="form-control form-control-sm" placeholder="cliente@correo.com" value="${esc(correoActual)}">
+                   </div>`,
             target: document.getElementById('modalOrdenCW'),
             showCancelButton: true,
             confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
-            cancelButtonText: 'Cancelar'
+            cancelButtonText: 'Cancelar',
+            preConfirm: () => ({ tipo: document.getElementById('cwMailTipo').value, correos: document.getElementById('cwMailPara').value.trim() })
         });
-        if (!isConfirmed) return;
+        if (!isConfirmed || !form) return;
+        const correos = form.correos;
         Swal.fire({ title: 'Enviando correo...', allowOutsideClick: false, target: document.getElementById('modalOrdenCW'), didOpen: () => Swal.showLoading() });
         try {
-            const fd = new FormData(); fd.append('id', id); fd.append('correos', correos || '');
+            const fd = new FormData(); fd.append('id', id); fd.append('correos', correos || ''); fd.append('tipo', form.tipo);
             const res = await fetch(`${RUTA}/enviarCorreoAjax`, { method: 'POST', body: fd });
             const data = await res.json();
             if (data.ok) Swal.fire('Enviado', data.mensaje || 'Correo enviado correctamente.', 'success');

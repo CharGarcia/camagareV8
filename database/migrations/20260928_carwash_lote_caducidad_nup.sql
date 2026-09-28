@@ -15,3 +15,10 @@ ALTER TABLE carwash_ordenes_detalle ADD COLUMN IF NOT EXISTS lote             VA
 ALTER TABLE carwash_ordenes_detalle ADD COLUMN IF NOT EXISTS fecha_caducidad  DATE;
 ALTER TABLE carwash_ordenes_detalle ADD COLUMN IF NOT EXISTS nup              VARCHAR(100);
 ALTER TABLE carwash_ordenes_detalle ADD COLUMN IF NOT EXISTS id_unidad_medida INTEGER;
+
+-- ----------------------------------------------------------------------------
+-- Condiciones de ingreso del vehículo: texto libre con formato (editor como el de
+-- "Condiciones" de la Proforma). Se imprime en el "Acta de ingreso del vehículo"
+-- (PDF aparte que deja constancia de cómo ingresa y qué servicios se esperan).
+-- ----------------------------------------------------------------------------
+ALTER TABLE carwash_ordenes ADD COLUMN IF NOT EXISTS condiciones_html TEXT;
