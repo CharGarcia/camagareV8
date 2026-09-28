@@ -620,7 +620,7 @@ class CuentasPorCobrarController extends BaseModuloController
                     $cuerpo .= "<tr>"
                         . ($consolidado ? "<td class='text-center' style='width:{$wEst}%;'>" . $e($r['establecimiento'] ?? '') . "</td>" : '')
                         . "<td class='text-center' style='width:9%;'>{$fEmis}</td>"
-                        . "<td style='width:{$wDoc}%;'>{$tipo}" . $e($r['numero_factura'] ?? '') . "</td>"
+                        . "<td style='width:{$wDoc}%;'>{$tipo}" . self::docPdf((string) ($r['numero_factura'] ?? ''), $wDoc) . "</td>"
                         . "<td class='text-end' style='width:10%;'>$" . number_format($ts, 2) . "{$ndTxt}</td>"
                         . "<td class='text-end' style='width:9%;'>" . ($nc > 0 ? '$' . number_format($nc, 2) : '—') . "</td>"
                         . "<td class='text-end' style='width:10%;'>" . ($abonos > 0 ? '$' . number_format($abonos, 2) : '—') . "</td>"
@@ -2323,8 +2323,13 @@ $plantillasFiltradas = [];
 
             // Consolidado: columna "Estab." al inicio; se le resta ancho a "Cliente" para
             // que la suma siga en 100% (table-layout: fixed).
+            // "Documento" va al 17%: al 13% el número (001-001-000000123 = 72 pt a 8 pt) no
+            // cabía y Html2Pdf, que no parte una palabra sin espacios, lo dejaba montado sobre
+            // "Origen". Los 4 puntos salen de Cliente y F. Vencimiento, que sí se parten en líneas.
             $wEst = $consolidado ? 6 : 0;
-            $wCli = 24 - $wEst;
+            $wCli = 22 - $wEst;
+            $wDoc = 17;
+            $docPdf = static fn (array $r): string => self::docPdf((string) ($r['numero_factura'] ?? ''), $wDoc);
             $tdEst = fn (array $r): string => $consolidado
                 ? "<td class='text-center' style='width:{$wEst}%;'>" . htmlspecialchars((string)($r['establecimiento'] ?? '')) . "</td>"
                 : '';
@@ -2347,11 +2352,11 @@ $plantillasFiltradas = [];
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
                 $origenTxt = $this->getOrigenLabel($r['origen'] ?? 'FACTURA');
                 $filaHtml .= "<tr>{$tdEst($r)}
-                    <td style='width:13%;'>" . htmlspecialchars($r['numero_factura'] ?? '') . "</td>
+                    <td style='width:{$wDoc}%;'>" . $docPdf($r) . "</td>
                     <td class='text-center' style='width:9%;'>{$origenTxt}</td>
                     <td style='width:{$wCli}%;'>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "</td>
                     <td class='text-center' style='width:11%;'>{$fEmis}</td>
-                    <td class='text-center' style='width:16%;'>{$fVenc} {$badge}</td>
+                    <td class='text-center' style='width:14%;'>{$fVenc} {$badge}</td>
                     <td class='text-end' style='width:9%;'>\$" . number_format($ts, 2) . "</td>
                     <td class='text-end' style='width:9%;'>\$" . number_format($tc, 2) . "</td>
                     <td class='text-end' style='width:9%;font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
@@ -2403,11 +2408,11 @@ $plantillasFiltradas = [];
                 <thead>
                     <tr>
                         <?php if ($consolidado): ?><th style="width:<?= $wEst ?>%;">Estab.</th><?php endif; ?>
-                        <th style="width:13%;">Documento</th>
+                        <th style="width:<?= $wDoc ?>%;">Documento</th>
                         <th style="width:9%;">Origen</th>
                         <th style="width:<?= $wCli ?>%;">Cliente</th>
                         <th style="width:11%;">F. Emisión</th>
-                        <th style="width:16%;">F. Vencimiento</th>
+                        <th style="width:14%;">F. Vencimiento</th>
                         <th style="width:9%;">Total</th>
                         <th style="width:9%;">Cobrado</th>
                         <th style="width:9%;">Saldo</th>
@@ -2807,6 +2812,18 @@ $plantillasFiltradas = [];
     }
 
     /** Etiqueta legible del origen de una fila del listado unificado. */
+    /**
+     * Número de documento para una celda de `$wPct` % en los PDF del módulo (A4 vertical,
+     * 8 pt). Html2Pdf no parte una palabra sin espacios más ancha que su columna: la deja
+     * montada sobre la vecina. Un número de saldo inicial largo (p. ej. FAC-001-001-000054321)
+     * se corta a mano por su ancho real. Ancho útil de la hoja: 521,6 pt (márgenes de 8 mm
+     * del <page> + 5 mm por defecto de Html2Pdf), menos 6 pt de padding de la celda.
+     */
+    private static function docPdf(string $numero, float $wPct): string
+    {
+        return \App\Helpers\ReportePdf::texto($numero, $wPct / 100 * 521.6 - 6.0, 8.0);
+    }
+
     private function getOrigenLabel(string $origen): string
     {
         return match ($origen) {

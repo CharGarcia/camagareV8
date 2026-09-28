@@ -594,7 +594,7 @@ class CuentasPorPagarController extends BaseModuloController
                 };
 
                 $filaHtml .= "<tr style='{$color}'>{$tdEst($r)}
-                    <td style='width:{$wDoc}%;'><small style='color:#6c757d;'>{$tipo}</small><br>" . htmlspecialchars($r['numero_documento'] ?? '') . "</td>
+                    <td style='width:{$wDoc}%;'><small style='color:#6c757d;'>{$tipo}</small><br>" . self::docPdf((string) ($r['numero_documento'] ?? ''), $wDoc) . "</td>
                     <td style='width:{$wProv}%;'>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "</td>
                     <td class='text-center' style='width:12%;'>{$fEmis}</td>
                     <td class='text-center' style='width:16%;'>{$fVenc}<br>{$badge}</td>
@@ -747,6 +747,18 @@ class CuentasPorPagarController extends BaseModuloController
     }
 
     /** Etiqueta del tipo de documento del listado unificado (factura, liquidación, etc.). */
+    /**
+     * Número de documento para una celda de `$wPct` % en los PDF del módulo (A4 vertical,
+     * 8 pt). Html2Pdf no parte una palabra sin espacios más ancha que su columna: la deja
+     * montada sobre la vecina. Un número largo (saldo inicial, importación) se corta a mano
+     * por su ancho real. Ancho útil de la hoja: 521,6 pt (márgenes de 8 mm del <page> + 5 mm
+     * por defecto de Html2Pdf), menos 6 pt de padding de la celda.
+     */
+    private static function docPdf(string $numero, float $wPct): string
+    {
+        return \App\Helpers\ReportePdf::texto($numero, $wPct / 100 * 521.6 - 6.0, 8.0);
+    }
+
     private function getTipoLabel(string $tipoFuente, bool $corto = false): string
     {
         return match ($tipoFuente) {
@@ -949,7 +961,7 @@ class CuentasPorPagarController extends BaseModuloController
                     $cuerpo .= "<tr>"
                         . ($consolidado ? "<td class='text-center' style='width:{$wEst}%;'>" . $e($r['establecimiento'] ?? '') . "</td>" : '')
                         . "<td class='text-center' style='width:10%;'>{$fEmis}</td>"
-                        . "<td style='width:{$wDoc}%;'>{$tipo}" . $e($r['numero_documento'] ?? '') . "</td>"
+                        . "<td style='width:{$wDoc}%;'>{$tipo}" . self::docPdf((string) ($r['numero_documento'] ?? ''), $wDoc) . "</td>"
                         . "<td class='text-end' style='width:12%;'>$" . number_format($ts, 2) . "{$ndTxt}</td>"
                         . "<td class='text-end' style='width:10%;'>" . ($nc > 0 ? '$' . number_format($nc, 2) : '—') . "</td>"
                         . "<td class='text-end' style='width:12%;'>" . ($abonos > 0 ? '$' . number_format($abonos, 2) : '—') . "</td>"

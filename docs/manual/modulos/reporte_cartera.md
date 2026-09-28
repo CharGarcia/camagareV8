@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
-etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora
-version: 1.9
+etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora, pdf cortado, columnas cortadas en el pdf, no sale el saldo en el pdf, falta el abono en el pdf, pdf se sale de la hoja, numero de documento montado, documento se pasa a la otra columna
+version: 1.10
 orden: 0
 estado: activo
 ---
@@ -184,6 +184,12 @@ criterio que usa Cuentas por Pagar y que el asiento contable de la compra, así
 que los tres deben coincidir.
 
 ## Historial de cambios
+
+- **1.10** — PDF del estado de cuenta: con un **detalle largo** (p. ej. un cobro con banco,
+  cuenta y referencia) la tabla se salía de la hoja y las columnas **Deuda Generada**, **Abono**
+  y **Saldo** quedaban cortadas. Ahora cada columna tiene un ancho fijo: el detalle y los números
+  de documento largos se parten en varias líneas dentro de su celda. Cada cliente o proveedor
+  sigue empezando en hoja nueva, y las hojas llevan numeración al pie.
 
 - **1.9** — El botón **PDF** del estado de cuenta de cada cliente o proveedor pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

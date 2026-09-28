@@ -532,20 +532,34 @@ class ReporteCarteraController extends BaseModuloController
         $etiqueta = $this->etiquetaEntidad($filtros['tipo']);
         $rango = $this->formatearRango($filtros);
 
+        // Anchos por columna (table-layout: fixed, suman 100%), repetidos en el <th> y en cada
+        // <td>: sin ellos Html2Pdf ensancha la columna hasta que su texto quepa en una línea,
+        // y un detalle largo (cobro con banco, cuenta y referencia) empujaba la tabla fuera de
+        // la hoja: Deuda Generada, Abono y Saldo quedaban cortados y no se imprimían.
+        $w = ['fecha' => 10, 'tipo' => 9, 'doc' => 17, 'det' => 28, 'deuda' => 12, 'abono' => 12, 'saldo' => 12];
+        // Html2Pdf reparte en líneas por los espacios pero no parte una palabra sin espacios
+        // más ancha que su columna (un número de documento largo): esa se corta por su ancho
+        // real. 521,6 pt = ancho útil de la A4 vertical con backleft/backright de 8 mm; 6 pt
+        // = padding de la celda; 8.5 pt = tamaño de letra de la tabla.
+        $celda = static fn (?string $t, int $pct): string
+            => \App\Helpers\ReportePdf::texto((string) $t, $pct / 100 * 521.6 - 6.0, 8.5);
+
         ob_start();
         ?>
         <style>
-            table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 8.5pt; margin: 0 auto 14px auto; }
+            table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 8.5pt; margin: 0 0 14px 0; table-layout: fixed; }
             th { background: #f2f2f2; border: 1px solid #ccc; padding: 4px; text-align: center; }
-            td { border: 1px solid #ccc; padding: 4px; }
+            td { border: 1px solid #ccc; padding: 4px; overflow: hidden; word-wrap: break-word; }
             .text-end { text-align: right; }
             .text-center { text-align: center; }
             .header { text-align: center; margin-bottom: 14px; }
             .saldo-row td { background: #f8f9fa; font-weight: bold; }
             .total-row td { background: #e9ecef; font-weight: bold; }
         </style>
-        <?php foreach ($ledgers as $i => $ledger): $e = $ledger['entidad']; ?>
-            <div class="header" <?= $i > 0 ? 'style="page-break-before: always;"' : '' ?>>
+        <?php // Una <page> por cliente/proveedor: cada estado de cuenta empieza en hoja nueva. ?>
+        <?php foreach ($ledgers as $ledger): $e = $ledger['entidad']; ?>
+            <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
+            <div class="header">
                 <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
                 <h3>Estado de Cuenta - <?= htmlspecialchars($etiqueta) ?></h3>
                 <p><strong><?= htmlspecialchars($e['nombre'] ?? '') ?></strong> — <?= htmlspecialchars($e['identificacion'] ?? '') ?></p>
@@ -556,32 +570,41 @@ class ReporteCarteraController extends BaseModuloController
             </div>
             <table>
                 <thead>
-                    <tr><th>Fecha</th><th>Tipo</th><th>Documento</th><th>Detalle</th><th>Deuda Generada</th><th>Abono</th><th>Saldo</th></tr>
+                    <tr>
+                        <th style="width:<?= $w['fecha'] ?>%;">Fecha</th>
+                        <th style="width:<?= $w['tipo'] ?>%;">Tipo</th>
+                        <th style="width:<?= $w['doc'] ?>%;">Documento</th>
+                        <th style="width:<?= $w['det'] ?>%;">Detalle</th>
+                        <th style="width:<?= $w['deuda'] ?>%;">Deuda Generada</th>
+                        <th style="width:<?= $w['abono'] ?>%;">Abono</th>
+                        <th style="width:<?= $w['saldo'] ?>%;">Saldo</th>
+                    </tr>
                 </thead>
                 <tbody>
                     <tr class="saldo-row">
-                        <td colspan="6" class="text-end">Saldo Anterior</td>
-                        <td class="text-end"><?= number_format($ledger['saldo_anterior'], 2) ?></td>
+                        <td colspan="6" class="text-end" style="width:<?= 100 - $w['saldo'] ?>%;">Saldo Anterior</td>
+                        <td class="text-end" style="width:<?= $w['saldo'] ?>%;"><?= number_format($ledger['saldo_anterior'], 2) ?></td>
                     </tr>
                     <?php foreach ($ledger['movimientos'] as $m): ?>
                         <tr>
-                            <td class="text-center"><?= date('d-m-Y', strtotime($m['fecha'])) ?></td>
-                            <td class="text-center"><?= htmlspecialchars(ucfirst(strtolower(str_replace('_', ' ', $m['origen'])))) ?></td>
-                            <td><?= htmlspecialchars($m['numero_documento'] ?? '') ?></td>
-                            <td><?= htmlspecialchars($m['detalle'] ?? '') ?></td>
-                            <td class="text-end"><?= $m['tipo_movimiento'] === 'CARGO' ? number_format((float) $m['monto'], 2) : '' ?></td>
-                            <td class="text-end"><?= $m['tipo_movimiento'] === 'ABONO' ? number_format((float) $m['monto'], 2) : '' ?></td>
-                            <td class="text-end"><?= number_format((float) $m['saldo'], 2) ?></td>
+                            <td class="text-center" style="width:<?= $w['fecha'] ?>%;"><?= date('d-m-Y', strtotime($m['fecha'])) ?></td>
+                            <td class="text-center" style="width:<?= $w['tipo'] ?>%;"><?= htmlspecialchars(ucfirst(strtolower(str_replace('_', ' ', $m['origen'])))) ?></td>
+                            <td style="width:<?= $w['doc'] ?>%;"><?= $celda($m['numero_documento'] ?? '', $w['doc']) ?></td>
+                            <td style="width:<?= $w['det'] ?>%;"><?= $celda($m['detalle'] ?? '', $w['det']) ?></td>
+                            <td class="text-end" style="width:<?= $w['deuda'] ?>%;"><?= $m['tipo_movimiento'] === 'CARGO' ? number_format((float) $m['monto'], 2) : '' ?></td>
+                            <td class="text-end" style="width:<?= $w['abono'] ?>%;"><?= $m['tipo_movimiento'] === 'ABONO' ? number_format((float) $m['monto'], 2) : '' ?></td>
+                            <td class="text-end" style="width:<?= $w['saldo'] ?>%;"><?= number_format((float) $m['saldo'], 2) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     <tr class="total-row">
-                        <td colspan="4" class="text-end">TOTALES</td>
-                        <td class="text-end"><?= number_format($ledger['total_cargos'], 2) ?></td>
-                        <td class="text-end"><?= number_format($ledger['total_abonos'], 2) ?></td>
-                        <td class="text-end">$<?= number_format($ledger['saldo_final'], 2) ?></td>
+                        <td colspan="4" class="text-end" style="width:<?= $w['fecha'] + $w['tipo'] + $w['doc'] + $w['det'] ?>%;">TOTALES</td>
+                        <td class="text-end" style="width:<?= $w['deuda'] ?>%;"><?= number_format($ledger['total_cargos'], 2) ?></td>
+                        <td class="text-end" style="width:<?= $w['abono'] ?>%;"><?= number_format($ledger['total_abonos'], 2) ?></td>
+                        <td class="text-end" style="width:<?= $w['saldo'] ?>%;">$<?= number_format($ledger['saldo_final'], 2) ?></td>
                     </tr>
                 </tbody>
             </table>
+            </page>
         <?php endforeach; ?>
         <?php
         return (string) ob_get_clean();
