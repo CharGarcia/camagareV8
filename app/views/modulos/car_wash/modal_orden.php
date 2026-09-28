@@ -155,19 +155,20 @@
 
                     <!-- Servicios / Productos (grilla igual que factura de venta) -->
                     <div class="mt-2 border rounded-3 overflow-hidden bg-white shadow-sm">
-                        <div class="table-responsive" style="max-height: 300px;">
+                        <div class="table-responsive" style="max-height: 350px;">
                             <table class="table table-sm table-detalle mb-0 text-nowrap">
                                 <thead>
                                     <tr class="table-light border-bottom">
-                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width: 20%;">Descripción</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width: 8%;">Adicional</th>
-                                        <th class="py-2 small fw-bold text-muted col-medida-header <?= (($empresa['mostrar_unidad_medida'] ?? true) === 'true' || ($empresa['mostrar_unidad_medida'] ?? true) === true) ? '' : 'd-none' ?>" style="width: 7%;">Medida</th>
+                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width: 9%;">Código</th>
+                                        <th class="py-2 small fw-bold text-muted" style="width: 26%;">Descripción</th>
+                                        <th class="py-2 small fw-bold text-muted" style="width: 7%;">Adicional</th>
+                                        <th class="py-2 small fw-bold text-muted col-medida-header col-medida d-none" style="width: 8%;">Medida</th>
                                         <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width: 10%;">Precios</th>
+                                        <th class="py-2 small fw-bold text-muted col-lista-precios d-none" style="width: 12%;">Precios</th>
                                         <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Sin Imp.</th>
                                         <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Con Imp.</th>
-                                        <th class="py-2 small fw-bold text-muted text-end" style="width: 6%;">Desc.</th>
-                                        <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Iva</th>
+                                        <th class="py-2 small fw-bold text-muted text-end" style="width: 10%;">Desc.</th>
+                                        <th class="py-2 small fw-bold text-muted text-center" style="width: 7%;">Iva</th>
                                         <?php if (!empty($empresa['obligatorio_lotes']) && ($empresa['obligatorio_lotes'] === 'true' || $empresa['obligatorio_lotes'] === true)): ?>
                                             <th class="py-2 small fw-bold text-muted text-center" style="width:8%;">Lote</th>
                                         <?php endif; ?>
@@ -177,7 +178,7 @@
                                         <?php if (!empty($empresa['obligatorio_nup']) && ($empresa['obligatorio_nup'] === 'true' || $empresa['obligatorio_nup'] === true)): ?>
                                             <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">NUP / Serial</th>
                                         <?php endif; ?>
-                                        <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 10%;">Subtotal</th>
+                                        <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 78px; min-width: 78px;">Subtotal</th>
                                         <th style="width: 40px;"></th>
                                     </tr>
                                 </thead>
@@ -340,8 +341,114 @@
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function cwFocus(id) { const el = document.getElementById(id); if (el) { try { el.focus(); if (el.select) el.select(); } catch (e) {} } }
 
+    // ─── Borrador local (orden sin guardar) ───────────────────────────────────
+    // Mientras se llena una orden, lo escrito se guarda en el navegador (localStorage), por
+    // empresa + usuario + orden ('nueva' o el id). Si se cierra el modal, se recarga la página
+    // o se cae la conexión antes de Guardar, al volver a abrir se ofrece recuperarlo. Se borra
+    // al guardar o eliminar la orden, o si el usuario lo descarta. Es solo una comodidad del
+    // navegador: nunca reemplaza lo guardado en el servidor.
+    const CW_BORR_BASE = 'cw_borrador:' + (window.CW_EMP_USR || '0:0');
+    let CW_BORR_ON = false, borrTimer = null;
+    function cwBorrKey() { return CW_BORR_BASE + ':' + (document.getElementById('cw_id').value || 'nueva'); }
+    function cwBorrLeer(key) { try { const t = localStorage.getItem(key); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
+    function cwBorrBorrar(key) { try { localStorage.removeItem(key || cwBorrKey()); } catch (e) {} }
+    function cwBorrSnapshot() {
+        const val = id => (document.getElementById(id) || {}).value || '';
+        const veh = document.getElementById('cw_vehiculo_busqueda');
+        const lineas = [];
+        document.querySelectorAll('#cw_tbodyDetalle .row-detalle').forEach(tr => {
+            const q = c => (tr.querySelector(c) || {}).value || '';
+            const selIva = tr.querySelector('.input-iva');
+            const opt = selIva ? selIva.options[selIva.selectedIndex] : null;
+            if (!q('.input-descripcion').trim() && !q('.input-id-producto')) return;
+            lineas.push({
+                id_producto: q('.input-id-producto'), producto_codigo: q('.input-codigo'), descripcion: q('.input-descripcion'),
+                adicional: q('.input-adicional'), cantidad: q('.input-cantidad'), precio_unitario: q('.input-precio'),
+                descuento: q('.input-desc'), id_tarifa_iva: opt ? (opt.dataset.id || '') : '', porcentaje_iva: opt ? opt.value : 0,
+                es_libre: q('.input-es-libre') === '1', tipo_linea: tr.dataset.tipoProduccion === '02' ? 'servicio' : 'producto',
+                lote: q('.input-lote') || tr.dataset.originalLote || '', fecha_caducidad: q('.input-caducidad') || tr.dataset.originalCad || '', nup: q('.input-nup'),
+                id_unidad_medida: q('.input-medida'), producto_inventariable: tr.dataset.inventariable === '1',
+                producto_tipo_produccion: tr.dataset.tipoProduccion || '',
+                producto_id_tipo_medida: tr.dataset.idTipoMedida || '', producto_id_medida: tr.dataset.idMedidaBase || '',
+            });
+        });
+        const info = [];
+        document.querySelectorAll('#cw_info_body .row-info-adicional').forEach(r => {
+            const n = (r.querySelector('.input-info-concepto') || {}).value || '', v = (r.querySelector('.input-info-detalle') || {}).value || '';
+            if (n.trim() || v.trim()) info.push({ nombre: n, valor: v, tipo: r.dataset.tipo || '' });
+        });
+        return {
+            ts: Date.now(), id: val('cw_id'), id_punto: val('cw_select_serie'), fecha_ingreso: val('cw_fecha_ingreso'),
+            id_vehiculo: val('cw_id_vehiculo'), vehiculo_texto: veh.value, placa: veh.dataset.placa || '', marca: veh.dataset.marca || '', modelo: veh.dataset.modelo || '',
+            id_cliente: val('cw_id_cliente'), cliente_texto: val('cw_cliente_busqueda'),
+            kilometraje: val('cw_kilometraje'), combustible: val('cw_nivel_combustible'), proxima_cita: val('cw_proxima_cita'), id_bodega: val('cw_id_bodega'),
+            lineas, info,
+        };
+    }
+    function cwBorrEscribir() {
+        clearTimeout(borrTimer); borrTimer = null;
+        if (!CW_BORR_ON) return;
+        const snap = cwBorrSnapshot();
+        // Sin nada que valga la pena recuperar: no se deja basura guardada.
+        if (!snap.id_vehiculo && !snap.id_cliente && !snap.lineas.length) { cwBorrBorrar(); return; }
+        try { localStorage.setItem(cwBorrKey(), JSON.stringify(snap)); } catch (e) {}
+    }
+    window.cwBorradorCambio = function () {
+        if (!CW_BORR_ON) return;
+        clearTimeout(borrTimer);
+        borrTimer = setTimeout(cwBorrEscribir, 500);
+    };
+    function cwBorrAplicar(b) {
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+        if (!document.getElementById('cw_id').value) {
+            const sel = document.getElementById('cw_select_serie');
+            if (b.id_punto && sel.querySelector(`option[value="${b.id_punto}"]`)) { sel.value = b.id_punto; cwSerieChange(); }
+            if (b.fecha_ingreso) set('cw_fecha_ingreso', b.fecha_ingreso);
+        }
+        set('cw_id_vehiculo', b.id_vehiculo);
+        const veh = document.getElementById('cw_vehiculo_busqueda');
+        veh.value = b.vehiculo_texto || ''; veh.dataset.placa = b.placa || ''; veh.dataset.marca = b.marca || ''; veh.dataset.modelo = b.modelo || '';
+        set('cw_id_cliente', b.id_cliente); set('cw_cliente_busqueda', b.cliente_texto);
+        set('cw_kilometraje', b.kilometraje); set('cw_nivel_combustible', b.combustible);
+        set('cw_proxima_cita', b.proxima_cita); set('cw_id_bodega', b.id_bodega);
+        document.getElementById('cw_tbodyDetalle').innerHTML = '';
+        (b.lineas || []).forEach(l => {
+            cwCargarLineaGuardada(l);
+            const tr = document.querySelector('#cw_tbodyDetalle .row-detalle:last-child');
+            if (tr && l.adicional) tr.querySelector('.input-adicional').value = l.adicional;
+        });
+        if (!(b.lineas || []).length) cwAgregarLinea();
+        document.getElementById('cw_info_body').innerHTML = '';
+        (b.info || []).forEach(ia => ia.tipo === 'correo-cliente' ? cwActualizarInfoCorreoCliente(ia.valor) : cwAgregarInfo(ia));
+        cwCalcTotales();
+    }
+    // Si hay un borrador para la orden que se abre, pregunta si recuperarlo.
+    async function cwBorrOfrecer() {
+        const key = cwBorrKey();
+        const b = cwBorrLeer(key);
+        if (!b) return;
+        const f = new Date(b.ts || Date.now());
+        const p2 = n => String(n).padStart(2, '0');
+        const cuando = `${p2(f.getDate())}-${p2(f.getMonth() + 1)}-${f.getFullYear()} ${p2(f.getHours())}:${p2(f.getMinutes())}:${p2(f.getSeconds())}`;
+        const detalle = [b.placa || (b.vehiculo_texto || '').split(' — ')[0], (b.lineas || []).length + ' ítem(s)'].filter(Boolean).join(' · ');
+        const r = await Swal.fire({
+            icon: 'question', target: document.getElementById('modalOrdenCW'),
+            title: 'Orden sin guardar',
+            html: `Hay cambios de esta orden que no se guardaron (${esc(cuando)}).<br><span class="text-muted small">${esc(detalle)}</span><br>¿Desea recuperarlos?`,
+            showCancelButton: true, confirmButtonText: '<i class="bi bi-arrow-counterclockwise me-1"></i> Recuperar', cancelButtonText: 'Descartar',
+        });
+        if (r.isConfirmed) cwBorrAplicar(b);
+        else if (r.dismiss === Swal.DismissReason.cancel) cwBorrBorrar(key);
+    }
+    // Cualquier cambio del formulario (escritura o selects) actualiza el borrador.
+    ['input', 'change'].forEach(ev => document.getElementById('formOrdenCW')?.addEventListener(ev, () => cwBorradorCambio()));
+    // Al cerrar el modal se escribe de inmediato lo pendiente y se deja de registrar.
+    document.getElementById('modalOrdenCW')?.addEventListener('hide.bs.modal', () => { if (borrTimer) cwBorrEscribir(); CW_BORR_ON = false; });
+    window.addEventListener('beforeunload', () => { if (borrTimer) cwBorrEscribir(); });
+
     // ─── Reset / apertura ─────────────────────────────────────────────────────
     function resetForm() {
+        CW_BORR_ON = false;
         document.getElementById('formOrdenCW').reset();
         ['cw_id','cw_id_vehiculo','cw_id_cliente','cw_serie','cw_id_punto_emision','cw_id_establecimiento','cw_numero_orden'].forEach(id => document.getElementById(id).value = '');
         document.getElementById('cw_secuencial').value = '';
@@ -391,6 +498,7 @@
         getModal().show();
         // El cursor empieza en Vehículo (tras la animación del modal).
         setTimeout(() => cwFocus('cw_vehiculo_busqueda'), 250);
+        setTimeout(async () => { await cwBorrOfrecer(); CW_BORR_ON = true; }, 300);
     };
 
     window.cwAbrirVer = function (rowEl) {
@@ -453,6 +561,8 @@
 
             // Botones de documento: generar si es borrador sin documento; PDF/correo/wa si ya hay documento.
             cwToggleDocBtns(true, o);
+            if (editable) { await cwBorrOfrecer(); CW_BORR_ON = true; }
+            else cwBorrBorrar(); // ya no se puede editar: un borrador viejo no sirve
             if (irAFacturar && o.puede_facturar) {
                 document.getElementById('cw_btn_factura').classList.add('shadow');
             }
@@ -481,14 +591,18 @@
         if (o.cliente_direccion) parts.push('<i class="bi bi-geo-alt"></i> ' + esc(o.cliente_direccion));
         if (o.cliente_email) parts.push('<i class="bi bi-envelope"></i> ' + esc(o.cliente_email));
         if (o.cliente_telefono) parts.push('<i class="bi bi-telephone"></i> ' + esc(o.cliente_telefono));
-        document.getElementById('cw_info_cliente').innerHTML = parts.length
-            ? '<span class="text-muted">' + parts.join(' &nbsp; ') + '</span>' : '';
+        const aviso = (o.id_cliente && o.cliente_activo === false)
+            ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 me-2"><i class="bi bi-person-x me-1"></i>Cliente inactivo: no se puede facturar. Actívelo en Clientes o elija otro.</span>'
+            : '';
+        document.getElementById('cw_info_cliente').innerHTML = aviso + (parts.length
+            ? '<span class="text-muted">' + parts.join(' &nbsp; ') + '</span>' : '');
     }
 
     // Habilita/deshabilita los botones de documento según el estado de la orden.
     function cwToggleDocBtns(mostrar, o) {
         const hayDoc = mostrar && o && !!o.id_documento && o.documento_vigente !== false;
-        const puedeFacturar = mostrar && o && !!o.puede_facturar && window.CW_PERM.crear;
+        // Solo se factura a clientes activos (el servidor lo vuelve a validar al emitir).
+        const puedeFacturar = mostrar && o && !!o.puede_facturar && window.CW_PERM.crear && !(o.id_cliente && o.cliente_activo === false);
         const esFactura = hayDoc && (o.tipo_documento === 'FACTURA');
         const ordenGuardada = !!(document.getElementById('cw_id').value);
         ['cw_btn_factura','cw_btn_recibo'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !puedeFacturar; });
@@ -515,6 +629,7 @@
         document.getElementById('cw_id_punto_emision').value = idPunto;
         document.getElementById('cw_id_establecimiento').value = opt.dataset.idEst || '';
         await cwCargarSecuencial(idPunto);
+        cwCalcTotales(); // el modo de IVA depende del establecimiento de la serie
     };
     async function cwCargarSecuencial(idPunto) {
         try {
@@ -550,6 +665,7 @@
         }, 300);
     };
     function cwSeleccionarVehiculo(v) {
+        cwBorradorCambio();
         document.getElementById('cw_id_vehiculo').value = v.id;
         document.getElementById('cw_vehiculo_busqueda').value = (v.placa || '') + (v.marca ? ' — ' + v.marca : '');
         document.getElementById('cw_veh_dropdown').classList.add('d-none');
@@ -582,6 +698,7 @@
         }, 300);
     };
     function cwSeleccionarCliente(c) {
+        cwBorradorCambio();
         document.getElementById('cw_id_cliente').value = c.id;
         document.getElementById('cw_cliente_busqueda').value = (c.identificacion || '') + ' — ' + (c.nombre || '');
         document.getElementById('cw_cli_dropdown').classList.add('d-none');
@@ -625,36 +742,18 @@
     const TARIFAS_IVA = window.TARIFAS_IVA || [];
     const UNIDADES = window.UNIDADES || [];
     const DEC_PRECIO = EMPRESA_CONFIG.decimales_precio ?? 2;
-    const r2 = v => Math.round(v * 100) / 100;
+    // Redondeo a centavos igual que PHP round(): Math.round(1.005 * 100) da 100 (1.00) por la
+    // representación binaria, PHP da 1.01. toPrecision(15) corrige ese ruido antes de redondear.
+    const r2 = v => { const s = v < 0 ? -1 : 1; return s * Math.round(parseFloat((Math.abs(v) * 100).toPrecision(15))) / 100; };
+    const r6 = v => parseFloat((parseFloat(v) || 0).toFixed(6));
+    // Modo de IVA del establecimiento de la serie elegida (el mismo que usa el servidor).
+    function cwModoIva() {
+        const idPunto = document.getElementById('cw_id_punto_emision')?.value || document.getElementById('cw_select_serie')?.value;
+        const p = (window.CW_PUNTOS || []).find(x => String(x.id) === String(idPunto));
+        return (p && p.calculo_iva) || EMPRESA_CONFIG.calculo_iva || 'linea_linea';
+    }
     function cwDebounce(fn, wait) { let t; return function (...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), wait); }; }
 
-    // La bodega es UNA para toda la orden (selector de la cabecera): al cambiarla se
-    // recalcula el saldo disponible de todas las líneas.
-    document.getElementById('cw_id_bodega')?.addEventListener('change', () => {
-        document.querySelectorAll('#cw_tbodyDetalle .row-detalle').forEach(tr => cwActualizarSaldoFila(tr));
-    });
-
-    // Muestra el saldo del producto de la fila en la bodega elegida.
-    async function cwActualizarSaldoFila(tr) {
-        if (!tr) return;
-        const cont = tr.querySelector('.span-saldo-info');
-        const lbl  = tr.querySelector('.lbl-saldo-valor');
-        if (!cont || !lbl) return;
-        const idProd = tr.querySelector('.input-id-producto') ? tr.querySelector('.input-id-producto').value : '';
-        const idBod  = document.getElementById('cw_id_bodega').value || ''; // la bodega de la cabecera aplica a toda la orden
-        if (!idProd || !idBod || tr.dataset.controlaStock !== '1') { cont.classList.add('d-none'); return; }
-        try {
-            const idOrd = document.getElementById('cw_id').value || 0;
-            const res = await fetch(`${RUTA}/getStockAjax?id_producto=${idProd}&id_bodega=${idBod}&id_orden=${idOrd}`);
-            const data = await res.json();
-            if (!data.ok) { cont.classList.add('d-none'); return; }
-            const st = parseFloat(data.stock || 0);
-            lbl.textContent = st.toFixed(2);
-            cont.classList.remove('d-none');
-            cont.classList.toggle('text-danger', st <= 0);
-            cont.classList.toggle('text-muted', st > 0);
-        } catch (e) { cont.classList.add('d-none'); }
-    }
 
     // Crea una fila vacía de la grilla y cablea su búsqueda de producto.
     window.cwAgregarLinea = function () {
@@ -662,10 +761,12 @@
         const tr = document.createElement('tr');
         tr.className = 'row-detalle';
         tr.innerHTML = `
-            <td class="ps-3 position-relative">
-                <input type="text" class="form-control form-control-sm input-detalle input-descripcion" placeholder="${EMPRESA_CONFIG.facturacion_libre ? 'Escribe o busca un servicio/producto...' : 'Buscar servicio o producto...'}">
+            <td class="ps-3">
+                <input type="text" class="form-control form-control-sm input-detalle input-codigo" placeholder="Código" title="Buscar por código">
+            </td>
+            <td class="position-relative">
+                <textarea rows="2" class="form-control form-control-sm input-detalle input-descripcion" style="resize:none; overflow:auto; line-height:1.15;" placeholder="${EMPRESA_CONFIG.facturacion_libre ? 'Escribe o busca un servicio/producto...' : 'Buscar servicio o producto...'}"></textarea>
                 <input type="hidden" class="input-id-producto">
-                <input type="hidden" class="input-codigo">
                 <input type="hidden" class="input-es-libre" value="0">
                 <input type="hidden" class="input-ice-pct" value="0">
                 <input type="hidden" class="input-ice-val" value="0">
@@ -674,16 +775,13 @@
                 <div class="mt-1 container-variante d-none">
                     <select class="form-select form-select-sm input-detalle input-variante" style="font-size:0.7rem; height:24px; padding:0 5px;"><option value="">Variantes...</option></select>
                 </div>
-                <div class="mt-1 small fw-bold text-muted span-saldo-info d-none" style="font-size:0.68rem;">
-                    <i class="bi bi-box-seam me-1 text-primary"></i>Saldo: <span class="lbl-saldo-valor">0.00</span>
-                </div>
             </td>
             <td><input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" placeholder="Info adicional"></td>
-            <td class="${EMPRESA_CONFIG.mostrar_unidad_medida ? '' : 'd-none'}">
+            <td class="col-medida d-none">
                 <select class="form-select form-select-sm input-detalle input-medida d-none"><option value="">Medida</option></select>
             </td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="1" step="any" oninput="cwCalcFila(this)"></td>
-            <td><select class="form-select form-select-sm input-detalle input-lista-precios"><option value="">P. Base</option></select></td>
+            <td class="col-lista-precios d-none"><select class="form-select form-select-sm input-detalle input-lista-precios d-none"><option value="">P. Base</option></select></td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="cwCalcSinImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(${DEC_PRECIO})" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio-iva" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="cwCalcConImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(${DEC_PRECIO})" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" oninput="cwCalcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}></td>
@@ -738,11 +836,11 @@
                                 <div class="text-nowrap">${stockBadge}<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-10">$${parseFloat(p.precio_base || 0).toFixed(2)}</span></div></div>`;
                         b.onmousedown = (evt) => {
                             evt.preventDefault();
-                            if (p.controla_stock && parseFloat(p.stock_actual || 0) <= 0) {
-                                Swal.fire({ icon: 'warning', title: 'Sin stock', text: `"${p.nombre}" no tiene stock disponible en la bodega seleccionada.`, timer: 2600, showConfirmButton: false, target: document.getElementById('modalOrdenCW') });
-                            }
+                            const sinStock = p.controla_stock && parseFloat(p.stock_actual || 0) <= 0;
                             cwSeleccionarProductoEnFila(p, tr);
                             dropdownGlobal.classList.add('d-none');
+                            // Sin saldo: se ofrecen productos similares que sí tienen saldo.
+                            if (sinStock) cwMostrarSimilares(p, tr);
                         };
                         dropdownGlobal.appendChild(b);
                     });
@@ -757,11 +855,32 @@
         inputDesc.addEventListener('input', cwDebounce((e) => buscarProducto(e.target.value, inputDesc), 400));
         inputDesc.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                e.preventDefault(); // la descripción es una sola línea (como factura)
                 const firstBtn = dropdownGlobal.querySelector('button');
-                if (firstBtn && !dropdownGlobal.classList.contains('d-none')) { e.preventDefault(); firstBtn.onmousedown(new MouseEvent('mousedown')); }
+                if (firstBtn && !dropdownGlobal.classList.contains('d-none')) firstBtn.onmousedown(new MouseEvent('mousedown'));
             }
         });
+
+        // Código (igual que factura): busca en el catálogo; Enter toma el primero.
+        const inputCodigo = tr.querySelector('.input-codigo');
+        inputCodigo.addEventListener('input', cwDebounce((e) => buscarProducto(e.target.value, inputCodigo), 400));
+        inputCodigo.addEventListener('keydown', (e) => {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && !EMPRESA_CONFIG.facturacion_libre && tr.querySelector('.input-id-producto').value) {
+                e.preventDefault();
+                inputCodigo.value = ''; inputDesc.value = '';
+                tr.querySelector('.input-id-producto').value = '';
+                dropdownGlobal.classList.add('d-none');
+            }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const firstBtn = dropdownGlobal.querySelector('button');
+                if (firstBtn && !dropdownGlobal.classList.contains('d-none')) firstBtn.onmousedown(new MouseEvent('mousedown'));
+                else inputDesc.focus();
+            }
+        });
+        inputCodigo.addEventListener('blur', () => setTimeout(() => dropdownGlobal.classList.add('d-none'), 200));
         inputDesc.addEventListener('blur', () => setTimeout(() => dropdownGlobal.classList.add('d-none'), 200));
+        inputDesc.addEventListener('blur', () => { inputDesc.value = inputDesc.value.replace(/\s+/g, ' ').trim(); });
         inputDesc.addEventListener('blur', () => {
             if (!EMPRESA_CONFIG.facturacion_libre) return;
             const idProd = tr.querySelector('.input-id-producto').value;
@@ -827,24 +946,13 @@
         }
 
         // Medidas
-        const selMedida = row.querySelector('.input-medida');
-        if (selMedida) {
-            if (p.id_tipo_medida || p.id_medida) {
-                selMedida.classList.remove('d-none');
-                selMedida.innerHTML = '';
-                let compatibles = [];
-                if (p.id_tipo_medida) compatibles = UNIDADES.filter(u => u.id_tipo == p.id_tipo_medida);
-                if (compatibles.length === 0 && p.id_medida) { const ub = UNIDADES.find(u => u.id == p.id_medida); if (ub) compatibles = [ub]; }
-                if (compatibles.length > 0) {
-                    compatibles.forEach(u => {
-                        const opt = document.createElement('option');
-                        opt.value = u.id; opt.textContent = u.nombre; opt.dataset.factor = u.factor_base || 1;
-                        if (u.id == p.id_medida) { opt.selected = true; row.querySelector('.input-factor-original').value = u.factor_base || 1; }
-                        selMedida.appendChild(opt);
-                    });
-                } else { selMedida.classList.add('d-none'); }
-            } else { selMedida.classList.add('d-none'); selMedida.innerHTML = '<option value="">...</option>'; }
-        }
+        cwLlenarMedidas(row, p.id_tipo_medida, p.id_medida, null);
+
+        // Lote / Caducidad / NUP según la configuración de facturación (como factura).
+        row.dataset.originalLote = ''; row.dataset.originalCad = '';
+        const nupIn = row.querySelector('.input-nup'); if (nupIn) nupIn.value = '';
+        const esInventariable = (p.inventariable == true || p.inventariable == 'true' || p.inventariable == 1) && (p.tipo_produccion !== '02');
+        cwMostrarCamposInventario(row, esInventariable);
 
         // Lista de precios
         const selPrecios = row.querySelector('.input-lista-precios');
@@ -859,13 +967,175 @@
                 selPrecios.appendChild(opt);
             });
         }
+        selPrecios.classList.toggle('d-none', !(p.precios_lista && p.precios_lista.length > 0));
         selPrecios.onchange = () => { row.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(DEC_PRECIO); cwSyncPrecioIva(row.querySelector('.input-precio')); };
 
         cwSyncPrecioIva(row.querySelector('.input-precio'));
         cwCalcFila(row.querySelector('.input-cantidad'));
-        cwActualizarSaldoFila(row);
+        if (esInventariable && EMPRESA_CONFIG.facturacion_inventario) cwCargarLotesFila(row);
         const inCant = row.querySelector('.input-cantidad'); inCant.focus(); inCant.select();
     };
+
+    // Producto sin saldo en la bodega de la orden: muestra productos similares (misma
+    // categoría, marca o nombre) que sí tienen saldo, para reemplazarlo con un clic.
+    window.cwMostrarSimilares = async function (p, tr) {
+        const modalEl = document.getElementById('modalOrdenCW');
+        const idBod = document.getElementById('cw_id_bodega').value || 0;
+        const idOrd = document.getElementById('cw_id').value || 0;
+        let similares = [];
+        try {
+            const res = await fetch(`${RUTA}/productosSimilaresAjax?id_producto=${p.id}&id_bodega=${idBod}&id_orden=${idOrd}`);
+            const data = await res.json();
+            similares = data.ok ? (data.data || []) : [];
+        } catch (e) { similares = []; }
+
+        const bodega = document.getElementById('cw_id_bodega');
+        const nomBodega = bodega && bodega.selectedIndex >= 0 ? bodega.options[bodega.selectedIndex].text : '';
+        if (!similares.length) {
+            Swal.fire({ icon: 'warning', title: 'Sin saldo', target: modalEl,
+                html: `<b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b> y no hay productos similares con saldo.` });
+            return;
+        }
+        const filas = similares.map((s, i) => `
+            <tr>
+                <td class="text-start"><div class="fw-semibold">${esc(s.nombre)}</div><div class="text-muted" style="font-size:.72rem">${esc(s.codigo || '')}${s.coincide ? ' · coincide en ' + esc(s.coincide) : ''}</div></td>
+                <td class="text-end"><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">${fmt(s.stock_actual, 2)}</span></td>
+                <td class="text-end">$${fmt(s.precio_base, 2)}</td>
+                <td class="text-center"><button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 cw-usar-similar" data-i="${i}">Usar este</button></td>
+            </tr>`).join('');
+        await Swal.fire({
+            icon: 'info', title: 'Sin saldo — productos similares', width: 720, target: modalEl,
+            showConfirmButton: false, showCancelButton: true, cancelButtonText: 'Mantener el producto',
+            html: `<div class="text-start small mb-2"><b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b>. Estos productos similares sí tienen:</div>
+                   <div style="max-height:320px;overflow:auto"><table class="table table-sm table-hover align-middle mb-0" style="font-size:.8rem">
+                   <thead class="table-light"><tr><th class="text-start">Producto</th><th class="text-end">Saldo</th><th class="text-end">Precio</th><th></th></tr></thead>
+                   <tbody>${filas}</tbody></table></div>`,
+            didOpen: (popup) => {
+                popup.querySelectorAll('.cw-usar-similar').forEach(btn => btn.addEventListener('click', () => {
+                    cwSeleccionarProductoEnFila(similares[parseInt(btn.dataset.i, 10)], tr);
+                    Swal.close();
+                }));
+            }
+        });
+    };
+
+    // Unidades compatibles del producto; idSel = unidad guardada en la línea (si hay).
+    function cwLlenarMedidas(row, idTipo, idMedidaBase, idSel) {
+        row.dataset.idTipoMedida = idTipo || ''; row.dataset.idMedidaBase = idMedidaBase || '';
+        const selMedida = row.querySelector('.input-medida');
+        if (!selMedida) return;
+        if (!idTipo && !idMedidaBase) { selMedida.classList.add('d-none'); selMedida.innerHTML = '<option value="">...</option>'; return; }
+        let compatibles = [];
+        if (idTipo) compatibles = UNIDADES.filter(u => u.id_tipo == idTipo);
+        if (compatibles.length === 0 && idMedidaBase) { const ub = UNIDADES.find(u => u.id == idMedidaBase); if (ub) compatibles = [ub]; }
+        if (!compatibles.length) { selMedida.classList.add('d-none'); return; }
+        selMedida.classList.remove('d-none');
+        selMedida.innerHTML = '';
+        compatibles.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id; opt.textContent = u.nombre; opt.dataset.factor = u.factor_base || 1;
+            if (u.id == idMedidaBase) row.querySelector('.input-factor-original').value = u.factor_base || 1;
+            opt.selected = idSel ? (u.id == idSel) : (u.id == idMedidaBase);
+            selMedida.appendChild(opt);
+        });
+        // Otra unidad → otro factor: el stock de cada lote se recalcula en esa unidad.
+        selMedida.onchange = () => { if (row.dataset.inventariable === '1' && EMPRESA_CONFIG.facturacion_inventario) cwCargarLotesFila(row); cwBorradorCambio(); };
+    }
+
+    // Muestra/oculta Lote, Caducidad y NUP según la configuración (solo productos inventariables).
+    function cwMostrarCamposInventario(row, esInventariable) {
+        row.dataset.inventariable = esInventariable ? '1' : '0';
+        [['obligatorio_lotes', '.input-lote'], ['obligatorio_caducidad', '.input-caducidad'], ['obligatorio_nup', '.input-nup']].forEach(([cfg, sel]) => {
+            if (!EMPRESA_CONFIG[cfg]) return;
+            const el = row.querySelector(sel);
+            if (!el) return;
+            el.classList.toggle('d-none', !esInventariable);
+            el.required = !!esInventariable;
+            if (!esInventariable) el.value = '';
+        });
+    }
+
+    function cwFechaCadTexto(iso) {
+        if (!iso) return 'Sin Fecha';
+        const p = String(iso).substring(0, 10).split('-');
+        return (p.length === 3) ? `${p[2]}-${p[1]}-${p[0]}` : iso;
+    }
+
+    // Lotes y vencimientos disponibles del producto en la bodega de la orden (igual que
+    // factura): lote y caducidad van 1:1; elegir uno acota/elige el otro. Lo guardado en la
+    // línea se muestra siempre, aunque ya no tenga stock (orden histórica o migrada).
+    window.cwCargarLotesFila = async function (row) {
+        const idProd = row.querySelector('.input-id-producto').value;
+        const idBod  = document.getElementById('cw_id_bodega').value;
+        const selLote = row.querySelector('.input-lote');
+        const selCad  = row.querySelector('.input-caducidad');
+        if (!idProd || !idBod || (!selLote && !selCad)) return;
+        const currentLote = row.dataset.originalLote || '';
+        const currentCad  = row.dataset.originalCad || '';
+        [selLote, selCad].forEach(s => { if (s) { s.innerHTML = '<option value="">Cargando...</option>'; s.disabled = true; } });
+        try {
+            const idOrd = document.getElementById('cw_id').value || 0;
+            const json = await (await fetch(`${RUTA}/getLotesAjax?id_producto=${idProd}&id_bodega=${idBod}&id_orden=${idOrd}`)).json();
+            if (selLote) selLote.innerHTML = '<option value="">Lote...</option>';
+            if (selCad) selCad.innerHTML = '<option value="">Vencimiento...</option>';
+            const selMedida = row.querySelector('.input-medida');
+            const factorLinea = parseFloat(selMedida?.options[selMedida.selectedIndex]?.dataset.factor || 1) || 1;
+            const factorProd  = parseFloat(row.querySelector('.input-factor-original')?.value || 1) || 1;
+            const factor = factorLinea / factorProd;
+            const lotes = (json.ok && json.data) ? json.data : [];
+            lotes.forEach(l => {
+                const stock = parseFloat(l.stock_lote || 0) / factor;
+                if (selLote) { const o = new Option(l.numero_lote || 'Sin Lote', l.numero_lote || ''); o.dataset.stock = stock; selLote.appendChild(o); }
+                if (selCad)  { const o = new Option(cwFechaCadTexto(l.fecha_caducidad || ''), l.fecha_caducidad || ''); o.dataset.stock = stock; selCad.appendChild(o); }
+            });
+            if (!lotes.length) {
+                if (selLote) selLote.options[0].textContent = 'Sin Stock';
+                if (selCad) selCad.options[0].textContent = 'Sin Stock';
+            }
+            const cadCompletas = selCad ? Array.from(selCad.options).map(o => o.cloneNode(true)) : [];
+            const acotarCadAlLote = (idx, isoGuardado) => {
+                if (!selCad) return;
+                selCad.innerHTML = '';
+                if (idx <= 0) { cadCompletas.forEach(o => selCad.appendChild(o.cloneNode(true))); selCad.selectedIndex = 0; return; }
+                const base = cadCompletas[idx];
+                if (isoGuardado && (!base || base.value !== isoGuardado)) selCad.appendChild(new Option(cwFechaCadTexto(isoGuardado), isoGuardado));
+                else if (base) selCad.appendChild(base.cloneNode(true));
+                selCad.selectedIndex = 0;
+            };
+            if (selLote) selLote.onchange = () => { acotarCadAlLote(selLote.selectedIndex); cwBorradorCambio(); };
+            if (selCad) selCad.onchange = () => {
+                const idx = selCad.selectedIndex;
+                if (idx > 0 && selLote && cadCompletas.length === selCad.options.length) { selLote.selectedIndex = idx; acotarCadAlLote(idx); }
+                cwBorradorCambio();
+            };
+            // Lote / caducidad guardados: se muestran aunque ya no estén en stock.
+            if (selLote && currentLote && currentLote !== 'sin_lote') {
+                if (!Array.from(selLote.options).some(o => o.value === currentLote)) selLote.appendChild(new Option(currentLote, currentLote));
+                selLote.value = currentLote;
+                acotarCadAlLote(selLote.selectedIndex, currentCad || '');
+                if (selCad && currentCad) {
+                    if (!Array.from(selCad.options).some(o => o.value === currentCad)) selCad.appendChild(new Option(cwFechaCadTexto(currentCad), currentCad));
+                    selCad.value = currentCad;
+                }
+            } else if (selCad && currentCad) {
+                if (!Array.from(selCad.options).some(o => o.value === currentCad)) selCad.appendChild(new Option(cwFechaCadTexto(currentCad), currentCad));
+                selCad.value = currentCad;
+            }
+        } catch (e) {
+            console.error('Error cargando lotes', e);
+        } finally {
+            const editable = !document.getElementById('cw_btn_guardar').classList.contains('d-none');
+            [selLote, selCad].forEach(s => { if (s) s.disabled = !editable; });
+        }
+    };
+
+    // Al cambiar la bodega de la orden, los lotes de cada línea se vuelven a cargar.
+    document.getElementById('cw_id_bodega')?.addEventListener('change', () => {
+        if (!EMPRESA_CONFIG.facturacion_inventario) return;
+        document.querySelectorAll('#cw_tbodyDetalle .row-detalle').forEach(tr => {
+            if (tr.dataset.inventariable === '1' && tr.querySelector('.input-id-producto').value) cwCargarLotesFila(tr);
+        });
+    });
 
     window.cwAgregarOpcionServicioLibre = function (texto, tr, dropdown) {
         const sep = document.createElement('div');
@@ -884,10 +1154,11 @@
     window.cwSeleccionarItemLibre = function (descripcion, row) {
         row.querySelector('.input-descripcion').value = descripcion;
         row.querySelector('.input-id-producto').value = '';
-        row.querySelector('.input-codigo').value = '__LIBRE__';
+        row.querySelector('.input-codigo').value = '';
         row.querySelector('.input-es-libre').value = '1';
         row.dataset.tipoProduccion = '02';
         row.dataset.inventariable = 'false';
+        cwMostrarCamposInventario(row, false); // ítem libre: sin lote / caducidad / NUP
         const selIva = row.querySelector('.input-iva');
         if (selIva && selIva.options.length > 0) selIva.selectedIndex = 0;
         const selMedida = row.querySelector('.input-medida');
@@ -925,13 +1196,27 @@
         const cant = parseFloat(tr.querySelector('.input-cantidad').value) || 0;
         const prec = parseFloat(tr.querySelector('.input-precio').value) || 0;
         const desc = parseFloat(tr.querySelector('.input-desc').value) || 0;
-        const subtotalNeto = r2(r2(cant * prec) - desc);
-        tr.querySelector('.subtotal-line').textContent = subtotalNeto.toFixed(2);
+        tr.querySelector('.subtotal-line').textContent = cwBaseLinea(cant, prec, desc).toFixed(2);
         cwCalcTotales();
     };
+    // Base de la línea EXACTAMENTE como el servidor (OrdenCarWashService::calcularLineas):
+    // cantidad y precio a 6 decimales, descuento a 2, y un solo redondeo al final.
+    function cwBaseLinea(cant, prec, desc) {
+        return Math.max(0, r2(r6(prec) * r6(cant) - r2(desc)));
+    }
+    // Columnas dinámicas (como factura): "Precios" y "Medida" solo se muestran si algún ítem
+    // las usa; Medida además respeta la configuración de la empresa.
+    function cwActualizarColumnasDinamicas() {
+        const hayPrecios = !!document.querySelector('#cw_tbodyDetalle .input-lista-precios:not(.d-none)');
+        document.querySelectorAll('#modalOrdenCW .col-lista-precios').forEach(el => el.classList.toggle('d-none', !hayPrecios));
+        const hayMedida = !!EMPRESA_CONFIG.mostrar_unidad_medida && !!document.querySelector('#cw_tbodyDetalle .input-medida:not(.d-none)');
+        document.querySelectorAll('#modalOrdenCW .col-medida').forEach(el => el.classList.toggle('d-none', !hayMedida));
+    }
     window.cwCalcTotales = function () {
-        const modoIva = EMPRESA_CONFIG.calculo_iva || 'linea_linea';
-        let subtotalGeneral = 0, descuentoTotal = 0;
+        cwBorradorCambio();
+        cwActualizarColumnasDinamicas();
+        const modoIva = cwModoIva();
+        let sumaBases = 0, descuentoTotal = 0;
         const grupos = {};
         document.querySelectorAll('#cw_tbodyDetalle .row-detalle').forEach(tr => {
             const cant = parseFloat(tr.querySelector('.input-cantidad').value) || 0;
@@ -942,17 +1227,25 @@
             const ivaPct = parseFloat(optIva ? optIva.value : 0) || 0;
             const key = optIva ? (optIva.dataset.id || ivaPct) : ivaPct;
             const label = optIva ? optIva.text : '0%';
-            const bruto = r2(cant * prec);
-            const neto = r2(bruto - desc);
-            subtotalGeneral = r2(subtotalGeneral + bruto);
-            descuentoTotal = r2(descuentoTotal + desc);
+            if (cant <= 0) return; // igual que el servidor: las líneas sin cantidad no suman
+            const neto = cwBaseLinea(cant, prec, desc);
+            sumaBases += neto;
+            descuentoTotal += r2(desc);
             if (!grupos[key]) grupos[key] = { pct: ivaPct, label: label, base: 0, iva: 0 };
-            grupos[key].base = r2(grupos[key].base + neto);
-            if (modoIva === 'linea_linea') grupos[key].iva = r2(grupos[key].iva + r2(neto * ivaPct / 100));
+            grupos[key].base += neto;
+            if (modoIva === 'linea_linea') grupos[key].iva += r2(neto * ivaPct / 100);
         });
-        if (modoIva === 'subtotal') Object.values(grupos).forEach(g => { g.iva = r2(g.base * g.pct / 100); });
-        let ivaTotal = 0; Object.values(grupos).forEach(g => { ivaTotal = r2(ivaTotal + g.iva); });
-        const total = r2((subtotalGeneral - descuentoTotal) + ivaTotal);
+        Object.values(grupos).forEach(g => {
+            g.base = r2(g.base);
+            g.iva = modoIva === 'subtotal' ? r2(g.base * g.pct / 100) : r2(g.iva);
+        });
+        sumaBases = r2(sumaBases); descuentoTotal = r2(descuentoTotal);
+        let ivaTotal = 0; Object.values(grupos).forEach(g => { ivaTotal += g.iva; });
+        ivaTotal = r2(ivaTotal);
+        // Subtotal (antes de descuento) = bases + descuentos, así Subtotal − Descuento cuadra
+        // al centavo con la suma de las líneas; Total = bases + IVA, igual que la factura.
+        const subtotalGeneral = r2(sumaBases + descuentoTotal);
+        const total = r2(sumaBases + ivaTotal);
 
         const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
         set('cw-lbl-subtotal', subtotalGeneral.toFixed(2));
@@ -974,6 +1267,7 @@
         tr.dataset.tipoProduccion = (d.tipo_linea === 'servicio') ? '02' : '01';
         tr.dataset.controlaStock = (d.id_producto && d.tipo_linea === 'producto') ? '1' : '0';
         tr.querySelector('.input-descripcion').value = d.descripcion || '';
+        tr.querySelector('.input-codigo').value = d.producto_codigo || '';
         tr.querySelector('.input-id-producto').value = d.id_producto || '';
         tr.querySelector('.input-es-libre').value = (d.es_libre === true || d.es_libre === 't' || d.es_libre === 'true' || d.es_libre === 1) ? '1' : '0';
         tr.querySelector('.input-cantidad').value = d.cantidad != null ? parseFloat(d.cantidad) : 1;
@@ -993,9 +1287,18 @@
             }
             if (opt) selIva.selectedIndex = opt.index;
         }
+        // Unidad de medida, inventariable y Lote / Caducidad / NUP guardados (como factura).
+        if (d.producto_tipo_produccion) tr.dataset.tipoProduccion = d.producto_tipo_produccion;
+        if (d.id_producto) cwLlenarMedidas(tr, d.producto_id_tipo_medida, d.producto_id_medida, d.id_unidad_medida);
+        const esInv = !!d.id_producto && (d.producto_inventariable === true || d.producto_inventariable === 't' || d.producto_inventariable === 'true' || d.producto_inventariable == 1)
+                      && (d.producto_tipo_produccion || tr.dataset.tipoProduccion) !== '02';
+        cwMostrarCamposInventario(tr, esInv);
+        tr.dataset.originalLote = d.lote || '';
+        tr.dataset.originalCad  = d.fecha_caducidad ? String(d.fecha_caducidad).slice(0, 10) : '';
+        const nupIn = tr.querySelector('.input-nup'); if (nupIn) nupIn.value = d.nup || '';
         cwSyncPrecioIva(tr.querySelector('.input-precio'));
         cwCalcFila(tr.querySelector('.input-cantidad'));
-        cwActualizarSaldoFila(tr);
+        if (esInv && EMPRESA_CONFIG.facturacion_inventario) cwCargarLotesFila(tr);
     };
 
 
@@ -1008,7 +1311,7 @@
         tr.innerHTML = `
             <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:20px;font-size:0.78rem;" placeholder="Concepto..." value="${esc(ia.nombre || '')}"></td>
             <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:20px;font-size:0.78rem;" placeholder="Detalle..." value="${esc(ia.valor || '')}"></td>
-            <td class="p-0 text-center pe-1"><button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none" onclick="this.closest('tr').remove();"><i class="bi bi-x-circle-fill"></i></button></td>`;
+            <td class="p-0 text-center pe-1"><button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none" onclick="this.closest('tr').remove(); cwBorradorCambio();"><i class="bi bi-x-circle-fill"></i></button></td>`;
         const primeraFija = tbody.querySelector('tr[data-tipo]');
         if (primeraFija) tbody.insertBefore(tr, primeraFija);
         else tbody.appendChild(tr);
@@ -1051,6 +1354,10 @@
                 precio_unitario: num(tr.querySelector('.input-precio')?.value),
                 descuento: num(tr.querySelector('.input-desc')?.value),
                 porcentaje_iva: optIva ? (parseFloat(optIva.value) || 0) : 0,
+                lote: tr.querySelector('.input-lote')?.value.trim() || '',
+                caducidad: tr.querySelector('.input-caducidad')?.value.trim() || '',
+                nup: tr.querySelector('.input-nup')?.value.trim() || '',
+                id_unidad_medida: (() => { const m = tr.querySelector('.input-medida'); return (m && !m.classList.contains('d-none') && m.value) ? m.value : null; })(),
             });
         });
         // 3º Al menos un servicio/producto
@@ -1093,12 +1400,15 @@
             detalles, novedades: [], info_adicional
         };
 
+        const keyBorrador = cwBorrKey();
         const btn = document.getElementById('cw_btn_guardar');
         const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
         try {
             const res = await fetch(`${RUTA}/store`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'Error al guardar');
+            CW_BORR_ON = false; clearTimeout(borrTimer); borrTimer = null;
+            cwBorrBorrar(keyBorrador);
             getModal().hide();
             await Swal.fire({ icon: 'success', title: 'Listo', text: data.msg, timer: 1400, showConfirmButton: false });
             if (typeof cwRecargarTablero === 'function') cwRecargarTablero();
@@ -1121,6 +1431,8 @@
             const res = await fetch(`${RUTA}/eliminar`, { method: 'POST', body: fd });
             const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'Error');
+            CW_BORR_ON = false; clearTimeout(borrTimer); borrTimer = null;
+            cwBorrBorrar(CW_BORR_BASE + ':' + id);
             getModal().hide();
             await Swal.fire({ icon: 'success', title: 'Eliminada', timer: 1200, showConfirmButton: false });
             if (typeof cwRecargarTablero === 'function') cwRecargarTablero();

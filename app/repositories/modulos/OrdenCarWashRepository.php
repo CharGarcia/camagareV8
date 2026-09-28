@@ -20,12 +20,25 @@ class OrdenCarWashRepository extends BaseRepository
         parent::__construct('carwash_ordenes');
     }
 
+    /**
+     * Ambiente vigente de la empresa ('1' pruebas / '2' producción). Como en Facturas y
+     * Recibos, cada ambiente tiene su propia numeración y su propio listado: las órdenes
+     * de pruebas no se ven (ni ocupan números) en producción y viceversa.
+     */
+    public function ambienteEmpresa(int $idEmpresa): string
+    {
+        $st = $this->db->prepare("SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e");
+        $st->execute([':e' => $idEmpresa]);
+        return (string) $st->fetchColumn() === '2' ? '2' : '1';
+    }
+
     /** Series (establecimiento-punto_emision) usadas realmente en órdenes existentes, para el filtro del listado. */
     public function getSeriesDistintas(int $idEmpresa): array
     {
         $sql = "SELECT DISTINCT establecimiento, punto_emision
                 FROM carwash_ordenes
                 WHERE id_empresa = :id_empresa AND eliminado = false AND establecimiento IS NOT NULL AND establecimiento != ''
+                  AND tipo_ambiente = (SELECT COALESCE(CAST(tipo_ambiente AS VARCHAR(1)), '1') FROM empresas WHERE id = :id_empresa)
                 ORDER BY establecimiento, punto_emision";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
@@ -36,7 +49,7 @@ class OrdenCarWashRepository extends BaseRepository
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
     {
-        $where  = "WHERE o.id_empresa = :e AND o.eliminado = false";
+        $where  = "WHERE o.id_empresa = :e AND o.eliminado = false AND o.tipo_ambiente = (SELECT COALESCE(CAST(tipo_ambiente AS VARCHAR(1)), '1') FROM empresas WHERE id = :e)";
         $params = [':e' => $idEmpresa];
 
         if ($idUsuarioFiltro !== null) {
@@ -163,6 +176,7 @@ class OrdenCarWashRepository extends BaseRepository
                 FROM carwash_ordenes o
                 JOIN usuarios u ON u.id = o.created_by
                 WHERE o.id_empresa = :id_empresa AND o.eliminado = false
+                  AND o.tipo_ambiente = (SELECT COALESCE(CAST(tipo_ambiente AS VARCHAR(1)), '1') FROM empresas WHERE id = :id_empresa)
                 ORDER BY u.nombre";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
@@ -182,7 +196,7 @@ class OrdenCarWashRepository extends BaseRepository
             return [];
         }
         $params = [':id_empresa' => $idEmpresa];
-        $whereBase = "o.id_empresa = :id_empresa AND o.eliminado = false";
+        $whereBase = "o.id_empresa = :id_empresa AND o.eliminado = false AND o.tipo_ambiente = (SELECT COALESCE(CAST(tipo_ambiente AS VARCHAR(1)), '1') FROM empresas WHERE id = :id_empresa)";
         if ($idUsuario !== null) {
             $whereBase .= " AND o.created_by = :id_usuario";
             $params[':id_usuario'] = $idUsuario;
@@ -274,12 +288,15 @@ class OrdenCarWashRepository extends BaseRepository
     // ─── SECUENCIAL (mismas reglas que recibo de venta) ───────────────────────
 
     /** Verifica si el secuencial ya existe para el punto de emisión (evita duplicados). */
-    public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial, ?int $excluirId = null): bool
+    public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial, string $tipoAmbiente, ?int $excluirId = null): bool
     {
+        // Por ambiente, igual que el índice único uq_carwash_secuencial y que SecuencialService:
+        // sin este filtro, al pasar a producción el número 1 "ya existía" en pruebas y no se
+        // podía registrar ninguna orden.
         $sql = "SELECT COUNT(*) FROM carwash_ordenes
                 WHERE id_empresa = ? AND id_establecimiento = ? AND id_punto_emision = ?
-                  AND secuencial = ? AND eliminado = false";
-        $params = [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial];
+                  AND secuencial = ? AND tipo_ambiente = ? AND eliminado = false";
+        $params = [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial, $tipoAmbiente];
         if ($excluirId !== null) {
             $sql .= " AND id <> ?";
             $params[] = $excluirId;
@@ -384,7 +401,35 @@ class OrdenCarWashRepository extends BaseRepository
             ':tot'   => $d['total_linea'] ?? 0,
             ':tar'   => $d['id_tarifa_iva'] ?? null,
         ]);
-        return (int) $st->fetchColumn();
+        $id = (int) $st->fetchColumn();
+
+        // Lote / caducidad / NUP / unidad (configuración de facturación). Solo si ya se
+        // aplicó 20260928_carwash_lote_caducidad_nup.sql; sin esas columnas no se guardan.
+        if ($this->tieneColumnasLote()) {
+            $this->db->prepare("UPDATE carwash_ordenes_detalle
+                                   SET lote = :l, fecha_caducidad = :c, nup = :n, id_unidad_medida = :u
+                                 WHERE id = :id")
+                ->execute([
+                    ':l'  => ($d['lote'] ?? '') !== '' && ($d['lote'] ?? '') !== 'sin_lote' ? mb_substr((string) $d['lote'], 0, 100) : null,
+                    ':c'  => !empty($d['caducidad']) ? substr((string) $d['caducidad'], 0, 10) : null,
+                    ':n'  => ($d['nup'] ?? '') !== '' ? mb_substr((string) $d['nup'], 0, 100) : null,
+                    ':u'  => !empty($d['id_unidad_medida']) ? (int) $d['id_unidad_medida'] : null,
+                    ':id' => $id,
+                ]);
+        }
+        return $id;
+    }
+
+    /** ¿Existen ya las columnas lote/fecha_caducidad/nup/id_unidad_medida en el detalle? */
+    public function tieneColumnasLote(): bool
+    {
+        // Solo se guarda en caché el "sí": si falta el SQL se vuelve a consultar (consulta barata).
+        static $tiene = false;
+        if (!$tiene) {
+            $tiene = (int) $this->db->query("SELECT COUNT(*) FROM information_schema.columns
+                 WHERE table_name = 'carwash_ordenes_detalle' AND column_name IN ('lote','fecha_caducidad','nup','id_unidad_medida')")->fetchColumn() === 4;
+        }
+        return $tiene;
     }
 
     public function insertNovedad(array $n): int
@@ -406,6 +451,7 @@ class OrdenCarWashRepository extends BaseRepository
         $sql = "SELECT o.*,
                        c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
                        c.direccion AS cliente_direccion, c.email AS cliente_email, c.telefono AS cliente_telefono,
+                       (c.id IS NOT NULL AND c.status = 1 AND c.eliminado = false) AS cliente_activo,
                        v.placa AS vehiculo_placa, v.marca AS vehiculo_marca,
                        " . self::SQL_DOC_VIGENTE . " AS documento_vigente
                 FROM carwash_ordenes o
@@ -420,7 +466,11 @@ class OrdenCarWashRepository extends BaseRepository
 
     public function getDetalles(int $idOrden, int $idEmpresa): array
     {
-        $sql = "SELECT d.*, p.codigo AS producto_codigo, b.nombre AS bodega_nombre
+        // inventariable / tipo_produccion / medida del producto: la pantalla los necesita para
+        // mostrar Lote-Caducidad-NUP y la unidad igual que en Factura de Venta.
+        $sql = "SELECT d.*, p.codigo AS producto_codigo, b.nombre AS bodega_nombre,
+                       p.inventariable AS producto_inventariable, p.tipo_produccion AS producto_tipo_produccion,
+                       p.id_tipo_medida AS producto_id_tipo_medida, p.id_medida AS producto_id_medida
                 FROM carwash_ordenes_detalle d
                 LEFT JOIN productos p ON p.id = d.id_producto
                 LEFT JOIN bodegas b   ON b.id = d.id_bodega
@@ -478,6 +528,13 @@ class OrdenCarWashRepository extends BaseRepository
         ]);
     }
 
+    /** IVA y total de una línea (se recalculan al emitir si la orden quedó con importes viejos). */
+    public function updateLineaImportes(int $idLinea, int $idEmpresa, float $iva, float $total): void
+    {
+        $this->db->prepare("UPDATE carwash_ordenes_detalle SET valor_iva = :i, total_linea = :t WHERE id = :id AND id_empresa = :e")
+                 ->execute([':i' => $iva, ':t' => $total, ':id' => $idLinea, ':e' => $idEmpresa]);
+    }
+
     public function updateEstado(int $id, int $idEmpresa, string $estado, int $idUsuario, bool $setFechaEntrega = false): void
     {
         $extra = $setFechaEntrega ? ", fecha_entrega = CURRENT_TIMESTAMP" : "";
@@ -523,6 +580,23 @@ class OrdenCarWashRepository extends BaseRepository
             ELSE EXISTS (SELECT 1 FROM recibos_venta_cabecera rvx
                  WHERE rvx.id = o.id_documento AND rvx.eliminado = false AND rvx.estado <> 'anulado') END";
 
+    /** Nombre, categoría y marca de un producto (base para buscar productos similares). */
+    public function getProductoBasico(int $idProducto, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare("SELECT id, nombre, id_categoria, id_marca FROM productos WHERE id = :id AND id_empresa = :e");
+        $st->execute([':id' => $idProducto, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** ¿El cliente existe en la empresa, está activo (status = 1) y no está eliminado? */
+    public function clienteActivo(int $idCliente, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare("SELECT 1 FROM clientes WHERE id = :id AND id_empresa = :e AND status = 1 AND eliminado = false");
+        $st->execute([':id' => $idCliente, ':e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
     /** ¿El documento enlazado a la orden sigue vigente? (null si no tiene documento). */
     public function documentoVigente(int $idOrden, int $idEmpresa): ?bool
     {
@@ -536,8 +610,8 @@ class OrdenCarWashRepository extends BaseRepository
     /** ¿Existe ya la tabla del historial de documentos? (el código no debe romperse si aún no se aplicó el SQL). */
     public function existeTablaDocumentos(): bool
     {
-        static $existe = null;
-        if ($existe === null) {
+        static $existe = false;
+        if (!$existe) {
             $existe = (bool) $this->db->query("SELECT to_regclass('public.carwash_ordenes_documentos') IS NOT NULL")->fetchColumn();
         }
         return $existe;
@@ -604,7 +678,7 @@ class OrdenCarWashRepository extends BaseRepository
      */
     public function getHistorial(int $idEmpresa, string $modo, string $q, ?int $idVehiculo, ?int $idCliente, ?int $idUsuarioFiltro, int $limit = 200): array
     {
-        $where  = "o.id_empresa = :e AND o.eliminado = false";
+        $where  = "o.id_empresa = :e AND o.eliminado = false AND o.tipo_ambiente = (SELECT COALESCE(CAST(tipo_ambiente AS VARCHAR(1)), '1') FROM empresas WHERE id = :e)";
         $params = [':e' => $idEmpresa];
         if ($idUsuarioFiltro !== null) {
             $where .= " AND o.created_by = :uid";

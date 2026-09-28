@@ -67,6 +67,12 @@ class OrdenCarWashService
                 'id_bodega'   => $idBodega ?: (int) ($d['id_bodega'] ?? 0), // la bodega de la cabecera aplica a toda la orden
                 'cantidad'    => $cant,
                 'nombre'      => $d['descripcion'] ?? '',
+                // Mismas claves que la factura: el motor descuenta del lote elegido y convierte
+                // la cantidad según la unidad de la línea (venta por caja, etc.).
+                'lote'             => $d['lote'] ?? null,
+                'caducidad'        => $d['caducidad'] ?? ($d['fecha_caducidad'] ?? null),
+                'nup'              => $d['nup'] ?? null,
+                'id_unidad_medida' => !empty($d['id_unidad_medida']) ? (int) $d['id_unidad_medida'] : null,
             ];
         }
         return $out;
@@ -129,6 +135,26 @@ class OrdenCarWashService
         }
     }
 
+    /**
+     * Aplica la configuración de facturación del establecimiento de la orden (ítems libres,
+     * lote, caducidad y NUP obligatorios), con las mismas reglas que Factura de Venta.
+     */
+    private function validarConfiguracionFacturacion(array $detalles, int $idEmpresa, int $idEstablecimiento): void
+    {
+        $estConfig = $this->configEstablecimiento($idEstablecimiento);
+        if (!$estConfig) return;
+        $prodRepo = new \App\repositories\modulos\ProductoRepository();
+        foreach ($detalles as &$d) {
+            if (!empty($d['id_producto'])) {
+                $info = $prodRepo->getInfoControlInventario((int) $d['id_producto'], $idEmpresa);
+                $d['inventariable']   = $info['inventariable'] ?? false;
+                $d['tipo_produccion'] = $info['tipo_produccion'] ?? '';
+            }
+        }
+        unset($d);
+        $this->rules->validarConfiguracionFacturacion($detalles, $estConfig);
+    }
+
     // ─── Lecturas ─────────────────────────────────────────────────────────────
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
@@ -161,15 +187,88 @@ class OrdenCarWashService
         $cab['info_adicional'] = $this->decodeInfoAdicional($cab['info_adicional'] ?? null);
         $cab['documentos'] = $this->repository->getDocumentos($id, $idEmpresa);
         $cab['documento_vigente'] = self::aBool($cab['documento_vigente'] ?? null);
+        $cab['cliente_activo'] = self::aBool($cab['cliente_activo'] ?? null) === true;
         $cab['puede_facturar'] = $this->puedeFacturar($cab);
         $cab['editable'] = $this->esEditable($cab);
         return $cab;
+    }
+
+    /**
+     * Productos SIMILARES con saldo en la bodega de la orden, para ofrecerlos cuando el
+     * producto elegido no tiene stock. Candidatos (sin repetir, sin el propio producto):
+     *  1. misma categoría, 2. misma marca, 3. que compartan las palabras principales del nombre.
+     * Se quedan solo los que controlan inventario y tienen saldo > 0 en esa bodega, ordenados
+     * por parecido (categoría + marca + palabras en común) y luego por saldo.
+     *
+     * @return array filas con el mismo formato del buscador de productos + stock_actual,
+     *               controla_stock y `coincide` (por qué se sugiere).
+     */
+    public function productosSimilares(int $idProducto, int $idEmpresa, int $idBodega, ?int $idOrden, int $limite = 8): array
+    {
+        $base = $this->repository->getProductoBasico($idProducto, $idEmpresa);
+        if (!$base || $idBodega <= 0) return [];
+
+        $prodRepo = new \App\repositories\modulos\ProductoRepository();
+        $invRepo  = new \App\repositories\modulos\InventarioRepository();
+        $buscar = fn(string $q) => $prodRepo->getListado($idEmpresa, $q, 1, 40, 'nombre', 'ASC', null, 'venta', true)['rows'] ?? [];
+
+        // Palabras principales del nombre (sin números ni palabras cortas).
+        $norm = fn(string $s) => mb_strtoupper(trim(preg_replace('/\s+/u', ' ', $s)));
+        $palabras = array_values(array_filter(
+            explode(' ', preg_replace('/[^\p{L}\p{N} ]+/u', ' ', $norm((string) $base['nombre']))),
+            fn($w) => mb_strlen($w) >= 4 && !is_numeric($w)
+        ));
+
+        $cand = [];
+        $agregar = function (array $rows) use (&$cand, $idProducto) {
+            foreach ($rows as $r) {
+                if ((int) $r['id'] !== $idProducto && !isset($cand[(int) $r['id']])) $cand[(int) $r['id']] = $r;
+            }
+        };
+        if (!empty($base['id_categoria'])) $agregar($buscar('id_categoria:' . (int) $base['id_categoria']));
+        if (!empty($base['id_marca']))     $agregar($buscar('id_marca:' . (int) $base['id_marca']));
+        foreach (array_slice($palabras, 0, 2) as $w) $agregar($buscar($w));
+
+        // Solo los que controlan inventario; su saldo en UNA consulta.
+        $cand = array_filter($cand, fn($p) => ($p['inventariable'] === true || $p['inventariable'] === 't' || $p['inventariable'] === 'true' || $p['inventariable'] == 1)
+                                              && (($p['tipo_produccion'] ?? '01') !== '02'));
+        $stocks = $invRepo->getStockActualPorProductos(array_keys($cand), $idBodega, $idEmpresa, $idOrden ?: null, $idOrden ? self::REF_TIPO : null);
+
+        $out = [];
+        foreach ($cand as $p) {
+            $stock = (float) ($stocks[(int) $p['id']] ?? 0);
+            if ($stock <= 0) continue;
+
+            $motivos = [];
+            $puntaje = 0;
+            if (!empty($base['id_categoria']) && (int) ($p['id_categoria'] ?? 0) === (int) $base['id_categoria']) { $puntaje += 3; $motivos[] = 'categoría'; }
+            if (!empty($base['id_marca']) && (int) ($p['id_marca'] ?? 0) === (int) $base['id_marca'])             { $puntaje += 2; $motivos[] = 'marca'; }
+            $nombreP = $norm((string) $p['nombre']);
+            $comunes = count(array_filter($palabras, fn($w) => str_contains($nombreP, $w)));
+            if ($comunes > 0) { $puntaje += $comunes; $motivos[] = 'nombre'; }
+
+            $p['stock_actual']   = $stock;
+            $p['controla_stock'] = true;
+            $p['coincide']       = implode(', ', $motivos);
+            $p['_puntaje']       = $puntaje;
+            $out[] = $p;
+        }
+        usort($out, fn($a, $b) => [$b['_puntaje'], $b['stock_actual']] <=> [$a['_puntaje'], $a['stock_actual']]);
+        return array_map(function ($p) { unset($p['_puntaje']); return $p; }, array_slice($out, 0, $limite));
     }
 
     /** Historial de órdenes por vehículo o por cliente (pestaña Historial del modal). */
     public function getHistorial(int $idEmpresa, string $modo, string $q, ?int $idVehiculo, ?int $idCliente, ?int $idUsuarioFiltro): array
     {
         return $this->repository->getHistorial($idEmpresa, $modo === 'cliente' ? 'cliente' : 'vehiculo', $q, $idVehiculo, $idCliente, $idUsuarioFiltro);
+    }
+
+    /** Solo se puede asignar (y facturar a) un cliente activo y no eliminado de la empresa. */
+    private function validarClienteActivo(int $idCliente, int $idEmpresa): void
+    {
+        if (!$this->repository->clienteActivo($idCliente, $idEmpresa)) {
+            throw new Exception('El cliente seleccionado está inactivo o eliminado. Solo se puede facturar a clientes activos: actívelo en Clientes o elija otro.');
+        }
     }
 
     private static function aBool($v): ?bool
@@ -210,14 +309,19 @@ class OrdenCarWashService
 
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
+        if (!empty($data['id_cliente'])) {
+            $this->validarClienteActivo((int) $data['id_cliente'], $idEmpresa);
+        }
 
-        $empresaConfig = $data['empresa_config'] ?? [];
-        $tipoAmbiente  = (string) ($empresaConfig['tipo_ambiente'] ?? '1');
+        // Ambiente vigente de la EMPRESA, leído de la base. Antes salía de empresa_config, que
+        // store() nunca envía: toda orden quedaba en pruebas ('1') aunque la empresa estuviera
+        // en producción.
+        $tipoAmbiente  = $this->repository->ambienteEmpresa($idEmpresa);
         $idEstab       = (int) ($data['id_establecimiento'] ?? 0);
         $idPunto       = (int) ($data['id_punto_emision'] ?? 0);
         $secuencial    = str_pad((string) $data['secuencial'], 9, '0', STR_PAD_LEFT);
 
-        if ($this->repository->existeSecuencial($idEmpresa, $idEstab, $idPunto, $secuencial)) {
+        if ($this->repository->existeSecuencial($idEmpresa, $idEstab, $idPunto, $secuencial, $tipoAmbiente)) {
             throw new \Exception('El secuencial ya existe para este punto de emisión. Recargue e intente nuevamente.');
         }
 
@@ -267,6 +371,7 @@ class OrdenCarWashService
             // Salida de inventario: los productos se consumen al realizar el servicio.
             // Valida bodega por línea y stock según la config (rollback si algo falla).
             $this->validarBodegasLineas($data['detalles'], (int) ($data['id_bodega'] ?? 0), $idEmpresa, $idEstab);
+            $this->validarConfiguracionFacturacion($data['detalles'], $idEmpresa, $idEstab);
             $this->aplicarSalidaInventario(
                 $idOrden, $idEmpresa, $idUsuario, $data['detalles'],
                 $idEstab, (int) ($data['id_bodega'] ?? 0), $numeroOrden, false
@@ -298,6 +403,11 @@ class OrdenCarWashService
         if (!$this->esEditable($cab)) {
             throw new Exception("No se puede editar una orden que ya generó un documento vigente ("
                 . ($cab['numero_documento'] ?? '') . "). Anule primero el documento.");
+        }
+        // Solo se exige al CAMBIAR de cliente: una orden cuyo cliente se desactivó después
+        // puede seguir editándose (lo que no puede es facturarse, ver generarDocumento).
+        if (!empty($data['id_cliente']) && (int) $data['id_cliente'] !== (int) ($cab['id_cliente'] ?? 0)) {
+            $this->validarClienteActivo((int) $data['id_cliente'], $idEmpresa);
         }
 
         $idUsuario = (int) $data['id_usuario'];
@@ -339,6 +449,7 @@ class OrdenCarWashService
 
             // Inventario: se revierte la salida anterior y se vuelve a aplicar con las líneas nuevas.
             $this->validarBodegasLineas($data['detalles'], (int) ($data['id_bodega'] ?? 0), $idEmpresa, (int) ($data['id_establecimiento'] ?? $cab['id_establecimiento'] ?? 0));
+            $this->validarConfiguracionFacturacion($data['detalles'], $idEmpresa, (int) ($data['id_establecimiento'] ?? $cab['id_establecimiento'] ?? 0));
             $this->revertirInventario($id, $idEmpresa, $idUsuario);
             $this->aplicarSalidaInventario(
                 $id, $idEmpresa, $idUsuario, $data['detalles'],
@@ -435,6 +546,13 @@ class OrdenCarWashService
             throw new Exception('Orden no encontrada.');
         }
         $this->rules->validarGeneracionDocumento($orden, $tipo, $extra);
+        // Estado del cliente leído en este momento (pudo desactivarse después de guardar la orden).
+        $this->validarClienteActivo((int) $orden['id_cliente'], $idEmpresa);
+        // Configuración de facturación vigente (pudo cambiar desde que se guardó la orden).
+        $this->validarConfiguracionFacturacion(array_map(
+            fn($d) => $d + ['caducidad' => $d['fecha_caducidad'] ?? null],
+            $orden['detalles'] ?? []
+        ), $idEmpresa, (int) ($orden['id_establecimiento'] ?? 0));
 
         $detalles = $orden['detalles'] ?? [];
         if (empty($detalles)) {
@@ -452,33 +570,44 @@ class OrdenCarWashService
         // La bodega de la orden (cabecera) manda; si no, la que venga en la emisión.
         $idBodegaExtra = (int) ($orden['id_bodega'] ?? 0) ?: (int) ($extra['id_bodega'] ?? 0);
 
-        // Construir detalles del documento con impuestos por línea.
-        $det = [];
-        $totalSinImp = 0.0; $totalDesc = 0.0; $ivaTotal = 0.0; $idBodega = 0;
-        foreach ($detalles as $d) {
-            $cant = (float) $d['cantidad'];
-            if ($cant <= 0) continue;
-            $precio = (float) $d['precio_unitario'];
-            $dscto  = (float) $d['descuento'];
-            $base   = round($precio * $cant - $dscto, 2);
-            if ($base < 0) $base = 0.0;
-
-            // Resolver tarifa de IVA: la de la línea (lo que se guardó y cotizó en la orden) →
-            // la del producto → por porcentaje. Antes mandaba la del producto y el documento
-            // podía salir con un total distinto al de la orden.
+        // Tarifa de IVA de cada línea: la que se guardó en la orden (id y % de la línea). Solo
+        // si la línea no la tiene se cae al producto y, al final, al porcentaje. Antes mandaba
+        // la del producto y el documento podía salir con un total distinto al de la orden.
+        $validas = []; $tarifas = [];
+        foreach ($detalles as $k => $d) {
+            if ((float) $d['cantidad'] <= 0) continue;
+            $pctLinea = (float) ($d['porcentaje_iva'] ?? 0);
             $tar = null;
             if (!empty($d['id_tarifa_iva'])) $tar = $this->repository->getTarifaIvaById((int) $d['id_tarifa_iva']);
+            // La tarifa guardada no coincide con el % de la línea (dato viejo o tarifa editada):
+            // manda el % con el que se cotizó la orden.
+            if ($tar && abs((float) $tar['porcentaje_iva'] - $pctLinea) > 0.001) $tar = null;
+            if (!$tar) $tar = $this->repository->getTarifaIvaByPorcentaje($pctLinea);
             if (!$tar && !empty($d['id_producto'])) $tar = $this->repository->getTarifaIvaProducto((int) $d['id_producto']);
-            if (!$tar) $tar = $this->repository->getTarifaIvaByPorcentaje((float) ($d['porcentaje_iva'] ?? 0));
+            $tarifas[$k] = $tar;
+            $validas[$k] = $d + [
+                'porcentaje_iva' => $pctLinea,
+                'grupo' => !empty($d['id_tarifa_iva']) ? (string) (int) $d['id_tarifa_iva'] : '',
+            ];
+        }
+        if (empty($validas)) {
+            throw new Exception('No hay líneas válidas para facturar.');
+        }
 
-            $pct    = $tar ? (float) $tar['porcentaje_iva'] : (float) ($d['porcentaje_iva'] ?? 0);
+        // MISMO cálculo que la orden (calcularLineas) y con el modo de IVA del establecimiento
+        // DE LA ORDEN: antes se tomaba el del primer establecimiento de la empresa y, con modos
+        // distintos entre establecimientos, el documento podía diferir de la orden en centavos.
+        $empresaConfig = array_merge($empresaConfig, $this->configEstablecimiento($idEstab));
+        $modoIva = IvaSubtotal::modo($empresaConfig);
+        $calc = self::calcularLineas($validas, $modoIva);
+
+        $det = []; $idBodega = 0;
+        foreach ($validas as $k => $d) {
+            $c   = $calc['lineas'][$k];
+            $tar = $tarifas[$k];
+            $pct    = $c['pct'];
             $codPct = $tar ? (string) $tar['codigo'] : '0';
             $idTar  = $tar ? (int) $tar['id'] : (!empty($d['id_tarifa_iva']) ? (int) $d['id_tarifa_iva'] : 0);
-            $ivaLinea = round($base * $pct / 100, 2);
-
-            $ivaTotal    += $ivaLinea;
-            $totalSinImp += $base;
-            $totalDesc   += $dscto;
 
             // La bodega de la cabecera aplica a toda la orden (las líneas ya no eligen bodega).
             $bodegaLinea = $idBodegaExtra ?: (int) ($d['id_bodega'] ?? 0);
@@ -492,12 +621,17 @@ class OrdenCarWashService
                 // vacío y el SRI la devuelve. Los ítems libres toman el código del servicio que
                 // se crea en el catálogo al emitir (crearServicioLibre).
                 'codigo_principal'          => $esLibre ? null : ((string) ($d['producto_codigo'] ?? '') ?: null),
+                // Lote / caducidad / NUP / unidad elegidos en la orden (configuración de facturación).
+                'lote'                      => ($d['lote'] ?? '') !== '' ? $d['lote'] : null,
+                'caducidad'                 => !empty($d['fecha_caducidad']) ? substr((string) $d['fecha_caducidad'], 0, 10) : null,
+                'nup'                       => ($d['nup'] ?? '') !== '' ? $d['nup'] : null,
+                'id_unidad_medida'          => !empty($d['id_unidad_medida']) ? (int) $d['id_unidad_medida'] : null,
                 'descripcion'               => $d['descripcion'],
                 'nombre'                    => $d['descripcion'],
-                'cantidad'                  => $cant,
-                'precio_unitario'           => $precio,
-                'descuento'                 => $dscto,
-                'precio_total_sin_impuesto' => $base,
+                'cantidad'                  => $c['cantidad'],
+                'precio_unitario'           => $c['precio'],
+                'descuento'                 => $c['descuento'],
+                'precio_total_sin_impuesto' => $c['base'],
                 'id_tarifa_iva'             => $idTar,
                 'codigo_porcentaje'         => $codPct,
                 'es_libre'                  => $esLibre ? '1' : 0,
@@ -506,35 +640,24 @@ class OrdenCarWashService
                     'codigo_impuesto'   => '2',
                     'codigo_porcentaje' => $codPct,
                     'tarifa'            => $pct,
-                    'base_imponible'    => $base,
-                    'valor'             => $ivaLinea,
+                    'base_imponible'    => $c['base'],
+                    'valor'             => $c['iva'],
                 ]],
             ];
         }
-        if (empty($det)) {
-            throw new Exception('No hay líneas válidas para facturar.');
-        }
 
-        // Modo 'subtotal' del establecimiento: IVA de cada tarifa sobre la suma de bases,
-        // repartido entre las líneas para que el XML y el RIDE cuadren con el total.
-        $modoIva = IvaSubtotal::modo($empresaConfig);
-        if ($modoIva === 'subtotal') {
-            $lineasIva = [];
-            foreach ($det as $k => $d) {
-                $lineasIva[$k] = ['grupo' => $d['id_tarifa_iva'] ?: (string) $d['porcentaje_iva'], 'base' => $d['precio_total_sin_impuesto'], 'pct' => $d['porcentaje_iva']];
-            }
-            $ivaTotal = 0.0;
-            foreach (IvaSubtotal::repartir($lineasIva, $modoIva) as $k => $ivaLinea) {
-                $det[$k]['impuestos'][0]['valor'] = $ivaLinea;
-                $ivaTotal += $ivaLinea;
-            }
-        }
-
-        $totalSinImp  = round($totalSinImp, 2);
-        $totalDesc    = round($totalDesc, 2);
-        $ivaTotal     = round($ivaTotal, 2);
-        $importeTotal = round($totalSinImp + $ivaTotal, 2);
+        $totalSinImp  = $calc['subtotal'];
+        $totalDesc    = $calc['descuento'];
+        $ivaTotal     = $calc['iva'];
+        $importeTotal = $calc['total'];
         if ($idBodegaExtra > 0) $idBodega = $idBodegaExtra;
+
+        // Garantía de exactitud: el documento debe salir con el MISMO total que la orden. Si
+        // la orden guardada tiene otro total (se guardó con una versión anterior del cálculo),
+        // se recalcula y se actualiza la orden con los importes exactos de sus líneas.
+        $ordenDesactualizada = abs((float) ($orden['total'] ?? 0) - $importeTotal) > 0.001
+            || abs((float) ($orden['subtotal'] ?? 0) - $totalSinImp) > 0.001
+            || abs((float) ($orden['iva'] ?? 0) - $ivaTotal) > 0.001;
 
         // Info adicional del documento: la de la orden + placa y número de orden (como hacía el
         // sistema anterior), sin duplicar si el usuario ya los escribió.
@@ -595,6 +718,13 @@ class OrdenCarWashService
                 ]],
                 'info_adicional'      => $infoAdicional,
             ];
+
+            if ($ordenDesactualizada) {
+                foreach ($validas as $k => $d) {
+                    $this->repository->updateLineaImportes((int) $d['id'], $idEmpresa, $calc['lineas'][$k]['iva'], $calc['lineas'][$k]['total']);
+                }
+                $this->repository->updateTotales($idOrden, $idEmpresa, $totalSinImp, $totalDesc, $ivaTotal, $importeTotal);
+            }
 
             // El documento hace su propia salida de inventario: primero devolvemos al stock
             // lo que consumió la orden, para no descontar dos veces.
@@ -675,6 +805,17 @@ class OrdenCarWashService
         return empty($limpio) ? null : json_encode($limpio, JSON_UNESCAPED_UNICODE);
     }
 
+    /** Configuración del establecimiento (vacía si no hay o falla la lectura). */
+    private function configEstablecimiento(int $idEstablecimiento): array
+    {
+        if ($idEstablecimiento <= 0) return [];
+        try {
+            return (new \App\repositories\modulos\EmpresaRepository())->getEstablecimientoConfig($idEstablecimiento) ?: [];
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     /** Modo de cálculo del IVA del establecimiento ('subtotal' | 'linea_linea'). */
     private function modoIvaEstablecimiento(int $idEstablecimiento): string
     {
@@ -699,60 +840,94 @@ class OrdenCarWashService
      * Inserta las líneas de detalle y novedades de una orden y devuelve los totales.
      * Los importes se calculan en el backend a partir de cantidad/precio/descuento/%IVA.
      */
-    private function guardarLineas(int $idOrden, int $idEmpresa, array $data, string $modoIva = 'linea_linea'): array
+    /**
+     * ÚNICO cálculo de importes de la orden, usado al GUARDAR la orden y al EMITIR la factura
+     * o el recibo: así el documento sale con exactamente los mismos subtotales, IVA y total
+     * que la orden. Los valores se llevan primero a la precisión con la que se guardan
+     * (cantidad y precio a 6 decimales, descuento a 2), para que recalcular desde lo
+     * guardado dé lo mismo que se calculó al guardar.
+     *
+     * @param array $lineas [k => ['cantidad','precio_unitario','descuento','porcentaje_iva','grupo']]
+     *        `grupo` = tarifa de IVA (id, o el % si no hay id) para el modo 'subtotal'.
+     * @return array{lineas: array, subtotal: float, descuento: float, iva: float, total: float}
+     *         lineas[k] = cantidad, precio, descuento, base, iva, total (normalizados).
+     */
+    public static function calcularLineas(array $lineas, string $modoIva): array
     {
-        $subtotal = 0.0; $descuento = 0.0; $iva = 0.0; $total = 0.0;
-
-        // IVA de cada línea según el modo del establecimiento: en 'subtotal' se calcula
-        // sobre la suma de bases de cada tarifa y se reparte entre las líneas, igual que
-        // el total que muestra la pantalla (antes aquí siempre era línea a línea).
-        $lineasIva = [];
-        foreach ($data['detalles'] as $k => $det) {
-            if ((float) ($det['cantidad'] ?? 0) <= 0 || trim((string) ($det['descripcion'] ?? '')) === '') continue;
-            $pct = (float) ($det['porcentaje_iva'] ?? 0);
-            $lineasIva[$k] = [
-                'grupo' => !empty($det['id_tarifa_iva']) ? (int) $det['id_tarifa_iva'] : (string) $pct,
-                'base'  => max(0.0, round((float) ($det['precio_unitario'] ?? 0) * (float) $det['cantidad'] - (float) ($det['descuento'] ?? 0), 2)),
-                'pct'   => $pct,
+        $norm = [];
+        foreach ($lineas as $k => $l) {
+            $cant   = round((float) ($l['cantidad'] ?? 0), 6);
+            $precio = round((float) ($l['precio_unitario'] ?? 0), 6);
+            $dscto  = round((float) ($l['descuento'] ?? 0), 2);
+            $norm[$k] = [
+                'cantidad'  => $cant,
+                'precio'    => $precio,
+                'descuento' => $dscto,
+                'pct'       => (float) ($l['porcentaje_iva'] ?? 0),
+                'grupo'     => (string) ($l['grupo'] ?? ''),
+                'base'      => max(0.0, round($precio * $cant - $dscto, 2)),
             ];
         }
-        $ivaLineas = IvaSubtotal::repartir($lineasIva, $modoIva);
 
+        // IVA por línea según el modo del establecimiento: en 'subtotal' se calcula sobre la
+        // suma de bases de cada tarifa y se reparte entre las líneas (cuadra al centavo).
+        $ivas = IvaSubtotal::repartir(array_map(fn($n) => [
+            'grupo' => $n['grupo'] !== '' ? $n['grupo'] : (string) $n['pct'],
+            'base'  => $n['base'],
+            'pct'   => $n['pct'],
+        ], $norm), $modoIva);
+
+        $sub = 0.0; $desc = 0.0; $iva = 0.0;
+        foreach ($norm as $k => &$n) {
+            $n['iva']   = (float) $ivas[$k];
+            $n['total'] = round($n['base'] + $n['iva'], 2);
+            $sub  += $n['base'];
+            $desc += $n['descuento'];
+            $iva  += $n['iva'];
+        }
+        unset($n);
+
+        $sub = round($sub, 2); $iva = round($iva, 2);
+        return [
+            'lineas'    => $norm,
+            'subtotal'  => $sub,
+            'descuento' => round($desc, 2),
+            'iva'       => $iva,
+            'total'     => round($sub + $iva, 2),
+        ];
+    }
+
+    private function guardarLineas(int $idOrden, int $idEmpresa, array $data, string $modoIva = 'linea_linea'): array
+    {
+        $validas = [];
         foreach ($data['detalles'] as $k => $det) {
-            $cant = (float) ($det['cantidad'] ?? 0);
-            $desc = trim((string) ($det['descripcion'] ?? ''));
-            if ($cant <= 0 || $desc === '') continue;
+            if ((float) ($det['cantidad'] ?? 0) <= 0 || trim((string) ($det['descripcion'] ?? '')) === '') continue;
+            $validas[$k] = $det + ['grupo' => !empty($det['id_tarifa_iva']) ? (string) (int) $det['id_tarifa_iva'] : ''];
+        }
+        $calc = self::calcularLineas($validas, $modoIva);
 
-            $precio  = (float) ($det['precio_unitario'] ?? 0);
-            $dscto   = (float) ($det['descuento'] ?? 0);
-            $porcIva = (float) ($det['porcentaje_iva'] ?? 0);
-
-            $baseLinea = round($precio * $cant - $dscto, 2);
-            if ($baseLinea < 0) $baseLinea = 0.0;
-            $valorIva  = $ivaLineas[$k];
-            $totalLin  = round($baseLinea + $valorIva, 2);
-
+        foreach ($validas as $k => $det) {
+            $c = $calc['lineas'][$k];
             $this->repository->insertDetalle([
                 'id_orden'        => $idOrden,
                 'id_empresa'      => $idEmpresa,
                 'id_producto'     => empty($det['id_producto']) ? null : (int) $det['id_producto'],
                 'tipo_linea'      => ($det['tipo_linea'] ?? 'servicio') === 'producto' ? 'producto' : 'servicio',
                 'es_libre'        => !empty($det['es_libre']),
-                'descripcion'     => $desc,
+                'descripcion'     => trim((string) $det['descripcion']),
                 'id_bodega'       => empty($det['id_bodega']) ? null : (int) $det['id_bodega'],
-                'cantidad'        => $cant,
-                'precio_unitario' => $precio,
-                'descuento'       => $dscto,
-                'porcentaje_iva'  => $porcIva,
-                'valor_iva'       => $valorIva,
-                'total_linea'     => $totalLin,
+                'cantidad'        => $c['cantidad'],
+                'precio_unitario' => $c['precio'],
+                'descuento'       => $c['descuento'],
+                'porcentaje_iva'  => $c['pct'],
+                'valor_iva'       => $c['iva'],
+                'total_linea'     => $c['total'],
                 'id_tarifa_iva'   => empty($det['id_tarifa_iva']) ? null : (int) $det['id_tarifa_iva'],
+                'lote'             => $det['lote'] ?? null,
+                'caducidad'        => $det['caducidad'] ?? null,
+                'nup'              => $det['nup'] ?? null,
+                'id_unidad_medida' => $det['id_unidad_medida'] ?? null,
             ]);
-
-            $subtotal  += $baseLinea;
-            $descuento += $dscto;
-            $iva       += $valorIva;
-            $total     += $totalLin;
         }
 
         foreach (($data['novedades'] ?? []) as $nov) {
@@ -767,10 +942,10 @@ class OrdenCarWashService
         }
 
         return [
-            'subtotal'  => round($subtotal, 2),
-            'descuento' => round($descuento, 2),
-            'iva'       => round($iva, 2),
-            'total'     => round($total, 2),
+            'subtotal'  => $calc['subtotal'],
+            'descuento' => $calc['descuento'],
+            'iva'       => $calc['iva'],
+            'total'     => $calc['total'],
         ];
     }
 }

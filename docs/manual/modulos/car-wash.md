@@ -61,12 +61,58 @@ El modal tiene tres pestañas:
 Cada usuario puede ocultar las pestañas que no use con el engranaje a la derecha de
 las pestañas.
 
+## Orden sin guardar: se recupera
+
+Mientras llena una orden, lo que escribe se guarda en su navegador. Si cierra el
+modal, recarga la página o se corta la conexión antes de pulsar **Guardar**, al volver
+a abrir la orden (o una orden nueva) el sistema pregunta si quiere **Recuperar** los
+cambios o **Descartarlos**. El borrador es de su usuario y empresa, queda solo en ese
+navegador y se borra al guardar o eliminar la orden.
+
+## Ambiente de pruebas y de producción
+
+Como en Facturas y Recibos, cada orden pertenece al ambiente en que está la empresa
+(**Empresa → Tipo de ambiente**). Las órdenes de pruebas no aparecen en producción ni
+ocupan sus números, y al pasar a producción la numeración de las órdenes empieza en
+la configurada para ese ambiente.
+
 ## La bodega es una sola para toda la orden
 
 La bodega se elige **una vez**, en la cabecera, y aplica a todos los productos de la
 orden: de ahí se descuenta el inventario al guardar y de ahí sale la factura o el
-recibo. Al cambiarla, el saldo disponible de cada línea se recalcula. Las líneas ya
-no tienen una columna de bodega propia.
+recibo. Las líneas ya no tienen una columna de bodega propia.
+
+## La grilla de servicios y productos
+
+Es la misma de **Facturas de venta**: **Código** (busca por código; Enter toma el
+primero), **Descripción** (busca por nombre), Adicional, Cantidad, P. Sin Imp.,
+P. Con Imp., Descuento, IVA y Subtotal. Las columnas **Medida** y **Precios** solo
+aparecen cuando algún ítem tiene unidades de medida o listas de precios.
+
+## La orden sigue la configuración de facturación
+
+La orden aplica la misma configuración de facturación del establecimiento que la
+**Factura de venta**, así que no acepta nada que luego la factura o el recibo
+rechazarían:
+
+- **Facturación libre** apagada: solo servicios y productos del catálogo.
+- **Lote**, **caducidad** y **NUP / serie** obligatorios: en los productos
+  inventariables aparecen esas columnas. Al elegir el producto se cargan los lotes y
+  vencimientos disponibles en la bodega de la orden (lote y vencimiento van juntos:
+  elegir uno elige el otro). Sin ellos la orden no se guarda. Los servicios y los
+  productos no inventariables no los piden.
+- **Unidad de medida**: la unidad elegida en la línea se guarda y la factura o el
+  recibo descuentan el inventario en esa unidad (por ejemplo, una caja de 12).
+
+Lote, caducidad, NUP y unidad pasan tal cual a la factura o al recibo.
+
+## Producto sin saldo: productos similares
+
+Si elige un producto que **no tiene saldo** en la bodega de la orden, se abre una
+ventana con **productos similares que sí tienen saldo**: de la misma categoría, de
+la misma marca o con un nombre parecido, ordenados por parecido y saldo. Cada uno
+muestra su saldo y precio; **Usar este** reemplaza el producto en la línea.
+**Mantener el producto** deja el que eligió.
 
 ## Historial por vehículo o por cliente
 
@@ -133,6 +179,14 @@ módulos de Facturas y Recibos de venta, así que requieren permiso de lectura e
 - La factura lleva en Info. Adicional la **placa** y el **número de orden**, además de
   lo que se haya escrito en la orden.
 - Una orden con documento vigente no se puede editar, eliminar ni volver a facturar.
+- **Solo se factura a clientes activos.** El buscador de clientes muestra solo los
+  activos; si el cliente de una orden se desactiva después, la orden muestra el aviso
+  *Cliente inactivo* y los botones Factura y Recibo quedan deshabilitados (el sistema
+  lo vuelve a comprobar al emitir).
+- **Los importes son exactos**: la pantalla, la orden guardada, la factura y el recibo
+  calculan subtotal, descuento, IVA y total con la misma regla (cantidad y precio a 6
+  decimales, descuento a 2, IVA línea a línea o al subtotal según el establecimiento
+  de la serie). El documento sale con el mismo total que la orden, al centavo.
 
 ## Integraciones con otros módulos
 
@@ -214,6 +268,8 @@ Detalles muestran solo las órdenes que usted registró.
 - **La orden no aparece en ventas**: falta emitir la factura o el recibo desde la orden.
 - **"Debe asignar un cliente a la orden antes de facturar"**: elija el cliente y
   guarde antes de pulsar Factura o Recibo.
+- **"El cliente seleccionado está inactivo o eliminado"**: actívelo en **Clientes**
+  o elija otro cliente activo, guarde y vuelva a facturar.
 - **"Esta orden ya generó un documento vigente"**: para volver a facturarla, anule
   primero ese documento en Facturas o Recibos de venta.
 - **"No se permite el ingreso de ítems libres"**: la empresa no admite servicios
@@ -244,8 +300,20 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
   órdenes de un vehículo o de un cliente, con resumen de visitas) y **Facturación**
   (en qué factura o recibo se emitió la orden, con su estado actual y PDF). La
   **bodega** se elige una sola vez en la cabecera; se quitó la columna de bodega de
-  cada línea. Si la factura o el recibo se anula o elimina, la orden se libera para
-  corregirla y volver a facturarla. Correcciones al facturar: la factura ahora queda
+  cada línea y se quitó el saldo que se mostraba bajo cada ítem; la grilla ahora es
+  igual a la de Factura de venta (columna **Código**, Medida y Precios solo cuando se
+  usan). Si un producto no tiene saldo, se ofrecen **productos similares con saldo**.
+  Solo se puede facturar a **clientes activos**. La orden sigue la **configuración de
+  facturación** del establecimiento igual que la factura: ítems libres, **lote,
+  caducidad y NUP** obligatorios (con la carga de lotes disponibles) y la **unidad de
+  medida** por línea, que pasan a la factura o recibo. Las órdenes respetan el **ambiente**
+  (pruebas / producción): antes toda orden se guardaba como pruebas y, con la empresa
+  en producción, no se podía registrar ninguna ("El secuencial ya existe"). La orden
+  que no se alcanzó a guardar se **recupera** al volver a abrirla. Subtotales, IVA y total son
+  **exactos** entre la pantalla, la orden, la factura y el recibo (antes podía haber
+  diferencias de un centavo o usar el modo de IVA de otro establecimiento). Si la
+  factura o el recibo se anula o elimina, la orden se libera para corregirla y
+  volver a facturarla. Correcciones al facturar: la factura ahora queda
   con su **XML** listo para enviar al SRI y con el **código** de cada ítem; usa el
   IVA elegido en cada línea de la orden; lleva la placa y el número de orden en la
   información adicional; y si la emisión falla, el inventario ya no se descuenta dos

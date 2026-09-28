@@ -224,6 +224,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <!-- Globales para el modal (IIFE) -->
 <script>
     window.RUTA_MODULO_CW = '<?= $urlBase ?>';
+    // Clave del borrador local de la orden (por empresa y usuario).
+    window.CW_EMP_USR = '<?= (int) ($_SESSION['id_empresa'] ?? 0) ?>:<?= (int) ($_SESSION['id_usuario'] ?? 0) ?>';
     window.CW_PERM = {
         crear:      <?= (!empty($perm['crear']) || !empty($perm['todo'])) ? 'true' : 'false' ?>,
         actualizar: <?= (!empty($perm['actualizar']) || !empty($perm['todo'])) ? 'true' : 'false' ?>,
@@ -252,6 +254,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         'id_establecimiento'  => (int)($p['id_establecimiento'] ?? 0),
         'cod_establecimiento' => $p['cod_establecimiento'] ?? '',
         'codigo_punto'        => $p['codigo_punto'] ?? '',
+        'calculo_iva'         => $p['calculo_iva'] ?? 'linea_linea',
     ], $puntos ?? [])) ?>;
     window.CW_FORMAS_PAGO = <?= json_encode($formasPago ?? []) ?>;
     window.CW_BODEGAS = <?= json_encode(array_map(fn($b) => ['id' => (int)$b['id'], 'nombre' => $b['nombre'] ?? ''], $bodegas ?? [])) ?>;

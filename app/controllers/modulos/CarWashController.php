@@ -68,11 +68,23 @@ class CarWashController extends BaseModuloController
         $empresaRepo = new \App\repositories\modulos\EmpresaRepository();
         $secRepo = new \App\repositories\SecuencialRepository();
         $puntos = [];
+        $modoIvaEst = [];
         foreach ($empresaRepo->getPuntosEmision($idEmpresa) as $p) {
             $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Ordenes car-wash');
             if (empty($config['id'])) {
                 continue;
             }
+            // Modo de IVA del establecimiento de la serie: la pantalla calcula igual que el
+            // servidor al guardar y al facturar (no con el del primer establecimiento).
+            $idEst = (int) ($p['id_establecimiento'] ?? 0);
+            if (!isset($modoIvaEst[$idEst])) {
+                try {
+                    $modoIvaEst[$idEst] = \App\Helpers\IvaSubtotal::modo($empresaRepo->getEstablecimientoConfig($idEst) ?: []);
+                } catch (\Throwable $e) {
+                    $modoIvaEst[$idEst] = 'linea_linea';
+                }
+            }
+            $p['calculo_iva'] = $modoIvaEst[$idEst];
             $puntos[] = $p;
         }
         // Series usadas realmente en órdenes existentes (para el filtro del listado, distinto
@@ -590,6 +602,45 @@ class CarWashController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Productos similares con saldo en la bodega de la orden (cuando el elegido no tiene stock).
+     * GET id_producto, id_bodega, id_orden (opcional: excluye lo ya consumido por la orden).
+     */
+    public function productosSimilaresAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa  = (int) $_SESSION['id_empresa'];
+            $idProducto = (int) ($_GET['id_producto'] ?? 0);
+            $idBodega   = (int) ($_GET['id_bodega'] ?? 0);
+            $idOrden    = (int) ($_GET['id_orden'] ?? 0);
+            if (!$idProducto || !$idBodega) {
+                echo json_encode(['ok' => true, 'data' => []]);
+                exit;
+            }
+            $rows = $this->service->productosSimilares($idProducto, $idEmpresa, $idBodega, $idOrden ?: null);
+
+            // Precios de lista y variantes EN LOTE, igual que el buscador de productos, para
+            // que "Usar este" deje la línea exactamente como si se hubiera buscado.
+            $repo = new \App\repositories\modulos\ProductoRepository();
+            $ids  = array_column($rows, 'id');
+            $preciosMap = $repo->getPreciosPorProductos($ids, $idEmpresa);
+            $variantMap = $repo->getVariantesPorProductos($ids, $idEmpresa);
+            foreach ($rows as &$p) {
+                $p['precios_lista'] = $preciosMap[(int) $p['id']] ?? [];
+                $p['variantes']     = $variantMap[(int) $p['id']] ?? [];
+            }
+            unset($p);
+
+            echo json_encode(['ok' => true, 'data' => $rows]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /** Alias por compatibilidad (misma respuesta que getProductosAjax). */
     public function buscarProductosAjax(): void
     {
@@ -637,9 +688,14 @@ class CarWashController extends BaseModuloController
             echo json_encode(['ok' => false, 'mensaje' => 'Faltan parámetros']);
             exit;
         }
+        // Como en factura: lo que ya consumió ESTA orden no resta (al editarla, su propio lote
+        // debe seguir apareciendo disponible).
+        $idOrden = (int) ($_GET['id_orden'] ?? 0);
+        $exId    = $idOrden > 0 ? $idOrden : null;
+        $exTipo  = $idOrden > 0 ? 'carwash_orden' : null;
         $repoInv = new \App\repositories\modulos\InventarioRepository();
-        $lotes = $repoInv->getLotesDisponibles($idProducto, $idBodega, $idEmpresa, null, null);
-        $stockTotal = $repoInv->getStockActual($idProducto, $idBodega, $idEmpresa, null, null);
+        $lotes = $repoInv->getLotesDisponibles($idProducto, $idBodega, $idEmpresa, $exId, $exTipo);
+        $stockTotal = $repoInv->getStockActual($idProducto, $idBodega, $idEmpresa, $exId, $exTipo);
         echo json_encode(['ok' => true, 'data' => $lotes, 'stock_total' => $stockTotal]);
         exit;
     }

@@ -80,6 +80,47 @@ class OrdenCarWashRules
         }
     }
 
+    /**
+     * Configuración de facturación del establecimiento, IGUAL que FacturaVentaRules
+     * (validarReglasEstablecimiento / validarItemInventario), para que la orden no acepte
+     * nada que luego la factura o el recibo rechazarían:
+     *  - facturacion_libre = false → no se permiten ítems libres (fuera del catálogo).
+     *  - obligatorio_lotes / obligatorio_caducidad / obligatorio_nup → exigidos en los
+     *    productos inventariables (no en servicios '02', ítems libres ni no inventariables).
+     *
+     * @param array $detalles líneas enriquecidas con `inventariable` y `tipo_produccion`.
+     */
+    public function validarConfiguracionFacturacion(array $detalles, array $estConfig): void
+    {
+        $toBool = fn($v) => ($v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1');
+        $facturacionLibre = $toBool($estConfig['facturacion_libre'] ?? true);
+
+        $num = 0;
+        foreach ($detalles as $d) {
+            if ((float) ($d['cantidad'] ?? 0) <= 0 || trim((string) ($d['descripcion'] ?? '')) === '') continue;
+            $num++;
+            $esLibre = empty($d['id_producto']);
+            $nombre  = trim((string) ($d['descripcion'] ?? '')) ?: "Línea #{$num}";
+
+            if (!$facturacionLibre && $esLibre) {
+                throw new Exception("Línea #{$num}: No se permite el ingreso de ítems libres. Debe seleccionar productos del catálogo.");
+            }
+            if ($esLibre || trim((string) ($d['tipo_produccion'] ?? '')) === '02' || !$toBool($d['inventariable'] ?? false)) {
+                continue;
+            }
+            $lote = trim((string) ($d['lote'] ?? ''));
+            if ($toBool($estConfig['obligatorio_lotes'] ?? false) && ($lote === '' || $lote === 'sin_lote')) {
+                throw new Exception("{$nombre}: El número de lote es obligatorio para productos inventariables.");
+            }
+            if ($toBool($estConfig['obligatorio_caducidad'] ?? false) && empty($d['caducidad'])) {
+                throw new Exception("{$nombre}: La fecha de caducidad es obligatoria para productos inventariables.");
+            }
+            if ($toBool($estConfig['obligatorio_nup'] ?? false) && trim((string) ($d['nup'] ?? '')) === '') {
+                throw new Exception("{$nombre}: El número de serie (NUP) es obligatorio para productos inventariables.");
+            }
+        }
+    }
+
     public function validarEstado(string $estado): void
     {
         if (!in_array($estado, self::ESTADOS, true)) {
