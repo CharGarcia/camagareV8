@@ -54,31 +54,60 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <div class="input-group input-group-sm" style="width: 280px;">
-                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                <input type="text" id="buscarVehiculo" class="form-control border-start-0 ps-0 shadow-none" placeholder="Buscar por placa, marca o dueño..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-            </div>
-            <div class="btn-group btn-group-sm">
-                <?php
-                $columnasTabla = [
-                    'marca' => 'Marca',
-                    'placa' => 'Placa',
-                    'chasis' => 'Chasis',
-                    'anio' => 'Año',
-                    'propietario' => 'Propietario',
-                    'correo' => 'Correo',
-                    'telefono' => 'Teléfono',
-                    'estado' => 'Estado',
-                    'created_at' => 'Fecha Registro'
-                ];
-                ?>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (§9): texto libre sobre las columnas + botón "Filtros" (embudo)
+            // con todos los criterios + chips de los activos. Las claves (key) deben existir en
+            // los mapas de VehiculoRepository::getListado().
+            $opcionesUsuarioVeh = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => $u['nombre']], $usuariosFiltro ?? []);
+            $tV = 'Vehículo';
+            $filtrosVehiculos = [
+                ['tab' => $tV, 'key' => 'placa',         'label' => 'Placa',          'icon' => 'bi-car-front',      'type' => 'text',         'grupo' => 'Vehículo', 'col' => 3],
+                ['tab' => $tV, 'key' => 'marca',         'label' => 'Marca',          'icon' => 'bi-badge-tm',       'type' => 'text',         'grupo' => 'Vehículo', 'col' => 3],
+                ['tab' => $tV, 'key' => 'modelo',        'label' => 'Modelo',         'icon' => 'bi-car-front-fill', 'type' => 'text',         'grupo' => 'Vehículo', 'col' => 3],
+                ['tab' => $tV, 'key' => 'color',         'label' => 'Color',          'icon' => 'bi-palette',        'type' => 'text',         'grupo' => 'Vehículo', 'col' => 3],
+                ['tab' => $tV, 'key' => 'chasis',        'label' => 'Chasis',         'icon' => 'bi-upc',            'type' => 'text',         'grupo' => 'Vehículo', 'col' => 4],
+                ['tab' => $tV, 'key' => 'anio',          'label' => 'Año',            'icon' => 'bi-calendar3',      'type' => 'number_range', 'grupo' => 'Vehículo', 'col' => 4],
+                ['tab' => $tV, 'key' => 'estado',        'label' => 'Estado',         'icon' => 'bi-flag',           'type' => 'select',       'grupo' => 'Vehículo', 'col' => 4, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                ['tab' => $tV, 'key' => 'propietario',   'label' => 'Propietario',    'icon' => 'bi-person',         'type' => 'text',         'grupo' => 'Propietario y registro', 'col' => 4],
+                ['tab' => $tV, 'key' => 'correo',        'label' => 'Correo',         'icon' => 'bi-envelope',       'type' => 'text',         'grupo' => 'Propietario y registro', 'col' => 4],
+                ['tab' => $tV, 'key' => 'telefono',      'label' => 'Teléfono',       'icon' => 'bi-telephone',      'type' => 'text',         'grupo' => 'Propietario y registro', 'col' => 4],
+                ['tab' => $tV, 'key' => 'fecha',         'label' => 'Fecha de registro', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Propietario y registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tV, 'key' => 'usuario',       'label' => 'Registrado por', 'icon' => 'bi-person-gear',    'type' => 'select',       'grupo' => 'Propietario y registro', 'col' => 6, 'options' => $opcionesUsuarioVeh],
+                ['tab' => $tV, 'key' => 'con_ordenes',   'label' => 'Órdenes de Car-Wash', 'icon' => 'bi-droplet-half', 'type' => 'select',    'grupo' => 'Car-Wash', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Con órdenes'],
+                    ['v' => 'no', 'l' => 'Sin órdenes'],
+                ]],
+                ['tab' => $tV, 'key' => 'ultima_visita', 'label' => 'Última visita',  'icon' => 'bi-calendar-check', 'type' => 'date_range',   'grupo' => 'Car-Wash', 'col' => 4],
+                ['tab' => $tV, 'key' => 'proxima_cita',  'label' => 'Próxima cita',   'icon' => 'bi-calendar-plus',  'type' => 'date_range',   'grupo' => 'Car-Wash', 'col' => 4],
+            ];
+            $columnasTabla = [
+                'marca' => 'Marca',
+                'placa' => 'Placa',
+                'chasis' => 'Chasis',
+                'anio' => 'Año',
+                'propietario' => 'Propietario',
+                'correo' => 'Correo',
+                'telefono' => 'Teléfono',
+                'estado' => 'Estado',
+                'created_at' => 'Fecha Registro'
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorVeh"></div>
+            <input type="hidden" id="buscarVehiculo" name="b" value="<?= htmlspecialchars($buscar) ?>">
+
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del grupo del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraVeh" class="btn-group btn-group-sm">
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                <a id="btnExportPdf" href="<?= $urlBaseVehiculos ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a id="btnExportExcel" href="<?= $urlBaseVehiculos ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <a id="btnExportPdf" href="<?= $urlBaseVehiculos ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a id="btnExportExcel" href="<?= $urlBaseVehiculos ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
             </div>
         </div>
-
         <div class="d-flex align-items-center gap-3">
             <span id="paginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?> / <?= $total ?></span>
             <div id="paginationContainer" class="btn-group btn-group-sm">
@@ -147,7 +176,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const inputB = document.getElementById('buscarVehiculo');
         let currentSort = '<?= $ordenCol ?>';
         let currentDir = '<?= $ordenDir ?>';
-        let timer;
 
         window.cambiarPaginaAjax = (p) => cargarListado(p);
 
@@ -183,9 +211,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             cargarListado(1);
         }, { col: currentSort, dir: currentDir });
 
-        if (inputB) inputB.addEventListener('input', () => {
-            clearTimeout(timer);
-            timer = setTimeout(() => cargarListado(1), 400);
+        // Buscador con filtros (mismo componente que el resto de módulos).
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!window.FiltrosModal) return;
+            window.VEH_filtros = new FiltrosModal({
+                containerId: 'fmBuscadorVeh',
+                hiddenInputId: 'buscarVehiculo',
+                placeholder: 'Buscar en todas las columnas...',
+                titulo: 'Filtros de vehículos',
+                inputWidth: 380,
+                extraId: 'fmExtraVeh',
+                fields: <?= json_encode($filtrosVehiculos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                loadingTarget: '#tbodyVehiculos',
+                onApply: () => cargarListado(1),
+            });
+            window.VEH_filtros.init();
         });
     })();
 </script>

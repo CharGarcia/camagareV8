@@ -70,6 +70,8 @@ class VehiculosController extends BaseModuloController
             'ordenDir'   => $ordenDir,
             'vistaConfig'=> $prefsVista,
             'fullWidth'  => true,
+            // Select "Registrado por" de la ventana de filtros.
+            'usuariosFiltro' => (new VehiculoRepository())->getUsuariosConVehiculos($idEmpresa),
         ]);
     }
 
@@ -171,6 +173,91 @@ class VehiculosController extends BaseModuloController
                     'actualizado_por' => $vehiculo['actualizado_por_nombre'] ?? '—'
                 ]
             ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Pestaña Transacciones: órdenes de Car-Wash del vehículo con sus servicios/productos. */
+    public function transaccionesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+            if ($id <= 0) throw new \Exception('ID no válido');
+            $perm = $this->getPermisos();
+            $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            $data = $this->service->getTransacciones($id, (int) $_SESSION['id_empresa'], $idUsuarioFiltro);
+            foreach ($data['ordenes'] as &$o) {
+                $o['fecha'] = !empty($o['fecha_ingreso']) ? date('d-m-Y H:i:s', strtotime($o['fecha_ingreso'])) : '';
+            }
+            unset($o);
+            echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Pestaña Recordatorios: citas del vehículo (de Car-Wash) + historial de envíos. */
+    public function recordatoriosAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+            if ($id <= 0) throw new \Exception('ID no válido');
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            if (!$this->service->findById($id, $idEmpresa)) throw new \Exception('Vehículo no encontrado.');
+            $perm = $this->getPermisos();
+            $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            $svc = new \App\Services\modulos\CarWashRecordatorioService();
+            echo json_encode(['ok' => true, 'data' => [
+                'disponible' => $svc->tablaDisponible(),
+                'citas'      => $svc->citasVehiculo($id, $idEmpresa, $idUsuarioFiltro),
+                'historial'  => $svc->historialVehiculo($id, $idEmpresa),
+            ]], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Envía por correo el recordatorio de la cita de una orden. */
+    public function enviarRecordatorioCorreoAjax(): void
+    {
+        $this->requireActualizar();
+        session_write_close(); // el envío de correo no debe bloquear las demás peticiones del usuario
+        header('Content-Type: application/json');
+        try {
+            $res = (new \App\Services\modulos\CarWashRecordatorioService())->enviarCorreo(
+                (int) ($_POST['id_orden'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'],
+                trim((string) ($_POST['destinatarios'] ?? '')), trim((string) ($_POST['asunto'] ?? '')), trim((string) ($_POST['mensaje'] ?? ''))
+            );
+            echo json_encode(['ok' => $res['ok'], 'msg' => $res['mensaje'], 'error' => $res['ok'] ? null : $res['mensaje']]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Registra el recordatorio que el usuario abrió en WhatsApp (envío manual). */
+    public function registrarRecordatorioWhatsappAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            (new \App\Services\modulos\CarWashRecordatorioService())->registrarWhatsappManual(
+                (int) ($_POST['id_orden'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'],
+                trim((string) ($_POST['telefono'] ?? '')), trim((string) ($_POST['mensaje'] ?? ''))
+            );
+            echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

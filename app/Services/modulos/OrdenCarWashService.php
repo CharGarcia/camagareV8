@@ -84,7 +84,7 @@ class OrdenCarWashService
      * no trabaja con inventario, el motor no hace nada; si exige stock positivo,
      * lanza excepción cuando no alcanza.
      */
-    private function aplicarSalidaInventario(int $idOrden, int $idEmpresa, int $idUsuario, array $detalles, int $idEstablecimiento, int $idBodega, string $numeroOrden, bool $esEdicion): void
+    private function aplicarSalidaInventario(int $idOrden, int $idEmpresa, int $idUsuario, array $detalles, int $idEstablecimiento, int $idBodega, string $numeroOrden, bool $esEdicion, bool $permitirNegativo = false): void
     {
         if ($idEstablecimiento <= 0) return;
         $lineas = $this->detallesParaInventario($detalles, $idBodega);
@@ -92,14 +92,81 @@ class OrdenCarWashService
 
         $this->getInventarioService()->procesarSalidaPorVenta(
             $idOrden, $lineas, $idEstablecimiento, $idEmpresa, $idUsuario,
-            'Orden Car-Wash # ' . $numeroOrden, $esEdicion, self::REF_TIPO
+            'Orden Car-Wash # ' . $numeroOrden, $esEdicion, self::REF_TIPO, $permitirNegativo
         );
     }
 
-    /** Revierte (devuelve al stock) los movimientos de inventario de la orden. */
-    private function revertirInventario(int $idOrden, int $idEmpresa, int $idUsuario): void
+    /**
+     * Revierte (devuelve al stock) los movimientos de inventario de la orden.
+     *
+     * $permitirNegativo: igual que Factura y Recibo de venta. Devolver una salida nunca
+     * empeora el stock, pero InventarioService rechaza el reverso si el saldo resultante
+     * sigue en negativo; con la empresa trabajando con stock negativo eso impedía facturar
+     * o eliminar la orden. Se pasa true al emitir el documento y al eliminar (como la
+     * conversión recibo → factura y el eliminar de factura/recibo) y, al editar,
+     * !factura_solo_stock_positivo (como la edición de factura/recibo).
+     */
+    private function revertirInventario(int $idOrden, int $idEmpresa, int $idUsuario, bool $permitirNegativo = true): void
     {
-        $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idOrden, $idEmpresa, $idUsuario);
+        $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idOrden, $idEmpresa, $idUsuario, $permitirNegativo);
+    }
+
+    /**
+     * Se llama desde FacturaVentaService / ReciboVentaService al ANULAR o ELIMINAR un
+     * documento, DENTRO de su transacción y después de que ese documento devolvió su
+     * inventario. Si el documento se emitió desde una orden Car-Wash, la orden vuelve a
+     * descontar lo suyo (el inventario vuelve a quedar comprometido por la orden, como
+     * antes de facturar) y vuelve a Borrador para corregirla o volver a facturarla. El
+     * documento anulado queda en su pestaña Facturación.
+     *
+     * Nunca bloquea la anulación del documento (dato fiscal): la salida se registra aunque
+     * el stock quede en negativo y, si algo falla, se revierte solo este paso (SAVEPOINT) y
+     * se deja constancia en el log de errores.
+     */
+    public static function reponerPorDocumentoAnulado(string $tipoDocumento, int $idDocumento, int $idEmpresa, int $idUsuario): void
+    {
+        $repo = new OrdenCarWashRepository();
+        $ordenes = $repo->ordenesPorDocumento(strtoupper($tipoDocumento), $idDocumento, $idEmpresa);
+        if (!$ordenes) return;
+
+        $svc = new self($repo, new OrdenCarWashRules(), new LogSistemaService());
+        $db  = Database::getConnection();
+        foreach ($ordenes as $idOrden) {
+            $sp = $db->inTransaction();
+            if ($sp) $db->exec('SAVEPOINT sp_cw_repone');
+            try {
+                $cab = $repo->find($idOrden, $idEmpresa);
+                if (!$cab) {
+                    if ($sp) $db->exec('RELEASE SAVEPOINT sp_cw_repone');
+                    continue;
+                }
+                // Idempotente: si la orden ya tiene su salida, no se duplica.
+                if (!$repo->tieneMovimientosInventario($idOrden, $idEmpresa)) {
+                    $svc->aplicarSalidaInventario(
+                        $idOrden, $idEmpresa, $idUsuario, $repo->getDetalles($idOrden, $idEmpresa),
+                        (int) ($cab['id_establecimiento'] ?? 0), (int) ($cab['id_bodega'] ?? 0),
+                        (string) ($cab['numero_orden'] ?? ''), false, true
+                    );
+                }
+                // De vuelta a borrador (el historial de Facturación conserva el documento anulado).
+                if ($repo->existeTablaDocumentos()) {
+                    $repo->liberarDocumento($idOrden, $idEmpresa, $idUsuario);
+                }
+                $svc->logService->registrar($idUsuario, $idEmpresa, 'REPONER_ORDEN_CARWASH_DOC_ANULADO', 'carwash_ordenes', $idOrden,
+                    ['tipo_documento' => $cab['tipo_documento'] ?? null, 'id_documento' => $cab['id_documento'] ?? null, 'estado' => $cab['estado'] ?? null],
+                    ['estado' => 'borrador', 'inventario' => 'salida de la orden repuesta']);
+                if ($sp) $db->exec('RELEASE SAVEPOINT sp_cw_repone');
+            } catch (\Throwable $e) {
+                if ($sp) $db->exec('ROLLBACK TO SAVEPOINT sp_cw_repone');
+                error_log("[CarWash] No se pudo reponer el inventario de la orden {$idOrden} al anular {$tipoDocumento} {$idDocumento}: " . $e->getMessage());
+            }
+        }
+    }
+
+    /** ¿El establecimiento exige stock positivo? (misma lectura que factura/recibo). */
+    private function soloStockPositivo(int $idEstablecimiento): bool
+    {
+        return \App\Helpers\Booleano::es($this->configEstablecimiento($idEstablecimiento)['factura_solo_stock_positivo'] ?? false);
     }
 
     /**
@@ -494,7 +561,8 @@ class OrdenCarWashService
             // Inventario: se revierte la salida anterior y se vuelve a aplicar con las líneas nuevas.
             $this->validarBodegasLineas($data['detalles'], (int) ($data['id_bodega'] ?? 0), $idEmpresa, (int) ($data['id_establecimiento'] ?? $cab['id_establecimiento'] ?? 0));
             $this->validarConfiguracionFacturacion($data['detalles'], $idEmpresa, (int) ($data['id_establecimiento'] ?? $cab['id_establecimiento'] ?? 0));
-            $this->revertirInventario($id, $idEmpresa, $idUsuario);
+            $this->revertirInventario($id, $idEmpresa, $idUsuario,
+                !$this->soloStockPositivo((int) ($data['id_establecimiento'] ?? $cab['id_establecimiento'] ?? 0)));
             $this->aplicarSalidaInventario(
                 $id, $idEmpresa, $idUsuario, $data['detalles'],
                 (int) ($data['id_establecimiento'] ?? $cab['id_establecimiento'] ?? 0),

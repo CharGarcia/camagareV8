@@ -51,7 +51,7 @@ se le entrega al cliente.
    confirme. La **forma de pago SRI** no se pregunta: se toma de la ficha del
    **cliente** o, si no la tiene, de la **configuración de facturación** (Empresa →
    Facturación); si ninguna está definida, se usa *01 - Sin utilización del sistema
-   financiero*. La ventana de confirmación muestra cuál se usará y de dónde sale. La orden pasa a **Facturado** y queda
+   financiero*. La orden pasa a **Facturado** y queda
    bloqueada.
 
 El modal tiene tres pestañas:
@@ -166,9 +166,11 @@ anulado o eliminado), origen (*Car-Wash* o *Sistema anterior*) y usuario. El íc
 rojo abre el PDF del documento (Imprimir / Descargar / Ver).
 
 **Volver a facturar una orden.** Si la factura o el recibo se **anula** o se
-**elimina** en su módulo, la orden se libera sola: en el listado aparece como
-**Doc. anulado**, se puede corregir y volver a emitir. El documento anterior se
-conserva en esta pestaña, así que siempre queda el rastro completo.
+**elimina** en su módulo, en ese mismo momento la orden vuelve a **Borrador** y
+**vuelve a descontar su inventario** (el documento anulado devolvió lo suyo, así que
+los productos quedan otra vez comprometidos por la orden). Se puede corregir y volver
+a emitir. El documento anulado se conserva en esta pestaña, así que siempre queda el
+rastro completo.
 
 ## Campos del formulario
 
@@ -198,9 +200,12 @@ módulos de Facturas y Recibos de venta, así que requieren permiso de lectura e
 
 ## Reglas de negocio
 
-- La orden descuenta inventario al guardarse (si el establecimiento trabaja con
-  inventario). Al emitir el documento, esa salida se devuelve y la hace el
-  documento, así el stock nunca se descuenta dos veces.
+- **Inventario:** la orden descuenta al guardarse (si el establecimiento trabaja con
+  inventario); al editarla se recalcula. Al emitir la factura o el recibo, lo de la
+  orden se devuelve y el documento hace su propia salida: el stock nunca se descuenta
+  dos veces. Si el documento se anula o elimina, la orden vuelve a descontar. Al
+  eliminar una orden sin documento, se devuelve lo que consumió. Funciona también con
+  stock negativo cuando la empresa lo permite.
 - Toda la emisión (número del documento, inventario, documento y marca de la orden)
   ocurre en una sola operación: si algo falla, nada queda a medias.
 - La factura lleva en Info. Adicional la **placa** y el **número de orden**, además de
@@ -220,7 +225,8 @@ módulos de Facturas y Recibos de venta, así que requieren permiso de lectura e
 - **Facturas de venta** y **Recibos de venta**: reciben el documento emitido; ahí se
   envía al SRI, se anula o se cobra.
 - **Inventario**: movimientos de salida por la orden y luego por el documento.
-- **Vehículos** y **Clientes**: catálogos que usa la orden.
+- **Vehículos** y **Clientes**: catálogos que usa la orden. La ficha del vehículo muestra
+  sus órdenes (pestaña Transacciones) y envía los recordatorios de la próxima cita.
 - **Migración desde el sistema anterior** (`/config/migrar-mysql`, solo
   superadministrador): la entidad *Órdenes de servicio (Car-Wash / mecánica)* trae las
   órdenes del módulo *Orden mecánica* del sistema anterior (ver abajo).
@@ -337,6 +343,12 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
   **información adicional**, más observaciones y la leyenda del PDF de la empresa.
   La **forma de pago SRI** ya no se pide al emitir: sale del cliente o de la
   configuración de facturación, como en Factura de venta.
+  Al **anular o eliminar** la factura o el recibo, la orden vuelve a Borrador y vuelve a
+  descontar su inventario. Corregido: con stock negativo permitido no se podía facturar
+  ni eliminar la orden.
+  Al generar la factura o el recibo ya no se ofrece "Ver PDF" (el PDF está en la pestaña
+  Facturación). Los **recordatorios de la próxima cita** se envían desde la ficha del
+  vehículo (pestaña Recordatorios) o automáticamente con Automatizaciones → Car-Wash.
   **Descuento rápido** por porcentaje o valor, por línea o a todos los ítems (como la
   factura).
   Nueva pestaña **Condiciones de ingreso** y nuevo PDF **Acta de ingreso del vehículo**,

@@ -33,10 +33,46 @@ class VehiculoRepository extends BaseRepository
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
-        if ($buscar !== '') {
-            $whereSql .= " AND (v.marca ILIKE :b OR v.placa ILIKE :b OR v.chasis ILIKE :b OR v.propietario ILIKE :b)";
-            $params[':b'] = '%' . $buscar . '%';
+        // Buscador estándar (§9): texto libre sobre las columnas del listado + filtros clave:valor
+        // de la ventana de filtros (FiltrosModal). Nunca se concatena la entrada del usuario.
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'v.marca', 'v.placa', 'v.chasis', 'v.anio::text', 'v.propietario', 'v.correo', 'v.telefono',
+                'v.modelo', 'v.color', "TO_CHAR(v.created_at, 'DD-MM-YYYY')",
+            ], $parsed['texto_libre'], $params, 'tl');
+            if ($condicion !== '') {
+                $whereSql .= " AND {$condicion}";
+            }
         }
+        // Órdenes de Car-Wash del vehículo (vivas y no anuladas): última visita y próxima cita.
+        $subOrden = "FROM carwash_ordenes o WHERE o.id_vehiculo = v.id AND o.id_empresa = v.id_empresa AND o.eliminado = false AND o.estado <> 'anulado'";
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
+            'texto' => [
+                'marca'       => 'v.marca',
+                'placa'       => 'v.placa',
+                'modelo'      => 'v.modelo',
+                'color'       => 'v.color',
+                'chasis'      => 'v.chasis',
+                'propietario' => 'v.propietario',
+                'correo'      => 'v.correo',
+                'telefono'    => 'v.telefono',
+            ],
+            'exacto' => [
+                'estado'      => 'v.estado',
+                'usuario'     => 'v.created_by',
+                // con_ordenes:si / con_ordenes:no (tiene órdenes de Car-Wash)
+                'con_ordenes' => "CASE WHEN EXISTS (SELECT 1 $subOrden) THEN 'si' ELSE 'no' END",
+            ],
+            'fecha' => [
+                'fecha'         => 'v.created_at',
+                'ultima_visita' => "(SELECT MAX(o.fecha_ingreso) $subOrden)",
+                'proxima_cita'  => "(SELECT MAX(o.proxima_cita) $subOrden)",
+            ],
+            'numerico' => [
+                'anio' => 'v.anio',
+            ],
+        ]);
 
         // Validación de columnas permitidas para order by
         $cols = [
@@ -46,7 +82,10 @@ class VehiculoRepository extends BaseRepository
             'chasis'      => 'v.chasis',
             'anio'        => 'v.anio',
             'propietario' => 'v.propietario',
-            'estado'      => 'v.estado'
+            'estado'      => 'v.estado',
+            'correo'      => 'v.correo',
+            'telefono'    => 'v.telefono',
+            'created_at'  => 'v.created_at',
         ];
         $col  = $cols[$ordenCol] ?? 'v.id';
         $dir  = ($ordenDir === 'DESC') ? 'DESC' : 'ASC';
@@ -77,6 +116,15 @@ class VehiculoRepository extends BaseRepository
             'total' => $total,
             'rows'  => $rows
         ];
+    }
+
+    /** Usuarios que registraron vehículos (select "Registrado por" de la ventana de filtros). */
+    public function getUsuariosConVehiculos(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT DISTINCT u.id, u.nombre FROM vehiculos v JOIN usuarios u ON u.id = v.created_by
+                                   WHERE v.id_empresa = :e AND v.eliminado = false ORDER BY u.nombre");
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

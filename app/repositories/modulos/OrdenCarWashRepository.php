@@ -632,6 +632,54 @@ class OrdenCarWashRepository extends BaseRepository
         return $existe;
     }
 
+    /** Servicios y productos de varias órdenes (pestaña Transacciones del vehículo), agrupados por orden. */
+    public function getLineasPorOrdenes(array $idsOrden, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsOrden))));
+        if (!$ids) return [];
+        $in = implode(',', $ids); // enteros ya saneados
+        $st = $this->db->prepare("SELECT d.id_orden, d.tipo_linea, d.descripcion, d.cantidad, d.precio_unitario, d.descuento, d.total_linea,
+                                         p.codigo AS producto_codigo
+                                    FROM carwash_ordenes_detalle d
+                               LEFT JOIN productos p ON p.id = d.id_producto
+                                   WHERE d.id_empresa = :e AND d.eliminado = false AND d.id_orden IN ($in)
+                                   ORDER BY d.id_orden, d.id");
+        $st->execute([':e' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $l) {
+            $out[(int) $l['id_orden']][] = $l;
+        }
+        return $out;
+    }
+
+    /** Órdenes (vivas) enlazadas a un documento de venta. */
+    public function ordenesPorDocumento(string $tipoDocumento, int $idDocumento, int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT id FROM carwash_ordenes
+                                   WHERE id_empresa = :e AND tipo_documento = :t AND id_documento = :d AND eliminado = false");
+        $st->execute([':e' => $idEmpresa, ':t' => $tipoDocumento, ':d' => $idDocumento]);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** ¿La orden tiene hoy su salida de inventario registrada? */
+    public function tieneMovimientosInventario(int $idOrden, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare("SELECT 1 FROM inventario_kardex
+                                   WHERE referencia_tipo = 'carwash_orden' AND referencia_id = :o AND id_empresa = :e AND eliminado = false LIMIT 1");
+        $st->execute([':o' => $idOrden, ':e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /** Desenlaza el documento (anulado) y devuelve la orden a borrador. */
+    public function liberarDocumento(int $idOrden, int $idEmpresa, int $idUsuario): void
+    {
+        $this->db->prepare("UPDATE carwash_ordenes
+                               SET estado = 'borrador', tipo_documento = NULL, id_documento = NULL, numero_documento = NULL,
+                                   updated_by = :u, updated_at = CURRENT_TIMESTAMP
+                             WHERE id = :id AND id_empresa = :e")
+                 ->execute([':u' => $idUsuario, ':id' => $idOrden, ':e' => $idEmpresa]);
+    }
+
     /** Registra un documento de venta emitido desde la orden (historial de facturación). */
     public function insertDocumento(array $d): void
     {

@@ -134,6 +134,37 @@ class HandlerFactory
                 ],
             ],
 
+            'car_wash' => [
+                'label'   => 'Car-Wash',
+                'icono'   => 'fa-car',
+                'acciones' => [
+                    'recordatorio_cita_correo' => [
+                        'label'       => 'Recordatorio de próxima cita (Correo)',
+                        'descripcion' => 'Envía un correo a los clientes cuyo vehículo tiene la próxima cita (fijada en la orden de Car-Wash) dentro de los días indicados. Cada cita se avisa una sola vez, así que puede programarse a diario. Destinatario: el correo del vehículo o, si no tiene, el del cliente de la orden.',
+                        'handler'     => Handlers\CarWashRecordatorioHandler::class,
+                        'parametros'  => [
+                            ['key' => 'dias_anticipacion', 'label' => 'Avisar con cuántos días de anticipación', 'tipo' => 'number', 'default' => 1,
+                             'ayuda' => 'Se avisan las citas que caen entre hoy y hoy + estos días. 0 = solo las citas de hoy.'],
+                            ['key' => 'asunto', 'label' => 'Asunto del correo', 'tipo' => 'text', 'default' => \App\Services\modulos\CarWashRecordatorioService::ASUNTO_DEFECTO,
+                             'ayuda' => 'Etiquetas: ' . \App\Services\modulos\CarWashRecordatorioService::ETIQUETAS . '.'],
+                            ['key' => 'cuerpo', 'label' => 'Mensaje', 'tipo' => 'textarea', 'default' => \App\Services\modulos\CarWashRecordatorioService::MENSAJE_DEFECTO,
+                             'ayuda' => 'Etiquetas: ' . \App\Services\modulos\CarWashRecordatorioService::ETIQUETAS . '.'],
+                        ],
+                    ],
+                    'recordatorio_cita_whatsapp' => [
+                        'label'       => 'Recordatorio de próxima cita (WhatsApp)',
+                        'descripcion' => 'Envía por WhatsApp, con una plantilla aprobada por Meta, el recordatorio de la próxima cita de Car-Wash a los clientes con cita dentro de los días indicados. Cada cita se avisa una sola vez. Teléfono: el del vehículo o, si no tiene, el del cliente.',
+                        'handler'     => Handlers\CarWashRecordatorioHandler::class,
+                        'parametros'  => [
+                            ['key' => 'dias_anticipacion', 'label' => 'Avisar con cuántos días de anticipación', 'tipo' => 'number', 'default' => 1,
+                             'ayuda' => 'Se avisan las citas que caen entre hoy y hoy + estos días. 0 = solo las citas de hoy.'],
+                            ['key' => 'plantilla_whatsapp', 'label' => 'Plantilla de WhatsApp', 'tipo' => 'select_dinamico', 'fuente' => 'whatsapp_plantillas', 'default' => '',
+                             'ayuda' => 'Plantilla aprobada por Meta. Variables del cuerpo, en orden: {{1}} cliente, {{2}} placa, {{3}} fecha de la cita, {{4}} empresa, {{5}} N.° de orden.'],
+                        ],
+                    ],
+                ],
+            ],
+
             'cuentas_por_cobrar' => [
                 'label'   => 'Cuentas por cobrar',
                 'icono'   => 'fa-hand-holding-usd',

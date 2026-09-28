@@ -1567,20 +1567,12 @@
         if (!idOrden) { Swal.fire('Atención', 'Primero guarde la orden.', 'warning'); return; }
         if (CW_CUR.id_documento && CW_CUR.documento_vigente !== false) { Swal.fire('Atención', 'Esta orden ya generó un documento vigente. Para volver a facturarla, anule primero ese documento.', 'warning'); return; }
 
-        // La forma de pago SRI la resuelve el servidor: la del cliente o, si no tiene, la de
-        // la configuración de facturación (igual que Factura de Venta). Aquí solo se informa.
+        // La forma de pago SRI la resuelve el servidor (cliente → configuración de facturación → 01).
         const etq = tipo === 'FACTURA' ? 'Factura electrónica' : 'Recibo de venta';
-        const fp = CW_CUR.forma_pago_sri || {};
         const { isConfirmed: form } = await Swal.fire({
             title: 'Generar ' + etq,
             target: document.getElementById('modalOrdenCW'),
             icon: 'question',
-            html: `<div class="text-start small">
-                    <div class="mb-1"><span class="text-muted">Forma de pago SRI:</span>
-                        <b>${esc(fp.codigo || '01')}${fp.nombre ? ' - ' + esc(fp.nombre) : ''}</b></div>
-                    <div class="text-muted" style="font-size:.75rem">Tomada ${fp.origen === 'cliente' ? 'de la ficha del cliente' : (fp.origen === 'configuración de facturación' ? 'de la configuración de facturación (Empresa → Facturación)' : 'por defecto: no está definida en el cliente ni en la configuración de facturación')}.</div>
-                    <div class="form-text">El inventario se descarga de la bodega seleccionada en la orden.</div>
-                   </div>`,
             showCancelButton: true,
             confirmButtonText: '<i class="bi bi-receipt me-1"></i> Generar',
             cancelButtonText: 'Cancelar',
@@ -1604,8 +1596,8 @@
             if (typeof cwRecargarTablero === 'function') cwRecargarTablero();
             if (typeof cargarGrid === 'function') cargarGrid();
 
-            const r = await Swal.fire({ icon: 'success', title: '¡Listo!', text: data.msg, showCancelButton: true, confirmButtonText: 'Ver PDF', cancelButtonText: 'Cerrar' });
-            if (r.isConfirmed) cwPdfDocumento();
+            // Sin botón "Ver PDF": el PDF del documento está en la pestaña Facturación.
+            Swal.fire({ icon: 'success', title: '¡Listo!', text: data.msg, target: document.getElementById('modalOrdenCW'), timer: 2200, showConfirmButton: false });
         } catch (e) {
             Swal.fire('Error', e.message, 'error');
         }

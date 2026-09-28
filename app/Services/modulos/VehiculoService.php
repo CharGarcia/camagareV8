@@ -166,4 +166,40 @@ class VehiculoService
     {
         return $this->repository->getDetalleCompleto($id, $idEmpresa);
     }
+
+    /**
+     * Pestaña Transacciones: todo lo que se le ha hecho al vehículo, tomado de las órdenes de
+     * Car-Wash (con sus servicios y productos) y un resumen (visitas, total, última visita,
+     * próxima cita). Respeta registros propios (§6) con $idUsuarioFiltro.
+     */
+    public function getTransacciones(int $idVehiculo, int $idEmpresa, ?int $idUsuarioFiltro = null): array
+    {
+        if (!$this->repository->getDetalleCompleto($idVehiculo, $idEmpresa)) {
+            throw new \Exception('Vehículo no encontrado.');
+        }
+        $repoCw  = new \App\repositories\modulos\OrdenCarWashRepository();
+        $ordenes = $repoCw->getHistorial($idEmpresa, 'vehiculo', '', $idVehiculo, null, $idUsuarioFiltro, 500);
+        $lineas  = $repoCw->getLineasPorOrdenes(array_column($ordenes, 'id'), $idEmpresa);
+
+        $total = 0.0; $proxima = null; $hoy = date('Y-m-d');
+        foreach ($ordenes as &$o) {
+            $o['lineas'] = $lineas[(int) $o['id']] ?? [];
+            if (($o['estado'] ?? '') !== 'anulado') $total += (float) $o['total'];
+        }
+        unset($o);
+        foreach ((new \App\Services\modulos\CarWashRecordatorioService())->citasVehiculo($idVehiculo, $idEmpresa, $idUsuarioFiltro) as $c) {
+            $f = substr((string) $c['proxima_cita'], 0, 10);
+            if ($f >= $hoy && ($proxima === null || $f < $proxima)) $proxima = $f;
+        }
+
+        return [
+            'ordenes' => $ordenes,
+            'resumen' => [
+                'visitas'        => count($ordenes),
+                'total'          => round($total, 2),
+                'ultima_visita'  => $ordenes[0]['fecha_ingreso'] ?? null,
+                'proxima_cita'   => $proxima,
+            ],
+        ];
+    }
 }

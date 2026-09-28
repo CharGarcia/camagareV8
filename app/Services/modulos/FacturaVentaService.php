@@ -1328,6 +1328,8 @@ class FacturaVentaService
             // 6.1 Si la factura provino de una consignación, deshacer el reingreso y
             //     liberar el saldo facturable (reversión automática).
             $this->reversarConsignacionSiAplica($id, $idEmpresa, $idUsuario);
+            // Si la factura se emitió desde una orden Car-Wash, la orden vuelve a descontar su inventario.
+            OrdenCarWashService::reponerPorDocumentoAnulado('FACTURA', $id, $idEmpresa, $idUsuario);
 
             // 6.5 Limpiar casilleros de declaracion 104
             $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
@@ -1460,6 +1462,8 @@ class FacturaVentaService
 
             // Si la factura provino de una consignación, deshacer el reingreso y liberar el saldo.
             $this->reversarConsignacionSiAplica($id, $idEmpresa, $idUsuario);
+            // Si la factura se emitió desde una orden Car-Wash, la orden vuelve a descontar su inventario.
+            OrdenCarWashService::reponerPorDocumentoAnulado('FACTURA', $id, $idEmpresa, $idUsuario);
 
             // Limpiar casilleros de declaración 104 (igual que anular()) — solo aplica si la
             // factura llegó a estar autorizada y a marcar algún casillero.

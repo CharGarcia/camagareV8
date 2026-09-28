@@ -532,6 +532,8 @@ class ReciboVentaService
             $this->repository->actualizarEstado($id, 'anulado', $idUsuario);
             // El saldo realmente vuelve al inventario al anular: nunca debe bloquearse.
             $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario, true);
+            // Si el recibo se emitió desde una orden Car-Wash, la orden vuelve a descontar su inventario.
+            OrdenCarWashService::reponerPorDocumentoAnulado('RECIBO', $id, $idEmpresa, $idUsuario);
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'ANULAR', 'recibos_venta_cabecera', $id,
@@ -570,6 +572,8 @@ class ReciboVentaService
             // El saldo realmente vuelve al inventario al eliminar: nunca debe bloquearse.
             $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario, true);
             $this->repository->eliminarLogico($id, $idUsuario);
+            // Si el recibo se emitió desde una orden Car-Wash, la orden vuelve a descontar su inventario.
+            OrdenCarWashService::reponerPorDocumentoAnulado('RECIBO', $id, $idEmpresa, $idUsuario);
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'ELIMINAR', 'recibos_venta_cabecera', $id,
