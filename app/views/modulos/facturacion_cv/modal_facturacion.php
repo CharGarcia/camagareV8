@@ -1145,6 +1145,11 @@
             grupos[key].iva += iva;
         });
         const lista = Object.values(grupos).sort((a, b) => a.pct - b.pct);
+        // Configuración de facturación "al subtotal": el IVA de cada tarifa es r2(Σ bases × %),
+        // no la suma de los IVA por línea (igual que el servidor y Facturas de Venta).
+        if ((window.EMPRESA_CONFIG || {}).calculo_iva === 'subtotal') {
+            lista.forEach(g => { g.iva = round2(round2(g.base) * g.pct / 100); });
+        }
         let ivaTotal = 0; lista.forEach(g => ivaTotal += g.iva);
 
         $('faccv_tot_subtotal').textContent = bruto.toFixed(2);

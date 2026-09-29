@@ -660,6 +660,14 @@ class ConsignacionFacturaRepository extends BaseRepository
         $st->execute();
     }
 
+    /** IVA y total de una línea (recalculados con la configuración de facturación al generar la factura). */
+    public function updateImpuestoDetalle(int $idDetalle, int $idEmpresa, float $valorImpuesto, float $total): void
+    {
+        $st = $this->db->prepare("UPDATE consignaciones_facturas_detalles SET valor_impuesto = :vi, total = :t
+                                  WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':vi' => $valorImpuesto, ':t' => $total, ':id' => $idDetalle, ':e' => $idEmpresa]);
+    }
+
     public function deleteDetalles(int $idDoc, int $idEmpresa): void
     {
         $sql = "UPDATE consignaciones_facturas_detalles SET eliminado = true

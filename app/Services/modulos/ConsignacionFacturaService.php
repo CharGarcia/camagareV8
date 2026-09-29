@@ -12,6 +12,7 @@ use App\Rules\modulos\ConsignacionFacturaRules;
 use App\Rules\modulos\FacturaVentaRules;
 use App\Services\LogSistemaService;
 use App\Services\SecuencialService;
+use App\Helpers\IvaSubtotal;
 use App\core\Database;
 use Exception;
 
@@ -356,7 +357,7 @@ class ConsignacionFacturaService
             // la vista previa que se cargó al abrir el modal.
             $numero = $this->reservarNumero($idEmpresa, $data);
 
-            [$detalles, $tot] = $this->normalizarDetalles($data['detalles'], $idEmpresa, null);
+            [$detalles, $tot] = $this->normalizarDetalles($data['detalles'], $idEmpresa, null, IvaSubtotal::modo($data['empresa_config'] ?? null));
 
             $idDoc = $this->crearCabecera([
                 'id_empresa'       => $idEmpresa,
@@ -422,7 +423,7 @@ class ConsignacionFacturaService
         try {
             $db->beginTransaction();
 
-            [$detalles, $tot] = $this->normalizarDetalles($data['detalles'], $idEmpresa, null);
+            [$detalles, $tot] = $this->normalizarDetalles($data['detalles'], $idEmpresa, null, IvaSubtotal::modo($data['empresa_config'] ?? null));
 
             $this->repository->deleteDetalles($id, $idEmpresa);
             foreach ($detalles as $d) {
@@ -578,11 +579,13 @@ class ConsignacionFacturaService
     /**
      * Normaliza las líneas del documento leyendo la consignación de origen (autoritativo),
      * valida saldo y calcula impuestos. Devuelve [detalles, totales].
+     *
+     * El IVA respeta la configuración de facturación del establecimiento
+     * (`calculo_iva_facturacion`, ver aplicarModoIva()), igual que Facturas de Venta.
      */
-    private function normalizarDetalles(array $lineas, int $idEmpresa, ?int $excluirDoc): array
+    private function normalizarDetalles(array $lineas, int $idEmpresa, ?int $excluirDoc, string $modoIva): array
     {
         $detalles = [];
-        $subtotalTot = 0.0; $ivaTot = 0.0; $totalTot = 0.0;
 
         foreach ($lineas as $ln) {
             $cant = (float) ($ln['cantidad'] ?? 0);
@@ -623,7 +626,6 @@ class ConsignacionFacturaService
             }
             $pct   = $tar ? (float) $tar['porcentaje_iva'] : (float) ($cd['porcentaje_impuesto'] ?? 0);
             $idTar = $tar ? (int) $tar['id'] : (int) ($cd['id_impuesto'] ?? 0);
-            $iva   = round($base * $pct / 100, 2);
 
             $lote = (isset($cd['lote']) && $cd['lote'] !== '') ? (string) $cd['lote'] : 'sin_lote';
 
@@ -636,28 +638,63 @@ class ConsignacionFacturaService
                 'descuento'               => $descuento,
                 'id_impuesto'             => $idTar ?: null,
                 'porcentaje_impuesto'     => $pct,
-                'valor_impuesto'          => $iva,
+                'valor_impuesto'          => 0.0, // lo fija aplicarModoIva()
                 'subtotal'                => $base,
-                'total'                   => round($base + $iva, 2),
+                'total'                   => $base,
                 'id_bodega'               => (int) ($cd['id_bodega'] ?? 0),
                 'lote'                    => $lote,
                 'nup'                     => (isset($cd['nup']) && $cd['nup'] !== '') ? $cd['nup'] : null,
                 'fecha_caducidad'         => (isset($cd['fecha_caducidad']) && $cd['fecha_caducidad'] !== '') ? $cd['fecha_caducidad'] : null,
             ];
-
-            $subtotalTot += $base;
-            $ivaTot      += $iva;
-            $totalTot    += $base + $iva;
         }
 
         if (empty($detalles)) {
             throw new Exception('No hay cantidades válidas para facturar.');
         }
 
+        return $this->aplicarModoIva($detalles, $modoIva);
+    }
+
+    /**
+     * Calcula el IVA de cada línea según `calculo_iva_facturacion` y devuelve [detalles, totales]:
+     *   - 'linea_linea': cada línea round(base × %) y el total es su suma.
+     *   - 'subtotal'   : el IVA de cada tarifa es round(Σ bases × %), y los centavos de
+     *                    diferencia se reparten entre sus líneas (IvaSubtotal::repartir),
+     *                    para que la suma de líneas cuadre exacto con el IVA de la tarifa.
+     * Antes siempre se calculaba línea a línea: en empresas configuradas "al subtotal" la
+     * factura salía con centavos de más frente a la misma venta hecha en Facturas de Venta
+     * (p. ej. 3 × 59,98 + 4 × 14,50 al 15%: 35,72 por línea vs. 35,69 al subtotal).
+     */
+    private function aplicarModoIva(array $detalles, string $modoIva): array
+    {
+        $lineasIva = [];
+        foreach ($detalles as $k => $d) {
+            $pct = (float) ($d['porcentaje_impuesto'] ?? 0);
+            $lineasIva[$k] = [
+                'grupo' => !empty($d['id_impuesto']) ? 'id:' . (int) $d['id_impuesto'] : 'pct:' . $pct,
+                'base'  => round((float) $d['subtotal'], 2),
+                'pct'   => $pct,
+            ];
+        }
+        $ivaLineas = IvaSubtotal::repartir($lineasIva, $modoIva);
+
+        $subtotalTot = 0.0; $ivaTot = 0.0;
+        foreach ($detalles as $k => &$d) {
+            $base = round((float) $d['subtotal'], 2);
+            $iva  = (float) ($ivaLineas[$k] ?? 0);
+            $d['valor_impuesto'] = $iva;
+            $d['total']          = round($base + $iva, 2);
+            $subtotalTot += $base;
+            $ivaTot      += $iva;
+        }
+        unset($d);
+
+        $subtotalTot = round($subtotalTot, 2);
+        $ivaTot      = round($ivaTot, 2);
         return [$detalles, [
-            'subtotal' => round($subtotalTot, 2),
-            'impuesto' => round($ivaTot, 2),
-            'total'    => round($totalTot, 2),
+            'subtotal' => $subtotalTot,
+            'impuesto' => $ivaTot,
+            'total'    => round($subtotalTot + $ivaTot, 2),
         ]];
     }
 
@@ -674,6 +711,13 @@ class ConsignacionFacturaService
 
         $detalles = $this->repository->getDetalles($idDoc, $idEmpresa);
         if (empty($detalles)) throw new Exception('El documento no tiene líneas.');
+
+        // IVA recalculado con la configuración VIGENTE (`calculo_iva_facturacion`): un borrador
+        // guardado antes (o con otra configuración) no debe arrastrar su IVA a la factura. Si
+        // cambia, el documento se actualiza junto con la factura (paso 3).
+        [$detalles, $totDoc] = $this->aplicarModoIva($detalles, IvaSubtotal::modo($empresaConfig));
+        $ivaCambio = abs($totDoc['impuesto'] - round((float) ($doc['impuesto'] ?? 0), 2)) > 0.001
+                  || abs($totDoc['total'] - round((float) ($doc['total'] ?? 0), 2)) > 0.001;
 
         $idPunto = (int) ($doc['id_punto_emision'] ?? 0);
         if ($idPunto <= 0) throw new Exception('El documento no tiene punto de emisión.');
@@ -847,6 +891,19 @@ class ConsignacionFacturaService
 
         try {
             $idFactura = $facturaService->crear($payload);
+            if ($ivaCambio) {
+                // Mismo IVA en el documento que en la factura generada (misma transacción).
+                foreach ($detalles as $d) {
+                    $this->repository->updateImpuestoDetalle((int) $d['id'], $idEmpresa, (float) $d['valor_impuesto'], (float) $d['total']);
+                }
+                $this->repository->update($idDoc, $idEmpresa, [
+                    'subtotal'   => $totDoc['subtotal'],
+                    'impuesto'   => $totDoc['impuesto'],
+                    'total'      => $totDoc['total'],
+                    'updated_by' => $idUsuario,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+            }
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();

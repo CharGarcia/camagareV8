@@ -215,6 +215,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     };
     window.RUTA_MODULO_FACTURA_VENTA = '<?= rtrim($base, '/') ?>/modulos/factura-venta';
     window.EMPRESA_CONFIG = {
+        calculo_iva: '<?= \App\Helpers\IvaSubtotal::modo($empresa ?? []) ?>',
         facturacion_inventario: <?= (($empresa['facturacion_inventario'] ?? true) === 'true' || ($empresa['facturacion_inventario'] ?? true) === true) ? 'true' : 'false' ?>,
         decimales_precio: <?= (int) ($empresa['decimales_precio'] ?? 2) ?>,
         decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>,
