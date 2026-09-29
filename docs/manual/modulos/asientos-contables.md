@@ -212,6 +212,13 @@ las cuentas contables de …». Por ejemplo:
 - Algunas formas de pago no tienen cuenta contable (Cobros y Pagos).
 - Configure las cuentas contables de Nómina.
 
+Al final, el aviso cierra con el total: **«Quedan pendientes N asiento(s) por
+generar»**. Cuenta solo los asientos que de verdad se deben generar: no incluye
+los módulos apagados en *Módulos que contabilizan*, ni los documentos sin valor
+que contabilizar, ni los cobros o pagos de documentos de un módulo apagado. Si
+usted interrumpió la generación, cuenta solo los módulos que alcanzaron a
+revisarse.
+
 Cada línea trae el enlace **Configurar**, que abre Configuración Contable en otra
 pestaña con ese tipo de asiento ya cargado y la sección correspondiente
 desplegada (General, Proveedores, Clientes, formas de cobro o pago, conceptos de
@@ -416,7 +423,8 @@ tienen un documento individual con tercero que mostrar.
   propias. Los cobros/pagos que dependen de otro documento sin asiento y los
   documentos sin valor que contabilizar pasan a ser notas informativas. No pide
   configurar módulos apagados en *Módulos que contabilizan*. Se retira el
-  desplegable con el detalle por documento.
+  desplegable con el detalle por documento. Al final indica cuántos asientos
+  quedan pendientes por generar.
 - **1.26** — Nuevo botón **Duplicar** en los asientos de tipo Diario: copia las
   líneas a un asiento nuevo, exigiendo cambiar la fecha o el concepto para que
   no quede idéntico al original.

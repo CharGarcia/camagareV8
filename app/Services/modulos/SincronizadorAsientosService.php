@@ -29,6 +29,12 @@ class SincronizadorAsientosService
      * registrarAccion().
      */
     private array $acciones = [];
+    /**
+     * Documentos sin asiento que NO se deben generar: sin valor que contabilizar, o que cobran/pagan
+     * documentos de un módulo apagado en «Módulos que contabilizan». Se restan del total de
+     * pendientes (getPendientes()) para que el aviso cuente solo lo que en realidad falta generar.
+     */
+    private int $noGenerables = 0;
 
     /**
      * Sección de Configuración Contable de la que sale el asiento de cada módulo (clave del
@@ -158,6 +164,7 @@ class SincronizadorAsientosService
             'warnings'         => $this->warnings,
             'detalle'          => $this->detalle,
             'resumenPorModulo' => $this->resumenPorModulo,
+            'pendientes'       => $this->getPendientes(),
             'acciones'         => array_values($this->acciones),
             'puedeConfigurar'  => $this->puedeConfigurar(),
             'info'             => $this->info,
@@ -1470,7 +1477,7 @@ class SincronizadorAsientosService
 
     /**
      * Acciones a realizar (ver $acciones): [{clave, texto, textoGenerico, tipo, seccion, dependeDe}]. `tipo` y
-     * `seccion` arman el enlace a Configuración Contable (?tipo=…&seccion=…); `tipo` vacío = sin
+     * `seccion` arman el enlace a Configuración Contable (se pasan por sesión, la URL queda limpia); `tipo` vacío = sin
      * enlace. `dependeDe` es el módulo del que depende (ej. un egreso que paga compras sin asiento):
      * si ese módulo también quedó con pendientes, la acción sobra y la UI la convierte en nota.
      */
@@ -1495,10 +1502,22 @@ class SincronizadorAsientosService
             }
             $lineas[] = $a['texto'];
         }
+        $pendientes = $this->getPendientes();
+        $cierre = $pendientes > 0 ? " Quedan pendientes {$pendientes} asiento(s) por generar." : '';
         if (!$lineas) {
-            return null;
+            return $cierre !== '' ? ltrim($cierre) : null;
         }
-        return 'Para generar los asientos que faltan: ' . implode('; ', $lineas) . '.';
+        return 'Para generar los asientos que faltan: ' . implode('; ', $lineas) . '.' . $cierre;
+    }
+
+    /**
+     * Asientos que quedaron por generar y que SÍ se deben generar: solo módulos encendidos (los
+     * apagados ni se revisan, ver construirTrabajos()) y sin contar los documentos que no llevan
+     * asiento ($noGenerables).
+     */
+    public function getPendientes(): int
+    {
+        return max(0, array_sum($this->resumenPorModulo) - $this->noGenerables);
     }
 
     /** ¿El usuario puede abrir Configuración Contable? Si no, el aviso no le muestra enlaces. */
@@ -1531,6 +1550,7 @@ class SincronizadorAsientosService
             if (!in_array($nota, $this->info, true)) {
                 $this->info[] = $nota;
             }
+            $this->noGenerables += count($ids);
             return;
         }
 
@@ -1558,7 +1578,8 @@ class SincronizadorAsientosService
                     if (!in_array($nota, $this->info, true)) {
                         $this->info[] = $nota;
                     }
-                    continue;
+                    $this->noGenerables += count($ids);
+                    return; // no se generará mientras el módulo siga apagado: nada más que pedir
                 }
                 $this->agregarAccion(
                     $tipoDep, 'general', "Falta configurar {$que} en {$nombreDep}",

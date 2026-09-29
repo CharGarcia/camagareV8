@@ -919,6 +919,8 @@ $base = BASE_URL;
 
 <script>
     window.BASE_URL = '<?= $base ?>';
+    // Sección a abrir al llegar desde el aviso de asientos pendientes (viaja en sesión, no en la URL).
+    window.ASIENTOPROG_ABRIR = <?= json_encode($abrirSeccion ?? null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 </script>
 
 <script src="<?= $base ?>/js/modulos/configuracion_contable_modal.js?v=<?= asset_ver('/js/modulos/configuracion_contable_modal.js') ?>"></script>

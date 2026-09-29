@@ -32,6 +32,39 @@ class ConfiguracionContableController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
+    /** Tipos de asiento del selector de la pantalla y secciones que se pueden abrir desde un enlace. */
+    private const TIPOS_ABRIR = [
+        'ventas_factura', 'factura_reembolso', 'recibos_venta', 'consignacion_venta', 'adquisiciones_compras',
+        'adquisiciones_importacion', 'retenciones_venta', 'retenciones_compra', 'ingresos_egresos', 'cobros_pagos',
+        'nomina', 'cierre_ejercicio', 'activos_fijos_alta', 'activos_fijos_depreciacion',
+    ];
+    private const SECCIONES_ABRIR = ['general', 'cliente', 'proveedor', 'empleado', 'ingresos', 'egresos', 'cobros', 'pagos'];
+
+    /**
+     * Enlace «Configurar» del aviso de asientos pendientes: deja en sesión qué tipo de asiento y
+     * qué sección abrir, y el JS navega a la URL limpia (`modulos/configuracion-contable`, sin
+     * parámetros). index() lo lee y lo borra. Mismo patrón que TallerTableroController::entrarAjax().
+     */
+    public function entrarAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+
+        $tipo    = trim((string) ($_POST['tipo'] ?? ''));
+        $seccion = trim((string) ($_POST['seccion'] ?? 'general'));
+        if (!in_array($tipo, self::TIPOS_ABRIR, true)) {
+            echo json_encode(['ok' => false, 'error' => 'Tipo de asiento no válido.']);
+            exit;
+        }
+        if (!in_array($seccion, self::SECCIONES_ABRIR, true)) {
+            $seccion = 'general';
+        }
+
+        $_SESSION['config_contable_abrir'] = ['tipo' => $tipo, 'seccion' => $seccion];
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     public function index(): void
     {
         $this->requireLeer();
@@ -55,7 +88,13 @@ class ConfiguracionContableController extends BaseModuloController
         $asientoTipoService = new AsientosTipoService();
         $asientosTipo = $asientoTipoService->getListado('', 1, 200, 'codigo', 'ASC')['rows'];
 
+        // Sección a abrir al llegar desde el aviso de asientos pendientes (ver entrarAjax()). Es de
+        // un solo uso: se borra al leerla para que recargar la página no la vuelva a abrir.
+        $abrirSeccion = $_SESSION['config_contable_abrir'] ?? null;
+        unset($_SESSION['config_contable_abrir']);
+
         $this->viewWithLayout('layouts.main', 'modulos.configuracion_contable.index', [
+            'abrirSeccion' => is_array($abrirSeccion) ? $abrirSeccion : null,
             'titulo'       => 'Configuración Contable',
             'perm'         => $perm,
             'rutaModulo'   => self::RUTA_MODULO,

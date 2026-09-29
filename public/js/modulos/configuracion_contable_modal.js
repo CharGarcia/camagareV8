@@ -1991,9 +1991,9 @@
         }
     });
 
-    // Enlace directo desde el aviso de asientos pendientes (asientos_pendientes.js):
-    // ?tipo=<tipo de asiento del selector>&seccion=<general|cliente|proveedor|empleado|ingresos|egresos|cobros|pagos>
-    // Carga ese tipo de asiento y abre la sección donde falta la cuenta.
+    // Enlace «Configurar» del aviso de asientos pendientes (asientos_pendientes.js): el tipo de
+    // asiento y la sección llegan en window.ASIENTOPROG_ABRIR (la vista los toma de la sesión, vía
+    // entrarAjax(); la URL queda limpia). Carga ese tipo de asiento y abre la sección.
     const SECCIONES_ENLACE = {
         general:   '#headingGeneral .accordion-button',
         cliente:   '#accItemCliente .accordion-button',
@@ -2005,15 +2005,15 @@
         pagos:     '[data-bs-target="#collapseFormaPagos"]',
     };
     (async function ASIENTOPROG_abrirDesdeEnlace() {
-        const qs = new URLSearchParams(window.location.search);
-        const tipo = qs.get('tipo');
+        const abrir = window.ASIENTOPROG_ABRIR || {};
+        const tipo = abrir.tipo;
         const selector = document.getElementById('tipoAsientoSelector');
         if (!tipo || !selector || !Array.from(selector.options).some(o => o.value === tipo)) return;
 
         selector.value = tipo;
         await window.ASIENTOPROG_configurar();
 
-        const btn = document.querySelector(SECCIONES_ENLACE[qs.get('seccion')] || SECCIONES_ENLACE.general);
+        const btn = document.querySelector(SECCIONES_ENLACE[abrir.seccion] || SECCIONES_ENLACE.general);
         if (btn && btn.offsetParent !== null) {
             if (btn.classList.contains('collapsed')) btn.click();
             btn.scrollIntoView({ behavior: 'smooth', block: 'start' });

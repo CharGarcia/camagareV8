@@ -20,7 +20,7 @@
  *
  * `acciones` es lo que se muestra: qué configurar, una línea por sección de Configuración Contable,
  * sin cifras (ver SincronizadorAsientosService::registrarAccion()). Cada una enlaza a
- * /modulos/configuracion-contable?tipo=…&seccion=… si `puedeConfigurar`.
+ * /modulos/configuracion-contable (URL limpia: tipo y sección viajan en sesión vía entrarAjax) si `puedeConfigurar`.
  *
  * `info` es un canal INFORMATIVO (azul): notas que no son error ni pendiente. Los documentos
  * traídos por la migración NO se revisan ni se cuentan: su contabilidad es el histórico migrado
@@ -57,6 +57,36 @@
     }
 
     /**
+     * Enlace «Configurar»: las URLs de navegación van limpias, sin parámetros. Se deja en sesión qué
+     * tipo de asiento y sección abrir (ConfiguracionContableController::entrarAjax()) y se navega a
+     * `modulos/configuracion-contable`. La pestaña se abre ANTES del fetch, dentro del clic, para que
+     * el navegador no la bloquee como ventana emergente; si igual la bloquea, se navega aquí mismo.
+     */
+    document.addEventListener('click', function (e) {
+        const a = e.target.closest ? e.target.closest('a[data-asientos-cfg-tipo]') : null;
+        if (!a) return;
+        e.preventDefault();
+
+        const url = a.getAttribute('href');
+        const destino = window.open('', '_blank');
+        if (destino) destino.opener = null;
+        const cuerpo = new URLSearchParams({
+            tipo: a.getAttribute('data-asientos-cfg-tipo'),
+            seccion: a.getAttribute('data-asientos-cfg-seccion') || 'general',
+        });
+        fetch(`${url}/entrarAjax`, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: cuerpo.toString(),
+        })
+            .catch(() => null) // sin la sección igual se abre la pantalla
+            .then(() => {
+                if (destino) destino.location.href = url;
+                else window.location.href = url;
+            });
+    });
+
+    /**
      * Arma y muestra el resultado final (generados + acciones + notas), acumulados de
      * todos los pasos. Las acciones dicen QUÉ configurar (una línea por sección, sin cifras) y,
      * si el usuario puede entrar a Configuración Contable, enlazan directo a esa sección.
@@ -68,7 +98,7 @@
         const { generados, interrumpido, onGenerado } = opts;
         const acciones = Array.isArray(opts.acciones) ? opts.acciones : [];
         const info = Array.isArray(opts.info) ? opts.info : [];
-        const hayPendientes = acciones.length > 0;
+        const hayPendientes = acciones.length > 0 || (parseInt(opts.pendientes, 10) || 0) > 0;
 
         let html = '';
         if (interrumpido) {
@@ -77,12 +107,13 @@
         if (generados > 0) {
             html += `<div class="mb-2"><i class="bi bi-check-circle-fill text-success me-1"></i> Se generaron <strong>${generados}</strong> asiento(s) contable(s).</div>`;
         }
-        if (hayPendientes) {
+        if (acciones.length) {
             const items = acciones.map(a => {
                 let enlace = '';
                 if (opts.urlConfig && a.tipo) {
-                    const qs = new URLSearchParams({ tipo: a.tipo, seccion: a.seccion || 'general' });
-                    enlace = ` <a href="${escapeHtml(opts.urlConfig + '?' + qs.toString())}" target="_blank" rel="noopener" class="text-nowrap">`
+                    // URL limpia: el tipo y la sección viajan en sesión (ver abrirConfiguracion()).
+                    enlace = ` <a href="${escapeHtml(opts.urlConfig)}" target="_blank" rel="noopener" class="text-nowrap"`
+                        + ` data-asientos-cfg-tipo="${escapeHtml(a.tipo)}" data-asientos-cfg-seccion="${escapeHtml(a.seccion || 'general')}">`
                         + `<i class="bi bi-box-arrow-up-right me-1"></i>Configurar</a>`;
                 }
                 return `<li class="mb-1">${escapeHtml(a.texto)}.${enlace}</li>`;
@@ -91,11 +122,20 @@
                 + `<strong>Para generar los asientos que faltan:</strong>`
                 + `<ul class="mb-0 mt-1">${items}</ul></div>`;
         }
-        if (!html) html = 'No quedaron asientos por generar.';
+        const pendientes = parseInt(opts.pendientes, 10) || 0;
+        if (!html && pendientes === 0) html = 'No quedaron asientos por generar.';
         if (info.length) {
             // Informativo: no cambia el ícono ni el título (no es un pendiente ni un error).
             html += `<div class="text-start small alert alert-info py-2 px-3 mt-3 mb-0"><strong><i class="bi bi-info-circle-fill me-1"></i>Información:</strong>`
                 + `<ul class="mb-0 mt-1 small">${info.map(i => `<li class="mb-1">${escapeHtml(i)}</li>`).join('')}</ul></div>`;
+        }
+        // Cierre del aviso: cuántos documentos siguen sin asiento (el único número que se muestra).
+        // Si se interrumpió, solo cuenta los módulos que alcanzaron a revisarse.
+        if (pendientes > 0) {
+            html += `<div class="text-start small fw-semibold mt-3 pt-2 border-top">`
+                + `<i class="bi bi-hourglass-split text-warning me-1"></i>`
+                + `Quedan pendientes <strong>${pendientes}</strong> asiento(s) por generar`
+                + (interrumpido ? ' en los módulos revisados' : '') + `.</div>`;
         }
 
         if (window.Swal) {
@@ -192,6 +232,9 @@
         const acumResumen = {};
         const acumAcciones = new Map();
         let puedeConfigurar = false;
+        // Solo lo que de verdad falta generar: módulos encendidos, sin los documentos que no llevan
+        // asiento (sin valor, o que dependen de un módulo apagado). Ver getPendientes() en el servidor.
+        let pendientesReales = 0;
         let generados = 0;
 
         (async () => {
@@ -246,6 +289,7 @@
                     });
                 }
                 if (json.puedeConfigurar) puedeConfigurar = true;
+                pendientesReales += parseInt(json.pendientes, 10) || 0;
 
                 n++;
                 if (!cancelado) {
@@ -276,6 +320,7 @@
 
             mostrarResultado({
                 acciones, urlConfig: puedeConfigurar ? urlConfiguracion(urlBase) : null,
+                pendientes: pendientesReales,
                 info: acumInfo, generados, interrumpido, onGenerado,
             });
         })();
